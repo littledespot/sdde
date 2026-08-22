@@ -194,6 +194,8 @@ The common contract makes data dependencies explicit:
 
 [View the Node contract and typed data keys sample](code.md#node-contract-and-data-keys).
 
+An action declares its contract directly. An orchestrator's externally visible `requires`, `produces`, `replaces`, `invalidates`, side-effect summary, and barriers are derived and checked from its child graph by the pipeline compiler; an orchestrator cannot hide a child's capability or claim a narrower effect. Its internal child-only keys are not exposed outside the composition boundary.
+
 Examples of keys are `engine.config@1`, `environment.compiled.web@1`, `reference.manifest@1`, `spec.ir@1`, `plan.ir@1`, `tasks.graph@1`, and `implementation.overlay.T007@1`. Keys are constants supplied by domain modules, never ad hoc strings inside actions.
 
 `PipelineEnvelope` is immutable and identical for all nodes:
@@ -753,7 +755,7 @@ The names below define responsibility boundaries. Implementations may group them
 | `ValidateRequiredArtifactPresenceAction` | one required artifact identity | presence evidence | Check one required artifact exists. |
 | `ValidateRequiredArtifactReadabilityAction` | one required artifact identity | readability evidence | Check one required artifact is readable. |
 | `ValidateWorkflowMetadataAction` | one stage metadata invariant | metadata evidence | Validate one reference/state/artifact expectation. |
-| `PersistStageStateAction` | committed stage result | updated stage metadata | Persist one state transition. |
+| `BuildNextStageStateAction` | validated stage result and current state | next-state payload | Build one state transition for inclusion in the stage transaction. |
 
 ### 13.3 Reference actions
 
@@ -771,7 +773,7 @@ The names below define responsibility boundaries. Implementations may group them
 | `ValidateSourceCitationAction` | one model citation and source corpus | citation evidence | Prove referenced location/text exists. |
 | `ValidateReferenceEntryAccountingAction` | one inventory entry and block ledger | entry accounting evidence | Prove one file and all of its blocks have dispositions. |
 | `AssembleReferenceSnapshotAction` | validated entries, claims, context, provenance | canonical reference snapshot | Assemble one persisted snapshot without hashing content. |
-| `PersistCanonicalReferenceStateAction` | validated reference snapshot and stage transaction | staged canonical reference state | Stage the snapshot as authoritative state. |
+| `SerializeCanonicalReferenceStateAction` | validated reference snapshot | canonical reference-state bytes | Serialize one authoritative reference snapshot. |
 | `RenderReferenceContextAction` | validated reference-context IR | Markdown candidate | Render the sidecar only. |
 
 Semantic extraction and reconciliation use the common LLM actions; there is no special reader that also calls a model.
@@ -811,12 +813,13 @@ Semantic extraction and reconciliation use the common LLM actions; there is no s
 | `AssignTaskIdsAction` | validated topologically ordered task records | identified tasks | Assign `TNNN` IDs. |
 | `BuildRequirementIndexAction` | specification IR | requirement index | Index traceable obligations. |
 | `BuildObligationLedgerAction` | spec, reference tokens, plan | full obligation ledger | Include non-ID visible states/guards/tokens as internal IDs. |
-| `ValidateTraceabilityAction` | ledger and downstream records | coverage diagnostics | Check exact references and coverage. |
+| `ValidateTraceReferenceAction` | one downstream source/obligation ID and ledger | reference evidence | Validate one trace reference exists. |
+| `ValidateObligationCoverageAction` | one obligation and downstream records | coverage evidence/diagnostic | Apply one obligation's typed coverage rule. |
 | `RenderSpecificationAction` | validated specification IR | Markdown candidate | Render `spec.md`. |
 | `RenderPlanArtifactAction` | one validated plan artifact IR | Markdown/data candidate | Render one plan output. |
 | `RenderTasksAction` | validated task graph | Markdown candidate | Render task IDs, checkboxes, phases, and dependencies. |
-| `ValidateRenderedArtifactAction` | rendered bytes plus artifact policy | rendered artifact evidence | Reparse and compare to source IR. |
-| `RecordReviewDecisionAction` | review decision plus canonical state ID | review evidence | Persist one approve/reject decision. |
+| `ValidateEditableSpecificationRenderAction` | rendered `spec.md` and specification IR | round-trip evidence | Reparse only the editable specification and compare normalized IR. |
+| `BuildReviewDecisionAction` | review event plus canonical state ID | validated review-state payload | Build one approve/reject record without writing it. |
 | `ValidateReviewApprovalAction` | canonical state ID and review evidence | approval authorization | Require approval of the current canonical state. |
 | `MapReviewFeedbackAction` | rejected review feedback and unit registry | targeted feedback records | Resolve feedback to explicit plan/task unit IDs. |
 | `InvalidateDescendantStateAction` | authorized rework transition and state graph | invalidated-state delta | Invalidate declared descendant states/approvals only. |
@@ -855,8 +858,9 @@ Semantic extraction and reconciliation use the common LLM actions; there is no s
 | `ValidateTaskDependencyTargetAction` | one dependency edge and task index | target evidence | Reject an unknown node. |
 | `DetectTaskCycleAction` | dependency graph | acyclicity evidence | Detect cycles only. |
 | `ValidateTaskPhaseEdgeAction` | one dependency edge and phase policy | phase-edge evidence | Apply phase direction rules. |
-| `ReconcileTaskDependenciesAction` | compact global task index and validated suggestions | reconciled edge candidates | Merge one bounded cross-cluster dependency pass. |
-| `CalculateParallelEligibilityAction` | DAG, paths, locks | parallel flags | Compute safe `[P]` status. |
+| `BuildCompactTaskIndexAction` | validated provisional tasks | compact global task index | Build one model-safe dependency index. |
+| `MergeValidatedTaskDependencyAction` | one validated suggested edge and graph | updated graph | Merge one semantic dependency edge. |
+| `CalculateParallelEligibilityAction` | one task pair, DAG, paths, locks | pair eligibility evidence | Decide one pair's concurrency eligibility. |
 | `CalculateRunnableSetAction` | task graph and execution journal | ordered runnable task IDs | Calculate currently ready tasks only. |
 | `SelectRunnableTaskAction` | ordered runnable set | one task or terminal state | Select next task deterministically. |
 | `ClaimTaskLeaseAction` | selected task and lock set | task lease | Atomically mark executing and reserve locks. |
@@ -875,7 +879,6 @@ Semantic extraction and reconciliation use the common LLM actions; there is no s
 | `RunConfiguredCommandAction` | available command ID and typed args | command evidence | Execute one restricted command. |
 | `DeriveRequiredChecksAction` | task kind, file kinds, diff, preset evidence policy | required command/evidence set | Compute mandatory checks without model choice. |
 | `SealTaskTransactionAction` | overlay, evidence, journal, state, rendered view | sealed task transaction | Bind the complete task commit set to one revision. |
-| `CommitTaskTransactionAction` | sealed transaction and single-use authorization | committed task evidence | Commit one complete task transaction. |
 | `BuildCompletedTaskStateAction` | task validation authorization and task state | candidate completed task state | Build the state delta to include in the sealed transaction. |
 | `RenderCompletionReportAction` | final workflow state and evidence | human report | Produce a report without changing state. |
 
@@ -885,12 +888,15 @@ Semantic extraction and reconciliation use the common LLM actions; there is no s
 |---|---|---|---|
 | `CreateArtifactTransactionAction` | intended artifact paths | empty artifact transaction | Reserve a contained staging area. |
 | `StageArtifactAction` | one rendered artifact and transaction | updated transaction | Stage one artifact candidate. |
-| `ValidateArtifactTransactionAction` | fully staged transaction | commit authorization | Confirm set completeness and boundaries. |
+| `ValidateTransactionMembershipAction` | staged transaction and intended entry registry | membership evidence | Prove exact entry-set completeness. |
+| `CreateTransactionAuthorizationAction` | sealed transaction and all validation evidence | single-use authorization | Authorize one exact sealed revision. |
 | `PrepareTransactionJournalAction` | sealed transaction | durable prepared journal | Persist entries, before-images, target identities, and authorization before mutation. |
 | `ApplyTransactionEntryAction` | prepared journal and one entry | applied-entry evidence | Apply and durably record one destination entry. |
 | `WriteTransactionCommitMarkerAction` | fully applied journal | committed transaction evidence | Durably write the commit marker last. |
 | `CleanCommittedTransactionAction` | committed journal | cleanup evidence | Remove disposable staging/before-images after commit. |
-| `RecoverPreparedTransactionAction` | one durable journal | recovered transaction evidence | Roll back or roll forward solely from marker/state. |
+| `ReadTransactionRecoveryStateAction` | one durable journal | typed recovery state | Read marker, phase, and applied entries only. |
+| `RestoreTransactionEntryAction` | one uncommitted applied entry and before-image | restored-entry evidence | Restore one entry during rollback. |
+| `VerifyCommittedTransactionEntryAction` | one committed journal entry and destination | verified-entry evidence | Verify/roll forward one committed entry idempotently. |
 | `DiscardTransactionAction` | uncommitted transaction | discard evidence | Remove candidate state without touching committed files. |
 
 The model is never invoked from a persistence action, and no persistence action accepts a raw model path.
@@ -937,7 +943,7 @@ The persisted stage status is advisory until these current artifacts pass. This 
 
 ### 14.3 `TaskSchedulingOrchestrator`
 
-The scheduler invokes `CalculateRunnableSetAction` over phase, dependencies, path sets, shared-resource locks, and command mutability, invokes `SelectRunnableTaskAction`, and invokes `ClaimTaskLeaseAction` to atomically reserve state and locks. It releases a lease only through `ReleaseTaskLeaseAction`. The orchestrator itself does not inspect a graph or lock table. Configuration defaults concurrency to one. Higher concurrency is permitted only for tasks whose validated graph says they are independent and whose overlay commits can be serialized safely. “Different files” alone is never sufficient.
+The scheduler invokes `CalculateRunnableSetAction` over phase, dependencies, path sets, shared-resource locks, and command mutability, invokes `SelectRunnableTaskAction`, and invokes `ClaimTaskLeaseAction` to atomically reserve state and locks. Failed/cancelled precommit leases are released through `ReleaseTaskLeaseAction`; successful lease release is an entry in the sealed task transaction. The orchestrator itself does not inspect a graph or lock table. Configuration defaults concurrency to one. Higher concurrency is permitted only for tasks whose validated graph says they are independent and whose overlay commits can be serialized safely. “Different files” alone is never sufficient.
 
 ### 14.4 `AtomicRepairOrchestrator`
 
@@ -952,6 +958,8 @@ This orchestrator presents engine-rendered plan or task views and waits for an e
 - Feedback that cannot be safely mapped to a bounded unit blocks for clarification; the engine does not treat direct edits to a generated view as feedback.
 
 In non-interactive use, approval must arrive through an explicit API/CLI approval event or a deliberately selected policy profile. Merely invoking the next stage does not silently approve review output in the hardened default.
+
+The review record and resulting stage state (`planned`, `tasked`, or rejected/rework state) commit as one `ReviewTransaction` using the Section 25 journal protocol. A crash cannot persist approval without its state transition or vice versa.
 
 ---
 
@@ -1089,7 +1097,7 @@ The engine validates:
 
 - route response schema and source references;
 - nonempty mandatory IR fields;
-- engine-assigned unique sequential `AC-*`, `FR-*`, `BR-*`, and `EC-*` identifiers;
+- engine-assigned, unique, well-formed `AC-*`, `FR-*`, `BR-*`, and `EC-*` identifiers; initial generation is gap-free, while edits preserve surviving IDs, allocate new monotonically increasing IDs, and never reuse deleted IDs;
 - explicit `given`, `when`, and `then` fields for each acceptance criterion;
 - duplicate or byte-identical requirements;
 - typed clarification state rather than fragile substring matching;
@@ -1239,7 +1247,9 @@ Validators enforce:
 
 ### 18.6 Plan outputs and gate
 
-The engine stages and commits canonical `PlanIR`, the full plan-input `SpecificationIR`, and the complete declared read-only view set. Successful generation enters `plan_review_pending`. The user validates the plan, research, design, contract, and quickstart views.
+Immediately before transaction preparation, the engine rereads `spec.md` and compares its full normalized IR with the plan input held in memory. If the user edited it during planning, the engine discards the plan candidate and restarts from the new spec; it never overwrites the newer edit. This is direct value comparison, not a fingerprint.
+
+The engine stages and commits normalized `spec.md`, canonical `PlanIR`, the full plan-input `SpecificationIR`, and the complete declared read-only view set in one stage transaction. Successful generation enters `plan_review_pending`. The user validates the plan, research, design, contract, and quickstart views.
 
 - Approval is recorded against the current plan `canonicalStateId` and advances state to `planned`.
 - Rejection supplies feedback through the engine. Actions map it to explicit plan unit IDs; those units are repaired/regenerated, full validation/rendering reruns under a new state ID, and review restarts. Generated files are not edited.
@@ -1439,6 +1449,8 @@ Code is generated one file operation at a time. A response cannot include a raw 
 
 `CopyFile` validates source provenance, media type, size, permission, and destination policy. Copy-overwrite is represented as an explicitly authorized replace target through `expectedTargetState`; it is never inferred. A later adaptation is a separate operation.
 
+Before invoking a model, the engine estimates the maximum serialized response size. `CreateFile` and `ReplaceFile` are permitted only when complete content fits the route's hard output budget with schema overhead. A larger change must use an exact `CopyFile` source plus bounded updates, parser-addressed/hunk updates, or an explicitly replanned set of smaller files; responses are never truncated and partial “complete content” is never applied. This keeps nano-class calls bounded while allowing large existing code to be copied deterministically.
+
 ### 20.5 Candidate workspace and validation
 
 Each task executes in an isolated workspace overlay. Each operation has a child savepoint based on the same pre-operation task-overlay revision:
@@ -1557,7 +1569,7 @@ This catalogue is normative for the first engine version. A project may add vali
 | Reader support | MIME sniff plus installed reader | Meaning of decoded content |
 | Citation | Source ID, bounds, and verbatim text exist | Whether citation proves claim |
 | Required sections | Typed required fields and renderer contract | Whether prose is adequate |
-| Requirement IDs | Engine-assigned type, uniqueness, order | Whether the requirement is substantively correct |
+| Requirement IDs | Engine-assigned type/uniqueness; stable surviving IDs and monotonic new IDs | Whether the requirement is substantively correct |
 | Acceptance form | Nonempty Given/When/Then fields | Whether scenario is truly testable |
 | Clarification state | No unresolved typed clarification at success | Whether all ambiguity was discovered |
 | Business-only lint | No obvious code/path/framework/CSS leakage | Nuanced business/technical classification |
@@ -1788,7 +1800,9 @@ Renderers own:
 - exact preserved token values;
 - completion summaries derived from state.
 
-`spec.md` is reparsed and normalized at the plan boundary; its IR must pass the full specification gate. A user may edit it before plan approval. Reference citations are not rendered into the business-only file. On reparse, the engine joins the persisted specification-provenance ledger only when the requirement ID and normalized business content still equal the ledger entry. A changed or new record loses inherited provenance and must be re-attributed from the persisted `ReferenceSnapshot`, explicitly marked user-authored, or blocked when reference support is mandatory. If the spec is edited after downstream canonical state exists, the next gate compares the normalized specification IR with the exact specification input stored in canonical plan state. A difference invalidates plan/task approvals and requires regeneration from `specified`; this is direct typed-state comparison, not fingerprinting.
+`spec.md` is reparsed and normalized at the plan boundary; its IR must pass the full specification gate. A user may edit semantic fields and add, remove, or reorder semantic records, but engine-owned headings, status/checklist fields, and existing ID syntax remain protected by validation. Surviving IDs stay attached to their records; an un-ID'd new record receives the next monotonic ID; deleted IDs are not reused. A duplicate, malformed, or reassigned ID blocks with targeted guidance. Formatting is normalized by deterministic rendering, and that normalized spec is staged with plan-input state so a crash cannot record a different planning input.
+
+Reference citations are not rendered into the business-only file. On reparse, the engine joins the persisted specification-provenance ledger only when the requirement ID and normalized business content still equal the ledger entry. A changed or new record loses inherited provenance and must be re-attributed from the persisted `ReferenceSnapshot`, explicitly marked user-authored, or blocked when reference support is mandatory. If the spec is edited after downstream canonical state exists, the next gate compares the normalized specification IR with the exact specification input stored in canonical plan state. A difference invalidates plan/task approvals and requires regeneration from `specified`; this is direct typed-state comparison, not fingerprinting.
 
 `reference-context.md`, `plan.md`, `research.md`, `data-model.md`, contract views, `quickstart.md`, and `tasks.md` are never parsed as authoritative execution input. The engine loads their canonical IR, renders the expected bytes, and checks the view for exact equality. A modified generated view produces `GENERATED_VIEW_MODIFIED`; the engine may regenerate the view from canonical state, but never imports the edit. Review feedback is submitted through the review API/CLI and targeted to IR units.
 
