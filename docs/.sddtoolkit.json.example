@@ -1,0 +1,30 @@
+{
+  "version": "1.0",
+  "logs": {
+    "level": "debug",
+    "format": "pretty",
+    "timestamp": true,
+    "output": "console",
+    "promptLogs": {
+      "enabled": true,
+      "logFile": "logs/prompts.log",
+      "includeResponse": true,
+      "maxResponseLength": 5000
+    }
+  },
+  "models": {
+    "slots": {
+      "audit_analysis": { "provider": "openai", "model": "gpt-5-nano" },
+      "drift_analysis": { "provider": "openai", "model": "gpt-5-nano" },
+      "spec_generation": { "provider": "openai", "model": "gpt-5-nano", "reasoningEffort": "low" },
+      "design_section_generation": { "provider": "openai", "model": "gpt-5.4-nano" },
+      "implementation": { "provider": "openai", "model": "gpt-5.4-mini" }
+    }
+  },
+  "paths": {
+    "specs": "specs/",
+    "references": "references/",
+    "specsArchive": "specs/_archive/",
+    "sddtoolkit": ".sddtoolkit/"
+  }
+}

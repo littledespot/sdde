@@ -1,0 +1,28 @@
+flowchart TB
+    CLI[CLI / API adapter] --> WF[FeatureWorkflowOrchestrator]
+
+    WF --> SO[SpecifyOrchestrator]
+    WF --> PO[PlanOrchestrator]
+    WF --> TO[TasksOrchestrator]
+    WF --> IO[ImplementOrchestrator]
+
+    SO --> VG1[ValidatedGenerationOrchestrator]
+    PO --> VG2[ValidatedGenerationOrchestrator]
+    TO --> VG3[ValidatedGenerationOrchestrator]
+    IO --> TE[TaskExecutionOrchestrator]
+
+    VG1 --> Actions[Single-responsibility actions]
+    VG2 --> Actions
+    VG3 --> Actions
+    TE --> Actions
+
+    Actions --> Ports[Typed ports]
+    Ports --> FS[Filesystem / transaction adapter]
+    Ports --> LLM[Model provider adapter]
+    Ports --> PARSE[Markdown, data, AST parsers]
+    Ports --> CMD[Restricted command runner]
+    Ports --> PRESET[Config and preset repository]
+
+    Actions --> VAL[Deterministic diagnostics]
+    VAL --> RO[AtomicRepairOrchestrator]
+    RO --> Actions

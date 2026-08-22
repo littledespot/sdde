@@ -1226,7 +1226,7 @@ Validators enforce:
 - mandatory plan IR fields and artifact decisions exist;
 - every mechanical technical assertion is a typed `FactSelection` whose ID/value matches repository/preset facts; prose rationale receives semantic review and is not claimed to be mechanically contradiction-free;
 - every touched existing file exists and is within the selected project;
-- every new/update path passes the full environment preset algorithm;
+- every new/update path passes the complete planning-time lexical/structural preset algorithm, and every unavailable content-dependent check is registered as a mandatory implementation validator;
 - proposed paths use accepted `fileId`s consistently;
 - no persistent foreign absolute paths;
 - minimal-change claims do not list rejected layers as proposed outputs;
@@ -1306,7 +1306,7 @@ The LLM receives one related obligation cluster and proposes task records. It de
 
 It must select files by existing `fileId` where the plan already identified them. If a new path is genuinely required but absent from the plan, the response is invalid and planning must be repaired/re-run; tasks cannot silently expand architecture.
 
-The LLM does not assign `TNNN`, checkbox text, `[P]`, final ordering, or arbitrary commands.
+The LLM does not assign `TNNN`, checkbox text, `[P]`, final ordering, runtime status, or arbitrary commands. The task-generation response schema exposes only `optionalCommandIds`; it cannot set `CommandInvocation.origin`. After validation, the engine constructs canonical command invocations and adds every `engine_required` check.
 
 After all clusters have schema-valid provisional definitions, the engine assigns provisional internal IDs and creates a compact global index containing responsibility, source/obligation IDs, produced/consumed `fileId`s, capabilities, and existing edges. A bounded `tasks.dependencies.reconcile` route may propose missing semantic edges over that index. For large graphs the route processes overlapping partitions and a final compact boundary index. The engine validates every proposed edge, then runs global unknown-node, cycle, and phase-edge actions. The model may suggest semantic dependencies; only the engine merges them.
 
