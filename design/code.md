@@ -242,7 +242,7 @@ interface FeatureExecutionControlPort {
       currentProcessLease: FeatureExecutionProcessLeaseCapability,
       featureExecutionLock: FeatureExecutionLockCapability,
       overlayCollectionLock: FinalValidationOverlayCollectionLockCapability)
-    -> FeatureExecutionProcessLeaseLivenessRegistryObservation
+    -> FeatureExecutionProcessLeaseLivenessOutcome
   releaseFeatureLock(lock: FeatureExecutionLockCapability)
     -> FeatureExecutionLockReleaseObservation
   releaseProcessLease(lease: FeatureExecutionProcessLeaseCapability)
@@ -268,8 +268,9 @@ interface FinalValidationOverlayPort {
       featureExecutionLock: FeatureExecutionLockCapability,
       boundedLockPolicy)
     -> FinalValidationOverlayCollectionLockObservation
-  createOverlay(invocationId: FinalValidationInvocationId,
-                collectionCapability, finalCommittedWorkspaceRevision,
+  createOverlay(header: FinalValidationOverlayLeaseHeader,
+                headerValidation: FinalValidationOverlayLeaseHeaderValidation,
+                collectionCapability,
                 processLease: FeatureExecutionProcessLeaseCapability,
                 featureExecutionLock: FeatureExecutionLockCapability,
                 lock: FinalValidationOverlayCollectionLockCapability)
@@ -287,6 +288,13 @@ interface FinalValidationOverlayPort {
       collectionCapability,
       lock: FinalValidationOverlayCollectionLockCapability)
     -> FinalValidationOverlayCreationCleanupObservation
+  inspectCreationCandidateAfterCleanup(
+      invocationId: FinalValidationInvocationId,
+      validationOverlayId,
+      collectionCapability,
+      lock: FinalValidationOverlayCollectionLockCapability,
+      inspectionCeilings)
+    -> FinalValidationOverlayCreationCandidateInspection
   createFinalValidationCommandSavepoint(
       authorization: CommandAuthorization,
       savepointId: FinalValidationCommandSavepointId,
@@ -313,12 +321,13 @@ interface FinalValidationOverlayPort {
                  featureExecutionLock: FeatureExecutionLockCapability)
     -> FinalValidationOverlayDiscardOutcome
   releaseCollectionLock(lock: FinalValidationOverlayCollectionLockCapability)
-    -> FinalValidationOverlayCollectionLockReleaseObservation
+    -> FinalValidationOverlayCollectionLockReleaseOutcome
   releaseRejectedCollectionLockObservation(
       observation: FinalValidationOverlayCollectionLockAcquired,
       rejection: FinalValidationOverlayCollectionLockValidationRejection)
-    -> FinalValidationOverlayRejectedCollectionLockCleanupObservation
-  // The write-once lease header is durable before overlay publication. A prior
+    -> FinalValidationOverlayRejectedCollectionLockCleanupOutcome
+  // The complete write-once lease header is atomically published and durable
+  // before overlay publication; partial header staging is never enumerable. A prior
   // run's overlay is never reopened or promoted; cleanup is idempotent and may
   // delete only a structurally valid entry returned by the bounded inventory
   // and classified orphaned by the separately validated OS-backed liveness
@@ -4546,6 +4555,13 @@ OverlayDiscardEvidence =
   FinalValidationOverlayNormalDiscardEvidence |
   FinalValidationOverlayRecursiveAbortEvidence
 
+FinalValidationRunnerFailStopEvidence =
+  RunnerCapabilityLossFailStopEvidence |
+  FinalValidationRejectedCollectionLockCleanupFailStopEvidence |
+  FinalValidationCollectionLockReleaseFailStopEvidence |
+  FinalValidationCreationCleanupFailStopEvidence |
+  FinalValidationOverlayDiscardRejection
+
 ReworkInvalidationRecord {
   invalidationRecordId,
   cause: reference_changed | specification_changed | principle_changed |
@@ -6805,16 +6821,22 @@ FeatureExecutionRejectedCapabilityCleanupEvidence {
   noCapabilityOrRunnerTableEntryRemains: true
 }
 
-FeatureExecutionProcessLeaseLivenessEntry =
+FeatureExecutionProcessLeaseLivenessEntryObservation =
   | LiveFeatureExecutionProcessLeaseEntry {
       owner: FeatureExecutionProcessLeaseOwnerRef,
       disposition: live,
-      exactOsProcessOwnershipObserved: true
+      exactOsProcessOwnershipObserved: boolean
     }
   | AbsentOrTerminalFeatureExecutionProcessLeaseEntry {
       owner: FeatureExecutionProcessLeaseOwnerRef,
       disposition: absent_or_terminal,
-      leaseIdentityCannotBeReacquired: true
+      leaseIdentityCannotBeReacquired: boolean
+    }
+  | UnknownFeatureExecutionProcessLeaseEntry {
+      owner: FeatureExecutionProcessLeaseOwnerRef,
+      disposition: unknown,
+      reason: adapter_unavailable | ownership_unprovable |
+              malformed_owner_ref | observation_ceiling_exceeded
     }
 
 FeatureExecutionProcessLeaseLivenessRegistryObservation {
@@ -6822,14 +6844,34 @@ FeatureExecutionProcessLeaseLivenessRegistryObservation {
   featureExecutionLockEpoch,
   overlayCollectionLockEpoch,
   requestedOwners: FeatureExecutionProcessLeaseOwnerRef[],
-  entries: FeatureExecutionProcessLeaseLivenessEntry[],
+  entries: FeatureExecutionProcessLeaseLivenessEntryObservation[],
   currentProcessLeaseId: FeatureExecutionProcessLeaseId,
-  currentProcessLeaseObservedLive: true,
-  completeBoundedObservation: true
+  currentProcessLeaseObservedLive: boolean,
+  completeBoundedObservation: boolean,
+  adapterId,
+  adapterContractVersion
 }
 
+FeatureExecutionProcessLeaseLivenessAdapterFailureObservation {
+  featureId,
+  featureExecutionLockEpoch,
+  overlayCollectionLockEpoch,
+  requestedOwners: FeatureExecutionProcessLeaseOwnerRef[],
+  failureCode: adapter_unavailable | os_ownership_query_failed |
+               result_delivery_failed,
+  completeBoundedObservation: false,
+  adapterId,
+  adapterContractVersion
+}
+
+FeatureExecutionProcessLeaseLivenessOutcome =
+  | { kind: observed,
+      observation: FeatureExecutionProcessLeaseLivenessRegistryObservation }
+  | { kind: adapter_failed,
+      failure: FeatureExecutionProcessLeaseLivenessAdapterFailureObservation }
+
 FeatureExecutionProcessLeaseLivenessRegistryValidation {
-  observation: FeatureExecutionProcessLeaseLivenessRegistryObservation,
+  outcome: FeatureExecutionProcessLeaseLivenessOutcome,
   exactOwnerCoverageOnceEach: true,
   noUnknownOrDuplicateOwner: true,
   currentLeaseAndFeatureLockJoin: true,
@@ -6837,6 +6879,18 @@ FeatureExecutionProcessLeaseLivenessRegistryValidation {
   onlyLiveToTerminalTransitionCanFollow: true
   // This run-local value authorizes classification only; it is neither
   // persisted workflow authority nor a timeout/heartbeat guess.
+}
+
+FeatureExecutionProcessLeaseLivenessRejection {
+  outcome: FeatureExecutionProcessLeaseLivenessOutcome,
+  rejectionCode: adapter_failure | incomplete_owner_coverage |
+                 duplicate_or_unknown_owner | unknown_disposition |
+                 current_lease_not_live | owner_ref_mismatch |
+                 feature_lock_epoch_mismatch |
+                 collection_lock_epoch_mismatch |
+                 adapter_contract_mismatch | ceiling_exceeded,
+  overlayInventoryClassificationForbidden: true,
+  ordinaryCollectionLockReleaseAllowedOnlyIfCapabilitiesRemainLive: true
 }
 
 FeatureExecutionLockReleaseObservation {
@@ -6902,13 +6956,33 @@ FinalValidationOverlayCollectionLockCapability {
 FinalValidationOverlayCollectionLockObservation =
   | FinalValidationOverlayCollectionLockAcquired {
       kind: acquired,
-      capability: FinalValidationOverlayCollectionLockCapability,
-      acquiredUnderValidatedFeatureExecutionLock: true
+      collectionArtifactPathId,
+      featureId,
+      ownerProcessInstanceId,
+      ownerProcessLeaseId: FeatureExecutionProcessLeaseId,
+      featureExecutionLockEpoch,
+      lockEpoch,
+      opaqueLockTokenHandle,
+      adapterId,
+      adapterContractVersion,
+      acquiredUnderValidatedFeatureExecutionLock: boolean,
+      osProcessOwnedObserved: boolean,
+      processDeathReleaseObserved: boolean,
+      epochNonrebindabilityObserved: boolean
     }
   | FinalValidationOverlayCollectionLockContended {
       kind: contended,
       collectionArtifactPathId,
       boundedWaitExhausted: true
+    }
+  | FinalValidationOverlayCollectionLockAcquisitionFailed {
+      kind: adapter_failed_no_token,
+      collectionArtifactPathId,
+      failureCode: adapter_unavailable | os_lock_error | policy_timeout,
+      noOpaqueTokenIssued: true,
+      runnerTableEntryAbsent: true,
+      adapterId,
+      adapterContractVersion
     }
 
 FinalValidationOverlayCollectionLockValidation {
@@ -6925,7 +6999,12 @@ FinalValidationOverlayCollectionLockValidationRejection {
   observation: FinalValidationOverlayCollectionLockAcquired,
   rejectionCode: collection_mismatch | feature_mismatch | process_mismatch |
                  lease_mismatch | feature_lock_epoch_mismatch |
-                 duplicate_token | outer_capability_not_live,
+                 adapter_mismatch | duplicate_token |
+                 acquisition_outer_binding_unprovable |
+                 os_process_ownership_unprovable |
+                 process_death_release_unprovable |
+                 epoch_nonrebindability_unprovable |
+                 outer_capability_not_live,
   transientTokenRetainedForCleanup: true
 }
 
@@ -6937,20 +7016,56 @@ FinalValidationOverlayCollectionLockContentionEvidence {
   runnerTableEntryAbsent: true
 }
 
+FinalValidationOverlayCollectionLockAcquisitionFailureEvidence {
+  observation: FinalValidationOverlayCollectionLockAcquisitionFailed,
+  exactCollectionAndOuterAuthorityJoin: true,
+  adapterFailureCodeValidated: true,
+  noCollectionLockCapabilityOrOpaqueTokenIssued: true,
+  runnerTableEntryAbsent: true
+}
+
 FinalValidationOverlayRejectedCollectionLockCleanupObservation {
   collectionArtifactPathId,
   ownerProcessInstanceId,
   releasedOrConfirmedNotOwned: true,
-  runnerTableEntryAbsent: true
+  runnerTableEntryAbsent: true,
+  adapterId,
+  adapterContractVersion
 }
+
+FinalValidationOverlayRejectedCollectionLockCleanupAdapterFailureObservation {
+  collectionArtifactPathId,
+  ownerProcessInstanceId,
+  failureCode: adapter_unavailable | release_failed | result_delivery_failed,
+  cleanupDisposition: proven_not_owned | indeterminate,
+  adapterId,
+  adapterContractVersion
+}
+
+FinalValidationOverlayRejectedCollectionLockCleanupOutcome =
+  | { kind: cleanup_observed,
+      observation: FinalValidationOverlayRejectedCollectionLockCleanupObservation }
+  | { kind: adapter_failed,
+      failure:
+        FinalValidationOverlayRejectedCollectionLockCleanupAdapterFailureObservation }
 
 FinalValidationOverlayRejectedCollectionLockCleanupEvidence {
   rejection: FinalValidationOverlayCollectionLockValidationRejection,
-  cleanupObservation: FinalValidationOverlayRejectedCollectionLockCleanupObservation,
+  cleanupOutcome: FinalValidationOverlayRejectedCollectionLockCleanupOutcome,
   exactObservationRejectionAndAdapterJoin: true,
   releaseOrNonownershipObserved: true,
   opaqueHandleDestroyed: true,
   noCollectionLockCapabilityOrRunnerTableEntryRemains: true
+}
+
+FinalValidationRejectedCollectionLockCleanupFailStopEvidence {
+  rejection: FinalValidationOverlayCollectionLockValidationRejection,
+  cleanupOutcome: FinalValidationOverlayRejectedCollectionLockCleanupOutcome,
+  failureKind: adapter_failure_indeterminate | token_or_table_entry_may_remain,
+  noFurtherPipelineNodeInvoked: true,
+  ordinaryReleaseEvidenceForbidden: true,
+  ownerProcessTerminationRequired: true,
+  freshRunRecoveryRequired: true
 }
 
 RunnerCapabilityLossFailStopEvidence {
@@ -6975,7 +7090,46 @@ FinalValidationOverlayCollectionLockReleaseObservation {
   ownerProcessLeaseId: FeatureExecutionProcessLeaseId,
   featureExecutionLockEpoch,
   lockEpoch,
-  released: true
+  disposition: released_now | already_absent,
+  runnerTableEntryAbsent: true,
+  adapterId,
+  adapterContractVersion
+}
+
+FinalValidationOverlayCollectionLockReleaseAdapterFailureObservation {
+  collectionArtifactPathId,
+  ownerProcessInstanceId,
+  ownerProcessLeaseId: FeatureExecutionProcessLeaseId,
+  featureExecutionLockEpoch,
+  lockEpoch,
+  failureCode: adapter_unavailable | release_failed | result_delivery_failed,
+  lockDisposition: proven_still_held | indeterminate,
+  adapterId,
+  adapterContractVersion
+}
+
+FinalValidationOverlayCollectionLockReleaseOutcome =
+  | { kind: release_observed,
+      observation: FinalValidationOverlayCollectionLockReleaseObservation }
+  | { kind: adapter_failed,
+      failure: FinalValidationOverlayCollectionLockReleaseAdapterFailureObservation }
+
+FinalValidationOverlayCollectionLockReleaseRetryEvidence {
+  releaseOutcome: FinalValidationOverlayCollectionLockReleaseOutcome,
+  exactOriginalValidatedCapabilityAndEpochJoin: true,
+  lockDisposition: proven_still_held,
+  runnerTableEntryStillExact: true,
+  outerFeatureExecutionLockAndProcessLeaseStillLive: true,
+  sameLogicalReleaseRetryOnly: true
+}
+
+FinalValidationCollectionLockReleaseFailStopEvidence {
+  releaseOutcome: FinalValidationOverlayCollectionLockReleaseOutcome,
+  failureKind: lock_disposition_indeterminate | runner_table_indeterminate,
+  noOrdinaryReleaseEvidenceFabricated: true,
+  noFurtherPipelineNodeInvoked: true,
+  ownerProcessTerminationRequired: true,
+  freshRunRecoveryRequired: true
 }
 
 FinalValidationOverlayLeaseHeader {
@@ -6987,17 +7141,42 @@ FinalValidationOverlayLeaseHeader {
   featureExecutionLockEpoch,
   finalValidationOverlayCollectionArtifactPathId,
   finalCommittedWorkspaceRevision,
+  headerAtomicallyPublished: true,
   headerDurableBeforeOverlayPublication: true
   // The overlay ID is the already closed run-scoped invocation tuple plus its
   // fixed overlay slot. No random/path/content/model-derived identity is used.
 }
 
-FinalValidationOverlayCreationObservation {
+FinalValidationOverlayLeaseHeaderValidation {
   header: FinalValidationOverlayLeaseHeader,
+  exactInvocationFeatureRunLeaseLockCollectionAndBaseRevisionJoin: true,
+  engineDerivedStructuralOverlayIdentity: true,
+  canonicalHeaderBytesOwnedByEngine: true,
+  adapterMustPublishThoseExactBytesAtomicallyOrNothing: true,
+  partialHeaderStagingNeverEnumerable: true
+}
+
+RawFinalValidationOverlayLeaseHeaderObservation {
+  validationOverlayId,
+  finalValidationInvocationId: FinalValidationInvocationId,
+  featureId,
+  featureLogRunId,
+  ownerProcessLease: FeatureExecutionProcessLeaseOwnerRef,
+  featureExecutionLockEpoch,
+  finalValidationOverlayCollectionArtifactPathId,
+  finalCommittedWorkspaceRevision,
+  headerAtomicallyPublished: boolean,
+  headerDurableBeforeOverlayPublication: boolean
+}
+
+FinalValidationOverlayCreationObservation {
+  rawHeader: RawFinalValidationOverlayLeaseHeaderObservation,
   collectionLockEpoch,
-  validationOverlayRevision: 0,
-  overlayPublished: true,
-  observedEntryCount: 0
+  validationOverlayRevision,
+  overlayPublished: boolean,
+  observedEntryCount,
+  adapterId,
+  adapterContractVersion
 }
 
 FinalValidationOverlayCreationAdapterFailureObservation {
@@ -7020,12 +7199,15 @@ FinalValidationOverlayCreationOutcome =
       failure: FinalValidationOverlayCreationAdapterFailureObservation }
 
 FinalValidationOverlayCreationValidation {
+  observation: FinalValidationOverlayCreationObservation,
+  header: FinalValidationOverlayLeaseHeader,
   validationOverlayId,
   finalValidationInvocationId: FinalValidationInvocationId,
   finalValidationOverlayCollectionArtifactPathId,
   collectionLockEpoch,
   exactHeaderRunProcessLeaseAndBaseRevisionJoin: true,
   exactValidatedFeatureExecutionLockJoin: true,
+  headerAtomicallyPublished: true,
   headerDurableBeforeEmptyOverlayPublication: true,
   noCoexistingLiveOverlay: true
 }
@@ -7048,9 +7230,23 @@ FinalValidationOverlayCreationCleanupObservation {
   finalValidationOverlayCollectionArtifactPathId,
   collectionLockEpoch,
   disposition: discarded_now | already_absent | adapter_failed,
-  residualCandidateEntryCount,
-  residualCandidateBytes,
+  residualCandidateEntryCount?,
+  residualCandidateBytes?,
   projectSpecsAndEngineStateUnchanged: boolean,
+  adapterId,
+  adapterContractVersion
+}
+
+FinalValidationOverlayCreationCandidateInspection {
+  finalValidationInvocationId: FinalValidationInvocationId,
+  engineDerivedValidationOverlayId,
+  finalValidationOverlayCollectionArtifactPathId,
+  collectionLockEpoch,
+  observedCandidateEntryCount,
+  observedCandidateBytes,
+  completeBoundedInspection: boolean,
+  ceilingExceeded: boolean,
+  projectSpecsAndEngineStateChanged: boolean,
   adapterId,
   adapterContractVersion
 }
@@ -7058,19 +7254,35 @@ FinalValidationOverlayCreationCleanupObservation {
 FinalValidationOverlayCreationCleanupEvidence {
   rejection: FinalValidationOverlayCreationRejection,
   cleanupObservation: FinalValidationOverlayCreationCleanupObservation,
+  candidateInspection: FinalValidationOverlayCreationCandidateInspection,
   exactEngineDerivedCandidateAndCollectionJoin: true,
   discardedOrAlreadyAbsent: true,
   residualCandidateEntryCount: 0,
   residualCandidateBytes: 0,
+  completeBoundedIndependentInspectionWithNoCeilingBreach: true,
   sameValidatedCollectionLockContinuouslyHeld: true,
   outerFeatureExecutionLockAndProcessLeaseStillLive: true,
   noUntrustedHeaderOrCallerPathUsed: true,
   projectSpecsAndEngineStateUnchanged: true
 }
 
+FinalValidationCreationCleanupFailStopEvidence {
+  rejection: FinalValidationOverlayCreationRejection,
+  cleanupObservation: FinalValidationOverlayCreationCleanupObservation,
+  candidateInspection: FinalValidationOverlayCreationCandidateInspection,
+  failureKind: cleanup_adapter_failure | inspection_incomplete |
+               inspection_ceiling_exceeded | residual_candidate |
+               authority_change_observed,
+  noOrdinaryCollectionLockReleaseAuthorized: true,
+  noFurtherPipelineNodeInvoked: true,
+  ownerProcessTerminationRequired: true,
+  freshRunRecoveryRequired: true
+}
+
 OrphanedFinalValidationOverlayEntry {
   header: FinalValidationOverlayLeaseHeader,
-  observedOverlayRevision,
+  overlayPublicationState: header_only | overlay_present,
+  observedOverlayRevision?,
   observedEntryCount,
   observedBytes,
   ownerRunIsNotCurrent: true,
@@ -7080,7 +7292,8 @@ OrphanedFinalValidationOverlayEntry {
 
 FinalValidationOverlayInventoryEntry {
   header: FinalValidationOverlayLeaseHeader,
-  observedOverlayRevision,
+  overlayPublicationState: header_only | overlay_present,
+  observedOverlayRevision?,
   observedEntryCount,
   observedBytes
 }
@@ -7125,8 +7338,8 @@ FinalValidationOverlayStartupInventoryRejection {
 FinalValidationOverlayOrphanDiscardObservation {
   header: FinalValidationOverlayLeaseHeader,
   disposition: discarded_now | already_absent | adapter_failed,
-  residualEntryCount,
-  residualBytes,
+  residualEntryCount?,
+  residualBytes?,
   projectSpecsAndEngineStateUnchanged: boolean,
   adapterId,
   adapterContractVersion
@@ -7142,12 +7355,23 @@ FinalValidationOverlayStartupCleanupEvidence {
   cleanupCompleteBeforeNewFinalValidationOverlay: true
 }
 
+FinalValidationOverlayStartupCleanupRejection {
+  inventoryValidation: FinalValidationOverlayStartupInventoryValidation,
+  discardObservations: FinalValidationOverlayOrphanDiscardObservation[],
+  rejectionCode: missing_or_duplicate_orphan_result | orphan_identity_mismatch |
+                 adapter_failure | residual_orphan_entries |
+                 residual_live_entry | authority_changed |
+                 collection_lock_epoch_mismatch | adapter_contract_mismatch,
+  newOverlayCreationForbidden: true,
+  ordinaryReleaseAllowedOnlyIfAllCapabilitiesRemainValidatedAndLive: true
+}
+
 FinalValidationOverlayCollectionLockReleaseEvidence =
   | FinalValidationOverlayCreatedLockReleaseEvidence {
       startupCleanupEvidence: FinalValidationOverlayStartupCleanupEvidence,
       overlayCreationObservation: FinalValidationOverlayCreationObservation,
       overlayCreationValidation: FinalValidationOverlayCreationValidation,
-      releaseObservation: FinalValidationOverlayCollectionLockReleaseObservation,
+      releaseOutcome: FinalValidationOverlayCollectionLockReleaseOutcome,
       sameCollectionLockEpoch: true,
       outerFeatureExecutionLockAndProcessLeaseStillLive: true,
       releasedAfterOverlayPublication: true
@@ -7156,14 +7380,14 @@ FinalValidationOverlayCollectionLockReleaseEvidence =
       failurePhase: inventory | lease_liveness_inspection |
                     lease_liveness_validation | inventory_validation |
                     orphan_cleanup | cleanup_validation,
-      releaseObservation: FinalValidationOverlayCollectionLockReleaseObservation,
+      releaseOutcome: FinalValidationOverlayCollectionLockReleaseOutcome,
       noOverlayPublished: true,
       sameCollectionLockEpoch: true,
       outerFeatureExecutionLockAndProcessLeaseStillLive: true
     }
   | FinalValidationOverlayCreationCleanupLockReleaseEvidence {
       creationCleanupEvidence: FinalValidationOverlayCreationCleanupEvidence,
-      releaseObservation: FinalValidationOverlayCollectionLockReleaseObservation,
+      releaseOutcome: FinalValidationOverlayCollectionLockReleaseOutcome,
       sameCollectionLockEpoch: true,
       releasedAfterCandidateProvenAbsent: true,
       outerFeatureExecutionLockAndProcessLeaseStillLive: true
@@ -7183,6 +7407,11 @@ FinalValidationOverlayCollectionLockTerminalEvidence =
       kind: contention_proves_not_acquired,
       contentionEvidence:
         FinalValidationOverlayCollectionLockContentionEvidence
+    }
+  | FailedAcquisitionFinalValidationOverlayCollectionLockTerminalEvidence {
+      kind: acquisition_failure_proves_not_acquired,
+      acquisitionFailureEvidence:
+        FinalValidationOverlayCollectionLockAcquisitionFailureEvidence
     }
   | RejectedFinalValidationOverlayCollectionLockTerminalEvidence {
       kind: rejected_acquired_observation_cleaned,
@@ -7217,11 +7446,14 @@ FinalValidationCommandSavepointCreationObservation {
   expectedParentValidationOverlayRevision,
   observedParentValidationOverlayRevision,
   childValidationOverlayId: FinalValidationCommandChildOverlayId,
-  childValidationOverlayRevision: 0,
+  childValidationOverlayRevision,
+  observedChildEntryCount,
   ownerProcessLeaseId: FeatureExecutionProcessLeaseId,
   featureExecutionLockEpoch,
-  childPublished: true,
-  noTaskExecutionAdapterBoundaryRecord: true
+  childPublished: boolean,
+  noTaskExecutionAdapterBoundaryRecord: boolean,
+  adapterId,
+  adapterContractVersion
   // The child ID is the savepoint identity plus the fixed `child_overlay` slot;
   // no random/path/content/model value or task adapter record is introduced.
 }
@@ -7249,6 +7481,7 @@ FinalValidationCommandSavepointCreationValidation {
   exactAuthorizationSavepointParentRevisionJoin: true,
   exactHeaderOwnerLeaseAndFeatureLockJoin: true,
   childIdentityStructuralAndUnique: true,
+  childPublishedAtRevisionZeroAndEmpty: true,
   parentOverlayUnchangedAtPublication: true,
   noTaskExecutionAdapterBoundaryRecord: true
 }
@@ -7258,6 +7491,8 @@ FinalValidationCommandSavepointCreationRejection {
   rejectionCode: adapter_failure | authorization_mismatch | savepoint_identity_mismatch |
                  parent_revision_mismatch | header_owner_mismatch |
                  outer_control_mismatch | child_alias |
+                 child_not_published | child_revision_mismatch |
+                 nonempty_initial_child |
                  task_boundary_record_present | adapter_contract_mismatch,
   commandExecutionForbidden: true,
   parentOverlayAbortRequired: true

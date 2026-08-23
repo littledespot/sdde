@@ -284,18 +284,20 @@ flowchart TD
     ALLTASKS -- No --> LEASE
     ALLTASKS -- Yes --> FVLOCKACQ[AcquireFinalValidationOverlayCollectionLockAction under the continuously held<br/>validated feature-execution lock and current process lease]
     FVLOCKACQ --> FVLOCKVALID[ValidateFinalValidationOverlayCollectionLockAction for the exact registered<br/>FinalValidationOverlayCollection, opaque adapter token, OS owner, outer capabilities<br/>and nonrebindable collection-lock epoch]
-    FVLOCKVALID --> FVLOCKGATE{Validated acquisition, validated contention,<br/>or acquired-observation validation rejection}
-    FVLOCKGATE -- Validated contention; no capability/token/table entry --> FVIBLOCK[Block final validation;<br/>retain the exact contention evidence, leave project/spec/canonical authority unchanged<br/>and create no overlay]
-    FVLOCKGATE -- Acquired observation rejected --> FVREJECTCLEAN[ReleaseRejectedFinalValidationOverlayCollectionLockObservationAction;<br/>release-or-confirm-not-owned and destroy only the transient rejected token]
+    FVLOCKVALID --> FVLOCKGATE{Validated acquisition, contention, no-token adapter failure,<br/>or acquired-observation validation rejection}
+    FVLOCKGATE -- Validated contention; no capability/token/table entry --> FVIBLOCK[Block final validation;<br/>retain the exact validated contention or no-token acquisition-failure evidence,<br/>leave project/spec/canonical authority unchanged and create no overlay]
+    FVLOCKGATE -- Validated adapter failure; no capability/token/table entry --> FVIBLOCK
+    FVLOCKGATE -- Acquired observation rejected while exact outer controls remain live --> FVREJECTCLEAN[ReleaseRejectedFinalValidationOverlayCollectionLockObservationAction;<br/>release-or-confirm-not-owned and destroy only the transient rejected token]
+    FVLOCKGATE -- Rejection includes outer-control loss or epoch substitution --> FVRUNNERFAILSTOP
     FVREJECTCLEAN --> FVREJECTCLEANVALID[ValidateRejectedFinalValidationOverlayCollectionLockCleanupAction;<br/>prove exact rejection ownership, destroyed handle and no runner-table entry]
     FVREJECTCLEANVALID --> FVREJECTCLEANGATE{Rejected observation cleanup valid}
     FVREJECTCLEANGATE -- Yes --> FVIBLOCK
     FVREJECTCLEANGATE -- No or any capability loss/epoch substitution --> FVRUNNERFAILSTOP
     FVLOCKGATE -- Acquired and valid --> FVINVENT[InspectFinalValidationOverlayStartupInventoryAction;<br/>return only the raw bounded structural inventory and exact unique header-owner refs<br/>under the same continuously held collection-lock epoch; classify/delete nothing]
     FVINVENT --> FVLIVEINSPECT[InspectFeatureExecutionProcessLeaseLivenessAction;<br/>inspect every unique inventory-header owner exactly once through the control adapter<br/>while the same collection lock and outer feature-execution controls remain held]
-    FVLIVEINSPECT --> FVLIVEVALID[ValidateFeatureExecutionProcessLeaseLivenessAction;<br/>prove complete one-to-one owner coverage, exact outer/collection-lock epochs,<br/>the current live lease and no unknown or duplicate owner]
-    FVLIVEVALID --> FVLIVEGATE{Complete validated liveness registry}
-    FVLIVEGATE -- Invalid data while all exact capabilities remain live --> FVFAILREL
+    FVLIVEINSPECT --> FVLIVEVALID[ValidateFeatureExecutionProcessLeaseLivenessAction over the closed raw outcome;<br/>accept only complete one-to-one owner coverage, exact outer/collection-lock epochs,<br/>the current live lease, no unknown/duplicate owner and exact adapter identity]
+    FVLIVEVALID --> FVLIVEGATE{Validated liveness registry or typed adapter/data rejection}
+    FVLIVEGATE -- Typed adapter/data rejection while all exact capabilities remain live --> FVFAILREL
     FVLIVEGATE -- Any outer/collection capability loss or epoch substitution --> FVRUNNERFAILSTOP
     FVLIVEGATE -- Yes --> FVINVENTVALID[ValidateFinalValidationOverlayStartupInventoryAction;<br/>consume the raw inventory and exact validated liveness registry under the same lock;<br/>require zero current or other live entries and classify only absent/terminal prior-run owners]
     FVINVENTVALID --> FVIGATE{Validated complete startup inventory}
@@ -312,30 +314,40 @@ flowchart TD
     FVOCGATE -- No while exact capabilities remain live --> FVFAILREL
     FVOCGATE -- Capability loss or epoch substitution --> FVRUNNERFAILSTOP
     FVOCGATE -- Yes --> FINVID[DeriveFinalValidationInvocationIdAction<br/>closed run/workflow/final-workspace/check-set tuple; consume no task-execution ledger]
-    FINVID --> FOVER[CreateFinalValidationOverlayAction from the final committed workspace revision,<br/>fresh invocation, validated startup-cleanup evidence, live process lease and locked collection;<br/>durably publish the write-once lease header before the empty overlay]
+    FINVID --> FVHEADER[BuildFinalValidationOverlayLeaseHeaderAction then<br/>ValidateFinalValidationOverlayLeaseHeaderAction; bind exact engine-owned canonical bytes,<br/>owner/outer/collection epochs and atomic all-or-nothing visible publication]
+    FVHEADER --> FVHEADERGATE{Header validation and capability guard}
+    FVHEADERGATE -- Invalid header with exact capabilities still live --> FVFAILREL
+    FVHEADERGATE -- Capability loss or epoch substitution --> FVRUNNERFAILSTOP
+    FVHEADERGATE -- Valid --> FOVER[CreateFinalValidationOverlayAction from the final committed workspace revision,<br/>validated engine-owned header, startup-cleanup evidence, live process lease and locked collection;<br/>publish exactly that complete header atomically or nothing before the empty overlay]
     FOVER --> FVCREATEVALID[ValidateFinalValidationOverlayCreationObservationAction over the closed raw outcome;<br/>accept only exact structural header, empty overlay, header-before-publication ordering,<br/>same collection-lock epoch and no coexistence; adapter failure is cleanup-required rejection]
     FVCREATEVALID --> FVCREATEGATE{Validated creation or cleanup-required rejection}
-    FVCREATEGATE -- Rejected, failed or publication indeterminate --> FVCREATECLEAN[CleanupRejectedFinalValidationOverlayCreationAction;<br/>discard-or-confirm-absent only the engine-derived candidate identity under the same lock;<br/>never use an untrusted returned header]
-    FVCREATECLEAN --> FVCREATECLEANVALID[ValidateFinalValidationOverlayCreationCleanupAction;<br/>prove zero candidate entries/bytes, unchanged authorities and continuous exact lock ownership]
+    FVCREATEGATE -- Rejected, failed or publication indeterminate while all exact capabilities remain live --> FVCREATECLEAN[CleanupRejectedFinalValidationOverlayCreationAction;<br/>discard-or-confirm-absent only the engine-derived candidate identity under the same lock;<br/>never use an untrusted returned header]
+    FVCREATEGATE -- Any outer/collection capability loss or epoch substitution --> FVRUNNERFAILSTOP
+    FVCREATECLEAN --> FVCREATEINSPECT[InspectRejectedFinalValidationOverlayCreationCandidateAction when the<br/>runner guard still proves the exact lock and outer controls; independently capture raw candidate<br/>entries/bytes, completeness/ceiling/change flags, collection epoch and adapter identity]
+    FVCREATECLEAN -. any capability loss before inspection .-> FVRUNNERFAILSTOP
+    FVCREATEINSPECT --> FVCREATECLEANVALID[ValidateFinalValidationOverlayCreationCleanupAction;<br/>prove complete no-ceiling independent inspection, zero candidate entries/bytes,<br/>unchanged authorities and continuous exact lock ownership]
     FVCREATECLEANVALID --> FVCREATECLEANGATE{Candidate cleanup valid}
     FVCREATECLEANGATE -- Yes --> FVFAILREL[ReleaseFinalValidationOverlayCollectionLockAction then<br/>ValidateFinalValidationOverlayCollectionLockReleaseAction for exact typed prepublication<br/>or creation-cleanup evidence; prove both outer controls remain live]
     FVCREATECLEANGATE -- No or any capability loss/epoch substitution --> FVRUNNERFAILSTOP
-    FVFAILREL --> FVFAILRELGATE{Validated collection-lock release evidence}
+    FVFAILREL --> FVFAILRELGATE{Closed collection-lock release validation result}
     FVFAILRELGATE -- Yes --> FVIBLOCK
-    FVFAILRELGATE -- No with exact capabilities still held --> FVCOLLRECOVERY
+    FVFAILRELGATE -- Proven still held; release-retry evidence --> FVCOLLRECOVERY
+    FVFAILRELGATE -- Adapter/table state indeterminate; closed fail-stop evidence --> FVRUNNERFAILSTOP
     FVFAILRELGATE -- Capability loss or epoch substitution --> FVRUNNERFAILSTOP
     FVCREATEGATE -- Valid --> FVLOCKREL[ReleaseFinalValidationOverlayCollectionLockAction then<br/>ValidateFinalValidationOverlayCollectionLockReleaseAction; release the exact collection lock<br/>only after validated publication and prove both outer controls remain continuously live]
-    FVLOCKREL --> FVRELGATE{Collection-lock release evidence valid}
-    FVRELGATE -- No with exact capabilities still held --> FVCOLLRECOVERY[Remain in collection-lock release recovery;<br/>do not terminalize or release either outer feature-execution capability<br/>until exact no-held-collection-lock evidence is validated]
+    FVLOCKREL --> FVRELGATE{Closed collection-lock release validation result}
+    FVRELGATE -- Proven still held; release-retry evidence --> FVCOLLRECOVERY[Remain in collection-lock release recovery;<br/>do not terminalize or release either outer feature-execution capability<br/>until exact no-held-collection-lock evidence is validated]
+    FVRELGATE -- Adapter/table state indeterminate; closed fail-stop evidence --> FVRUNNERFAILSTOP
     FVRELGATE -- Capability loss or epoch substitution --> FVRUNNERFAILSTOP
     FVRELGATE -- Yes --> FCHECK{Next required stage-level check and attempt}
     FVCOLLRECOVERY --> FVCOLLRETRY{PipelineRunner capability guard rechecks the exact<br/>process lease, feature lock, collection-lock token and epochs}
     FVCOLLRETRY -- All exact and live --> FVCOLLRETRYREL[Retry ReleaseFinalValidationOverlayCollectionLockAction then<br/>ValidateFinalValidationOverlayCollectionLockReleaseAction with the retained exact<br/>created, prepublication-failure or creation-cleanup evidence]
     FVCOLLRETRY -- Lost, absent or substituted --> FVRUNNERFAILSTOP
-    FVCOLLRETRYREL --> FVCOLLRETRYGATE{Validated release and retained purpose}
+    FVCOLLRETRYREL --> FVCOLLRETRYGATE{Closed collection-lock release validation result<br/>and retained purpose}
     FVCOLLRETRYGATE -- Created overlay --> FCHECK
     FVCOLLRETRYGATE -- Failure or cleaned creation candidate --> FVIBLOCK
-    FVCOLLRETRYGATE -- Still held with exact capabilities --> FVCOLLRECOVERY
+    FVCOLLRETRYGATE -- Proven still held; release-retry evidence --> FVCOLLRECOVERY
+    FVCOLLRETRYGATE -- Adapter/table state indeterminate; closed fail-stop evidence --> FVRUNNERFAILSTOP
     FVCOLLRETRYGATE -- Capability loss or epoch substitution --> FVRUNNERFAILSTOP
     FCHECK -- Check remains --> FNAUTHID[DeriveFinalValidationCommandAuthorizationIdAction<br/>closed invocation/check/attempt tuple; no task-ledger allocation]
     FNAUTHID --> FNAUTH[BuildNonPromotingCommandAuthorizationAction<br/>read-only or discard_all; only declared disposable effects]
@@ -344,16 +356,19 @@ flowchart TD
     FSP --> FSPCREATEVALID[ValidateFinalValidationCommandSavepointCreationAction;<br/>prove exact authorization/savepoint/parent/header/owner/outer-control joins,<br/>unique revision-zero child publication and an unchanged parent before execution]
     FSPCREATEVALID --> FSPCREATEGATE{Validated final-command child creation}
     FSPCREATEGATE -- Valid --> FRUN[RunConfiguredCommandAction<br/>capture bounded RawCommandExecutionObservation]
-    FSPCREATEGATE -- Adapter failure, indeterminate publication or typed rejection;<br/>child is untrusted --> FVCHILDABORT
+    FSPCREATEGATE -- Adapter failure, indeterminate publication or typed rejection<br/>while exact outer controls remain live; child is untrusted --> FVCHILDABORT
+    FSPCREATEGATE -- Outer capability loss or epoch substitution --> FVRUNNERFAILSTOP
     FRUN --> FPROC[ValidateCommandProcessOutcomeAction<br/>apply success_required and produce a typed passed/rejected outcome;<br/>raw exit/output observations are never evidence]
     FPROC --> FDECODE[DecodeCommandDeltaAction]
     FDECODE --> FSAFE[ValidateCommandResourceTelemetryAction then ValidateCommandDeltaAction]
     FSAFE --> FSDROP[DiscardCommandSavepointAction for every process/safety outcome;<br/>call only FinalValidationOverlayPort.discardFinalValidationCommandSavepoint and return<br/>a closed observed-or-adapter-failed outcome while both outer controls remain live]
-    FSDROP --> FSDROPINSPECT[InspectFinalValidationCommandSavepointAfterDiscardAction;<br/>capture raw bounded child presence/bytes, parent revision, task-boundary-record count,<br/>authority-change flags, completeness/ceiling status and adapter identity]
+    FSDROP --> FSDROPINSPECT[InspectFinalValidationCommandSavepointAfterDiscardAction only while the runner guard<br/>retains both exact outer controls; capture raw bounded child presence/bytes, parent revision,<br/>task-boundary-record count, authority-change flags, completeness/ceiling and adapter identity]
+    FSDROP -. outer capability loss before inspection .-> FVRUNNERFAILSTOP
     FSDROPINSPECT --> FSDROPVALID[ValidateFinalValidationCommandSavepointDiscardAction over the raw discard outcome<br/>and independent post-discard inspection; prove exact child absence, directly unchanged parent,<br/>zero residual child bytes/entries and task records, and exact live outer-control joins]
     FSDROPVALID --> FSDROPGATE{Validated final-command child discard}
     FSDROPGATE -- Valid --> FCLASS{Typed process outcome and delta/resource safety result<br/>plus validated final-command child-discard evidence}
-    FSDROPGATE -- Adapter-indeterminate, incomplete or typed rejection;<br/>verification unreachable --> FVCHILDABORT[DiscardFinalValidationOverlayAction;<br/>recursively discard the entire disposable parent from the typed child creation/discard rejection,<br/>exact validated parent header and still-live feature-execution lock/process lease;<br/>never trust or address the rejected/indeterminate child]
+    FSDROPGATE -- Adapter-indeterminate, incomplete or typed rejection while exact outer controls<br/>remain live; verification unreachable --> FVCHILDABORT[DiscardFinalValidationOverlayAction;<br/>recursively discard the entire disposable parent from the typed child creation/discard rejection,<br/>exact validated parent header and still-live feature-execution lock/process lease;<br/>never trust or address the rejected/indeterminate child]
+    FSDROPGATE -- Outer capability loss or epoch substitution --> FVRUNNERFAILSTOP
     FVCHILDABORT --> FVCHILDABORTVALID[ValidateFinalValidationOverlayDiscardAction;<br/>require discriminated recursive-parent-abort evidence, complete parent-tree absence,<br/>zero residual bytes and unchanged project/spec/engine authority]
     FVCHILDABORTVALID --> FVCHILDABORTGATE{Recursive parent abort valid}
     FVCHILDABORTGATE -- Yes --> FVABORTED[Block with the exact final-command child diagnostic and<br/>recursive-abort evidence; build no command verification result or final record]
@@ -406,7 +421,7 @@ flowchart TD
     EVIDRETIRE --> EVIDPERSIST[Build and validate the owning successor evidence registry and persist it before retry/exit:<br/>if a task adapter boundary is ready, commit an otherwise authority-equal checkpoint retaining that<br/>same boundary for normal restart recovery; if boundary-free, use the owning checkpoint/outcome;<br/>for final validation, discard its disposable overlay before the failed-stage transaction]
     EVIDPERSIST --> EVIDSTOP[Stop or restart at the durable owning gate;<br/>never clear, repeat or reclassify an adapter effect through retirement]
 
-    RBLOCK --> FETERMINAL[Carry the exact implementation success, error, block or cancellation outcome;<br/>invoke BuildFinalValidationOverlayCollectionLockTerminalEvidenceAction once from exactly<br/>not-attempted runner-path proof, validated contention, rejected-observation cleanup,<br/>or exact normal release evidence before releasing either outer capability]
+    RBLOCK --> FETERMINAL[Carry the exact implementation success, error, block or cancellation outcome;<br/>invoke BuildFinalValidationOverlayCollectionLockTerminalEvidenceAction once from exactly<br/>not-attempted runner-path proof, validated contention/no-token acquisition failure,<br/>rejected-observation cleanup, or exact normal release evidence before either outer release]
     FVIBLOCK --> FETERMINAL
     IMPLEMENTED --> FETERMINAL
     REMEDIATION --> FETERMINAL
@@ -420,7 +435,7 @@ flowchart TD
     FEPLTERMREL --> FEPLTERMRELVALID[ValidateFeatureExecutionProcessLeaseReleaseAction;<br/>prove the exact run/process lease absent, nonreusable and terminal after the feature lock]
     FEPLTERMRELVALID --> IMPLEMENTATIONRETURN[Return the retained exact implementation terminal outcome]
 
-    FVRUNNERFAILSTOP[PipelineRunner capability guard or discard validator produces<br/>RunnerCapabilityLossFailStopEvidence or FinalValidationOverlayDiscardRejection;<br/>invoke no further pipeline node and fabricate no ordinary release/absence evidence] --> FVPROCESSDEATH[Fail-stop the owner process;<br/>OS releases the nonrebindable collection lock, feature lock and process lease;<br/>no success/blocked PipelineOutcome is returned from the interrupted run]
+    FVRUNNERFAILSTOP[PipelineRunner guard or validator produces one closed<br/>FinalValidationRunnerFailStopEvidence variant for capability loss, indeterminate lock cleanup/release,<br/>creation cleanup failure or parent-discard rejection; invoke no further pipeline node<br/>and fabricate no ordinary release/absence evidence] --> FVPROCESSDEATH[Fail-stop the owner process;<br/>OS releases the nonrebindable collection lock, feature lock and process lease;<br/>no success/blocked PipelineOutcome is returned from the interrupted run]
     FVPROCESSDEATH --> FVFRESHRUN[Fresh invocation acquires new process/feature/collection epochs;<br/>bounded startup inventory and OS-backed liveness classification sweep the old parent tree]
     FVFRESHRUN -. restart only through the normal stage gate .-> ISTAGE
 
