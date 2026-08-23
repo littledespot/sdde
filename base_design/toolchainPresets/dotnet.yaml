@@ -1,0 +1,77 @@
+version: "1.0"
+
+package:
+  configFiles:
+    manifest: "*.csproj"
+  commands:
+    install: dotnet restore
+    add: dotnet add package {{package}}
+    addDev: dotnet add package {{package}}
+    validatePackage: dotnet package search {{package}} --take 1 > /dev/null
+
+build:
+  commands:
+    compile: dotnet build --configuration Release
+    syntax: dotnet build --configuration Release --no-restore
+  paths:
+    source: src/
+    output: bin/Release/
+  patterns:
+    file: "*.cs"
+  language:
+    extensions:
+      - .cs
+    name: csharp
+
+test:
+  unit:
+    commands:
+      runAll: dotnet test
+    paths:
+      root: tests/Unit/
+    placement: mirrored
+    patterns:
+      file: "*Tests.cs"
+      include:
+        - "**/*Tests.cs"
+        - "**/*Test.cs"
+      exclude:
+        - "**/bin/**"
+        - "**/obj/**"
+  integration:
+    commands:
+      runAll: dotnet test
+    paths:
+      root: tests/Integration/
+    patterns:
+      file: "*IntegrationTests.cs"
+      include:
+        - "**/*IntegrationTests.cs"
+        - "**/*IT.cs"
+  e2e:
+    paths:
+      root: tests/E2E/
+    patterns:
+      file: "*E2ETests.cs"
+      include:
+        - "**/*E2ETests.cs"
+        - "**/*E2E.cs"
+
+quality:
+  commands:
+    lint: dotnet format --verify-no-changes
+
+protection:
+  patterns:
+    - "**/bin/**"
+    - "**/obj/**"
+    - "**/.vs/**"
+    - "**/.git/**"
+
+ast:
+  grammars:
+    .cs:
+      module: tree-sitter-c-sharp
+      packageName: tree-sitter-c-sharp
+      wasmFileName: tree-sitter-c-sharp.wasm
+      localWasmFileName: tree-sitter-c_sharp.wasm

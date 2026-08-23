@@ -1,0 +1,6 @@
+version: "1.0"
+
+framework:
+  name: express
+  package: express
+  ecosystem: npm

@@ -1,0 +1,83 @@
+version: "1.0"
+
+package:
+  configFiles:
+    manifest: package.json
+  commands:
+    install: npm install
+    add: npm install {{package}}
+    addDev: npm install --save-dev {{package}}
+    validatePackage: npm view {{package}} version --json > /dev/null
+    flags: "--ignore-scripts"
+
+build:
+  commands:
+    compile: npm run build
+    syntax: npx tsc --noEmit --skipLibCheck --skipDefaultLibCheck --jsx preserve
+  paths:
+    source: src/
+    output: dist/
+  patterns:
+    file: "*.{ts,tsx}"
+  language:
+    extensions:
+      - .ts
+      - .tsx
+    name: typescript
+
+test:
+  runner: vitest
+  unit:
+    commands:
+      runAll: npx vitest run
+      runFile: npx vitest run {{active_file}}
+    paths:
+      root: src/
+      subdir: __tests__
+    placement: co-located
+    patterns:
+      file: "*.test.ts"
+      include:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.spec.ts"
+        - "**/*.spec.tsx"
+      exclude:
+        - "**/node_modules/**"
+        - "**/dist/**"
+  integration:
+    commands:
+      runAll: npx vitest run
+      runFile: npx vitest run {{active_file}}
+    paths:
+      root: tests/integration/
+    patterns:
+      file: "*.integration.test.{ts,tsx}"
+      include:
+        - "**/*.integration.test.ts"
+        - "**/*.integration.test.tsx"
+        - "**/*.integration.spec.ts"
+        - "**/*.integration.spec.tsx"
+
+quality:
+  commands:
+    lint: npm run lint
+
+protection:
+  patterns:
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/coverage/**"
+    - "package-lock.json"
+    - "**/.git/**"
+
+ast:
+  importQueries:
+    .ts: ".sddtoolkit/queries/ecmascript-imports.scm"
+    .tsx: ".sddtoolkit/queries/ecmascript-imports.scm"
+  grammars:
+    .ts: tree-sitter-typescript
+    .tsx:
+      module: tree-sitter-tsx
+      packageName: tree-sitter-typescript

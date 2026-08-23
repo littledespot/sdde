@@ -1,0 +1,62 @@
+version: "1.0"
+
+package:
+  configFiles:
+    manifest: pom.xml
+  commands:
+    install: "mvn dependency:resolve"
+    validatePackage: mvn -q dependency:get -Dartifact={{package}} -Dtransitive=false
+
+build:
+  commands:
+    compile: mvn compile
+    syntax: mvn test-compile -q
+  paths:
+    source: src/main/java/
+    output: target/
+  patterns:
+    file: "*.java"
+  language:
+    extensions:
+      - .java
+    name: java
+
+test:
+  unit:
+    commands:
+      runAll: mvn test
+    paths:
+      root: src/test/java/
+    placement: mirrored
+    patterns:
+      file: "*Test.java"
+      include:
+        - "**/*Test.java"
+        - "**/*Tests.java"
+      exclude:
+        - "**/target/**"
+  integration:
+    commands:
+      runAll: mvn verify
+    paths:
+      root: src/test/java/
+    patterns:
+      file: "*IT.java"
+      include:
+        - "**/*IT.java"
+      exclude:
+        - "**/target/**"
+
+quality:
+  commands:
+    lint: "mvn checkstyle:check"
+
+protection:
+  patterns:
+    - "**/target/**"
+    - "**/.mvn/**"
+    - "**/.git/**"
+
+ast:
+  grammars:
+    .java: tree-sitter-java

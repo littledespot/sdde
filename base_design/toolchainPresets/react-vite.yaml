@@ -1,0 +1,116 @@
+version: "1.0"
+
+framework:
+  name: react
+  package: react
+  ecosystem: npm
+
+package:
+  configFiles:
+    manifest: package.json
+  commands:
+    install: npm install
+    add: npm install {{package}}
+    addDev: npm install --save-dev {{package}}
+    validatePackage: npm view {{package}} version --json > /dev/null
+    flags: "--ignore-scripts"
+
+build:
+  commands:
+    compile: npx vite build
+    syntax: npx tsc --noEmit --project tsconfig.app.json
+  paths:
+    source: src/
+    output: dist/
+  patterns:
+    file: "*.{ts,tsx,js,jsx,css}"
+  language:
+    extensions:
+      - .ts
+      - .tsx
+      - .js
+      - .jsx
+      - .css
+    name: typescript
+
+test:
+  runner: vitest
+  unit:
+    commands:
+      runAll: npx vitest run
+      runFile: npx vitest run {{active_file}}
+    paths:
+      root: src/
+      subdir: __tests__
+    placement: co-located
+    patterns:
+      file: "*.test.tsx"
+      include:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.test.js"
+        - "**/*.test.jsx"
+        - "**/*.spec.ts"
+        - "**/*.spec.tsx"
+        - "**/*.spec.js"
+        - "**/*.spec.jsx"
+      exclude:
+        - "**/node_modules/**"
+        - "**/dist/**"
+  integration:
+    commands:
+      runAll: npx vitest run
+      runFile: npx vitest run {{active_file}}
+    paths:
+      root: tests/integration/
+    patterns:
+      file: "*.integration.test.{ts,tsx,js,jsx}"
+      include:
+        - "**/*.integration.test.ts"
+        - "**/*.integration.test.tsx"
+        - "**/*.integration.test.js"
+        - "**/*.integration.test.jsx"
+        - "**/*.integration.spec.ts"
+        - "**/*.integration.spec.tsx"
+        - "**/*.integration.spec.js"
+        - "**/*.integration.spec.jsx"
+  e2e:
+    paths:
+      root: tests/e2e/
+    patterns:
+      file: "*.e2e.{ts,tsx,js,jsx}"
+      include:
+        - "**/*.e2e.ts"
+        - "**/*.e2e.tsx"
+        - "**/*.e2e.js"
+        - "**/*.e2e.jsx"
+
+quality:
+  commands:
+    lint: npx eslint .
+
+protection:
+  patterns:
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/.vite/**"
+    - "package-lock.json"
+    - "**/.git/**"
+
+ast:
+  importQueries:
+    .ts: ".sddtoolkit/queries/ecmascript-imports.scm"
+    .tsx: ".sddtoolkit/queries/ecmascript-imports.scm"
+    .js: ".sddtoolkit/queries/ecmascript-imports.scm"
+    .jsx: ".sddtoolkit/queries/ecmascript-imports.scm"
+  grammars:
+    .ts: tree-sitter-typescript
+    .tsx:
+      module: tree-sitter-tsx
+      packageName: tree-sitter-typescript
+    .js: tree-sitter-javascript
+    .jsx:
+      module: tree-sitter-tsx
+      packageName: tree-sitter-typescript
+    .css: tree-sitter-css

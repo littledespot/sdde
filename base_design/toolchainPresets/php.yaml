@@ -1,0 +1,67 @@
+version: "1.0"
+
+package:
+  configFiles:
+    manifest: composer.json
+  commands:
+    install: composer install
+    add: composer require {{package}}
+    addDev: composer require --dev {{package}}
+    validatePackage: composer show {{package}} --all --no-ansi > /dev/null
+    flags: "--no-plugins"
+
+build:
+  commands:
+    compile: composer dump-autoload
+    syntax: composer run phpstan
+  paths:
+    source: src/
+    output: dist/
+  patterns:
+    file: "*.php"
+  language:
+    extensions:
+      - .php
+    name: php
+
+test:
+  unit:
+    commands:
+      runAll: vendor/bin/phpunit
+      runFile: vendor/bin/phpunit {{active_file}}
+    paths:
+      root: tests/
+    placement: mirrored
+    patterns:
+      file: "*Test.php"
+      include:
+        - "**/*Test.php"
+      exclude:
+        - "**/vendor/**"
+  integration:
+    commands:
+      runAll: vendor/bin/phpunit
+      runFile: vendor/bin/phpunit {{active_file}}
+    paths:
+      root: tests/integration/
+    patterns:
+      file: "*IntegrationTest.php"
+      include:
+        - "**/*IntegrationTest.php"
+        - "**/*IT.php"
+      exclude:
+        - "**/vendor/**"
+
+quality:
+  commands:
+    lint: vendor/bin/phpcs
+
+protection:
+  patterns:
+    - "**/vendor/**"
+    - "composer.lock"
+    - "**/.git/**"
+
+ast:
+  grammars:
+    .php: tree-sitter-php

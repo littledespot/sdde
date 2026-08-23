@@ -1,0 +1,98 @@
+version: "1.0"
+
+framework:
+  name: vue
+  package: vue
+  ecosystem: npm
+
+package:
+  configFiles:
+    manifest: package.json
+  commands:
+    install: npm install
+    add: npm install {{package}}
+    addDev: npm install --save-dev {{package}}
+    validatePackage: npm view {{package}} version --json > /dev/null
+    flags: "--ignore-scripts"
+
+build:
+  commands:
+    compile: npx vite build
+    syntax: npx vue-tsc --noEmit
+  paths:
+    source: src/
+    output: dist/
+  patterns:
+    file: "*.{ts,js,vue,css}"
+  language:
+    extensions:
+      - .ts
+      - .js
+      - .vue
+      - .css
+    name: typescript
+
+test:
+  runner: vitest
+  unit:
+    commands:
+      runAll: npx vitest run
+      runFile: npx vitest run {{active_file}}
+    paths:
+      root: src/
+      subdir: __tests__
+    placement: co-located
+    patterns:
+      file: "*.spec.ts"
+      include:
+        - "**/*.test.ts"
+        - "**/*.test.js"
+        - "**/*.spec.ts"
+        - "**/*.spec.js"
+      exclude:
+        - "**/node_modules/**"
+        - "**/dist/**"
+  integration:
+    commands:
+      runAll: npx vitest run
+      runFile: npx vitest run {{active_file}}
+    paths:
+      root: tests/integration/
+    patterns:
+      file: "*.integration.spec.{ts,js}"
+      include:
+        - "**/*.integration.test.ts"
+        - "**/*.integration.test.js"
+        - "**/*.integration.spec.ts"
+        - "**/*.integration.spec.js"
+  e2e:
+    paths:
+      root: tests/e2e/
+    patterns:
+      file: "*.e2e.{ts,js}"
+      include:
+        - "**/*.e2e.ts"
+        - "**/*.e2e.js"
+
+quality:
+  commands:
+    lint: npx eslint .
+
+protection:
+  patterns:
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/.vite/**"
+    - "package-lock.json"
+    - "**/.git/**"
+
+ast:
+  importQueries:
+    .ts: ".sddtoolkit/queries/ecmascript-imports.scm"
+    .js: ".sddtoolkit/queries/ecmascript-imports.scm"
+  grammars:
+    .ts: tree-sitter-typescript
+    .js: tree-sitter-javascript
+    .vue: tree-sitter-vue
+    .css: tree-sitter-css

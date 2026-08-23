@@ -1,0 +1,75 @@
+version: "1.0"
+
+package:
+  configFiles:
+    manifest: requirements.txt
+  commands:
+    install: pip install -r requirements.txt
+    add: "pip install {{package}}"
+    addDev: "pip install {{package}}"
+    validatePackage: python -m pip index versions {{package}} > /dev/null
+
+build:
+  commands:
+    compile: "python -m py_compile src/**/*.py"
+    syntax: mypy .
+  paths:
+    source: src/
+    output: dist/
+  patterns:
+    file: "*.{py,pyi}"
+  language:
+    extensions:
+      - .py
+      - .pyi
+    name: python
+
+test:
+  unit:
+    commands:
+      runAll: pytest
+      runFile: pytest {{active_file}}
+    paths:
+      root: tests/
+    placement: mirrored
+    patterns:
+      file: "test_*.py"
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+      exclude:
+        - "**/__pycache__/**"
+  integration:
+    commands:
+      runAll: pytest
+      runFile: pytest {{active_file}}
+    paths:
+      root: tests/integration/
+    patterns:
+      file: "test_*.py"
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+      exclude:
+        - "**/__pycache__/**"
+
+quality:
+  commands:
+    lint: ruff check .
+
+protection:
+  patterns:
+    - "**/__pycache__/**"
+    - "**/*.pyc"
+    - "**/.pytest_cache/**"
+    - "**/venv/**"
+    - "**/.venv/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/.eggs/**"
+    - "**/.git/**"
+
+ast:
+  grammars:
+    .py: tree-sitter-python
+    .pyi: tree-sitter-python

@@ -1,0 +1,106 @@
+version: "1.0" # mandatory
+
+framework: # optional — framework identity only; framework presets must not inherit from another framework or select a test runner
+  name: "<!-- IMPLEMENT -->" # mandatory when framework is present
+  package: "<!-- IMPLEMENT -->" # optional package/dependency marker
+  ecosystem: "<!-- IMPLEMENT -->" # optional package ecosystem for the marker
+
+package: # optional — package-manager layer only
+  manager: "<!-- IMPLEMENT -->" # optional
+  lockfile: "<!-- IMPLEMENT -->" # optional
+  configFiles:
+    manifest: "<!-- IMPLEMENT -->" # mandatory
+  manifestConfig: # optional
+    sourceDirectoriesKey: "<!-- IMPLEMENT -->"
+    structureType: "<!-- IMPLEMENT -->"
+    directoryTransformer: "<!-- IMPLEMENT -->"
+    directoryValuePattern: "<!-- IMPLEMENT -->"
+    dependencyKeys:
+      - "<!-- IMPLEMENT -->"
+  commands: # mandatory
+    install: "<!-- IMPLEMENT -->" # mandatory
+    add: "<!-- IMPLEMENT -->" # optional — must contain {{package}} placeholder if present; omit when manifest mutation is unsupported
+    addDev: "<!-- IMPLEMENT -->" # optional — must contain {{package}} placeholder if present
+    validatePackage: "<!-- IMPLEMENT -->" # mandatory
+    flags: "<!-- IMPLEMENT -->" # optional
+
+build: # optional — build/language layer only
+  commands: # mandatory
+    compile: "<!-- IMPLEMENT -->" # mandatory
+    syntax: "<!-- IMPLEMENT globally -->" # optional
+  paths: # mandatory
+    source: "<!-- IMPLEMENT -->" # mandatory
+    output: "<!-- IMPLEMENT -->" # mandatory
+    assets: "<!-- IMPLEMENT -->" # optional
+  patterns: # optional
+    file: "<!-- IMPLEMENT -->"
+    include:
+      - "<!-- IMPLEMENT -->"
+    exclude:
+      - "<!-- IMPLEMENT -->"
+  language:
+    extensions:
+      - "<!-- IMPLEMENT -->" # mandatory
+test: # optional — test-runner layer only
+  unit: # mandatory
+    commands:
+      runAll: "<!-- IMPLEMENT -->" # mandatory
+      runFile: "<!-- IMPLEMENT -->" # optional
+    paths:
+      root: "<!-- IMPLEMENT -->" # optional
+      subdir: "<!-- IMPLEMENT -->" # optional
+    patterns: # optional
+      file: "<!-- IMPLEMENT -->" # optional — basename glob the LLM MUST use for test files. Add per project when a naming convention applies.
+      include:
+        - "<!-- IMPLEMENT -->" # optional
+      exclude:
+        - "<!-- IMPLEMENT -->" # optional
+    placement: "<!-- IMPLEMENT -->" # mandatory — co-located | mirrored
+  integration: # optional
+    commands:
+      runAll: "<!-- IMPLEMENT -->" # optional
+      runFile: "<!-- IMPLEMENT -->" # optional
+    paths:
+      root: "<!-- IMPLEMENT -->" # optional
+      subdir: "<!-- IMPLEMENT -->" # optional
+    patterns: # optional
+      file: "<!-- IMPLEMENT -->" # optional
+      include:
+        - "<!-- IMPLEMENT -->" # optional
+      exclude:
+        - "<!-- IMPLEMENT -->" # optional
+  e2e: # optional
+    commands:
+      runAll: "<!-- IMPLEMENT -->" # optional
+      runFile: "<!-- IMPLEMENT -->" # optional
+    paths:
+      root: "<!-- IMPLEMENT -->" # optional
+      subdir: "<!-- IMPLEMENT -->" # optional
+    patterns:
+      file: "<!-- IMPLEMENT -->" # optional
+      include:
+        - "<!-- IMPLEMENT -->"
+      exclude:
+        - "<!-- IMPLEMENT -->"
+
+pathPolicies: # optional physical policies for kinds not derived above
+  config:
+    roots:
+      - "<!-- IMPLEMENT -->"
+    filenamePatterns:
+      - "<!-- IMPLEMENT -->"
+  style:
+    roots:
+      - "<!-- IMPLEMENT -->"
+    extensions:
+      - "<!-- IMPLEMENT -->"
+
+quality: # optional
+  commands: # optional
+    lint: "<!-- IMPLEMENT -->" # optional
+
+ast: # optional — language/parser layer only
+  importQueries:
+    ".ext": ".sddtoolkit/queries/<query>.scm"
+  grammars:
+    ".ext": "<!-- IMPLEMENT -->"

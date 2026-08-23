@@ -1,0 +1,76 @@
+version: "1.0"
+
+package:
+  configFiles:
+    manifest: pyproject.toml
+  commands:
+    install: poetry install
+    add: poetry add {{package}}
+    addDev: poetry add --group dev {{package}}
+    validatePackage: poetry search {{package}} > /dev/null
+
+build:
+  commands:
+    compile: "poetry run python -m py_compile src/**/*.py"
+    syntax: poetry run mypy .
+  paths:
+    source: src/
+    output: dist/
+  patterns:
+    file: "*.{py,pyi}"
+  language:
+    extensions:
+      - .py
+      - .pyi
+    name: python
+
+test:
+  unit:
+    commands:
+      runAll: poetry run pytest
+      runFile: poetry run pytest {{active_file}}
+    paths:
+      root: tests/
+    placement: mirrored
+    patterns:
+      file: "test_*.py"
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+      exclude:
+        - "**/__pycache__/**"
+  integration:
+    commands:
+      runAll: poetry run pytest
+      runFile: poetry run pytest {{active_file}}
+    paths:
+      root: tests/integration/
+    patterns:
+      file: "test_*.py"
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+      exclude:
+        - "**/__pycache__/**"
+
+quality:
+  commands:
+    lint: poetry run ruff check .
+
+protection:
+  patterns:
+    - "**/__pycache__/**"
+    - "**/*.pyc"
+    - "**/.pytest_cache/**"
+    - "**/venv/**"
+    - "**/.venv/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/.eggs/**"
+    - "poetry.lock"
+    - "**/.git/**"
+
+ast:
+  grammars:
+    .py: tree-sitter-python
+    .pyi: tree-sitter-python

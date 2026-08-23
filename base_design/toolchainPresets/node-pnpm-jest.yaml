@@ -1,0 +1,83 @@
+version: "1.0"
+
+package:
+  configFiles:
+    manifest: package.json
+  commands:
+    install: pnpm install
+    add: pnpm add {{package}}
+    addDev: pnpm add -D {{package}}
+    validatePackage: pnpm view {{package}} version --json > /dev/null
+    flags: "--ignore-scripts"
+
+build:
+  commands:
+    compile: pnpm exec tsc
+    syntax: pnpm exec tsc --noEmit --skipLibCheck --skipDefaultLibCheck --jsx preserve
+  paths:
+    source: src/
+    output: dist/
+  patterns:
+    file: "*.{ts,tsx}"
+  language:
+    extensions:
+      - .ts
+      - .tsx
+    name: typescript
+
+test:
+  runner: jest
+  unit:
+    commands:
+      runAll: pnpm exec jest
+      runFile: pnpm exec jest {{active_file}}
+    paths:
+      root: src/
+      subdir: __tests__
+    placement: co-located
+    patterns:
+      file: "*.test.ts"
+      include:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.spec.ts"
+        - "**/*.spec.tsx"
+      exclude:
+        - "**/node_modules/**"
+        - "**/dist/**"
+  integration:
+    commands:
+      runAll: pnpm exec jest
+      runFile: pnpm exec jest {{active_file}}
+    paths:
+      root: tests/integration/
+    patterns:
+      file: "*.integration.test.{ts,tsx}"
+      include:
+        - "**/*.integration.test.ts"
+        - "**/*.integration.test.tsx"
+        - "**/*.integration.spec.ts"
+        - "**/*.integration.spec.tsx"
+
+quality:
+  commands:
+    lint: pnpm exec eslint .
+
+protection:
+  patterns:
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/coverage/**"
+    - "pnpm-lock.yaml"
+    - "**/.git/**"
+
+ast:
+  importQueries:
+    .ts: ".sddtoolkit/queries/ecmascript-imports.scm"
+    .tsx: ".sddtoolkit/queries/ecmascript-imports.scm"
+  grammars:
+    .ts: tree-sitter-typescript
+    .tsx:
+      module: tree-sitter-tsx
+      packageName: tree-sitter-typescript

@@ -1,0 +1,3909 @@
+# Deterministic SDD Engine
+
+## Architecture and detailed design for `specify -> plan -> tasks -> implement`
+
+**Status:** Proposed design  
+**Scope:** A new engine. The current repository is source material for workflow behavior; it is not the implementation target.  
+**Primary inputs:** `prompts/sdd-specify.md`, `prompts/sdd-plan.md`, `prompts/sdd-tasks.md`, `prompts/sdd-implement.md`, their templates and flow documentation, `new_engine/_structure.yaml`, every example under `new_engine/toolchainPresets/`, `new_engine/.sddtoolkit.json.example`, and the category-guided free-text examples under `new_engine/principles/`.  
+**Out of scope:** Editing the current prompts/scripts, `init`, `drift`, `audit`, version-control workflow integration, and artifact fingerprinting.
+
+---
+
+## 1. Executive summary
+
+The new engine must treat an LLM as an untrusted semantic content generator, not as the workflow runtime. The LLM must not choose the workflow sequence, perform filesystem operations, run arbitrary tools, declare its own output valid, or mark work complete. It receives a small typed assignment, preset-derived guidance, the relevant evidence, and an exact response schema. It returns a candidate. The engine parses, validates, repairs, renders, persists, and verifies that candidate.
+
+The design has five defining properties:
+
+1. **Ordered workflow:** one feature flows through `specify`, `plan`, `tasks`, and `implement` in that order. Every stage revalidates the previous stage before it starts.
+2. **Deterministic shell around probabilistic work:** argument parsing, feature identity, paths, filenames, artifact structure, identifiers, traceability, dependency graphs, writes, commands, task state, and stage gates are engine-owned.
+3. **Preset-controlled project operations:** every model-proposed project path is classified and checked against the selected development-environment preset, such as React, Node, Java, or .NET, before it can be recorded in a plan, emitted as a task, or written during implementation.
+4. **Atomic repair:** a failed candidate is repaired at the smallest independently replaceable field, record, section, task, path, or code operation. Unrelated valid output is retained. The repaired candidate is never committed until all applicable validators pass.
+5. **Actions and orchestrators:** actions have one responsibility and a common typed interface. They do not coordinate other components. Orchestrators contain actions and/or other orchestrators, but perform no filesystem, LLM, parsing, validation, rendering, or command work themselves.
+
+The resulting boundary is:
+
+- **The engine owns:** control flow, policy, facts, schemas, identifiers, paths, artifact locations, rendering, side effects, validation, retry limits, diagnostics, and completion.
+- **The LLM owns:** understanding arbitrary reference material, extracting intent, writing business-facing requirements, making justified design choices, decomposing work, and generating or repairing code.
+- **Executable evidence owns:** syntax, build, lint, test, and other preset-defined checks. An LLM assertion never substitutes for executable evidence.
+
+---
+
+## 2. Existing workflow used as the design basis
+
+### 2.1 Behavior to preserve
+
+The repository defines a specification-first workflow in which requirements lead to design, design leads to an executable task list, and tasks lead to implementation (`README.md:3-9`; `docs/workflow-overview.md:86-90`). The new engine preserves these behavioral concepts:
+
+- `specify` accepts only a mandatory reference selector beneath the configured reference root; it derives the human feature brief from that reference.
+- Every validated reference artifact is an authoritative input; `README.md`, when present, is an organizer and does not outrank sibling files (`prompts/sdd-specify.md:153-167`; `docs/reference-folder-example.md:58-63`).
+- `spec.md` remains business-facing. Supplementary design, visual-system, technical, and verification detail is carried in `reference-context.md` (`prompts/sdd-specify.md:178-238`).
+- `plan` uses the specification, its mandatory reference context, the current repository, and project principles to produce research and design artifacts (`prompts/sdd-plan.md:33-113`).
+- `tasks` turns the plan and its artifacts into a dependency-ordered, traceable, executable task graph (`prompts/sdd-tasks.md:92-149`).
+- `implement` executes that graph, applies relevant project principles, verifies work, and marks a task complete only after it succeeds (`prompts/sdd-implement.md:71-137`).
+- Technology-agnostic workflow guidance becomes technology-specific only after the engine resolves the actual project environment (`README.md:315-328`).
+
+### 2.2 Why a new engine is needed
+
+The current material often describes deterministic operations, but expresses them as instructions for an LLM. A model is currently expected to parse arguments, run scripts, interpret output, choose paths, inspect files, decide whether gates passed, write artifacts, run implementation work, and update task state. Those steps can be skipped, misunderstood, or inconsistently applied—especially by a lower-capability model.
+
+The current source material also contains useful examples of ambiguity that a deterministic engine must eliminate rather than ask a model to reconcile:
+
+- Runtime prompts require a feature argument, while helper scripts and several flow documents support auto-selection (`prompts/sdd-plan.md:12-29`; `.specify/scripts/bash/setup-plan.sh:13-35`; `docs/flow-plan.md:5-17`).
+- Feature names and feature-directory names are not governed by one explicit, versioned naming policy.
+- The prompt checks for `NEED CLARIFICATION`, while templates use `NEEDS CLARIFICATION` (`prompts/sdd-plan.md:55-68`; `.specify/templates/spec-template.md:22,65`). A string typo can therefore bypass a gate.
+- Planning and task prompts try to infer whether a specification used references, while `spec.md` is explicitly forbidden from containing reference metadata (`prompts/sdd-specify.md:186,235-238`).
+- The specify flow creates a feature directory before it checks whether the requested reference folder exists (`prompts/sdd-specify.md:109-157`). A failed precondition can therefore leave partial output.
+- The prompt advertises a maximum generated-name length that the current Bash and PowerShell scripts do not enforce (`prompts/sdd-specify.md:107-119`; `.specify/scripts/bash/create-new-feature.sh:29`; `.specify/scripts/powershell/create-new-feature.ps1:42`).
+- Documentation treats some planning artifacts as mandatory and elsewhere treats them as optional. `contracts/` is explicitly intended to be optional and generic (`README.md:298-313`).
+- Current parallelism guidance is primarily “different files means parallel,” which does not account for dependencies, shared manifests, generated state, exclusive commands, or other shared resources (`prompts/sdd-tasks.md:119-120`; `prompts/sdd-implement.md:79-89`).
+- Current task-shape routing uses generic path-name heuristics. These overlap and do not encode React, Node, Java, and .NET conventions (`prompts/sdd-implement.md:48-59`).
+
+These are observations about the basis material, not requests to patch it. The new engine replaces ambiguity with explicit contracts.
+
+### 2.3 Normative resolutions for the new engine
+
+The new engine adopts the following unambiguous rules:
+
+| Concern | New-engine rule |
+|---|---|
+| Feature identity | `featureId` is a flat, deterministic, kebab-case identifier. It never contains `/`. |
+| Feature directory | `featureDir = <paths.specs>/<featureId>`. The configured `paths.specs` value is the only source of truth. |
+| Feature selection | The root workflow passes `featureId` through typed run context. A standalone later-stage invocation must provide `featureId`; directory auto-selection is not used. |
+| Stage sequence | `specify -> plan -> tasks -> implement` is enforced by the root orchestrator and by stage precondition validators. |
+| Reference use | The required reference selector and resulting reference-state identity are carried in workflow metadata and run context. They are never inferred from business prose. |
+| Specify launch | `sdd specify --reference <relative-selector>` is the canonical and complete CLI form. Compatibility adapters may map `@sdd-specify` or `/sdd-specify` only to that same single-selector invocation. |
+| Reference requirement | Every new specification has one non-empty relative selector beneath `paths.references`. Missing or invalid reference input blocks before feature activation, logging, model calls, or artifact writes; there is no reference-free mode. |
+| Reference precedence | All successfully decoded reference artifacts are peers and authoritative within the feature-intent domain. `README.md` may organize them but has no special precedence. Conflicts become blocking open questions. |
+| Workflow artifact paths | The engine assigns them. The model never chooses `spec.md`, `plan.md`, `tasks.md`, or other canonical artifact locations. |
+| Artifact editability | `spec.md` is the only user-editable stage output. `clarify/SNN.md`, `PNN.md`, and `TNN.md` are controlled input forms whose status/answer regions are user-editable; they are not plan/task authority. `reference-context.md`, all plan/design artifacts, and `tasks.md` remain read-only projections. |
+| User validation | Plan/design views require explicit user approval before task generation. The tasks view requires explicit user approval before implementation. Rejection supplies feedback through the engine; users do not edit generated views. |
+| Planning artifacts | `plan.md`, `research.md`, and `quickstart.md` are required. `data-model.md` and `contracts/` use explicit `required` or `not_applicable` decisions in the plan IR; absence alone is never interpreted. |
+| TDD/verification order | A verification task precedes dependent implementation only when the resolved preset, repository, and plan support it. Otherwise the plan must name an executable manual verification. |
+| Completion states | `completed`, `failed`, `blocked`, and `cancelled` are distinct. A failure report is never routed to a successful terminal state. |
+| Paths | Paths are canonical absolute values inside the engine and repository-relative POSIX-style values in model contracts and persistent artifacts. Foreign absolute paths are rejected. |
+| Platform | The engine uses platform-neutral ports. Presets define executable/argument arrays; prompts never hard-code Bash or PowerShell scripts. |
+| Fingerprinting | No cross-stage content fingerprints are created or compared. Ordered stage gates reload and revalidate predecessor artifacts. |
+
+---
+
+## 3. Goals, non-goals, and invariants
+
+### 3.1 Goals
+
+- Make every mechanically decidable part of the four-stage workflow host-enforced.
+- Give nano-class models concrete, bounded assignments instead of large agentic prompts.
+- Validate every model-proposed filename and path against a project/environment preset.
+- Repair invalid model output without regenerating valid unrelated work.
+- Preserve traceability from source material through requirements, planning, tasks, code changes, and verification evidence.
+- Make every action independently testable with fake ports and immutable inputs.
+- Keep workflow orchestration composable without allowing domain work to leak into orchestrators.
+- Support one or more development environments in a repository, including monorepos.
+- Make failure explicit, stable, diagnosable, and safe to retry.
+- Keep the specification editable while making plan/task outputs review-only projections with explicit approval gates.
+
+### 3.2 Non-goals
+
+- Making LLM output mathematically deterministic.
+- Replacing semantic judgment with brittle keyword rules.
+- Guaranteeing support for every possible binary reference format without an installed reader.
+- Automatically resolving contradictory authoritative requirements.
+- Integrating with version-control branching or lifecycle workflows.
+- Extending `audit`, `drift`, or `init` in the first implementation.
+- Detecting out-of-band predecessor changes with hashes or fingerprints.
+- Allowing a model to execute an open-ended shell or use unrestricted agent tools.
+
+### 3.3 Non-negotiable invariants
+
+1. An LLM response is always a candidate, never committed truth.
+2. No model-returned path is read, recorded as actionable, or written before path validation.
+3. A fixed workflow-artifact path is calculated by the engine, not proposed by the model.
+4. A project path must map to exactly one configured environment and project, and its explicitly declared file kind must permit that path and operation.
+5. A stage cannot commit any output until all of its blocking deterministic validators pass.
+6. A repair can modify only the repair unit selected by the engine.
+7. A repaired candidate receives impacted validation followed by a full validation pass before commit.
+8. An action performs one responsibility and never invokes an action or orchestrator.
+9. An orchestrator coordinates child nodes and performs no domain or infrastructure operation itself.
+10. Task completion is an engine transition backed by committed changes and required evidence; the model cannot request `[X]` directly.
+11. Unsupported or unreadable reference files are never silently skipped.
+12. Persistent artifact paths are repository-relative and normalized.
+13. Model-supplied commands are never executed. Only named, preset/config-defined commands can run.
+14. Identifiers, checkboxes, Markdown headings, and status text are rendered by the engine wherever possible.
+15. The same normalized engine input and the same accepted structured model payload produce byte-stable rendered artifacts.
+16. Only `spec.md` accepts free user edits as a stage artifact. A registered clarification form accepts edits only in its declared status/answer regions; generated plan/task/reference views are never parsed as authoritative state.
+17. Implementation cannot begin until the user has approved the current plan and current task graph.
+18. Every actionable project-file reference in model output is a typed `fileId` or a planning-stage `ProjectPathCandidate`; path-shaped tokens in free-text fields are invalid.
+
+---
+
+## 4. Deterministic and LLM responsibility boundary
+
+Deterministic checks should be used wherever the answer can be computed from configuration, schemas, files, parsers, graphs, or command exit status. Semantic classification remains with the LLM. The engine must not disguise model-assisted review as deterministic validation.
+
+| Area | Engine-deterministic | LLM-owned | Limit or escalation |
+|---|---|---|---|
+| Command input | Parse flags, defaults, enums, duplicates, required arguments | None | Invalid user input is non-repairable by the model. |
+| Feature identity and brief | Selector normalization, configured length, portability, and fail-on-collision identity; brief schema/citation validation | Derive the human title, description, and goal from the reconciled reference summary | Reference/model content never affects `featureId`; the model cannot provide a workflow filename. |
+| Reference discovery | Root containment, traversal, symlinks, inventory, ordering, readability, size, decoder availability | None | Unsupported inputs block or require an installed reader according to policy. |
+| Reference understanding | Source span validity, exact token preservation for structured formats, coverage ledger | Extract requirements, classify signals, recognize semantic conflicts | The engine can prove a citation exists; it cannot prove every semantic implication was found. |
+| Business/technical split | Obvious lint such as forbidden absolute paths, code fences, known source extensions, known framework identifiers | Decide whether nuanced content belongs in business spec or technical context | Borderline findings are model-assisted warnings or human review, not false “proof.” |
+| Spec structure | Required fields, IDs, uniqueness, status, placeholders, citation schema, required sidecar | Stories, acceptance criteria, business rules, assumptions, non-goals | Testability and ambiguity are semantic reviews unless reducible to a schema rule. |
+| Repository facts | File inventory, manifests, installed dependencies, scripts, source/test roots, AST parse, tool availability | Interpret which existing areas are relevant to the feature | A model may select among real facts but may not invent facts. |
+| Plan structure | Artifact manifest, canonical paths, applicability, required sections, requirement coverage, allowed commands | Architecture, trade-offs, research rationale, minimal change choice, verification strategy, principle interpretation | Principle conflicts requiring judgment remain LLM/human decisions. |
+| Planned filenames | Containment, environment, kind, root, extension, filename pattern, include/exclude, test placement | Propose a meaningful valid name | Invalid names receive preset-specific atomic repair guidance. |
+| Task graph | IDs, phase enum, references, coverage, DAG, dependency existence, write-set collisions, safe `[P]` calculation | Decompose work, descriptions, non-obvious dependencies, read/write intent | Engine may remove unsafe parallelism; it never invents missing semantic dependencies silently. |
+| Code changes | Allowed operation/path, patch applicability, declared scope, syntax, AST rules, import resolution, build/lint/test results | Generate code and repair semantic/compile/test failures | Behavioral correctness is only deterministic where an executable assertion exists. |
+| Completion | Evidence requirements, committed transaction, task status, stage status | Summarize completed work | Model claims have no effect on state. |
+
+The operating rule is: **if a validator can answer from typed data or executable evidence, do not ask the LLM to answer it.**
+
+---
+
+## 5. Logical architecture
+
+[View the logical architecture diagram](diagrams/01-logical-architecture.mmd).
+
+### 5.1 Layers
+
+1. **Interface adapters** parse CLI/API input and present final reports. They contain no workflow decisions.
+2. **Application orchestration** contains the root and stage orchestrators. It owns ordering and branching on typed outcomes, but no domain work.
+3. **Actions** perform one use-case operation each: read one resource, invoke one model request, validate one concern, render one artifact, write one transaction, or execute one configured command.
+4. **Domain** contains immutable intermediate representations, identifiers, diagnostics, policies, and result types.
+5. **Infrastructure adapters** implement filesystem, model-provider, parser, command-runner, clock, logging, and reader ports.
+6. **Preset/config compiler** validates raw configuration and compiles it into normalized, executable policy. Downstream actions use only compiled policy.
+
+### 5.2 Dependency direction
+
+Application and domain code depend on interfaces, never provider implementations. The LLM SDK, OS filesystem, shell/process API, YAML parser, Markdown parser, AST parser, and logger are adapters behind ports. This permits action unit tests without network access, repository mutation, or a real compiler.
+
+Orchestrators receive runner-owned `ChildNodeBinding` instances from the composition root, never raw child nodes. They do not receive `FileSystem`, `ModelGateway`, `CommandRunner`, parser, or validator ports. This makes the rule “orchestrators organize; actions do” mechanically enforceable and prevents child execution from bypassing the runner.
+
+---
+
+## 6. Common action and orchestrator contract
+
+Every action **and** every orchestrator implements the same runtime interface. There is one envelope, one result vocabulary, and one dependency declaration mechanism across the engine. A concrete implementation may add generic compile-time facades, but it must preserve this common runtime ABI so nodes can be chained, reordered, replaced, or nested without bespoke adapters.
+
+[View the Pipeline node interfaces sample](code.md#pipeline-node-interfaces).
+
+`NodeRuntime` is deliberately capability-free:
+
+[View the Capability-free node runtime sample](code.md#node-runtime).
+
+It exposes no filesystem, model, parser, renderer, validator, state, clock, logger, command, node-runner, or service-locator capability. Narrow operational ports are constructor dependencies of actions only. The outer pipeline runner records timing and telemetry around `execute`; nodes do not receive a telemetry adapter.
+
+The common contract makes data dependencies explicit:
+
+[View the Node contract and typed data keys sample](code.md#node-contract-and-data-keys).
+
+An action declares its contract directly. An orchestrator's externally visible `requires`, `produces`, `replaces`, `invalidates`, side-effect summary, and barriers are derived and checked from its child graph by the pipeline compiler; an orchestrator cannot hide a child's capability or claim a narrower effect. Its internal child-only keys are not exposed outside the composition boundary.
+
+Examples of keys are `engine.config@1`, `environment.compiled.web@1`, `reference.manifest@1`, `spec.ir@1`, `plan.ir@1`, `tasks.graph@1`, and `implementation.overlay.T007@1`. Keys are constants supplied by domain modules, never ad hoc strings inside actions.
+
+`PipelineEnvelope` is immutable and identical for all nodes:
+
+[View the Pipeline envelope sample](code.md#pipeline-envelope).
+
+The registry is not an untyped property bag. Every value is retrieved through a versioned `DataKey<T>` and schema-checked on insertion. A node may read only keys declared by `requires`/`optional`, write only keys declared by `produces`/`replaces`, and invalidate only declared keys. Large bodies use engine-controlled content handles; arbitrary model paths are never registry keys.
+
+`Outcome` is the same closed union for actions and orchestrators:
+
+[View the Pipeline outcome sample](code.md#pipeline-outcome).
+
+`PipelineEnvelope` is the sole accumulated source of data, evidence, and diagnostics. A node returns only a `NodeDelta`; it never repeats competing diagnostic/evidence collections or constructs the next envelope. The runner validates the delta against `NodeContract`, creates the next immutable envelope, and returns that applied result through a child binding. For an orchestrator, runner-owned bindings track child deltas and expose the composite delta; the orchestrator does not merge registries itself.
+
+`NodeDelta.telemetryFactsAdded` is a closed union of IDs, enums, counts, timings, and outcomes. It contains no log level, message, arbitrary map, environment value, or raw model/reference/code body. Actions may add facts; orchestrator lifecycle/branch facts are derived by the runner. After contract/delta validation, the runner's `PipelineTelemetryObserver` starts a separate logging-internal `PipelineEnvelope` and passes those facts plus trusted run/node context through `FeatureLoggingOrchestrator`. Both business and logging nodes still use `PipelineNode` and return all intermediate values through validated `NodeDelta`s. Logging-only `DataKey`s are compiler-locked, transient, non-model-visible, excluded from business-envelope composition and self-observation, and destroyed by the runner on every terminal logging branch. Thus sanitized prompt records may pass between discrete logging actions without bypassing the common ABI, persisting in workflow state, or becoming model context. `NodeRuntime` continues to expose no logger.
+
+An `invalid` outcome is not an exception. It is the normal input to an atomic repair orchestrator. `blocked` and `failed` are never sent to an LLM repair loop unless the diagnostic explicitly declares that model repair is valid.
+
+The pipeline runner validates node contracts before execution, applies immutable deltas after a successful node, and refuses a chain with missing inputs, undeclared writes, incompatible schema versions, duplicate producers, or invalid side-effect ordering. An orchestrator schedules nodes; the runner performs contract/data plumbing.
+
+### 6.1 Action rules
+
+Every action must:
+
+- have one verb-object responsibility;
+- be deterministic when its port is deterministic;
+- declare `requires`, `produces`, `replaces`, `invalidates`, and side-effect class through `NodeContract`;
+- accept all variable behavior through typed input or injected narrow ports;
+- return stable diagnostic codes rather than formatted-only error strings;
+- support cancellation and configured timeouts;
+- never select its successor;
+- never call another action or orchestrator;
+- never turn an invalid result into success;
+- be independently testable.
+
+An action that reads a file does not also parse it. An action that invokes a model does not parse or validate the response. An action that validates a path does not write that path. An action that commits a transaction does not decide whether validation passed; it requires a validated transaction token as input.
+
+### 6.2 Orchestrator rules
+
+Every orchestrator must:
+
+- express a static or data-driven sequence of child nodes;
+- branch only on typed `Outcome` and diagnostic metadata;
+- pass immutable envelopes between children;
+- impose iteration and repair limits from compiled config;
+- never open files, call models, parse responses, render content, validate rules, execute commands, or mutate task state directly;
+- be testable with spy/fake child nodes;
+- allow child orchestrators, while preventing cycles in the orchestration graph.
+
+Architecture tests fail the build if an action field or constructor parameter is a `PipelineNode`, `Action`, `Orchestrator`, dispatcher, executor callback, node runner, or service locator; if an action imports an orchestrator namespace; if any node calls another node's `execute` outside an orchestrator module; or if an orchestrator imports anything outside an allowlist of contracts, outcomes, envelopes, loop controls, and child-node bindings. Orchestrator modules cannot import infrastructure or domain-operation adapters.
+
+### 6.3 Reordering and composition rules
+
+Actions and orchestrators can be reorganized without changing their implementation when their contracts remain satisfiable:
+
+1. Before building a pipeline, the composition validator calculates the keys available at each position.
+2. A node is placeable when all `requires` keys exist at compatible schema versions.
+3. `produces` adds a new key; `replaces` requires and atomically replaces an existing key; `invalidates` removes stale downstream keys.
+4. Two pure/read nodes with satisfied inputs may be reordered or run concurrently when neither invalidates/replaces a key used by the other.
+5. Model calls, candidate writes, commands, and commits create declared barriers. A commit cannot move before its validation-authorization key exists.
+6. A node cannot depend on execution order that is not represented by a required data/evidence key or an ordering barrier.
+7. The pipeline compiler rejects cycles and prints a dependency explanation before runtime.
+
+This enables, for example, swapping one filename validator implementation, moving source parsing earlier, inserting a semantic-review orchestrator, or nesting the same validated-generation orchestrator in a new stage without changing adjacent nodes. Typed keys keep information passing simple while preserving testability and preventing hidden state.
+
+---
+
+## 7. Core domain representations
+
+Markdown is a presentation format, not the internal source of truth while a stage is running. The engine uses typed intermediate representations (IRs) and renders Markdown only after validation.
+
+### 7.1 Shared types
+
+[View the Shared domain types sample](code.md#shared-domain-types).
+
+Every route schema types model-authored prose explicitly. Business-specification leaves use the closed `BusinessValue` union: ordinary segmented `NormalizedBusinessValue {text: BusinessText}` or `ExactBusinessCopy {tokenId, citationId}`. Technical/reference/plan/task/implementation explanations use `SemanticText`. Literal segments may be ordinary text; operational project/reference mentions must be `FileReference {fileId}` or `SourceReference {sourceId}`; and a filename, display path, or external URI that is only part of the prose must be an engine-registered `PassiveLiteralReference {passiveLiteralId}`. The exact-copy and passive-literal variants contain no model-authored display bytes and are never path/file/fetch capabilities. No schema contains an untyped prose string in which a project or reference path is semantically actionable.
+
+`PassiveLiteralRegistryState` is a feature-scoped immutable revision authority. The engine scans decoded mandatory-reference spans, reference manifest labels, and authenticated editable-spec additions, classifies candidates using the closed precedence `external_uri > display_path > display_filename`, and assigns monotonic IDs to unique `(kind, NFC bytes)` tuples. Model-derived brief/spec text is never a minting source. Existing ID/kind/value cores can never change; later revisions only append records/occurrences and retire failed allocations. Every occurrence resolves exact trusted bytes. Models receive only unit-allowlisted `{passiveLiteralId, kind, displayValue, nonOperational: true}` choices. There is deliberately no passive-to-operational conversion action.
+
+`isOrganizer` does not reduce authority. It records that a file such as `README.md` helps describe the corpus; any requirements it contains remain peer authoritative with requirements in sibling files.
+
+`sourceId`, `blockId`, and claim IDs are stable within a persisted feature-scoped `ReferenceSnapshot`, including across process restarts. They are derived from normalized source position and snapshot-local ordinal, not content hashes, and are not stale-artifact fingerprints. A changed reference corpus creates a new snapshot identity and invalidates provenance that names the prior snapshot.
+
+State identities are engine identifiers, not content digests. Plan approval targets `planStateId`; task approval targets immutable `taskDefinitionStateId`. Execution changes only a monotonic `taskRuntimeRevision`, so completing one task does not invalidate approval of the unchanged task graph. These states are persisted beneath `paths.sddtoolkit`; their Markdown files are review views only. The specification remains authoritative as editable Markdown and is reparsed into `SpecificationIR` at the plan boundary.
+
+### 7.2 Stage IRs
+
+#### Specification IR
+
+The LLM returns `SpecificationContentProposal` semantic fields with no IDs or status. The engine assigns canonical record identifiers from the persisted `SpecificationIdLedger` and constructs `SpecificationIR`:
+
+[View the Specification IR sample](code.md#specification-ir).
+
+The two singleton fields have fixed provenance keys `spec.display_name` and `spec.primary_user_story`; their engine-owned structural slots survive reparse without an allocated ordinal. Every repeatable editable/provenance-bearing record uses a monotonic prefix:
+
+| Record kind | Prefix |
+|---|---|
+| Acceptance criterion | `AC` |
+| User-visible outcome | `UO` |
+| Edge case | `EC` |
+| Functional requirement | `FR` |
+| Business rule | `BR` |
+| Assumption | `AS` |
+| Non-goal | `NG` |
+| Prohibited behavior | `PB` |
+| Entity | `EN` |
+| Open question | `OQ` |
+
+The renderer emits the ID as an engine-owned visible list/heading label in a fixed grammar, for example `**UO-001**`, and the parser requires/preserves it. `SpecificationIdLedger.nextOrdinalByKind` and tombstones cover every prefix; surviving IDs stay with normalized records across reorder, new unlabelled items receive the next ordinal, and removed IDs are never reused. The renderer also owns dates, headings, checklist state, and execution state. The model cannot forge a “passed” checklist.
+
+#### Reference-context IR
+
+[View the Reference-context IR sample](code.md#reference-context-ir).
+
+Every `PreservedToken` contains a tagged `RawSourceScalar` and citation. That scalar points to the exact validated UTF-8 source bytes and bypasses ordinary text normalization. Structured readers can create tokens directly from CSS declarations and JSON/YAML/XML leaves. The LLM classifies relevance but cannot rewrite the value. This creates a deterministic propagation ledger for values that the current workflow says must never be lost.
+
+#### Plan IR
+
+[View the Plan IR sample](code.md#plan-ir).
+
+Nested plan values are closed too: principle-consideration records, implementation units, data-model entities, contracts, quickstart steps, and coverage entries have explicit schemas. A contract body is admitted only under an exact registered closed schema whose string leaves are typed as identifiers, `BusinessText`, `SemanticText`, `FileReference`, or `SourceReference`; it is not arbitrary JSON. Repository fact selections return registry value IDs rather than model-authored copies of fact values.
+
+`ArtifactDecision` is explicit:
+
+[View the Artifact decision sample](code.md#artifact-decision).
+
+#### Task IR
+
+The model does not assign task IDs, checkbox syntax, or `[P]` markers:
+
+[View the Task IR sample](code.md#task-ir).
+
+After graph validation, the engine topologically assigns `T001...`, calculates safe parallel markers, and renders checkboxes. A task may be semantically atomic while changing multiple tightly coupled files, but every file, shared resource, command, manual scenario, and completion-evidence predicate must be declared.
+
+#### Implementation IR
+
+[View the Implementation IR sample](code.md#implementation-ir).
+
+`CreateFile` requires an absent destination. `ReplaceFile` requires an explicit whole-file capability and a present regular-file destination, then replaces its complete contents. `CopyFile` performs a byte-exact copy from an engine-resolved, immutable-revision `CopySource`; it never accepts a raw source path, and source/destination cannot be the same file. Target state and revisions are derived and bound by the engine, never asserted by the model. If copied code needs adaptation, the copy completes first in the operation savepoint and a separately authorized `UpdateFile` or `ReplaceFile` operation performs the adaptation. Deletion is disabled by default and requires both task authorization and engine policy. The model never returns a raw shell command.
+
+---
+
+### 7.3 Canonical state and model-request identity
+
+Every feature-scoped canonical authority state identity uses the closed contracts in [the shared domain samples](code.md#shared-domain-types). The two project-level authorities are compiler-locked tuple/revision exceptions outside the feature namespace registry: `BootstrapRootRegistry` uses its self-validating project-root tuple, and `FeatureIdentityRegistryState` is the append-only `(bootstrapRootRegistryId, revision)` ownership chain beneath it. Owner-local record identities and nested registries use their explicitly typed principle, toolchain-preset, reference, specification, plan, clarification, or task-execution ledgers instead; they cannot fall back to the feature ledger. The bootstrap-root registry ID is built only after the exact root `.sddtoolkit.json` location and configured roots validate; it is not derived from content. Each feature has one `FeatureStateIdLedgerCanonicalState` path resolved from its validated `WorkflowArtifactRegistry`; it is not configurable independently and is never model-visible. V1 has no project `StateIdLedger` file or generic project-state namespace.
+
+The compiler-locked `StateIdNamespaceDescriptor` registry maps every generic canonical feature-state type to exactly one feature namespace. A registered, state-specific ID-assignment action accepts the matching single-use namespace capability and the exact current validated feature ledger, reserves one monotonic tuple, and returns both the ID and successor ledger. These registered actions implement the same allocation ABI directly; no action invokes another action and no ambient allocator exists. Reusing a durable open reservation is legal only when its engine-built discriminated `StateIdPurposeKey` is directly equal. An ID is **externally exposed** only when it crosses to a model/provider, a nontransactional adapter or serializer, a log/diagnostic, or a public artifact/path. Serialization and staging performed privately under the same sealed transaction capability that atomically commits the ID ledger and owning state are not external exposure; those bytes are inaccessible outside recovery and disappear on rollback. Therefore an in-memory allocation may be transaction-privately serialized/staged and discarded with its whole rolled-back candidate ledger. Before any actual external exposure, activation or a minimal `StateIdentityReservationStageTransaction` durably compare-and-swaps that reservation. A durable abandoned reservation is retired in a `StateIdentityRetirementStageTransaction`, and its ordinal is never reused. Content, paths, timestamps, model scalars, and fingerprints never choose an ordinal.
+
+Every durable stage/review/task/checkpoint/manual transaction includes the common `StateIdentityTransactionMember`. It compare-and-swaps each touched ledger and commits or retires all state IDs introduced by that transaction. An untouched owner is represented by the explicit unchanged variant and creates no no-op revision. For a new feature, the in-memory initial feature ledger reserves only states actually persisted by activation; no reference-state identity exists yet. After activation/log readiness, the canonical reference reservation is durably persisted through the feature transaction-storage path immediately before canonicalization. For an existing feature, the validated feature ledger is loaded first. Thus a crash or retry can reuse or retire a recorded purpose-bound reservation but cannot fork state identity.
+
+Logical model requests have the same discipline. `BuildImmutableUnitOwnerIdAction` constructs one closed stage-specific owner tuple from already canonical authorities. `AssignModelRequestIdAction` consumes the current run-local `ModelRequestIdentityLedger` and returns the next ordinal plus successor ledger. The tuple fixes stage epoch, unit owner, route, purpose, purpose owner, and ordinal; the model supplies none of them. Protocol-format retries retain the same logical request ID and advance its attempt count. A new repair, semantic review, clarification resolution, or context follow-up receives a distinct purpose-bound request ID, while unit- and stage-level repair ceilings still prevent request fan-out from resetting budgets.
+
+---
+
+## 8. Diagnostics and evidence
+
+Every deterministic failure is represented consistently:
+
+[View the Diagnostic contract sample](code.md#diagnostic-contract).
+
+Representative codes include:
+
+- `CFG_SCHEMA_INVALID`
+- `PRESET_PLACEHOLDER_UNRESOLVED`
+- `STAGE_PREDECESSOR_INVALID`
+- `REF_PATH_ESCAPE`
+- `REF_DECODER_UNAVAILABLE`
+- `REF_CITATION_NOT_FOUND`
+- `SPEC_UNRESOLVED_CLARIFICATION`
+- `SPEC_TECHNICAL_LEAK`
+- `ARTIFACT_PATH_INVALID`
+- `PATH_ENVIRONMENT_AMBIGUOUS`
+- `PATH_KIND_AMBIGUOUS`
+- `PATH_ROOT_FORBIDDEN`
+- `PATH_EXTENSION_INVALID`
+- `PATH_FILENAME_PATTERN_INVALID`
+- `TEST_PLACEMENT_INVALID`
+- `PLAN_REQUIREMENT_UNCOVERED`
+- `TASK_ID_REFERENCE_UNKNOWN`
+- `TASK_DEPENDENCY_CYCLE`
+- `TASK_PARALLEL_WRITE_CONFLICT`
+- `PATCH_OUTSIDE_TASK_SCOPE`
+- `PATCH_APPLY_FAILED`
+- `SOURCE_SYNTAX_INVALID`
+- `IMPORT_TARGET_MISSING`
+- `COMMAND_FAILED`
+- `TASK_EVIDENCE_INCOMPLETE`
+- `REPAIR_SCOPE_VIOLATION`
+- `REPAIR_ATTEMPTS_EXHAUSTED`
+
+Diagnostics are sorted deterministically by stage, artifact, location, validator priority, and code. Human-facing messages are rendered from codes and fields; repair logic does not parse prose.
+
+Evidence is separate from diagnostics. It records facts such as a decoded source location, a successfully parsed AST, a passing command, or a committed transaction. A checklist or task status is derived from evidence and cannot be set by the LLM.
+
+---
+
+## 9. Engine configuration
+
+`new_engine/.sddtoolkit.json.example` is a non-runtime example and a useful starting point for logs, model routing, and paths, but it is not yet sufficient to control a deterministic engine. Starting from the invocation working directory, bootstrap walks ancestors in a fixed nearest-first order and stops at the first exact `.sddtoolkit.json`; that file's directory is the project root and the file must be located there. If none exists, bootstrap fails. It accepts neither the example filename nor another config alias. The example has no schema URI, principle policy, environment preset selection, repair policy, reference-reader policy, validation policy, workflow gates, state policy, or command-safety policy. Its model slots also omit explicit plan, tasks, reference-analysis, and repair routes (`new_engine/.sddtoolkit.json.example:15-22`).
+
+### 9.1 Required configuration shape
+
+The following is illustrative; the implementation must publish a formal JSON Schema and use `additionalProperties: false` at all policy-bearing levels.
+
+[View the Engine configuration sample](code.md#engine-configuration).
+
+Every base folder location is resolved solely from the validated `paths` object in the root `.sddtoolkit.json`. A missing required path blocks bootstrap; the engine never guesses a current-working-directory, `.specify/`, `new_engine/`, or example-file fallback. Principles have one fixed runtime location, `<paths.sddtoolkit>/principles/`, and toolchain presets have one fixed runtime location, `<paths.sddtoolkit>/toolchainPresets/`; neither is given a second independently configurable root. Other fixed descendants such as `<paths.specs>/<featureId>/clarify/`, `<paths.specs>/<featureId>/logs/`, `<paths.sddtoolkit>/features/`, each feature's `<paths.sddtoolkit>/features/<featureId>/execution/final-validation-overlays/`, and the project activation/recovery WAL collection `<paths.sddtoolkit>/transactions/` are likewise derived by the engine from those configured roots.
+
+Bootstrap compiles an immutable reserved-root registry with explicit access classes. Engine config, workflow/reference/state, principles/preset/overlay, VCS, and dependency-cache roots are `engine_only`/`inaccessible` to project-file operations. Generated/build roots are `generated_read_only` by default: discovery may mint an engine-issued, read-only `FileRecord` for an existing generated input when the preset explicitly permits it, but a model cannot propose its raw path and no create/patch/replace/copy/delete operation can target it. A registered generator command may recreate declared ephemeral/generated output only inside its command savepoint; it does not turn that output into a model-writable file. Workflow/reference/state actions use their separate engine-artifact policy and transaction authorizations; a language/framework overlay cannot weaken the separation.
+
+Canonical feature state is always derived as `<paths.sddtoolkit>/features/`, and a `projectOverlayId` resolves beneath `<paths.sddtoolkit>/toolchainPresets/overlays/`; neither is a second independently configurable root that can diverge. All other engine-owned descendants are likewise derived from their owning configured root. Each environment names one or more registered target-platform/filesystem policy IDs, which supply normalization, case, reserved-name, segment-length, and repository-relative path limits. Bootstrap also detects the active workspace filesystem policy through a trusted adapter and adds it as a non-overridable member of the compiled portability policy. The host policy additionally supplies an absolute-path ceiling measured after joining the candidate to the canonical workspace/project root using its declared native encoding/count rule. All path creation/rename/copy/replace checks therefore use `configured target policies ∪ active workspace policy`; a deployment-only target list can never omit host representability, host collision rules, or the actual absolute target length.
+
+### 9.2 Configuration validation
+
+Bootstrap must reject configuration before any LLM call when:
+
+- `schemaVersion` is unsupported;
+- `routeRegistryVersion` or `rendererContractVersion` is unsupported;
+- an unknown key appears in a closed schema;
+- a configured peer root is absolute, escapes the workspace, overlaps a forbidden root, or conflicts with another configured peer root; the one configurable peer-root nesting exception is `paths.specsArchive` beneath `paths.specs`, and the archive subtree is excluded from active feature discovery; derived engine-owned children beneath `paths.sddtoolkit` are validated against their fixed ownership tree rather than treated as peer roots;
+- an `environments[].root` is absolute, escapes the canonical workspace, or resolves through an escaping symlink; every discovered project root and manifest must remain beneath its selected contained environment root;
+- two environments have the same root or ambiguous equal-specificity roots;
+- a named preset, model profile, built-in route, exact `readerId@version`, target-platform/filesystem policy ID, validator, parser, or command adapter is missing;
+- an environment's `targetPlatforms` set is empty, contains duplicates, or cannot be resolved completely before path-policy compilation;
+- the active workspace filesystem policy cannot be detected/resolved, or any candidate collides/fails under that policy even though it passes the configured deployment targets;
+- a model route required by an enabled stage is absent; a config route value is only a profile-ID shorthand or a closed failover selector `{ primary, fallback?, fallbackAfter }` containing profile IDs, every profile must exist, and no config field may override the built-in route descriptor;
+- a numeric limit is negative, zero where prohibited, or above an engine safety maximum;
+- `references.followSymlinks` is anything other than the required v1 constant `false`; followed reference symlinks are deliberately unsupported until a separate version defines containment, loop, depth, deduplication, and accounting semantics;
+- a reference traversal/decoder limit (`maxEntries`, directory depth, source/decoded byte totals, blocks, pages, cells, decoder time/memory, or archive expansion limits when applicable) is absent or exceeds the engine hard maximum;
+- a repository-discovery file/depth/time/memory limit is absent or exceeds the engine hard maximum;
+- response logging is enabled without a redaction/retention policy;
+- `useFingerprints` is set to true in this design version;
+- a hardened workflow disables required plan or task approval without an explicitly selected non-interactive policy profile;
+- a project overlay attempts to disable a locked safety validator.
+
+### 9.3 Precedence
+
+Configuration and content authority are separate systems.
+
+Configuration is resolved in this order, from least to most specific:
+
+1. engine defaults;
+2. base language preset;
+3. runtime preset;
+4. framework preset;
+5. build/test-tool preset;
+6. project overlay;
+7. explicitly permitted CLI overrides.
+
+Non-overridable engine safety invariants sit outside the merge and always win. Repository discovery supplies evidence; it is not a precedence layer. An `auto` field may be filled from unambiguous evidence, but discovered facts cannot silently overwrite explicit configuration.
+
+Merge semantics must be declared per field:
+
+- maps merge by stable key;
+- commands replace atomically by command ID;
+- extension sets may union;
+- forbidden paths and locked validators only union and cannot be weakened;
+- roots and naming rules replace by default;
+- arrays never concatenate implicitly;
+- an explicit merge directive is required for append, prepend, union, or remove;
+- removing a locked rule is invalid.
+
+Content authority is domain-specific:
+
+- engine safety and mechanical environment facts cannot be overridden by references;
+- the compulsory reference corpus, together with later authenticated specification edits and clarification answers, defines feature intent;
+- authoritative reference conflicts block or create open questions—there is no last-file-wins behavior;
+- the specification is the business-intent source for later stages;
+- reference context carries supplementary implementation-facing obligations;
+- project principles govern code and structural choices within the real environment, but grant no operational capability;
+- generic prompt examples have the lowest authority.
+
+### 9.4 Project-principle resolution
+
+The new engine calls this authority **principles**. It fulfils the role that constitution/memory material has in the basis workflow: overarching guidance for code, architecture, project structure, security, validation, observability, and user-interface work (`prompts/sdd-plan.md:70-85`; `prompts/sdd-implement.md:48-69`). Version-control workflow material remains out of scope.
+
+The principle root is exactly `<projectRoot>/<paths.sddtoolkit>/principles/`, derived from the project-root `.sddtoolkit.json` (therefore `.sddtoolkit/principles/` under the supplied example). The files under `new_engine/principles/` are design examples only; their location is never a runtime fallback. Their filenames illustrate the initial category hints—`core`, `architecture`, `project-structure`, `security`, `validation`, `observability`, and `user-interface`—but their bodies may be arbitrary free text.
+
+Resolution is explicit:
+
+1. resolve the configured principle root through the root-access policy, enumerate bounded no-follow regular files, reject alias/case collisions, and sort by canonical filename;
+2. classify a category hint from the normalized filename using the configured mapping; an unmatched filename receives the explicit `custom` hint rather than having its meaning guessed from its body;
+3. decode bounded UTF-8 text and preserve exact source-byte and line spans; no front matter, heading, Markdown structure, template placeholder, or content schema is required;
+4. split large files into deterministic transport chunks. A file with no headings or paragraph structure is still valid and receives a whole-file or fixed-window chunk;
+5. select categories solely from the configured stage/environment/file-kind hint table and include every chunk from those files in stable source order; no model classifies, summarizes, ranks, or omits principle prose;
+6. include the exact selected raw spans in plan, task, implementation, repair, and semantic-review guidance; if the complete selection cannot fit the bounded route, block with `PRINCIPLE_GUIDANCE_BUDGET_EXCEEDED` and require the project owner to split/narrow the files or adjust explicit category mappings;
+7. validate only transport facts deterministically: configured root, containment, identity, filename-to-hint mapping, UTF-8, byte/count ceilings, stable spans, registry joins, and prompt-selection coverage;
+8. treat content compliance or conflict as semantic judgment backed by exact principle citations and the plan/tasks user-review gates. If material ambiguity remains, create or retain a plan/task clarification rather than silently choosing a plausible interpretation.
+
+Principle prose is never parsed or compiled into a deterministic validator, even when it resembles YAML, a table, a template, or a formal rule. Machine-enforceable path, filename, command, dependency, coverage, and safety rules come only from separately configured schemas, presets, and engine policy. A principle cannot grant a read/write/command/network capability, weaken engine safety, change a canonical artifact path, or override a mechanically proven environment fact. When prose appears to conflict with those authorities, the mechanical boundary still holds and a cited semantic diagnostic asks for a project-level decision.
+
+The filename is a guide used by the engine, not a claim that the contents obey a schema. Category selection deliberately errs toward inclusion: `core` and `custom` are considered for all technical stages, while other category hints are selected by explicit configuration. The model never chooses which files to open and never sees an operational principle path—only registered IDs, category hints, raw bounded spans, and citations.
+
+Principles are captured once per command-run bootstrap, bound into `BootstrapAuthorityState`, and compared by direct typed metadata/raw-byte equality at every plan, tasks, implement, recovery, and clarification-resume gate. They are not supplied to specification-generation routes because `spec.md` is business intent and principles must not invent missing product requirements. An updated principle can resolve `PNN` or `TNN` only through cited, current authority resolution; it cannot resolve an `SNN`. A changed registry invalidates the current plan and downstream task approvals, then requires the normal ordered regeneration and review path. No content fingerprint is used.
+
+Bootstrap authority is immutable and versioned. A freshly built candidate that is directly equal to the workflow's current state reuses that exact state ID and performs no authority write. A changed candidate receives a new ID/path beneath the workflow artifact registry's `BootstrapAuthorityStateCollection`; the owning plan/tasks/specification/clarification/rework transaction persists the new state and advances the workflow pointer atomically. Older states remain readable for `PlanState`, task, review, recovery, and audit joins. Bootstrap never overwrites a singleton before its consumers advance, and it never persists an unreferenced candidate independently.
+
+A change is not treated generically or forced into one lossy label. `ClassifyBootstrapAuthorityChangeAction` uses a locked component-impact registry to assign every changed `(componentTypeId, componentOrdinal)` exactly one impact. `ValidateBootstrapAuthorityChangePlanAction` then unions all obligations and derives the earliest owner using fixed dominance `administrative > reference ingestion > specification contract > planning > runtime-only`:
+
+- reference reader, decoder, source-map, chunker, extraction/reconciliation route-contract, or reference safety changes return to `specifying`, reingest the compulsory corpus, and invalidate all descendants atomically;
+- specification schema, business-boundary, passive-literal scanner, or specification renderer/parser contract changes return to `specifying` and regenerate/revalidate the complete specification;
+- toolchain preset, environment, project overlay, target/host portability, file-kind/path, parser/query, command, dependency, sandbox, or capability-policy changes return to `planning`; after task commits they first enter `implementation_reconciliation_plan` and mark affected task/evidence state for reconciliation;
+- principle changes use the dedicated principle route already defined;
+- logging threshold/retention and model-profile capacity changes that leave route schemas/semantics unchanged are compatible runtime-only changes and may use `BootstrapAuthorityRefreshStageTransaction` with every other workflow value directly equal; if logging changes are secondary to a specification/planning change, their transition obligation remains set and runs after that owning transaction;
+- project-root, configured artifact-root/layout, workflow-artifact registry contract, state serializer, renderer migration that changes review-visible bytes, or unsupported schema transition blocks with `BOOTSTRAP_ADMINISTRATIVE_MIGRATION_REQUIRED`. It cannot advance the workflow pointer until an explicit offline migration produces and validates a complete successor artifact/state set.
+
+The exact materialized evidence and any `ReworkInvalidationRecord` retain the total ordered coordinate-to-impact assignments plus current/successor component identities and deterministic earliest owner. `RouteBootstrapAuthorityChangeAction` combines that validated plan with current stage, open clarifications, descendants, and implementation watermark; no preset/config change or secondary obligation is silently accepted because another impact dominated it.
+
+The locked route table is:
+
+| Earliest owner / current state | Required adopting route |
+|---|---|
+| unchanged / any | Return `NoBootstrapAuthorityChangeRoute {reason: direct_typed_equality}` and reuse the current bootstrap state; no transaction or ID. |
+| administrative / any | Block with `BOOTSTRAP_ADMINISTRATIVE_MIGRATION_REQUIRED`; no workflow pointer change. |
+| runtime-only / any nonterminal state | `BootstrapAuthorityRefreshStageTransaction`, then logging transition iff obligated. |
+| reference ingestion / any active state | Complete reference preactivation and the durable reference-ID reservation; then use `ReferenceRevisionStageTransaction`, or its atomic `SNN` clarification-pause branch when conflict remains. Include descendant/runtime reconciliation from the watermark. |
+| specification-owning / `specifying` | Adopt in the next complete `SpecifyCompletionStageTransaction`. |
+| specification-owning / `spec_clarification_pending` | Adopt in the next specification clarification pause/authority-resolution transaction while preserving the open gate. |
+| specification-owning / `specified` or any later no-commit descendant | `ReworkInvalidationStageTransaction -> specifying`; empty plan/task descendant lists are legal at `specified`. |
+| specification-owning / implementing with commits | The same rework route with committed runtime/evidence reconciliation, then `specifying`. |
+| planning-owning / `specifying` or `spec_clarification_pending` | Return `DeferredPlanningBootstrapRoute`, not the no-change route. Do not adopt through a specification transaction. Continue only spec-relevant work under the current authority, discard the run-local candidate before a user pause/run end, and require a complete fresh compare/classify/validate/route pass at the first PlanInput entry after `specified`. The deferred route carries the validated planning change plan and the closed recheck obligation, but it authorizes no successor identity, logging transition, or semantic use. |
+| planning-owning / `specified` | Initial `PlanInputAuthorityStageTransaction -> planning`. |
+| planning-owning / `planning` | Successor `PlanInputAuthorityStageTransaction -> planning` before any further plan model call. |
+| planning-owning / `plan_clarification_pending` | Plan clarification pause/authority-resolution with a successor `PlanInputAuthorityState`; never bypass the open gate. |
+| planning-owning / plan-review or later no-commit descendant | `ReworkInvalidationStageTransaction -> planning`. |
+| planning-owning / implementing with commits | The same rework route with committed runtime/evidence reconciliation, then `planning`. |
+
+After every adopting route—not only runtime-only refresh—the runner checks `changePlan.obligations.transitionFeatureLogging` and completes `FeatureLogPolicyTransitionOrchestrator` before any next normal event, model call, or workflow node.
+
+`NoBootstrapAuthorityChangeRoute` is legal only for direct typed equality. `DeferredPlanningBootstrapRoute` is a distinct run-local decision for a detected planning-owned change whose legal owner has not yet been reached. A validator must reject either variant when used for the other's condition. Deferral preserves obligations by mandating fresh derivation before the first plan model call; it does not persist candidate handles or pretend that the changed authority was adopted.
+
+### 9.5 Legacy configuration migration
+
+The supplied `.sddtoolkit.json.example` is input to a one-time, deterministic migration adapter, not accepted directly as v1 engine policy. The adapter applies a published mapping and emits the complete v1 document for user review:
+
+| Legacy field | v1 destination or treatment |
+|---|---|
+| `version` | `schemaVersion`, only when the legacy value is in the supported migration table |
+| legacy model slots | explicit `models.profiles` plus route entries; no route is guessed when more than one mapping is possible |
+| `logs.level` | required v1 `logs.level`; case is normalized and only `CRITICAL -> fatal` / `WARN -> warning` aliases are accepted |
+| `logs.timestamp` | v1 requires `true`; trusted UTC/monotonic timestamps are runner-assigned and never ordering authority |
+| `logs.format` / `logs.output: console` | map only to the optional console mirror; the mandatory feature JSONL sink cannot be disabled |
+| `logs.promptLogs.enabled` | `logs.prompt.enabled`; this controls optional prompt-exchange capture only and can never disable mandatory feature event logging |
+| `logs.promptLogs.includeResponse` | `logs.prompt.includeResponseBody`; the absent legacy request-body flag maps to `includeRequestBody: false`, and reference/code body opt-ins remain false until explicitly added during review |
+| `logs.promptLogs.maxResponseLength` | `logs.prompt.maxContentBytes` using the published legacy-adapter rule that treats the nonnegative integer as the stricter UTF-8 byte ceiling; out-of-hard-range/noninteger values block rather than changing units heuristically |
+| `logs.promptLogs.logFile` | discarded after validating the legacy value; v1 prompt/event paths are fixed beneath the active feature's engine-derived `logs/` collection and are never configurable |
+| existing path fields | normalized into `paths`; conflicts and the archive exception are validated normally |
+
+Unknown legacy keys or ambiguous model mappings block migration. The migrated file must pass the closed v1 schema; runtime code contains no ongoing legacy-field fallback.
+
+---
+
+## 10. Development-environment presets
+
+The runtime preset root is exactly `<projectRoot>/<paths.sddtoolkit>/toolchainPresets/`, derived from the root `.sddtoolkit.json` (therefore `.sddtoolkit/toolchainPresets/` under the supplied example). `new_engine/toolchainPresets/` and the duplicate top-level `new_engine/_structure.yaml` are design/source material only. Runtime bootstrap never loads either source location and has no packaged-example fallback.
+
+[View the toolchain-preset bootstrap diagram](diagrams/08-toolchain-preset-bootstrap.mmd).
+
+`new_engine/toolchainPresets/_structure.yaml` inventories framework identity, package, build, test, path, quality, and AST concerns. It is a seed, not a v1 schema. Its “mandatory” rules exist only in comments, unresolved `<!-- IMPLEMENT -->` values are valid YAML strings, commands are raw strings, and AST resources are incompletely identified. A v1 preset must instead pass the closed, versioned contract below; unresolved placeholders and missing mandatory values are rejected everywhere in a preset. This placeholder rule does **not** apply to free-text principle bodies.
+
+None of the supplied `new_engine/toolchainPresets/*.yaml` examples is directly executable engine policy. They lack the v1 `apiVersion`, `kind`, stable package identity, exact compositional dependency versions, typed path-pattern objects, structured command descriptors, effect/sandbox declarations, and complete parser/query identities. Several contain shell redirection, glob expansion, or nested quoting. Bootstrap therefore rejects these legacy shapes with `PRESET_LEGACY_SCHEMA_UNSUPPORTED`; it never silently upgrades them. A separate, explicit migration adapter may parse one legacy file into a candidate set of v1 layers, but every ambiguous, disabled, or unsafe value remains an unresolved migration diagnostic for user review before installation into the runtime root.
+
+The complete source-material treatment is:
+
+| Legacy example | Useful seed layers | Mandatory migration findings |
+|---|---|---|
+| `react-vite.yaml` | JavaScript/TypeScript language + Node runtime/package manager + React framework + Vite build + Vitest test | Split monolith; replace `npx`/raw commands and redirects; define package-manager ownership, exact parser/query packages, brace-glob semantics, effects, E2E command availability, and role-specific filenames. |
+| `vue-vite.yaml` | Vue framework + JavaScript/TypeScript language + Node/npm + Vite build + Vitest test | Split monolith; replace `npx`/raw commands and redirects; fully identify the Vue SFC parser and import-query coverage; define effects, package-manager ownership, E2E command availability, and role-specific filenames. |
+| `node-jest.yaml` | JavaScript/TypeScript + Node + npm + Jest | Split package manager/test layers; replace raw `npx`, placeholders, redirects, and detached `flags`; type lockfile ownership, scripts, command effects, parser/query versions, and content-reference coverage. |
+| `node-pnpm-jest.yaml` | JavaScript/TypeScript + Node + pnpm + Jest | Same as Node/Jest; retain exclusive pnpm command/lockfile ownership and validate every command capability explicitly. |
+| `node-vitest.yaml` | JavaScript/TypeScript + Node + npm + Vitest | Same as Node/Jest; bind build/lint/test IDs to proven project scripts or exact executables. |
+| `node-express.yaml` | Express framework identity overlay | Migrate the legacy `framework` marker to an exact v1 framework identity and dependency detector; declare language/runtime/build/test dependencies separately without selecting a test runner. |
+| `java-maven.yaml` | Java/JVM + Maven | Keep dependency addition explicitly unsupported until a manifest mutation adapter is selected; replace redirects/raw Maven text, fully identify the Java parser, and validate integration-goal semantics and module roots. |
+| `java-gradle.yaml` | Java/JVM + Gradle | Keep dependency addition explicitly unsupported until a manifest mutation adapter is selected; type wrapper execution/tasks/effects and fully identify Java parser/source-root coverage. |
+| `dotnet.yaml` | C# + .NET + MSBuild/dotnet test | Resolve each `*.csproj` to a project adapter rather than a raw manifest glob; type project-scoped package addition and dependency scope; replace redirects; declare missing E2E command as disabled; fully identify the C# parser. |
+| `python-poetry.yaml` | Python + Poetry + pytest | Replace shell glob compilation and redirects; type Poetry-environment commands, manifest/lock mutation, scopes, executable capabilities, parser identity, and generated/cache roots. |
+| `python-pytest.yaml` | Python + pip/requirements + pytest | `pip install` does not by itself update `requirements.txt`; migration must select a manifest mutation adapter or disable add/addDev. Replace shell glob/redirection and type every command/effect. |
+| `php.yaml` | PHP + Composer + PHPUnit | Replace redirects/raw commands; type Composer plugin/script/network policy, manifest/lock effects, installed tool capabilities, and PHP parser identity. |
+| `wordpress.yaml` | PHP/Composer base + WordPress framework + CSS | Split framework from PHP/Composer/CSS; replace the example `wp-content/` source root with discovered roots/file kinds; account separately for PHP/CSS parsers and vendor outputs; type lint arguments. |
+
+`.DS_Store` and any other non-preset file in the source example are not policy. Runtime bootstrap performs a bounded, completely accounted inventory of the derived root, but resolves environments only by exact configured preset ID/version after each candidate has been classified and validated. A YAML/JSON candidate that is not a closed v1 preset produces a stable inventory diagnostic; platform metadata is ignored only through a locked engine rule. No filename alone creates preset identity.
+
+React, Node, Java, and .NET should not be four flat, monolithic alternatives. React is a framework, Node is a runtime, Java is a language/ecosystem, and .NET is a runtime/toolchain. Presets must therefore be composable.
+
+### 10.1 Preset identity and composition
+
+[View the Preset identity and composition sample](code.md#preset-identity-and-composition).
+
+Every preset and overlay is validated with a JSON Schema (YAML 1.2 parsing for YAML form), closed objects, explicit required fields, enums, anchored patterns, and semantic-version validation. Production configuration pins an exact preset version; ranges and implicit `latest` are invalid. `metadata.layer` is one of `language`, `runtime`, `framework`, `build`, `test`, `environment`, or `project_overlay`. The composition graph must be acyclic; a preset identity may occur only once in its transitive closure, and conflicting versions of one ID are an error. Layer-order constraints and every field's merge operator are schema-defined, so list position cannot silently change policy meaning.
+
+### 10.2 Project discovery
+
+A preset must support multiple manifests and project roots rather than the sample's single `package.configFiles.manifest` field. Manifest semantics vary too much for generic keys such as `sourceDirectoriesKey`, `structureType`, and `directoryTransformer` (`new_engine/_structure.yaml:6-14`). Use registered, non-executable adapters:
+
+- `npm-package-json`
+- `npm-workspaces`
+- `maven-pom`
+- `gradle-project`
+- `msbuild-project`
+- `dotnet-solution`
+
+[View the Project discovery policy sample](code.md#project-discovery-policy).
+
+Each discovered project receives a `projectId`, canonical root, manifest adapter, language set, and compiled file-kind policies. Every v1 `ProjectPathCandidate` must name one engine-supplied `projectId`; omission is a schema error. The engine then proves that the path is contained by that project's environment/root and is not claimed by an equal-specificity conflicting owner. Equal ownership matches are a blocking `PRESET_SELECTION_AMBIGUOUS` diagnostic, not an LLM choice.
+
+For a monorepo, environment resolution uses the longest matching configured root. An equal-length match is invalid configuration. A cross-environment task declares separate paths/operations for each environment.
+
+### 10.3 File-kind policies
+
+The sample has general source patterns and physical policies only for config and style (`new_engine/_structure.yaml:26-38,81-91`). Filename validation needs an extensible role-aware map:
+
+[View the File-kind policies sample](code.md#file-kind-policies).
+
+At minimum, the schema must support these kinds where relevant:
+
+- source module;
+- component/view/screen;
+- hook/helper;
+- state/schema/type;
+- unit, integration, and end-to-end test;
+- style;
+- asset/resource;
+- config;
+- project/solution manifest;
+- contract/interface artifact;
+- migration;
+- documentation;
+- generated output.
+
+Every policy-bearing path expression uses the closed `PathPattern` type; bare strings are invalid. Every pattern declares:
+
+- a base domain: workspace, environment, project, source root, or command working directory;
+- `patternType`: `glob`, `regex`, or exact;
+- `target`: basename or path relative to the declared base;
+- case sensitivity.
+
+Every pattern matches its complete declared target; partial matching is not configurable. Planning-intent and runtime-capability applicability belongs to the containing file-kind, discovery, command-effect, generated, or forbidden rule and cannot be overridden by an individual pattern.
+
+The versioned `path-pattern/v1` glob grammar defines `*` as zero or more non-separator characters, `**` as zero or more complete path segments, and a terminal `/**` as the named directory itself plus every descendant. Thus `dist/**`, `coverage/**`, and `.cache/**` explicitly match their root directory as well as their contents; adapters may not substitute host-library glob semantics. Regex uses the pinned RE2 dialect and exact patterns are scalar-equal after the declared normalization/case policy.
+
+`base: source_root` is a post-discovery compiled form and requires an exact `sourceRootId` from the discovered project registry; it forbids an implicit nearest root. A reusable raw preset instead declares `SourceRootPathPatternTemplate {templateRuleId, sourceRootSelectorId, ...}` where the selector is a closed semantic role, not a path. Preset merge retains these templates. After manifests/projects identify roots, dedicated actions resolve every selector, materialize one bound pattern per matched root, and build/validate the final environment policy; a missing, ambiguous-for-singleton, extra, or unresolved binding blocks bootstrap. The bound instance rule identity is the tuple `(templateRuleId, sourceRootId)`, rendered unambiguously for diagnostics, so generic Java/Maven/Gradle/.NET presets never predict repository-specific IDs.
+
+All non-source-root bases forbid `sourceRootId`. `base: command_cwd` is valid only while compiling a particular command descriptor and resolves from that descriptor's separately validated owning-project `cwd` evidence; it is never ambient. Workspace/environment/project bases likewise resolve from explicit compiled identities. Before matching, the base-binding validator resolves exactly one contained root; a missing/stale/ambiguous module root or absent command binding is an environment diagnostic. Java package-directory, Maven/Gradle resource/test placement, and MSBuild project-relative rules consume that resolved root ID, and `PathGuidance` preserves it inside each applicable pattern.
+
+Every `PathPattern` carries an explicit stable `ruleId`, unique across the compiled environment policy. Each nonempty file-kind extension set likewise declares its own globally unique `extensionRuleId`; it is not synthesized from the kind name. IDs are versioned preset data, not derived from array position, display text, or a content hash; diagnostics, initial guidance, and repair authorization all cite the same ID and typed value. For a containing `{includes[], excludes[]}` set, empty `includes` means include by default, otherwise any include match is sufficient; any exclude match rejects and always wins. The final result is `(includes.empty || anyIncludeMatch) && !anyExcludeMatch`. Individual match actions emit rule evidence, and a set-level action alone emits the authorization result—an orchestrator never computes these booleans.
+
+The containing file-kind rule declares `namingEnforcement` for supported `create` and `update` intents. `strict` applies all basename and compound-extension rules. `existing_compatible`, normally used for legacy `update`, requires containment, existence, compatible kind, allowed extension, and unchanged canonical path but does not reapply create-only basename conventions. `read` and `delete` never consult this map: they always require an already registered, unchanged canonical path with compatible kind/extension; delete additionally requires its independent capability and global gate. A project overlay may set update to `strict` for an explicit migration policy. There is no validator guess based on whether a filename looks old.
+
+### 10.4 Structured commands
+
+Raw command strings in `_structure.yaml` are shell-dependent and unsafe to template (`new_engine/_structure.yaml:15-25,40-77,93-95`). Commands must be structured, capability-based values:
+
+[View the Structured commands sample](code.md#structured-commands).
+
+Rules:
+
+- commands execute without a shell;
+- every placeholder is declared, typed, and provided by the engine;
+- values are individual argv elements and are never string-interpolated into a shell command;
+- working directory must be within the owning project;
+- executable resolution follows an engine allowlist;
+- time, output, environment, filesystem, and network limits are explicit;
+- mutability is declared as `readOnly`, `workspaceWrite`, or `dependencyMutation`;
+- every mutating command declares `effects.authorizedWrites` and disposable `effects.ephemeralWrites`; both are compiled path policies, not free-form model values;
+- command write policies are ceilings: the persistent promotable set is exactly the task-approved write-file IDs whose resolved paths also match the command's authorized-write policy, never the union of those sets; each entry also carries engine-derived allowed delta kinds (`create`, `modify`, `delete`) from file capabilities and global policy, with delete separately gated;
+- persistent and ephemeral effect languages must be disjoint. Preset compilation proves their intersection empty after compiling exact/glob/RE2 rules; an unprovable or nonempty intersection rejects the command. Runtime also rejects any delta that matches both classes—there is no precedence rule;
+- ephemeral effect rules may target only preset-declared generated/cache/private-temp roots and may never overlap source, manifest/lockfile, VCS, engine, workflow, principles, toolchain-preset, or reference roots;
+- a command delta has only three valid variants: persistent regular-file, ephemeral regular-file, or ephemeral structural-directory. A structural-directory create/delete must match an ephemeral rule (including its explicitly matched root), be contained below a validated ephemeral root, and is always disposable. It can never carry a `fileId`, satisfy a planned file operation, or enter promotion. Symlinks, hard-link aliases, devices, sockets, FIFOs, directory changes in the persistent class, and all other node types are rejected;
+- the entire command process tree runs inside a required OS/container sandbox whose filesystem and network boundaries are enforceable by the adapter; child scripts cannot escape by spawning a shell or another executable;
+- package-add commands distinguish package name, version, project, and dependency scope;
+- validation commands cannot alias an install/add operation;
+- the engine verifies that an npm script, Maven goal, Gradle task, or .NET target is available before exposing the command ID to the LLM;
+- an unsupported capability is disabled with a reason rather than populated with a fake command.
+
+The LLM may select from allowed command IDs supplied in context. It never returns executable text.
+
+Bootstrap wires each descriptor through `ValidateCommandWorkingDirectoryAction`, `ResolveCommandExecutableAction`, `ValidateCommandPlaceholderContractAction`, `ValidateCommandMutabilityAliasAction`, persistent/ephemeral pattern compilation, effect-disjointness and ephemeral-root validation, sandbox and in-flight quota-capability validation, and only then `ProbeCommandCapabilityAction`. `AssembleCommandRegistryAction` requires every one of those evidence keys for a descriptor; a capability probe alone cannot expose a command.
+
+### 10.5 AST and parser policy
+
+The sample's extension-to-string AST maps do not identify parser versions, query captures, resolution rules, or missing-resource behavior (`new_engine/_structure.yaml:97-101`). Use explicit parser descriptors:
+
+[View the AST and parser policy sample](code.md#ast-and-parser-policy).
+
+Preset loading verifies parser availability, grammar compatibility, query-resource containment, query compilation, and required captures. Every file kind that permits model `create`, `patch`, or `replace` also declares `contentReferencePolicy`: registered import/resource/link/path-literal extractors, a resolver, and a conservative fallback scanner for every body range the structured extractors do not claim. Bootstrap disables those write capabilities unless coverage is complete. After each proposed operation is applied in its savepoint, the engine extracts and resolves typed references, scans all remaining text ranges, and rejects unresolved path-like tokens. This includes Markdown, documentation, templates, stylesheets, configuration, and other non-AST formats; copy operations remain governed by their immutable-source policy. If a parser, query, resolver, or fallback scanner is unavailable, the preset fails at bootstrap; the LLM is not asked to compensate.
+
+### 10.6 Generated and forbidden paths
+
+Every compiled preset includes immutable deny rules for dependency caches, build output, source-control internals, engine internals, and any declared generated source:
+
+[View the Generated and forbidden paths sample](code.md#generated-and-forbidden-paths).
+
+A generated path can be a read-only input only when repository discovery and the preset produce an engine-issued `generated_existing` file ID. It is never accepted from a model path string. Regeneration requires a specific task, registered generator command adapter, and declared ephemeral/generated effect policy; those command bytes are diff-gated and are not hand-edited or promoted as arbitrary model source. Hand-editing compiled output is rejected.
+
+### 10.7 Environment-specific expectations
+
+#### React
+
+- Compose JavaScript or TypeScript, Node, React, and the actual build/test overlay.
+- Represent components, hooks, state, styles, assets, and tests as distinct file kinds.
+- Typical PascalCase `.tsx`, `useXxx.ts[x]`, and colocated `*.test.tsx` conventions are defaults only when the selected project preset declares them; React itself does not mandate them.
+- Validate JSX/TSX syntax, aliases, import resolution, package declarations, and configured test placement.
+- Exclude build/cache paths such as `dist`, `.next`, and coverage output according to the selected tool overlay.
+
+#### Node
+
+- Compose JavaScript or TypeScript with ESM or CommonJS and the selected package manager/test runner.
+- Detect `package.json`, its `type`, TypeScript configuration, scripts, and lockfiles.
+- Do not require compilation for runtime JavaScript.
+- Permit `.js`, `.mjs`, `.cjs`, or `.ts` only when the resolved variant allows them.
+- Multiple unresolved lockfiles are a configuration ambiguity, not a model decision.
+
+#### Java
+
+- Compose Java/JVM with Maven or Gradle.
+- Discover modules from `pom.xml`, `settings.gradle*`, and `build.gradle*`.
+- Model `src/main/java`, `src/test/java`, and resource roots per module.
+- Deterministically require a public top-level type to match its `.java` basename and its package declaration to match the source-root-relative directory when the preset enables those rules.
+- Provide project-configurable `*Test.java`/`*Tests.java` policies.
+- Treat `target/`, `build/`, and generated sources as non-writable by default.
+
+#### .NET
+
+- Compose C#/.NET with MSBuild/dotnet.
+- Discover `.sln`, `.slnx`, `.csproj`, central package files, and project references.
+- Associate every proposed source or test file with exactly one project.
+- Provide typed `dotnet build`, `dotnet test`, and `dotnet add <project> package <package>` command definitions.
+- Treat PascalCase and `*Tests.cs` as project policies, not universal language laws.
+- Exclude `bin/` and `obj/`.
+- Validate project ownership, references, and namespace/folder conventions when configured.
+
+### 10.8 Normative matching and platform semantics
+
+Preset compilation uses one portable matching contract:
+
+- Persistent and policy paths are NFC-normalized, repository-relative POSIX paths with `/` separators. Matching is performed on Unicode scalar values after normalization.
+- `exact` means full target equality. `regex` uses the RE2-compatible grammar, is implicitly anchored to the entire declared target, and must declare case sensitivity. Unsupported constructs fail preset compilation.
+- `glob` uses `/` as the only separator: `*` matches zero or more non-`/` characters, `?` one non-`/` character, `[...]` one class character, and a complete segment `**` zero or more path segments. Brace expansion, extglobs, escaping by platform shell, and partial substring matching are not supported.
+- Each path proposal explicitly declares a kind, and validators apply that kind's rules. Overlap with another kind is therefore not ambiguity. When the engine must infer a kind for an existing repository file, the highest unique `inferencePriority` wins; equal-priority matching kinds fail preset compilation for the relevant root/operation domain.
+- File-kind policies explicitly declare planning intents (`read`, `create`, `update`, `delete`) and the narrower runtime capabilities (`read`, `create`, `patch`, `replace`, `copy_destination`, `delete`). Read-only repository context uses `read`; a write capability is never inferred from read permission. `update` does not imply whole-file `replace`, and `create`/`update` do not imply copy-destination permission.
+- The environment declares target filesystems. The compiled cross-platform policy rejects Windows reserved device basenames, disallowed characters, trailing dots/spaces, and target-specific segment/path length violations when Windows is a target. It also checks normalization and case-fold collisions for every configured target, even when the engine host is more permissive.
+- Maven and Gradle adapters evaluate effective module source/resource/test/generated-source sets through registered build-model adapters; directory-name heuristics alone are insufficient. MSBuild adapters evaluate SDK defaults plus explicit `Compile`, `Content`, `None`, `EmbeddedResource`, `Remove`, `Include`, and project-reference ownership rules. An unevaluable dynamic build model blocks path authorization or requires an explicit project overlay.
+
+Plan-time validation is lexical and repository-structural. Content-dependent rules such as Java public-type/basename, Java package/directory, or configured namespace/declaration checks run only when source bytes or an explicit typed declaration proposal is available, and are mandatory again against the parsed generated source during implementation. The engine never claims to prove a content-dependent rule from a filename alone.
+
+### 10.9 Explicit legacy-preset migration
+
+Legacy conversion is an offline administrative workflow, never a branch of bootstrap, recovery, `specify`, `plan`, `tasks`, or `implement`. It reads only a user-selected known source file and a published filename/version mapping. It may map legacy `1.0` to `1.0.0`, expand a known brace expression into separate v1 patterns, or split a known monolith into curated language/runtime/package/framework/build/test resources only when the migration table provides the exact stable IDs, versions, rule IDs, and merge operators. It never generically shell-splits command strings or infers identity/layer/framework from arbitrary YAML.
+
+The migration report must enumerate every source field and classify it as mapped, replaced by a curated typed resource, disabled, dropped, or unresolved. Raw redirection becomes bounded runner output policy; fake Java dependency commands are disabled; Maven `LATEST` becomes an unresolved typed package/version decision; Python glob compilation becomes a registered traversal/compiler adapter; legacy protection patterns require an explicit generated/cache/VCS/lockfile/engine classification; and every placeholder, parser, resolver, project-discovery rule, command effect, sandbox boundary, and target-platform policy must be supplied explicitly. Any uncertainty blocks installation.
+
+Only after user review does the ordinary v1 loader validate the entire emitted transitive closure. Installation beneath `<paths.sddtoolkit>/toolchainPresets/` is one atomic engine-artifact transaction; a partial set is never activated. The source examples remain unchanged and are never fallback inputs. Runtime `toolchainPresets.legacyDocumentPolicy` is a schema constant equal to `reject`, not a switch that can enable migration.
+
+---
+
+## 11. Filename and path validation algorithm
+
+Workflow artifacts and project files use two separate policy domains:
+
+- **Workflow artifact policy** owns canonical files beneath `paths.specs`: `spec.md`, the `clarify/` collection and its engine-numbered controlled forms, `reference-context.md`, `plan.md`, `research.md`, `data-model.md`, `quickstart.md`, optional feature-local contracts, and `tasks.md`.
+- **Environment preset policy** owns proposed repository implementation files: source, tests, configuration, styles, assets, project manifests, migrations, documentation, and related files.
+
+This distinction prevents a language preset from incorrectly rejecting `spec.md` because Markdown is not a source extension.
+
+For every model-returned path-like field, the engine executes these checks in order:
+
+1. Validate response field type and UTF-8; reject NUL/control characters.
+2. Decode only the response's required UTF-8 layer, normalize the Unicode path to NFC, normalize literal separators to `/`, and remove literal `.` segments. This is canonicalization, not repair.
+3. Never URL/percent-decode a path. Reject empty paths, absolute paths, drive prefixes, UNC paths, URI schemes, literal `..` segments, and any ASCII-case-insensitive encoded dot/separator token matching `%(?:25)*(?:2e|2f|5c)` (including repeatedly encoded forms such as `%252F`).
+4. Join to the canonical workspace root without following model-controlled indirection.
+5. Resolve existing ancestors and symlinks; reject any real path that escapes the workspace or owning environment.
+6. Apply the compiled root access class. Reject every project operation against engine config, workflow/spec/reference, canonical-state/transaction, principles/toolchain-preset/overlay, VCS, and dependency-cache roots. Reject every generated/build write. An existing generated/build file may enter context only through an engine-issued `generated_existing` read-only ID allowed by the preset; a model-returned raw path never obtains that exception.
+7. Resolve `projectId` and environment. Reject no match or multiple matches.
+8. Validate the explicitly declared `kind`; do not infer a different kind to make a proposal pass.
+9. Check whether the planning intent is allowed for that kind and stage, then compile its preset/task-authorized runtime capability subset; never infer `replace` or `copy_destination` from a generic update intent.
+10. Check allowed roots using segment-aware matching, never string-prefix containment.
+11. Apply exact/regex/glob basename rules using declared case sensitivity when the containing file-kind's create/update `namingEnforcement` is `strict`; under `existing_compatible`, or for read/delete, prove the operation keeps the already registered canonical basename unchanged.
+12. When a file kind declares a nonempty extension set, require its explicit `extensionCaseSensitive` boolean and match with that rule using longest-suffix semantics for every intent, so `.test.tsx` is not reduced to `.tsx`. The active-host-plus-target portability collision pass remains independently stricter where required. When `extensions` is omitted, `extensionCaseSensitive` is forbidden and the kind must have at least one full basename exact/glob/regex rule; that rule is authoritative, and omission never means “any extension.” This supports deliberate extensionless names such as `Dockerfile`.
+13. Apply include and exclude rules to the declared target domain.
+14. Apply placement/mapping rules, such as colocated tests or mirrored `src` to `test` structure.
+15. Apply environment-specific content rules only when typed declaration facts or source bytes are present; otherwise record them as mandatory implementation-time validators.
+16. Detect case-fold collisions on case-insensitive filesystems.
+17. For `update`, require an existing regular file. For `create`, require an absent target. Upsert is not a v1 intent or capability.
+18. Apply the stage-specific authorization gate: planning validates the current plan-unit proposal scope before minting a `FileRecord`; tasks may select only plan-authorized file IDs; implementation requires both the plan capability and the approved task read/write set.
+19. Immediately before any commit, re-resolve every existing ancestor with descriptor-relative/no-follow operations or the platform-equivalent safe primitive, compare parent identities captured during preparation, and fail if an ancestor or target was swapped. Lexical validation performed earlier never authorizes a race-prone write.
+
+An accepted planning `ProjectPathCandidate` is create-only and must name an absent target; it becomes an engine-assigned `plan_declared` `FileRecord`. Existing files are selected only by discovered `fileId`, so an update/delete proposal cannot collide with the registry while trying to mint a second identity. `FileRegistryState` stores identity, path, kind, existence, provenance, and the deterministic policy-capability ceiling—but no plan intent or authorization. `PlanState.fileGrants` separately binds each approved file ID to one planned intent and exact capability subset. Tasks and implementation intersect that grant with task scope and current policy. The `fileId` remains the only project-file identity downstream model routes may use.
+
+Raw model path strings are discarded after normalization and diagnostic reporting. Every `FileReference` is checked against the current route/unit's allowed file-ID set as well as the global registry; every `SourceReference` is checked against the current reference state and route/unit source allowlist. A known but unauthorized file/source therefore cannot enter later context. `PassiveLiteralReference` is checked against the exact registry state and unit allowlist and is valid only in a display-capable prose field. It is forbidden from `ProjectPathCandidate`, `FileRecord`, file-operation/command/copy payloads, import/resource resolution, context selectors, URI fetching, and every filesystem/network adapter. Business specification fields cannot carry operational file/source nodes. An exact-copy value resolves only through the current snapshot's token/citation registry; the model cannot inline arbitrary bytes or emit a textual marker and claim that it was engine-rendered. Renderers resolve valid nodes and tokens to engine-controlled display labels/bytes.
+
+As defense in depth, every model-authored `LiteralText.value` and `BusinessLiteralText.value` is rejected when a token bounded by whitespace/punctuation matches `(segment/)+basename`, `(segment\\)+basename`, a drive/UNC/URI form, a basename ending in any compiled compound extension, or any root-level basename accepted by a compiled exact/name rule or known-manifest rule. The last set includes extensionless or dotfile names such as `Dockerfile`, `Makefile`, and `.env` when a selected preset admits them. Segments use the same NFC and allowed-character policy as path normalization. `BuildSupersetPathTokenGrammarAction` compiles this detector from every resolved environment extension/exact/name rule, manifest/reserved name, path/URI grammar, and current identified reference-manifest basename—not merely the current unit's allowed kinds—and binds the exact policy/repository/reference identities and scanner version. Route/unit allowlists are applied only after detection and can never shrink the lexeme detector.
+
+The lexer never turns a token into a path. An inline match produces `UNBOUND_PATH_REFERENCE`; an atomic repair may choose only an exact unit-allowlisted passive literal ID, locally allowed file/source ID, or non-path replacement text. Unknown/stale/cross-unit passive IDs produce closed diagnostics and the model cannot register one. A valid passive reference or `ExactBusinessCopy` bypasses inline-literal rejection only as inert display content. In technical prose, a passive literal whose exact bytes resolve to a locally allowed project file produces `FILE_REFERENCE_REQUIRED`; business prose may retain the display literal because lexical shape cannot decide business relevance. Operational use of the same bytes must independently pass normal path/file-ID authorization.
+
+Plans and tasks refer to stable `fileId` values once a path is accepted. Filename repair occurs in planning, before the file record is approved. One canonical path record changes and renderers update all human-facing references; the model is not asked to repair repeated prose occurrences.
+
+Generated source is a separate structured path surface. Registered AST queries extract import/export specifiers, resource references, project-file includes, and statically decidable filesystem literals. Relative/module references are resolved against the validated file registry, manifest aliases, and preset rules; a new project target must already have a plan-approved `fileId`. Dynamic path construction that cannot be resolved mechanically is reported under the preset's semantic/security policy rather than declared valid. Thus a filename embedded in code cannot bypass validation merely because it was not a top-level response field.
+
+### 11.1 Cross-stage filename write gate
+
+No model-authored filename or path is written to `spec.md`, `plan.md`, `tasks.md`, canonical state, or a source overlay merely because its response passed JSON schema. The stage-specific representation is deliberately narrower:
+
+| Stage | Model representation | Deterministic authority before rendering/writing |
+|---|---|---|
+| Specify | Ordinary prose plus unit-allowlisted `PassiveLiteralReference` IDs; no inline filename/path/URI and no operational project path | Passive registry scalar/origin validation, unbound-path lexer, business-boundary rules, and optional exact existing source IDs |
+| Plan | Existing `fileId`; normally engine-generated `pathCandidateId` for a new file; raw create-path only under explicit disabled-by-default fallback | Full preset kind/root/name/extension/placement rules, active-host-plus-target portability, collision/containment, path-candidate registry, and plan-file grant |
+| Tasks | Approved read/write `fileId`s and capabilities only | Exact `PlanState.fileGrants`, sole file registry, task-unit scope, and graph/coverage validation |
+| Implement | Approved `fileId`/copy `sourceId`/operation-intent ID only | Plan grant ∩ task scope ∩ current preset/global capability, descriptor/no-follow target state, and content reference validation |
+
+The visible filename in every artifact is renderer-owned. It is resolved from the exact `FileRegistryState` or inert passive registry bound by the canonical state; the model never repeats it in task prose. Therefore a nano-model spelling, separator, case, extension, or directory variation cannot propagate from plan into tasks or implementation.
+
+Every generation unit follows the same pre-write loop:
+
+1. Build initial guidance from the exact compiled preset/policy, including stable rule IDs, path candidates, file IDs, and minimal valid examples.
+2. Decode the response into a candidate held only in memory; no artifact or workspace write is authorized.
+3. Run schema, typed-reference, unbound-path-token, preset path, portability, authorization, and stage-specific validators.
+4. If a path-related rule fails, order diagnostics and select one; build a single-pointer repair authorization containing the exact rejected value, compiled policy state, stable rule ID and typed rule value, permitted candidate IDs/format, and immutable siblings.
+5. Invoke the bounded repair route, validate authorization/revision/scope, merge only that atomic replacement, and rerun the impacted validators followed by the complete unit validator set.
+6. Repeat within the configured unit/stage limits. Exhaustion blocks with the last exact diagnostics; it never writes a best-effort value or broadens scope.
+7. Only a fully valid canonical unit may be merged. Only a fully valid canonical stage may be rendered, transaction-validated, and committed.
+
+A repair in specify cannot introduce a plan path; a task repair cannot rename a file; and an implementation repair cannot change its target ID. A real rename or relocation returns to planning, creates a new candidate/file/grant state, clears descendant approvals, and regenerates task views.
+
+---
+
+## 12. LLM interaction boundary
+
+### 12.1 Discrete LLM components
+
+LLM interaction is deliberately split across actions:
+
+1. `SelectContextAction` chooses relevant typed facts and bounded source excerpts.
+2. `BuildInitialGuidanceAction` converts compiled policy into a concise instruction packet.
+3. `BuildModelRequestAction` constructs the provider-neutral request and response schema.
+4. `InvokeModelAction` performs exactly one provider call and returns raw provider output plus usage metadata.
+5. `DecodeModelEnvelopeAction` converts provider output into the typed model-response envelope.
+6. Stage-specific validation actions validate the candidate.
+7. `BuildAtomicRepairGuidanceAction` builds a single-diagnostic repair request when required.
+8. `MergeAtomicRepairAction` merges only the authorized replacement into the in-memory candidate.
+
+No one action both invokes and interprets the model. No model action reads or writes the workspace directly.
+
+### 12.2 Initial guidance packet
+
+Each generation request contains only what the current unit needs:
+
+[View the Initial guidance packet sample](code.md#initial-guidance-packet).
+
+Raw preset YAML is not sent. The engine sends the compiled subset relevant to the requested unit. For every permitted model-visible fallback filename field, the packet contains a closed `PathGuidance` variant with the declared intent/capabilities, naming-enforcement mode, complete applicable root/include/exclude/basename/extension/placement rules, full-match glob/RE2 semantics, configured-target plus active-host filename constraints, inaccessible/generated-root classes, relevant collision paths, content ceilings, and every mechanical rule ID. Normally the engine supplies a finite `PathCandidateRegistry` and the nano model returns only `pathCandidateId`; if exactly one candidate exists, an action selects it without a model choice. The packet never implies that an omitted rule is disabled: `applicableRuleIds` is checked against the validator dependency set before the call. Atomic repair cites one of those same rule IDs and the exact field pointer, so first-pass guidance and repair cannot drift.
+
+For display prose, the packet also carries `PassiveLiteralGuidance` selected from the exact registry and current unit evidence. It says explicitly that passive IDs may be selected only at the listed presentation field pointers and authorize no read, write, copy, command, import, context request, or URI fetch. Operational references use only locally allowed file/source IDs. The path-token grammar still scans ordinary literal segments, so a nano model cannot bypass the distinction by copying the display bytes inline.
+
+A dependency-capable plan unit receives `DependencyGuidance` from the exact `DependencyPolicyRegistry`: allowed target project/manifest IDs, ecosystems, registry-source IDs, scopes, and version/package grammar plus deny-rule IDs. It receives no install command and cannot introduce a registry endpoint. The same authority and typed rules are used by proposal validation and atomic repair.
+
+Raw whole-repository listings, principle categories not selected by the configured stage/file-kind mapping, and earlier model prose are not sent. Stable identifiers replace repeated text wherever possible.
+
+### 12.3 Provider-neutral response envelope
+
+[View the Model response envelope sample](code.md#model-response-envelope).
+
+The response schema is closed. The provider adapter should use native structured output when available, but the engine still performs its own schema validation. Provider claims of schema compliance are not trusted.
+
+Allowed top-level result kinds are route-specific. A generation route cannot return a patch; a repair route cannot return a whole document; an implementation route cannot return task status.
+
+### 12.4 Context requests
+
+If the current unit cannot be completed with supplied facts, a route may support one typed context request:
+
+[View the Model context request sample](code.md#model-context-request).
+
+The model does not provide a raw path. The context request must reference an already validated ID or a strictly typed query. The orchestrator permits at most the configured number of context rounds. Unsupported requests become a diagnostic, not an agentic tool call.
+
+A context request asks only for already-held evidence. It cannot stand in for absent business authority. On `spec.section.generate`, if the supplied reference/clarification authorities do not support a required business fact, the only valid semantic alternative is `clarification_needed`; inventing a default, silently omitting the affected behavior, or repeatedly asking the model to guess is invalid.
+
+### 12.5 Low-capability model operating rules
+
+- one reference chunk, artifact section, requirement cluster, task cluster, or file operation per call;
+- strict JSON schema with enums and `additionalProperties: false`;
+- low temperature or provider equivalent, without relying on it for correctness;
+- stable IDs for sources, requirements, tokens, projects, files, tasks, commands, and diagnostics;
+- a short valid example matching the current exact schema;
+- no request to reproduce engine-known filenames, IDs, headings, checkboxes, or status;
+- no open-ended “inspect the repo” instruction;
+- no unrestricted tool use;
+- no invention of an absent business fact; return the route's typed clarification variant when available;
+- no full-document retry for a local validation failure;
+- bounded output and repair attempts;
+- optional configured fallback route only after deterministic retry exhaustion, never as silent behavior.
+
+### 12.6 Semantic review
+
+Some current gates—testability, ambiguity, minimality, unsupported behavior, and conflict detection—are semantic. If desired, the engine runs a separate `semantic.review` model action over one typed unit. Its findings are labeled `model_assisted`, retain source citations, and never masquerade as deterministic evidence. Configuration determines whether such findings warn, block for user review, or produce a model repair request.
+
+### 12.7 Versioned route registry
+
+`routeRegistryVersion` selects a closed registry shipped with the engine. Configuration may map an exact route ID to a model profile, but it cannot redefine that route's unit, schemas, context-request type, guidance/example assets, ceilings, or repair algebra. Unknown routes, missing required routes, duplicate descriptors, and provider profiles whose advertised limits cannot satisfy a descriptor fail at bootstrap. The effective provider limit is the stricter of the profile and route limit.
+
+The initial `routes/v1` registry is:
+
+| Exact route ID | Unit type | Request schema ID | Result schema ID | Allowed context request | Guidance + minimal-example contract | Input ceiling | Output ceiling | Repair authorization schema |
+|---|---|---|---|---|---|---:|---:|---|
+| `reference.extract` | `reference-chunk/v1` | `request.reference-extract/v1` | `result.reference-claims/v1` | None | `guidance.reference-extract/v1` + `example.reference-extract/v1` | 65,536 B / 16,000 tokens | 12,288 B / 3,000 tokens | `repair.authorization.structured/v1` |
+| `reference.reconcile` | `reference-claim-cluster/v1` | `request.reference-reconcile/v1` | `result.reference-reconciliation/v1` | `source-block-by-id/v1` | `guidance.reference-reconcile/v1` + `example.reference-reconcile/v1` | 65,536 B / 16,000 tokens | 12,288 B / 3,000 tokens | `repair.authorization.structured/v1` |
+| `spec.feature-brief.generate` | `reference-feature-brief/v1` | `request.feature-brief/v1` | `result.feature-brief/v1` | `source-block-by-id/v1` | `guidance.feature-brief/v1` + `example.feature-brief/v1` | 49,152 B / 12,000 tokens | 4,096 B / 1,000 tokens | `repair.authorization.structured/v1` |
+| `spec.section.generate` | `specification-section/v1` | `request.spec-section/v1` | `result.spec-content-section/v1` | `source-block-by-id/v1` | `guidance.spec-section/v1` + `example.spec-section/v1` | 49,152 B / 12,000 tokens | 12,288 B / 3,000 tokens | `repair.authorization.structured/v1` |
+| `plan.path-intent.generate` | `plan-path-intent/v1` | `request.plan-path-intent/v1` | `result.plan-path-intent/v1` | `repository-fact-or-file-excerpt/v1` | `guidance.plan-path-intent/v1` + `example.plan-path-intent/v1` | 32,768 B / 8,000 tokens | 4,096 B / 1,000 tokens | `repair.authorization.structured/v1` |
+| `plan.section.generate` | `plan-unit/v1` | `request.plan-unit/v1` | `result.plan-unit/v1` | `repository-fact-or-file-excerpt/v1` | `guidance.plan-unit/v1` + `example.plan-unit/v1` | 65,536 B / 16,000 tokens | 12,288 B / 3,000 tokens | `repair.authorization.structured/v1` |
+| `tasks.cluster.generate` | `obligation-cluster/v1` | `request.task-cluster/v1` | `result.task-cluster/v1` | `plan-obligation-by-id/v1` | `guidance.task-cluster/v1` + `example.task-cluster/v1` | 49,152 B / 12,000 tokens | 12,288 B / 3,000 tokens | `repair.authorization.structured/v1` |
+| `tasks.dependencies.reconcile` | `task-edge-candidate/v1` | `request.task-edge/v1` | `result.task-edge/v1` | None | `guidance.task-edge/v1` + `example.task-edge/v1` | 32,768 B / 8,000 tokens | 4,096 B / 1,000 tokens | `repair.authorization.structured/v1` |
+| `clarification.resolve` | `open-clarification/v1` | `request.clarification-resolution/v1` | `result.clarification-resolution/v1` | `authority-record-by-id/v1` | `guidance.clarification-resolution/v1` + `example.clarification-resolution/v1` | 32,768 B / 8,000 tokens | 4,096 B / 1,000 tokens | `repair.authorization.structured/v1` |
+| `implementation.change-plan.generate` | `task-change-plan/v1` | `request.task-change-plan/v1` | `result.operation-intent-plan/v1` | `authorized-file-excerpt/v1` | `guidance.task-change-plan/v1` + `example.task-change-plan/v1` | 49,152 B / 12,000 tokens | 8,192 B / 2,000 tokens | `repair.authorization.structured/v1` |
+| `implementation.operation.generate` | `file-operation/v1` | `request.file-operation/v1` | `result.file-operation/v1` | `authorized-file-excerpt/v1` | `guidance.file-operation/v1` + `example.file-operation/v1` | 65,536 B / 16,000 tokens | 12,288 B / 3,000 tokens | `repair.authorization.code/v1` |
+| `repair.structured` | `authorized-structured-repair/v1` | `request.structured-repair/v1` | `result.structured-repair/v1` | None | `guidance.structured-repair/v1` + `example.structured-repair/v1` | 24,576 B / 6,000 tokens | 4,096 B / 1,000 tokens | None; protocol retry only |
+| `repair.code` | `authorized-code-repair/v1` | `request.code-repair/v1` | `result.code-repair/v1` | None | `guidance.code-repair/v1` + `example.code-repair/v1` | 49,152 B / 12,000 tokens | 12,288 B / 3,000 tokens | None; protocol retry only |
+| `semantic.review` | `semantic-review-unit/v1` | `request.semantic-review/v1` | `result.semantic-findings/v1` | None | `guidance.semantic-review/v1` + `example.semantic-review/v1` | 32,768 B / 8,000 tokens | 4,096 B / 1,000 tokens | `repair.authorization.structured/v1` when policy permits |
+
+Byte ceilings apply to canonical UTF-8 request/response envelopes, and token ceilings use the selected provider adapter's tokenizer. Both must pass. Each result schema replaces the illustrative empty `payload` in the companion sample with a closed route-specific payload; the generic envelope is not an escape hatch. Repair routes do not recursively repair semantic failures: malformed envelopes may receive only the decoder-level protocol retry, while a schema-valid but invalid repair consumes the existing authorization attempt.
+
+In particular, `result.reference-claims/v1` contains a bounded ordered collection of `ReferenceClaimProposal` values, exactly one `PreservedTokenClassificationProposal` for every engine-supplied structured-token candidate, and a closed claims/positive-`no_feature_claim` outcome. A preserve classification deterministically creates a canonical token and preserved-token claim, so `no_feature_claim` is valid only when no model or preserved-token claim remains. Each model claim contains typed content plus one or more `SourceCitationProposal` values; neither proposal admits reference-state, chunk, citation, claim, token, obligation, reconciliation-disposition, or related-claim IDs. The request envelope binds the exact state/chunk and allowed sources/candidates. Completeness validators reject omitted/duplicate token classifications; then distinct validation/ID/build actions create canonical citations, tokens, and identified claims.
+
+`result.reference-reconciliation/v1` is the discriminated `ReferenceReconciliationRouteResult`. A bounded lower-level partition returns only a `ReferenceReconciliationSummaryProposal` whose member IDs exactly equal its supplied partition. The final global partition returns one `ReferenceReconciliationProposal`: total claim-disposition proposals plus bounded signal and conflict proposals over the complete represented claim set. Neither variant can redefine claim/token content or mint canonical summary/statement/signal/conflict/decision IDs. Dedicated coverage, join, ID, and build actions materialize summaries, the final claim ledger, `ReferenceSignal` records, and `SourceConflict` records.
+
+`result.feature-brief/v1` is a `FeatureBriefRouteResult`: a `FeatureBriefProposal` grounded only in the completed reference claim/citation registries, or a typed specification clarification need. The model supplies a business title, description, and primary goal plus existing claim/citation or resolved clarification-response IDs; it cannot supply the `featureId`, any workflow or project path, or a reference selector. The engine derives `featureId` before the call from every canonical validated selector segment in order using the versioned workflow naming policy. An unsupported fact takes the clarification branch; a path-shaped or structurally invalid value follows the normal passive-literal/atomic protocol.
+
+`result.spec-content-section/v1`, `result.plan-unit/v1`, and `result.task-cluster/v1` are discriminated route results: either stage content or one `ClarificationNeedProposal`. A clarification carries a bounded user-answer schema and engine-known subject authorities explaining the gap. It is a successful semantic pause, consumes neither protocol-retry nor model-repair budget, and is never sent through repair to manufacture content. A malformed need is an ordinary invalid model candidate; content that asserts an unsupported fact is a semantic no-invention finding and must be replaced by the clarification variant under one atomic authorization. The engine validates/deduplicates the need, assigns an `SNN`, `PNN`, or `TNN` ID when necessary, persists its form under `clarify/`, and enters the matching clarification-pending state.
+
+`result.clarification-resolution/v1` may only select one existing open clarification and existing current-authority IDs. It is used on a subsequent stage run when exact deterministic lookup cannot decide semantic sufficiency. The engine—not the model—checks the subject key, authority provenance, non-conflict, current revisions, and required-field coverage before closing the record. Failure to establish support leaves the same record open; it never creates an answer.
+
+The `reference.extract` descriptor additionally binds `unitPartitionContractId: reference-chunker/v1`. `ReferenceSnapshot.extractionContract` stores the exact route-registry version, route ID, request/result schema IDs, and partition contract. Recovery/re-extraction must resolve that closed descriptor and blocks with `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE` rather than silently using a newer schema or chunk boundary contract.
+
+---
+
+## 13. Action catalogue
+
+The names below define responsibility boundaries. Implementations may group them into packages, but must not merge responsibilities in a way that violates the action rules.
+
+Catalogue-wide durable-transaction rule: every action anywhere in Sections 13.1-13.9 that builds, seals, validates, or persists a stage, activation, review, task checkpoint, manual-verification, task-success, or task-outcome transaction consumes/produces the complete `DurableTransactionMember` and its validation evidence, even when the compact row omits repeated fields. This rule is not limited to the persistence-action subsection.
+
+### 13.1 Bootstrap and configuration actions
+
+| Action | Input | Output | Single responsibility |
+|---|---|---|---|
+| `LocateExactEngineConfigAction` | invocation working directory, trusted filesystem adapter, and parent-walk ceiling | exact config location and canonical project-root descriptor | Walk canonical ancestors nearest-first for the exact basename `.sddtoolkit.json`, reject aliases/symlinks/special files, and bind the containing directory as project root; do not inspect config content or accept a fallback/default name. |
+| `ReadEngineConfigAction` | validated exact config location and bounded no-follow descriptor | raw config text | Read that one bounded engine config resource through the validated descriptor. |
+| `ParseEngineConfigAction` | raw config text | raw config object | Parse JSON without applying policy. |
+| `ValidateEngineConfigSchemaAction` | raw config object | schema-valid config | Apply only the closed config schema. |
+| `ValidateConfigReferenceAction` | one schema-valid config reference | reference evidence | Resolve one named profile/route/reader/validator/adapter. |
+| `ValidateConfigLimitAction` | one configured numeric limit | limit evidence | Apply one engine safety bound. |
+| `ValidateConfigInvariantAction` | one schema-declared cross-field invariant | invariant evidence | Evaluate one closed config predicate. |
+| `CanonicalizeLogLevelAction` | configured `.sddtoolkit.json` `logs.level` scalar | canonical level and alias evidence | Case-normalize the closed enum and map `CRITICAL` to `fatal` and `WARN` to `warning`; no event producer chooses severity. |
+| `ResolveLogEventDefinitionRegistryAction` | exact built-in registry version | immutable event/field-definition registry | Resolve the closed event-to-level/template/field-schema authority. |
+| `ValidateLoggingPolicyAction` | schema-valid logs config, engine hard bounds, and event-definition registry | validated logging policy fragment | Prove feature-file logging is mandatory, JSONL/timestamp constants, bounded rotation/flush/retention, prompt opt-ins, redaction registry, alias/threshold semantics, and `block_new_work` failure mode. |
+| `ValidateEnginePathPolicyAction` | one configured path relation | path-policy evidence | Validate one engine path/overlap relation. |
+| `ResolveConfiguredBaseRootAction` | exact project-root descriptor, one schema-valid `paths` entry, and active workspace filesystem policy | configured-root candidate | Join exactly one required relative configured base to project root without following aliases or deriving fixed children. |
+| `ValidateConfiguredBaseRootAction` | one configured-root candidate, exact config location, portability limits, and engine root rules | configured-root capability | Prove normalization, containment, representability, access class, and permitted existence/type for one `paths` base. |
+| `BuildBootstrapRootRegistryIdAction` | validated exact config location, canonical project root, and compiler-locked bootstrap-root contract version | self-validating bootstrap-root-registry identity | Construct the closed `(canonical project root, contract version)` tuple; consume no state ledger and inspect no content. |
+| `BuildBootstrapRootRegistryAction` | bootstrap-root-registry identity, exact config/project-root descriptors, and the complete validated configured-root capability set | immutable bootstrap-root registry | Assemble only the roots needed to load engine-owned bootstrap inputs; it contains no preset-derived/generated/project-discovery roots. |
+| `ValidateBootstrapRootRegistryAction` | bootstrap-root registry, closed required-path-key set, and pre-preset overlap matrix | bootstrap-root-registry evidence | Require every configured base exactly once and reject missing, duplicate, escaping, or illegally overlapping roots before preset/principle ingestion. |
+| `ResolveProjectTransactionCollectionAction` | validated bootstrap-root registry and its configured `paths.sddtoolkit` capability | fixed project transaction/WAL collection capability | Derive only `<paths.sddtoolkit>/transactions/` for v1 preownership feature activation and project-WAL recovery; accept no independent path. Archive mutation is outside v1. |
+| `AcquireProjectTransactionCollectionLockAction` | fixed project transaction collection, bootstrap-root identity, process instance, and bounded lock policy | runner-held project-transaction lock capability or contention diagnostic | Serialize project ownership/ledger recovery and activation preparation without reading or mutating a transaction. |
+| `ReleaseProjectTransactionCollectionLockAction` | runner-held project-transaction lock capability and terminal project-storage outcome | release observation | Release exactly once after recovery plus the last project mutation/read requiring serialization on every success/error/cancel path; accept no serialized token. |
+| `ScanTransactionJournalInventoryAction` | one project/feature transaction collection under its matching held lock and bounded journal inventory policy | ordered raw journal inventory | Enumerate only engine journal/transaction-ID-ledger entries and header/marker observations; perform no recovery mutation or state read. |
+| `ValidateTransactionJournalInventoryAction` | raw inventory, discriminated storage owner/path, journal schemas, transaction-ID ledger, and hard count/byte limits | validated recovery set | Prove total bounded accounting and reject malformed, aliased, cross-owner, unknown-ID, duplicate, or unledgered journals before any canonical state is trusted. |
+| `BuildTransactionIdentityRecoveryPlanAction` | validated transaction-ID ledger and validated journal recovery set for the same storage owner | ordered transaction-identity recovery-plan candidate | Join every reservation/committed record and journal exactly once into `retire_orphan`, `rollback_and_retire`, `recover_commit_id`, `verify_committed`, or blocking disposition; perform no mutation. |
+| `ValidateTransactionIdentityRecoveryPlanAction` | recovery-plan candidate, exact ledger/journal inventories, marker schemas, and storage owner | recovery-plan evidence | Prove total one-to-one coverage, ordinal order, legal status/marker pairing, no cross-owner join, and that every impossible pair blocks. |
+| `ResolveFeatureStateIdLedgerPathAction` | validated workflow-artifact registry and `FeatureStateIdLedgerCanonicalState` selector | fixed feature state-ID-ledger path | Resolve the one engine-owned feature ledger path and accept no caller path. |
+| `ReadStateIdLedgerAction` | one validated feature-ledger path and bounded no-follow descriptor | absent or bounded canonical feature ledger bytes | Read one feature ledger resource without parsing, allocating, or repairing it. |
+| `ParseStateIdLedgerAction` | bounded canonical feature-ledger bytes | unvalidated feature state-ID ledger | Decode the closed feature ledger; trust no owner, namespace, ordinal, status, or purpose key. |
+| `BuildInitialFeatureStateIdLedgerAction` | new feature identity and compiler-locked feature namespace registry | empty in-memory feature ledger revision zero | Initialize every feature namespace at ordinal one; persistence occurs only inside activation. |
+| `ValidateStateIdLedgerAction` | parsed/initial ledger, exact owner, namespace registry, optional prior ledger, and complete allocation accounts | state-ID-ledger evidence | Prove owner/path identity, compare-and-swap revision, monotonic ordinals, unique purpose-bound records, valid status transitions, total retirement, and no reuse. |
+| `BuildStateIdPurposeKeyAction` | one closed feature-activation/workflow-stage/task-execution transition descriptor, exact current feature authorities, state type, and compiler-locked transition-slot registry | discriminated state-ID purpose key | Construct one exact typed purpose tuple and reject free-text or caller/model-selected slots. |
+| `ValidateStateIdPurposeKeyAction` | purpose key, requested state type, owner, current authorities, and transition-slot registry | purpose-key evidence | Prove variant-specific required/forbidden fields, current revision joins, state-type/slot compatibility, and stable direct-equality semantics. |
+| `ResolveStateIdNamespaceCapabilityAction` | validated current ledger, exact state type, engine-built typed purpose key, and compiler-locked namespace registry | single-use state-ID namespace capability | Bind one state type to its sole owner/scope/namespace and current ledger revision; reject caller-selected namespaces. |
+| `AssignStateIdReservationAction` | one namespace capability and exact current validated ledger | canonical state-ID reservation plus successor ledger | Reuse only a directly equal open purpose reservation or consume exactly one monotonic ordinal; assign no content/path/model-derived identity. Registered state-specific ID-assignment actions implement this same ABI directly and never invoke this action or one another. |
+| `CommitStateIdReservationAction` | one reserved ID, exact canonical state member, terminal transaction ID, and current successor ledger | committed allocation record plus next ledger | Mark exactly one reservation committed only when the transaction contains the matching state. |
+| `RetireStateIdReservationAction` | one reserved ID, typed abandonment cause, and current successor ledger | retired allocation record plus next ledger | Retire exactly one ordinal permanently and create no replacement. |
+| `BuildStateIdentityMutationAction` | validated input ledger and complete ordered reservation/commit/retirement results for one owner | one closed state-identity mutation | Construct unchanged, initialized-feature, or advanced mutation without allocating or writing. |
+| `ValidateStateIdentityTransactionMemberAction` | transaction state members, all touched current ledgers, and complete owner mutations | state-identity membership evidence | Require exactly one mutation per touched owner, no no-op successor revision, every new state ID accounted once, and no unreferenced committed reservation. |
+| `SerializeStateIdLedgerAction` | validated successor feature ledger | canonical ledger bytes | Serialize one feature ledger in namespace/ordinal order for its enclosing transaction. |
+| `BuildRootAccessRegistryAction` | validated configured/derived roots, compiled preset generated roots, dependency/VCS facts, and locked engine rules | immutable root-access registry | Assign every reachable root one access class without filesystem scanning. |
+| `ValidateRootAccessRegistryAction` | compiled root-access registry and allowed nesting matrix | root-registry evidence | Reject uncovered, equal-precedence conflicting, or illegally overlapping roots. |
+| `ResolveTargetPlatformPolicyAction` | one exact target-platform ID and platform registry | immutable filesystem policy | Resolve one normalization/case/name/length contract. |
+| `DetectWorkspaceFilesystemPolicyAction` | trusted workspace/filesystem adapter | active filesystem policy ID and evidence | Detect the host policy independently of user configuration. |
+| `ValidateEnvironmentTargetPlatformSetAction` | one environment's resolved platform IDs | target-platform-set evidence | Reject empty, duplicate, or unresolved policy sets. |
+| `BuildPortabilityPolicySetAction` | resolved configured targets and active workspace policy | compiled portability-policy union | Deduplicate and bind the non-overridable host-plus-target set. |
+| `ValidateRouteRegistryVersionAction` | configured registry version and built-in registry | registry evidence | Select one exact supported route registry. |
+| `ResolveRouteDescriptorAction` | one configured route ID and selected registry | immutable route descriptor | Resolve one built-in route contract. |
+| `ValidateRouteProfileCapacityAction` | one route descriptor and selected model profile | capacity evidence | Prove byte/token/context limits are supportable. |
+| `ValidateRendererContractVersionAction` | configured renderer version and renderer registry | renderer evidence | Select one exact supported renderer contract. |
+| `DeriveToolchainPresetsRootAction` | validated bootstrap-root registry and its `paths.sddtoolkit` root capability | exact toolchain-presets-root capability | Derive the sole `<paths.sddtoolkit>/toolchainPresets/` child; never search or fall back to source examples. |
+| `BuildToolchainPresetIdLedgerAction` | validated bootstrap-root registry and optional prior validated preset registry/ID ledger | current preset ID ledger | Initialize every namespace at one, or retain prior next ordinals/tombstones for refresh; bind it to the already available bootstrap-root registry, not later project discovery. |
+| `ValidateToolchainPresetIdLedgerAction` | current/optional prior ledgers and every retained/new/retired preset identity | preset-ID-ledger evidence | Prove direct-equality retention, monotonic per-namespace allocation, total tombstone accounting, no reuse, and exact prior/successor joins. |
+| `ParseToolchainPresetIdLedgerAction` | bounded canonical ledger bytes | unvalidated preset ID ledger | Parse one persisted multi-namespace ledger without trusting ownership or ordinals. |
+| `SerializeToolchainPresetIdLedgerAction` | validated final preset ID ledger | canonical ledger bytes | Serialize ownership, next ordinals, and tombstones in namespace order. |
+| `BuildToolchainPresetCaptureBudgetSessionAction` | bootstrap-attempt identity and configured/hard entry/depth/source-byte/time/memory ceilings | run-local provisional capture-budget session | Initialize bounded provisional reservations/counters after inventory-entry IDs exist; this session is never persisted as canonical authority. |
+| `ValidateToolchainPresetCaptureBudgetSessionAction` | complete provisional session, sorted inventory, capture observations, and hard ceilings | closed session evidence | Prove exactly one terminal provisional reservation per regular-file entry, no reservation for other nodes, exact totals, and no unaccounted read. |
+| `AssignToolchainPresetBudgetLedgerStateIdAction` | complete closed provisional session, captured owner/byte set, optional prior closed budget ledger, and current preset ID ledger | retained/new preset-budget-ledger identity plus successor ledger | After capture, retain the prior identity only when policy, owner set, terminal outcomes, and direct bytes all match; otherwise allocate once in `budget_ledger_state`. |
+| `AssignToolchainPresetReservationIdAction` | one provisional reservation in canonical inventory order, optional exact prior reservation for the same retained entry, and current durable ledger ordinal/tombstones | retained/new stable reservation ID plus next ordinal/tombstones | Retain only the exact prior owner/outcome/byte binding; otherwise consume one monotonic reservation ordinal. |
+| `RetireRemovedToolchainPresetReservationAction` | one unmatched prior reservation and current durable tombstones | next reservation tombstones | Retire exactly one removed/superseded reservation ID and never make it reusable. |
+| `BuildToolchainPresetSourceBudgetLedgerAction` | chosen identity, validated complete provisional session, complete provisional-to-stable reservation map, next reservation ordinal/tombstones, optional prior ledger, and successor preset ID ledger | immutable durable preset-budget ledger | Assemble stable retained/new/retired canonical reservations with exact totals in inventory order; perform no allocation or retirement itself and preserve no bootstrap-attempt identity. |
+| `EnumerateToolchainPresetResourcesAction` | toolchain-presets-root capability and entry/depth/time ceilings | bounded unordered raw inventory | Enumerate every encountered directory, regular file, symlink, special node, and engine-locked metadata candidate without following links, filtering, sorting, assigning IDs, or claiming validity. |
+| `ValidateToolchainPresetResourcePathAction` | one raw inventory entry and bootstrap-root/portable-filesystem policy | contained path evidence or blocking node diagnostic | Prove one engine-owned relative path is UTF-8/NFC, normalized, contained, host-representable, non-aliased, and of its observed no-follow node type. |
+| `ValidateToolchainPresetInventoryCollisionAction` | complete raw inventory and all path evidence | collision evidence | Reject duplicate, normalization-equivalent, case-fold, and portable-name collisions across the complete inventory. |
+| `SortToolchainPresetInventoryAction` | collision-valid raw inventory | stable ordered inventory | Sort once by normalized Unicode-scalar relative path; assign no identity. |
+| `AssignToolchainPresetInventoryEntryIdAction` | one ordered position, optional directly equal prior entry, and current preset ID ledger | retained/new inventory-entry identity plus successor ledger | Retain only an exact normalized-path/node/metadata match; otherwise allocate once in `inventory_entry`, with no path/content-derived ID. |
+| `BuildToolchainPresetInventoryEntryAction` | identity, observed metadata, and path evidence/diagnostic | immutable inventory entry | Record exactly what was encountered without interpreting file content. |
+| `ReserveToolchainPresetSourceBytesAction` | one regular-file inventory entry and current provisional capture-budget session | single-entry provisional reservation and next session | Reserve the reported length once or emit a closed budget diagnostic. |
+| `CaptureToolchainPresetResourceAction` | one contained regular-file entry, its exact reservation, and same no-follow descriptor identity | raw immutable-byte capture observation | Read bounded bytes exactly once and report entry/descriptor/length/byte-handle facts; assign no resource/source-map ID and never accept a model path or source-example fallback. |
+| `CommitToolchainPresetSourceDebitAction` | provisional reservation, stable complete read observation, and current capture-budget session | committed debit and next session | Commit exact actual bytes only when identity/type/length and reservation remain equal. |
+| `ReleaseToolchainPresetSourceReservationAction` | failed/changed read observation, provisional reservation, and current capture-budget session | released reservation and next session | Close one failed reservation without treating its bytes as captured. |
+| `AssignToolchainPresetResourceIdAction` | stable raw capture observation, committed debit, optional directly equal prior captured blob, and current preset ID ledger | retained/new resource identity plus successor ledger | Retain only after direct raw-byte and metadata equality; otherwise allocate once in `resource`, independent of filename or document metadata. |
+| `AssignToolchainPresetSourceMapIdAction` | resource identity, optional retained resource/source-map join, and current preset ID ledger | retained/new source-map identity plus successor ledger | Retain the prior map only with its exact retained resource; otherwise allocate once in `source_map`. |
+| `BuildToolchainPresetCapturedBlobAction` | resource/source-map identities, stable raw capture observation, exact inventory entry, and committed debit | canonical captured preset blob | Bind the immutable bytes to engine identities only after the read and debit succeed. |
+| `BuildToolchainPresetSourceMapAction` | source-map/resource identities, canonical captured blob, exact inventory metadata, and committed debit | immutable whole-resource source map | Bind only byte range `0..byteLength` to the captured blob; later package/asset parser coordinates live in immutable parser-validation evidence and never mutate this map. |
+| `ClassifyToolchainPresetResourceRoleAction` | captured blob, locked media/extension registry, and optional later package declaration joins | package-document candidate, one closed typed asset candidate, or unsupported-resource diagnostic | Classify only `package_document`, `parser_query`, `grammar`, `adapter_descriptor`, or `schema`; every other/ambiguous media-role combination blocks and package identity is never inferred from filename. |
+| `ClassifyPresetDocumentVersionAction` | one captured package-document YAML/JSON candidate and fixed format sniffer | v1 document candidate or legacy/unknown diagnostic | Classify transport/version only; it is never run on a parser/query/grammar/adapter asset and a filename cannot create preset identity. |
+| `RejectLegacyPresetDocumentAction` | one legacy top-level shape or template inventory | rejection evidence | Emit `PRESET_LEGACY_SCHEMA_UNSUPPORTED`; runtime never invokes migration. |
+| `ReadPresetAction` | one captured v1 candidate blob | raw preset resource | Decode the immutable captured resource without reopening its path. |
+| `ParsePresetAction` | raw preset resource | raw preset object | Parse YAML/JSON using fixed semantics. |
+| `ValidatePresetSchemaAction` | raw preset object | schema-valid preset | Apply only the closed preset schema. |
+| `RejectPresetPlaceholderAction` | one schema-valid preset | placeholder-free preset evidence | Reject unresolved placeholders. |
+| `BuildPresetResourceDeclarationIndexAction` | complete set of placeholder-free schema-valid package documents | preset resource-declaration index candidate | Project every explicit locator plus declared stable resource ID/version/role/media/format and owning package; infer nothing from an asset filename. |
+| `ValidatePresetResourceDeclarationIndexAction` | declaration-index candidate, complete captured inventory paths, package identities, and locator policy | declaration-index evidence | Require one-to-one contained normalized locator ownership, unique stable identity/version, role/media compatibility, no duplicate/missing/extra locator, and no path escape. |
+| `JoinToolchainPresetAssetDeclarationAction` | one captured typed asset candidate, its exact inventory entry/path evidence, and validated declaration index | exact asset-declaration join | Match the declaration's locator exactly once and copy declared identity/version/role/media/format; the locator locates bytes but never becomes identity. |
+| `AssignToolchainPresetAssetIdAction` | resource identity, typed asset candidate, optional retained resource/asset join, and current preset ID ledger | retained/new preset-asset identity plus successor ledger | Retain only an exact prior typed-asset join; otherwise allocate once in `asset`, independent of filename and package declarations. |
+| `BuildToolchainPresetAssetRecordAction` | asset/resource identities, exact asset-declaration join, blob/debit/source-map evidence, and locked asset-format descriptor | immutable asset record | Bind one non-document resource to declared identity/version and captured bytes without inferring identity from its locator or parsing it as a package. |
+| `ValidateToolchainPresetAssetAction` | one asset record and its exact parser/query/grammar/adapter/schema validator | resource-asset evidence | Validate bounded syntax, required captures/exports, dialect/version, and absence of undeclared includes or path escape. |
+| `ResolvePresetResourceReferenceAction` | one schema-valid package resource reference and complete validated asset registry | exact asset-reference evidence | Resolve one declared stable resource ID/version/role exactly once; reject filename-only, missing, extra, or role-incompatible assets. |
+| `BuildToolchainPresetPackageRecordAction` | one placeholder-free schema-valid package document, its captured resource/source-map evidence, and all exact resolved asset-reference evidence | immutable package record | Bind declared stable preset ID/exact version/layer to its package document and exact asset IDs without composing or inferring from filename. |
+| `ValidateToolchainPresetPackageRecordAction` | one package record, package schema/placeholder/resource evidence, and global identity/layer registries | package-record evidence | Prove document ownership, exact metadata equality, closed resource joins, unique stable identity/version, and absence of unreferenced embedded operational resources. |
+| `ValidateWritableKindReferenceCoverageAction` | one model-writable file kind and registered content extractors/fallback scanner/resolver | content-surface evidence | Disable model create/patch/replace unless every string/path surface has deterministic extraction or conservative blocking coverage. |
+| `CompilePathPatternAction` | one schema-valid `PathPattern` | compiled matcher/path language | Compile one exact/glob/RE2 pattern or diagnose it. |
+| `ValidatePathPatternBaseBindingAction` | one pattern, canonical workspace/environment/project/source-root registry, and optional exact command-cwd evidence | base-binding evidence | Enforce base-specific iff rules and resolve exactly one contained base without ambient context. |
+| `ValidatePathPatternRuleIdAction` | one path-pattern ID and compiled preset closure | rule-ID evidence | Prove global uniqueness and version-stable ownership of one rule ID. |
+| `ValidateFileKindExtensionRuleAction` | one file kind's extension set, `extensionRuleId`, case flag, and compiled preset closure | extension-rule evidence | Require a stable globally unique rule ID, nonempty unique longest-suffix set, and explicit case semantics. |
+| `ValidatePresetPathTemplateAction` | one path template, owning file kind, role/name-transform registry, and bound root/placement policy | path-template evidence | Prove template IDs/fields are closed, extension agrees with the kind, and its strategy can yield only paths inside allowed roots. |
+| `ValidateFileKindInferenceAmbiguityAction` | compiled file-kind languages, priorities, roots, and intent domains | inference-uniqueness evidence | Reject an equal-priority overlapping inference domain. |
+| `ValidatePresetVersionPinAction` | one preset reference | version evidence | Require one exact supported version. |
+| `ValidatePresetLayerEdgeAction` | one composition edge | layer-order evidence | Validate one layer dependency. |
+| `ValidatePresetDuplicateIdentityAction` | one preset identity and closure | uniqueness evidence | Reject duplicate/conflicting inclusion. |
+| `DetectPresetCompositionCycleAction` | preset dependency graph | acyclicity evidence | Detect composition cycles only. |
+| `TopologicallyOrderPresetCompositionAction` | acyclic validated preset graph and closed layer-rank table | ordered validated presets | Apply dependency-first Kahn ordering with `(layerRank, Unicode-scalar presetId, exact version)` as the stable ready-set tie-break; do not merge values. |
+| `CompilePresetSetAction` | ordered validated presets | merged preset policy with unresolved source-root templates | Apply explicit merge rules once without inventing project-specific root IDs. |
+| `BuildToolchainPresetEntryAccountAction` | one inventory entry and exactly one terminal directory/exclusion/blocked/captured-document/captured-asset disposition | immutable entry-account record | Account for one encountered entry exactly once; a blocking record remains blocking rather than being silently filtered. |
+| `AssignToolchainPresetInventoryStateIdAction` | root identity, complete unidentified inventory content, optional prior inventory, closed budget ledger, and current preset ID ledger | retained/new inventory-state identity plus successor ledger | Retain only when the complete canonical inventory projection compares directly equal; otherwise allocate once in `inventory_state`, never from a path or byte fingerprint. |
+| `BuildToolchainPresetInventoryStateAction` | inventory-state/root identities, stable entries, closed budget ledger, captured blobs/source maps, complete entry accounts, and final successor preset ID ledger | immutable inventory state | Assemble restart-safe inventory/accounting and its exact allocation authority without validating package composition. |
+| `ValidateToolchainPresetInventoryStateAction` | inventory state, optional prior state, root/path/collision/read/budget evidence, ID-ledger evidence, and hard limits | inventory-state evidence | Prove total one-to-one entry accounting, retained/new/retired identity rules, closed reservations, exact blob/debit joins, and no blocking node or unclassified captured resource. |
+| `AssignToolchainPresetRegistryStateIdAction` | validated inventory state, complete validated package/asset/declaration/reference candidate content, optional prior registry, and current preset ID ledger | retained/new toolchain-preset-registry identity plus successor ledger | Reuse the prior registry only when every complete typed package/asset/reference field and raw byte compares directly equal; otherwise allocate once in `registry_state`. |
+| `BuildToolchainPresetRegistryStateAction` | registry identity, validated inventory state, final successor preset ID ledger, all validated exact package records, all validated asset records, and reference joins | immutable toolchain-preset registry candidate | Assemble the sole restart-safe package/resource/allocation authority without compiling environments. |
+| `ValidateToolchainPresetRegistryStateAction` | registry candidate, optional prior registry, inventory/package/asset/schema/reference/ID-ledger evidence, and selected environment references | registry evidence | Prove complete resource/identity accounting, exact package/asset joins, no orphan or multiply owned asset, root containment, version closure, and that every configured preset resolves once. |
+| `ValidateEnvironmentRootContainmentAction` | one configured environment root and canonical workspace | contained environment root | Prove one environment root is relative and non-escaping. |
+| `EnumerateManifestCandidatesAction` | contained environment roots plus compiled discovery rules | manifest candidates | Enumerate possible manifests only. |
+| `ValidateManifestContainmentAction` | one manifest candidate and owning contained environment | manifest-containment evidence | Prove one manifest/project root cannot escape its environment. |
+| `ParseProjectManifestAction` | one containment-valid manifest and one registered adapter | project fragment | Parse one manifest only. |
+| `AssembleProjectRegistryAction` | validated project fragments | repository project facts | Assemble non-conflicting ownership records. |
+| `ResolveSourceRootSelectorAction` | one preset-owned source-root selector and assembled project/manifest facts | ordered identified source roots | Resolve semantic roles such as Java main/test/resources to exact engine-owned `sourceRootId`s without returning raw model paths. |
+| `MaterializeSourceRootPathPatternAction` | one source-root template and one matching identified source root | bound source-root pattern | Create `base: source_root`, copy the exact root ID, and derive the instance rule ID as the unambiguous tuple `(templateRuleId, sourceRootId)`. |
+| `BuildCompiledEnvironmentPolicyAction` | merged preset policy, all bound source-root patterns, resolved project/environment bases, and binding evidence | compiled environment policy | Replace every template with its complete deterministic binding set; retain no unresolved template. |
+| `ValidateCompiledEnvironmentPolicyAction` | compiled environment policy, project/source-root registry, and preset closure | environment-policy evidence | Prove total template resolution, base containment, rule-ID tuple uniqueness, and no unresolved/extra binding. |
+| `AssignRepositoryFactRegistryStateIdAction` | prospective bootstrap-authority-state ID and singleton repository-fact component descriptor | owner-local repository-fact-registry identity | Construct the registered bootstrap-component tuple without hashing facts or consuming a generic state ledger. |
+| `BuildRepositoryFactRegistryAction` | registry identity plus project, manifest, dependency, command, file, and preset facts | typed repository fact-registry candidate | Assemble one complete ordered fact input state. |
+| `ValidateRepositoryFactRegistryAction` | registry candidate, project/environment/file/command/preset authorities, and fact schema | fact-registry evidence | Prove unique fact/value IDs, typed values, evidence joins, complete configured fact coverage, and gate-policy legality. |
+| `CompareRepositoryFactValueAction` | one persisted registered fact and one freshly rebuilt fact | equality/transition evidence | Compare one typed value under its gate policy. |
+| `ValidateEnvironmentMatchAction` | config, compiled policy, project facts | resolved environments | Detect conflicts and ambiguities. |
+| `AssignPathTokenGrammarStateIdAction` | prospective bootstrap-authority-state ID, singleton base-grammar component descriptor, and optional historical parent grammar ID | owner-local path-token-grammar identity | Construct the registered bootstrap-component tuple without deriving it from grammar content or consuming a generic state ledger. |
+| `BuildSupersetPathTokenGrammarAction` | assigned grammar identity and exactly one closed build variant: either the validated identity-free **base** grammar blueprint plus its validated `leaf_dependencies` resolution map, or an already validated identified base/parent grammar plus identified reference-manifest names/reference-state identity; each variant also carries its exact compiled environments, manifests, reserved names, and root registry | version-bound base or feature superset path-token grammar | For the base variant, resolve every blueprint reference to its exact canonical component ID. For the feature variant, extend only the identified parent with the identified reference-manifest inputs. Union every detectable extension/name/path/URI lexeme rule without a route allowlist, and reject an unresolved handle, absent parent identity, or cross-variant field rather than copying it. |
+| `ValidateSupersetPathTokenGrammarAction` | grammar, exact input registries, and scanner contract | grammar evidence | Prove complete input coverage, canonical ordering/deduplication, closed lexer rules, and exact state/version bindings. |
+| `ValidateDependencyRegistrySourceAction` | one schema-valid registry-source descriptor and engine trust/credential adapter registries | registry-source evidence | Validate unique ID, ecosystem, canonical HTTPS endpoint, trust policy, optional credential policy, and prerelease rule without contacting it. |
+| `ResolveDependencyGrammarAction` | one exact package-name/version grammar ID and built-in grammar registry | immutable dependency grammar | Resolve and compile one versioned non-backtracking grammar or diagnose absence. |
+| `ValidateDependencyDenyRuleAction` | one exact/RE2 package deny rule and ecosystem case policy | dependency-deny evidence | Compile one stable rule ID with full-scalar semantics. |
+| `AssignDependencyPolicyRegistryIdAction` | validated dependency config, prospective bootstrap-authority-state ID, and singleton dependency-policy component descriptor | owner-local dependency-policy-registry identity | Construct the registered bootstrap-component tuple without hashing policy content or consuming a generic state ledger. |
+| `BuildDependencyPolicyRegistryAction` | registry identity and all registry-source/grammar/deny/scope evidence | dependency-policy-registry candidate | Assemble the closed ecosystem authorities without performing package lookup or mutation. |
+| `ValidateDependencyPolicyRegistryAction` | registry candidate and configured environment ecosystems | dependency-policy evidence | Prove unique IDs, total source/grammar joins, allowed-scope closure, and environment coverage. |
+| `ResolveFileIntentCapabilityRegistryAction` | exact built-in registry version and locked execution policy | immutable file-intent-capability registry | Resolve the closed intent/capability/implication/sequence matrix without project input. |
+| `ValidateFileIntentCapabilityRegistryAction` | registry and closed intent/operation enums | file-intent policy evidence | Prove every intent is covered once, required sets are satisfiable, implications are closed, and no operation obtains an undeclared capability. |
+| `ResolveFactTransitionRuleRegistryAction` | exact built-in/preset transition-rule references | immutable fact-transition-rule registry | Resolve only version-pinned closed transition variants. |
+| `ValidateFactTransitionRuleRegistryAction` | transition registry, repository fact variants, command/file operation enums, and environment ecosystems | fact-transition policy evidence | Prove unique IDs and total compatible before/after/operation coverage. |
+| `ProbeCommandCapabilityAction` | one project and command descriptor | command capability evidence | Prove one named capability exists. |
+| `ValidateCommandWorkingDirectoryAction` | one command descriptor and owning project | working-directory evidence | Prove the resolved command directory is contained by that project. |
+| `ResolveCommandExecutableAction` | one command descriptor and engine executable/adapter allowlist | executable capability | Resolve one exact non-shell executable through an allowed adapter. |
+| `ValidateCommandPlaceholderContractAction` | one command descriptor and typed placeholder registry | placeholder evidence | Prove every argv placeholder is declared once, type-compatible, engine-bindable, and used only as a whole argv element. |
+| `ValidateCommandMutabilityAliasAction` | one resolved command capability and manifest semantics | mutability evidence | Reject validation/read-only aliases that resolve to install, add, dependency mutation, or another stronger effect. |
+| `ValidateCommandQuotaCapabilityAction` | one sandbox adapter and engine command quotas | quota-capability evidence | Prove entry/bytes/per-file/private-temp limits are enforceable during writes. |
+| `ValidateCommandEffectDisjointnessAction` | one command's compiled persistent and ephemeral pattern sets | disjointness evidence | Prove their path-language intersection is empty. |
+| `ValidateCommandEphemeralRootAction` | one ephemeral pattern and compiled root registry | ephemeral-root evidence | Restrict it to generated/cache/private-temp roots. |
+| `AssembleCommandRegistryAction` | capability, cwd, executable, placeholder, mutability, compiled persistent/ephemeral patterns, effect-disjointness/ephemeral-root evidence, sandbox-capability evidence, and quota-capability evidence | available command registry | Assemble only completely proven command capabilities. |
+| `ValidateCommandRegistryAction` | command-registry candidate and all descriptor evidence | command-registry evidence | Prove unique IDs/versions and exact executable/argv/cwd/limit/environment/network/mutability/sandbox bindings. |
+| `SerializeCommandRegistryAction` | validated command registry | canonical registry bytes | Serialize the restart-safe command authority. |
+| `DerivePrinciplesRootAction` | validated bootstrap-root registry and its `paths.sddtoolkit` root capability | exact principles-root capability | Derive the sole `<paths.sddtoolkit>/principles/` child; never search or fall back. |
+| `BuildPrincipleIdLedgerAction` | validated bootstrap-root registry and optional prior validated principle registry/ID ledger | current principle ID ledger | Initialize every namespace at one, or retain prior next ordinals/tombstones for refresh; bind it to the already available bootstrap-root registry. |
+| `ValidatePrincipleIdLedgerAction` | current/optional prior ledgers and every retained/new/retired principle identity | principle-ID-ledger evidence | Prove direct-equality retention, monotonic per-namespace allocation, total tombstone accounting, no reuse, and exact prior/successor joins. |
+| `ParsePrincipleIdLedgerAction` | bounded canonical ledger bytes | unvalidated principle ID ledger | Parse one persisted multi-namespace ledger without trusting ownership or ordinals. |
+| `SerializePrincipleIdLedgerAction` | validated final principle ID ledger | canonical ledger bytes | Serialize ownership, next ordinals, and tombstones in namespace order. |
+| `BuildPrincipleCaptureBudgetSessionAction` | bootstrap-attempt identity and configured/hard entry/source-byte/time/memory/chunk ceilings | run-local provisional capture-budget session | Initialize bounded provisional reservations/counters after inventory-entry IDs exist; this session is never persisted as canonical authority. |
+| `ValidatePrincipleCaptureBudgetSessionAction` | complete provisional session, sorted inventory, capture observations, and hard ceilings | closed session evidence | Prove exactly one terminal provisional reservation per regular-file entry, no reservation for other nodes, exact totals, and no unaccounted read. |
+| `AssignPrincipleBudgetLedgerStateIdAction` | complete closed provisional session, captured owner/byte set, optional prior closed budget ledger, and current principle ID ledger | retained/new principle-budget-ledger identity plus successor ledger | After capture, retain the prior identity only when policy, owner set, terminal outcomes, and direct bytes all match; otherwise allocate once in `budget_ledger_state`. |
+| `AssignPrincipleReservationIdAction` | one provisional reservation in canonical inventory order, optional exact prior reservation for the same retained entry, and current durable ledger ordinal/tombstones | retained/new stable reservation ID plus next ordinal/tombstones | Retain only the exact prior owner/outcome/byte binding; otherwise consume one monotonic reservation ordinal. |
+| `RetireRemovedPrincipleReservationAction` | one unmatched prior reservation and current durable tombstones | next reservation tombstones | Retire exactly one removed/superseded reservation ID and never make it reusable. |
+| `BuildPrincipleSourceBudgetLedgerAction` | chosen identity, validated complete provisional session, complete provisional-to-stable reservation map, next reservation ordinal/tombstones, optional prior ledger, and successor principle ID ledger | immutable durable principle-budget ledger | Assemble stable retained/new/retired canonical reservations with exact totals in inventory order; perform no allocation or retirement itself and preserve no bootstrap-attempt identity. |
+| `EnumeratePrincipleSourcesAction` | principles-root capability and entry/depth/time ceilings | bounded unordered raw principle inventory | Enumerate every encountered directory, regular file, link, and special node without following, filtering, sorting, assigning IDs, or interpreting text. |
+| `ValidatePrincipleSourcePathAction` | one raw inventory entry and bootstrap-root/portable-filesystem policy | contained path evidence or blocking-node diagnostic | Validate the engine-owned relative filename/path, node type, normalization, containment, representability, and non-aliasing without exposing a project-operation capability. |
+| `ValidatePrincipleInventoryCollisionAction` | complete raw inventory and all path evidence | collision evidence | Reject duplicate, normalization-equivalent, case-fold, and portable-name collisions. |
+| `SortPrincipleInventoryAction` | collision-valid raw inventory | stable ordered inventory | Sort once by normalized Unicode-scalar relative path; assign no IDs. |
+| `AssignPrincipleInventoryEntryIdAction` | one ordered position, optional directly equal prior entry, and current principle ID ledger | retained/new inventory-entry identity plus successor ledger | Retain only an exact normalized-path/node/metadata match; otherwise allocate once in `inventory_entry`. |
+| `BuildPrincipleInventoryEntryAction` | entry identity, observed metadata, and path evidence/diagnostic | immutable principle inventory entry | Record one encountered node without decoding or categorizing content. |
+| `ReservePrincipleSourceBytesAction` | one contained regular-file entry and current provisional capture-budget session | provisional reservation and next session | Reserve its reported bytes once or emit a closed budget diagnostic. |
+| `ClassifyPrincipleCategoryFromFilenameAction` | one validated filename and configured basename-hint table | known or custom category hint | Use only the filename mapping; never inspect body text to choose a category. |
+| `CapturePrincipleSourceAction` | one contained regular-file entry, exact reservation, and same no-follow descriptor identity | raw immutable-byte capture observation | Read one bounded file exactly once and report entry/descriptor/length/byte-handle facts without assigning a source or source-map ID. |
+| `CommitPrincipleSourceDebitAction` | provisional reservation, stable complete read observation, and current capture-budget session | committed debit and next session | Commit actual bytes only when identity/type/length and reservation remain exact. |
+| `ReleasePrincipleSourceReservationAction` | failed/changed read observation, provisional reservation, and current capture-budget session | released reservation and next session | Close one failed reservation without capturing partial text. |
+| `AssignPrincipleSourceIdAction` | stable raw capture observation, committed debit, optional directly equal prior source, and current principle ID ledger | retained/new principle-source identity plus successor ledger | Retain only after direct raw-byte and metadata equality; otherwise allocate once in `source`, independent of filename/text. |
+| `BuildPrincipleCapturedSourceAction` | source identity, stable raw capture observation, exact inventory entry, and committed debit | canonical captured principle source | Bind the immutable bytes to the engine source identity after the read/debit succeeds; assign no source-map ID. |
+| `DecodePrincipleFreeTextAction` | canonical captured source and UTF-8 policy | decoded raw text plus byte/line source-map candidate | Accept arbitrary free text; require no front matter, headings, template expansion, placeholder resolution, or content schema. |
+| `AssignPrincipleSourceMapIdAction` | source identity, optional retained source/map join, and current principle ID ledger | retained/new principle-source-map identity plus successor ledger | Retain only with the exact retained source; otherwise allocate once in `source_map`. |
+| `BuildPrincipleSourceMapAction` | source-map identity, decoded raw text, exact byte offsets, and line-boundary observations | immutable principle source map | Bind every line/byte span to captured bytes without normalizing body text. |
+| `AssignPrincipleModuleIdAction` | source identity, optional retained source/module join, and current principle ID ledger | retained/new principle-module identity plus successor ledger | Retain only an exact prior source/category mapping; otherwise allocate once in `module`; infer no meaning. |
+| `BuildPrincipleModuleAction` | module/source identities, filename category hint, exact blob/debit/source map | opaque principle module | Bind free-text bytes to transport/category metadata only. |
+| `PartitionPrincipleTextAction` | one module/source map and chunk limits | deterministic boundary candidates | Select whole-file/paragraph/line/byte transport boundaries without assigning semantic meaning; no-heading text remains valid. |
+| `AssignPrincipleChunkIdAction` | one stable boundary position, optional retained module/span join, and current principle ID ledger | retained/new principle-chunk identity plus successor ledger | Retain only an exact module/span join; otherwise allocate once in `chunk`. |
+| `BuildPrincipleChunkAction` | chunk identity, module, exact source span, and captured bytes | immutable principle chunk | Bind one exact raw span and boundary kind; summarize nothing. |
+| `BuildPrincipleEntryAccountAction` | one inventory entry and exactly one directory/blocked/captured-source disposition | immutable entry-account record | Account for every encountered entry once; links/special nodes remain blocking. |
+| `AssignPrincipleInventoryStateIdAction` | root identity, complete unidentified inventory content, optional prior inventory, closed budget ledger, and current principle ID ledger | retained/new inventory-state identity plus successor ledger | Retain only when the complete canonical inventory projection compares directly equal; otherwise allocate once in `inventory_state`, never from paths, text, or a fingerprint. |
+| `BuildPrincipleInventoryStateAction` | inventory-state/root identities, stable entries, closed budget ledger, canonical captured sources, source maps, complete entry accounts, and final successor principle ID ledger | immutable principle inventory state | Assemble restart-safe source/allocation accounting independent of semantic selection. |
+| `ValidatePrincipleInventoryStateAction` | inventory state, optional prior state, and root/path/collision/read/budget/source-map/ID-ledger evidence | inventory-state evidence | Prove total accounting, retained/new/retired identity rules, closed reservations, exact byte/span joins, and absence of blocked or orphan sources. |
+| `AssignPrincipleRegistryStateIdAction` | complete candidate content, optional prior registry, and current principle ID ledger | retained/new principle-registry identity/revision plus successor ledger | Reuse the prior registry only under direct equality of every typed field/raw byte; otherwise allocate once in `registry_state`, without hashing content. |
+| `BuildPrincipleRegistryStateAction` | state identity, validated inventory state, final successor principle ID ledger, ordered modules/chunks, and category hints | principle-registry candidate | Assemble the immutable source/allocation registry without compiling prose into rules. |
+| `ValidatePrincipleRegistryStateAction` | registry candidate, optional prior registry, inventory/source-map/budget/ID-ledger evidence, and category table | principle-registry evidence | Prove complete module/chunk/source/identity accounting, exact spans, unique IDs, and filename-only category provenance. |
+| `SelectApplicablePrinciplesAction` | exact registry, stage, environment, task/file kinds, and category-hint table | complete ordered chunk/span selection candidate or budget diagnostic | Select all raw chunks in eligible categories in stable order; never assign an ID or use a model to rank/omit them. |
+| `AssignPrincipleSelectionIdAction` | exact immutable principle-registry revision, stage, validated `ImmutableUnitOwnerId`, and consumer ordinal | closed owner-local principle-selection identity tuple | Construct and validate `(registry state/revision, stage, immutable unit owner, ordinal)`; use no allocator, prose, selected content, or process-local state. |
+| `BuildApplicablePrincipleSelectionAction` | selection identity, complete candidate, exact registry/stage/consumer bindings | applicable-principle selection | Bind the selected chunks/spans without interpreting them. |
+| `ValidateApplicablePrincipleSelectionAction` | applicable selection, registry/category table, and complete prompt budget evidence | principle-selection evidence | Prove registry/revision/category/chunk/span/consumer joins, all-eligible-chunk coverage, stable ordering, and fit without summary or omission. |
+| `BuildPrincipleGuidanceAction` | validated selection and exact raw source spans | bounded immutable model guidance | Render registered IDs/category hints/raw excerpts/citations; never reveal an operational source path. |
+| `ComparePrincipleRegistryStateAction` | persisted bound registry and freshly captured registry | direct equality/change evidence | Compare complete typed metadata and raw bytes directly, never by fingerprint. |
+| `CreateRunMetadataAction` | invocation plus resolved environment | initial workflow metadata | Create feature-run state without artifact hashes. |
+| `BuildIdentityFreeSupersetPathTokenGrammarCandidateAction` | validated grammar values plus run-local references to the exact environment/repository-fact/root candidates and optional already canonical reference authority | identity-free base-grammar blueprint | Build the aggregate grammar value with no grammar ID and no not-yet-materialized cross-component ID; generic dependencies are represented only by typed candidate references. |
+| `ValidateIdentityFreeSupersetPathTokenGrammarCandidateAction` | grammar blueprint, candidate handles, component descriptors, and exact value-input evidence | grammar-blueprint evidence | Prove every generic dependency is represented once by a type/ordinal-matching run-local handle, every specialized/fixed reference is already canonical, and no canonical generic ID or unresolved value is embedded. |
+| `BuildIdentityFreeCompiledEnginePolicyCandidateAction` | validated config/logging fragment, specialized preset/principle states, routes/renderers/readers/parsers/limits, the grammar blueprint handle, and run-local references to every required generic leaf component | identity-free compiled-policy blueprint | Assemble the complete aggregate policy value without a policy ID and without copying a not-yet-materialized generic component ID. |
+| `ValidateIdentityFreeCompiledEnginePolicyCandidateAction` | compiled-policy blueprint, grammar-blueprint evidence, component descriptors, all referenced leaf candidates, and specialized/fixed authorities | compiled-policy-blueprint evidence | Prove complete one-to-one dependency coverage, exact types/ordinals, an acyclic leaf-to-grammar-to-policy dependency order, and absence of canonical generic IDs or serializable handles. |
+| `BuildBootstrapOperationalCandidateAction` | validated config/root, preset/principle candidates and specialized ledgers, identity-free typed **leaf** payloads for every required root/project/discovery-file/repository-fact/dependency/file-intent/fact-transition/log-event/portability/environment/command component, the validated base-grammar and compiled-policy blueprints, routes/renderers/readers/parsers, and hard limits | noncanonical bootstrap operational candidate | Assemble the complete handle/DataKey/schema-bound leaf and aggregate blueprints needed for selector resolution and deterministic reference preactivation; every generic canonical ID field and cross-component canonical generic ID is structurally absent. |
+| `ValidateBootstrapOperationalCandidateAction` | operational candidate, compiler-locked component-type/dependency registry, all leaf evidence, both aggregate-blueprint evidence records, and specialized ledger/capability evidence | validated bootstrap operational candidate | Prove exactly one handle/payload/schema DataKey join per required singleton/ordered member, the closed acyclic leaf-to-grammar-to-policy graph, complete authority capability closure, disjoint specialized/owner-local/generic identity domains, and that no run-local handle is serializable, loggable as canonical, or model-visible. |
+| `AssignBootstrapComponentIdAction` | durable prospective bootstrap-authority-state ID, one exact component-type descriptor, and canonical component ordinal | owner-local bootstrap-component identity | Construct `(bootstrapAuthorityStateId, componentTypeId, ordinal)` without consuming a state ledger, model scalar, content, or path. |
+| `MaterializeBootstrapCandidateComponentAction` | one validated typed **leaf** component candidate, matching handle/DataKey/schema evidence, and assigned owner-local bootstrap-component ID | identified canonical leaf component candidate plus its `materialized_leaf` binding | Replace one run-local leaf handle with its authorized identity without changing the component value or assigning another ID; reject specialized preset/principle states and the aggregate grammar/policy blueprints, whose canonical values require materialized dependencies. |
+| `BindDerivedBootstrapCandidateComponentAction` | one validated aggregate blueprint handle, its assigned owner-local component ID, the validated canonical grammar or compiled-policy value built from it, and its complete dependency-resolution evidence | one `validated_derived_aggregate` binding | Bind one derived aggregate handle to the exact canonical component it produced without constructing, validating, or changing that value. |
+| `BuildBootstrapCandidateDependencyResolutionMapAction` | validated operational candidate, exact binding records produced so far, and one requested closed phase (`leaf_dependencies`, `base_grammar_resolved`, or `complete`) | phase-discriminated dependency-resolution-map candidate | Assemble bindings and the phase's exact unresolved-aggregate handle list without resolving, validating, or assigning an identity. |
+| `ValidateBootstrapCandidateDependencyResolutionMapAction` | map candidate, validated operational candidate, immediately prior validated phase when applicable, component descriptors, and all binding/value evidence | validated phase-specific dependency-resolution map or diagnostic | Prove the exact bootstrap attempt/state owner, handle/type/ordinal/identity joins, no duplicate/orphan/specialized binding, strict phase extension, leaf-only coverage at phase one, grammar inclusion at phase two, and total one-to-one generic-handle coverage with no unresolved handle at `complete`. |
+| `AssembleCompiledEnginePolicyAction` | assigned owner-local `compiled_engine_policy` component ID, validated identity-free compiled-policy blueprint and validated `base_grammar_resolved` dependency-resolution map, exact config location, validated bootstrap-root registry/config including the canonical compiled feature-logging fragment, toolchain-preset registry, materialized environment/portability/root registries, routes/renderer, readers/parsers, command/dependency/file-intent/fact-transition/log-event registries, validated principle-registry state, limits, and already materialized/validated base path-token grammar | identified compiled-engine-policy candidate | Resolve the blueprint's references and bind every independently validated bootstrap authority, the restart-reconstructible logging fragment, and its owner-local policy ID; perform no validation, discovery, or generic state allocation and retain no handle. |
+| `ValidateCompiledEnginePolicyAction` | compiled-engine-policy candidate and required-authority schema | compiled-policy evidence | Prove all IDs/versions resolve exactly once and every configured environment has complete required capabilities. |
+| `AssignBootstrapAuthorityStateIdAction` | feature scope, validated current feature `StateIdLedger`, and matching single-use namespace capability | bootstrap-authority-state reservation plus successor ledger | Reserve one engine state ID without hashing authority content. |
+| `BuildBootstrapAuthorityStateCoreAction` | state identity, validated compiled policy, exact bootstrap-root/toolchain-preset/root/project/portability/environment/discovery-file/repository-fact/command/dependency/file-intent/fact-transition/log-event registries, principle-registry state, and base grammar | unlinked bootstrap-authority core candidate | Bundle the identified component values under the prospective state ID without fabricating parent/change evidence or yet producing a canonical state. |
+| `ValidateBootstrapAuthorityStateCoreAction` | unlinked core candidate and all component evidence | bootstrap-authority-core evidence | Prove component IDs/values and grammar bindings are exact, internally closed, and all owner-local generic component IDs name the prospective authority ID. |
+| `CompareBootstrapAuthorityStateAction` | freshly validated bootstrap candidate, current persisted bootstrap authority, locked component-type/ordinal/dependency registry, and validated aggregate-blueprint projections | closed `BootstrapAuthorityComparisonResult`: `BootstrapCandidateDirectEqualityEvidence` or run-local `BootstrapCandidateChangeEvidence` | Compare by stable `(componentTypeId, componentOrdinal)` and direct canonical-ID-erased typed value. Resolve aggregate blueprint references by candidate coordinate rather than by nonexistent successor IDs, recording current identity plus a closed candidate handle/specialized-state reference for each difference. Produce complete equality evidence only when every projected coordinate is equal; never fabricate an empty change plan or successor ID, compare a hash, or persist a handle. |
+| `ClassifyBootstrapAuthorityChangeAction` | exact run-local candidate-change evidence including direct changed-subfield evidence and locked component/subfield-to-impact registry | candidate `BootstrapAuthorityChangePlan` | Assign exactly one coordinate record to every changed component and a nonempty ordered set of unique `(impact, rule, changedFieldSelectors, evidence)` entries inside it, retain aggregate-component secondary impacts, derive complete obligations, and select the earliest owner by fixed dominance `administrative > reference ingestion > specification contract > planning > runtime-only`; mixed changes never use last-match-wins. |
+| `ValidateBootstrapAuthorityChangePlanAction` | candidate change plan, exact candidate component/subfield differences, locked impact/dominance/obligation registries | validated bootstrap-authority change plan | Prove total one-to-one coordinate assignment, total changed-subfield coverage within each coordinate, nonempty unique/ranked impacts, impact-rule/evidence validity, no extra/missing field or coordinate, dominant/earliest-owner correctness, administrative dominance, unioned downstream obligations, and `transitionFeatureLogging` iff any nested logging impact exists. |
+| `RouteBootstrapAuthorityChangeAction` | exactly one comparison branch—either `BootstrapCandidateDirectEqualityEvidence`, or its exact `BootstrapCandidateChangeEvidence` plus validated change plan—together with current workflow stage/authority IDs, open clarification projection, descendant state/approval set, and implementation watermark | closed bootstrap-authority change route plan | Select equality reuse only from the equality branch; otherwise select explicit planning deferral, administrative block, compatible refresh, reference ingestion, owning spec/plan transaction, or rework/reconciliation from the validated change plan and locked `(earliestOwner,currentStage,open-stage,watermark)` table. Perform no mutation and never fabricate an empty plan for equality. |
+| `ValidateBootstrapAuthorityChangeRouteAction` | route candidate, the same closed equality-or-change comparison branch, current workflow/clarification/descendant/runtime authorities, and locked route table | bootstrap-route evidence | Prove equality-coordinate coverage or preserve every changed-plan obligation, choose the earliest legal owner, include committed-runtime reconciliation when required, and never bypass an open clarification gate. Require `NoBootstrapAuthorityChangeRoute` only with complete direct-equality evidence; require `DeferredPlanningBootstrapRoute` only with a planning-owned change in `specifying|spec_clarification_pending`, no adoption, and a complete fresh PlanInput-gate recheck before any plan model call. |
+| `BindMaterializedBootstrapChangeEvidenceAction` | run-local candidate-change evidence, its exact validated change plan, validated `complete` dependency-resolution map, validated successor core candidate/evidence, and current authority | canonical materialized bootstrap-change evidence | Replace every leaf or aggregate candidate handle with the exact owner-local successor identity, preserve already identified preset/principle references, retain removed/current identities and comparison evidence, and prove the resulting ordered differences exactly explain the current-to-successor core change. |
+| `ValidateMaterializedBootstrapChangeEvidenceAction` | canonical materialized change evidence, current authority, validated successor core, locked component/impact registries, and all direct comparison evidence | bootstrap-change validation evidence | Prove total one-to-one coordinate coverage, correct added/modified/removed identities, exact validated change-plan equality, no handle/run-local field, and no unexplained component value or pointer change. |
+| `BuildInitialBootstrapAuthorityStateAction` | validated initial core and compiler-locked initial-lineage variant | initial bootstrap-authority state candidate | Wrap one new feature's core with `kind: initial`; accept no parent or change evidence. |
+| `BuildSuccessorBootstrapAuthorityStateAction` | validated successor core, exact current parent authority, and validated materialized change evidence | successor bootstrap-authority state candidate | Attach the parent ID and total change evidence only after both core and evidence validate; change no component value. |
+| `ValidateBootstrapAuthorityStateAction` | initial/successor state candidate, core evidence, optional exact parent authority, and optional materialized-change evidence | bootstrap-authority evidence | Prove the closed lineage variant, exact ID/core equality, parent/evidence presence together for successors, current/successor joins, and no parent cycle. |
+| `ResolveBootstrapAuthorityStatePathAction` | bootstrap-state identity and workflow bootstrap-authority collection root | versioned engine-owned state path | Derive one immutable state path without accepting a path from config/model/user. |
+| `ParseBootstrapAuthorityStateAction` | bounded raw canonical authority bytes and recorded serializer contract | unvalidated bootstrap-authority candidate | Parse one persisted immutable authority state; trust no nested component ID/value. |
+| `SerializeBootstrapAuthorityStateAction` | validated bootstrap-authority state | canonical authority bytes | Serialize one restart authority under the recorded renderer/serializer contract. |
+
+### 13.2 Invocation, feature, and stage-gate actions
+
+| Action | Input | Output | Single responsibility |
+|---|---|---|---|
+| `ParseSpecifyInvocationAction` | CLI/API arguments | parsed specify invocation | Parse the exact `sdd specify --reference <relative-selector>` shape without reading the reference. |
+| `ValidateSpecifyArgumentsAction` | parsed invocation | valid specify invocation | Require exactly one non-empty `--reference`; reject `--feature`, `--description`, positional descriptions, `-type`, unknown flags, and duplicate selectors. |
+| `NormalizeReferenceSelectorAction` | validated raw `--reference` value | normalized selector candidate | Decode strict UTF-8 once, normalize NFC and literal separators, and remove only literal `.` segments; do not join a root. |
+| `ValidateReferenceSelectorLexicalSafetyAction` | normalized selector candidate and selector policy | `RelativeReferenceSelector` | Reject empty/dot-only, absolute/drive/UNC/URI/control/NUL, `..`, encoded dot/separator, invalid segment, length, and trailing-separator ambiguity before identity or root resolution. |
+| `DeriveFeatureIdentityAction` | validated canonical reference-selector segment sequence and versioned workflow naming policy | feature-identity seed | Derive `featureId` mechanically from every selector segment in order; do not ask the model or use reference prose. |
+| `ResolveFeatureIdentityRegistryPathAction` | validated bootstrap-root registry and fixed engine feature-state child contract | project-level identity-registry path | Derive the sole registry path beneath `<paths.sddtoolkit>/features/`; accept no path from the invocation, model, or reference. |
+| `ReadFeatureIdentityRegistryAction` | engine-derived registry path and bounded no-follow descriptor | absent or bounded canonical registry bytes | Read one project-level identity authority without interpreting it; absence is valid only before its first activation transaction. |
+| `ParseFeatureIdentityRegistryAction` | bounded canonical registry bytes | unvalidated feature-identity registry | Parse one registry revision; trust no feature, selector, lifecycle, or owner pointer. |
+| `BuildInitialFeatureIdentityRegistryAction` | validated self-identifying bootstrap-root-registry identity and proven absent fixed feature-identity-registry path | empty revision-zero feature-identity registry | Construct the only valid absent-file successor as `(bootstrapRootRegistryId, revision 0)` without depending on later project discovery or writing it. |
+| `ResolveFeatureStateInventoryEntryPathsAction` | one parsed ownership record, configured specs/archive roots, and fixed artifact/state path contracts | one bounded engine-derived owner-path set | Resolve only the feature root plus workflow, artifact-registry, and feature-state-ledger header paths for one active/archived record; perform no read. |
+| `CaptureFeatureStateHeaderObservationAction` | one resolved owner path, expected header kind, bounded no-follow descriptor, and metadata/read ceiling | immutable root or canonical-state-header observation | Capture exactly one root/header observation without following aliases, parsing a full state, or deciding ownership validity. |
+| `BuildFeatureStateInventoryEntryAction` | one ownership record, its complete root/workflow/artifact/ledger header observations, and any read diagnostic | one terminally accounted feature-state-inventory entry | Join exactly one record to its required observation set or one blocking account; infer no missing pointer. |
+| `AssembleFeatureStateInventoryAction` | parsed registry, bounded traversal budget, and exactly one entry candidate per ownership record | ordered feature-state inventory candidate | Assemble entries in canonical ownership order and preserve every terminal account; perform no validation or filesystem access. |
+| `ValidateFeatureStateInventoryAction` | inventory candidate, parsed registry, configured roots, portability/no-follow policy, header schemas, and hard budget | feature-state-inventory evidence | Prove total record coverage, bounded reads, active/archive root placement, exact workflow/artifact/ledger header identities, and no alias/collision/unaccounted record. |
+| `ValidateFeatureIdentityRegistryAction` | candidate, optional prior revision, project/root/portability authorities, and current feature state inventory | identity-registry evidence | Prove closed tuple state identity, monotonic revision, exact selectors/policy versions, unique active/archive ownership, resolvable workflow/artifact/root pointers, retained archive records, and no portable collision. |
+| `ResolveFeatureIdentityTargetAction` | feature-identity seed, one validated unified feature-identity registry state, and collision policy | new-or-existing feature target | Reopen only when the record's canonical selector and naming-policy version match exactly; reject every different-owner active/archive collision without a suffix. |
+| `BuildFeatureIdentityOwnershipRecordAction` | new-feature target, prospective workflow/artifact/root identities, and trusted clock | active ownership record | Bind the exact selector/policy/feature owner before activation; invent or suffix nothing. |
+| `BuildNextFeatureIdentityRegistryAction` | current registry revision and one validated new ownership | successor identity-registry candidate | Apply exactly one compare-and-swap ownership append; never remove or rewrite selector ownership. A requested archive transition is deterministically rejected as unsupported in v1. |
+| `SerializeFeatureIdentityRegistryAction` | validated successor identity registry | canonical project-level registry bytes | Serialize records in canonical `featureId` order for the feature-activation transaction. |
+| `ValidateFeatureBriefProposalAction` | one route-valid feature brief and complete reference claim/citation/passive/clarification registries | feature-brief evidence | Prove all reference or resolved-response grounding joins, business-only fields, completeness, and absence of unbound path tokens. |
+| `AssignFeatureRequestIdAction` | durable canonical reference-state ID and compiler-locked singleton `feature_brief` request slot | owner-local feature-request identity | Construct `(referenceStateId, feature_brief)` without a run-local allocator, model scalar, content, or fingerprint; exactly one exists per reference revision. |
+| `BuildFeatureRequestAction` | feature-request identity, validated feature brief, feature-identity target, exact required selector/snapshot, and validated clarification-response joins | identified reference-derived feature request | Bind title/description/goal and source authorities without minting any identity or accepting a model-owned feature/path. |
+| `AssignFeatureRequestStateIdAction` | feature ID, validated current feature `StateIdLedger`, and matching single-use namespace capability | feature-request-state reservation plus successor ledger | Reserve one immutable request-state ID. |
+| `BuildFeatureRequestStateAction` | state identity, identified request, derived feature identity, exact reference snapshot, and exact current clarification registry ID/revision | feature-request state candidate | Bind the validated derived brief/request ID to its immutable reference/clarification authorities without minting IDs. |
+| `AssignWorkflowArtifactRegistryStateIdAction` | feature identity, config version, validated current feature `StateIdLedger`, and matching single-use namespace capability | workflow-artifact-registry reservation plus successor ledger | Reserve the immutable artifact-authority state ID before resolving paths. |
+| `ResolveWorkflowArtifactPathsAction` | registry identity, feature identity, validated config roots, and closed selector/path table | workflow-artifact-registry candidate | Calculate every canonical workflow/view/state/transaction/log collection path; the model supplies none. |
+| `ValidateWorkflowArtifactRegistryAction` | registry candidate, canonical root-access registry, portability policy, and closed required-selector table | workflow-artifact-registry evidence | Prove exact singleton/collection coverage, selector-specific `rootAuthority`, root-relative containment, editability/access class, non-overlap, and host/target collision safety. Require views/forms/logs under `specs_feature`, state/transaction/checkpoint selectors under their declared engine root, and reject interpreting one entry against two bases. |
+| `SerializeWorkflowArtifactRegistryAction` | validated workflow-artifact registry | canonical registry bytes | Serialize the exact path authority used by restart and rendering. |
+| `ParseWorkflowArtifactRegistryAction` | raw canonical registry bytes | unvalidated workflow-artifact registry | Parse one persisted artifact authority only. |
+| `BuildFeatureActivationStageTransactionAction` | new-feature target, exact input/validated successor feature-identity registries, validated bootstrap/artifact/principle authorities, revision-zero actor/review-decision/workflow-control-event/passive-literal/clarification registries, exact directory set, and pre-snapshot `specifying` workflow state | feature-activation transaction candidate | Define the atomic project-level ownership claim plus minimal durable feature creation set before any feature-local log/model call. |
+| `ValidateFeatureActivationStageTransactionAction` | activation candidate, preactivation authorization, input/successor identity-registry evidence, root/portability policies, and absence/collision evidence | activation-transaction evidence | Prove compare-and-swap ownership append, new-only feature creation, exact directory/state membership, no partial existing owner, and current authority bindings. |
+| `BuildActiveFeatureDirectoryCapabilityAction` | committed activation transaction plus fresh no-follow metadata for the exact specs-feature, engine-feature, and engine-state roots | active feature-directory capability | Issue the three-root capability required by logging/artifact/state actions only after the commit marker is durable; never collapse the specs/log root into the engine-state root. |
+| `LoadActiveFeatureDirectoryCapabilityAction` | exact existing-feature target, validated workflow/artifact/clarification states, and fresh no-follow metadata for all three registered roots | active feature-directory capability | Reissue a run-local capability only for the same stored selector/owner/current workflow revision and exact distinct root bindings. |
+| `ScanFeatureLogRunInventoryAction` | validated feature log collection paths, active-feature capability, bounded no-follow descriptor, and hard segment/header limits | raw feature-log run/binding/stream inventory | Enumerate and capture bounded segment headers/trailers grouped by their declared run/binding/stream without closing, truncating, trusting, or acquiring a stream lock. |
+| `ValidateHistoricalFeatureLogRunInventoryAction` | raw inventory, fresh current run ID, workflow-artifact/bootstrap-authority lineage, segment schemas, and hard limits | ordered historical run-group inventory or diagnostic | Exclude the fresh run, validate every historical binding/policy ID against a readable authority in the current lineage, classify each group as active-tail or closed-only, and block unknown/corrupt/aliased groups; this does not authorize close. |
+| `ResolveHistoricalFeatureLogAuthorityAction` | one validated historical group, its log-policy ID, and current bootstrap lineage/authority collection | exact historical bootstrap authority and compiled logging fragment | Resolve the policy tuple's bootstrap state, validate its lineage reachability and persisted fragment, and never consult current config or choose a path. |
+| `BuildHistoricalFeatureLogPolicyAction` | validated historical group, resolved historical authority/fragment, feature ID, and workflow-artifact registry | historical feature-log-policy candidate | Reconstruct only the exact closed policy tuple recorded in headers; perform no binding construction, segment I/O, or current-config lookup. The ordinary policy validator then validates it. |
+| `CloseRecoveredHistoricalFeatureLogStreamAction` | locked active-tail inspection, recovered historical stream state, validated historical policy/binding, and matching ordinary single-binding stream-lock capability | `HistoricalFeatureLogTailCloseObservation` | Invoke the typed historical-close port once, fsync a crash-finalization trailer, and close exactly one prior-run active tail; create no successor segment. |
+| `ValidateAlreadyClosedHistoricalFeatureLogStreamAction` | locked closed-only inspection, validated historical policy/binding, and matching ordinary stream-lock capability | `AlreadyClosedHistoricalFeatureLogTailObservation` | Validate existing trailers/sequence bounds and prove the prior-run group already needs no write; reject an active, missing, or corrupt tail and record `bytesWritten: 0`. |
+| `BuildHistoricalFeatureLogStreamFinalizationEvidenceAction` | one exact validated historical inventory group, its matching close-or-already-closed observation, and the terminal ordinary stream-lock release observation | one discriminated `HistoricalFeatureLogStreamFinalizationEvidence` | Join the group's ordinal/run/binding/stream/disposition to exactly one terminal tail observation and its exact released lock; perform no I/O, validation, or policy reconstruction. |
+| `ValidateHistoricalFeatureLogRunFinalizationAction` | validated historical inventory and the ordered `HistoricalFeatureLogStreamFinalizationEvidence` set | `HistoricalFeatureLogRunFinalizationEvidence` or diagnostic | Prove one-to-one ordered group coverage, disposition/observation equality, exact binding/run/stream joins, one successful release per acquired prior-run lock, no duplicate/orphan evidence, and no remaining prior-run active tail before current-run policy/binding construction or sink initialization. |
+| `BuildFeatureLogPolicyIdAction` | feature ID, exact bootstrap-authority-state ID, that authority's persisted compiled-policy config version, and compiler-locked `feature_logging` slot | stable feature-log-policy identity | Construct the closed tuple without consulting the current root config and without an allocator, path, content value, clock, user/model scalar, or run-local capability. |
+| `BuildFeatureLogPolicyAction` | assigned feature-log-policy identity, exact persisted `CompiledFeatureLoggingPolicyFragment` from the bound bootstrap authority, event-definition registry, feature ID, and workflow-artifact registry | feature-log-policy candidate | Bind the historical/current authority-owned threshold and safety/rotation/retention constants to the exact authority-derived ID and engine-derived event/prompt collection IDs; never consult a possibly changed root config for an existing authority. |
+| `ValidateFeatureLogPolicyAction` | log-policy candidate and exact bound bootstrap compiled-policy/artifact authorities | feature-log-policy evidence | Recompute and prove the closed ID tuple, persisted fragment equality, level rank/aliases, fixed per-feature destinations, prompt opt-ins, detector joins, and hard bounds; equal restart inputs must reproduce the same policy identity. |
+| `BuildFeatureLogBindingIdAction` | validated log-policy ID, run ID, workflow-artifact-registry-state ID, and compiler-locked `feature_run_logging` slot | stable feature-log-binding identity | Construct the closed tuple without an allocator, path, clock, or active-directory capability token. |
+| `ResolveFeatureLogBindingAction` | assigned feature-log-binding identity, validated feature-log policy, activated feature-directory capability, run metadata, and workflow-artifact registry | feature-log binding | Bind one run only to the fixed event/prompt collections beneath `canonicalSpecsFeatureRoot/logs`; accept no engine-state-root, config child path, user path, or model path. |
+| `ValidateFeatureLogBindingAction` | binding, root registry, no-follow metadata, bound bootstrap authority, and workflow-artifact registry | log-binding evidence | Recompute and prove the closed policy/binding tuple, containment beneath the active feature, append-only access class, owner-only mode, regular-file/ancestor safety, and exact authority IDs; historical segment headers can be rejoined to the same tuple after restart. |
+| `BuildFeatureLogPolicyTransitionAction` | current/successor validated bootstrap authorities, exact change plan/materialized evidence whose logging-transition obligation is true, current/successor validated log policies and bindings, run metadata, and enabled streams | closed feature-log-policy transition candidate | Bind one same-run old-to-new logging authority switch after any compatible/spec/plan owning transaction; perform no stream I/O and reject absent logging impact or administrative changes. |
+| `ValidateFeatureLogPolicyTransitionAction` | transition candidate, locked impact registry, both policies/bindings, current workflow/bootstrap pointer, and successor committed-bootstrap evidence | log-policy-transition evidence | Validate the logging-impact subset and exact old/new fragments while accepting other already-validated plan assignments; require `transitionFeatureLogging=true`, reject administrative plans, require the same-run segment/record hard caps and format/safety fields to remain equal (cap/format changes require a new run or migration), prove historical/successor IDs match their authorities, prove the bootstrap successor is durable, and represent every enabled stream exactly once. |
+| `CloseFeatureLogStreamForPolicyTransitionAction` | one validated transition, recovered current stream/sink state, current binding/policy, and validated dual-binding transition-stream-lock capability | durable historical-stream trailer/close evidence | Fsync and close exactly one old-binding active segment without creating its successor or changing another stream. |
+| `ValidateClosedHistoricalFeatureLogStreamAction` | old-binding closed-only inspection, historical policy/binding, validated transition, and dual-binding transition-stream-lock capability | reconstructed historical-stream close evidence | Validate the already durable trailer and reproduce the same close-boundary observation after a crash; perform no write and reject an active, missing, or corrupt tail. |
+| `BuildTransitionSuccessorFeatureLogStreamStateAction` | historical close evidence, successor-binding ordinal-one segment creation/recovery evidence, exact total same-run/all-binding segment count, and successor policy | successor stream-state candidate | Continue sequence at historical final plus one, initialize the successor binding's local segment ordinal, and carry the remaining run/stream lifetime segment budget without inspecting or writing a segment. |
+| `ValidateTransitionSuccessorFeatureLogStreamStateAction` | successor stream candidate, transition, old/new segment inventories, policy, and dual-binding lock evidence | successor stream evidence | Prove sequence continuity, binding-local ordinal rules, total all-binding segment cap, exact old closure/new active tail, and no segment/path/identity reuse. |
+| `ValidateFeatureLogPolicyTransitionStreamAction` | one historical close evidence, one initialized/recovered successor-binding stream state, transition, and the same dual-binding transition-stream-lock capability | one stream-transition evidence | Prove the old binding has no active tail, the new binding has exactly one active tail with valid sequence/ordinal origin, and both belong to the exact authorized feature/run/stream/binding pair. |
+| `BuildTransitionSuccessorFeatureLogSinkStateAction` | assigned successor sink-state ID, successor policy/binding, and exactly one initialized-or-recovered successor stream state plus inventory for each enabled stream | successor transition sink-state candidate | Assemble the mixed post-crash/new-stream set into one complete successor sink without inspecting, closing, creating, or recovering a segment. |
+| `ValidateTransitionSuccessorFeatureLogSinkStateAction` | successor sink candidate, validated transition, complete stream-transition evidence, successor policy/binding, and segment inventories | successor transition sink evidence | Prove total enabled-stream coverage, exact new binding/policy, unique active tails, sequence/ordinal rules, and equality to every per-stream transition result. |
+| `ActivateFeatureLogPolicyTransitionAction` | validated transition, complete ordered stream-transition evidence, validated successor sink state/evidence, and runner logging coordinator | active successor-sink capability | Atomically swap only the run-local logging observer pointer after every enabled stream is safe; consume no filesystem port and emit no event itself. |
+| `InspectFeatureLogStreamAction` | validated binding, one enabled stream, and a matching held operation-lock capability (single-binding normally; exact old/new side of a validated transition capability during switch) | no-existing, existing-active-tail, or existing-closed-only result | Determine one binding/stream startup or transition-recovery branch from validated headers/trailers without creating, truncating, recovering, or inventing an active tail. |
+| `AssignFeatureLogSinkStateIdAction` | feature/run/binding identity and run-local sink allocator | log-sink-state identity | Assign the one run-local sink ID without inspecting files. |
+| `AssignFeatureLogSegmentIdAction` | binding, stream, exact ordinal, and per-run segment allocator | segment identity | Assign one segment ID for initialization or rotation without creating a file. |
+| `CreateInitialFeatureLogSegmentAction` | no-existing evidence, ordinal-one segment identity, validated binding/policy, matching held operation-lock capability, and trusted clock | exclusive-create/header evidence | Under the exact binding/stream authorization—including only the successor side of a dual-binding transition—create exactly one owner-only no-follow regular segment with its complete durable header; fail on a race or pre-existing alias. |
+| `BuildInitialFeatureLogStreamStateAction` | enabled stream and ordinal-one segment creation evidence | revision-zero stream state | Initialize sequence one, active ordinal one, zero body bytes, and no durable event sequence. |
+| `BuildInitialFeatureLogSegmentRecordAction` | segment identity and creation/header evidence | active ordinal-one segment record | Project one created segment into inventory metadata. |
+| `BuildInitialFeatureLogSinkStateAction` | sink identity, binding/policy, all enabled initial stream states, and initial segment records | initialized log-sink state | Assemble one new-run sink state; create or recover no files. |
+| `RecoverFeatureLogTailAction` | existing-segments result, validated binding/policy, and one matching held operation-lock capability | recovered stream state and segment records | Validate one exact binding/stream (the old or successor side when transition-authorized) and truncate only an incomplete final frame; interior corruption blocks new work. |
+| `BuildRecoveredFeatureLogSinkStateAction` | sink identity, binding/policy, and every recovered enabled stream/inventory | recovered log-sink state | Assemble one restart sink state without touching a segment. |
+| `BuildFeatureLogRetentionAuthorizationAction` | recovered closed segments, trusted clock, and validated policy | single-use retention authorization | Select oldest eligible closed segments deterministically and exclude every active segment. |
+| `PruneFeatureLogSegmentAction` | one retention authorization, matching feature-log binding, and matching held stream-lock capability | prune evidence | Under the exact binding/stream lock, delete only the authorized closed segments; this is the sole log-retention deletion action. |
+| `ReadWorkflowStateAction` | feature ID | persisted stage metadata or none | Read state only. |
+| `AssignWorkflowStateIdAction` | feature ID, optional prior workflow state, validated current feature `StateIdLedger`, and matching single-use namespace capability | workflow-state reservation plus successor ledger | Reserve one immutable workflow-state revision ID. |
+| `BuildInitialWorkflowStateAction` | workflow identity, new feature/artifact/bootstrap/principle/actor/review-decision/workflow-control-event/passive/clarification authorities, and empty open-clarification/active-approval projections | pre-snapshot `specifying` workflow-state candidate | Construct the first persisted state with no `currentReferenceStateId`; no other state may omit that pointer. |
+| `ValidateStageOrderAction` | requested stage and state | stage authorization | Enforce predecessor order. |
+| `ValidateRequiredArtifactPresenceAction` | one required artifact identity | presence evidence | Check one required artifact exists. |
+| `ValidateRequiredArtifactReadabilityAction` | one required artifact identity | readability evidence | Check one required artifact is readable. |
+| `ValidateWorkflowMetadataAction` | one stage metadata invariant | metadata evidence | Validate one reference/state/artifact expectation. |
+| `BuildNextStageStateAction` | next workflow identity, validated stage result, current state, and exact current authority/open-clarification/active-approval/control-event projections | next-state payload | Build one state transition for inclusion in the stage transaction; never synthesize an approval or active final/rework pointer. |
+| `ValidateWorkflowStateAction` | workflow-state candidate, prior revision if any, artifact/bootstrap/principle/actor/review-decision/workflow-control-event/passive/clarification/plan-input/stage authorities, and transition table | workflow-state evidence | Prove monotonic revision, legal transition, exact current IDs/open sets/active approvals/final-rework pointers, stage-valid plan-input presence/absence, and no dangling authority. A missing reference pointer is valid only for the newly activated `specifying` revision with empty clarification history and no feature request/specification. |
+| `ParseWorkflowStateAction` | raw workflow-state bytes | unvalidated workflow state | Parse one persisted revision only. |
+| `SerializeWorkflowStateAction` | validated workflow state | canonical workflow bytes | Serialize one restart authority. |
+
+### 13.3 Reference actions
+
+| Action | Input | Output | Single responsibility |
+|---|---|---|---|
+| `AssignReferenceStateIdAction` | feature ID, optional parent state ID, validated current feature `StateIdLedger`, and matching single-use namespace capability | prospective reference-state reservation plus successor ledger | Reserve the state ID before any local ID/citation/blob binding and persist it before external exposure. |
+| `BuildReferenceIdLedgerAction` | prospective state identity and optional prior snapshot for correction | reference-ID ledger candidate | Initialize or advance monotonic source/block/chunk/citation/claim/signal/conflict/feedback/conflict-decision/token/reconciliation-partition/reconciliation-summary/reconciliation-statement allocators and the shared tombstone set. |
+| `RetireReferenceAllocatedIdAction` | one failed allocated reference ID, its namespace, and current successor ledger | next reference ID ledger | Add the exact failed ID to the shared tombstone set without rewinding any namespace ordinal. |
+| `ValidateReferenceIdLedgerAction` | initial/final ledgers and every canonical/intermediate allocation or retirement in the prospective snapshot | reference-ID-ledger evidence | Prove each assigner advanced exactly its namespace, monotonic uniqueness, no reuse, total tombstone accounting, and that the final ledger resolves every persisted reference identity. |
+| `ResolveReferenceExtractionContractAction` | exact extraction-contract binding and historical route registry | immutable extraction descriptor | Resolve the recorded schemas/chunker or emit the unavailable-contract diagnostic. |
+| `ResolveReferenceRootAction` | canonical configured reference root and required non-empty relative descendant selector | lexical reference-root candidate | Join the required selector without treating it as an alternate root. |
+| `ValidateReferenceRootContainmentAction` | lexical candidate, canonical configured reference root, and workspace | contained reference root | Prove containment beneath both authorities and apply no-follow root policy. |
+| `ValidateReferenceRootDirectoryAction` | one contained reference root | directory evidence | Prove it exists, is a readable directory, and is not a special file. |
+| `BuildReferencePreactivationSessionAction` | trusted run ID, canonical selector, feature-identity seed, and run-local session ordinal | noncanonical reference-preactivation session | Create provisional source/block counters that may identify bounded reader/decoder observations only; emit no canonical state ID and persist nothing. |
+| `BuildReferenceTraversalBudgetAction` | validated reference limits | traversal budget capability | Bind entry, depth, and enumeration time/memory ceilings for one traversal. |
+| `EnumerateReferenceFilesAction` | contained root and traversal budget capability | bounded unordered raw inventory and traversal telemetry | Enumerate without decoding/ordering and terminate before a hard traversal bound is exceeded. |
+| `ValidateReferenceEntryCountAction` | bounded raw inventory telemetry and entry limit | entry-count evidence | Apply the corpus entry ceiling once. |
+| `BuildReferencePreactivationBranchAction` | one identified source and exactly one accepted exclusion, successful empty/nonempty decode, unsupported, failed, or blocked deterministic outcome with its budget/reader/resource bindings | one provisional preactivation branch | Project the closed outcome without constructing a canonical `ReferenceEntry` or semantic block status. |
+| `BuildReferencePreactivationBranchSetAction` | preactivation-session ID, sorted provisionally identified sources, and all provisional branches | ordered preactivation branch-set candidate | Join one branch to every provisional source in source order; perform no acceptance decision. |
+| `ValidateReferencePreactivationCoverageAction` | branch-set candidate, sorted inventory, source blobs, both closed budget ledgers, reader selections, identified nonempty blocks, and decoder telemetry | branch-set evidence | Prove exact one-to-one source coverage and every branch's complete identity/budget/read/decode joins before policy acceptance. |
+| `ValidateReferencePreactivationAction` | validated provisional branch set, complete deterministic inventory, provisional source/decoded budget ledgers, and mandatory-reference policy | preactivation authorization | Require a nonempty corpus, one accepted deterministic branch per source, closed budgets, and no unsupported/failed/blocked branch; all IDs remain run-local and noncanonical, and source-map materialization, chunks, canonical entries, and semantic dispositions are intentionally later. |
+| `ValidateReferenceDirectoryDepthAction` | one raw inventory entry and depth limit | depth evidence | Apply one traversal-depth ceiling. |
+| `ValidateReferenceInventoryPathAction` | one raw directory entry and reference policy | canonical inventory path | Validate UTF-8, NFC form, containment, and platform names. |
+| `DetectReferenceInventoryCollisionAction` | canonical inventory paths and compiled portability-policy set | collision evidence | Reject one NFC/case-fold-equivalent entry set under host or target rules. |
+| `SortReferenceInventoryAction` | collision-free canonical inventory | ordered inventory | Sort once by normalized Unicode-scalar relative path. |
+| `AssignReferencePreactivationSourceIdAction` | one ordered inventory entry and current preactivation session | provisional source identity plus successor session | Allocate one run-local source ordinal for bounded capture/decoder joins only; never persist, render, log as canonical, or send it to a model. |
+| `AssignReferenceSourceIdAction` | one ordered provisional source after the canonical reference-state reservation is durable and current reference ID ledger | canonical source mapping plus successor ledger | Allocate one monotonic source ID and return the exact ledger with `nextSourceOrdinal` advanced. |
+| `ClassifyReferenceEntryPolicyAction` | one identified inventory entry and hidden/symlink policy | include/exclude decision candidate | Apply one entry-class policy without accepting it. |
+| `ValidateReferenceExclusionAcceptanceAction` | one exclusion candidate and exact compiled configuration-policy rule | exclusion-acceptance evidence | In v1, accept only a durable preconfigured policy decision and bind its rule/evidence ID; preactivation cannot use a not-yet-existing feature actor registry, so a user-authored exclusion is unrepresentable and requires policy update plus rerun. |
+| `BuildReferencePreactivationSourceBudgetLedgerAction` | preactivation-session identity and validated source-corpus limit | empty provisional source-byte ledger | Create the run-local reservation/debit authority used during bounded capture. |
+| `ValidateReferenceEntryReadabilityAction` | one included regular-file entry and no-follow adapter | descriptor-bound readability evidence | Open one regular file without following links and retain the exact bounded descriptor capability; do not reopen it by path. |
+| `ValidateReferenceFileSizeAction` | descriptor-bound readability evidence and per-file limit | file-size evidence | Apply one per-file byte ceiling to the descriptor metadata. |
+| `ReserveReferenceSourceBytesAction` | current provisional source-byte ledger, preactivation-session ID, provisional source ID, source/file-size evidence, and ledger revision | tuple-identified source-byte reservation and next ledger revision | Construct the closed `(sessionId, source_bytes, provisionalSourceId)` run-local identity, prove it is unique in the ledger, and reserve the descriptor-reported bytes before capture or fail without reading. |
+| `CaptureReferenceSourceBlobAction` | exact no-follow descriptor, provisional source-byte reservation, and preactivation-session identity | immutable provisional blob handle and capture telemetry | Read that descriptor once into a private run-local store, reject length/identity mutation or a reservation overrun, and never reopen by path. |
+| `CommitReferenceSourceBudgetDebitAction` | matching source-byte reservation, immutable blob length, and current ledger revision | committed debit and next ledger revision | Convert one reservation to actual source-byte use exactly once. |
+| `ReleaseReferenceSourceBudgetReservationAction` | failed/abandoned capture and matching current reservation | released reservation and next ledger revision | Release one uncommitted source-byte reservation exactly once. |
+| `AccumulateReferenceCorpusSizeAction` | ordered captured source blobs, final source-byte ledger, and total limit | corpus-size evidence | Verify blob lengths equal committed debits and the total ceiling was never exceeded. |
+| `BuildReferencePreactivationDecodedBudgetLedgerAction` | preactivation-session identity and validated decoded-corpus limit | empty provisional decoded-byte ledger | Create the run-local reservation/debit authority for decoded output bytes. |
+| `ReserveReferenceDecodedBytesAction` | current provisional decoded-byte ledger, preactivation-session ID, provisional source/reader IDs, per-file decoded limit, and ledger revision | tuple-identified decoded-byte reservation and next ledger revision | Construct the closed `(sessionId, decoded_bytes, provisionalSourceId, readerId)` run-local identity, prove it is unique in the ledger, and reserve at most the lesser of the per-file ceiling and remaining corpus allowance before decode. |
+| `BuildReferenceDecoderBudgetAction` | validated config, exact reader descriptor, and decoded-byte reservation | decoder budget capability | Bind the reservation plus time, memory, block, page, cell, archive, and expansion ceilings for one decode. |
+| `BuildExcludedReferenceEntryAction` | one accepted exclusion and identified entry | excluded-entry candidate | Build one union variant without a decoder/blocks. |
+| `SniffReferenceMediaTypeAction` | one immutable source blob | media-type result | Determine content type using registered sniffers without reopening the inventory path. |
+| `ProbeReferenceReaderAction` | one immutable source blob and exact reader descriptor | bounded integer probe score | Probe one reader only against the captured bytes. |
+| `FilterReferenceReaderThresholdAction` | one reader/score/media tuple | eligible or rejected candidate | Apply one descriptor's threshold only. |
+| `SelectReferenceReaderTierAction` | eligible primary and fallback sets | one candidate tier | Choose primaries when nonempty, otherwise fallbacks. |
+| `BuildReferenceReaderRankAction` | one eligible candidate and detected media type | rank tuple | Build one integer `(score, media-rank, priority)` tuple. |
+| `SelectReferenceReaderAction` | one-tier candidate/rank set | reader selection | Select the unique maximum or diagnose a tie. |
+| `DecodeReferenceAction` | one immutable source blob, exact reader, and decoder budget capability | bounded decode result and resource telemetry | Decode one captured file only; the sandboxed reader must terminate before a bound is exceeded and cannot reopen its path. |
+| `ValidateReferenceDecodedFileSizeAction` | one decode result and per-file decoded-byte limit | decoded-size evidence | Apply one decoded-output ceiling. |
+| `CommitReferenceDecodedBudgetDebitAction` | matching decoded-byte reservation, validated decoded length, and current ledger revision | committed debit and next ledger revision | Convert one reservation to actual decoded-byte use exactly once. |
+| `ReleaseReferenceDecodedBudgetReservationAction` | failed/empty/abandoned decode and matching current reservation | released reservation and next ledger revision | Release one uncommitted decoded-byte reservation exactly once. |
+| `AccumulateReferenceDecodedCorpusSizeAction` | ordered successful decoded lengths, final decoded-byte ledger, and total limit | decoded-corpus evidence | Verify output lengths equal committed debits and the total ceiling was never exceeded. |
+| `ValidateReferenceBlockCountAction` | one decode result and block limit | block-count evidence | Apply one decoded-block ceiling. |
+| `ValidateReferencePageCountAction` | one document decode and page limit | page-count evidence | Apply one document-page ceiling. |
+| `ValidateReferenceCellCountAction` | one tabular decode and cell limit | cell-count evidence | Apply one table-cell ceiling. |
+| `ValidateReferenceDecoderResourceUseAction` | one decoder telemetry record and time/memory limits | resource-use evidence | Prove the sandbox terminated within its time and memory envelope. |
+| `BuildUnsupportedReferenceEntryAction` | one no-reader result and identified entry | unsupported-entry candidate | Build one unsupported union variant. |
+| `BuildFailedReferenceEntryAction` | one decode failure and attempted reader IDs | failed-entry candidate | Build one failed union variant. |
+| `BuildBlockedReferenceEntryAction` | one readability/source-size/source-capture/reader-selection/decode-budget failure and identified entry | blocked-entry candidate | Build one phase-exact blocking union variant without fabricating captured or decoded content. |
+| `BuildEmptyReferenceEntryAction` | one successful empty decode and decoder identity | empty-entry candidate | Build one empty union variant. |
+| `BuildDecodedReferenceEntryAction` | one successful nonempty decode and accounted content blocks | decoded-entry candidate | Build one decoded union variant only after every block has a final status. |
+| `AssignReferencePreactivationBlockIdAction` | one decoder block proposal and current preactivation session | provisional block observation plus successor session | Allocate one run-local block ordinal for decoder/source-map joins only and claim no canonical identity. |
+| `AssignReferenceBlockIdAction` | one ordered provisional block after the canonical reference-state reservation is durable and current reference ID ledger | canonical block mapping plus successor ledger | Allocate one reference-state-global block ID, advance only `nextBlockOrdinal`, and claim no accounting. |
+| `AssignReferenceBudgetReservationIdAction` | canonical reference-state ID, one mapped canonical source ID, and closed budget kind `source_bytes | decoded_bytes` | owner-local canonical budget-reservation identity | Construct `(referenceStateId, sourceId, budgetKind)`; require at most one terminal reservation per source/kind and consume no `ReferenceIdLedger` namespace. |
+| `ValidateReferenceBudgetReservationIdentityCoverageAction` | canonical source set, complete source/decoded reservation sets, and preactivation identity-map candidate | reservation-identity coverage evidence | Require exactly one unique source-byte and one decoded-byte terminal identity for every applicable source, no duplicate tuple, and total provisional mapping. |
+| `ClonePreactivationBlobIntoReferenceStateAction` | one validated provisional blob handle, canonical reference-state ID, and exact provisional source/canonical-source mapping | reference-state-owned immutable blob plus one blob mapping | Copy exact bytes into the write-once canonical namespace without reopening the reference path. |
+| `BuildReferencePreactivationIdentityMapAction` | preactivation session, canonical reference-state ID, complete ordered source/block/blob/reservation mappings | reference-preactivation identity map candidate | Assemble the total provisional-to-canonical translation without assigning or copying anything. |
+| `ValidateReferencePreactivationIdentityMapAction` | map candidate, validated branch set, canonical reference-ID ledger, cloned blobs, and both provisional/canonical budget ledgers | identity-map evidence | Prove total one-to-one source/block/blob/reservation coverage, order preservation, no provisional ID survives in canonical state, and no canonical ID existed before its durable reservation. |
+| `MaterializeReferenceSourceBudgetLedgerAction` | closed provisional source budget, identity-map candidate, exact source/reservation mappings, and canonical reference-state ID | canonical source-budget ledger candidate | Translate every reservation/debit/release exactly once without changing limits or totals; validation occurs only after both ledgers exist. |
+| `MaterializeReferenceDecodedBudgetLedgerAction` | closed provisional decoded budget, identity-map candidate, exact source/reservation mappings, and canonical reference-state ID | canonical decoded-budget ledger candidate | Translate every reservation/debit/release exactly once without changing limits or totals; validation occurs only after both ledgers exist. |
+| `ValidateReferenceSourceMapProposalAction` | decoder source-map proposal, source bytes/metadata, and identified block set | source-map evidence | Validate coordinate ordering/bounds, handle containment, media-specific required mappings, and source/block joins. |
+| `BuildReferenceSourceMapAction` | source-map evidence and exact decoder identity | canonical reference source map | Materialize one source-keyed map without changing coordinates. |
+| `ValidateReferenceSourceMapCompletenessAction` | manifest decoded entries, block set, and canonical source maps | source-map completeness evidence | Prove exactly one sufficient map per decoded source and every mapped block resolves once. |
+| `ExtractStructuredFactsAction` | decoded structured content | exact machine facts/tokens | Parse values mechanically where supported. |
+| `AssignStructuredTokenCandidateIdAction` | one source-ordered deterministic fact whose typed extractor marks it preservation-eligible, its extractor ID, source ID, and source-local ordinal | owner-local structured-token candidate identity | Construct `(sourceId, extractorId, ordinal)` before model classification; this transient candidate consumes no canonical reference-ID namespace. |
+| `ValidatePreservedTokenClassificationProposalAction` | one model classification, allowed candidate IDs, closed token kinds, and current source map | token-classification evidence | Resolve one engine candidate, require the preserve/irrelevant shape, and forbid model-authored bytes/citations/IDs. |
+| `ValidateStructuredTokenClassificationCompletenessAction` | exact chunk-local candidate set and all validated classifications | token-accounting evidence | Prove every candidate has exactly one preserve/irrelevant disposition and no unknown/duplicate candidate appears. |
+| `AssignPreservedTokenIdAction` | one preserve-valid structured-token candidate and current reference ID ledger | token identity plus successor ledger | Allocate one reference-state-local token ID and advance only `nextTokenOrdinal`. |
+| `BuildPreservedTokenAction` | token identity, structured-token candidate, canonical citation, and deterministic obligation namespace | canonical preserved token | Copy exact captured bytes and derive the downstream obligation ID from the token identity. |
+| `BuildPreservedTokenClaimAction` | canonical preserved token, its canonical citation, and current block/chunk | preserved-token claim candidate | Construct one citation-bound deterministic claim candidate for normal claim-ID assignment/accounting. |
+| `ChunkReferenceAction` | one identified content block and route ceiling | ordered bounded chunk proposals | Partition one block while preserving exact source ranges. |
+| `AssignReferenceChunkIdAction` | one ordered chunk proposal and current reference ID ledger | identified reference chunk plus successor ledger | Allocate one reference-state-global chunk ID and advance only `nextChunkOrdinal`. |
+| `RecordChunkDispositionAction` | one identified chunk and validated extraction result | accounted reference chunk | Attach exactly one claims, positive no-feature-claim, or blocked outcome. |
+| `ValidateChunkAccountingAction` | one block's expected chunks and accounted chunk set | chunk-accounting evidence | Prove every chunk appears exactly once and every referenced claim resolves. |
+| `DeriveBlockDispositionAction` | one identified block and complete chunk-accounting evidence | canonical accounted content block | Derive blocked if any chunk blocked, no-feature-claim if all are positive-empty, otherwise extracted. |
+| `ValidateSourceCitationAction` | one `SourceCitationProposal`, current `ReferenceChunk`, captured source blob, and validated source map | validated citation proposal | Prove the source/block/location/verbatim tuple exists and lies inside the exact chunk range supplied to this unit; accept no model-owned canonical ID. |
+| `AssignSourceCitationIdAction` | one validated citation proposal and current reference ID ledger | citation identity plus successor ledger | Allocate one reference-state-local citation ID, advance only `nextCitationOrdinal`, and leave the proposal unchanged. |
+| `BuildSourceCitationAction` | citation identity, prospective reference-state identity, and validated citation proposal | canonical source citation | Bind engine identity/state to the unchanged validated location and optional exact scalar. |
+| `ValidateReferenceClaimProposalAction` | one `ReferenceClaimProposal`, current chunk, canonical citations, passive-literal registry, and closed claim schema | validated claim proposal | Validate kind/content and require every citation to be canonical, unique, and chunk-local; accept no disposition or model-owned ID. |
+| `AssignReferenceClaimIdAction` | one validated model claim proposal or deterministic preserved-token claim candidate and current reference ID ledger | claim identity plus successor ledger | Allocate one reference-state-local claim ID, advance only `nextClaimOrdinal`, and choose no disposition. |
+| `BuildIdentifiedReferenceClaimAction` | claim identity, validated model/token claim candidate, canonical citations, and current chunk | identified reference claim | Derive source/block/chunk/citation joins and bind the unchanged validated content. |
+| `AssignReferenceReconciliationStateIdAction` | prospective reference-state identity and reconciliation contract version | owner-local reconciliation-state identity | Construct the closed tuple `(referenceStateId, reconciliationContractVersion)`; consume no hidden allocator. |
+| `BuildReferenceReconciliationItemAction` | one identified claim, canonical citations, and source ordering | compact reconciliation item | Project the bounded content/IDs needed for conflict/disposition decisions without losing claim meaning. |
+| `PartitionReferenceReconciliationItemsAction` | reconciliation items, level, route ceilings, partition contract, and stable source/claim ordering | bounded reconciliation partitions | Deterministically partition within source, across sources, or globally; an oversized singleton blocks. |
+| `AssignReferenceReconciliationPartitionIdsAction` | ordered unidentified partitions and current reference ID ledger | identified partitions plus successor ledger | Allocate one partition ID per canonical order and advance only `nextReconciliationPartitionOrdinal`. |
+| `ValidateReferenceReconciliationPartitionCoverageAction` | partitions, exact input item/summary set, and route request estimator | partition-coverage evidence | Prove every input member appears exactly once at that level, IDs/order are unique, and every request fits byte/token ceilings. |
+| `ValidateReferenceReconciliationSummaryProposalAction` | one summary proposal, exact partition, and claim/summary allowlists | summary-proposal evidence | Require exact member-ID echo, total represented-claim coverage, closed content variants, and no canonical IDs. |
+| `AssignReferenceReconciliationSummaryIdsAction` | one validated summary proposal and current reference ID ledger | summary/statement ID map plus successor ledger | Allocate summary and statement IDs in canonical local-key order and advance only their two reconciliation ordinals. |
+| `BuildReferenceReconciliationSummaryAction` | validated proposal and ID map | canonical summary | Replace local keys with IDs while preserving represented claims/content. |
+| `BuildCrossSourceReconciliationInputAction` | validated lower-level summaries and exact represented-claim evidence | next-level item set | Project the next bounded level and preserve a total claim-membership map. |
+| `ValidateGlobalReferenceReconciliationProposalAction` | final global proposal, global partition, all summaries/identified claims, and registries | global reconciliation evidence | Prove exactly one disposition per original claim, complete signal/conflict joins, and no summary/member loss. |
+| `BuildHierarchicalReferenceReconciliationStateAction` | state identity, all validated partitions/summaries, route/partition contract, and final proposal | hierarchical reconciliation state | Assemble the complete reconciliation authority without assigning IDs. |
+| `ValidateHierarchicalReferenceReconciliationCompletenessAction` | hierarchical state and complete identified-claim registry | reconciliation-completeness evidence | Prove level lineage, one-to-one membership at every level, total final claim coverage, and no dropped/duplicated claim. |
+| `ValidateClaimDispositionProposalAction` | one `ClaimDispositionProposal` and current identified-claim set | disposition evidence | Validate closed disposition shape, allowed related IDs, and self/cycle constraints without changing a claim. |
+| `ValidateReferenceSignalProposalAction` | one `ReferenceSignalProposal` and current claim/citation/token registries | signal-projection evidence | Validate the kind-to-content variant and every claim/citation/token join without accepting a signal ID. |
+| `AssignReferenceSignalIdAction` | one validated signal proposal and current reference ID ledger | signal identity plus successor ledger | Allocate one reference-state-local signal ID and advance only `nextSignalOrdinal`. |
+| `BuildReferenceSignalAction` | signal identity and validated signal proposal | canonical reference signal | Bind identity to the unchanged validated projection. |
+| `ValidateSourceConflictCandidateAction` | one `SourceConflictProposal`, current claim/citation/source/block/chunk registries, and compiled precedence rules | conflict-candidate evidence | Validate kind, mutually relevant claim set, citations, typed summary, and any selected precedence rule without accepting an ID or user decision. |
+| `BuildReferenceAuthorityLocusAction` | one current citation, manifest entry, source map, decoder contract, and directly captured source location | snapshot-independent authority locus | Project normalized relative path plus versioned structural decoder selector; omit every reference-state/source/block/chunk/citation ID and perform no fuzzy matching. |
+| `BuildReferenceConflictSubjectCoordinateAction` | validated conflict kind, required decision slot, and complete canonically ordered authority loci | structural conflict-subject coordinate | Build a non-hash tuple whose equality is decidable across independently captured snapshots. |
+| `BuildReferenceConflictOptionContinuityKeyAction` | conflict-subject coordinate, one exact identified claim, its canonical typed content, citations, authority loci, and captured scalar spans | structural option-continuity key | Bind claim meaning and direct source coordinates without including a snapshot-local claim/citation ID. |
+| `ValidateReferenceConflictContinuityKeySetAction` | conflict proposal, subject coordinate, option-continuity keys, current claims/citations/source maps, and direct capture evidence | continuity-key evidence | Prove complete one-to-one claim coverage, unique keys, canonical ordering, exact content/location equality, and no hash/prose/fuzzy correspondence. |
+| `AssignReferenceConflictIdAction` | one validated conflict proposal and current reference ID ledger | conflict identity plus successor ledger | Allocate one reference-state-local conflict ID and advance only `nextConflictOrdinal`. |
+| `BuildSourceConflictAction` | conflict identity, validated conflict proposal, subject coordinate, and complete continuity-key set | canonical source conflict | Bind identity and materialize only an unresolved or validated source-precedence resolution while retaining restart-safe subject/option continuity. |
+| `DeriveReferencedSourceIdsAction` | validated signals/conflicts/open questions and citation ledger | ordered referenced source IDs | Derive the exact manifest-source projection once. |
+| `BuildReferenceContextIRAction` | referenced source IDs and validated identified signals/conflicts/open questions | reference-context candidate | Place each typed record into exactly one closed context collection. |
+| `ValidateReferenceContextCompletenessAction` | reference-context candidate and claim/citation/token/conflict registries | context evidence | Prove unique IDs, complete joins, collection-kind correctness, and no orphan context record. |
+| `BuildPriorReferenceConflictClarificationSubjectSetAction` | validated prior clarification registry and optional prior reference-state identity | prior subject-set candidate `P` | Project the latest active revision of every clarification binding owned by the prior reference state, including its exact structural key, ID, binding, and usable-response disposition, in canonical complete-key order; for initial ingestion build the explicitly empty set with no prior pointer, and make no current-subject comparison. |
+| `ValidatePriorReferenceConflictClarificationSubjectSetAction` | prior subject-set candidate, prior clarification registry, and optional prior reference state | prior-set evidence | Prove complete latest-record coverage, exact binding/reference ownership, valid response disposition, canonical order, and unique full structural keys; permit an absent prior pointer only for initial ingestion and then require zero subjects. |
+| `BuildCurrentUnresolvedReferenceConflictSubjectSetAction` | fully validated freshly recaptured snapshot and complete current conflict registry | current subject-set candidate `C` | Project every unresolved behavior-changing current conflict to its exact structural clarification key and binding in canonical complete-key order; make no prior-subject comparison. |
+| `ValidateCurrentUnresolvedReferenceConflictSubjectSetAction` | current subject-set candidate, fully validated fresh snapshot, complete conflict registry, and continuity contract | current-set evidence | Prove complete unresolved behavior-conflict coverage, exact conflict/binding joins, canonical order, and one unique full structural key per current conflict. |
+| `ReconcileReferenceConflictSubjectSetsAction` | complete canonical `P` and `C` | structural subject-set reconciliation candidate | Deterministically merge-join the full keys into `P ∩ C`, `P ∖ C`, and `C ∖ P`; retain each intersection entry's prior answer disposition and produce exhaustive current-set absence evidence for each obsolete prior key without relating it to an introduced key. |
+| `ValidateReferenceConflictSubjectSetReconciliationAction` | reconciliation candidate, prior clarification registry, fresh snapshot, and complete conflict registry | set-reconciliation evidence | Prove the three partitions are pairwise disjoint and exhaustive: every `P` key occurs exactly once in the intersection or `P ∖ C`, every `C` key exactly once in the intersection or `C ∖ P`, intersection keys are directly equal, and difference keys have no equal counterpart. No cardinality, ordering proximity, wording, hash, or semantic similarity may pair subjects. |
+| `BuildFreshReferenceConflictCorrespondenceAction` | one validated `P ∩ C` entry with a usable closed response, its exact equal-key prior/current bindings, current continuity-key registry, and direct typed fresh-capture comparisons | `current` or `stale_same_subject` correspondence candidate | Compare options only inside the already established equal-key pair. Return `current` for a total unique selected-option map or `stale_same_subject` for a nonempty exact-mapping failure. There is no absent or unequal-subject variant, and the action may not search for a nearest, first, or unrelated current conflict. Read no retained parent blob as refresh input. |
+| `ValidateFreshReferenceConflictCorrespondenceAction` | correspondence candidate, exact intersection entry/prior response, fresh manifest/source blobs/source maps/claims, equal-key current conflict, and direct fresh-capture descriptor/range/scalar evidence | variant-specific correspondence evidence | Prove the prior, intersection, and current subject keys are directly equal. For `current`, require a total one-to-one mapping of every selected option by structural coordinates, typed content, and directly recaptured bytes. For `stale_same_subject`, require at least one selected prior option with a typed missing-or-mismatched exact mapping. Reject unequal-key pairing, ID equality as continuity, hashes, summaries, old blobs, model prose, and fuzzy similarity. |
+| `AssignReferenceConflictDecisionIdAction` | validated `current` fresh-reference correspondence, authenticated response binding, and current refreshed reference ID ledger's conflict-decision allocator | conflict-decision identity and successor ledger | Advance only `nextConflictDecisionOrdinal` after exact correspondence is proven; perform no decision build or retirement. |
+| `BuildReferenceConflictResolutionDecisionAction` | decision identity, authenticated user event or validated current correspondence, target state/conflict, selected current claims, and rationale | conflict-decision candidate | Bind trusted actor/time metadata and only revision-current selected claim IDs without minting identity. |
+| `ValidateReferenceConflictResolutionDecisionAction` | one authenticated decision and current unresolved conflict | conflict-decision evidence | Resolve the target state/conflict/claims and validate the selected subset. |
+| `BuildResolvedSourceConflictAction` | one decision-valid conflict | resolved conflict candidate | Apply one user decision while retaining its decision ID. |
+| `ValidateCitationLedgerAction` | citation ledger, claims, signals, provenance, and manifest | citation-join evidence | Prove unique IDs and resolve every citation/source join. |
+| `ValidateSpecificationClaimJoinAction` | one specification record's claim/citation IDs and claim ledger | claim-to-spec evidence | Resolve claims and prove citation consistency for one record. |
+| `BuildReferenceClaimLedgerAction` | identified claims and validated reconciliation disposition proposals | claim-ledger candidate | Join one engine-owned claim record to exactly one disposition and related-claim set without minting IDs. |
+| `ValidateReferenceClaimLedgerAction` | claim-ledger candidate and identified-claim registry | extraction-ledger evidence | Prove every extracted claim has one valid retained/superseded/duplicate/conflicting disposition and all related claim IDs resolve. |
+| `ValidateReferenceEntryAccountingAction` | one inventory entry and block ledger | entry accounting evidence | Prove one file and all of its blocks have dispositions. |
+| `BuildReferenceManifestAction` | identified inventory, exactly one final entry candidate per source, accepted exclusions, and blocking diagnostics | reference manifest candidate | Join the ordered inventory to final entry variants without inventing or dropping a source. |
+| `ValidateReferenceManifestCompletenessAction` | manifest candidate, ordered inventory, source/decode budget ledgers, and blocking policy | manifest evidence | Prove one-to-one source accounting, ledger closure, and the derived `allEntriesAccountedFor` value. |
+| `CaptureReferenceFeedbackSubmissionAction` | raw feedback event and runner-held submission/authentication-lease table | immutable run-local feedback handle/candidate | Capture expected reference revision, closed change proposal, and bounded feedback bytes without authenticating or assigning a durable ID. |
+| `ValidateReferenceFeedbackSubmissionAction` | captured feedback candidate, current reference state, target schema, and business-text policy | validated reference-feedback submission or stale/structural diagnostic | Before authentication, prove closed intent/target shape, exact current revision, target existence/kind compatibility, and canonicalize feedback bytes to durable `BusinessText`. |
+| `BindAuthenticatedReferenceFeedbackSubmissionAction` | validated feedback submission and validated fresh actor evidence for `reference_feedback` | authenticated feedback binding | Bind the exact run-local submission handle/change/text to actor evidence after static freshness validation; assign no reference ID. |
+| `AssignReferenceFeedbackIdAction` | authenticated feedback binding and current reference ID ledger's feedback allocator | feedback identity and next ledger | Assign one monotonic engine-owned feedback ID and retire failed allocations. |
+| `BuildReferenceFeedbackAction` | feedback identity, authenticated binding, validated submission with durable `BusinessText`, unchanged target/change, and trusted clock | canonical reference-feedback event | Bind public actor/time/evidence metadata and canonical text without credentials or invocation-owned handles and without performing correction. |
+| `ValidateReferenceFeedbackTargetAction` | one canonical feedback event and current snapshot | target evidence | Validate its exactly-one target and intent-compatible block/chunk, claim, classification, token, and replacement-citation join. |
+| `CloneReferenceBlobIntoRevisionAction` | one current snapshot-owned immutable blob and newly assigned prospective reference-state identity | new state-owned immutable blob handle | Copy exact stored bytes into the successor's write-once namespace without reopening an original reference path or hashing. |
+| `BuildSuccessorReferenceIdLedgerAction` | validated prior ID ledger, prospective reference-state identity, and one typed feedback/decision allocation delta | successor ID-ledger candidate | Preserve monotonic allocators/tombstones and apply only the explicitly authorized identity transition. |
+| `RebindRetainedReferenceManifestEntryAction` | one retained manifest entry, prospective state identity, and exact cloned-blob/source mapping | successor manifest entry | Rebind one unchanged entry without rebuilding a manifest or reading its path. |
+| `RebindRetainedReferenceChunkAction` | one retained accounted chunk, prospective state identity, and exact cloned-blob/block mapping | successor accounted chunk | Rebind one unchanged chunk and disposition without extracting or reconciling it. |
+| `RebindRetainedReferenceSourceMapAction` | one retained source map and exact successor source/block/blob mapping | successor source map | Rebind one source map while preserving all source ranges. |
+| `RebindRetainedReferenceBudgetEntryAction` | one closed source/decoded budget entry and prospective ledger identity | successor budget entry | Copy one immutable reservation/debit/release outcome without changing its byte accounting. |
+| `RebindRetainedSourceCitationAction` | one retained citation and exact successor state/source/block/chunk mapping | successor citation | Rebind one citation while preserving its validated location/content. |
+| `RebindRetainedReferenceClaimAction` | one retained identified claim and successor citation/token mappings | successor identified claim | Rebind one unchanged claim; it assigns no disposition or identity. |
+| `RebindRetainedConflictDecisionAction` | one retained authenticated decision and successor state/conflict mapping | successor conflict decision | Rebind one decision only after its selected claim IDs remain valid. |
+| `ValidateReferenceRevisionProjectionAction` | prior snapshot, typed feedback/decision, and complete per-record retained/changed projections | revision-projection evidence | Prove every prior record is retained, explicitly replaced, or tombstoned exactly once before normal manifest/reconciliation/context assembly. |
+| `AssembleReferenceSnapshotAction` | prospective state identity, exact extraction-route contract, final ID ledger, validated passive-literal registry, manifest/budget ledgers/entries/chunks/source maps/citations/reconciliation/claims/feedback events/conflict-resolution decisions/context/blobs | reference-snapshot candidate | Copy the exact passive-registry/reconciliation state IDs and assemble one complete snapshot without assigning identity or hashing content. |
+| `ValidateReferenceSnapshotAction` | reference-snapshot candidate and every bound ledger/registry/route/blob authority | whole-snapshot evidence | Prove state-ID ownership, ledger closure, citation/chunk/source/context/reconciliation/claim/conflict joins, total accounting, immutable blob ownership, and no orphan or duplicate record. |
+| `SerializeCanonicalReferenceStateAction` | validated reference snapshot | canonical reference-state bytes | Serialize one authoritative reference snapshot. |
+| `RenderReferenceContextAction` | validated reference snapshot, its exact passive-literal registry state, and renderer contract | Markdown candidate | Render the sidecar using snapshot-owned source labels/locations and inert registered display literals only. |
+
+Semantic extraction and reconciliation use the common LLM actions; there is no special reader that also calls a model.
+
+### 13.4 Model actions
+
+| Action | Input | Output | Single responsibility |
+|---|---|---|---|
+| `SelectContextAction` | unit plus indexed facts | bounded context set | Select relevant known context. |
+| `BuildInitialGuidanceAction` | unit, context, compiled policy | guidance packet | Generate deterministic initial guidance. |
+| `BuildImmutableUnitOwnerIdAction` | one closed route-unit descriptor and exact current canonical input authorities | immutable unit-owner tuple | Construct only the matching reference/specification/plan/task/implementation/semantic-review owner variant; reject missing or extra owner fields and accept no model identity. |
+| `BuildInitialModelRequestIdentityLedgerAction` | trusted stage-run epoch and closed request-purpose registry | empty run-local `model.request_identity_ledger/v1` DataKey | Initialize ordinal/accounting state once for the epoch without assigning a request; it is the sole producer of this compiler-owned key. |
+| `AssignModelRequestIdAction` | immutable unit owner, exact route, one closed discriminated purpose binding, and current model-request identity-ledger DataKey revision | one typed model-request ID plus successor-ledger DataKey replacement | Allocate one logical request ordinal and enforce the purpose variant's required owner fields; protocol retries do not invoke this action, and runner CAS is the only mutation. |
+| `AdvanceModelRequestLifecycleAction` | exact request ID, expected status, typed invocation/terminal fact, and current model-request identity-ledger DataKey revision | successor-ledger DataKey replacement | Apply one runner-enforced compare-and-swap `assigned -> invoked`, `invoked -> terminal`, or `assigned -> terminal(not_invoked_attempt_ceiling)` transition; protocol retries remain invoked and never reassign identity. |
+| `ValidateModelRequestBindingAction` | request ID, immutable unit, route descriptor, discriminated purpose authority, and current request ledger | model-request binding evidence | Prove epoch/unit/route/purpose/ordinal and ledger membership, including required/forbidden purpose-owner fields. |
+| `BuildModelRequestAction` | validated model-request binding, guidance, and exact route schema | provider-neutral identified request | Serialize one request carrying only the engine-owned logical request ID. |
+| `InvokeModelAction` | identified provider-neutral request, binding evidence, and already-applied runner attempt transition | raw provider result | Make one model call only after identity and total-attempt accounting succeed. |
+| `BuildPromptBodyFragmentManifestAction` | typed request/result assembly, exact route schemas, and fragment-classification registry | complete prompt-body fragment manifest | Before provider serialization, bind every loggable typed body field to one `ordinary`, `reference_body`, or `code_body` fragment and prove complete pointer coverage; never reclassify opaque whole serialized bytes. |
+| `BuildPromptLogCandidateAction` | complete fragment manifest, provider metadata, exact route/profile, and enabled feature-log policy | prompt-exchange candidate | Select request fragments only when request capture is enabled, response fragments only when response capture is enabled, and additionally require the matching reference/code opt-in for those classes; an unclassified or multiply classified fragment blocks capture. Do not redact, truncate, or emit. |
+| `RedactPromptLogContentAction` | one prompt candidate, structured secret-field registry, mandatory credential detectors, and configured bounded RE2 detectors | redacted prompt candidate and evidence | Remove secrets before any size truncation and never retain an original value/length in the replacement. |
+| `TruncatePromptLogContentAction` | redacted prompt candidate and configured UTF-8 content-byte ceiling | bounded redacted prompt candidate and evidence | Truncate only at a UTF-8 scalar boundary after redaction. |
+| `ValidatePromptLogContentAction` | bounded redacted prompt candidate, feature-log policy, fragment manifest, event/field registry, and record-byte ceiling | transient logging-internal `SanitizedPromptExchangeLogRecord` | Prove complete fragment accounting, all direction/class opt-ins, field schemas, redaction-before-truncation evidence, and final byte limit. Return it only through a compiler-locked transient logging `DataKey`; it is never added to the business envelope or model context. |
+| `DecodeModelEnvelopeAction` | raw provider result | decoded envelope or protocol diagnostic | Decode only. |
+| `BuildProtocolRetryGuidanceAction` | decoder/schema diagnostic and original route schema | protocol-retry guidance | Build decoder-only retry guidance without semantic instructions. |
+| `AdvanceModelAttemptAccountingAction` | exact stage-run epoch/request/unit identity, current runner repair accounting, and configured/hard `maxModelAttemptsPerUnit` ceiling | request-keyed compare-and-swap model-attempt transition | Reserve one attempt before every `InvokeModelAction`, including the initial call and decoder/schema retries; reject invocation at the total-attempt ceiling. Each new generation or repair request ID receives its own bounded counter in the same unit/stage epoch. |
+| `ValidateModelRequestIdentityAction` | decoded envelope, validated request binding, and current model-request identity ledger | identity evidence | Validate exact request, epoch, immutable unit, operation/purpose, route, and ordinal identity only. |
+| `ValidateModelPayloadSchemaAction` | identity-valid envelope and route schema | schema-valid route payload | Apply only the route's closed payload schema. |
+| `ValidateSemanticReviewResultAction` | schema-valid `semantic.review` payload, exact request/unit binding, and closed finding-kind/confidence/disposition policy | validated semantic-finding proposals | Prove result cardinality and allowed kinds without treating a model assertion as deterministic evidence. |
+| `AssignSemanticFindingIdAction` | exact semantic-review request ID and stable finding ordinal | owner-local semantic-finding identity | Construct `{modelRequestId, findingOrdinal}`; accept no model-provided identity. |
+| `ResolveSemanticFindingCitationsAction` | one finding proposal and the request's current authority/span allowlist | exact citation bindings or diagnostic | Resolve every cited record/span against its state revision and reject missing, stale, out-of-unit, or uncited findings. |
+| `BuildSemanticFindingAction` | assigned identity, validated proposal, exact `SemanticReviewOwner`/request/model/profile metadata, citation bindings, confidence policy, and configured disposition | canonical `SemanticFinding` | Label the finding `model_assisted`, retain the typed semantic-review owner, and copy provenance without promoting it to validator evidence. |
+| `ValidateSemanticFindingAction` | canonical finding, semantic-review request, parent content-unit owner, and current route/unit/authority/policy registries | semantic-finding evidence | Reprove identity/request/result/schema/citations/confidence/disposition and require `finding.immutableUnitOwnerId.parentUnitOwnerId` to equal the reviewed content-unit owner. |
+| `ProjectSemanticFindingDiagnosticAction` | validated semantic finding and exact unit pointer | model-assisted diagnostic | Embed the complete finding as the diagnostic's evidence class; never attach a mechanical rule claim. |
+| `ValidateContextRequestSchemaAction` | one context request and route descriptor | schema evidence | Apply the route's one allowed context-request schema. |
+| `ValidateContextRequestScopeAction` | schema-valid context request and current unit allowlists | context-scope evidence | Validate one requested ID/query against local scope. |
+| `ResolveContextRequestAction` | scope-valid request and immutable fact/content registries | bounded context result | Resolve one authorized context request only. |
+| `OrderRepairDiagnosticsAction` | repairable diagnostics | ordered diagnostic IDs | Sort repair diagnostics deterministically. |
+| `SelectNextRepairDiagnosticAction` | ordered diagnostics and attempt state | selected diagnostic | Select one next diagnostic only. |
+| `ClassifyRepairAuthorizationPurposeAction` | selected diagnostic, optional validated embedded semantic finding, exact content-unit owner, route-result kind, and closed purpose table | ordinary atomic or no-invention-replacement purpose | Select the dedicated no-invention branch only for `unsupported_behavior` and exact semantic-review-parent/content-owner equality against a content-kind route result; otherwise select the ordinary builder or reject nonrepairable evidence. |
+| `CreateRepairAuthorizationAction` | selected diagnostic, candidate handle/revision, repair-unit descriptor, schema registry, exact compiled-engine-policy identity, and complete cited rule bindings | repair authorization | Bind one closed operation, current values, preconditions, and self-contained versioned rules used by the diagnostic. |
+| `AdvanceAtomicRepairAttemptAccountingAction` | selected ordinary repair diagnostic/authorization, exact stage-run epoch/unit, current runner repair accounting, and configured/hard `maxRepairAttemptsPerUnit` plus `maxRepairsPerStage` ceilings | unit-and-stage compare-and-swap atomic-repair transition | Increment that unit and the stage aggregate together before invoking `repair.structured`/`repair.code`; exhaust when either cap is reached, never leak counts across stage epochs, and exclude the separate no-invention one-shot. |
+| `CreateNoInventionClarificationReplacementAuthorizationAction` | one validated unsupported-content semantic finding, content-kind route result, exact parent content `ImmutableUnitOwnerId`, exact candidate revision, clarification-result schema, and runner repair accounting | one-shot no-invention replacement authorization | Require the finding's `SemanticReviewOwner.parentUnitOwnerId` to equal the authorization/accounting owner; authorize only whole-result replacement from `content` to schema-valid `clarification_needed` and reject a consumed unit one-shot. |
+| `BuildAtomicRepairGuidanceAction` | immutable repair authorization, matching diagnostic, and authorization-bound semantic guidance/finding | repair guidance | Explain exactly the authorized change from bound rule values and reproduce every bound principle raw span/citation as context; never use semantic guidance as mechanical authority or perform ambient lookup. |
+| `ValidateRepairEnvelopeAction` | decoded repair response and authorization | identity-valid repair payload | Validate authorization, diagnostic, and revision identity. |
+| `ValidateRepairScopeAction` | repair payload, authorization, source semantic finding, and runner repair accounting | scope-valid repair operation plus next accounting | Prove only authorized pointers/keys are present; for no-invention replacement reprove semantic-review parent = authorization content owner = one-shot accounting owner, require exactly `kind=clarification_needed`, consume that owner's flag, and do not increment the ordinary counter. |
+| `MergeAtomicRepairAction` | candidate, repair authorization, scope-valid operation | repaired in-memory candidate | Compare-and-swap one authorized operation. |
+
+### 13.5 Artifact, renderer, and traceability actions
+
+| Action | Input | Output | Single responsibility |
+|---|---|---|---|
+| `ReadArtifactAction` | engine-owned artifact path | raw artifact | Read one artifact. |
+| `AuthenticateActorAction` | runner-issued opaque single-use authentication-lease reference and required assurance-policy ID | authentication observation or diagnostic | Invoke `AuthenticationPort.authenticateAndConsume` once. The runner-owned lease table—not the envelope—holds the credential, and the port finalizes it on every terminal branch. |
+| `ValidateAuthenticationObservationAction` | one authentication observation, provider registry, required assurance policy, trusted clock, and intended event kind | authentication-observation evidence | Reject missing/unknown actors, provider or policy mismatches, impossible/expired times, extra credential-shaped fields, and event-incompatible assurance before an evidence ID is allocated. |
+| `AssignAuthenticationEvidenceIdAction` | current validated actor-evidence registry/next ordinal and one validated authentication observation | closed `AuthenticationEvidenceIdAllocation` | Assign one monotonic engine ID and return its exact input/next-ordinal delta without authenticating, constructing evidence, or yet mutating the registry. |
+| `BuildAuthenticatedActorEvidenceAction` | authentication-evidence allocation and unchanged authentication observation | authenticated-actor evidence | Bind the allocated engine identity to public provider/actor/assurance/time metadata; include no credential material. |
+| `ValidateAuthenticatedActorEvidenceAction` | one actor evidence, provider registry, required assurance policy, trusted clock, and intended event kind | actor-evidence validation | Prove evidence ID/actor/context/provider/policy, freshness at event time, and event compatibility without authenticating again. |
+| `AssignActorEvidenceRegistryStateIdAction` | feature ID, optional prior registry, validated current feature `StateIdLedger`, and matching single-use namespace capability | actor-evidence-registry reservation plus successor ledger | Reserve one immutable revision ID without deriving it from actor content. |
+| `BuildInitialActorEvidenceRegistryStateAction` | feature ID and registry identity | empty revision-zero actor-evidence registry | Create the activation-time registry with the next authentication-evidence ordinal set to one. |
+| `AppendAuthenticatedActorEvidenceAction` | validated prior registry, next identity, exact allocation delta, and one validated nonduplicate actor evidence | next actor-evidence-registry candidate | Append one event evidence, consume exactly the allocated next ordinal, and preserve immutable history; never accept credentials. |
+| `BuildSpecificationEditAuthenticationEvidenceRetirementAction` | validated specification-edit change set/capture authority, exact validated actor evidence and authentication-evidence allocation, assigned submission ID, typed shared failure cause, and trusted clock | specification-edit authentication-evidence retirement record | Bind the allocated evidence ID to the same failed submission without requiring the later handle-bearing edit binding to have been built and without persisting handles, actor evidence, credentials, or edit content. |
+| `ValidateSpecificationEditAuthenticationEvidenceRetirementAction` | authentication-evidence retirement record, validated change set/capture authority, exact actor evidence/allocation delta, current actor registry, and matching specification-acknowledgement ID-retirement record | authentication-evidence-retirement evidence | Prove registry/ordinal freshness, capture/actor/event-kind validity, authentication-evidence/submission/cause equality across both retirements, absence from current entries/references/tombstones, and no live or committed edit journal, including a failure after submission allocation but before a run-local edit binding exists. |
+| `BuildActorEvidenceIdRetirementRegistryStateAction` | next actor-registry identity, validated prior registry, and specification-edit authentication-evidence retirement record | retirement-only actor-evidence-registry candidate | Advance only registry identity/revision/next ordinal and append the exact evidence ID to `retiredAuthenticationEvidenceIds`; copy `entries` byte-for-byte and append no actor evidence. |
+| `ValidateActorEvidenceRegistryStateAction` | candidate, optional prior revision, feature identity, provider/policy registry, referencing records, and either accepted append evidence or a validated retirement-only record | registry evidence | Prove unique monotonic IDs and append-only history; require either one actor/context/time-valid evidence append with total specification-acknowledgement/clarification-response/review/reference-feedback/reference-conflict-decision/manual-evidence joins, or byte-equal entries plus exactly one unreferenced allocated-ID tombstone, never both. |
+| `ParseActorEvidenceRegistryStateAction` | raw canonical actor-evidence bytes | unvalidated registry | Parse one persisted registry revision only. |
+| `SerializeActorEvidenceRegistryStateAction` | validated actor-evidence registry | canonical registry bytes | Serialize public actor/evidence metadata without credentials or tokens. |
+| `ScanPassiveLiteralCandidateAction` | one trusted reference/spec-edit/validated-clarification-answer scalar and version-bound superset path-token grammar | ordered exact-span candidates | Detect bounded URI/path/filename-shaped spans without assigning meaning, identity, or operational authority; model output is never an origin. |
+| `ClassifyPassiveLiteralCandidateAction` | one exact candidate and closed precedence table | classified passive-literal candidate | Apply `external_uri` before `display_path` before `display_filename`, or reject ambiguity. |
+| `ValidatePassiveLiteralScalarAction` | one classified candidate and scalar policy | passive-scalar evidence | Require bounded strict UTF-8/NFC, single-line control-free bytes and allowed external URI scheme/syntax. |
+| `AssignPassiveLiteralIdAction` | one new `(kind, NFC bytes)` tuple and registry allocator | passive-literal identity | Reuse an exact existing tuple or assign one monotonic never-reused ID. |
+| `BuildPassiveLiteralRecordAction` | passive identity and scalar-valid candidate | immutable literal record | Bind the engine ID to exact display bytes and kind without an occurrence. |
+| `BuildPassiveLiteralOccurrenceAction` | literal record and exact reference origin evidence | literal occurrence | Bind one existing record to one byte-exact trusted origin. |
+| `BuildUserSpecificationPassiveLiteralOccurrenceAction` | literal record, acknowledgement identity, and parsed specification record/span | pending user-spec occurrence | Bind a newly edited display literal to the same authenticated acknowledgement transaction as its record. |
+| `BuildUserClarificationPassiveLiteralOccurrenceAction` | literal record, exact validated clarification response, and answer byte span | pending clarification occurrence | Bind display-only text to the assigned response ID; the same response transaction must persist the response, next passive registry, and next clarification state. |
+| `AssignPassiveLiteralRegistryStateIdAction` | feature ID, optional prior registry state, validated current feature `StateIdLedger`, and matching single-use namespace capability | passive-literal-registry reservation plus successor ledger | Reserve one immutable registry revision ID. |
+| `BuildPassiveLiteralRegistryStateAction` | state identity, optional validated prior registry, ordered records/occurrences, and scanner contract | registry-state candidate | Preserve prior record cores and append/deduplicate authorized records and occurrences without assigning IDs. |
+| `ParsePassiveLiteralRegistryStateAction` | raw canonical registry bytes | unvalidated passive-literal registry | Parse one registry revision only. |
+| `ValidatePassiveLiteralRegistryStateAction` | registry candidate, bound feature/request/reference/acknowledgement/clarification authorities, and allocator rules | registry evidence | Prove immutable ID/core history, tuple uniqueness, exact origin spans, monotonic allocation, and no orphan occurrence. |
+| `SerializePassiveLiteralRegistryStateAction` | validated passive-literal registry | canonical registry bytes | Serialize one registry revision. |
+| `SelectPassiveLiteralAllowlistAction` | one route unit's exact inputs and validated registry | ordered unit-local literal IDs | Select only display literals evidenced by that unit's request/reference/spec records. |
+| `ValidatePassiveLiteralReferenceNodeAction` | one passive-reference node, exact bound registry, unit allowlist, and field schema | passive-reference evidence | Require a current allowed display-only ID and forbid the node in every operational field. |
+| `ResolveEditableSpecificationPassiveLiteralAction` | one parsed spec literal span and current registry | existing passive ID or authenticated-registration requirement | Resolve by exact `(kind, NFC bytes)` without silently creating authority. |
+| `ValidateSpecificationUnitProposalAction` | one route-valid specification-unit proposal and unit descriptor | unit evidence | Validate kind, cardinality, claim/citation fields, and unit-local business schema. |
+| `ValidateClarificationNeedProposalAction` | one route-valid need, fixed stage/unit descriptor, current subject-authority allowlist, current clarification registry, and either direct-need evidence or the exact consumed no-invention replacement authorization/finding | clarification-need evidence with closed origin | Prove a genuine current authority gap, exact stage-compatible subject, bounded closed answer schema, absence of smuggled assumptions/paths/status/identity fields, and exactly one origin: direct with no finding, or replacement with the validated embedded semantic finding. |
+| `BuildReferenceConflictClarificationNeedAction` | one validated unresolved behavior-changing source conflict, its structural subject coordinate/continuity keys, and exact current claim/citation IDs | deterministic specification-clarification need plus current conflict binding | Build a closed select-one/select-many conflict question whose visible option keys are current engine-owned claim IDs while retaining the snapshot-independent continuity keys internally; invoke no model and invent no preferred answer. |
+| `BuildClarificationSubjectKeyAction` | validated stage/unit/required-slot/gap descriptor and canonical ordered subject authorities, or a validated reference-conflict subject coordinate | engine-owned subject key | Build the exact non-hash tuple used for uniqueness without accepting model wording as identity. The reference-conflict variant excludes snapshot-local state/conflict/claim/citation IDs and uses the structural coordinate plus continuity-contract version. |
+| `FindExistingClarificationBySubjectAction` | subject key, validated need origin, and validated current/prior clarification registry | exact existing record or absent result | Perform one equality lookup across open and closed history; a reused record appends only a nonduplicate validated origin in a new record revision and never creates a second clarification. |
+| `ValidateClarificationSubjectUniquenessAction` | subject key, lookup result, and stage slot rules | reuse-or-allocate evidence | Require reuse for an existing key and reject overlapping ownership of the same required slot; wording changes never create a second record. |
+| `AssignClarificationIdAction` | stage, absent-result evidence, and current persisted clarification ID ledger | transaction-private `S01..S99`, `P01..P99`, or `T01..T99` identity plus prospective next ledger | Select the next two-digit stage-local ordinal and block at 99 rather than changing filename grammar. The identity and prospective ledger may flow only inside the not-yet-committed registry/view/workflow candidate; no model request, log, diagnostic, path write, serializer, or adapter may observe it before the complete owning transaction commits. A failed uncommitted candidate is discarded with its prospective ledger; the unchanged durable ledger may deterministically reselect that ordinal. |
+| `BuildClarificationRecordAction` | reused/new identity, validated need with closed origin, subject key, and record revision | open clarification record | Preserve the canonical question, canonically deduplicate/append its origin list, or construct one new record; never resolve it or duplicate the subject. |
+| `AssignClarificationStateIdAction` | feature ID, optional prior registry state, validated current feature `StateIdLedger`, and matching single-use namespace capability | clarification-state reservation plus successor ledger | Reserve one immutable registry revision ID. |
+| `BuildInitialClarificationIdLedgerAction` | closed stage prefix/limit policy | empty clarification ID ledger | Initialize `S/P/T` ordinals and response/resolution ordinals at one. V1 has no clarification tombstone set because these owner-local IDs never cross a transaction-private boundary before the complete owning commit. |
+| `BuildInitialClarificationRegistryAction` | state identity, feature/bootstrap/principle/revision-zero passive/actor authority bindings, and empty ID ledger | revision-zero clarification registry with no reference pointer | Create restart authority before the first reference snapshot or clarification can be allocated. |
+| `BuildNextClarificationRegistryAction` | state identity, validated prior registry, next ledger, and one closed `ClarificationRegistryTransition` | next clarification-registry candidate | Apply exactly one single-record/response/resolution transition, or one validated complete reference-conflict set transition containing every equal-key continuation, obsolete-key closure, and introduced-key opening; update current authority bindings without mutating history or exposing an intermediate registry revision. |
+| `ValidateClarificationRegistryAction` | registry candidate, prior revision, workflow/preset/principle/reference/spec/plan/task/passive/actor authorities, and ID policy | clarification-registry evidence | Prove monotonic IDs/tombstones, prefix/stage/ordinal agreement, subject-key uniqueness, current joins, response actor-evidence joins, lifecycle legality, and exactly one active record revision per ID. The reference pointer may be absent only in revision zero before any record. |
+| `ParseClarificationRegistryAction` | raw canonical clarification-state bytes | unvalidated registry | Parse one persisted registry revision only. |
+| `SerializeClarificationRegistryAction` | validated registry | canonical clarification-state bytes | Serialize one restart-safe clarification authority. |
+| `DeriveClarificationViewPathAction` | clarification ID and validated workflow `clarify/` collection root | canonical clarification path | Derive exactly `<featureDir>/clarify/<ID>.md`; accept no filename/path from a model, user, or config. |
+| `ValidateClarificationDirectoryAction` | collection root, current inventory, portability policy, and clarification registry | directory evidence | Reject unknown matching files, case/NFC aliases, wrong prefixes/widths, subdirectories, symlinks, and duplicate IDs; recreate only a missing engine-known open form. |
+| `RenderClarificationViewAction` | one record, exact registry revision, derived path, and clarification renderer contract | discriminated `ClarificationView` | For an open record render `ClarificationSubmissionView` with only `requestedStatus` and `answer` editable. For a resolved/cancelled record render `ClarificationAuditView` with the immutable resolution/history and `editableRegions: []`. Never expose an uncommitted newly allocated identity as a file. |
+| `ParseClarificationViewAction` | raw registered open `SNN.md`/`PNN.md`/`TNN.md` bytes and expected path/renderer contract | unvalidated user submission and immutable projection | Parse one exact `open_submission` form; never infer closure from prose, import an extra file, or accept a submission against a `closed_audit` view. |
+| `ValidateClarificationViewStaticProjectionAction` | parsed open view and current open record | immutable-projection evidence | Require filename, ID, stage, state/revision, question, rationale, answer schema, and open lifecycle discriminant to equal canonical values directly, without a hash. |
+| `ValidateClarificationViewLifecycleAction` | one rendered clarification view and its exact registry record | clarification-view lifecycle evidence | Require `open -> open_submission` with exactly the two controlled editable regions, and `resolved/cancelled -> closed_audit` with exactly zero editable/submittable regions and immutable resolution/history. |
+| `ValidateClarificationViewSetAction` | complete clarification registry, complete registered view set, expected open subject-key set, and per-view lifecycle evidence | clarification-view-set evidence | Prove exactly one correctly pathed view per retained record, no extra/missing/case-equivalent file, and direct equality of the `open_submission` subject projection to the expected open set; the empty projection retains every required closed audit view. |
+| `ValidateClarificationUserSubmissionAction` | parsed submission, current open record, expected state/record revisions, and answer schema | structurally current submission evidence | Before authentication, reject stale/immutable edits; require a nonempty matching answer for `closed`; for `select_many` require unique known keys within min/max and canonicalize to engine option order; validate bounded defer/cancel reason shapes. |
+| `BindAuthenticatedClarificationSubmissionAction` | structurally valid current submission and validated fresh actor evidence | authenticated submission binding | Bind the exact actor/evidence to the already valid answer and intended event kind; perform no ID allocation or lifecycle change. |
+| `AssignClarificationResponseIdAction` | authenticated submission binding and current persisted response-ID allocator | transaction-private response identity plus prospective next ledger | Select one monotonic engine-owned response ID only inside the complete response/actor/view/workflow transaction candidate. A failed precommit candidate exposes no ID and discards the prospective ledger; a committed ordinal is never reused. |
+| `BuildClarificationResponseAction` | response identity, authenticated submission binding, current record/state, and trusted clock | clarification response | Bind the exact selected option/text/defer/cancel variant, actor/evidence equality, and compare-and-swap revisions. |
+| `BuildReferenceConflictDecisionFromClarificationResponseAction` | current conflict-bound `SNN`, validated closed response, validated `current` fresh-reference correspondence, current snapshot/conflict, and decision identity | conflict-decision candidate | Replace each prior selected option with its uniquely mapped current claim ID and copy only the response's actor/evidence/time; add no preference or rationale. |
+| `RefreshReferenceConflictClarificationAction` | validated exact same-key entry with no usable closed response or a stale-answer correspondence, existing conflict clarification, and current conflict binding/options | same-ID open record revision | Preserve the structural subject key and clarification ID, replace only snapshot-local subject/answer-schema option bindings, invalidate any stale closure, and reopen without allocating a duplicate. |
+| `BuildObsoleteReferenceConflictAuthorityResolutionAction` | one validated `P ∖ C` entry, its current record revision, an assigned resolution ID, fresh reference-state authority, and exhaustive absence correspondence | deterministic obsolete-subject authority resolution | Close only that prior subject with an engine-owned “no longer present in current reference authority” resolution; consume no model prose and do not choose a replacement subject. |
+| `BuildIntroducedReferenceConflictOpeningAction` | one validated `C ∖ P` entry, deterministic conflict need, exact global subject-key lookup, and reused identity or a legally assigned absent-subject identity | current open record | Reopen/rebind the exact existing subject ID when lookup finds one; allocate only after exact global absence, and bind the current conflict/options without pairing it to an obsolete subject. |
+| `BuildReferenceConflictClarificationSetTransitionAction` | validated full set reconciliation, every validated equal-key decision/reopen outcome, every obsolete authority resolution, every introduced opening, and the fully threaded successor clarification ID ledger | complete reference-conflict clarification-set transition | Assemble all `P ∩ C`, `P ∖ C`, and `C ∖ P` effects in canonical key order as one registry mutation; perform no state-ID allocation or persistence. Resolution and new-record IDs are assigned one at a time in canonical difference-set order through the ordinary allocators. |
+| `ValidateReferenceConflictClarificationSetTransitionAction` | set transition, prior/current registries, fresh snapshot after validated current-answer decisions, exact global subject lookups, allocator/tombstone evidence, and rendered-form candidates | complete transition evidence | Prove one outcome per reconciliation entry, same-ID reuse for all equal/existing keys, allocation only for globally absent introduced keys, exact ledger advancement, closure of every obsolete key, and exactly one open form for every still-unresolved current key after decisions. Reject duplicate IDs/keys/forms, unrelated pairings, omitted entries, and any state in which a current unresolved conflict lacks its form. |
+| `BuildClarificationAuthoritySearchContextAction` | one open record and refreshed stage-specific authorities | bounded current authority index | Select reference/principle/spec/plan/repository records permitted for that clarification stage; never synthesize missing facts. |
+| `EvaluateDeterministicClarificationResolutionAction` | open record and current authority index | exact resolution candidate or semantic-review-required | Resolve only closed registry/identity/value cases that need no interpretation. |
+| `ValidateClarificationAuthorityResolutionProposalAction` | one `clarification.resolve` result, current open record, subject key, and bounded authority index | authority-resolution evidence | Require current known IDs, subject/slot coverage, non-conflict, and no model-owned status, ID, or invented value. |
+| `AssignClarificationResolutionIdAction` | validated resolution and current persisted resolution-ID allocator | transaction-private resolution identity plus prospective next ledger | Select one monotonic authority-resolution ID only inside the complete resolution/view/workflow transaction candidate. A failed precommit candidate exposes no ID and discards the prospective ledger; a committed ordinal is never reused. |
+| `BuildClarificationAuthorityResolutionAction` | resolution identity, validated unchanged proposal/deterministic result, exact route-or-rule validation binding, record/state revisions, and trusted clock | canonical authority resolution | Persist the exact canonical resolution text, current authority IDs, and self-contained validation-contract binding; close only the current record revision and depend on no transient evidence ID. |
+| `ReopenInvalidatedClarificationAction` | one closed record whose bound answer authority became stale or conflicting and current registry | same-ID open record revision | Reopen the existing ID; never allocate a duplicate. |
+| `ValidateClarificationStageGateAction` | requested gate, current validated registry, and closed prefix matrix | gate evidence/diagnostic | Require no open `S` before plan, no open `S/P` before tasks, and no open `S/P/T` before implementation; return a stable nonzero upstream-clarification error. |
+| `BuildClarificationProvenanceAction` | one response-valid affected spec record, exact current clarification registry, and exact ordered response-ID set plus optional validated reference attribution | provenance entry | Record clarification-only or mixed origin, require every response ID, and forbid fabricated reference citations for user-supplied facts. |
+| `MergeSpecificationUnitProposalAction` | one valid unit and current specification-content candidate | next content candidate | Insert one unit at its engine-known slot and reject duplicate ownership. |
+| `ValidateSpecificationContentCompletenessAction` | assembled specification-content candidate and enabled section policy | completeness evidence | Prove every required singleton/collection unit has a deliberate result. |
+| `AssignGeneratedSpecificationIdsAction` | complete initial content candidate and new specification ID ledger | identified content candidate and next ledger | Allocate gap-free monotonic IDs for initial repeatable records only. |
+| `BuildSpecificationIRAction` | identified complete content, fixed singleton keys, traceability evidence, and exact validated passive-literal registry | canonical specification IR | Copy the registry state ID and construct one complete initial specification authority. |
+| `CompareSpecificationIRAction` | current normalized specification IR and one authoritative predecessor-bound specification IR | equality/difference evidence | Compare the complete typed values directly and report changed record keys; do not use rendered bytes, hashes, or timestamps. |
+| `ParseSpecificationAction` | raw `spec.md` | specification parse tree with record keys and exact field bytes | Parse the specification contract without normalizing field bytes. |
+| `CaptureSpecificationEditSubmissionAction` | raw specification-edit event with a typed `EditableSpecificationViewAuthorityBinding`, exact current editable-view path, bounded no-follow descriptor, and runner-held submission/lease table | immutable run-local specification-edit handle plus `SpecificationEditCaptureAuthority` | Bind the exact expected workflow/provenance/acknowledgement revisions, complete editable-view authority, captured no-follow file identity, and capture time to one bounded file capture before parsing; retain the opaque lease only in the runner table and assign no durable ID. |
+| `BuildSpecificationEditChangeSetAction` | captured submission, parsed submitted specification, current normalized specification/ID ledger, and direct typed content comparison | specification-edit change-set candidate | Enumerate every added/modified/removed record and prior/next canonical business-content identity without authenticating or accepting protected-structure changes. |
+| `ValidateSpecificationEditSubmissionAction` | captured submission, change-set candidate, current workflow/editable-view/specification/provenance/acknowledgement/passive/reference authorities, protected-structure contract, and edit policy | validated specification-edit change set retaining the exact `SpecificationEditCaptureAuthority`, or stale/structural diagnostic | Before consuming authentication, prove every expected revision, complete view binding, and captured file identity is current, parse/round-trip succeeds, IDs/tombstones are legal, protected structure is unchanged, and the complete diff is bounded and nonempty; the valid output must retain that immutable authority projection. |
+| `AssignSpecificationEditSubmissionIdAction` | validated edit handle, validated fresh actor evidence for `specification_edit`, current specification-acknowledgement ID ledger, and feature ID | durable submission ID plus successor acknowledgement ID ledger | Consume exactly one monotonic submission ordinal only after static validation and authentication; never accept a caller/model ID. |
+| `AssignSpecificationEditChangeSetIdAction` | assigned submission ID, validated change-set handle, the same validated fresh actor evidence, and current successor acknowledgement ID ledger | durable change-set ID plus successor acknowledgement ID ledger | Consume one submission-local monotonic change-set ordinal only for the authenticated capture and never derive it from edited content. |
+| `BindAuthenticatedSpecificationEditSubmissionAction` | validated specification-edit change set, assigned durable submission/change-set IDs, and validated fresh actor evidence for `specification_edit` | run-local `AuthenticatedSpecificationEditBinding` containing both exact handles and one closed durable binding projection | Bind the exact IDs/handles, unchanged capture authority, and actor evidence after static freshness/diff validation; mark the handle-bearing shell nonserializable and perform no acknowledgement or provenance mutation. |
+| `BuildAuthenticatedSpecificationEditEventAction` | run-local authenticated binding, unchanged validated change set, and trusted clock | immutable specification-edit event with `DurableSpecificationEditAuthenticationBinding` | Reprove handle equality, project the complete capture authority and authentication binding into the durable event, preserve the complete add/modify/remove intent and exact expected input revisions/view/file identity, and structurally drop only handles, leases, credentials, and raw submitted bytes. |
+| `ValidateSpecificationEditAcknowledgementCoverageAction` | authenticated edit event, next normalized specification, all proposed acknowledgements, current acknowledgement state, current workflow/editable-view/provenance authorities, and policy | edit/acknowledgement coverage evidence | Revalidate the event's durable capture authority against its transaction CAS inputs; require exactly one binding-matching acknowledgement for each new or changed user-authored current record, none for removals/unchanged records, and total recording of deletions in the edit event. |
+| `RebindExactBusinessCopyAction` | one parsed field, current provenance, and preserved-token registry | typed business value | Reconstruct one exact-copy value only after byte-exact token/citation validation; otherwise normalize or diagnose. |
+| `BuildBusinessContentIdentityAction` | one typed business value | canonical content identity | Build NFC canonical identity or exact token/byte identity for one leaf. |
+| `ValidateExactBusinessCopyAction` | one exact-copy value and current token/citation registry | exact-copy evidence | Prove token, citation, raw scalar, and record attribution agree. |
+| `ParseSpecificationIdLedgerAction` | raw ID-ledger bytes | unvalidated ID ledger | Parse one feature ID ledger. |
+| `BuildInitialSpecificationIdLedgerAction` | enabled repeatable record kinds | empty specification ID ledger | Initialize next ordinals and empty tombstones before generated ID assignment. |
+| `ValidateSpecificationIdLedgerAction` | parsed ledger and specification records | valid ID-allocation evidence | Validate next ordinals, uniqueness, and tombstones. |
+| `AssignMissingSpecificationIdsAction` | parsed spec and valid ID ledger | identified spec plus next ledger | Allocate only missing monotonic record IDs. |
+| `BuildFeatureRequestProvenanceAction` | one feature-brief-grounded record, validated feature-request state, and exact referenced claims/citations | provenance entry | Record `reference_derived_feature_brief` attribution while preserving complete snapshot joins. |
+| `BuildReferenceExtractedProvenanceAction` | one record key/content identity, exact reference-state ID, and validated claim/citation join | provenance entry | Record one reference-derived attribution without inventing source IDs. |
+| `ParseFeatureRequestStateAction` | raw feature-request-state bytes | unvalidated feature-request state | Parse one canonical request authority. |
+| `ValidateFeatureRequestStateAction` | parsed request state, feature identity, reference snapshot, and clarification registry | feature-request evidence | Validate request/state IDs and exact persisted invocation/reference/clarification bindings. |
+| `SerializeFeatureRequestStateAction` | validated feature-request state | canonical feature-request bytes | Serialize one immutable request authority. |
+| `AssignSpecificationAcknowledgementIdAction` | authenticated edit binding, one changed current record, and current successor acknowledgement ID ledger | acknowledgement identity plus successor ID ledger | Consume exactly one monotonic acknowledgement ordinal and return its successor; failed post-allocation construction retires the ID. |
+| `RetireSpecificationAcknowledgementAllocatedIdAction` | one failed submission/change-set/acknowledgement allocation and current successor ID ledger | next acknowledgement ID ledger with exact tombstone | Retire one failed durable ID without rewinding any ordinal or affecting another namespace. |
+| `BuildSpecificationAcknowledgementIdRetirementAction` | one failed edit attempt's nonempty canonically ordered allocated-ID set, typed terminal cause, proven no-journal or fully rolled-back abandoned edit-journal disposition, exact final tombstoned acknowledgement ID ledger, and trusted clock | specification-acknowledgement ID-retirement record | Bind exactly one submission allocation and every later change-set/acknowledgement allocation from that attempt; accept no edit content or accepted event. |
+| `ValidateSpecificationAcknowledgementIdRetirementAction` | retirement record, input acknowledgement state/ledger, exact post-allocation successor-ledger chain, final tombstoned ledger, and current transaction-ID-ledger/journal inventory | acknowledgement-ID-retirement evidence | Prove gap-free ordinal advances for only the listed IDs, correct submission ownership, one tombstone per allocation, no prior/accepted reference, no live or committed edit journal, a terminally retired abandoned transaction ID when a journal existed, and no omitted or extra allocation. |
+| `BuildSpecificationAcknowledgementAction` | acknowledgement identity, authenticated specification-edit binding, feature ID, changed record key, and next canonical business-content identity | acknowledgement candidate | Bind one user acceptance to the exact validated edit/change set and current content without minting identity. |
+| `ValidateSpecificationAcknowledgementAction` | one acknowledgement, authenticated edit event, next specification, and exact actor-evidence registry | acknowledgement evidence | Prove submission/change-set/actor/evidence equality, freshness-at-event, and the feature/key/content binding. |
+| `AssignSpecificationAcknowledgementStateIdAction` | feature ID, prior revision if any, validated current feature `StateIdLedger`, and matching single-use namespace capability | acknowledgement-state reservation plus successor ledger | Reserve one immutable acknowledgement revision ID. |
+| `BuildInitialSpecificationAcknowledgementStateAction` | first acknowledgement-state identity and initialized three-namespace acknowledgement ID ledger | empty acknowledgement-state candidate | Create revision one with next ordinals at one, empty tombstones, no edit events, and no fabricated acknowledgements. |
+| `BuildNextSpecificationAcknowledgementStateAction` | next state identity, validated prior state, one authenticated edit event, its complete validated acknowledgement set, and exact successor ID ledger | next acknowledgement-state candidate | Append exactly one edit event plus its authorized current-record acknowledgements and persist every allocation/tombstone transition without reusing state identity. |
+| `BuildSpecificationAcknowledgementIdRetirementStateAction` | next acknowledgement-state identity, validated prior state, validated retirement record, and exact final tombstoned ID ledger | retirement-only acknowledgement-state candidate | Advance only state identity/revision and the three-namespace ledger; copy `editEvents` and `entries` byte-for-byte and fabricate no accepted edit or acknowledgement. |
+| `ValidateSpecificationAcknowledgementStateAction` | candidate, optional prior state, current specification/actor authorities, accepted-edit evidence or a validated retirement-only record, and ID-ledger accounts | acknowledgement-state evidence | Prove monotonic submission/change-set/ack ordinals, total tombstones and append-only history; require either exactly one complete event-to-acknowledgement append or byte-equal events/entries with only the validated retirement delta, never both. |
+| `ParseSpecificationAcknowledgementStateAction` | raw acknowledgement-state bytes | unvalidated acknowledgement state | Parse one acknowledgement-state revision. |
+| `SerializeSpecificationAcknowledgementStateAction` | validated acknowledgement state | canonical acknowledgement bytes | Serialize one acknowledgement-state revision. |
+| `BuildUserAuthoredProvenanceAction` | one validated acknowledgement | provenance entry | Record one explicit user-authored attribution without accepting a caller-supplied scalar ID. |
+| `BuildSpecificationClaimDispositionAction` | one snapshot claim and current specification/context/conflict/open-question registries | current claim-disposition entry | Build exactly one spec-dependent disposition for one claim. |
+| `ParseSpecificationProvenanceStateAction` | raw provenance-state bytes | unvalidated provenance state | Parse one provenance-state revision. |
+| `ValidateSpecificationProvenanceStateAction` | provenance state, specification records, feature-request, acknowledgement, clarification, required reference, exact passive-literal, and current context/conflict/question registries | provenance evidence | Validate reference-only/clarification-only/mixed/user-authored cross-field rules, every response/passive-registry join, and exactly one current specification disposition per snapshot claim. |
+| `AssignSpecificationProvenanceStateIdAction` | feature ID, prior revision if any, validated current feature `StateIdLedger`, and matching single-use namespace capability | provenance-state reservation plus successor ledger | Reserve one immutable provenance revision ID. |
+| `BuildInitialSpecificationProvenanceStateAction` | first state identity, feature-request state, initial acknowledgement/clarification states, required reference state, exact passive-literal registry, and initial attribution/dispositions | initial provenance-state candidate | Copy every authority ID and construct the first complete provenance authority. |
+| `BuildNextSpecificationProvenanceStateAction` | next state identity, validated prior state, current specification, exact current acknowledgement/clarification/passive-literal registries, and attribution/disposition changes | next provenance-state candidate | Copy every current authority state ID and rebuild one immutable revision without mutating/reusing prior state identity. |
+| `BuildSpecificationAcknowledgementRetirementProvenanceStateAction` | next provenance-state identity, validated current provenance/specification and retirement-only acknowledgement state | acknowledgement-retirement provenance candidate | Copy entries, claim dispositions, feature-request/reference/clarification/passive bindings byte-for-byte and change only provenance identity/revision plus `acknowledgementStateId`. |
+| `SerializeSpecificationProvenanceStateAction` | validated provenance-state candidate | canonical provenance bytes | Serialize one provenance-state revision. |
+| `SerializeSpecificationIdLedgerAction` | valid next ID ledger | canonical ledger bytes | Serialize the monotonic allocator/tombstones. |
+| `ParseCanonicalReferenceStateAction` | raw canonical reference bytes | unvalidated reference snapshot | Parse one canonical reference payload. |
+| `ParseCanonicalPlanStateAction` | raw canonical plan bytes | unvalidated plan state | Parse one canonical plan-state payload. |
+| `ParseCanonicalTaskDefinitionStateAction` | raw canonical task-definition bytes | unvalidated task-definition state | Parse one complete canonical definition-state payload. |
+| `ParseCanonicalTaskRuntimeStateAction` | raw canonical runtime bytes | unvalidated runtime state | Parse one canonical runtime payload. |
+| `ValidateCanonicalStateSchemaAction` | one parsed canonical payload and schema ID | schema-valid canonical state | Apply one canonical-state schema. |
+| `AssignPlanStateIdAction` | validated plan result, validated current feature `StateIdLedger`, and matching single-use namespace capability | plan-state reservation plus successor ledger | Reserve one engine-owned plan-state ID. |
+| `AssignPlanInputAuthorityStateIdAction` | current workflow/specification revision, optional prior plan-input authority, validated current feature `StateIdLedger`, and matching single-use namespace capability | plan-input-authority reservation plus successor ledger | Reserve one immutable state revision and commit it before any plan model call. |
+| `ResolvePlanInputAuthorityStatePathAction` | plan-input state identity and workflow `PlanInputAuthorityStateCollection` root | versioned engine-owned child path | Derive one contained immutable state path; accept no path from model, user, reference, or config. |
+| `BuildPlanInputAuthorityStateAction` | identity/parent, exact bootstrap/feature-request/reference/normalized-specification/spec-ID/acknowledgement/provenance/passive/clarification/principle-selection/repository-fact/baseline-file/research-evidence authorities, and current plan ID ledger | plan-input-authority candidate | Bundle every ID/value that a plan route or `PNN` may cite; perform no generation and accept no partial `PlanState`. |
+| `BuildSpecificationAcknowledgementRetirementPlanInputAuthorityAction` | next plan-input-authority identity, validated current planning input, retirement-only acknowledgement state, and its exactly rebound provenance state | retirement-rebound plan-input-authority candidate | Copy every business, repository, file, research, principle, clarification, bootstrap, passive, and plan-ID-ledger value byte-for-byte; advance only identity/revision/parent and replace the embedded acknowledgement/provenance pair. |
+| `ValidatePlanInputAuthorityStateAction` | candidate, optional prior revision, all bound canonical authorities/adapters, and plan-stage citation policy | plan-input-authority evidence | Prove current revisions, normalized editable-spec round trip, complete repository/file/research/principle joins, monotonic research/plan IDs, and no citation outside the durable bundle. |
+| `SerializePlanInputAuthorityStateAction` | validated plan-input authority and canonical serializer contract | canonical plan-input bytes | Serialize the complete immutable input bundle at its engine-derived child path. |
+| `ParsePlanInputAuthorityStateAction` | bounded canonical child bytes and recorded serializer contract | unvalidated plan-input authority | Parse one persisted revision without trusting any nested state/record ID. |
+| `BuildPlanStateAction` | plan-state identity, validated plan IR/final plan-ID ledger, exact validated plan-input authority, complete file/grant/dependency-mutation/source-reference/contract-view/review-unit registries | validated plan-state candidate | Construct one complete canonical plan wrapper with no duplicated file or reference authority and bind the exact precommitted plan-input state. |
+| `SerializeCanonicalPlanStateAction` | validated `PlanState` | canonical plan-state bytes | Serialize one complete canonical plan state. |
+| `AssignTaskDefinitionStateIdAction` | validated task graph, validated current feature `StateIdLedger`, and matching single-use namespace capability | task-definition-state reservation plus successor ledger | Reserve one engine-owned immutable definition ID. |
+| `BuildTaskDefinitionStateAction` | definition identity, exact input `PlanState`, validated obligation/shared-resource/task-file-capability registries, canonical graph, and fact-transition bindings | validated task-definition-state candidate | Copy every restart authority and construct one complete immutable task-definition wrapper. |
+| `SerializeTaskDefinitionStateAction` | validated `TaskDefinitionState` | canonical task-definition bytes | Serialize one immutable approved definition state. |
+| `AssignRuntimeFileStateIdAction` | task-definition/plan scope, optional prior runtime-file-state ID, validated current feature `StateIdLedger`, and matching single-use namespace capability | runtime-file-state reservation plus successor ledger | Reserve one engine-owned state ID without hashing file content. |
+| `BuildInitialRuntimeFileStateAction` | runtime-file-state identity, exact approved `PlanState` file registry/grants, and current contained workspace metadata | revision-zero runtime-file state | Initialize every registered file's current existence/descriptor revision and prove it agrees with the plan baseline. |
+| `ValidateRuntimeFileStateAction` | runtime-file state, immutable file registry, current overlay/workspace metadata, and optional transition registry | runtime-file-state evidence | Prove total file-ID coverage, descriptor joins, revision, and transition chain. |
+| `SerializeRuntimeFileStateAction` | validated runtime-file state | canonical runtime-file-state bytes | Serialize the current cross-task file lifecycle authority. |
+| `ParseRuntimeFileStateAction` | raw canonical runtime-file-state bytes | unvalidated runtime-file state | Parse one persisted revision only. |
+| `AssignExecutionEvidenceRegistryStateIdAction` | task-definition identity, optional prior evidence-state ID, validated current feature `StateIdLedger`, and matching single-use namespace capability | evidence-registry reservation plus successor ledger | Reserve one immutable registry-revision ID. |
+| `BuildInitialExecutionEvidenceRegistryAction` | evidence-registry identity and task-definition identity | empty revision-zero evidence registry | Create the durable execution evidence/diagnostic authority with an embedded ID ledger whose two ordinals start at one and tombstones are empty. |
+| `AssignVerificationEvidenceIdAction` | either one validated automated result, or one validated manual submission together with its exact authenticated manual-verification binding, plus the current prospective execution-evidence ID ledger | verification-evidence identity plus successor ID ledger | Allocate one monotonic evidence ID only after all result-kind prerequisites (including manual authentication) exist, advance only `nextEvidenceOrdinal`, and leave result/binding content unchanged. |
+| `BuildVerificationEvidenceRecordAction` | evidence identity, one closed `ValidatedAutomatedVerificationResult` or validated manual result, and exact predicate/authority joins | verification-evidence record | Bind the complete typed command/copy/operation/file-delta or actor/scenario result; raw exit/output/validator observations have no valid record variant. |
+| `ValidateVerificationEvidenceRecordAction` | one built record, current command/operation/copy/task/predicate authorities, and its exact safety/disposition observations | verification-evidence evidence | Prove every scope/revision/result/predicate join and that only a validated success or exact expected-red outcome became evidence. |
+| `AssignExecutionDiagnosticRecordIdAction` | one validated engine diagnostic and current prospective execution-evidence ID ledger | execution-diagnostic identity plus successor ID ledger | Allocate one monotonic diagnostic-record ID and advance only `nextDiagnosticRecordOrdinal`. |
+| `BuildExecutionDiagnosticRecordAction` | assigned identity, one engine diagnostic, its typed command-process or validator source outcome, and task/operation/command context | execution-diagnostic record | Persist one typed diagnostic without changing its code/severity/repair class or treating raw output as evidence. |
+| `RetireExecutionEvidenceAllocatedIdAction` | one allocated evidence/diagnostic identity, its exact allocation-successor ledger, typed post-allocation/pre-append failure, and proof that no canonical record references the identity | retirement-successor ID ledger | Tombstone the exact failed ID without rewinding or reusing either ordinal. Before retry or exit, the owner persists this ledger in an otherwise authority-equal checkpoint/transaction; when an adapter boundary remains ready, that checkpoint preserves the same boundary and lets normal recovery terminalize it. A crash before the failed identity crosses a durable/external boundary loses only the in-memory candidate and safely reselects from the last durable ledger. |
+| `BuildNextExecutionEvidenceRegistryAction` | next state identity, validated prior registry, ordered new evidence/diagnostic records, and exact final prospective ID ledger | successor evidence-registry candidate | Append immutable records and bind the batch's final allocator/tombstones without allocating or reusing identity. |
+| `ValidateExecutionEvidenceRegistryAction` | evidence registry, task definitions/predicates, command/validator registries, and prior revision | evidence-registry evidence | Prove unique/monotonic IDs, resolvable predicate/diagnostic joins, immutable history, and no orphan evidence. |
+| `SerializeExecutionEvidenceRegistryAction` | validated execution-evidence registry | canonical evidence bytes | Serialize one durable evidence revision. |
+| `ParseExecutionEvidenceRegistryAction` | raw canonical evidence bytes | unvalidated evidence registry | Parse one persisted evidence revision only. |
+| `BuildInitialTaskRuntimeStateAction` | one task-definition state, validated revision-zero runtime-file state, and empty execution-evidence registry | initial runtime-state candidate | Create pending task records at revision zero and bind both current authority IDs/revisions. |
+| `SerializeTaskRuntimeStateAction` | task definition ID, runtime revision/records, and exact current runtime-file/evidence registry IDs/revisions | canonical task-runtime bytes | Serialize one mutable runtime revision. |
+| `StageCanonicalStateAction` | one canonical state payload and transaction | staged canonical-state entry | Stage one authoritative state payload. |
+| `ValidateGeneratedViewAction` | generated view, bound canonical wrapper, exact workflow-artifact/file/passive-literal registries, required reference snapshot, and recorded renderer contract | view-consistency evidence | Validate every state binding and selector/path ownership, re-resolve typed references, rerender, and compare exact bytes. |
+| `AssignTaskIdsAction` | validated topologically ordered proposal internal keys | internal-key-to-`TNNN` map | Assign canonical IDs before definition construction. |
+| `BuildRequirementIndexAction` | validated specification IR | typed requirement index | Project acceptance-criterion, functional-requirement, edge-case, business-rule, and assumption/non-goal/prohibited-behavior records into their closed variants; `requirementId` is the unchanged engine-assigned specification record ID and no generic `Requirement` or new identity is invented. |
+| `AssignResearchEvidenceRegistryStateIdAction` | plan-input authority IDs, validated current feature `StateIdLedger`, and matching single-use namespace capability | research-evidence-registry reservation plus successor ledger | Reserve one engine-owned state ID without hashing evidence. |
+| `AssignResearchEvidenceIdAction` | one validated evidence proposal, current plan ID ledger, and evidence order | research-evidence identity plus next ledger | Assign one monotonic engine-owned evidence ID without capturing content. |
+| `BuildResearchEvidenceRecordAction` | evidence identity, one validated feature/reference/repository/principle/parser/user authority, and bounded source location/value | research-evidence record | Bind one existing internal authority to the assigned evidence ID; principle evidence identifies an exact raw source span. |
+| `BuildRegistryAdapterResearchEvidenceAction` | evidence identity, one policy-authorized version-pinned read-only adapter result, trust/expiry evidence, and bounded captured value | registry-adapter evidence record | Capture external evidence under the assigned ID without permitting a command, dependency mutation, or model-authored endpoint. |
+| `BuildResearchEvidenceRegistryAction` | registry identity, exact bootstrap/feature/provenance/passive/reference bindings, and ordered evidence records | research-evidence-registry candidate | Assemble one closed plan-local evidence authority. |
+| `ValidateResearchEvidenceRegistryAction` | registry candidate and all bound canonical states/adapters | research-evidence-registry evidence | Prove every ID/owner/subject/location/trust/expiry join, unique ordering, and no orphan or expired record. |
+| `ValidateResearchDecisionEvidenceAction` | one research-decision proposal, unit-local evidence allowlist, and exact research-evidence registry | decision-evidence evidence | Require every evidence ID to resolve and be authorized; `unresolvedExternalEvidence=true` blocks plan approval, and false requires the configured minimum evidence. |
+| `AssignObligationLedgerStateIdAction` | exact plan-state input identity, validated current feature `StateIdLedger`, and matching single-use namespace capability | obligation-ledger reservation plus successor ledger | Reserve one engine-owned ledger state ID. |
+| `BuildTypedObligationAction` | one exact specification/reference/plan source record and its typed obligation rule | one obligation | Project one source-owned obligation variant without semantic regrouping. |
+| `BuildObligationLedgerAction` | ledger identity, spec/reference/plan registries, and all typed projections | full obligation ledger candidate | Assemble every public/internal obligation under one namespace. |
+| `ValidateObligationLedgerCompletenessAction` | ledger candidate and exact required upstream registries | obligation-ledger evidence | Prove one-to-one projection of requirements, visible states, exact copies, scope/non-goals/prohibitions, data/contracts/research/quickstart/accessibility/responsive/visual/value-treatment/coverage/repository prerequisites, with no omission/duplicate. |
+| `ValidateTraceReferenceAction` | one downstream source/obligation ID and ledger | reference evidence | Validate one trace reference exists. |
+| `ValidateObligationCoverageAction` | one obligation and downstream records | coverage evidence/diagnostic | Apply one obligation's typed coverage rule. |
+| `ValidateArtifactDecisionProposalAction` | one artifact-decision proposal and plan facts | applicability evidence | Validate one kind/disposition/reason without accepting a path. |
+| `BuildArtifactDecisionAction` | validated proposal and workflow artifact registry | canonical artifact decision | Copy the engine-owned file path for singleton views or `contracts/` collection root for contract views, with explicit path role. |
+| `ValidatePlanUnitProposalAction` | one route-valid plan-unit proposal and unit descriptor | plan-unit evidence | Validate the closed unit payload and local ID allowlists only. |
+| `ResolveExistingPlanFileSelectionAction` | one validated existing file ID and current file registry/unit scope | existing-file selection evidence | Resolve one already registered record without allocating or mutating a registry. |
+| `ResolvePlannedPathCandidateSelectionAction` | one validated selected path-candidate ID, intent key, and path-candidate registry | accepted absent candidate | Resolve one create candidate without assigning a file ID or checking another candidate. |
+| `JoinPlanFileSelectionAction` | one proposal key and exactly one existing/planned file record produced by the ordinary file pipeline | keyed canonical file selection | Bind one proposal-local key to one file ID; allocate nothing and reject duplicate key ownership. |
+| `ValidatePlanIntentCapabilitySelectionAction` | one planned intent/requested capability set, file-intent-capability registry, file-kind ceiling, and global delete/copy policies | intent-capability evidence | Enforce required-all/required-at-least-one/implication/sequence rules and reject unimplementable read-only updates or incoherent copy/create/replace sets. |
+| `BuildPlanFileGrantAction` | one resolved file selection, intent-capability evidence, file record, compiled kind/policy ceiling, and global delete policy | validated plan-file grant | Require present existing IDs for read/update/delete, absent plan-declared IDs for create, and copy the exact authorized capability subset without mutating file authority. |
+| `ValidatePlanFileGrantCompletenessAction` | materialized implementation shape, touched/proposed/dependency-mutation file projections, and all grants | file-grant evidence | Prove every selected/dependency file has exactly one compatible grant, no grant is orphaned, and all projections are exact. |
+| `AssignDependencyMutationSurfaceRegistryStateIdAction` | plan scope, validated current feature `StateIdLedger`, and matching single-use namespace capability | dependency-mutation-surface-registry reservation plus successor ledger | Reserve one engine-owned registry ID. |
+| `AssignDependencyMutationSurfaceIdAction` | one validated dependency proposal, current plan ID ledger, and deterministic dependency order | mutation-surface identity plus next ledger | Allocate one engine-owned surface ID without constructing the surface. |
+| `ResolveDependencyLockfileAction` | validated dependency proposal, project/package-manager facts, preset lockfile policy, and current file registry | typed existing/required-absent/none lockfile resolution | Resolve an existing `fileId`, report one required absent lockfile with exact kind/template/semantic-role/name-source IDs and the fixed `[create]` capability, or prove none; never derive a path or mutate a ledger. |
+| `BuildDependencyLockfilePathIntentAction` | one required-absent resolution, engine-assigned path-intent key, dependency proposal key, and project ID | closed dependency-lockfile path intent | Preserve the policy-selected template/kind/role/name source and fixed create capability for the ordinary enumeration/path-validation pipeline; assign no candidate/file ID and admit no generic missing field. |
+| `BuildDependencyLockfileSelectionAction` | one existing resolution or ordinary-pipeline planned file record and matching dependency proposal | canonical existing/create/none lockfile selection | Join one proven result to the dependency key without building a grant, registry, or implementation-shape projection. |
+| `BuildDependencyLockfileGrantAction` | materialized absent lockfile record, file-intent-capability evidence, file-kind ceiling, and global policy | validated create grant | Build only the create/copy/replace capability grant required by the dependency command. |
+| `BuildDependencyMutationFileProjectionAction` | dependency proposal, exact manifest/lockfile records, setup design unit, and validated grants | dependency-mutation file projection | Project existing manifest/lockfile IDs into touched files and absent lockfile IDs into proposed files/implementation shape. |
+| `MergeDependencyMutationFileProjectionAction` | current plan candidate and one validated projection | next plan candidate | Union the dependency file IDs exactly once before implementation-shape/file-grant completeness checks. |
+| `BuildDependencyMutationSurfaceAction` | surface identity, one validated dependency proposal, exact manifest/lockfile result, and compatible command descriptors | dependency-mutation surface | Bind every file/command that the later setup task may mutate without assigning identity. |
+| `BuildDependencyMutationSurfaceRegistryAction` | registry identity, ordered built surfaces, and final file-registry identity | mutation-surface registry candidate | Assemble exactly one registry without validating it. |
+| `ValidateDependencyMutationSurfaceRegistryAction` | registry candidate, all dependency proposals, final file registry/grants, and command/dependency policies | validated mutation-surface registry | Prove one surface per proposal and matching manifest/lockfile create/update grants/capabilities; reject a dependency whose required setup task would be impossible. |
+| `BuildInitialPlanIdLedgerAction` | enabled plan record kinds | empty plan ID ledger | Initialize monotonic design-unit/entity/field/contract/scenario/research-evidence/research-decision/dependency/mutation-surface/path-candidate/review-unit allocators and all tombstones. |
+| `ValidatePlanLocalKeyAction` | one proposal-local key, key kind, and unit scope | local-key evidence | Apply the closed grammar and prove uniqueness without treating the key as canonical identity. |
+| `BuildPlanProposalIndexAction` | all validated implementation-shape/data-model/contract/quickstart/research/dependency/coverage proposals | complete local-key index | Join qualified keys to their proposal records and reject duplicate ownership. |
+| `ValidatePlanProposalReferenceAction` | one local-key or allowed upstream-ID reference and complete proposal/upstream index | proposal-reference evidence | Resolve design/entity/relationship/scenario/obligation references without assigning IDs. |
+| `AssignPlanRecordIdsAction` | complete valid proposal index and current plan ID ledger | plan-local key map and next ledger | Sort each kind by closed kind rank plus Unicode-scalar qualified key and assign monotonic engine IDs. |
+| `BuildImplementationShapeAction` | validated implementation-shape proposal, resolved file IDs, and key map | canonical implementation shape | Replace unit keys with engine design-unit IDs and preserve validated prose/file IDs. |
+| `BuildDataModelIRAction` | validated data-model proposal and key map | canonical data-model IR | Replace entity/field/relationship keys with engine IDs without changing business content. |
+| `ValidateContractProposalBodyAction` | one `ContractValueProposal`, exact registered schema/version, identifier grammars, unit file/source/passive/endpoint allowlists, and superset path-token grammar | schema-validated contract value | Validate the complete closed shape and each typed leaf; reject raw path/URI-shaped identifiers and unresolved authority IDs. |
+| `BuildContractIRAction` | one contract proposal with schema-validated body and key map | canonical contract IR | Replace its contract key with one engine ID and retain the validator-produced body. |
+| `BuildQuickstartScenarioAction` | one validated scenario proposal, key map, and validated command/requirement/file references | canonical quickstart scenario | Replace the scenario key with one engine ID and retain only validated selections. |
+| `BuildResearchDecisionAction` | one evidence-valid research proposal and key map | canonical research decision | Replace its decision key with one engine ID without changing validated evidence/content. |
+| `ValidateDependencyProposalPolicyAction` | one dependency proposal, project/manifest/file registries, compiled ecosystem package-name/version grammar, configured registry-source authority, and dependency policy | dependency-policy evidence | Resolve the allowlisted target project and its exact manifest file ID, then validate registry source, ecosystem compatibility, package identity, version constraint, scope, duplication, and allow/deny policy without installing anything. |
+| `BuildDependencyPlanRecordAction` | one validated dependency proposal, its exact mutation-surface ID, and key map | canonical dependency record | Replace its dependency key with one engine ID and bind the validated project/manifest/lockfile mutation authority. |
+| `ValidateEvidenceExpectationProposalAction` | one plan-stage evidence expectation and plan-known command/file/parser/scenario registries | expectation evidence | Validate only plan-known authorities; task IDs and task-bound predicates are schema-impossible. |
+| `BuildEvidenceExpectationAction` | one validated expectation proposal and plan key map | canonical evidence expectation | Resolve scenario/command references without creating a task predicate. |
+| `BuildCoverageEntryAction` | one validated coverage proposal, canonical expectations, key map, and obligation registry | canonical coverage entry | Resolve design-unit/scenario keys and upstream IDs exactly. |
+| `AssignSourceReferenceAuthorityRegistryStateIdAction` | final plan/file/dependency/contract/passive authority IDs, validated current feature `StateIdLedger`, and matching single-use namespace capability | source-reference-authority-registry reservation plus successor ledger | Reserve one plan-local registry ID. |
+| `BuildSourceReferenceAuthorityRegistryAction` | registry identity, existing dependency facts, planned dependencies, file registry, canonical contracts/endpoints/resources/external-endpoint policy, and passive registry | source-reference-authority candidate | Assemble every source-code reference target without resolving source occurrences. |
+| `ValidateSourceReferenceAuthorityRegistryAction` | authority candidate and exact bound registries/policies | source-reference-authority evidence | Prove total/unique IDs and source joins, package grammars, endpoint scheme/host/operation rules, resource ownership, and inert-only passive targets. |
+| `BuildContractViewRegistryAction` | canonical contracts, workflow contract collection root, schema-to-extension table, and renderer contract | contract-view registry candidate | Allocate each view path solely from engine contract ID plus registered extension. |
+| `ValidateContractViewRegistryAction` | contract-view registry candidate, canonical contracts, workflow root, and portability policy | contract-view evidence | Prove total one-to-one coverage, containment, extension/schema agreement, and no host/target collision. |
+| `AssignPlanReviewUnitRegistryStateIdAction` | plan scope, validated current feature `StateIdLedger`, and matching single-use namespace capability | review-unit-registry reservation plus successor ledger | Reserve one immutable registry state ID. |
+| `AssignPlanReviewUnitIdAction` | one canonically ordered reviewable plan record and current plan ID ledger | identified review-unit selector plus next ledger | Retain fixed selectors or assign one monotonic review-unit ID without prose matching. |
+| `BuildPlanReviewUnitRegistryAction` | registry identity and all identified review-unit selectors | review-unit registry candidate | Assemble the complete registry without assigning IDs. |
+| `ValidatePlanReviewUnitRegistryAction` | review-unit registry candidate and canonical plan | review-unit evidence | Prove every reviewable record has exactly one stable selector and no orphan target. |
+| `MergePlanUnitAction` | one validated/materialized unit and current plan candidate | next plan candidate | Insert one unit by its closed kind and reject duplicate singleton ownership. |
+| `ValidatePlanCandidateCompletenessAction` | assembled plan candidate and artifact applicability policy | plan-completeness evidence | Prove every required unit and required artifact payload is present exactly once. |
+| `BuildPlanIRAction` | complete validated plan candidate | canonical plan IR | Construct one plan authority without assigning state identity. |
+| `RenderSpecificationAction` | validated specification IR, exact passive-literal registry state, required bound reference snapshot, and renderer contract | Markdown candidate | Render `spec.md`, resolving passive display nodes and exact-copy tokens only from bound authorities. |
+| `RenderPlanArtifactAction` | validated `PlanState`, artifact selector, exact passive-literal registry state, required bound reference snapshot, and renderer contract | Markdown/data candidate | Render one plan output while resolving file/source/passive nodes from the state's exact registries/snapshot. |
+| `RenderTasksAction` | task definition state, task runtime revision, input `PlanState` file registry, exact passive-literal registry state, required bound reference snapshot, and renderer contract | Markdown candidate | Render definitions, controlled source/path/passive labels, and engine-owned checkbox/runtime projection. |
+| `BuildGeneratedViewAction` | artifact selector, rendered bytes, exact canonical-state binding, workflow artifact registry, optional exact `ContractViewRegistry`, and renderer contract version | generated-view candidate | Resolve singleton paths from workflow authority or a contract selector from its bound per-contract registry, then construct one complete read-only view without writing it. |
+| `ValidateEditableSpecificationRenderAction` | rendered `spec.md` and specification IR | round-trip evidence | Reparse only the editable specification and compare normalized IR. |
+| `BuildEditableSpecificationViewAction` | validated rendered bytes, exact specification/provenance/acknowledgement/clarification/passive/reference bindings, workflow artifact registry, and renderer contract | editable-specification-view candidate plus its exact `EditableSpecificationViewAuthorityBinding` projection | Bind the engine-owned `spec.md` path and protected-structure contract, and project every non-content field a later edit must echo, without writing or treating later edits as canonical. |
+| `ValidateEditableSpecificationViewAction` | editable-view candidate and every bound canonical authority | editable-view evidence | Prove selector/path/editability, exact state joins, renderer version, protected structure, and round-trip IR before transaction staging. |
+| `CaptureReviewSubmissionAction` | raw review event and runner-held submission/authentication-lease table | immutable run-local review-submission handle/candidate | Capture expected workflow revision, exact plan/task target, decision, bounded feedback bytes, and target-unit IDs; keep the lease opaque and perform no authentication or durable ID assignment. |
+| `ValidateReviewSubmissionAction` | captured review submission, current workflow/plan-or-task/review-unit/review-decision authorities, text policy, and review policy | validated review submission or stale/structural diagnostic | Before authentication, prove exact target/current workflow revision, stage-compatible approve/reject shape, complete valid target-unit references, and canonicalize bounded feedback into durable `BusinessText`; raw invocation handles cannot survive. |
+| `BindAuthenticatedReviewSubmissionAction` | validated review submission and validated fresh actor evidence for its exact plan/tasks review kind | authenticated review-submission binding | Bind submission ID, target/decision, actor/evidence, and event kind after freshness validation; assign no decision ID. |
+| `AssignReviewDecisionIdAction` | authenticated review-submission binding, unchanged validated review submission, and current review-decision registry | reserved review-decision allocation | Reserve the exact next monotonic ID only after authentication is bound, and return its input revision/ordinal/next-ordinal delta without building a decision. |
+| `AssignReviewSubmissionIdAction` | reserved review-decision ID and compiler-locked singleton `review` slot | owner-local review-submission identity | Construct `(reviewDecisionId, review)` after decision allocation; consume no second ledger or caller/model scalar. |
+| `BuildReviewDecisionAction` | decision/submission identities, authenticated review-submission binding, unchanged validated review submission with canonical feedback, and exact plan/task-definition target ID | review-decision candidate | Build one actor-bound approve/reject record carrying only durable text and the owner-local submission ID. |
+| `ValidateReviewDecisionAction` | decision candidate, current target/review-unit/actor authorities, and review policy | review-decision evidence | Prove target/revision freshness, actor-evidence equality, allowed targeted feedback, and approve/reject shape. |
+| `AssignReviewDecisionRegistryStateIdAction` | feature ID, optional prior review registry, validated current feature `StateIdLedger`, and matching single-use namespace capability | review-registry-state reservation plus successor ledger | Reserve one immutable registry revision ID. |
+| `BuildInitialReviewDecisionRegistryAction` | feature ID and revision-zero state identity | empty review-decision registry | Initialize next decision ordinal to one and no active approvals. |
+| `AppendReviewDecisionAction` | validated prior registry, next state identity, exact reserved allocation, and one validated matching decision | next review-decision registry candidate | Compare-and-swap the allocator delta, append immutable history, and consume the reservation; approval activity is projected by the same review transaction into `WorkflowState.activeApprovalDecisionIds`. |
+| `RetireReviewDecisionAllocationAction` | validated prior registry, next state identity, exact reserved allocation, and terminal construction/validation diagnostic | next review-decision registry candidate with tombstone | Consume one failed reservation by advancing the ordinal and adding its ID to `retiredReviewDecisionIds`; never append a decision or reuse the ID. |
+| `ValidateReviewDecisionRegistryAction` | candidate, optional prior registry, current plan/task definitions, actor registry, and invalidation records | review-registry evidence | Prove append-only unique IDs, monotonic allocation, target/actor joins, and that every workflow-active or invalidated approval decision ID resolves; rework never mutates old decision history. |
+| `ParseReviewDecisionRegistryAction` | raw canonical review-state bytes | unvalidated review-decision registry | Parse one persisted review-registry revision without treating its decisions as active approvals. |
+| `SerializeReviewDecisionRegistryAction` | validated review-decision registry | canonical review-state bytes | Serialize review history without credentials or free-standing approval booleans. |
+| `ValidateReviewApprovalAction` | plan state ID or task-definition state ID, validated current review-decision registry, and workflow active-approval projection | approval authorization | Require one workflow-active approve decision whose registry record exactly targets the current immutable definition state and is absent from every applicable invalidation record. |
+| `AssignWorkflowControlEventRegistryStateIdAction` | feature ID, optional prior control registry, validated current feature `StateIdLedger`, and matching single-use namespace capability | control-event-registry-state reservation plus successor ledger | Reserve one immutable registry revision ID. |
+| `BuildInitialWorkflowControlEventRegistryAction` | feature ID and revision-zero state identity | empty workflow-control-event registry | Initialize final-validation/rework/evidence-invalidation ordinals to one and all event/tombstone sets empty. |
+| `BuildWorkflowControlEventAppendSequenceAction` | one closed `StageTransitionKind`, its versioned control-event-append policy, and validated candidate records | ordered control-event append descriptors | Before transaction construction, derive the exact set/order only: final failure/completion appends one final record; localized remediation appends one evidence invalidation; reference-revision/rework/reconciliation appends rework invalidation then optional/required evidence invalidation; specification-acknowledgement ID retirement and other non-control mutations produce the locked empty sequence. |
+| `AppendWorkflowControlEventAction` | validated prior registry, next state identity, next matching namespace ledger, and exactly one validated final-validation/rework/evidence-invalidation record | next workflow-control-event registry candidate | Append one immutable control event and advance only its namespace; build or validate no event. |
+| `ValidateWorkflowControlEventRegistryAction` | candidate, optional prior registry, workflow/task/evidence/review authorities, and all referencing transactions/states | control-event-registry evidence | Prove append-only histories, unique monotonic IDs/tombstones, every event join, and that active workflow final/rework pointers resolve exactly. |
+| `ParseWorkflowControlEventRegistryAction` | raw canonical control-event bytes | unvalidated control-event registry | Parse one persisted registry revision only. |
+| `SerializeWorkflowControlEventRegistryAction` | validated control-event registry | canonical control-event bytes | Serialize restart-safe final-validation and invalidation history. |
+
+For a transaction that needs two control events, the orchestrator statically invokes `AppendWorkflowControlEventAction` twice against successive in-memory registry candidates in the sequence above. Only the final validated registry revision is staged with the transaction. The intermediate candidate is neither persisted nor externally visible; validators prove both parent links and require the transaction's event records to equal the exact appended suffix.
+| `MapReviewFeedbackAction` | rejected review feedback and unit registry | targeted feedback records | Resolve feedback to explicit plan/task unit IDs. |
+| `InvalidateDescendantStateAction` | authorized rework transition and state graph | invalidated-state delta | Invalidate declared descendant states/approvals only. |
+
+### 13.6 Project path and static-validation actions
+
+| Action | Input | Output | Single responsibility |
+|---|---|---|---|
+| `BuildRepositoryTraversalBudgetAction` | validated project-discovery limits, compiled exclusion rules, and root-access registry | repository traversal capability | Bind file-count/depth/time/memory ceilings and immutable pre-descent prune rules for one project scan. |
+| `EnumerateProjectFilesAction` | one contained project root and repository traversal capability | bounded unordered inventory plus prune records | Discover entries without classifying/minting IDs; record and do not descend into an excluded or inaccessible subtree. |
+| `ValidateProjectInventoryEntryAction` | one raw OS directory entry and owning project | canonical existing-file entry | Require UTF-8/NFC relative path, no-follow containment, allowed regular-file type, and valid owner. |
+| `ClassifyProjectInventoryAccessAction` | one canonical entry and compiled root/generated policy | ordinary, generated-read-only, or inaccessible classification | Apply root access before file-kind inference and record the exact rule ID. |
+| `ValidateProjectInventoryAccountingAction` | raw entries, prune records, and classified canonical entries | inventory-accounting evidence | Prove every encountered entry is registered, rejected, or covered by an authorized pre-descent prune record. |
+| `DetectProjectInventoryCollisionAction` | canonical existing-file entries and compiled portability-policy set | inventory-collision evidence | Reject duplicate or host/target-equivalent existing paths before ordering. |
+| `SortProjectFileInventoryAction` | collision-free normalized existing paths | ordered existing-file inventory | Sort once by project ID then normalized Unicode-scalar path. |
+| `BuildPathNameSourceRegistryAction` | validated specification/entity/plan-role records and naming-source policy | path-name-source registry | Assign engine IDs to the exact allowed semantic name sources without creating paths. |
+| `ValidatePathIntentProposalAction` | one ID-only path intent, project/kind/role/name-source/anchor registries, and plan unit scope | path-intent evidence | Resolve every supplied ID and allow only create/copy-destination requests; accept no filename. |
+| `SelectPresetPathTemplateAction` | one valid path intent and compiled preset templates | ordered applicable templates | Select exact kind/role/placement templates using stable template IDs. |
+| `EnumerateProjectPathCandidateAction` | one valid intent, one selected template, exact name-source text, and bound roots/placement anchor | raw engine path candidate | Apply the versioned name transform and directory strategy once; do not validate or assign identity. |
+| `AssignPathCandidateIdAction` | one fully path-valid ordered candidate and current plan ID ledger | identified path candidate plus next ledger | Assign one monotonic engine-owned candidate ID without deriving it from path bytes; retire failed allocations and never reuse them. |
+| `AssignPathCandidateRegistryStateIdAction` | plan scope, input file-registry identity, validated current feature `StateIdLedger`, and matching single-use namespace capability | path-candidate-registry reservation plus successor ledger | Reserve one immutable registry state ID. |
+| `BuildPathCandidateRegistryAction` | registry identity, input file/name-source states, and all identified valid candidates | path-candidate registry candidate | Assemble the complete finite selection set without choosing a file. |
+| `ValidatePathCandidateRegistryAction` | registry candidate, path intents/templates, file registry, and all path-rule evidence | path-candidate evidence | Prove total intent coverage, exact derivation, uniqueness, and no existing/cross-platform collision. |
+| `ValidatePathCandidateSelectionAction` | one model-selected candidate ID, exact path-candidate registry, and current plan unit | selected candidate evidence | Resolve one current unit-allowed candidate without accepting a path string. |
+| `ValidateRawPathFallbackPolicyAction` | one raw fallback selection, explicit engine flag/preset support, and path intent | fallback authorization | Reject by default; when explicitly enabled, require the full raw candidate to match the same intent before normal path validation/atomic repair. |
+| `NormalizeProjectPathAction` | raw model path field | normalized lexical path | Validate UTF-8, normalize Unicode to NFC, canonicalize literal separators, and remove literal dot segments without percent decoding. |
+| `ValidateLexicalPathSafetyAction` | normalized path | lexical path evidence | Reject absolute, traversal, control, URI, drive/UNC, and direct/repeated percent-encoded dot or separator forms. |
+| `ValidatePathContainmentAction` | lexically safe path and workspace | contained path | Enforce root and existing-ancestor containment. |
+| `ValidateRootAccessClassAction` | contained path, intent/capability, file provenance, and compiled root registry | root-access evidence | Apply one access class; only an engine-issued `generated_existing` read may pass `generated_read_only`. |
+| `RegisterGeneratedReadInputAction` | discovered existing generated file and preset read policy | read-only generated `FileRecord` | Mint one engine-issued generated input ID without model path authority. |
+| `ValidateDeclaredProjectOwnershipAction` | declared project ID, contained path, and project/environment registry | matching ownership evidence | Prove the path belongs to the declared project; never substitute another owner. |
+| `InferExistingFileKindAction` | one ownership-valid existing path and compiled kind languages | unique inferred kind | Select the unique highest-priority compatible existing kind or diagnose ambiguity. |
+| `AssignFileIdAction` | one ordered existing file or accepted planned path and file-ID ledger | identified file candidate | Allocate one monotonic file ID without path hashing. |
+| `BuildExistingFileRecordAction` | identified existing path, ownership, inferred kind, and compiled policy-capability ceiling | existing file record | Construct one `repository_existing` record with `present` state and no plan grant. |
+| `BuildPlannedFileRecordAction` | identified accepted absent create-path candidate, ownership, kind, and compiled policy-capability ceiling | planned file record | Construct one `plan_declared` record with engine-derived `absent` state and no embedded grant. |
+| `ValidateFileRegistryCollisionAction` | one file record and current registry | registry uniqueness evidence | Reject duplicate IDs, canonical paths, or cross-platform-equivalent paths. |
+| `AssignBootstrapDiscoveryFileRegistryStateIdAction` | prospective bootstrap-authority-state ID and singleton discovery-file component descriptor | owner-local discovery-file-registry identity | Construct the registered bootstrap-component tuple without consuming a generic state ledger. |
+| `AssignFileRegistryStateIdAction` | plan scope, optional prior plan file registry, validated current feature `StateIdLedger`, and matching single-use namespace capability | plan file-registry-state reservation plus successor ledger | Reserve one immutable plan-owned registry state ID. |
+| `BuildFileRegistryStateAction` | registry identity, ordered validated file records, next file-ID allocator/tombstones, and prior registry revision if any | file-registry-state candidate | Assemble one complete versioned file registry. |
+| `ValidateFileRegistryStateAction` | registry candidate, prior revision, project/environment/kind/root/portability authorities | file-registry evidence | Prove ID/path uniqueness, monotonic allocation, immutable retained records, ownership, expected existence, capability ceilings, and host/target collision freedom. |
+| `ValidateDeclaredFileKindAction` | project path, declared kind, preset | kind evidence | Validate the declared role exists. |
+| `ValidatePathOperationAction` | declared kind and planning intent | operation evidence | Validate one read/create/update/delete planning permission. |
+| `ValidatePathRootAction` | project path and kind roots | root evidence | Validate one segment-aware root policy. |
+| `ValidatePathIncludeExcludeAction` | project path and one typed include/exclude rule | filter evidence | Apply one kind-policy filter. |
+| `EvaluatePathIncludeExcludeSetAction` | complete include/exclude match evidence for one containing policy | filter-set authorization | Apply empty-include/any-include/exclude-wins semantics once. |
+| `ValidateBasenameAction` | basename and kind | basename evidence | Apply exact/glob/regex name rules. |
+| `ValidateExtensionAction` | basename and kind | extension evidence | Apply longest compound-extension rules. |
+| `ValidateFilenamePortabilityAction` | normalized relative path, canonical workspace/project root, and compiled portability-policy set | portability evidence | Apply target relative limits and host joined absolute-path Unicode/name/case/length rules. |
+| `ValidateCaseFoldCollisionAction` | normalized path, compiled portability-policy set, and file registry | collision evidence | Detect one host or target path collision. |
+| `ValidateExpectedTargetStateAction` | file record, plan grant, canonical operation, current runtime-file-state record/revision, and no-follow target metadata | target-state evidence | Validate the operation-specific current presence/absence, regular-file type, and descriptor revision without trusting the immutable plan baseline after execution starts. |
+| `AssignFileStateTransitionIdAction` | operation record and exact current `TaskExecutionIdLedger` revision | file-state-transition identity plus allocation delta | Select one engine-owned transition ordinal before construction. |
+| `BuildFileStateTransitionAction` | transition identity, operation record, target-state evidence, and current runtime-file-state revision | file-state-transition candidate | Derive the exact before/after lifecycle transition without applying it. |
+| `ApplyFileStateTransitionAction` | promoted operation evidence, transition candidate, and matching runtime-file-state revision | next runtime-file-state revision | Compare-and-swap one file's existence/descriptor state and record the operation ID. |
+| `ValidateFileAuthorizationAction` | file ID, operation, and plan/task authorization registry | authorization evidence | Validate one downstream file permission. |
+| `ValidateTestPlacementAction` | test path, source mapping, resolved source-root IDs, and preset | placement evidence | Enforce co-located/mirrored/module-root rules without nearest-root guessing. |
+| `ValidateProjectSemanticNameAction` | path and parsed source | semantic filename evidence | Apply Java/C# or configured language rules. |
+| `OpenValidatedCommitTargetAction` | prepared target descriptor and current ancestors | descriptor-bound no-follow target token | Revalidate and open one race-safe target immediately before apply. |
+| `ValidateFileReferenceNodeAction` | one typed file-reference node, file registry, and current route/unit allowlist | reference evidence | Resolve one known and locally authorized `fileId`. |
+| `ValidateSourceReferenceNodeAction` | one typed source-reference node, reference state, and current route/unit allowlist | reference evidence | Resolve one known and locally authorized `sourceId`. |
+| `RejectUnboundPathTokenAction` | one model-authored `LiteralText` or `BusinessLiteralText` segment and version-bound superset path-token grammar | prose-path evidence | Reject one inline path/URI/filename lexeme without resolving or authorizing it. |
+| `ParseSourceAction` | source bytes and parser ID | AST/parse diagnostics | Parse one source file. |
+| `ExtractImportsAction` | AST and query ID | import records | Execute one import query. |
+| `ResolveImportsAction` | import records and resolver | resolution evidence | Resolve referenced modules. |
+| `ExtractStaticPathReferenceAction` | containing file ID, AST, parser ID, and one registered import/path/resource/endpoint/display query | static-reference occurrence proposal | Extract one exact source range/scalar/context without assigning target or identity. |
+| `AssignStaticReferenceOccurrenceIdAction` | one source-ordered occurrence proposal and file-operation-local allocator | static-reference occurrence | Assign one engine ID while preserving parser/query/range/context/raw scalar. |
+| `ResolveStaticPathReferenceAction` | one occurrence, exact `SourceReferenceAuthorityRegistry`, containing file/project aliases, and preset resolver | static-reference resolution or diagnostic | Resolve exactly one project file, existing/planned package, contract/runtime/external endpoint, or inert display target. |
+| `ValidateStaticReferenceContextCompatibilityAction` | occurrence, resolution, and exact authority record | context evidence | Permit package only for module syntax, files/resources only in compatible contexts, endpoint schemes/hosts/operations exactly, and passive literals only in parser-proven display-only contexts. |
+| `ScanConservativeContentPathTokenAction` | one model-authored text body and registered fallback grammar | unresolved path-token candidates | Scan text surfaces not claimed by a registered parser/extractor. |
+| `BuildContentReferenceCoverageAction` | containing file ID, parser-covered/fallback-covered ranges, occurrences, resolutions, and rejected fallback candidates | content-reference-coverage candidate | Assemble one file-operation-local coverage record without declaring validity. |
+| `ValidateContentReferenceCoverageAction` | coverage candidate, model-authored byte ranges, exact source-reference authority, parser/query/fallback policy | coverage evidence | Prove every byte is claimed by a registered extractor or conservative scanner and every path-like occurrence has exactly one context-compatible resolution or explicit rejection; unknown/dynamic operational references block. |
+
+### 13.7 Task and implementation actions
+
+Inside one leased task execution, every input described below as a task-local, task-execution, attempt, record, transition, journal, savepoint, authorization, or checkpoint “allocator” is a namespace capability for the exact current `TaskExecutionIdLedger` revision. An assigning action has only one identity responsibility: it returns the ID plus a single-namespace `TaskExecutionIdAllocationDelta`. The runner must pass that exact delta to `AdvanceTaskExecutionIdLedgerAction` before any later builder. If a post-allocation builder fails, `RetireTaskExecutionAllocatedIdAction` produces the tombstone delta and the same advance action persists its successor; the ID is never reused. The next durable checkpoint includes every successor ledger. No task allocator exists only in process memory. Copy-source IDs are the explicitly documented closed structural tuples derived by `DeriveCopySourceRegistryIdAction` and `DeriveCopySourceIdAction`; stage-level final-validation command IDs use separately documented run-scoped structural tuples and never consume a task ledger.
+
+| Action | Input | Output | Single responsibility |
+|---|---|---|---|
+| `ValidateTaskDefinitionProposalSchemaAction` | one model task proposal | schema evidence | Apply the closed proposal schema that excludes canonical IDs/origins/evidence/locks. |
+| `AssignObligationPartitionStateIdAction` | exact obligation-ledger ID, validated current feature `StateIdLedger`, and matching single-use namespace capability | obligation-partition reservation plus successor ledger | Reserve one immutable partition-state ID. |
+| `BuildObligationClustersAction` | partition identity, complete obligation ledger, route descriptor, and stable phase/project/kind ordering policy | deterministic obligation clusters | Partition by closed affinity keys and ceilings, using a singleton fallback; do not interpret semantics. |
+| `ValidateObligationClusterCoverageAction` | clusters, exact ledger, route request estimator, and partition contract | cluster-coverage evidence | Prove every obligation appears exactly once, every cluster fits byte/token limits, ordering is canonical, and an oversized singleton blocks rather than truncates. |
+| `ValidateTaskProposalPartitionAccountingAction` | all cluster calls/proposals and obligation partition | task-proposal accounting evidence | Prove one final call outcome per cluster and every proposed obligation remains inside its cluster allowlist. |
+| `ValidateTaskExecutabilityAction` | one schema-valid task proposal | executability evidence | Require one concrete file/check/scenario responsibility. |
+| `ValidateTaskObligationReferenceAction` | one task `obligationId` and task-local obligation allowlist | obligation-reference evidence | Resolve only the closed `ObligationLedger` namespace. |
+| `ValidateTaskPhaseKindAction` | one task phase/kind/mode tuple | phase-kind evidence | Apply the verification compatibility matrix. |
+| `ValidateCommandSelectionAction` | one command selection and task/plan-local command allowlist | command-selection evidence | Validate known ID and typed arguments without accepting an origin. |
+| `BuildCommandInvocationAction` | one validated selection and engine-required/model-optional derivation | canonical command invocation | Assign the invocation origin from engine context only. |
+| `ValidateTaskFileSelectionAgainstPlanGrantAction` | one proposal read/write file ID, role, exact `PlanFileGrant`, and file-kind/global policy | task-file-selection evidence | Require read capability for reads and at least one intent-compatible mutation capability for writes; reject an ID outside the plan. |
+| `ValidateTaskFileSelectionCompletenessAction` | one proposal, its responsibility/obligations/dependency surface, and all selection evidence | task-file-scope evidence | Prove mandatory manifest/lockfile/source/test targets are present and read/write sets are nonconflicting and sufficient. |
+| `ResolveTaskInternalReferenceAction` | one internal-key dependency or red-to-green target and assigned task-ID map | canonical task reference | Resolve one internal key to one existing task ID. |
+| `DeriveTaskEvidenceAction` | task proposal, plan evidence expectations, canonical commands, preset evidence policy, and resolved task IDs | mandatory evidence-predicate values | Construct closed values, including red-to-green targets, without model-owned canonical fields or IDs. |
+| `AssignTaskEvidencePredicateIdsAction` | one task ID, ordered predicate values, and task-definition allocator | identified evidence predicates | Assign stable engine predicate IDs after every task/red-to-green target ID resolves. |
+| `ValidateTaskEvidencePredicateCompletenessAction` | identified predicates, task/plan expectations, file/command/scenario registries, and policy | predicate-completeness evidence | Prove unique IDs, exact required coverage, valid joins, and no model-added completion condition. |
+| `BuildSharedResourceRegistryAction` | project/file/command adapter facts | shared-resource registry | Build the closed set of resource IDs and modes. |
+| `ValidateTaskSharedResourceIdAction` | one engine-derived resource ID and shared-resource registry | resource-reference evidence | Validate one known resource and compatible lock mode. |
+| `DeriveTaskResourceLocksAction` | task file/command sets and resource registry | mandatory lock records | Derive locks implied by one task's operations. |
+| `BuildTaskDefinitionAction` | assigned task ID, validated proposal, canonical commands/evidence, and resource IDs | canonical task definition | Construct one engine-owned task record. |
+| `AssignTaskFileCapabilityRegistryStateIdAction` | task-definition scope, validated current feature `StateIdLedger`, and matching single-use namespace capability | task-file-capability-registry reservation plus successor ledger | Reserve one immutable registry ID after canonical task IDs exist. |
+| `BuildTaskFileCapabilityRecordAction` | canonical task/file/role, task-file-selection evidence, exact plan grant, file-kind ceiling, and global policy | task-file-capability record | Materialize the exact per-task intersection without broadening plan authority. |
+| `BuildTaskFileCapabilityRegistryAction` | registry identity, all canonical tasks, and all capability records | task-file-capability-registry candidate | Assemble the closed task/file matrix. |
+| `ValidateTaskFileCapabilityRegistryAction` | registry candidate, task graph, PlanState grants/file registry, and policy | task-file-capability evidence | Prove total read/write coverage, exact intersections, no orphan records, and dependency mutation-surface sufficiency. |
+| `BuildFactTransitionBindingAction` | one transition-required plan fact, task graph, and transition-rule registry | fact-transition binding | Bind one fact to one concrete task/rule after task IDs exist. |
+| `ValidateFactTransitionBindingAction` | one binding, plan fact, and task definition | transition-binding evidence | Prove task scope/capability can perform the declared transition. |
+| `BuildTaskProposalGraphAction` | validated task proposals and internal-key dependency proposals | proposal graph | Construct one pre-ID graph using internal keys only. |
+| `ValidateTaskDependencyProposalAction` | one route-valid `TaskDependencyProposal`, current partition allowlist, and semantic-text validators | edge-proposal evidence | Validate both internal keys and bounded reason without accepting a canonical basis or task ID. |
+| `BuildTaskProposalDependencyAction` | validated edge proposal and reconciliation invocation kind | canonical proposal edge | Copy keys/reason and set `basis: semantic_reconciliation`; the model cannot choose basis. |
+| `ValidateTaskProposalDependencyTargetAction` | one canonical proposal edge and internal-key index | target evidence | Reject an unknown/self internal key. |
+| `DetectTaskProposalCycleAction` | proposal graph | acyclicity evidence | Detect pre-ID cycles only. |
+| `ValidateTaskProposalPhaseEdgeAction` | one proposal edge and phase policy | phase-edge evidence | Apply phase direction rules before ID assignment. |
+| `TopologicallyOrderTaskProposalsAction` | validated acyclic proposal graph and stable tie-break policy | ordered internal keys | Calculate one deterministic pre-ID order. |
+| `AssignCompactTaskIndexStateIdAction` | tasking scope, validated current feature `StateIdLedger`, and matching single-use namespace capability | compact-task-index reservation plus successor ledger | Reserve one immutable index ID. |
+| `BuildCompactTaskIndexAction` | index identity and all validated provisional tasks | compact global task index | Build one complete model-safe dependency index. |
+| `ValidateCompactTaskIndexAction` | compact index and all provisional proposals | compact-index evidence | Prove one-to-one task coverage and exact projected phase/kind/obligation/file/mode fields. |
+| `AssignTaskDependencyPartitionStateIdAction` | compact-task-index ID, validated current feature `StateIdLedger`, and matching single-use namespace capability | task-edge-partition reservation plus successor ledger | Reserve one immutable dependency partition-state ID. |
+| `AssignTaskBoundaryIndexStateIdAction` | compact-task-index identity, validated current feature `StateIdLedger`, and matching single-use namespace capability | task-boundary-index reservation plus successor ledger | Reserve one engine-owned boundary-index state ID. |
+| `BuildTaskBoundaryIndexAction` | boundary-index identity, exact compact index, phase policy, shared write sets, and red-to-green links | task-boundary index | Derive mechanical boundary facts without inventing semantic edges. |
+| `PartitionTaskDependencyIndexAction` | partition identity, compact index, boundary index, route ceilings, and stable pair ordering | task-edge partitions | Cover required semantic candidate pairs with bounded overlapping visibility sets. |
+| `ValidateTaskDependencyPartitionCoverageAction` | edge partitions, compact/boundary indexes, and partition contract | edge-partition evidence | Prove every required pair/boundary appears in at least one partition, every call fits ceilings, and no unknown key appears. |
+| `MergeValidatedTaskDependencyAction` | one validated internal-key edge and proposal graph | updated proposal graph | Merge one semantic dependency before final ordering. |
+| `ValidateTaskDependencyMergeCompletenessAction` | all partition outcomes, deduplicated validated edges, engine-derived/explicit edges, and edge-partition evidence | dependency-merge evidence | Prove every partition completed, duplicate equal edges coalesced, conflicting reasons/bases diagnosed, and no proposed edge was dropped. |
+| `BuildTaskDependencyAction` | one validated proposal edge and both exact internal-key-to-task-ID resolutions | canonical task dependency | Replace both keys with task IDs while preserving the engine-owned basis and validated reason. |
+| `ValidateTaskDependencyConversionCompletenessAction` | all canonical dependencies, final proposal edges, and task-ID map | dependency-conversion evidence | Prove one-to-one edge conversion, no duplicate/orphan edge, and exact basis/reason preservation. |
+| `BuildTaskGraphAction` | canonical tasks and ID-resolved dependency/lock records | canonical task graph | Construct one final graph using task IDs only. |
+| `ValidateCanonicalTaskGraphAction` | canonical graph and internal-key-to-task-ID map | canonical-graph evidence | Recheck node/edge/lock completeness, phase rules, and acyclicity after resolution. |
+| `CalculateParallelEligibilityAction` | one task pair, DAG, paths, locks | pair eligibility evidence | Decide one pair's concurrency eligibility. |
+| `CalculateRunnableSetAction` | task graph and execution journal | ordered runnable task IDs | Calculate currently ready tasks only. |
+| `SelectRunnableTaskAction` | ordered runnable set | one task or terminal state | Select next task deterministically. |
+| `ClaimTaskLeaseAction` | selected task and lock set | task lease | Atomically mark executing and reserve locks. |
+| `ReleaseTaskLeaseAction` | task lease and terminal task outcome | candidate lease/lock release delta | Build one release delta without persisting it. |
+| `DeriveCopySourceRegistryIdAction` | exact task-definition/task/lease identities, task-base-overlay revision, and registry-contract version | closed structural copy-source-registry identity | Derive the tuple `(taskDefinitionStateId, taskId, taskLeaseId, taskBaseOverlayRevision, registryContractVersion)`; accept no caller/model ID and consume no task-execution ordinal. |
+| `DeriveCopySourceIdAction` | copy-source-registry identity, one uniquely normalized eligible source selector, and its ordinal in the engine's canonical source ordering | closed structural copy-source identity | Derive `(copySourceRegistryId, canonicalSourceOrdinal)` only after proving selector uniqueness; accept no caller/model ID. |
+| `BuildCopySourceRegistryAction` | registry identity, task base revision, current reference state, exact template packages, and complete ordered identified-source set | versioned source registry | Capture only immutable, policy-eligible source blobs and preserve the canonical selector-to-ID bijection. |
+| `ValidateCopySourceRegistryAction` | source registry, task/lease/base revision, reference/template authorities, and copy policy | copy-source-registry evidence | Prove identity/provenance/blob/media/policy joins and unique source IDs. |
+| `BuildTaskContextAction` | task, indices, repository facts | bounded task context | Gather task-scoped facts. |
+| `AssignTaskExecutionIdLedgerStateIdAction` | exact task-definition/task/lease identities, validated current feature `StateIdLedger`, and matching single-use namespace capability | task-execution-ledger reservation plus successor feature ledger | Reserve the revision-zero ledger state ID without allocating an execution child ID. |
+| `BuildInitialTaskExecutionIdLedgerAction` | ledger identity and exact task-definition/task/lease identities | revision-zero task-execution ID ledger | Initialize every closed execution namespace ordinal to one and every retired-allocation set empty before any plan/attempt/registry/savepoint ID is assigned. |
+| `RetireTaskExecutionAllocatedIdAction` | one already advanced but unmaterialized/failed task-execution ID, its namespace, current ledger revision, and failure cause | task-execution retirement delta | Select exactly that allocated ID for tombstoning without rewinding or consuming another ordinal. |
+| `AdvanceTaskExecutionIdLedgerAction` | current ledger revision and exactly one matching allocation or retirement delta | next task-execution ID ledger | For assignment, advance exactly one namespace ordinal; for retirement, append exactly one already allocated ID to the tombstone set without changing an ordinal. Reject stale/double/mismatched deltas. |
+| `ValidateTaskExecutionIdLedgerAction` | ledger, optional prior revision, and every execution record/checkpoint in scope | ledger evidence | Prove monotonic per-namespace ordinals, no reuse, complete ID/tombstone accounting, task/lease ownership, and exact prior/successor joins. |
+| `ValidateOperationIntentPlanProposalSchemaAction` | one decoded change-plan result and route contract | schema-valid operation-intent-plan proposal | Validate the closed proposal shape, task ID, ordered bounded intents, and typed rationale without assigning identity. |
+| `ValidateOperationIntentProposalAction` | one intent proposal and approved task/file/source registries | intent evidence | Validate operation kind and exact target/source scope without assigning identity. |
+| `SimulateOperationIntentLifecycleAction` | ordered validated intent proposals, current runtime-file state, and file-intent sequence policy | lifecycle evidence | Prove create/update/replace/copy/delete ordering is possible for every target before execution. |
+| `ValidateOperationIntentPlanScopeAction` | whole proposal, approved task file-capability registry, and copy-source registry | exact-scope evidence | Reject missing, extra, duplicate, or out-of-task targets/sources across the complete proposal. |
+| `ValidateOperationIntentPlanCompletenessAction` | whole proposal, task definition, planned write obligations, and preset operation policy | completeness evidence | Require a deliberate ordered intent for every required task mutation and no unexecutable prose-only plan. |
+| `BuildOperationIntentPlanValidationAction` | per-intent, lifecycle, scope, completeness, and rationale evidence | operation-intent-plan validation | Assemble the complete validation record without assigning canonical plan/intent IDs. |
+| `AssignOperationIntentIdAction` | one ordered validated intent proposal and exact current `TaskExecutionIdLedger` revision | identified operation intent plus allocation delta | Select exactly the current operation-intent ordinal; a failed downstream build retires that ID before any later allocation. |
+| `AssignOperationIntentPlanIdAction` | task definition/lease identity and exact current validated `TaskExecutionIdLedger` revision | operation-intent-plan identity plus allocation delta | Select exactly the current operation-plan ordinal before construction; accept no ambient allocator or caller/model identity. |
+| `BuildOperationIntentPlanAction` | plan identity, exact task-definition/lease/task IDs, identified intents, and whole-plan validation | canonical operation-intent plan | Bind one complete ordered intent plan to the exact execution authority. |
+| `AssignTaskExecutionAttemptRegistryIdAction` | task definition/task/lease and exact current `TaskExecutionIdLedger` revision | attempt-registry identity plus allocation delta | Select one attempt-registry ordinal before construction. |
+| `AssignTaskExecutionAttemptIdAction` | attempt registry, optional parent attempt, and exact current `TaskExecutionIdLedger` revision | attempt identity plus allocation delta | Select one attempt ordinal; a repair never reuses an attempt. |
+| `BuildTaskExecutionAttemptAction` | attempt identity, lease, ordinal, optional superseded parent, exact operation plan, clean base overlay revision, and runtime-file-state binding | active attempt record | Bind one execution attempt without changing prior disposition. |
+| `BuildInitialTaskExecutionAttemptRegistryAction` | registry identity and first active attempt | revision-zero attempt registry | Create exactly one active attempt. |
+| `BuildSuccessorTaskExecutionAttemptRegistryAction` | current registry, supersede evidence, and one successor attempt | next attempt-registry revision | Mark the old attempt superseded and append exactly one active successor. |
+| `ValidateTaskExecutionAttemptRegistryAction` | registry, task/lease/plan/overlay/runtime authorities, and prior revision | attempt-registry evidence | Prove monotonic ordinals, one active attempt, valid parent chain, immutable history, and base-revision joins. |
+| `SerializeOperationIntentPlanAction` | validated operation-intent plan | canonical plan bytes | Serialize the immutable execution plan without regenerating it. |
+| `ValidateOperationProposalTaskIdentityAction` | one file-operation proposal and task lease | task-identity evidence | Validate the leased task ID only. |
+| `ValidateOperationProposalIntentBindingAction` | one file-operation proposal and current operation-intent plan | intent-binding evidence | Prove intent ID, operation kind, source, and target exactly equal one approved intent. |
+| `ValidateModelOperationBodyAction` | one create/update/replace payload and route/file-kind policy | body evidence and exact UTF-8 bytes | Validate actual byte length, text encoding, patch-format enum, and response ceilings; never trust a model length/handle. |
+| `CaptureModelOperationBodyAction` | body-valid exact bytes and run-local candidate store | immutable candidate body handle | Store one candidate body without constructing an operation or touching the workspace. |
+| `BuildCanonicalFileOperationAction` | schema/intent-valid payload and optional captured body handle | canonical file operation | Replace inline model bytes with the engine handle while preserving validated IDs/kind. |
+| `ValidateCompleteContentBudgetAction` | one create/replace intent, file-kind limit, route descriptor, and estimated envelope overhead | response-budget evidence | Prove complete content can fit before model invocation. |
+| `ValidateOperationCapabilityAction` | one operation and task/file capability registry | operation-capability evidence | Validate one operation kind against plan/task scope. |
+| `AssignOperationAuthorizationIdAction` | exact operation intent/active attempt and current `TaskExecutionIdLedger` revision | operation-authorization identity plus allocation delta | Select one operation-authorization ordinal before the authorization is built or exposed. |
+| `BuildOperationAuthorizationAction` | assigned authorization identity, operation, exact persisted operation-intent plan/lease, capability/target evidence, overlay revision, and optional copy binding | operation authorization | Bind plan/intent/target/source identities and engine-derived revisions without assigning an ID. |
+| `ResolveCopySourceAction` | one authorized `sourceId` and exact source-registry revision | immutable copy source | Resolve one engine-owned immutable blob only. |
+| `BindCopySourceRevisionAction` | resolved source and operation intent | source-revision binding | Bind one source blob/registry revision to the operation. |
+| `ValidateCopySourceKindAction` | one resolved copy source | source-kind evidence | Validate the registered source kind. |
+| `ValidateCopyMediaTypeAction` | one resolved copy source and destination kind | media evidence | Validate source/destination media compatibility. |
+| `ValidateCopyProvenanceAction` | one resolved copy source | provenance evidence | Validate required provenance/license metadata. |
+| `ValidateCopySizeAction` | one resolved copy source and policy | size evidence | Apply one copy byte limit. |
+| `ValidateCopyPermissionAction` | one source/destination/policy tuple | permission evidence | Validate one exact copy authorization. |
+| `BuildCopySourceVerificationResultAction` | exact operation/copy-source authorization plus kind/media/provenance/size/permission evidence | typed copy-source automated verification result | Project only a complete passed source/revision/blob/policy validation into the closed evidence-result union. |
+| `CreateWorkspaceOverlayAction` | task and workspace | isolated task overlay | Create a candidate workspace. |
+| `AssignOperationRecordRegistryIdAction` | active attempt/lease and exact current `TaskExecutionIdLedger` revision | operation-record-registry identity plus allocation delta | Select one registry ordinal without constructing records. |
+| `BuildInitialOperationRecordRegistryAction` | registry identity, active attempt, and lease | empty revision-zero operation-record registry | Initialize replay authority before the first operation. |
+| `ValidateOperationRecordRegistryAction` | registry, attempt/lease/plan/copy-source authorities, and prior revision | record-registry evidence | Prove monotonic record IDs, immutable replay bindings, and no duplicate intent/authorization/savepoint use. |
+| `AssignFileStateTransitionRegistryIdAction` | active attempt/runtime-file state and exact current `TaskExecutionIdLedger` revision | file-state-transition-registry identity plus allocation delta | Select one transition-registry ordinal before construction. |
+| `BuildInitialFileStateTransitionRegistryAction` | registry identity, active attempt, and input runtime-file state | empty revision-zero transition registry | Establish the attempt-local transition authority. |
+| `AppendFileStateTransitionRegistryAction` | current registry revision and one applied transition | next registry revision | Append one unique contiguous transition after its promotion evidence exists. |
+| `ValidateFileStateTransitionRegistryAction` | registry, operation records, command evidence, and input/current runtime-file states | transition-registry evidence | Prove source joins, revision continuity, per-file lifecycle legality, and exact runtime-state projection. |
+| `AssignOperationJournalIdAction` | active attempt, plan, lease, and exact current `TaskExecutionIdLedger` revision | operation-journal identity plus allocation delta | Select one journal ordinal before construction. |
+| `BuildInitialOperationJournalAction` | journal identity, active attempt ID, task lease, immutable operation-intent-plan ID, and new task overlay | empty revision-zero operation journal | Bind the journal to the exact attempt/plan/task/lease/overlay before applying an operation. |
+| `AssignOperationSavepointIdAction` | assigned operation authorization and exact current `TaskExecutionIdLedger` revision | operation-savepoint identity plus allocation delta | Select one savepoint ordinal before any overlay-adapter call. |
+| `BuildOperationApplyBoundaryReservationAction` | operation authorization, assigned savepoint identity, exact successor task-execution ledger revision, and current active checkpoint | `operation_apply_ready` boundary candidate | Bind all IDs and authority needed at the first nontransactional overlay boundary; perform no adapter call. |
+| `BuildTaskExecutionAdapterBoundaryRecordSetAction` | exact validated current checkpoint/boundary/task-overlay binding and, for `operation_promotion_ready`, its exact validated parent `operation_apply_ready` checkpoint plus predecessor `TaskExecutionAdapterBoundaryEntryValidation` | closed structural boundary-record set | Derive the one-key apply/command set or two-key operation-promotion chain without I/O, allocation, ambient adapter lookup, paths, random values, content derivation, or model input. |
+| `ValidateTaskExecutionAdapterRecordIdentityAction` | boundary-record set and every proposed/observed adapter entry, child, receipt, effect, before-image, tombstone, and blob identity | adapter-record identity evidence | Prove every identity is the exact closed tuple of boundary key, fixed record kind, and—where applicable—canonical gap-free effect ordinal/file ID; require total one-to-one uniqueness and reject caller/model/path/random/content/digest-derived values. |
+| `ValidateTaskExecutionAdapterBoundaryEntryObservationAction` | entry observation, validated record-set/identity evidence, committed ready checkpoint, exact authorization/savepoint/overlay revision, and adapter durability contract | `TaskExecutionAdapterBoundaryEntryValidation` | Prove exact checkpoint/boundary/savepoint/overlay joins, child publication only after/with the immutable entry record, and no parent revision change. Validate no promotion, discard, restore, or operation content. |
+| `ValidateTaskExecutionAdapterPromotionReceiptAction` | promotion receipt, validated record-set/identity evidence, exact promotion or command authorization, validated child delta, pre/post overlay descriptors, and adapter durability contract | `TaskExecutionAdapterPromotionReceiptValidation` | Prove effect-kind/source-entry legality, total canonical changed-file coverage, exact before/after image or absence-tombstone coverage, child consumption, and entry/receipt/before-image durability before or with parent publication. Validate no business evidence/journal mutation. |
+| `ValidateTaskExecutionAdapterDiscardReceiptAction` | discard receipt, validated record-set/identity evidence, exact entry/savepoint, expected parent overlay, post-discard inspection, and adapter durability contract | `TaskExecutionAdapterDiscardReceiptValidation` | Prove the receipt was durable atomically with child removal, zero child residue, and direct unchanged parent revision/value; validate no promotion/restore/checkpoint mutation. |
+| `ValidateTaskExecutionAdapterRestoreReceiptAction` | restore receipt, validated record-set/identity evidence, exact promotion receipt/before images/tombstones, pre/post-restore overlay inspection, and adapter durability contract | `TaskExecutionAdapterRestoreReceiptValidation` | Prove exact complete restoration, correct promoted/restored revisions, zero residual effect, and restore-receipt durability with the mutation; validate no reconstruction/evidence/checkpoint mutation. |
+| `CreateOperationSavepointAction` | validated durable `operation_apply_ready` boundary, its validated explicit one-key record set, task overlay ID/revision, and assigned savepoint identity | child operation savepoint plus `TaskExecutionAdapterBoundaryEntryObservation` | Call `TaskExecutionOverlayPort.createOperationSavepoint` only after the boundary checkpoint commits; atomically durably append the write-once entry record with child publication and bind the returned structural record IDs to the savepoint. |
+| `ApplyFileOperationAction` | operation authorization, operation, and matching savepoint with `TaskExecutionAdapterBoundaryEntryValidation` | changed savepoint | Apply one operation only inside the recorded child; create no parent effect or adapter receipt. |
+| `BuildOperationLocalVerificationResultAction` | exact operation authorization/savepoint, target file IDs, and complete configured local validator results | typed operation-local automated verification result | Project one fully passed operation-local check set without assigning evidence or record IDs. |
+| `BuildFileDeltaVerificationResultAction` | exact operation authorization/savepoint, decoded savepoint delta, target file IDs, and file-delta validation | typed file-delta automated verification result | Bind one completely scoped passed delta check; reject extra/missing/aliased effects. |
+| `PromoteOperationBodyToExecutionStoreAction` | locally valid canonical operation, candidate handles/copy binding, and task-execution write-once store | execution-owned canonical operation | Copy body/patch bytes or immutable copy binding into checkpoint lifetime and prove it reproduces the savepoint delta. |
+| `AssignOperationRecordIdAction` | execution-owned operation and exact current `TaskExecutionIdLedger` revision | operation-record identity plus allocation delta | Select one monotonic execution-local record ordinal. |
+| `BuildOperationRecordAction` | record identity, execution-owned operation, exact plan/intent/authorization/savepoint bindings, and already built typed source-validation evidence IDs in the same prospective evidence-registry revision | immutable operation record | Bind all replay inputs without appending or promoting; every referenced validation ID must be committed atomically with this record. |
+| `AppendOperationRecordRegistryAction` | current operation-record registry revision and one built record | next registry revision | Append one record exactly once and reject duplicate plan/intent/authorization/savepoint bindings. |
+| `AssignOperationPromotionAuthorizationIdAction` | matching operation record/savepoint and exact current `TaskExecutionIdLedger` revision | operation-promotion-authorization identity plus allocation delta | Select one promotion-authorization ordinal before construction; never reuse it after a failed promotion. |
+| `BuildOperationPromotionAuthorizationAction` | assigned promotion-authorization identity, matching operation record/savepoint authorization, unchanged task-overlay revision, and complete typed local-validation evidence in the same prospective checkpoint | operation-promotion authorization | Seal one exact replayable record/savepoint/revision/evidence set for single use without assigning identity. |
+| `BuildOperationPromotionBoundaryReservationAction` | operation authorization/savepoint, promotion authorization, exact successor task-execution ledger revision, current active checkpoint, and predecessor `TaskExecutionAdapterBoundaryEntryValidation` | `operation_promotion_ready` boundary candidate | Bind the complete promotion boundary and exact predecessor key/entry ID for the same savepoint/overlay into the pre-promotion checkpoint. That checkpoint atomically persists evidence, record, all authorization dependencies, and the ledger; no evidence-only checkpoint is allowed. |
+| `PromoteOperationSavepointAction` | validated durable `operation_promotion_ready` boundary, its validated two-key record set and predecessor `TaskExecutionAdapterBoundaryEntryValidation`, promotion authorization, and matching task-overlay revision | updated task overlay plus `TaskExecutionAdapterPromotionReceipt` | Call the overlay port with no ambient lookup; compare-and-swap one locally valid delta while durably writing the current promotion-boundary entry, complete exact before-images/absence tombstones, and promotion receipt before or atomically with parent-revision publication. Assign no engine evidence and edit no journal. |
+| `AssignOperationPromotionEvidenceIdAction` | validated promotion observation and exact current prospective `ExecutionEvidenceIdLedger` | operation-promotion evidence identity plus successor ID ledger | Allocate one monotonic evidence ID, advance only `nextEvidenceOrdinal`, and inspect neither overlay content nor adapter records. Every later operation-promotion builder/append and every subsequent evidence allocator must consume this exact successor. |
+| `BuildOperationPromotionEvidenceAction` | evidence identity, operation record/intent/savepoint, `TaskExecutionAdapterPromotionReceiptValidation`, matching receipt, and exact changed file IDs | operation-promotion evidence | Project the validated receipt into durable before/after revisions and exact changed file IDs without appending it. Do not retain an adapter-record/blob handle after cleanup closure. |
+| `BuildOperationJournalEntryAction` | operation record, exact applied file-state-transition ID, authorization/savepoint/promotion evidence, before/after overlay revisions, and local evidence | operation-journal entry | Reference the exact replayable record, transition, promoted intent/revisions/evidence without appending it. |
+| `AppendOperationJournalEntryAction` | current journal revision and one built entry | next operation journal revision | Append exactly once with contiguous ordinal and reject duplicate intent/authorization/savepoint use. |
+| `ValidateOperationJournalCompletenessAction` | final operation journal, canonical intent plan, task/lease/overlay identities, and current overlay revision | journal-completeness evidence | Prove every approved intent was promoted exactly once in order, no extra intent exists, and revisions form one contiguous chain. |
+| `AssignTaskExecutionCheckpointIdAction` | task, optional active attempt, optional parent checkpoint, and current task-execution ID ledger | checkpoint identity plus parent link and allocation delta | Select one monotonic checkpoint ID for either the preparation or active variant; advance its ledger before construction and retire it if construction fails. |
+| `BuildTaskExecutionPreparationCheckpointAction` | checkpoint identity/path/serializer version, exact validated task-execution ledger, task/lease identity, validated copy-source registry, `none` adapter boundary, and `none` adapter-record cleanup state | preparation-checkpoint candidate | Build the restart-safe pre-model checkpoint that durably accounts for the ledger and every copy-source tuple before the change-plan request is exposed. |
+| `ResolveTaskExecutionCheckpointPathAction` | checkpoint identity and workflow checkpoint collection root | engine-owned checkpoint path | Derive one contained path; accept no path from the model. |
+| `BuildTaskExecutionCheckpointAction` | checkpoint identity/path/serializer version, current validated task-execution ID ledger, complete attempt/copy-source/operation-record/journal/file-transition/runtime-file/evidence registries, exact operation plan, task lease, overlay revision, exactly one validated pending-adapter-boundary variant, and exact adapter-record cleanup state | active execution-checkpoint candidate | Bind all resumable/replayable execution and allocation authorities without performing a write. A boundary-free successor that terminalizes a boundary carries `pending_release` with its complete record set/terminal authority; other legal checkpoints carry `none`. |
+| `ValidateTaskExecutionCheckpointAction` | checkpoint candidate and all current persisted/overlay/ledger/adapter-record authorities | checkpoint evidence | Prove every embedded ID/revision/path/active-attempt/allocator join and current ledger closure; require `pending_release` exactly on a newly boundary-free terminal successor, forbid it alongside a ready boundary, prove its complete one/two-key set, and reject a partial checkpoint. |
+| `SerializeTaskExecutionCheckpointAction` | validated checkpoint and exact checkpoint serializer contract | canonical checkpoint bytes | Serialize every embedded registry and the full task-execution ID ledger in stable order. |
+| `ParseTaskExecutionCheckpointAction` | bounded raw checkpoint bytes and recorded serializer contract | unvalidated checkpoint candidate | Parse one persisted checkpoint without trusting IDs, paths, revisions, or embedded registries. |
+| `LoadTaskExecutionCheckpointAction` | engine-derived checkpoint path, workflow checkpoint collection authority, and bounded no-follow descriptor | bounded raw checkpoint bytes | Read exactly one registered checkpoint resource; never accept a user/model path. |
+| `BuildTaskExecutionCheckpointTransactionAction` | validated checkpoint (including any `pending_release` state or pre-commit cleanup-closure binding), canonical serialized bytes, exact workflow/task/runtime revisions, rendered tasks view, and complete state-identity mutation | checkpoint transaction candidate | Bind the complete checkpoint plus the first durable `TaskExecutionIdLedger` state reservation (or later unchanged/advanced feature-ledger member) without writing project files. |
+| `ValidateTaskExecutionCheckpointTransactionAction` | checkpoint transaction, current feature state-ID ledger, prior checkpoint/runtime authorities, and checkpoint evidence | checkpoint-transaction evidence | Prove first-exposure reservation CAS, exact checkpoint/view membership, unchanged project delta, and no canonical state ID was serialized earlier. For cleanup closure, require the serialized binding to directly join the parent `pending_release` checkpoint and validated release evidence before commit; post-commit closure evidence is not an input. |
+| `PersistTaskExecutionCheckpointAction` | validated `TaskExecutionCheckpointTransaction`, canonical serialized bytes, and workflow WAL transaction | durable checkpoint evidence | Atomically persist state-identity ledger, plan/journal/ledger/revision, checkpoint, and runtime view before first operation and after every journal append. |
+| `DiscardOperationSavepointAction` | invalid child overlay, its validated apply-boundary entry/record set, and unchanged expected parent revision | raw post-discard observation plus `TaskExecutionAdapterDiscardReceipt` | Delete only that child and atomically append a durable structural discard receipt with the removal; build no evidence or checkpoint. Retain all records until a boundary-free checkpoint commits. |
+| `BuildOperationSavepointDiscardEvidenceAction` | operation/savepoint/entry authorities, validated record identity, `TaskExecutionAdapterDiscardReceiptValidation`, and matching raw post-discard observation | `OperationSavepointDiscardEvidence` | Project one self-contained zero-residual/unchanged-parent discard proof without performing I/O or persisting it. |
+| `DetectUnexpectedChangesAction` | overlay and authorized write set | change-scope evidence | Find unplanned file mutations. |
+| `AssignCommandAuthorizationIdAction` | exact task command selection/active attempt and current `TaskExecutionIdLedger` revision | task-command-authorization identity plus allocation delta | Select one task command-authorization ordinal; it is invalid for stage-level final validation. |
+| `AssignCommandSavepointIdAction` | assigned task command authorization and exact current `TaskExecutionIdLedger` revision | task-command-savepoint identity plus allocation delta | Select one task command-savepoint ordinal before any sandbox-adapter call. |
+| `DeriveFinalValidationInvocationIdAction` | exact feature/workflow state and revision, task-definition/runtime revision, final committed workspace revision, required-final-check-set identity, and current feature-log run identity | run-scoped final-validation invocation identity | Derive the closed tuple of those authorities; only one such invocation may run per feature-log run. |
+| `DeriveFinalValidationCommandAuthorizationIdAction` | final-validation invocation identity, canonical required-check ordinal, and bounded retry ordinal | run-scoped final-validation command-authorization identity | Derive a closed tuple; the current run enforces monotonic bounded retries, and a restarted process has a different run ID. |
+| `DeriveFinalValidationCommandSavepointIdAction` | final-validation command-authorization identity and exact final-validation overlay ID/revision | run-scoped final-validation command-savepoint identity | Derive a closed tuple that cannot collide across checks, retries, overlays, or process restarts. |
+| `BuildCommandRunBoundaryReservationAction` | task command authorization, assigned task command-savepoint identity, exact successor task-execution-ledger revision, and current active checkpoint | `command_run_ready` boundary candidate | Bind a task command's complete nontransactional boundary for durable checkpointing; it is invalid for stage-level final validation. |
+| `ClearTaskExecutionAdapterBoundaryAction` | active checkpoint, terminal adapter observation or typed discard/promotion evidence, and current ledger | successor `none` boundary candidate | Close exactly one pending boundary after proving its savepoint promoted or was fully discarded; never erase an unaccounted boundary. |
+| `ValidateTaskExecutionAdapterBoundaryAction` | checkpoint variant, current/previous checkpoint, exact ledger, authorizations, complete adapter record set/inspection, promotion/discard evidence, and cleanup state | boundary evidence | Prove legal `none -> ready -> none` or operation `apply_ready -> promotion_ready -> none` transitions, exact predecessor-key/entry continuity, one-time IDs, and restart disposition. A terminal transition to `none` must carry `pending_release`, and no subsequent allocation/model/adapter boundary is valid until its complete release evidence proves zero residual records. |
+| `InspectRecoveredTaskExecutionAdapterBoundaryAction` | one validated recovered active checkpoint with a non-`none` boundary, its exact task-overlay capability, and its validated complete boundary-record set (including predecessor apply key/entry for operation promotion) | one closed `RecoveredTaskExecutionAdapterBoundaryObservation` | Invoke only `TaskExecutionOverlayPort.inspectWriteOnceBoundaryRecords`; inspect task-overlay revision, child, immutable entry/promotion/discard/restore receipts and retained before-images once without creating, discarding, restoring, promoting, or searching ambient adapter state. Return `indeterminate` for every missing/conflicting/unjoinable combination. |
+| `ValidateRecoveredTaskExecutionAdapterBoundaryObservationAction` | recovered observation, exact checkpoint/parent-checkpoint/boundary/ledger and record set, operation or command authorization, savepoint/promotion authorization and record when present, task overlay, adapter contract/version, structural identity evidence, and the applicable entry/promotion/discard/restore receipt validations | recovered-boundary observation evidence or diagnostic | Prove exact parent-checkpoint/savepoint/overlay/revision/effect joins and the closed distinction among never entered, present unpromoted, already applied/promoted, already discarded with no parent effect, already restored with no residual effect, and indeterminate. Never infer completion from process exit, missing child files alone, timestamps, hashes, or logs. |
+| `ClassifyTaskExecutionAdapterBoundaryRecoveryAction` | validated recovered-boundary observation and exact boundary variant | `TaskExecutionAdapterBoundaryRecoveryPlan` candidate | Apply only the locked recovery table: clear a proven never-entered apply/command boundary or any already-terminalized boundary without adapter mutation; an `operation_promotion_ready` call not entered still has its predecessor child and is the unpromoted-child branch. Discard a present unpromoted child; reconstruct an exactly receipted promotion; restore exact before-images for a prematurely promoted apply/command effect; otherwise block. Perform no I/O, allocation, validation, or checkpoint mutation. |
+| `ValidateTaskExecutionAdapterBoundaryRecoveryPlanAction` | recovery-plan candidate, validated observation evidence, checkpoint/boundary/ledger, complete record set, authorization/record authorities, and locked recovery table | recovery-plan evidence | Prove one exact legal disposition; require `clear_already_terminalized` for validated durable discard/restore receipts; forbid reconstruction outside `operation_promotion_ready`; require complete durable receipt/before-image coverage for every already applied/promoted effect; and keep ordinary allocation, model, and adapter work blocked until a boundary-free checkpoint commits. |
+| `DiscardRecoveredTaskExecutionSavepointAction` | validated discard recovery plan, exact recovered child/entry record from the complete record set, matching task-overlay capability, and unchanged expected parent revision | raw post-discard observation plus `TaskExecutionAdapterDiscardReceipt` | Invoke only the port's typed discard; delete that recovered unpromoted child and atomically append its immutable discard receipt. The receipt then passes the ordinary identity/discard validators before recovery evidence is built; a restart observes `already_discarded_no_parent_effect` and never repeats the mutation ambiguously. |
+| `BuildRecoveredTaskExecutionSavepointDiscardEvidenceAction` | recovery plan/observation, validated record identity and discard receipt, and exact post-discard overlay inspection | `RecoveredTaskExecutionSavepointDiscardEvidence` | Project self-contained recovery discard evidence without I/O, checkpoint mutation, or receipt creation. |
+| `RestoreRecoveredTaskExecutionBoundaryBeforeImageAction` | validated restore recovery plan, exact durable promotion receipt and complete before-image/tombstone records, matching task-overlay capability at the observed promoted revision, and authorized file set | raw post-restore observation plus `TaskExecutionAdapterRestoreReceipt` | Invoke only the port's exact restore; compare-and-swap every affected entry to recorded bytes/absence and append the immutable restore receipt atomically with restoration. The receipt then passes the ordinary identity/restore validators; a restart observes `already_restored_no_parent_effect`. |
+| `BuildRecoveredTaskExecutionBeforeImageRestoreEvidenceAction` | recovery plan/observation, validated record identity and restore receipt, promotion receipt validation, and exact post-restore overlay inspection | `RecoveredTaskExecutionBeforeImageRestoreEvidence` | Project self-contained zero-residual restore evidence without I/O, checkpoint mutation, or receipt creation. |
+| `ReconstructRecoveredOperationPromotionAction` | validated reconstruction recovery plan for `operation_promotion_ready`, `TaskExecutionAdapterPromotionReceiptValidation` and matching receipt, persisted operation record/savepoint/promotion authorization, pre-promotion local evidence, and current task overlay at the receipted post-promotion revision | `RecoveredOperationPromotionObservation` | Reconstruct the ordinary before/after promotion observation exactly from durable receipt/record evidence without invoking the overlay adapter, changing files, assigning evidence, or editing the journal. |
+| `BuildTaskExecutionAdapterBoundaryRecoveryTerminalEvidenceAction` | validated recovery plan and exactly one matching validated never-entered observation, already-discarded observation, already-restored observation, new discard evidence, new restore evidence, or fully reconstructed operation-promotion evidence/transition/journal/evidence-registry successor | discriminated `TaskExecutionAdapterBoundaryRecoveryTerminalEvidence` | Bind one terminal recovery result to the pending boundary without clearing it, allocating an ID, or persisting a checkpoint. |
+| `ValidateTaskExecutionAdapterBoundaryRecoveryCompletionAction` | recovery plan, terminal evidence, validated committed successor checkpoint/transaction, exact task-execution ledger chain, overlay/record/journal/evidence authorities, and transaction recovery evidence | `TaskExecutionAdapterBoundaryRecoveryCompletionEvidence` | Prove the successor checkpoint has `pendingAdapterBoundary: none`, atomically contains every recovery-only ID/state/journal change, directly joins the final overlay revision, and is durably committed; reject any intervening ordinary allocation/model/adapter invocation. |
+| `BuildTaskExecutionRecoveryResumeGateAction` | validated boundary-recovery completion, adapter-record cleanup-closure evidence, and freshly reloaded cleanup-closed checkpoint/ledger | `TaskExecutionRecoveryResumeGate` | Authorize ordinary task allocation/model/adapter work only for the exact reloaded checkpoint whose boundary and cleanup states are both `none` and whose complete prior record set has zero residual entries. Perform no recovery, cleanup, allocation, or invocation. |
+| `BuildTaskExecutionAdapterBoundaryRecordReleaseAuthorizationAction` | validated forward terminal evidence or validated recovery completion, reloaded committed boundary-free checkpoint transaction, and its exact `pending_release` cleanup state/complete record set | release authorization | Bind idempotent cleanup to the exact retained one-key or operation two-key set only after the `none` checkpoint commit; perform no adapter call. |
+| `ValidateTaskExecutionAdapterBoundaryRecordReleaseAuthorizationAction` | release-authorization candidate, reloaded `pending_release` checkpoint/commit evidence, prior boundary checkpoint(s), exact terminal authority, validated record identities, and complete retained adapter inventory | `TaskExecutionAdapterBoundaryRecordReleaseAuthorizationValidation` | Prove exact checkpoint/transaction/set/terminal joins, one-to-one retained-record coverage, and task-only authority; reject final-validation discard variants, missing/extra keys, cleanup before commit, or any authorization capable of project/overlay mutation. |
+| `ReleaseTaskExecutionAdapterBoundaryRecordAction` | release authorization plus `TaskExecutionAdapterBoundaryRecordReleaseAuthorizationValidation`, and task-execution overlay capability | release observation | Invoke only `TaskExecutionOverlayPort.releaseBoundaryRecords`; idempotently delete the exact immutable entries/receipts/before-images/tombstones in the complete set. A failure leaves bounded inert metadata named by the checkpoint's `pending_release` state and blocks the next allocation/model/adapter step until retry; it cannot revoke the committed checkpoint or authorize work. |
+| `ValidateTaskExecutionAdapterBoundaryRecordReleaseAction` | release authorization/validation, released-now or already-released observation, retained-record inventory, and adapter contract/version | `TaskExecutionAdapterBoundaryRecordReleaseEvidence` | Prove the observation names the same committed checkpoint transaction and complete record set, has zero residual records, and changed no project/overlay/workflow authority. |
+| `BuildTaskExecutionAdapterCleanupClosedCheckpointAction` | validated `pending_release` checkpoint, release evidence, one recovery/cleanup-only assigned checkpoint identity with successor task-execution ledger, and byte-equal execution authorities | cleanup-closed active checkpoint candidate | Copy every non-checkpoint authority exactly, set both pending boundary and adapter-record cleanup state to `none`, bind the release evidence/parent checkpoint, and perform no model or adapter work. |
+| `ValidateTaskExecutionAdapterCleanupClosedCheckpointAction` | cleanup-closed candidate, pending-release parent, release evidence/closure binding, exact allocation delta/successor ledger, and all execution authorities | cleanup-closed checkpoint evidence | Prove the only changes are checkpoint/parent identity, the permitted checkpoint-ledger advance, the exact durable closure binding, and `pending_release -> none`; require zero residual adapter records, require the binding exactly on this direct successor, and reject any business/runtime/journal/evidence mutation. |
+| `BuildTaskExecutionAdapterRecordCleanupClosureEvidenceAction` | validated cleanup-closed checkpoint, its committed/recovered `task_checkpoint` transaction, release evidence, and freshly reloaded checkpoint/ledger | `TaskExecutionAdapterRecordCleanupClosureEvidence` | Bind durable cleanup closure after commit and reload without assigning, writing, or authorizing ordinary work. |
+| `DeriveFeatureExecutionProcessLeaseIdAction` | exact feature ID, current feature-log run ID, trusted process-instance ID, and fixed `feature_execution` lease slot | `FeatureExecutionProcessLeaseId` | Build the closed run/process tuple used only for this implementation invocation; accept no caller/model/path/clock/content value and never reuse the tuple for another run or process. |
+| `AcquireFeatureExecutionProcessLeaseAction` | derived lease identity, feature-execution control port, and bounded lease policy | process-lease observation | Invoke only `FeatureExecutionControlPort.acquireProcessLease`; acquire an OS/process-owned run-local lease before any task adapter/recovery/model work and perform no feature locking or liveness classification. |
+| `ValidateFeatureExecutionProcessLeaseAction` | raw lease observation, exact feature/run/process authorities, adapter registry, runner lease table, and lease policy | acquired `FeatureExecutionProcessLeaseValidation`, typed acquired-observation validation rejection, or `FeatureExecutionProcessLeaseAcquisitionRejectionEvidence` | On `acquired`, prove the opaque capability belongs to the exact structural identity, is backed by live OS process ownership, cannot be rebound after terminal release, and keeps its token out of envelopes/serialization/log/model data. On `rejected`, prove exact identity/reason and that no capability/token was issued; a raw rejection is not trusted directly. |
+| `ReleaseRejectedFeatureExecutionProcessLeaseObservationAction` | lease-validation rejection and exact runner-retained acquired observation | raw rejected-capability cleanup observation | Invoke only `FeatureExecutionControlPort.releaseRejectedProcessLeaseObservation`; request release-or-confirm-not-owned and token destruction without validating the result or returning the terminal diagnostic. |
+| `AcquireFeatureExecutionLockAction` | active feature-directory capability, validated current process lease, feature-execution control port, and bounded lock policy | feature-execution-lock observation | Invoke only `FeatureExecutionControlPort.acquireFeatureLock`; acquire the exclusive feature-wide implementation lock before task recovery/scheduling and perform no workflow or overlay operation. This lock is distinct from the short feature transaction-collection lock. |
+| `ValidateFeatureExecutionLockAction` | raw acquired-or-contended lock observation, active feature/workflow/run authorities, validated process lease, adapter registry, runner lock table, and lock policy | acquired `FeatureExecutionLockValidation`, `FeatureExecutionLockContentionEvidence`, or typed acquired-observation validation rejection | On `acquired`, prove exact feature/root/run/lease/adapter ownership, one live exclusive feature owner, and a runner-held nonserializable capability. On `contended`, prove the exact live owner and that no capability/token was issued; neither raw contention nor an unprovable owner enters task execution. |
+| `ReleaseRejectedFeatureExecutionLockObservationAction` | feature-lock-validation rejection and exact runner-retained acquired observation | raw rejected-capability cleanup observation | Invoke only `FeatureExecutionControlPort.releaseRejectedFeatureLockObservation`; request release-or-confirm-not-owned and token destruction without validating the result or returning the terminal diagnostic. |
+| `ValidateRejectedFeatureExecutionCapabilityCleanupAction` | one process-lease or feature-lock validation rejection, its exact cleanup observation, adapter registry, and runner capability table | `FeatureExecutionRejectedCapabilityCleanupEvidence` | Prove exact rejection/adapter/token ownership, release-or-confirmed-nonownership, destroyed opaque handle, and zero matching runner-table entry; create no success capability. |
+| `BuildFeatureExecutionLockTerminalEvidenceAction` | exactly one validated feature-lock release evidence, validated contention evidence, or rejected-lock cleanup evidence | closed `FeatureExecutionLockTerminalEvidence` | Project exactly one of `released_validated`, `contention_proves_not_acquired`, or `rejected_acquired_observation_cleaned`; perform no adapter call and reject mixed/missing branches. |
+| `InspectFeatureExecutionProcessLeaseLivenessAction` | raw bounded final-overlay inventory owner refs, validated current process lease and feature-execution lock, same held overlay-collection lock, adapter registry, and liveness ceilings | `FeatureExecutionProcessLeaseLivenessRegistryObservation` | Invoke only `FeatureExecutionControlPort.inspectLeaseLiveness`; observe every unique header owner exactly once through adapter/OS process ownership while the collection is locked. Use no timeout, heartbeat age, PID alone, file time, or model judgment. |
+| `ValidateFeatureExecutionProcessLeaseLivenessAction` | raw liveness observation, exact inventory owner-ref set, current lease/feature lock, same overlay-collection lock, adapter contract, and ceilings | `FeatureExecutionProcessLeaseLivenessRegistryValidation` | Prove complete one-to-one owner coverage, exact current live lease, exact lock epochs, no unknown/duplicate owner, and only the safe later transition `live -> terminal`; produce a run-local classification authority, not persisted workflow state. |
+| `ReleaseFeatureExecutionLockAction` | held validated feature-execution lock, terminal task/final-validation outcome, and closed `FinalValidationOverlayCollectionLockTerminalEvidence` | feature-lock release observation | Invoke only `FeatureExecutionControlPort.releaseFeatureLock` exactly once after every implementation terminal branch; require the overlay lock to be proven not attempted, never acquired after validated contention, cleaned after an acquired-observation rejection, or exactly released. Release before the process lease and mutate no workflow/project/overlay data. Process death relies on adapter/OS release. |
+| `ValidateFeatureExecutionLockReleaseAction` | lock release observation, original validated lock/lease, runner lock table, terminal implementation outcome, and closed final-validation overlay-lock terminal evidence | `FeatureExecutionLockReleaseEvidence` | Prove the exact feature lock is absent, every task/final-validation operation is terminal, and the final-validation overlay collection lock has exactly one valid terminal branch with no remaining runner capability. |
+| `ReleaseFeatureExecutionProcessLeaseAction` | held validated process lease and closed `FeatureExecutionLockTerminalEvidence` proving the feature lock was released, was never acquired after contention, or its rejected acquired observation was cleaned | process-lease release observation | Invoke only `FeatureExecutionControlPort.releaseProcessLease` exactly once after the feature-lock branch is terminal; perform no liveness inspection or feature mutation. Process death relies on adapter/OS release. |
+| `ValidateFeatureExecutionProcessLeaseReleaseAction` | lease release observation, original lease validation, closed feature-lock terminal evidence, and runner lease table | `FeatureExecutionProcessLeaseReleaseEvidence` | Prove the exact run/process lease is absent and terminal only after no feature lock remains; reject reuse or a leaked capability. |
+| `CreateCommandSavepointAction` | either a validated durable task `command_run_ready` boundary plus its explicit record set, or a validated run-scoped final-validation command authorization/savepoint identity, exact current final-overlay header/revision, and validated live feature-execution lock/process lease | child command savepoint plus discriminated raw task-entry or closed `FinalValidationCommandSavepointCreationOutcome` | For a task command, call the task-overlay port and atomically durably append its write-once entry record with child publication after the boundary checkpoint. For final validation, call only `FinalValidationOverlayPort.createFinalValidationCommandSavepoint`; return either the raw created observation or typed adapter failure, including indeterminate publication, and produce no task-boundary record. Validate either raw outcome separately. |
+| `ValidateFinalValidationCommandSavepointCreationAction` | final-validation command-savepoint creation outcome, exact authorization and structural savepoint/child identities, validated parent overlay creation/header/revision, validated feature-execution lock/process lease, adapter contract, and resource ceilings | `FinalValidationCommandSavepointCreationValidation` or `FinalValidationCommandSavepointCreationRejection` requiring parent-overlay abort | Accept only an exact created observation with authorization/savepoint/parent/header/owner/feature-lock joins, structural unique child identity, revision-zero publication over an unchanged parent, and no task adapter record. Convert every adapter failure, indeterminate publication, or structural mismatch into the rejection; command execution is unreachable and only recursive cleanup addressed by the validated parent header is authorized. |
+| `ValidateCommandSandboxCapabilityAction` | platform adapter and command policy | sandbox-capability evidence | Prove per-path write mediation plus process/network isolation is enforceable. |
+| `BuildCommandAuthorizationAction` | assigned task command-authorization identity, command, task write IDs, file capabilities, path/global policies, resource quotas, and overlay revision | command authorization | Bind the exact persistent intersection, per-file delta kinds, ephemeral ceiling, and in-flight quotas without assigning identity. |
+| `BuildNonPromotingCommandAuthorizationAction` | derived final-validation command-authorization identity, fully validated command capability, `FinalValidationOverlayCreationValidation`, created-branch `FinalValidationOverlayCollectionLockReleaseEvidence`, final-validation overlay ID/revision, declared ephemeral/root/path policies, sandbox-capability evidence, and validated resource quotas | non-promoting command authorization | Bind the exact validated disposable overlay only after collection-lock release, with in-flight protections/quotas, no persistent result, and only disposable output paths without consuming a task ledger. |
+| `AcquireFinalValidationOverlayCollectionLockAction` | validated feature-execution lock and current process lease, exact registered `FinalValidationOverlayCollection` capability, and bounded lock policy | collection-lock observation | Invoke the overlay port once and return an acquired runner-held capability or contention diagnostic; bind both outer capabilities, acquire before inventory, and perform no inventory, cleanup, or creation. The opaque adapter token is OS/process-owned, released on owner death, and its epoch is never rebound to a later process. |
+| `ValidateFinalValidationOverlayCollectionLockAction` | raw acquired-or-contended observation, active feature/root/collection authorities, validated feature-execution lock/process lease, adapter registry, runner lock table, and lock policy | acquired `FinalValidationOverlayCollectionLockValidation`, `FinalValidationOverlayCollectionLockContentionEvidence`, or typed acquired-observation validation rejection | On `acquired`, prove exact ownership/collection/outer-lock/lease epochs, adapter identity, OS-backed owner liveness, process-death release/nonrebindability, and a runner-held opaque capability. On `contended`, prove the exact collection/outer-authority join, bounded wait exhaustion, and that no capability/token or runner-table entry exists. A raw contention observation is never terminal evidence by itself. |
+| `ReleaseRejectedFinalValidationOverlayCollectionLockObservationAction` | final-validation collection-lock validation rejection and exact runner-retained acquired observation | raw rejected-lock cleanup observation | Invoke only `FinalValidationOverlayPort.releaseRejectedCollectionLockObservation`; request release-or-confirm-not-owned and opaque-token destruction without treating the untrusted acquired observation as a validated capability. |
+| `ValidateRejectedFinalValidationOverlayCollectionLockCleanupAction` | acquired-observation validation rejection, exact cleanup observation, adapter registry, runner capability table, and still-live outer capabilities | `FinalValidationOverlayRejectedCollectionLockCleanupEvidence` | Prove exact rejection/observation/adapter ownership, release-or-confirmed-nonownership, destroyed handle, and zero matching runner-table entry; authorize no inventory, overlay, or ordinary release. |
+| `BuildFinalValidationOverlayCollectionLockTerminalEvidenceAction` | exactly one validated not-attempted runner-path proof, normal collection-lock release evidence, validated contention evidence, or rejected-acquired-observation cleanup evidence | closed `FinalValidationOverlayCollectionLockTerminalEvidence` | Project exactly one of `not_attempted`, `released_validated`, `contention_proves_not_acquired`, or `rejected_acquired_observation_cleaned`; perform no adapter call and reject raw/mixed/missing branches. |
+| `InspectFinalValidationOverlayStartupInventoryAction` | validated active feature roots, registered engine-owned `FinalValidationOverlayCollection`, locked inventory ceilings, and held collection-lock validation | raw bounded final-validation-overlay inventory observation | Invoke the final-validation overlay port once under that lock and report every entry plus raw malformed/unowned counts, observed bytes, ceiling status, completeness, and adapter identity. Accept no caller/model path, classify no owner liveness, delete nothing, and never hardcode a success predicate into the raw shape. |
+| `ValidateFinalValidationOverlayStartupInventoryAction` | raw inventory observation, validated process-lease liveness registry for its exact owner-ref set, workflow-artifact registry, current run/process lease, validated feature-execution lock, same held collection lock, adapter contract, and locked ceilings | `FinalValidationOverlayStartupInventoryValidation` or typed `FinalValidationOverlayStartupInventoryRejection` | Prove complete bounded accounting and one-to-one liveness classification under exact lock epochs. Require zero malformed/unowned/current/other-live entries and no ceiling breach; classify only a prior-run entry whose nonrebindable owner lease is absent/terminal. Every malformed, incomplete, over-budget, live-entry, adapter, or epoch case is mechanically representable and blocks creation. |
+| `DiscardOrphanedFinalValidationOverlayAction` | one orphan entry from validated startup inventory, exact overlay-collection capability, and the same held collection lock | orphan-discard observation | Idempotently delete only that prior-run, absent/terminal-owner disposable overlay through `FinalValidationOverlayPort.discardOrphan`; never read/import/promote its bytes or touch project/spec/canonical state. |
+| `ValidateFinalValidationOverlayStartupCleanupAction` | validated classified inventory, same continuously held collection lock, and one discard-now/already-absent observation per canonical orphan entry | `FinalValidationOverlayStartupCleanupEvidence` | Prove exhaustive one-to-one cleanup, zero residual orphan/live entries and bytes, unchanged project/spec/engine authorities, and continuous same-epoch locking through cleanup. |
+| `CreateFinalValidationOverlayAction` | final committed workspace revision, current run-scoped invocation identity, registered overlay-collection capability, validated zero-entry startup-cleanup evidence, same held collection lock, and validated live process lease/feature-execution lock | closed `FinalValidationOverlayCreationOutcome` | Call only `FinalValidationOverlayPort.createOverlay`; return a created observation or typed adapter failure with `proven_absent | indeterminate` publication disposition. The adapter must durably publish the structural owner/header before the empty overlay and may never signal absence by throwing or omitting an outcome. |
+| `ValidateFinalValidationOverlayCreationObservationAction` | creation outcome, engine-derived candidate identity, invocation/root/collection/base-revision authorities, validated process lease/feature-execution lock, startup-cleanup evidence, same held collection lock, and adapter contract | `FinalValidationOverlayCreationValidation` or `FinalValidationOverlayCreationRejection` | Accept only the exact empty/header-first created observation with matching outer and collection epochs and no coexistence. Every adapter failure or mismatch produces cleanup-required rejection; neither raw `proven_absent` nor indeterminate/post-publication state authorizes ordinary release. |
+| `CleanupRejectedFinalValidationOverlayCreationAction` | creation rejection, engine-derived invocation/candidate identity, exact overlay collection capability, and same still-held validated collection lock | raw creation-candidate cleanup observation | Invoke only `FinalValidationOverlayPort.discardCreationCandidate`; address the candidate by engine-derived structural identity rather than an untrusted returned header and idempotently discard-or-confirm-absent. |
+| `ValidateFinalValidationOverlayCreationCleanupAction` | creation rejection, raw cleanup observation, engine-derived candidate/collection identities, same collection-lock validation, live outer capabilities, adapter contract, and fresh bounded candidate accounting | `FinalValidationOverlayCreationCleanupEvidence` | Prove exact candidate/collection/epoch ownership, discarded-or-already-absent disposition, zero residual candidate entries/bytes, unchanged project/spec/engine state, and no use of an untrusted header. Until this validates the collection lock remains held or the runner fail-stops into fresh-run recovery. |
+| `ReleaseFinalValidationOverlayCollectionLockAction` | acquired `FinalValidationOverlayCollectionLockValidation`, still-valid outer feature-execution lock/process lease, and exactly one validated overlay creation, typed prepublication terminal diagnostic, or `FinalValidationOverlayCreationCleanupEvidence` | lock-release observation | Invoke only the overlay port's ordinary release exactly once after successful acquisition validation and the last permitted collection mutation; after publication/cleanup it changes no overlay bytes and does not release either outer capability. An acquired observation rejected by lock validation can reach only the dedicated rejected-observation cleanup action. |
+| `ValidateFinalValidationOverlayCollectionLockReleaseAction` | startup cleanup evidence when reached, optional creation validation or creation-candidate cleanup evidence, release observation, original acquired validation, and still-valid outer feature-execution lock/process lease | `FinalValidationOverlayCollectionLockReleaseEvidence` | Prove one continuous collection-lock epoch from validated acquisition through inventory, cleanup, and publication or rejected-candidate cleanup; prove release after the last mutation, zero candidate bytes before the cleanup-release variant, no leaked capability, and unchanged live outer ownership. |
+| `RunConfiguredCommandAction` | command authorization and matching command savepoint with `TaskExecutionAdapterBoundaryEntryValidation` or `FinalValidationCommandSavepointCreationValidation` | raw command-execution observation | Execute one restricted command inside that exact validated child and capture bounded exit/output/resource/filesystem observations; do not accept a raw binding, classify its delta, or create evidence. |
+| `ValidateCommandProcessOutcomeAction` | raw execution observation, exact command authorization/descriptor, bound success-exit-code set, process-outcome expectation, diagnostic-matcher registry, and required evidence predicate | validated passed/expected-red process outcome or rejected process outcome | Accept success only for `success_required`; accept expected red only for a non-success exit plus the exact versioned required diagnostic/predicate/task join; reject an unrelated failure or unexpectedly green red check. Raw exit/output never becomes evidence directly. |
+| `ValidateCommandResourceTelemetryAction` | one command's mediator telemetry and bound resource quotas | resource-quota evidence | Prove every counter remained within its authorization after in-flight enforcement. |
+| `DecodeCommandDeltaAction` | raw filesystem observation, exact command savepoint base, filesystem-node classifier, and path normalizer | typed command delta or closed alias/special-node diagnostic | Decode/classify every observed entry once; reject symlink/hard-link alias/device/socket/FIFO/unknown nodes rather than trusting the runner or silently dropping them. |
+| `ValidateCommandDeltaAction` | decoded command delta, command authorization, compiled `path-pattern/v1` semantics, and root registry | command-delta evidence | Validate exclusive effect class/path/kind; allow regular files in either class and structural directories only in the disposable ephemeral class, while rejecting every special/alias node. |
+| `PromoteCommandSavepointAction` | successful task command savepoint, validated `command_run_ready` boundary/record set and `TaskExecutionAdapterBoundaryEntryValidation`, typed delta, validation evidence, and unchanged task-overlay revision | updated task overlay, `TaskExecutionAdapterPromotionReceipt`, and ephemeral-discard evidence | Call the task-overlay port with no ambient lookup; durably write complete exact before-images/absence tombstones and the promotion receipt before or atomically with parent-revision publication, compare-and-swap only declared persistent regular files, and discard every ephemeral entry. Assign no evidence ID. |
+| `AssignCommandPromotionEvidenceIdAction` | validated command-promotion observation and exact current prospective `ExecutionEvidenceIdLedger` | command-promotion evidence identity plus successor ID ledger | Allocate one monotonic evidence ID, advance only `nextEvidenceOrdinal`, and decode/promote nothing. The command-promotion append consumes this successor, and the following verification-evidence assignment consumes the ledger returned by that append—never the predecessor ledger. |
+| `BuildCommandPromotionEvidenceAction` | evidence identity, command/savepoint, validated typed delta, `TaskExecutionAdapterPromotionReceiptValidation` with matching receipt, and self-contained ephemeral-discard evidence | command-promotion evidence | Project canonical persistent delta ordinals/file IDs and exact before/after overlay revisions, and prove zero residual ephemeral entries without appending it. Do not retain an adapter-record/blob handle after cleanup closure. |
+| `AssignCommandFileStateTransitionIdAction` | one promoted persistent command-delta entry and exact current `TaskExecutionIdLedger` revision | transition identity plus allocation delta | Select one transition ordinal per persistent entry in canonical delta order. |
+| `BuildCommandFileStateTransitionAction` | transition identity, command/promotion evidence, delta-entry ordinal, and current runtime-file record/revision | command file-state-transition candidate | Derive one create/modify/delete lifecycle transition from the validated promoted delta. |
+| `ApplyCommandFileStateTransitionAction` | promotion evidence, command transition candidate, and matching runtime-file-state revision | next runtime-file-state revision | Compare-and-swap one promoted command effect into runtime authority. |
+| `DiscardCommandSavepointAction` | successful `discard_all`, failed, or invalid command savepoint plus its discriminated validated task-entry or final-validation creation binding, and for final validation the still-live validated feature-execution lock/process lease | task raw discard observation plus `TaskExecutionAdapterDiscardReceipt`, or closed `FinalValidationCommandSavepointDiscardOutcome` | Discard the complete command delta for every non-promoting outcome. For task execution call the task-overlay port and atomically retain the structural receipt with child removal. For final validation call only `FinalValidationOverlayPort.discardFinalValidationCommandSavepoint`; return an observed discard or typed adapter failure/removal disposition, change no parent/task record, and build no verification result. |
+| `InspectFinalValidationCommandSavepointAfterDiscardAction` | final-validation creation validation, exact parent header/revision, and validated feature-execution lock/process lease | raw bounded post-discard parent/child inspection | Invoke only `FinalValidationOverlayPort.inspectFinalValidationCommandSavepointAfterDiscard`; report child presence/bytes, parent revision, task-boundary-record count, project/spec/engine change flag, completeness/ceiling status, and adapter identity without hardcoding success. |
+| `ValidateFinalValidationCommandSavepointDiscardAction` | final-validation creation validation, raw discard outcome, raw post-discard inspection, exact authorization/savepoint/parent header and revisions, validated feature-execution lock/process lease, adapter contract, and ceilings | `FinalValidationCommandSavepointDiscardEvidence` or `FinalValidationCommandSavepointDiscardRejection` requiring parent-overlay abort | Accept an observed discard—or an adapter failure only when the independent complete inspection proves the same postcondition—iff the exact child is absent, parent is directly unchanged, zero child bytes/entries remain, no project/spec/engine authority or task record changed, and outer capabilities remain live. Every indeterminate/incomplete/over-budget/mismatched branch forbids verification and authorizes only parent-addressed recursive cleanup. |
+| `BuildCommandVerificationResultAction` | validated process outcome, exact authorization/savepoint, resource-quota/delta evidence, promotion evidence plus receipt validation, or task discard plus receipt validation, or `FinalValidationCommandSavepointDiscardEvidence` | typed command automated verification result | Construct the only command result eligible for durable verification evidence; a final-validation result is impossible before its child discard validates, and expected-red requires complete validated discard and may never promote. |
+| `ProjectRejectedCommandOutcomeDiagnosticAction` | rejected process outcome, bound descriptor/matcher observation, and task/final context | deterministic command diagnostic | Produce a bounded diagnostic with no raw output body and exact source-outcome binding. |
+| `DiscardFinalValidationOverlayAction` | completed/failed/aborted final validation overlay, exact validated write-once parent header/collection capability, validated still-live feature-execution lock/process lease matching the header owner, and either all validated command-child discards or one typed child creation/discard rejection, plus sandbox adapter/version | closed raw `FinalValidationOverlayDiscardOutcome` | Invoke only `FinalValidationOverlayPort.discardCurrent`; request normal parent removal after every trusted child is absent or recursive parent-tree removal from the validated parent header when a child is rejected/indeterminate. The abort branch never trusts or addresses that child. Return observed discard or typed adapter failure and assign no evidence. |
+| `ValidateFinalValidationOverlayDiscardAction` | raw parent discard outcome, exact validated parent header/collection/outer authorities, sandbox adapter contract, and either complete normal child-discard evidence or one exact child rejection | `FinalValidationOverlayNormalDiscardEvidence`, `FinalValidationOverlayRecursiveAbortEvidence`, or `FinalValidationOverlayDiscardRejection` | For normal completion prove every child exactly once and absent; for abort prove the typed cause, parent-only addressing, complete recursive removal, zero residual tree bytes/entries, unchanged project/spec/engine state, and live outer controls. Only normal evidence may enter `FinalValidationRecord`; recursive-abort evidence blocks safely, while adapter-indeterminate/residual rejection requires runner fail-stop and fresh-run orphan cleanup. |
+| `AssignFinalValidationRecordIdAction` | final-validation attempt and current workflow-control-event registry allocator | final-validation-record identity plus next namespace ledger | Assign one monotonic record ID before building a result; a failed build retires it. |
+| `BuildFinalValidationRecordAction` | record identity, run-scoped final-validation invocation identity, task-definition/runtime identities, disposable overlay identity, exact command/verification-evidence/execution-diagnostic IDs, outcome, self-contained discard evidence, and trusted clock | final-validation record candidate | Bind one passed/failed gate result after all validation bytes are discarded; failed results retain the exact durable diagnostic IDs used by localization. |
+| `ValidateFinalValidationRecordAction` | final record, task/evidence/diagnostic/command/overlay authorities, required final-check set, and embedded discard proof | final-validation-record evidence | Prove exact command/evidence/diagnostic coverage, passed-empty versus failed-nonempty diagnostic rules, outcome consistency, current revisions, and zero residual/promotable overlay delta. |
+| `LocalizeFinalValidationDiagnosticAction` | one diagnostic ID resolved through the failed final record and execution-evidence registry, committed task journals, file registry, and task graph | unique existing task or scope-gap result | Map a durable failure mechanically without authorizing a write or rereading transient command output. |
+| `BuildFinalValidationFailedWorkflowStateAction` | failed final evidence and discarded-overlay proof | final-validation-failed state candidate | Record the failed gate without retaining validation bytes. |
+| `BuildTaskRemediationRuntimeAction` | unique localization, completed task record, and stale evidence set | remediation-pending runtime candidate | Reopen only the same approved task scope and invalidate affected evidence. |
+| `BuildReconciledTaskRuntimeStateAction` | current task runtime, exact affected completed task IDs, and typed upstream/review invalidation | next task-runtime candidate | Change each affected completed task to `needs_reconciliation`, clear no unrelated record, and preserve immutable task definitions. |
+| `AssignExecutionEvidenceInvalidationIdAction` | current evidence registry and current workflow-control-event registry allocator | evidence-invalidation identity plus next namespace ledger | Assign one monotonic ID without retiring evidence; a failed build retires it. |
+| `BuildNextExecutionEvidenceRegistryWithRetirementsAction` | current evidence registry, exact stale evidence IDs, next registry-state identity, and cause | next execution-evidence registry candidate | Append no fabricated evidence; copy retained records and move exactly the stale IDs into the never-reused retired set. |
+| `BuildExecutionEvidenceInvalidationRecordAction` | invalidation identity, current/next evidence registries, affected task IDs, and typed cause | evidence-invalidation record | Bind the exact retired IDs and before/after revisions without mutating either state. |
+| `ValidateExecutionEvidenceInvalidationAction` | invalidation record, current/next evidence registries, task runtime/definition, and cause evidence | evidence-invalidation evidence | Prove every retired ID existed and was active, every affected task owned/depended on it, no unrelated ID retired, and all before/after joins are exact. |
+| `AssignReworkInvalidationRecordIdAction` | current workflow and current workflow-control-event registry allocator | rework-invalidation identity plus next namespace ledger | Assign one monotonic invalidation ID without deciding scope; a failed build retires it. |
+| `BuildReworkInvalidationRecordAction` | invalidation identity, typed change/review/final-scope evidence, earliest-owner derivation, exact descendant definition/approval IDs, and implementation watermark | rework-invalidation record candidate | Bind one closed invalidation cause and exact targets without mutating state. |
+| `ValidateReworkInvalidationRecordAction` | invalidation record, current reference/spec/plan/task/review/runtime authorities, and cause evidence | rework-invalidation evidence | Prove earliest-stage choice, total/only affected descendants, review-decision ID joins, and exact no-commit/commits-exist watermark. |
+| `BuildRemediationTaskProposalAction` | scope-gap localization and task-generation context | remediation task proposal unit | Produce one proposed task for normal validation/review when no approved task owns the repair. |
+| `ValidatePostCommandStateAction` | promoted overlay, impacted IDs, and required validator set | refreshed validation evidence | Rerun validators invalidated by one command promotion. |
+| `DeriveRequiredChecksAction` | task kind, file kinds, diff, preset evidence policy | required command/evidence set | Compute mandatory checks without model choice. |
+| `CaptureManualVerificationSubmissionAction` | raw manual-verification event and runner-held submission/authentication-lease table | immutable run-local manual-verification handle/candidate | Capture expected workflow/task/runtime/checkpoint/evidence-registry/predicate/scenario revisions and bounded observation bytes; keep the lease opaque and assign no durable ID. |
+| `ValidateManualVerificationSubmissionAction` | captured submission, current workflow/task/runtime/checkpoint/evidence registry, exact predicate/scenario definitions, and manual-verification policy | validated manual-verification submission or stale/structural diagnostic | Before authentication, prove all expected identities/revisions are current, the task owns the unsatisfied predicate/scenario, observation shape is bounded, and manual verification is enabled. |
+| `BindAuthenticatedManualVerificationSubmissionAction` | validated manual submission and validated fresh actor evidence for `manual_verification` | authenticated manual-verification binding | Bind the exact submission/revisions/predicate/scenario/actor evidence after static validation; add no execution evidence. |
+| `AssignManualVerificationSubmissionIdAction` | reserved execution-evidence ID and compiler-locked singleton `manual_verification` slot | owner-local manual-verification-submission identity | Construct `(evidenceId, manual_verification)` without another allocator or caller/model scalar. |
+| `BuildManualEvidenceAction` | evidence/submission identities, authenticated manual-verification binding, unchanged validated submission, and trusted clock | manual-evidence candidate | Build one exact observer/evidence-attributed scenario record with task/runtime/checkpoint/evidence-registry bindings. |
+| `ValidateManualEvidenceAction` | manual-evidence candidate, authenticated binding, exact actor-evidence registry, current task/checkpoint/evidence authorities, and scenario/evidence policy | manual evidence | Validate actor/evidence/submission equality, freshness, predicate ownership, and one observation against its declared scenario. |
+| `BuildImplementationActorRegistryMutationAction` | current actor registry and either no authenticated event or one validated manual-event actor evidence append | unchanged-or-appended implementation actor mutation | Select the exact unchanged variant for automated work or the appended variant for manual evidence; never create a no-op actor revision. |
+| `ValidateImplementationActorRegistryMutationAction` | mutation, current actor registry, optional authenticated binding, and transaction evidence set | actor-mutation evidence | Prove unchanged direct equality or exactly one required authenticated append and forbid actor mutation for automated-only evidence. |
+| `BuildManualVerificationTransactionAction` | current workflow/task/runtime/checkpoint/file/overlay/view authorities, input/next actor and execution-evidence registries, validated manual evidence, and state-identity mutation | manual-verification transaction candidate | Atomically append actor plus manual evidence while leaving project files, overlay, runtime/file state, and workflow unchanged. |
+| `ValidateManualVerificationTransactionAction` | transaction, current canonical authorities, authenticated binding, actor-mutation/evidence/state-identity validation | manual-verification transaction evidence | Prove exact compare-and-swaps, one evidence append, unchanged code/runtime/overlay, and tasks-view equality. |
+| `AppendExecutionEvidenceAction` | current in-memory prospective execution-evidence registry, one validated identity-bound verification/operation-promotion/command-promotion record, and its exact successor ID ledger | next in-memory prospective registry candidate | Append one union member and carry the allocator compare-and-swap; durable registry revision/state identity is assigned once for the complete checkpoint batch. |
+| `BuildNextRuntimeFileStateAction` | next runtime-file-state identity/revision, current valid state, and ordered applied transition registry | successor runtime-file state | Project all operation/command lifecycle transitions exactly once without reading plan baselines as current state. |
+| `SupersedeTaskExecutionAttemptAction` | current active attempt, coupled diagnostic, and clean-base replay authorization | supersede evidence | Close the failed attempt before any repaired replay begins. |
+| `BuildSuccessorAttemptReplayPlanAction` | superseded attempt checkpoint, immutable accepted operation records, one atomic repair authorization/response, and clean task base | successor replay plan | Reuse unchanged replay records and replace only the authorized operation unit; never mutate the prior attempt's journal. |
+| `BuildTaskValidationAuthorizationAction` | lease/definition/runtime identities, final overlay revision, operation-journal completeness evidence, required predicates/evidence, and no-unexpected-change evidence | task-validation authorization candidate | Bind one exact journal ID/revision and completion evidence set for single use. |
+| `ValidateTaskValidationAuthorizationAction` | authorization candidate and current lease/runtime/overlay/journal/evidence registries | completion authorization evidence | Prove identities/revisions are current and every required predicate is satisfied exactly once. |
+| `SealTaskTransactionAction` | validated task authorization, exact overlay/project delta, operation plan/record/journal identities, input/next runtime-file state, evidence, explicit validated unchanged-or-appended implementation actor mutation, state-identity mutation, next task/workflow states, rendered view, and lease release | sealed `TaskTransaction` | Bind the complete successful task commit set and all expected revisions to one single-use authorization; automated completion requires the unchanged actor variant. |
+| `ValidateTaskTransactionAction` | sealed task transaction and current persisted/overlay/lease/authorization authorities | task-transaction evidence | Prove every binding/revision, project delta, journal/file-state transition, evidence set, view, and state update before WAL preparation. |
+| `SealTaskOutcomeTransactionAction` | non-success state, diagnostics/evidence, journal, explicit validated unchanged-or-appended implementation actor mutation, state-identity mutation, rendered view, and lease delta | sealed state-only outcome transaction | Bind one failed/blocked/runtime outcome and lock release atomically; create no actor revision unless authenticated manual evidence is in the same transaction. |
+| `BuildCompletedTaskStateAction` | task validation authorization and task state | candidate completed task state | Build the state delta to include in the sealed transaction. |
+| `BuildValidationFailedTaskStateAction` | failed validation outcome and task state | candidate validation-failed state | Build one retryable validation-failure transition. |
+| `BuildFailedTaskStateAction` | terminal execution failure and task state | candidate failed state | Build one terminal failure transition. |
+| `BuildBlockedTaskStateAction` | failed prerequisite/dependency evidence and task state | candidate blocked state | Build one dependency-blocked transition. |
+| `BuildNeedsReconciliationTaskStateAction` | authorized upstream rework and affected task ID | candidate reconciliation state | Mark one completed task for explicit reconciliation. |
+| `RenderCompletionReportAction` | final workflow state and evidence | human report | Produce a report without changing state. |
+
+### 13.8 Persistence actions
+
+Every transaction-builder uses the catalogue-wide `DurableTransactionMember`: the appropriate `StateIdentityTransactionMember` plus a `TransactionIdentityMember` whose collection-local monotonic ID reservation was durably compare-and-swapped before sealing. Validators reprove them through `ValidateStateIdentityTransactionMemberAction` and `ValidateTransactionIdentityMemberAction`; every sealed entry set includes touched successor state ledgers, while the collection transaction-ID ledger moves reserved to committed only after the journal marker.
+
+| Action | Input | Output | Single responsibility |
+|---|---|---|---|
+| `AcquireFeatureTransactionCollectionLockAction` | active feature-directory capability's engine-feature root, validated workflow-artifact registry/`StageTransactionCollection`, process instance, and bounded lock policy | runner-held feature-transaction lock capability or contention diagnostic | Serialize recovery and stage/task/review/checkpoint commits in the registered engine transaction collection; never resolve it beneath the specs/log root and do not inspect a journal. |
+| `ReleaseFeatureTransactionCollectionLockAction` | runner-held feature-transaction lock capability and terminal feature-storage outcome | release observation | Release exactly once on every success/error/cancel path after the last feature transaction/recovery operation; accept no serialized token. |
+| `ResolveTransactionIdLedgerPathAction` | validated project/feature transaction collection capability | fixed collection-local transaction-ID-ledger path | Derive the one ledger child for that collection; accept no caller path. |
+| `ReadTransactionIdLedgerAction` | fixed transaction-ID-ledger path, held collection lock, and bounded no-follow descriptor | absent or bounded ledger bytes | Read one collection ledger without parsing or allocating; absence is valid only before its first transaction. |
+| `ParseTransactionIdLedgerAction` | bounded transaction-ID-ledger bytes | unvalidated transaction-ID ledger | Parse owner/revision/next ordinal/reservation/tombstone fields without trusting them. |
+| `BuildInitialTransactionIdLedgerAction` | exact project/feature storage owner and proven absent ledger path | empty transaction-ID ledger revision zero | Initialize the next transaction ordinal to one without creating a journal. |
+| `ValidateTransactionIdLedgerAction` | parsed/initial ledger, storage owner, optional prior ledger, journal inventory, and hard policy | transaction-ID-ledger evidence | Prove owner/revision/monotonic ordinals, unique reservation/commit/retire transitions, total orphan accounting, and no reuse. |
+| `AssignTransactionIdAction` | requested closed transaction kind and current validated transaction-ID ledger under the held collection lock | reserved transaction ID plus successor ledger | Reserve exactly the next collection-local ordinal; accept no caller/model ID and never derive identity from entry content. |
+| `PersistTransactionIdReservationAction` | exact input/successor ledgers, one reserved transaction ID, ledger path, and held collection lock | durable reservation CAS evidence | Atomically replace/fsync the single ledger before constructing or exposing the journal path; a crash leaves a recoverable reserved ordinal. |
+| `CommitTransactionIdAction` | committed journal marker, matching reserved transaction ID, exact current validated ledger/revision, fixed ledger path, and held collection lock | durable committed-ledger CAS/fsync evidence plus successor ledger | Atomically replace and fsync the ledger to mark exactly one reservation committed after complete roll-forward verification and before journal cleanup; never alter or reuse its ordinal. |
+| `RetireTransactionIdAction` | reserved transaction ID with no committed marker, complete restoration-or-proven-absence evidence, typed terminal/orphan cause, exact current validated ledger/revision, fixed ledger path, and held collection lock | durable retired-ledger CAS/fsync evidence plus successor ledger | Atomically replace and fsync the ledger to tombstone one abandoned/orphan reservation after restoration/absence proof and before journal cleanup; never rewind or reuse its ordinal. |
+| `ValidateTransactionIdentityMemberAction` | transaction, durable reservation evidence, input/successor transaction-ID ledgers, storage owner, and transaction kind | transaction-identity evidence | Prove exact ID/kind/owner/revision membership and that no transaction is sealed without its pre-persisted reservation. |
+| `BuildTransactionStorageCapabilityAction` | one held project or feature transaction lock, its exact validated collection path authority/current transaction-ID ledger, and requested transition kind | discriminated transaction-storage capability | Bind one journal to exactly one authorized project/feature collection and reject a transition kind not admitted by that storage variant. |
+| `ValidateTransactionStorageCapabilityAction` | storage capability, sealed transaction, current root/artifact authorities, process instance, and runner lock table | transaction-storage evidence | Prove path containment, owner/kind/transition equality, live exact lock ownership, and absence of cross-project/feature storage. |
+| `BuildStateIdentityReservationStageTransactionAction` | active feature/current workflow identity, exact current feature-ledger revision, validated reservation mutation, and one closed actual external-exposure boundary | minimal feature-owned reservation transaction candidate | After feature activation, persist only purpose-bound ID reservations that must cross to a model/provider, nontransactional adapter/serializer, log/diagnostic, or public artifact/path before their owning business transaction; transaction-private serialization/staging is explicitly excluded. Change no canonical business state. Preownership reference capture uses only noncanonical session IDs. |
+| `ValidateStateIdentityReservationStageTransactionAction` | reservation candidate, namespace/purpose registries, current ledgers, and exact not-yet-exposed evidence | reservation-transaction evidence | Prove compare-and-swap ownership, unique new ordinals, closed purpose keys, no prior exposure, unchanged workflow/business state, and exact ledger-only membership. |
+| `BuildStateIdentityRetirementStageTransactionAction` | active feature/current workflow identity, current touched ledgers, durable open reservations, typed abandonment cause, and validated retirement mutations | minimal feature-owned retirement transaction candidate | Permanently retire only previously durable reservations while changing no canonical business state. |
+| `ValidateStateIdentityRetirementStageTransactionAction` | retirement candidate, current ledgers, purpose bindings, and no-live-state-reference evidence | retirement-transaction evidence | Prove every target is still reserved, unreferenced by canonical state, retired once, and contained in the exact ledger-only mutation. |
+| `BuildSpecificationAcknowledgementIdRetirementStageTransactionAction` | current `specified` or `planning` workflow/actor/provenance/acknowledgement authorities, matching validated authentication-evidence and acknowledgement-ID retirement records, validated retirement-only actor/acknowledgement/provenance successors, exact regenerated editable view, optional exact retirement-rebound plan-input successor, matching same-stage workflow successor, and common state/transaction identity members | specification-acknowledgement-ID-retirement transaction candidate | Persist one post-auth failed edit attempt's actor-evidence plus submission/change-set/acknowledgement ID tombstones without an actor-evidence entry, authenticated edit event, acknowledgement, specification-content change, or model call; when planning, atomically rebind the current plan-input authority, and when specified require that no plan-input authority exists. |
+| `ValidateSpecificationAcknowledgementIdRetirementStageTransactionAction` | retirement transaction, current canonical workflow/actor/specification/provenance/acknowledgement/optional plan-input authorities, both validated retirement evidence records, exact state-identity mutations, and current transaction-ID-ledger/journal inventory | acknowledgement-ID-retirement transaction evidence | Prove CAS inputs and same failed submission/cause; no competing prepared/committed edit journal; actor entries, accepted edit events/acknowledgements, specification, passive, clarification, and all business authority are unchanged; only the exact actor/acknowledgement allocator tombstones, required provenance/view pointers, optional byte-equal planning-input rebind, and workflow identities/revisions advance; require `specified -> specified` or `planning -> planning` and forbid any accepted edit member. |
+| `CreateArtifactTransactionAction` | intended artifact paths | empty artifact transaction | Reserve a contained staging area. |
+| `StageArtifactAction` | one rendered artifact and transaction | updated transaction | Stage one artifact candidate. |
+| `StageWorkflowStateAction` | one next-state payload and transaction | staged workflow-state entry | Stage the workflow state as a transaction member. |
+| `BuildBootstrapAuthorityRefreshStageTransactionAction` | current workflow/bootstrap revisions, validated successor bootstrap authority, exact validated materialized evidence with a runtime-only change plan, and next workflow state differing only in workflow identity/revision/bootstrap pointer | bootstrap-authority-refresh transaction candidate | Persist a nonsemantic compatible authority change with its complete typed explanation without altering feature/reference/spec/plan/task/review/runtime/control-event state. |
+| `ValidateBootstrapAuthorityRefreshStageTransactionAction` | refresh candidate, exact changed-component evidence, current canonical authorities, and locked impact registry | bootstrap-refresh transaction evidence | Prove every change is in the compatible class and every non-bootstrap workflow field is directly equal; reject breaking or administrative changes. |
+| `BuildSpecifyCompletionStageTransactionAction` | current workflow revision, a closed retained/adopted specification-contract bootstrap mutation whose adopting plan has `dominantImpact: specification_contract` and exact materialized evidence, and the exact validated artifact/actor/reference/request/passive/spec-ID/acknowledgement/clarification/provenance/specification/editable-view/reference-view/clarification-view/next-workflow members | specify-completion transaction candidate | Construct the closed `SpecifyCompletionStageTransaction` variant and atomically adopt only a specification-contract successor used by that regenerated specification; reference-dominant changes use reference revision/pause and planning-dominant changes wait for PlanInput. Perform no write or generic sealing. |
+| `BuildPlanInputAuthorityStageTransactionAction` | current `specified` or `planning` workflow revision, a closed retained/adopted planning-stage bootstrap mutation restricted to principle/technical-planning change evidence, validated normalized editable specification and spec-ID/acknowledgement/provenance/passive authorities, a closed unchanged-spec or authenticated-edit mutation carrying the exact edit event and durable authentication/capture binding projection, complete acknowledgement set and successor acknowledgement ID ledger, explicit unchanged-current or authenticated-append actor-registry mutation, current clarification authorities, one validated initial/successor plan-input-authority state, and a `planning` workflow state pointing to it | plan-input-authority transaction candidate | Before any plan model call, atomically adopt the planning bootstrap successor when present and commit authenticated spec edits, their IDs/acknowledgements/provenance/passive changes and actor evidence, plus every repository/file/research/principle authority a plan result may cite; support the legal `planning -> planning` authority-refresh self-transition and create no no-op actor revision. |
+| `BuildPlanCandidateStageTransactionAction` | current workflow revision and the exact validated bootstrap/actor/normalized-specification/editable-spec-view/spec-ID/acknowledgement/clarification/provenance/passive/current-plan-input-authority/plan-state/generated-plan-view/clarification-view/next-workflow members | plan-candidate transaction candidate | Construct the closed `PlanCandidateStageTransaction` variant only; stage the immutable current plan-input member unchanged and verify `PlanState.inputPlanAuthorityStateId`, but perform no review or ambient lookup. |
+| `BuildTasksCandidateStageTransactionAction` | current workflow revision and the exact validated bootstrap/actor/clarification/task-definition/runtime-file/evidence/task-runtime/tasks-view/clarification-view/next-workflow members | tasks-candidate transaction candidate | Construct the closed `TasksCandidateStageTransaction` variant only; perform no review or write. |
+| `ValidateCoreStageTransactionAction` | one specify-completion/plan-input-authority/plan-candidate/tasks-candidate transaction and current canonical authorities | core-stage transaction evidence | Prove exact variant membership, compare-and-swap revisions, canonical-state/view equality, authority joins, clarification closure, plan-input pointer rules, and the legal specified/planning/review-pending next state; for owning-stage bootstrap adoption, prove exact route/change-plan/materialized evidence, all unioned obligations, and that every regenerated member plus the next workflow points to the transaction-committed successor. |
+| `BuildClarificationPauseStageTransactionAction` | exact stage, immutable authority bindings, stage-specific write members (including, for `SNN`, a closed retained/adopted specification-stage bootstrap mutation and, when a successor reference has a nonempty prior/current conflict-subject union or applies a prior conflict answer, the complete successor reference/passive authority, closed descendant invalidation mutation, validated complete reference-conflict set transition, and reference view; and, for `PNN`, a closed retained/adopted planning-stage bootstrap mutation plus validated successor `PlanInputAuthorityState` bound to the next clarification revision), next clarification registry, complete clarification view set, and matching pending workflow state | clarification-pause transaction candidate | Build the closed spec/plan/tasks pause variant; atomically adopt a classified owning-stage bootstrap successor with the authority/question state it affects, persist the entire reference-conflict subject-set reconciliation when present, persist every advanced plan-ID/tombstone even though no partial `PlanState` is allowed, distinguish unchanged bindings from staged entries, and forbid an incomplete `SpecificationIR`, `PlanState`, or `TaskDefinitionState`. |
+| `BuildClarificationResponseStageTransactionAction` | current workflow/clarification/actor-registry revisions, validated authenticated response, next actor/clarification/passive registries, views, and matching resumed/pending/cancelled workflow state | clarification-response transaction candidate | Persist a compare-and-swap user answer and its authentication evidence against the last committed authority binding before refresh/regeneration. |
+| `BuildClarificationAuthorityResolutionStageTransactionAction` | current workflow/clarification revisions, validated authority resolution, one closed stage-specific refresh variant, current actor registry, next clarification registry/views, and matching resumed-or-still-pending workflow state | authority-resolution transaction candidate | Persist every newly referenced authority and any exact classified bootstrap successor with the resolution. A specification refresh is discriminated: `SpecificationCurrentReferenceAuthorityRefreshEntries` may retain the current reference and adopt only a specification-contract bootstrap mutation; `SpecificationReferenceRevisionAuthorityRefreshEntries` must carry the successor snapshot, reference view, reference-revision bootstrap mutation, and complete `ReferenceRevisionDescendantMutation`. A plan refresh carries its successor plan-input authority built against the next clarification revision. Validate prospective mutual joins, remain pending when another same-stage record is open, and never point clarification state at an uncommitted snapshot/policy/input bundle. |
+| `ValidateClarificationStageTransactionAction` | one pause/response/authority-resolution transaction and current canonical authorities | transaction-membership evidence | Prove exact state/view/path/revision membership, prefix/state agreement, actor-evidence/authority joins, absence of a partially accepted stage artifact, and equality of the workflow open-ID projection to the next registry. A specification pause with a nonempty prior/current conflict-subject union or a prior conflict answer must contain the validated complete subject-set transition and must prove that its post-decision unresolved conflict keys, open registry keys, and open/submittable form-view key projection are identical; closed historical views may remain but expose no input region. A partial per-subject pause is invalid. For bootstrap adoption, also prove exact route/change-plan/materialized evidence, current-or-successor effective authority pointer, and every unioned obligation. In the current-reference authority-resolution variant, require direct identity/value equality with the complete current `ReferenceSnapshot`, require every retained passive/provenance authority to rejoin that exact snapshot, and reject any reference-ingestion mutation. For the reference-revision authority-resolution variant, require successor snapshot/reference-view equality, complete no/uncommitted/committed descendant mutation, workflow-control/runtime/evidence invalidation when applicable, cleared feature-request/provenance/plan/task pointers, and no stale `SpecificationProvenanceState` member. Enforce `closed/resolved + same-stage open records remain -> same clarification-pending stage`, `final same-stage closure -> owning active stage`, `defer -> same pending stage with a freshly blank open form`, and `cancel -> cancelled`. |
+| `BuildReviewTransactionAction` | exact current review target, validated authenticated decision/evidence, input/next actor registry, input/next review-decision registry, and matching next workflow state | review transaction candidate | Bind approval/rejection, both immutable registries, authentication evidence, and transition without changing generated view/state content. |
+| `ValidateReviewTransactionAction` | review transaction and current plan/task/workflow/actor/review authorities | review-transaction evidence | Prove target freshness, decision policy, actor/evidence equality, both registry compare-and-swaps, state transition, and exact membership. |
+| `BuildReferenceRevisionStageTransactionAction` | current workflow/actor-registry revisions, validated successor reference/passive/clarification authorities, the validated complete reference-conflict set transition when conflict-bound records were reconciled, the complete rendered clarification-view set plus `ClarificationViewSetEvidence`, exact current-or-next actor registry containing every feedback/decision evidence ID, a closed retain-current or adopt-successor bootstrap-authority mutation (the latter carrying an exact specification-owning change plan whose dominant impact is reference ingestion and complete component evidence), regenerated reference view, a closed no-descendant/uncommitted-descendant/committed-descendant mutation (including input/next control registry, rework record, and when committed next task/evidence states plus evidence invalidation), and a `specifying` workflow state with current feature-request/provenance/plan-input/plan/task pointers cleared | reference-revision transaction candidate | Atomically bind the complete successor reference/actor authority, successor bootstrap authority with every secondary obligation, complete clarification-set effects and every registered historical view when no current conflict remains open, and exact descendant invalidation/reconciliation after feedback, conflict decision, reingestion, or reference-ingestion policy change. Accept only evidence whose open-submission view projection is empty while retaining closed read-only audit views; never expose a new snapshot with stale approvals/runtime or a dangling evidence pointer. |
+| `BuildReworkInvalidationStageTransactionAction` | validated bootstrap route/change plan, input/next workflow-control-event registries containing the validated rework/evidence-invalidation records, typed change evidence, implementation watermark, exact descendant state/approval IDs, a closed retain-current or adopt-successor bootstrap-authority mutation carrying complete materialized evidence, current clarification/actor authorities, closed no-runtime or committed-runtime mutation (including next task/evidence states), regenerated views, and next workflow state | rework-invalidation transaction candidate | Record one earliest owning-stage invalidation, atomically adopt the planned successor bootstrap authority and every unioned obligation, and, iff commits exist, mark every affected completed task `needs_reconciliation` and retire its stale evidence without deleting history or regenerating definitions. |
+| `BuildFinalValidationFailedStageTransactionAction` | input/next workflow-control-event registries containing the failed final-validation record, input/next execution-evidence registry revisions, unchanged task-runtime revision, regenerated tasks view, and failed workflow state pointing to that record | final-validation-failed transaction candidate | Bind one discarded-overlay failure result without retaining validation bytes or yet claiming a localized runtime mutation. |
+| `BuildLocalizedTaskRemediationStageTransactionAction` | durable failed-final record resolved from the input workflow-control-event registry, its successor containing the validated evidence-invalidation record, unique localization, current/next task runtime, current/next evidence registries, regenerated tasks view, and implementing state | localized-remediation transaction candidate | Atomically append the invalidation event, move only the owning completed task to `remediation_pending`, retire exactly affected evidence, and leave project files unchanged. |
+| `BuildImplementationReconciliationStageTransactionAction` | input/next workflow-control-event registries containing the scope-gap/upstream invalidation and evidence-invalidation records, optional durable failed-final record, current/next task runtime, current/next evidence registries, tasks view, and reconciliation workflow state | implementation-reconciliation transaction candidate | Atomically mark affected completed tasks `needs_reconciliation`, retire stale evidence, and enter one explicit backward transition without changing project files. |
+| `BuildImplementationCompletionStageTransactionAction` | input/next workflow-control-event registries appending the validated passed final-validation record, next evidence/runtime states, final tasks view, and implemented workflow state that clears active final/rework pointers | implementation-completion transaction candidate | Bind the exact final evidence/state set and durable passed record; a model summary cannot complete the run. |
+| `ValidateWorkflowTransitionStageTransactionAction` | one reference-revision/rework/final-failure/localized-remediation/reconciliation/completion variant and current canonical authorities | transition-transaction evidence | Prove exact variant membership, current revisions, task/evidence invalidation and view joins, implementation watermark, and legal next state. A reference revision that reconciles conflict-bound records must contain the validated complete subject-set transition and complete clarification-view set; its zero expected-open-key set must equal both the successor snapshot's zero unresolved behavior-conflict key set and the view set's empty `open_submission` projection before entering `specifying`, while every retained closed record has exactly one `closed_audit` view with no editable regions. For reference-revision/rework, prove the closed bootstrap mutation consumes the exact validated route/change-plan/component evidence, preserves every secondary obligation, and that `nextWorkflowState.bootstrapAuthorityStateId` points to the retained current or transaction-committed successor authority. |
+| `SealStageTransactionAction` | artifacts, canonical-state entries, next state, evidence | sealed stage transaction | Bind one exact stage entry set/revision. |
+| `ValidateTransactionMembershipAction` | staged transaction and intended entry registry | membership evidence | Prove exact entry-set completeness. |
+| `CreateTransactionAuthorizationAction` | sealed transaction and all validation evidence | single-use authorization | Authorize one exact sealed revision. |
+| `PrepareTransactionJournalAction` | sealed transaction, matching single-use authorization, and validated discriminated transaction-storage capability | durable prepared journal bound to one storage collection | Persist entries, before-images, target identities, authorization, storage kind/path identity, and lock-owner identity before mutation. |
+| `RecordTransactionEntryIntentAction` | prepared journal, one entry, and same validated transaction-storage capability | durable `ENTRY_APPLYING` evidence | Persist intent under the still-held exact collection lock before one destination mutation. |
+| `ApplyTransactionEntryAction` | intent evidence, entry, fresh no-follow target token, and same validated transaction-storage capability | destination mutation evidence | Apply one destination entry only while its recorded collection lock remains live. |
+| `RecordTransactionEntryAppliedAction` | destination mutation evidence and same validated transaction-storage capability | durable `ENTRY_APPLIED` evidence | Persist completion of one entry mutation under the exact journal storage authority. |
+| `WriteTransactionCommitMarkerAction` | fully applied journal and same validated transaction-storage capability | committed transaction evidence | Durably write the commit marker last under the held exact collection lock. |
+| `CleanCommittedTransactionAction` | committed journal and same validated transaction-storage capability | cleanup evidence | Remove disposable staging/before-images after commit while the exact collection lock remains held. |
+| `ReadTransactionRecoveryStateAction` | one durable journal and validated storage capability for its recorded collection | typed recovery state | Read marker, phase, and applied entries only after storage/lock equality. |
+| `RestoreTransactionEntryAction` | one uncommitted intent-marked entry, before-image, and validated capability for its recorded storage collection | restored-entry evidence | Idempotently restore one possibly applied entry under the exact held recovery lock. |
+| `VerifyCommittedTransactionEntryAction` | one committed journal entry, destination, and validated capability for its recorded storage collection | verified-entry evidence | Verify/roll forward one committed entry idempotently under the exact held recovery lock. |
+| `DiscardTransactionAction` | uncommitted transaction and matching validated transaction-storage capability | discard evidence | Remove candidate state from its exact collection without touching committed files. |
+
+The model is never invoked from a persistence action, and no persistence action accepts a raw model path.
+
+### 13.9 Feature logging actions
+
+The runner-owned logging observer submits trusted lifecycle events and applied `TelemetryFact`s to these ordinary common-interface actions. Their contract IDs are the only compiler-locked instrumentation-internal IDs and are not observed recursively. The logging orchestrator coordinates them but has no clock, filesystem, redaction, serializer, or sink port itself.
+
+| Action | Input | Output | Single responsibility |
+|---|---|---|---|
+| `AcquireFeatureLogStreamLockAction` | validated current feature-log binding, exact stream, and bounded lock policy | raw current-binding lock observation or contention diagnostic | Ask the sink adapter for the exclusive physical `(featureId, runId, stream)` lock; the binding supplies feature/run but is not part of physical lock identity. Wait only within the configured deadline and perform no inspect/write. |
+| `ValidateFeatureLogStreamLockAction` | raw lock observation, binding/stream, adapter registry, process instance, and runner lock table | runner-held stream-lock capability or typed rejection retaining the transient observation handle | Prove exact owner/binding/adapter/token uniqueness; keep the opaque token out of envelopes, serialization, telemetry, and model/log data. |
+| `ReleaseRejectedFeatureLogStreamLockObservationAction` | validation rejection and the exact runner-retained raw observation returned by the same acquisition call | rejected-lock cleanup observation | Ask the adapter to release-or-confirm-not-owned, destroy the opaque token, and prove no runner lock-table entry exists before emitting the terminal diagnostic; accept no serialized/model-provided observation. |
+| `ReleaseFeatureLogStreamLockAction` | runner-held stream-lock capability and terminal stream operation outcome | release observation | Release exactly one held lock on every success/error/cancel branch; process death relies on adapter/OS ownership release and the next run reacquires before recovery. |
+| `BuildFeatureLogPolicyTransitionStreamLockCapabilityAction` | validated feature-log-policy transition, still-held current-binding stream-lock capability, exact stream, process instance, and runner lock table | nonauthorizing dual-binding transition-lock candidate | Propose rebinding the already-held physical lock to the transition's exact current/successor binding IDs without acquiring a token and without consuming/releasing the ordinary capability. |
+| `ValidateFeatureLogPolicyTransitionStreamLockCapabilityAction` | transition-lock candidate, the still-held ordinary capability, transition evidence, both bindings, adapter/process identity, and runner lock table | validated dual-binding transition-stream-lock capability, or rejection retaining the releasable ordinary capability | Prove one live physical `(featureId,runId,stream)` token, exact old/new binding pair, stream membership, and no alias; only the success branch atomically consumes/invalidates the ordinary capability and installs the dual capability in the runner table. |
+| `ReleaseFeatureLogPolicyTransitionStreamLockAction` | dual-binding transition-stream-lock capability and terminal old/new stream-transition outcome | typed dual-binding transition-lock release observation | Release the one wrapped physical token exactly once on success/error/cancel, prove the runner-table entry absent, and invalidate both exact binding authorizations. |
+| `ResolveLogEventDefinitionAction` | trusted runner lifecycle/telemetry-fact kind and exact definition registry | event definition | Resolve the engine-owned canonical severity, template, and field schema; ignore any caller-suggested wording/level. |
+| `BuildLogEventDraftAction` | trusted run/node context, resolved definition, and typed fact/lifecycle data | schema-shaped event draft | Project only definition-allowed IDs/enums/counts; omit diagnostic message/expected/actual and all raw content. |
+| `RedactLogFieldAction` | one potentially-sensitive draft field and mandatory redaction registry | redacted or omitted field plus evidence | Apply the field-definition-owned classification and remove secrets; a producer cannot label a field public. |
+| `EvaluateLogThresholdAction` | canonical event level and configured canonical threshold | emit/drop decision | Emit exactly when `rank(event) >= rank(threshold)` using `fatal=60`, `error=50`, `warning=40`, `info=30`, `debug=20`, `trace=10`. |
+| `AssignLogEventSequenceAction` | emitted schema-shaped draft, resolved definition, redacted fields, trusted clock/monotonic source, and matching per-run/per-stream sink state | identified ordered `LogEvent` | Assign canonical level/template, timestamp, event ID, and the next stream sequence only after filtering/redaction. |
+| `ValidateSafeLogRecordAction` | identified event, exact definition/policy, safe fields, and optional sanitized prompt exchange | `ValidatedSafeLogRecord` | Prove schema, field types, redaction evidence, stream/payload discrimination, UTF-8 safety, and maximum encoded size. |
+| `SerializeFeatureLogRecordAction` | validated safe log record and `feature-log/v1` serializer | one complete JSONL frame | Encode fixed-order UTF-8 JSON plus one LF; never split a record. |
+| `BuildFeatureLogSegmentInventoryAction` | validated segment headers/trailers and recovered final frames for one binding under a validated stream-lock capability | segment inventory candidate | Reconstruct stream/ordinal/sequence/bytes/created/closed metadata without using filesystem modification time. |
+| `ValidateFeatureLogSegmentInventoryAction` | segment inventory candidate, binding, sink state, and policy | segment-inventory evidence | Prove unique contiguous ordinals, one active segment per enabled stream, sequence monotonicity, byte limits, and closed-time iff rules. |
+| `BuildFeatureLogRunStreamSegmentAccountAction` | all validated binding-local segment inventories for one feature/run/stream and exact policy cap | run-stream segment-account candidate | Sort binding inventories and total their immutable records without inspecting files or authorizing rotation. |
+| `ValidateFeatureLogRunStreamSegmentAccountAction` | account candidate, raw run inventory, all binding/inventory evidence, and current/historical policies | run-stream segment-budget evidence | Prove total binding coverage, no segment/path alias, one active tail across bindings after transition, nonnegative remaining count, and lifetime total at or below the unchanged cap. |
+| `EvaluateFeatureLogRotationNeedAction` | encoded-frame size, current sink state, and validated segment limits | append decision, rotation-required request with next ordinal, or `LOG_SEGMENT_LIMIT_EXHAUSTED` diagnostic | Decide fit/cap only. The hard count is per `(featureId, runId, stream)`, ordinals are never reused, and retention cannot reclaim an active-run ordinal. |
+| `BuildLogRotationAuthorizationAction` | one rotation-required request, matching preassigned next-segment identity, current sink state, and validated segment limits | single-use rotation authorization | Embed the exact next segment identity and bind its binding/stream/ordinal plus compare-and-swap state without reevaluating fit or assigning an ID. |
+| `RotateFeatureLogSegmentAction` | rotation authorization, matching binding/state, and validated stream-lock capability | next segment state | Under the exact held lock, validate the embedded next identity, fsync/close the old segment, and exclusive-create the next owner-only regular file. |
+| `AppendFeatureLogRecordAction` | complete frame, validated binding, expected sequence/segment state, flush policy, and matching stream-lock capability | append evidence and next sink state | Append exactly one frame under the held lock and compare-and-swap expected state; fsync when the bound policy requires it. |
+| `DestroyRawPromptLogHandlesAction` | transient fragment-manifest/candidate/sanitized handle set plus terminal emit/drop/error outcome | destruction evidence | Release every raw, redacted, and truncated fragment handle on every branch, including selection/redaction/truncation/validation failure; no emitted record is a precondition. |
+| `EmitEmergencyLogFailureRecordAction` | sink failure code and fixed emergency adapter | emergency-write evidence | Emit exactly one fixed content-free stderr record without invoking the feature sink or recursively logging. |
+| `BuildLoggingBlockedControlAction` | sink failure plus emergency evidence and `TransactionRecoveryOrchestrator` stable-boundary outcome | fail-closed block result | Prevent the runner from starting the next node without writing logs or mutating an in-flight transaction. |
+
+---
+
+## 14. Orchestrator composition
+
+[View the Orchestrator composition sample](code.md#orchestrator-composition).
+
+[View the validated-generation and atomic-repair diagram](diagrams/03-validated-generation-repair.mmd).
+
+An orchestrator “contains” children through composition. It does not contain their logic. Actions expose no child collection or dispatcher, so an action cannot contain or call an orchestrator.
+
+### 14.1 `ValidatedGenerationOrchestrator`
+
+This reusable orchestrator expresses the common model interaction:
+
+1. select context;
+2. build initial guidance;
+3. build request;
+4. invoke model;
+5. decode response;
+6. validate response schema;
+7. branch on the closed route-result discriminator;
+8. for `clarification_needed`, validate the need and invoke `ClarificationLifecycleOrchestrator`; a valid need returns `NeedsUser` and consumes neither retry nor repair budget;
+9. for content, run the validators registered for the unit;
+10. if valid, return the candidate;
+11. if model-repairable—including unsupported content that should have used the clarification variant—invoke actions that order diagnostics and select the next diagnostic, then invoke `AtomicRepairOrchestrator`;
+12. repeat local repair within limits;
+13. run all unit validators once more;
+14. return `Ok`, `NeedsUser`, `Blocked`, or `Failed`.
+
+The orchestrator itself does not build guidance, call the model, validate, or merge content. It only invokes the actions that do so.
+
+### 14.2 `StageGateOrchestrator`
+
+For a requested stage it:
+
+1. invokes stage-order validation;
+2. invokes prerequisite presence/readability validation;
+3. loads authoritative predecessor inputs through read/parse actions for editable `spec.md` and canonical-state read actions for generated stages;
+4. invokes the registered predecessor validators;
+5. invokes `CompareSpecificationIRAction` wherever the stage or recovery matrix requires the current normalized spec to equal the exact specification stored in `PlanState` (and records typed changed-record evidence when it does not);
+6. loads/validates the current clarification registry and invokes `ValidateClarificationStageGateAction` for the requested stage;
+7. invokes `ValidateWorkflowMetadataAction` for each metadata invariant, such as whether a reference view is expected;
+8. returns the typed predecessor context or stops.
+
+An unresolved `SNN` causes plan to terminate with `UPSTREAM_SPEC_CLARIFICATION_OPEN`; an unresolved `SNN` or `PNN` causes tasks to terminate with `UPSTREAM_PLAN_CLARIFICATION_OPEN`; any unresolved `SNN`, `PNN`, or `TNN` causes implement to terminate with `UPSTREAM_TASKS_CLARIFICATION_OPEN`. These are deterministic user-input errors with nonzero command status, not model-repair attempts.
+
+The persisted stage status is advisory until these current artifacts pass. This provides sequential safety without fingerprints.
+
+### 14.3 `TaskSchedulingOrchestrator`
+
+The scheduler invokes `CalculateRunnableSetAction` over phase, dependencies, path sets, shared-resource locks, and command mutability, invokes `SelectRunnableTaskAction`, and invokes `ClaimTaskLeaseAction` to atomically reserve state and locks. Failed/cancelled precommit leases are released through `ReleaseTaskLeaseAction`; successful lease release is an entry in the sealed task transaction. The orchestrator itself does not inspect a graph or lock table. Configuration defaults concurrency to one. Higher concurrency is permitted only for tasks whose validated graph says they are independent and whose overlay commits can be serialized safely. “Different files” alone is never sufficient.
+
+### 14.4 `AtomicRepairOrchestrator`
+
+The repair orchestrator invokes ordering and selection, then `ClassifyRepairAuthorizationPurposeAction`. The ordinary branch invokes `CreateRepairAuthorizationAction` and `AdvanceAtomicRepairAttemptAccountingAction`; the unsupported-content branch invokes `CreateNoInventionClarificationReplacementAuthorizationAction` and consumes only its unit-local one-shot flag during scope validation. Both then invoke guidance/request/model/decode actions, `ValidateRepairEnvelopeAction`, `ValidateRepairScopeAction`, `MergeAtomicRepairAction`, impacted validators, and the full candidate validator set. `AdvanceModelAttemptAccountingAction` reserves every initial or retry invocation, so `maxModelAttemptsPerUnit` is a total-call cap with no off-by-one exception; a new repair request ID receives its own request-keyed allowance while remaining subject to unit/stage repair caps. The orchestrator branches only on typed outcomes: it never infers purpose, increments a counter, constructs scope, or routes a generic authorization into the no-invention path.
+
+### 14.5 `UserReviewOrchestrator`
+
+This orchestrator presents engine-rendered plan or task views and waits for an explicit decision tied to the current `planStateId` or immutable `taskDefinitionStateId`. It first captures the raw submission and runs `ValidateReviewSubmissionAction` against the expected workflow revision, exact target, review-unit registry, decision shape, and bounded feedback. A stale or malformed submission is rejected before its authentication lease is consumed. Only a statically valid submission proceeds through `AuthenticateActorAction`, authentication-observation/evidence validation, and `BindAuthenticatedReviewSubmissionAction`; decision allocation/build/validation then consumes that exact binding.
+
+- `approve` records approval and unlocks the next stage.
+- `reject` records feedback without changing generated files. Feedback is mapped to one or more explicit IR unit IDs through actions. Each affected unit is regenerated or atomically repaired, the full stage is revalidated and re-rendered, and prior approval is cleared.
+- Feedback that cannot be safely mapped to a bounded unit blocks for clarification; the engine does not treat direct edits to a generated view as feedback.
+
+In non-interactive use, approval must arrive through an explicit API/CLI approval event or a deliberately selected policy profile. Merely invoking the next stage does not silently approve review output in the hardened default.
+
+The actor-evidence append, review record/registry successor, state-ID-ledger mutation, and resulting stage state (`planned`, `tasked`, or rejected/rework state) commit as one `ReviewTransaction` using the Section 25 journal protocol. A crash cannot persist authentication or approval without its exact target transition, or vice versa.
+
+### 14.6 `ModelProtocolRetryOrchestrator`
+
+This orchestrator is used only when decoding or route-schema validation produced no candidate IR. It invokes `BuildProtocolRetryGuidanceAction`, `BuildModelRequestAction`, `InvokeModelAction`, `DecodeModelEnvelopeAction`, `ValidateModelRequestIdentityAction`, and `ValidateModelPayloadSchemaAction` within the response-level attempt limit. It cannot invoke candidate/semantic validators or `MergeAtomicRepairAction` because no authorized pointer exists.
+
+### 14.7 `ClarificationLifecycleOrchestrator`
+
+[View the clarification lifecycle diagram](diagrams/07-clarification-lifecycle.mmd).
+
+This shared orchestrator is used by specify, plan, and tasks. For a new typed need it invokes subject-key construction, exact registry lookup, uniqueness validation, ID allocation only when absent, record/view construction, and the clarification-pause transaction. It never interprets the question, chooses an answer, edits a form, or closes a record.
+
+For a specification reference refresh, it switches to the complete conflict-set route: build and validate `P`, build and validate `C`, exact merge-join and validate the three set partitions, then process entries in canonical structural-key order. It invokes option correspondence and decision actions only for answered `P ∩ C` entries, same-ID refresh actions for the remaining intersection entries, resolution allocation/build actions for all `P ∖ C`, and exact global lookup plus reuse-or-allocation actions for all `C ∖ P`. It threads one prospective clarification ledger through those child calls and validates the single complete set transition. A nonempty resulting open-key set renders the complete historical view set with an exactly matching submittable projection and invokes one clarification-pause transaction. An empty open-key set still renders and commits the complete historical view set, but its submittable projection is empty and every retained closed view has `editableRegions: []`; one reference-revision transaction then enters `specifying`. It never chooses a correspondence between unequal keys, exposes a candidate allocation before that complete transaction, or commits a per-entry intermediate registry.
+
+On every subsequent run of the same stage, before generating semantic units, it visits open records in `(stage rank, ordinal)` order. A user submission is first compared with the last committed form revision; a valid response commits before authority refresh. Deterministic authority resolvers then run. When semantic interpretation is necessary, the bounded `clarification.resolve` route may cite current authority IDs; validation, not the model, decides whether those IDs resolve the exact subject without conflict. A valid authority resolution or authenticated closed answer is committed before stage regeneration. Because a clarification-pause transaction deliberately persists no partial stage IR or accepted-unit checkpoint, restart regenerates **all** units of the owning stage in deterministic unit order; it never claims to resume only an in-memory sibling. A still-open/deferred item reuses the same ID and file and returns the stage to its clarification-pending state. A consumed defer is recorded once, increments record/state revision, and rerenders a fresh blank `requestedStatus: open` answer region; replaying the old form is stale. Resolved/cancelled forms expose no submittable regions. A cancel submission commits `cancelled`.
+
+The no-duplication rule is structural: one record exists for each engine-built `ClarificationSubjectKey`, IDs are never reused, and reopening creates a new revision of that same record. The model cannot choose a clarification ID, filename, subject key, lifecycle status, or resolution. Missing knowledge is a `NeedsUser` outcome, not a failed model call; malformed output remains eligible for the ordinary bounded repair/protocol rules.
+
+### 14.8 `TransactionRecoveryOrchestrator`
+
+This common orchestrator performs no journal cleanup or transaction-ID-ledger mutation itself. It invokes `ReadTransactionRecoveryStateAction`, then statically branches: without a durable commit marker it visits intent-marked entries in deterministic reverse order through one `RestoreTransactionEntryAction` per entry; with a marker it visits entries in forward order through one `VerifyCommittedTransactionEntryAction` per entry. Its result is a typed complete restoration/roll-forward boundary used by the owning transaction-storage flow. Under the still-held collection lock, that owner must next durably `RetireTransactionIdAction` or `CommitTransactionIdAction`, and only then invoke `DiscardTransactionAction` or `CleanCommittedTransactionAction`. It rescans and revalidates the journal inventory and successor ledger after cleanup before assigning another transaction ID. No action loops over a transaction, rolls back multiple entries, chooses rollback versus roll-forward internally, or can erase the only durable evidence before the ID ledger records the terminal state.
+
+### 14.9 `FeatureLoggingFailureOrchestrator`
+
+This instrumentation-internal orchestrator is entered once for a feature-sink failure. It invokes `DestroyRawPromptLogHandlesAction` when transient fragments exist, `EmitEmergencyLogFailureRecordAction` once, and `TransactionRecoveryOrchestrator` only when a workflow/stage/task transaction is already prepared or applying. It then invokes `BuildLoggingBlockedControlAction`. It has no sink, journal, filesystem, or workflow-state port and is excluded from logging observation, so the failure cannot recurse. A durable commit remains committed; an uncommitted transaction is restored before new work is blocked.
+
+### 14.10 `FeatureLogPolicyTransitionOrchestrator`
+
+This instrumentation-only orchestrator switches an existing run after **any** committed successor bootstrap authority whose validated change plan sets `transitionFeatureLogging: true`, including mixed specification/planning changes. Before refresh, startup reconstructs the historical policy solely from the current persisted `BootstrapAuthorityState.components.compiledEnginePolicy.loggingPolicyFragment`; until feature-WAL recovery and that authority validation finish, only bounded content-free emergency telemetry is available. Ordinary feature events continue under that historical binding while the successor bootstrap candidate is evaluated.
+
+After the adopting transaction commits, the runner pauses new workflow nodes and buffers only bounded typed `TelemetryFact` values. The successor state's durable lineage supplies the exact parent ID and materialized change plan. In the same live run, the orchestrator builds/validates both policies/bindings, then visits each enabled stream in fixed `event`, then `prompt` order. It acquires the physical lock from the historical binding and converts that single token into the validated dual-binding transition capability. Under it, actions recover the historical active tail or validate an already-closed tail, durably close when needed through `FeatureLogPort.closeForPolicyTransition`, initialize or recover the successor-binding segment namespace, and validate the old/new boundary. After all per-stream locks are released, the mixed-state assembler builds/validates one complete successor sink; only then does `ActivateFeatureLogPolicyTransitionAction` swap the run-local observer and flush buffered facts through the new definitions/policy. No normal event/model/node occurs between bootstrap-pointer commit and this switch. Any failure emits the one fixed emergency record and enters `block_new_work`; the engine never continues on an obsolete or partially switched policy.
+
+A process restart deliberately creates a fresh `runId`; it never pretends to resume or activate the crashed run's in-memory transition. Fresh-run startup first uses the fixed event/prompt collection paths from the validated `WorkflowArtifactRegistry` and active-feature capability; it does **not** build the current run's policy or binding merely to discover history. It scans/validates all bounded prior-run binding groups, resolves each historical policy solely through its header ID and readable bootstrap lineage, and processes groups in deterministic `(runId, bindingId, stream rank)` order. For an active prior tail it acquires that prior run's ordinary single-binding physical lock, recovers the tail, invokes `FeatureLogPort.closeHistoricalTailAfterCrash`, validates the close, and releases; for a closed-only group it validates the durable trailer under the same lock and performs no write. After release, `BuildHistoricalFeatureLogStreamFinalizationEvidenceAction` joins that exact group result to its release observation. `ValidateHistoricalFeatureLogRunFinalizationAction` requires one such discriminated record per group and proves all locks released/no active prior tail. Only that complete evidence authorizes canonicalization and construction of the fresh current-authority policy/binding, emission of `run.started`, or current-run sink initialization. Thus crash recovery needs no durable run-local transition pointer, and neither a current binding nor a dual-binding capability is misapplied to a historical run.
+
+### 14.11 `ImplementOrchestrator`
+
+This stage orchestrator invokes the implementation gate; the structural process-lease derive/acquire/validate actions; exclusive feature-execution-lock acquire/validate actions; ready-set/scheduling orchestrator; one `ImplementTaskOrchestrator` per deterministic ready task; final-validation/reconciliation branches; and, on every terminal branch, collection-lock cleanup followed by feature-lock then process-lease release/validation actions. No task checkpoint/recovery, model, overlay, or command child is reachable before the validated outer lease/lock pair. Opaque lease/lock token handles remain in the runner tables; typed run-local capability references are nonserializable/nonloggable and never enter durable workflow state or model context. It owns only child-node ordering and loop controls. It cannot inspect or mutate the repository, run commands, select files, accept evidence, or mark a task complete. After each child outcome it reloads the validated canonical runtime envelope before choosing the next legal branch, so a crash/restart and a live continuation use the same state transition table.
+
+### 14.12 `ImplementTaskOrchestrator`
+
+This one-task orchestrator receives an already selected task/lease and invokes the discrete attempt, operation-intent, model-generation, savepoint, deterministic validator, command/manual-evidence, and task transaction/outcome nodes in their closed order. It never broadens the task's `fileId`/capability set, executes a port, edits code itself, or interprets a diagnostic. Atomic repair is delegated only with one exact authorization; copy and replace remain separate typed operation branches. Completion is returned only from committed transaction/evidence state, never from the model's prose or checklist claim.
+
+### 14.13 `TaskExecutionAdapterBoundaryRecoveryOrchestrator`
+
+Before a recovered task checkpoint can resume, this orchestrator branches only on its validated `pendingAdapterBoundary`. `none` continues through the ordinary checkpoint gate. Any ready boundary first derives and validates its complete structural adapter-record set: apply and command boundaries own one key; an operation-promotion boundary owns its current key plus the exact predecessor apply key and entry-record ID persisted in the promotion checkpoint and joined to the parent checkpoint, same savepoint, and overlay. It then invokes recovered-boundary inspection, record-identity/observation validation, classification, and plan validation before another task ID allocation, model call, savepoint/command adapter call, diagnostic/log exposure of a candidate execution ID, or runnable-task decision. Ambient adapter search is forbidden.
+
+The orchestrator then invokes exactly the plan-selected atomic branch: no adapter mutation for a proven never-entered apply/command boundary; no repeated adapter mutation for a proven `already_discarded_no_parent_effect` or `already_restored_no_parent_effect` receipt; one recovered-child discard for a present unpromoted savepoint (including promotion-ready before its promote call); exact before-image restoration for an unauthorized promotion beneath `operation_apply_ready` or an evidence-incomplete promotion beneath `command_run_ready`; or receipt-only reconstruction for an exactly promoted `operation_promotion_ready`. Reconstruction reuses the already persisted operation record, promotion authorization, and pre-promotion evidence, then invokes the ordinary promotion-evidence, file-transition, journal, and evidence-registry actions. Only IDs needed by that recovery branch and its checkpoint may advance before closure. An indeterminate observation blocks without mutation.
+
+Every successful branch builds terminal recovery evidence, clears the boundary, assigns/builds/validates a complete successor checkpoint whose cleanup state is `pending_release`, and commits it through the ordinary `task_checkpoint` transaction lifecycle. The completion validator reloads that durable `pendingAdapterBoundary: none` checkpoint and exact ledger/overlay/journal/evidence authorities. Only then do the cleanup actions bind the checkpoint's same complete record set, idempotently release it, and validate released-now or already-released absence. The engine may next use the generic checkpoint-ID allocator only for the cleanup-closure checkpoint: it advances the task ledger, copies all execution authorities byte/value-equal, changes `pending_release` to `none`, commits through `task_checkpoint`, and reloads. No ordinary allocation, model call, or other adapter invocation is permitted in between. `BuildTaskExecutionRecoveryResumeGateAction` requires this durable cleanup-closure evidence and zero residual records. A crash before release reloads `pending_release` and retries; a crash after release obtains `already_released` from exact authorized absence and commits the same closed successor path, so metadata is bounded rather than accumulating. Adapter entries, child records, promotion/discard/restore receipts, creation/deletion tombstones, and exact before-images are immutable engine metadata with structural tuple IDs and remain retained through the first boundary-free checkpoint commit; no ID is random, content/path/digest-derived, or model-controlled, and the adapter cannot delete a record merely because a child was consumed or a process exited. Thus restart neither reruns an ambiguous effect nor treats logs/process exit as authority.
+
+---
+
+## 15. Bootstrap flow
+
+Bootstrap occurs before every root workflow and every permitted standalone stage invocation:
+
+[View the Bootstrap flow sample](code.md#bootstrap-flow).
+
+No model call occurs before bootstrap succeeds. A config, preset, reader, parser, project, or command ambiguity is an engine/environment problem and does not consume a repair attempt.
+
+The new engine uses typed filesystem and process adapters. It does not reproduce the current `eval $(get_feature_paths)` pattern (`.specify/scripts/bash/common.sh:71-88`), hard-code `specs/`, or delegate state construction to a shell script.
+
+---
+
+## 16. Reference ingestion and normalization
+
+“Reference requirements in any format” is implemented as an extensible reader system, not as a promise to interpret arbitrary bytes. The invariant is that no reference is silently ignored.
+
+### 16.1 Reader contract
+
+[View the Reference reader contract sample](code.md#reference-reader-contract).
+
+Initial readers should cover:
+
+- plain text and Markdown;
+- JSON, YAML, XML, CSV, and other tabular data;
+- source code and stylesheet formats;
+- PDF;
+- common office documents;
+- raster images through deterministic OCR/layout decoders where installed;
+- a declared opaque-binary adapter only when a purpose-built extractor exists.
+
+Encrypted, corrupted, unsupported, oversized, unreadable, or budget-terminated inputs produce explicit diagnostics. Traversal is capability-bounded by entry count, depth, time, and memory before decoding; readers are sandbox-bounded by source and decoded bytes, time, memory, blocks, pages, cells, and archive depth/count/expansion when an archive reader is enabled. Source and decoded byte totals also have corpus ceilings. The engine enforces each corpus ceiling with a revisioned reservation/debit ledger, so parallel readers cannot each observe the same remaining allowance. A decoder receives at most the lesser of its per-file limit and its committed ledger reservation and must terminate at that boundary. Adapters must terminate before a hard bound is exceeded; post-run telemetry validators are defense in depth, not the primary resource boundary.
+
+Enumeration records every encountered regular file, hidden entry, and symlink before policy filtering. In v1 `references.followSymlinks` is schema-constant `false`: a symlink receives an explicit non-followed classification and its target is never traversed. For an included regular file, the engine opens one no-follow descriptor, validates its metadata, reserves its reported length, and captures the bytes into a write-once state blob through that same descriptor. A changed identity/length, short/long read, special-file transition, or reservation overrun blocks the entry and requires fresh inventory; MIME sniffing, reader probing, decoding, source mapping, and citation validation consume only that immutable blob. They never reopen the reference path. This closes the inventory/read time-of-check-to-time-of-use boundary without hashes.
+
+`ReferenceEntry` is a status-discriminated union: decoded/empty entries require media type, exact decoder version, blocks, and diagnostics; a decoded entry has at least one fully accounted block and an empty entry has none plus positive empty-file evidence. Excluded entries have no blocks, require an exclusion record, and forbid a fabricated decoder; unsupported and failed entries likewise have no decoded blocks and record only what was actually detected/attempted. Readability/source-size/source-capture/reader-selection/decode-budget rejection creates a `blocked` entry with the exact phase; a reader-rank tie is therefore representable and cannot vanish into manifest diagnostics alone. Corpus/traversal failures create manifest blocking diagnostics and prevent snapshot commit. In v1, an exclusion record contains only an exact compiled configuration-policy rule/reason/evidence binding with `actor: policy`; a preactivation user-acceptance event is not representable because no feature actor registry exists yet. The user must update reviewed project policy and rerun. Any exclusion without that durable policy acceptance blocks `allEntriesAccountedFor`; blocked/unsupported/failed entries block under the default hardened policy. “Best effort and silently continue” is prohibited.
+
+Reader selection is deterministic and version-pinned. Configuration names exact `readerId@version` descriptors. Each descriptor declares a per-media-type integer rank, an integer probe threshold in `0..1000`, a bounded stable priority, and role `primary` or `fallback`; probe adapters must return an integer in the same domain. For the sniffed media type, below-threshold primary candidates are removed and the unique highest `(probeScore, mediaTypeRankForDetectedType, priority)` tuple wins. Fallback readers are considered only when no primary candidate qualifies, then use the same selection rule. A tie is `REF_READER_AMBIGUOUS`, not an ID-based arbitrary selection. Deterministic OCR may produce text and regions. Any multimodal or vision-model interpretation is not a reader: it must pass through the normal context/guidance/request/`InvokeModelAction`/closed-schema/citation/repair chain, with citations bound to image regions.
+
+### 16.2 Stable ordering and provenance
+
+Enumeration retains no durable authority to later reopen a raw entry and does not claim an order. A reference path must decode as valid UTF-8 and normalize to an NFC workspace-relative path. Before sorting, the engine rejects any two entries whose normalized paths are identical or equivalent under the compiled active-host-plus-target portability policy; host enumeration order never resolves a collision. Collision-free files are sorted once by normalized Unicode-scalar relative path, then receive only run-local `ReferencePreactivationSession` source IDs for bounded capture/decoder joins. Decoded block proposals likewise receive provisional block IDs. These values are noncanonical, never model-visible, and never persisted.
+
+After preactivation succeeds and the feature is active, the engine durably reserves the canonical `referenceStateId`, builds the canonical `ReferenceIdLedger`, assigns state-global source/block IDs in the same stable order, clones provisional blobs into the reference state's write-once namespace, materializes canonical source/decoded budget ledgers, and validates the total one-to-one `ReferencePreactivationIdentityMap`. Only canonicalized blocks then receive chunks and source maps and may enter a model request. Each extracted claim must cite one or more real source locations. The citation validator resolves `(referenceStateId, sourceId, blockId, location)`, requires the location to lie inside the exact `ReferenceChunk` supplied to the call, and validates any returned verbatim scalar against the canonical captured blob and source map.
+
+The complete manifest, closed source/decoded budget ledgers, captured source blobs, decoded/accounted block bytes, identified chunks, source maps, unique `SourceCitation` ledger, typed extraction/reconciliation claim ledger, conflict-resolution decision events, and `ReferenceContextIR` are persisted as one feature-scoped `ReferenceSnapshot` before `specified`. The snapshot records only reference-derived facts: every claim has one retained/superseded/duplicate/conflicting extraction disposition, with valid block/chunk/related-claim joins. It never stores a mapping to the current editable specification.
+
+Every citation ID must resolve uniquely to the same `referenceStateId` and a manifest source/location; every claim, signal, token, conflict, and provenance citation join is validated before commit and again on load. Every rendered context item is a `ReferenceSignal<T>` carrying its `signalId`, exact claim IDs, citation IDs, and typed content; open questions and preserved tokens use the same join. An unresolved conflict additionally stores a snapshot-independent structural subject coordinate and one continuity key per option. Those tuples use normalized relative source paths, the versioned decoder's structural selectors, canonical typed claim content, and exact citation coordinates/scalars—not hashes, model summaries, or snapshot-local IDs. Thus restart validation and targeted correction never rely on a global source list, digest, or prose matching.
+
+Specification attribution is a separate versioned `SpecificationProvenanceState {provenanceStateId, revision, featureRequestStateId, referenceStateId, acknowledgementStateId, entries, claimDispositions}` because every specification is reference-backed and editable records can change without mutating the immutable snapshot. `entries` bind current specification record keys and canonical content identities to their origin. Reference-derived origins resolve against the required snapshot and derived feature-brief origins against the exact persisted `FeatureRequestState`; user-authored origins resolve an authenticated `SpecificationAcknowledgement` in the bound acknowledgement-state revision whose feature, record key, and canonical content identity all match. `claimDispositions` is a total current-specification projection: it contains exactly one entry for every claim in the referenced snapshot, and a `mapped_to_spec` entry may name only record keys present in the same provenance revision. A spec edit rebuilds this projection in the next provenance revision, so deleted or re-keyed records cannot leave stale mappings. Specify and plan transactions persist the normalized specification, reference-derived feature request, ID ledger, acknowledgement state, provenance state, and relevant reference/plan state together. Every `ImmutableContentHandle` is a capability to a write-once, snapshot-owned blob in engine state; restart validation reads that blob rather than mutable original reference files. Immutability comes from the transaction/store contract and access control, not a content hash. This provenance is not fingerprinting. No content hash is stored or compared across stages.
+
+### 16.3 Structured facts and exact tokens
+
+Where a parser can decide mechanically, the engine extracts facts before involving the LLM:
+
+- JSON/YAML/XML key/value leaves;
+- CSV headers/cells;
+- CSS selectors/declarations and exact values;
+- manifest dependencies/scripts;
+- code declarations/imports;
+- document headings/tables;
+- explicit numeric values, units, and color literals where a format adapter defines them.
+
+Ordinary structured facts are supplied as evidence to the chunk's typed claim proposals, through which the LLM may classify their meaning as business, design, technical, validation, assumption, scope, open question, or irrelevant-to-feature. Separately, only extractor facts whose closed descriptor marks them preservation-eligible exact values become `StructuredTokenCandidate`s. For those candidates the model returns exactly one `preserve | irrelevant` decision and, only for preserve, one `PreservedTokenKind`; it never returns the bytes, citation, token ID, or obligation ID. Exact source values stay as tagged raw-source scalars. Dedicated actions assign/build a preserved token and deterministic preserved-token claim. Downstream coverage validators require its derived obligation ID in planning and task records, and renderers emit the exact scalar sequence through deterministic Markdown escaping without Unicode normalization.
+
+### 16.4 Semantic extraction flow
+
+[View the reference-ingestion diagram](diagrams/05-reference-ingestion.mmd).
+
+The linked diagram and this sequence are normative; an orchestrator must require the typed evidence from every named phase before advancing:
+
+1. Resolve/contain the root and prove it is a readable directory. Build one noncanonical `ReferencePreactivationSession`, provisional source/decoded byte ledgers, and traversal capability; enumerate a bounded unordered inventory without following symlinks. No canonical reference, feature-request, source, block, blob, budget-reservation, or citation identity exists yet.
+2. Validate entry count/depth/time/memory telemetry; validate every raw path as UTF-8/NFC/no-follow contained; reject host/target collisions; sort the collision-free set; then assign provisional source IDs from the session.
+3. Classify every entry. Accept only configuration-backed exclusion candidates; for each included regular file open one no-follow descriptor, validate metadata/per-file size, reserve provisional source-corpus bytes, capture exactly once into a private immutable provisional blob, and commit the actual debit. A capture failure releases the reservation and creates a provisional blocked branch; only captured blobs proceed. Verify the closed provisional source ledger and aggregate ceiling.
+4. Sniff and probe each provisional blob, select one exact reader, reserve the lesser of per-file decoded ceiling and provisional corpus remainder, bind that reservation into the sandbox budget, and decode to block proposals. Assign provisional block IDs and validate time/memory/decoded-byte/block/page/cell limits. Close every success/empty/failed/unsupported/blocked branch and the provisional decoded ledger, then validate total branch coverage and mandatory-corpus policy. No provisional identity is serialized, logged as canonical, or sent to a model.
+5. For a new target, commit activation first; for an existing target, use the already recovered active feature. Under the feature transaction-storage contract reserve and persist the canonical reference-state identity, build its `ReferenceIdLedger`, assign canonical source/block IDs in provisional order, clone every accepted provisional blob into the canonical namespace, build the complete identity map, materialize both canonical budget ledgers from that map, and validate the map only after both ledgers exist. Then validate/build complete source maps and assign chunks. Starting from the compiled policy's base grammar, assign/build/validate a feature grammar that adds the canonical state's reference-manifest basenames, scan only canonical manifest labels and decoded block spans, and build the passive-literal registry. No reference/spec model call occurs until canonical unit-local passive/source/token allowlists exist; model text can select but never mint an ID.
+6. Invoke `reference.extract` for one `ReferenceChunk` at a time. Validate the closed extraction proposal, every captured-blob/source-map/chunk-bounded citation, and exactly one preserve/irrelevant classification per supplied token candidate. The engine assigns/builds canonical citation/token/claim records only after validation; a preserved token deterministically produces a claim. Repair only the invalid proposal/classification unit.
+7. Record exactly one claims/positive-`no_feature_claim`/blocked outcome for every identified chunk. Positive empty is forbidden when any model or preserved-token claim exists. Validate the expected chunk set is complete, then derive each block's final status from all chunks; neither one successful chunk nor a file-level status can hide an unprocessed range. Only then build a decoded-entry candidate.
+8. Merge identified claims into a per-document claim set. A compact reconciliation item includes claim ID, normalized claim payload, modality, subject/object IDs, block/chunk IDs, and source citations—not an ID without meaning.
+9. Reconcile bounded groups hierarchically: within document, across related documents, then across compact group summaries. Every summary retains member claim IDs, payloads needed to decide conflict, and citations.
+10. Validate the closed `ReferenceReconciliationProposal`: every returned ID is supplied/authorized, each input claim has exactly one retained/superseded/duplicate/conflicting disposition, signal variants match their content, and conflict/precedence joins resolve.
+11. Build/validate the canonical claim ledger; assign engine conflict/signal IDs; and build canonical `SourceConflict`/`ReferenceSignal` records. Current-spec claim dispositions refer to open-question signals by `signalId`.
+12. Build the manifest from the ordered inventory and exactly one final entry variant per source; validate that every inventory entry and decoded block has a final accounting state, both budget ledgers are closed, every source map is complete, and every passive/claim/context join resolves. Assemble and fully validate the immutable `ReferenceSnapshot` candidate before deciding its next branch.
+13. If behavior-changing conflicts remain unresolved, deterministically create or reuse exactly one conflict-bound `SNN` for every unique structural subject coordinate, render their engine-owned current claim-ID choices, and use one `SpecificationClarificationPauseEntries` variant to atomically persist the conflict-bearing snapshot, current authorities, complete clarification-set transition, complete controlled-form set, reference view, and `spec_clarification_pending` state. Snapshot-local conflict/claim/citation IDs are binding data, not clarification subject identity. No feature brief or partial specification is persisted. A closed authenticated response is first committed through the clarification-response transaction, then checked against a fully and independently recaptured successor snapshot. Only a validated total old-option-to-current-claim correspondence for the exact same structural subject may feed the decision-ID allocator and decision builder; full accounting, set reconciliation, and snapshot validation run again. Otherwise generate/validate the specification, rebuild the current `SpecificationProvenanceState.claimDispositions`, and persist bootstrap-authority/request/passive-literal-registry/acknowledgement/reference/provenance/spec/views/workflow state in one specify transaction.
+
+`README.md` is flagged as an organizer for presentation, but its claims remain peer authoritative. A conflict with a sibling is treated like any other authoritative conflict.
+
+### 16.5 Human correction without editing generated views
+
+`reference-context.md` remains read-only, but its semantic extraction is correctable. A user submits discriminated `ReferenceFeedback` through the API/CLI against the current `referenceStateId`; each intent admits exactly one compatible block, chunk, claim, or token target. `ValidateReferenceFeedbackTargetAction` proves the complete discriminated join before any change.
+
+- `reextract_block` loads the snapshot-owned block bytes, reproduces its chunking under the recorded route/chunker contract (or diagnoses an unavailable version), assigns the new snapshot's chunk IDs, and invokes `reference.extract` once per reproduced chunk with the same bounded feedback. It requires exactly one outcome per chunk and rederives the block status; no block-shaped model call exists.
+- `add_claim` invokes `reference.extract` only for the named existing chunk in additive mode with the feedback. That mode requires exactly one `ReferenceClaimProposal` with one or more chunk-bounded citation proposals; the normal citation/claim validation, ID assignment, canonical build, reconciliation, and accounting actions apply. Generic feedback is never parsed into a canonical claim by an action.
+- `correct_claim_classification` copies the existing canonical claim content/citations into the user-selected closed `newClaimKind`; `remove_claim` tombstones only the named existing claim. Neither intent invokes a model or accepts replacement prose.
+- `correct_token` takes no model-authored replacement value: its required `replacementCitationId` must resolve to one exact scalar in the current snapshot, and the builder copies those captured bytes.
+
+A later correction conflict resolution may use the authenticated reference-feedback API; an initial behavior-changing conflict always uses its controlled `SNN` form. A form response is committed before refresh. The engine then reruns post-selector bootstrap, full no-follow preactivation/canonical ingestion of the compulsory selected directory, extraction, and reconciliation; it never resolves from retained old blobs alone. It builds the complete prior conflict-clarification subject set `P` from latest active registry revisions bound to the prior reference state and the complete current unresolved behavior-conflict subject set `C` from the fully validated fresh snapshot; on initial ingestion, `P` is the validated explicit empty set with an absent prior-state pointer. Both sets use the same full, non-hash structural `ReferenceConflictClarificationSubjectKey`, are canonically sorted, and reject duplicate keys before reconciliation.
+
+`ReconcileReferenceConflictSubjectSetsAction` performs an exact merge join and nothing else. Equal keys form `P ∩ C`; unmatched prior keys form `P ∖ C`; unmatched current keys form `C ∖ P`. A prior key is never paired with an unequal current key, even when each difference set has one member. For a usable response in `P ∩ C`, `BuildFreshReferenceConflictCorrespondenceAction` compares the prior binding's structural option tuples only with that equal-key current conflict, and its validator requires direct fresh-capture descriptor, decoder-coordinate, range, typed-content, and exact-scalar evidence for a unique mapping of every selected prior claim. A `current` equal-key result is the only branch allowed to assign a decision ID; the builder binds the already validated actor/time and mapped current claim IDs, and `BuildResolvedSourceConflictAction` can act only after those selections rejoin the current conflict authority. An unanswered equal-key entry or an equal-key entry whose selected option is stale reopens or refreshes the same `SNN`; it never allocates a second subject ID.
+
+Every `P ∖ C` entry receives its own deterministic authority resolution proving exhaustive absence from `C`; it is closed without naming any new subject. Every `C ∖ P` entry independently performs the global exact-key clarification lookup: an existing historical key reuses and reopens that ID, while an exact-absence result permits a new `SNN` allocation. Allocation and resolution IDs are threaded in canonical key order through one prospective ledger that remains transaction-private until the complete set transition, registry, views, reference snapshot, and workflow revision commit. If any builder or validator fails first, the whole candidate and prospective ledger are discarded; because no ID/path/form/log/diagnostic/model/adapter boundary observed the candidate, the unchanged durable ledger may deterministically reselect the same next ordinal. `BuildReferenceConflictClarificationSetTransitionAction` then assembles the complete intersection continuations, all obsolete closures, and all introduced openings. Its validator proves the partition coverage again and proves that, after applying validated equal-key decisions, the open subject-key set and open/submittable form-view key projection are each exactly the still-unresolved current conflict-key set. Closed historical views remain available for audit but are discriminated read-only views with `editableRegions: []`.
+
+When the expected open-key set is nonempty, that complete set transition, the post-decision fresh snapshot, the complete clarification view set, and the pending workflow revision commit in one clarification-pause transaction; its submittable-view projection is exactly the expected open set. When the expected open-key set is empty, the same complete transition and post-decision snapshot instead commit through one `ReferenceRevisionStageTransaction` whose workflow state enters `specifying`; the absence of submittable forms is validated, not inferred, while closed historical views may remain. There is no pairwise “different subject” operation and no durable intermediate revision that closes an old form before all required current forms exist. Direct typed tuple equality determines only same-key continuity; no hash, wording, list position, first-match rule, cardinality heuristic, fuzzy similarity, or old-blob read may reconcile subjects. A race after decision allocation takes the distinct retirement path: `RetireReferenceAllocatedIdAction` tombstones that exact conflict-decision ID in the refreshed snapshot ledger, the engine rebuilds and fully validates the undecided snapshot/complete clarification-set transaction with the successor ledger, and only then reopens or refreshes the `SNN`. “Discard the ID” without durable retirement is forbidden. Every accepted branch produces a new snapshot revision and reruns claim disposition, citation, exact-token, chunk/block accounting, conflict reconciliation, source-map, manifest and full-snapshot validators before commit. The complete specification stage is regenerated only after the successor snapshot and closed clarification state are durable.
+
+An accepted correction creates a new immutable `ReferenceSnapshot` and reference-state ID; it never edits a prior snapshot in place. Before construction, `CloneReferenceBlobIntoRevisionAction` copies every retained source/block/chunk blob from the current write-once store into the successor state's namespace and produces a total old-handle-to-new-handle map. The snapshot revision builder accepts only successor-owned handles and cannot reopen an original path or retain a dangling parent-owned capability. The next passive-literal registry revision similarly retains immutable literal cores while binding occurrences/state to the successor where required. `ReferenceRevisionStageTransaction` then commits only the fully validated successor reference/passive/clarification/actor authorities, regenerated sidecar, and a `specifying` workflow revision that clears the current feature-request, specification-provenance, plan, task-definition, and task-runtime pointers. It does not construct a provenance state against an obsolete feature request. The complete specify flow subsequently rebuilds the feature request, all specification units, provenance, editable view, and `specified` state from the new snapshot in its ordinary completion transaction. If implementation commits exist, the same transaction also applies the Section 24.5 reconciliation runtime/evidence mutation before specification regeneration can proceed. This provides a restart-safe correction path for nano-model omissions without making the generated sidecar editable.
+
+The same stable-boundary rule applies when an existing feature's validated bootstrap change plan has `earliestOwner: specify` and `dominantImpact: reference_ingestion`. The engine branches only after the complete successor snapshot is validated. With no unresolved behavior conflict, one `ReferenceRevisionStageTransaction` adopts the validated successor bootstrap authority/materialized change evidence together with the snapshot, descendant invalidation, and `specifying` workflow state. With an unresolved conflict, the `SpecificationClarificationPauseEntries` variant instead carries that same closed bootstrap mutation and descendant mutation, and atomically commits the successor authority, conflict-bearing snapshot, passive state, deterministic subject-keyed `SNN`, forms, reference view, and `spec_clarification_pending` state. No intermediate committed snapshot can require a not-yet-created clarification, and an identity-free bootstrap candidate is never expected to survive a user pause. Any secondary logging impact is still transitioned immediately after this adopting commit and before another normal node/model/event.
+
+Initial content grounded through the engine-held feature brief receives `origin: reference_derived_feature_brief`, the engine-assigned request ID, and the exact claim/citation union from the mandatory snapshot; it never pretends to be an independent user request. A later user-authored spec record that lacks reference support requires an authenticated acknowledgement event. The engine assigns the acknowledgement ID and persists the actor/authentication context, feature ID, fixed/allocated record key, exact `BusinessContentIdentity`, intent, and time in the next `SpecificationAcknowledgementState`. Only after its validator resolves that event may `BuildUserAuthoredProvenanceAction` record `origin: user_authored`; a caller cannot fabricate an acknowledgement scalar, claim, or citation. Project policy decides whether such records are allowed or whether re-attribution to a real snapshot claim/citation is mandatory.
+
+---
+
+## 17. Specify stage design
+
+### 17.1 Inputs
+
+[View the Specify CLI contract sample](code.md#specify-cli-contract).
+
+The only v1 launch form is `sdd specify --reference <relative-selector>`. The API equivalent contains exactly one required `referenceSelector`. There is no positional feature description and no `--feature`, `--description`, `--feature-id`, `-type`, or Git/branch input. Compatibility adapters may translate `@sdd-specify` or `/sdd-specify` only when their input has the same single-selector meaning; they may not restore the removed fields.
+
+`--reference` selects one non-empty descendant directory beneath the canonical configured `paths.references` root, not an arbitrary workspace path. Absolute, drive, UNC, URI, empty, dot-only, and traversing selectors are invalid; any no-follow resolution escape blocks. An alternate root requires a separately authenticated future capability and is not part of v1. Duplicate flags, missing values, unknown flags, positional tokens, and `--` termination have closed parser outcomes. The stable feature description is not command input: `spec.feature-brief.generate` derives it from the completely reconciled reference claims and citations.
+
+### 17.2 Deterministic preflight
+
+1. Locate/validate the exact root config and configured base roots, build the self-identifying `BootstrapRootRegistry`, derive/acquire the fixed project transaction collection, and scan/recover every project WAL before reading the tuple-identified `FeatureIdentityRegistryState`. Build only the noncanonical bootstrap operational inputs needed for CLI/selector processing; call no model. V1 has no project state-ID ledger.
+2. Parse the invocation and require exactly one `--reference` value; reject every removed/unknown/positional field. Canonicalize/contain the selector beneath `paths.references`, require a readable directory, and derive the prospective feature identity mechanically from the selector alone.
+3. Build the bounded `FeatureStateInventory`, validate the `(bootstrapRootRegistryId, revision)` feature-identity chain, and resolve a new target or the exact stored selector/policy owner. Reject every active/archive/portable collision. For an existing target, trust only the inventory-validated ownership record plus the minimum workflow-artifact-registry header needed to resolve `StageTransactionCollection`; acquire the feature collection lock, load/validate its transaction-ID ledger, scan/validate all journals, execute the complete identity recovery plan, rescan/revalidate, and release the lock. Only then load/schema-validate `WorkflowState`, the complete artifact registry, feature state-ID ledger, bootstrap, actor/review/control/passive/clarification authorities; reissue the active-directory capability; and initialize/recover the feature log before refreshed reference work. Existing-feature bootstrap/preactivation failures are logged beneath that feature.
+4. After target resolution, load prior principle/toolchain-preset specialized ledgers from the existing bootstrap authority when present or initialize empty candidates for a new target. Perform bounded prior-aware refresh, project discovery, and validation into one `ValidatedBootstrapOperationalCandidate`. A new target still has no generic canonical component/state IDs. For an existing target, compare by stable component coordinate, build/validate the total `BootstrapAuthorityChangePlan`, then build/validate the closed route from that plan plus current workflow stage, open clarifications, descendants, and implementation watermark before using a changed canonical authority.
+5. Build a `ReferencePreactivationSession`; complete bounded no-follow inventory, provisional source capture, reader selection, deterministic decoding, provisional block assignment, branch coverage, and provisional source/decoded byte accounting. `ValidateReferencePreactivationAction` requires a nonempty mandatory corpus with no unsupported/failed/blocked branch. A failed new target has no ownership/spec directory/per-feature log; a failed existing target preserves its existing directory and records the failure in its log.
+6. For a new target, build an initial feature `StateIdLedger` and reserve only activation authority IDs (bootstrap authority, artifact registry, workflow state, and initial registries). Assign owner-local component IDs and materialize/validate all leaf bootstrap candidates first. Build and validate the `leaf_dependencies` resolution map; use only that map to build/validate the base grammar, bind the grammar handle, and build/validate the `base_grammar_resolved` map. Use only that second map to assemble/validate the compiled policy, bind the policy handle, and build/validate the `complete` map with no unresolved generic handle. Validate the `WorkflowArtifactRegistry`, and commit the feature state-ledger successor, ownership append, bootstrap/artifact authorities, exact directories, five revision-zero feature registries, and pre-snapshot `specifying` workflow state in one project-storage `FeatureActivationStageTransaction`. The separate project `TransactionIdLedger` advances; no project state-ID ledger exists. Commit/recover the project WAL, issue `ActiveFeatureDirectoryCapability`, initialize/recover feature transaction storage and log sinks, flush bounded buffered preactivation telemetry, then release the project lock. An existing target uses the same leaf-map-then-grammar-map-then-policy-map construction order inside its owning transaction after comparison/routing; it never materializes an aggregate blueprint as if its cross-component IDs already existed.
+7. Under feature transaction storage, reserve and durably persist the canonical reference-state ID before its first model/provider or diagnostic/log exposure (private serialization within that reservation transaction is not a separate boundary). Assign canonical source/block IDs in provisional order, clone provisional blobs, build the total identity-map candidate, materialize both canonical budget ledgers, validate the map, then build canonical source maps, chunks, entries, passive literals, and token candidates. No provisional ID survives or enters a model request.
+8. On an existing feature rerun, load/validate the last committed clarification registry and current `clarify/` inventory before generation. Ingest only a revision-current user answer against the last committed authority bindings and commit its response/next passive registry/resumed state before refreshed authority may reference it.
+9. Extract and hierarchically reconcile every canonical decoded claim and validate the complete in-memory `ReferenceSnapshot`. Re-evaluate still-open `SNN` records. An authority-based closure or still-open need commits the exact refreshed snapshot/authorities in its clarification authority-resolution/pause transaction before regeneration.
+10. Invoke `spec.feature-brief.generate` once over the complete bounded global reconciliation summary/signal index; block if that exact input cannot fit. Validate title/description/goal and every reference/clarification join, or persist its valid clarification need. Construct the owner-local `FeatureRequestId` as `(referenceStateId, feature_brief)`; specification unit owners use this tuple and the reference state, not an uncommitted feature-request-state ID.
+11. Generate/validate every specification unit, then reserve/build the reference-derived `FeatureRequestState` and all remaining specification authorities. Assign a collection-local transaction ID, validate the complete `DurableTransactionMember`, and commit reference/request/passive/acknowledgement/provenance/specification/views/workflow in the full specify transaction. Model candidates, transient request ledgers, provisional IDs, and decoded provider bodies never enter destination paths.
+
+Default deterministic identity derivation is:
+
+1. take the already validated selector's complete relative segment sequence, not reference prose or a model title;
+2. normalize each segment with the versioned Unicode normalization/transliteration adapter;
+3. join segment boundaries with one hyphen;
+4. invariant case-fold;
+5. replace remaining runs outside `[a-z0-9]` with one hyphen;
+6. collapse repeated hyphens and trim ends;
+7. apply `workflow.featureIdMaxLength` and truncate only at a normalized scalar boundary;
+8. reject an empty result or any active/archive/host/target collision rather than accepting an override or variable suffix.
+
+This algorithm is versioned with the engine. The same validated selector under the same naming-policy version always produces the same feature directory, regardless of how a nano model words the derived feature brief.
+
+### 17.3 LLM work
+
+The LLM performs three semantic activities:
+
+1. reference claim extraction and bounded hierarchical reconciliation;
+2. one reference-grounded feature brief containing the human title, description, and primary goal;
+3. specification content generation from the validated brief and complete reconciled claims.
+
+Calls are split into typed units:
+
+- display title;
+- primary story;
+- observable outcomes;
+- acceptance-criteria candidates;
+- functional-requirement candidates;
+- business rules;
+- assumptions and scope boundaries;
+- explicit non-goals;
+- prohibited behaviors;
+- entities, only if business data is involved;
+- semantic ambiguity/open-question review.
+
+The LLM does not assign the feature ID, IDs, headings, paths, dates, status, checklist state, passive-literal values, clarification lifecycle, or execution status. Every initial brief/spec record selects either real claim/citation IDs, one or more exact resolved clarification-response IDs, or an allowed combination. The engine assigns canonical IDs and mechanically verifies all authority joins and citation unions. Semantic entailment of arbitrary prose is model-assisted and ultimately user-reviewed; it is never misrepresented as deterministic proof. For path/filename/URI display text the model may select only a unit-allowlisted passive ID from the exact registry. There is no unreferenced command description to use as provenance. The model returns typed business content rather than Markdown.
+
+For each feature-brief or specification unit, the route returns either content or a clarification need. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
+
+### 17.4 Specification clarification behavior
+
+A valid specification need is deduplicated by its engine-built subject tuple. If it is new, the engine allocates the next `S01` through `S99` identity and derives `<paths.specs>/<featureId>/clarify/SNN.md`; otherwise it reuses the existing ID and path. It commits the registry/form/workflow pause together in `spec_clarification_pending`. The model is idle while the engine waits.
+
+On the next specify run, the engine first parses the exact registered form against the last committed clarification/reference binding. A user closes it by changing only `requestedStatus` and the answer region. The submission must name the current state/record revisions, match the configured select-one or bounded-text schema, and be associated with an authenticated actor. An empty close is invalid; `defer` remains open; `cancel` cancels the run. Path-shaped answer text is scanned into the inert passive registry under the assigned response ID, and that response transaction commits before refresh.
+
+The engine then refreshes the selected reference directory and tests still-open `SNN` records against the new claims/citations. A current, non-conflicting authority resolution may close the record after deterministic join validation and, where semantic interpretation is required, a bounded `clarification.resolve` proposal. If the reference snapshot is directly unchanged, the current-reference resolution variant may retain current provenance and may adopt only a specification-contract bootstrap successor. If refresh constructs a successor reference snapshot or adopts a reference-ingestion bootstrap successor, the reference-revision resolution variant atomically includes the regenerated reference view and the complete descendant/runtime/evidence invalidation mutation; it clears feature-request/provenance/plan/task pointers and cannot carry a stale provenance state. Thus no clarification registry can point to an uncommitted snapshot and no changed reference can bypass the ordinary rework contract.
+
+The accepted response/resolution and resumed `specifying` state commit before regeneration. Every specification unit is regenerated from the current committed authorities, after which complete specification validators rerun. This trades extra model work for restart-safe semantics without a partial-stage checkpoint. A stale response, changed immutable question section, unknown clarification file, extra `SNN` file, duplicate/case-equivalent filename, or second proposal for the same subject is rejected. A later authority change may reopen the same `SNN` revision; it never allocates a duplicate.
+
+### 17.5 Deterministic specification validation
+
+The engine validates:
+
+- route response schema and source references;
+- nonempty mandatory IR fields;
+- fixed singleton provenance keys plus engine-assigned, unique, well-formed `AC/UO/EC/FR/BR/AS/NG/PB/EN/OQ-*` identifiers; initial generation is gap-free per prefix, while edits preserve surviving IDs, allocate new monotonically increasing IDs, and never reuse deleted IDs;
+- explicit `given`, `when`, and `then` fields for each acceptance criterion;
+- duplicate or byte-identical requirements;
+- typed clarification state rather than fragile substring matching;
+- citation validity and reference-file accounting;
+- for every spec record, each authority is either a resolvable claim/citation set, a current resolved clarification response, or an allowed combination; reference citations equal the stable unique union of selected claim citations, while user answers never receive fabricated citations;
+- every retained reference claim has exactly one closed specification disposition: mapped to one or more fixed/allocated spec record keys, context-only signal IDs, a blocking conflict, an ID-bearing open question, or an explicit non-spec reason; no claim disappears between the snapshot and specification;
+- derived-feature-brief records cite the reference claims from which they were generated; a later user-authored record requires its explicit acknowledgement provenance;
+- exact user-facing copy obligations;
+- exact preserved-token propagation in `reference-context.md`, with visual/style kinds additionally requiring visual checks;
+- presence of separate observable flows when claims explicitly distinguish success, invalid, empty, error, or terminal outcomes;
+- absence of template placeholders and model-authored checklist state;
+- artifact boundary: `spec.md` has no `Reference Context` heading or reference metadata;
+- unbound or operational technical leakage: foreign absolute paths, fenced code, stylesheet declarations, inline known source-file paths/extensions, known framework/package identifiers, and implementation-only handles; an exact validated passive display node is inert but remains subject to semantic business-relevance review;
+- mandatory `reference-context.md` existence, complete section set, and exact binding to the current reference snapshot;
+- equality between the reference inventory and the sidecar's rendered file inventory;
+- unresolved authoritative conflicts and blocking open questions;
+- workflow artifact paths and transaction completeness.
+
+The technical-leakage validator is a strong lexical/static lint, not a complete semantic proof. A separate semantic-review action decides nuanced cases and labels them model-assisted.
+
+### 17.6 Rendering and commit
+
+After validation:
+
+1. assign requirement IDs;
+2. render `spec.md` from `SpecificationIR` and the canonical template contract;
+3. render the mandatory `reference-context.md`;
+4. serialize the immutable reference-derived feature-request state, exact passive-literal registry revision, specification ID ledger, initial/next specification-acknowledgement and clarification-registry states, clarification views, specification-provenance state revision, and canonical reference snapshot;
+5. reparse `spec.md` and compare its normalized IR to the validated source IR;
+6. compare the read-only reference-context view with deterministic rendering from its canonical IR;
+7. stage the complete artifact set, exact workflow-artifact registry, bootstrap-authority state, feature-request state, passive-literal registry state, specification ID ledger, acknowledgement and clarification-registry states, all registered clarification forms, specification-provenance state, canonical reference state, and next workflow-state record in one stage transaction;
+8. validate the transaction;
+9. commit the set and durable state marker;
+10. report engine-known paths and readiness for user spec editing/validation, then `plan`.
+
+The initial acknowledgement state is present even when its `entries` array is empty. Its ID, the feature-request-state ID, passive-literal-registry ID, and their engine-derived paths are stored in workflow metadata and bound by `SpecificationIR`, `SpecificationProvenanceState`, and any reference snapshot; stage gates and recovery load and validate all authorities before model selection, provenance acceptance, or rendering. No fingerprint is written. If the engine process is restarted, later stages reload and revalidate the current artifacts.
+
+### 17.7 Specify gate
+
+`specify` succeeds only when:
+
+- the specification IR and rendered `spec.md` pass all blocking rules;
+- every reference file is accounted for;
+- the sidecar exists and passes when required;
+- no behavior-changing reference conflict remains unresolved;
+- no specification clarification record remains open;
+- the artifact transaction committed;
+- workflow state recorded `specified` after the commit.
+
+---
+
+## 18. Plan stage design
+
+### 18.1 Inputs and preconditions
+
+`PlanOrchestrator` receives the `featureId` from `FeatureWorkflowOrchestrator`. A standalone `plan` invocation must provide it. It does not count directories or auto-select a feature.
+
+The stage gate:
+
+1. requires workflow state `specified`, or `planning` with a current validated `PlanInputAuthorityState` for restart/resume;
+2. requires and parses `spec.md`;
+3. requires `reference-context.md` and its canonical snapshot/view binding for every feature;
+4. loads the clarification registry/forms and returns nonzero `UPSTREAM_SPEC_CLARIFICATION_OPEN` if any `SNN` remains open;
+5. revalidates specification structure, IDs, typed clarifications, and sidecar completeness;
+6. builds the current `RequirementIndex` and token/scope obligation ledger;
+7. rejects unresolved reference-conflict records;
+8. confirms resolved environments still match the current repository;
+9. builds/validates the normalized editable-spec authorities, baseline file and repository-fact registries, configured read-only research evidence, complete principle selection, and initial `PlanIdLedger`, then commits one `PlanInputAuthorityState` and a `planning` workflow pointer before the first plan model call. An authenticated spec edit and its acknowledgement/passive/provenance revisions are members of that transaction, so a later `PNN` cannot cite transient IDs.
+
+Starting `plan` treats the current validated `SpecificationIR` as the user's approved planning input. The engine first stores it in the immutable `PlanInputAuthorityState`; the final `PlanState` binds that exact input authority rather than relying on an in-memory parse. A later spec edit invalidates the current input/plan descendants through direct typed comparison without a fingerprint.
+
+The editable-file boundary is deterministic and authentication-gated. On every plan entry, the engine captures the complete current `spec.md` through the registered no-follow path and directly compares its parsed typed value with the current canonical specification. Equal content takes the closed unchanged-spec branch and consumes no authentication lease or ID. Different content takes the edit branch: capture into a run-local handle; parse and build the full add/modify/remove change set; then validate expected workflow/view/provenance/acknowledgement revisions, round-trip, record-ID/tombstone legality, boundedness, and protected structure **before** consuming authentication. A stale or malformed edit is rejected without authenticating. A valid changed file without a fresh runner-issued `specification_edit` lease exits nonzero with `SPEC_EDIT_AUTHENTICATION_REQUIRED`; it is not sent to an LLM and is not treated as authority.
+
+Only after static validation does `AuthenticateActorAction` consume the single-use lease. The engine validates the observation, assigns/builds actor evidence and its successor actor registry, then assigns the specification submission/change-set IDs from the acknowledgement state's three-namespace ledger and binds those exact IDs and run-local handles to the validated change set. That binding also contains a closed durable projection of the exact expected workflow/provenance/acknowledgement revisions, complete editable-view authority, captured no-follow file identity, and actor evidence. `BuildAuthenticatedSpecificationEditEventAction` reproves the handle joins, embeds only that durable projection, and drops the handles, lease, credentials, raw byte capability, and submitted bytes. It then deterministically rebuilds normalized specification/passive/provenance state and assigns one acknowledgement for each added or modified current record. Removals remain fully recorded in the event but receive no acknowledgement; unchanged records receive none. Coverage, capture freshness, content identity, actor/evidence joins, and every successor ID-ledger/tombstone transition are validated before `BuildPlanInputAuthorityStageTransactionAction` atomically commits the edit event, acknowledgements, actor/passive/provenance/specification authorities, immutable plan-input authority, and its `planning` workflow pointer. No plan model call occurs before this commit.
+
+If any submission, change-set, or acknowledgement ID has been assigned and the accepted-edit candidate cannot reach a valid plan-input transaction, the engine takes the closed retirement-only path while the failure, exact actor-evidence allocation, and acknowledgement successor-ledger chain are still available. If an edit journal was prepared, ordinary recovery must first prove it uncommitted, restore every before-image, and durably retire its transaction ID; a committed or still-live edit journal makes retirement illegal. The engine builds matching retirement records for the authentication-evidence ID and every submission/change-set/acknowledgement ID allocated by that attempt, then assigns new actor-registry, acknowledgement, provenance, and workflow state identities. The actor successor copies `entries` byte-for-byte and tombstones only the unreferenced authentication-evidence ID; the acknowledgement successor copies accepted edit events/entries byte-for-byte and tombstones only the failed edit IDs. Specification content, provenance entries, and every other business authority remain byte-equal; only the editable view's authority binding is regenerated. `SpecificationAcknowledgementIdRetirementStageTransaction` commits this complete chain atomically. At `planning` it also builds a successor `PlanInputAuthorityState` whose only semantic difference is the rebound acknowledgement/provenance pair; at `specified` no plan-input authority may exist. The transaction stays in the same stage, contains no actor-evidence entry, authenticated edit event, acknowledgement, or business-content mutation, and completes before exit or retry. A crash before any of these owner-local IDs crosses a transaction-private boundary loses only the rolled-back candidate allocator projections and exposes no identity; once a retirement transaction is prepared, ordinary WAL recovery completes or rolls it back and the transaction-ID ledger is terminally accounted. A retired owner-local ID is never reused.
+
+The retirement action order is fixed: terminalize any abandoned edit journal; call `RetireSpecificationAcknowledgementAllocatedIdAction` once per allocated edit ID in namespace/ordinal order; build and validate the matching acknowledgement and authentication-evidence retirement records; assign/build/validate the actor-registry and acknowledgement successors; assign/build/validate the rebound provenance and editable view; at `planning` assign/build/validate the rebound plan-input authority; assign/build/validate the same-stage workflow successor; then use the ordinary transaction-ID reservation and WAL lifecycle to build, validate, and commit the retirement transaction. Failure before its commit re-enters transaction recovery; it never falls through to a model call or a second allocation chain.
+
+The engine does not run a setup script that overwrites `plan.md`. It creates an isolated artifact transaction and assigns output paths directly.
+
+### 18.2 Deterministic repository reality
+
+Before an LLM design call, actions perform a bounded project-file discovery and build repository facts:
+
+- manifests, modules/projects, dependencies, lockfiles, and package manager;
+- source/test/style/config/asset roots;
+- allowed extensions and filename patterns;
+- existing application entry points discovered through configured adapters;
+- existing test runners, scripts, fixtures, and verification commands;
+- compiler, formatter, linter, AST parser, and import resolver availability;
+- current files near requirement-relevant terms and known entry points;
+- generated and forbidden paths;
+- selected raw principle spans and separately compiled project/toolchain overlays;
+- missing prerequisites where a required capability has no current command/tool.
+
+The scanner uses the same traversal-hard-limit pattern as reference enumeration. The traversal capability carries compiled project-discovery exclusions and the engine root-access registry. Before descending into a directory, enumeration evaluates those rules; an excluded/inaccessible subtree is not opened, and a prune record stores its canonical root, rule ID, access class, and descriptor evidence. Every encountered entry must later join either a canonical classified file, an explicit rejection, or one such prune record. Root-access/generated classification occurs before kind inference, so VCS/engine/workflow/reference/dependency roots cannot become ordinary files and generated inputs can receive only the narrow `generated_existing` read capability.
+
+The scanner then normalizes and collision-checks existing paths, sorts them by `(projectId, normalized path)`, infers exactly one existing file kind from the compiled preset languages, allocates monotonic file IDs, and constructs `repository_existing` or narrowly authorized `generated_existing` records. `FileRegistryState` owns `nextFileOrdinal` and retired IDs; surviving canonical paths retain IDs across revisions and retired IDs are never reused. Accepted model path candidates pass the same ownership/kind/path/portability chain and receive later IDs from that persisted allocator; a declared `projectId` mismatch is repaired as that one field and is never silently replaced by the actual owner. `BuildFileRegistryStateAction` rejects duplicate IDs/paths and produces the sole file authority used by planning and later stages. `PlanState` persists that complete registry.
+
+`BuildRepositoryFactRegistryAction` assembles the complete ordered typed set into `RepositoryFactRegistryState`. Each fact stores its value, value ID, evidence source, and gate policy; the registry itself receives an engine state ID, not a digest. `PlanInputAuthorityState` persists that fact registry, baseline file registry, configured research registry, exact specification/provenance/passive/reference bindings, and principle selection before generation. `PlanState` binds the input state and persists the successor sole file registry alongside `PlanIR`. `PlanIR` stores only `touchedFileIds` and `proposedFileIds`, never duplicate `FileRecord` values; every consumer resolves them through the bound registries. A `FactSelection` names a fact/value ID and is accepted only when that value resolves in the input authority.
+
+These facts are immutable model inputs. The LLM may interpret relevance, but may not claim that a dependency, command, folder, test suite, or entry point already exists unless it selects a supplied fact ID. A new dependency is a typed proposal, never a repository fact. At the tasks and initial implementation gates, the engine rebuilds current facts through the same adapters and compares typed values directly with persisted facts marked `must_equal_until_implementation`; an ID match without value equality is insufficient. A plan-time `transition_requires_task_binding` fact carries no future task ID. Task generation must create a validated `FactTransitionBinding {factId, taskId, transitionRuleId}` inside immutable `TaskDefinitionState`. Only that approved named task's committed journal may satisfy the transition. Any other difference blocks for plan rework. This is value comparison, not hashing or fingerprinting.
+
+Phase-0 “research” is grounded only in the supplied reference snapshot, repository facts, compiled presets, selected raw project-principle spans, and evidence from version-pinned read-only registry adapters already configured and validated at bootstrap. The default engine performs no open-web research and defines no ad hoc evidence-import channel. When a decision requires unavailable external evidence, the model sets `unresolvedExternalEvidence: true`; the stage blocks with `RESEARCH_EVIDENCE_REQUIRED`. The user must add the material beneath the configured reference root and rerun specify/reference ingestion (thereby creating a new snapshot and normal invalidation), or configure a supported exact registry adapter and rerun bootstrap/planning. The engine does not let a model fill the gap from memory and label it researched.
+
+### 18.3 LLM work
+
+The LLM generates bounded plan units:
+
+- summary and minimal-change hypothesis;
+- implementation-shape decision;
+- existing touched-area selection from engine-provided file/project IDs;
+- proposed new file records, one or a small related group at a time;
+- selections from typed repository/preset fact IDs plus separate technical rationale;
+- research unknowns and one decision/rationale/alternatives record per question;
+- typed new-dependency proposals containing ecosystem, package, version constraint, configured registry source, scope, and rationale;
+- principle-consideration reasoning, exact source citations, and justified deviations;
+- data/state entity models when applicable;
+- the smallest justified structured contract obligations when applicable;
+- quickstart scenarios;
+- requirement-to-design/verification mappings;
+- task-generation approach.
+
+Each plan route returns `PlanUnitRouteResult`: either one content unit or one typed clarification need. When an architecture, dependency, verification, repository, or policy decision cannot be supported by the supplied current authorities, the model must request clarification; it may not choose a plausible default from memory.
+
+Filename variability is removed at the plan boundary. Existing files are selected only by engine `fileId`. For a new file, `plan.path-intent.generate` first returns an ID-only `PathIntentProposal`—project, kind, semantic role, engine `nameSourceId`, optional placement-anchor file ID, and requested create/copy capability—with no filename field. Actions select preset path templates, apply versioned case/name/directory transforms, run the complete path/portability/collision algorithm, assign `pathCandidateId`s, and build a finite `PathCandidateRegistry`. The normal `plan.section.generate` response maps its local `proposalKey` only to one allowed `pathCandidateId`.
+
+The hardened default sets `allowRawPathFallback: false`. A specialized preset may explicitly enable fallback only when it cannot enumerate a name; in that branch the model's complete `ProjectPathCandidate` is create-only and passes the identical normalization/kind/root/name/extension/placement/portability chain plus atomic field repair before the engine adds it to the candidate registry. Thus a raw LLM filename is never canonical merely because it is schema-valid.
+
+Each selected absent candidate receives a stable `fileId`; an existing selection retains its discovered ID. `ImplementationShapeProposal.fileSelections` pairs that selection with requested intent/capabilities, and `BuildPlanFileGrantAction` intersects them with the file kind's policy ceiling. Canonical `PlanIR` stores only file IDs and `PlanState` persists the sole `FileRegistryState`, exact grants, and candidate registry. Plan/task renderers resolve display paths from that state; task and implementation model schemas carry only `fileId`s. A rename is a new plan/candidate/file-state decision that clears plan/task approval, never a task-level spelling repair.
+
+All other cross-linked plan records follow the same proposal/canonical split. The model supplies bounded local keys for design units, entities/fields, contracts, scenarios, research decisions, and dependency proposals; coverage and relationships refer only to those keys or allowed upstream obligation IDs. After every plan unit is present, actions validate unique keys and total references, build one complete proposal index, sort by closed kind rank and Unicode-scalar qualified key, allocate monotonic IDs from `PlanIdLedger`, and materialize each canonical record. No `PlanUnitProposal` admits a canonical engine ID. `PlanState` persists the final ledger and a `PlanReviewUnitRegistry` mapping every reviewable record to a fixed or engine-owned selector, so targeted rejection after restart never relies on prose or array position.
+
+### 18.4 Plan clarification behavior
+
+A plan need is deduplicated through the shared registry and allocated `P01` through `P99` only when its subject key has never existed. Its only path is `<paths.specs>/<featureId>/clarify/PNN.md`. Persisting a new/reused open record enters `plan_clarification_pending` and atomically persists a successor `PlanInputAuthorityState` bound to that next clarification revision. Its `PlanIdLedger` includes every path-candidate/research allocation or tombstone consumed before the pause, so full-stage regeneration cannot reuse an abandoned ID. No candidate `PlanState`, path-candidate record, accepted content unit, or plan view is committed, and a `PNN` cannot cite such uncommitted records.
+
+On a later plan run, the engine first rejects any open `SNN`, then refreshes the plan-authorized authority set: current reference/specification/provenance, current principles and presets, current repository facts, and configured research evidence. With no open `PNN`, a changed fact/adapter capture uses the legal `planning -> planning` plan-input transaction before any model call. While a `PNN` is open, the refresh and clarification change are one atomic clarification pause/resolution transaction: assign prospective IDs first, build the next clarification registry, then build the successor `PlanInputAuthorityState` against that exact next clarification ID/revision, validate the mutual authority joins, and choose pending or `planning` according to whether another `PNN` remains. A separate `planning` transaction is forbidden from bypassing the pending gate. A change to raw reference material is reingested through the specify flow before it can resolve a plan question; if that changes the specification, descendants are invalidated and plan restarts from the newly validated specification. The engine may close `PNN` only from a current non-conflicting authority resolution or a revision-current authenticated user-closed form. It reuses the same record when unresolved, and regenerates the complete plan stage after resolution before full validation.
+
+`plan.md` and its design artifacts remain read-only. The clarification form is the only file-based plan feedback/answer channel; direct plan edits are never imported.
+
+### 18.5 Artifact applicability
+
+The engine requires these decisions:
+
+| Artifact | Disposition |
+|---|---|
+| `plan.md` | Always required |
+| `research.md` | Always required; may state that no unresolved technology choice existed, but must still record grounded decisions |
+| `quickstart.md` | Always required; contains executable automated/manual validation scenarios |
+| `data-model.md` | `required` when the feature introduces or changes data/state concepts; otherwise explicit `not_applicable` with reason |
+| `contracts/` | `required` only when a structured interaction/API/event/file/schema contract adds planning value; otherwise explicit `not_applicable` with reason |
+
+The model proposes applicability reasoning. A semantic-review action may challenge it. The engine validates that the declared disposition and actual artifact set agree; it never infers applicability from a missing file. The workflow artifact registry owns one `contracts/` collection root. After contract IDs exist, `BuildContractViewRegistryAction` derives every contained view filename solely from the engine contract ID and the registered schema-to-extension table, and portability validation rejects collisions. The model's contract name/key never becomes a path. The resulting per-contract selector/path registry is persisted in `PlanState`; the aggregate `ArtifactDecision` names the collection root while each `GeneratedView` uses an exact `{kind: contract, contractId}` selector.
+
+### 18.6 Deterministic plan validation
+
+Validators enforce:
+
+- feature ID, date, and spec link match engine facts;
+- mandatory plan IR fields and artifact decisions exist;
+- every mechanical technical assertion is a typed `FactSelection` whose ID/value matches repository/preset facts; prose rationale receives semantic review and is not claimed to be mechanically contradiction-free;
+- every touched existing file exists and is within the selected project;
+- every new/update path passes the complete planning-time lexical/structural preset algorithm, and every unavailable content-dependent check is registered as a mandatory implementation validator;
+- proposed paths use accepted `fileId`s consistently;
+- no persistent foreign absolute paths;
+- minimal-change claims do not list rejected layers as proposed outputs;
+- research records contain decision, rationale, alternatives, source/fact links, and no unresolved external-evidence flag;
+- each dependency proposal names a configured registry source and allowed version form and passes package/source policy; approval of the exact `PlanState` approves all dependency proposals contained in that state for later setup-task generation, but does not claim any package is installed;
+- entity names/references and relationships resolve within the data-model IR;
+- format-specific contract artifacts pass their registered schemas when a validator exists;
+- quickstart scenarios have complete typed automated/manual steps and reference real requirements/tokens/guards; whether a prose scenario is adequate remains semantic unless an executable command/assertion proves it;
+- configured automated verification references only available command IDs;
+- unsupported automation has a prerequisite decision or an explicit manual scenario;
+- every `AC-*`, `FR-*`, and `EC-*` has exactly one normalized coverage entry;
+- business rules, exact copy, scope guards, visible states, accessibility/responsive obligations, and preserved tokens in the internal obligation ledger have design/verification coverage or an explicit blocking gap;
+- every required preserved token is carried by obligation ID; visual token kinds additionally have a manual visual-verification expectation;
+- all planning artifacts remain under the feature directory;
+- no repository implementation files or `tasks.md` are staged or changed;
+- progress status is engine-derived: planning phases complete only after their validators pass, and implementation phases remain incomplete;
+- every read-only planning view exactly equals deterministic rendering from validated canonical `PlanIR`.
+- no `SNN` or `PNN` clarification remains open.
+
+### 18.7 Plan outputs and gate
+
+Immediately before transaction preparation, the engine rereads `spec.md` and compares its full normalized IR with the plan input held in memory. If the user edited it during planning, the engine discards the plan candidate and restarts from the new spec; it never overwrites the newer edit. This is direct value comparison, not a fingerprint.
+
+Before any plan model call, the engine has already committed the complete immutable `PlanInputAuthorityState` at its engine-derived `PlanInputAuthorityStateCollection` child path and set `WorkflowState.currentPlanInputAuthorityStateId`. That state remains the sole source of truth for normalized specification, acknowledgement/provenance/passive/clarification bindings, bootstrap/reference/principle/repository/baseline-file/research authorities, and the starting `PlanIdLedger`.
+
+The plan-candidate transaction retains that exact input authority unchanged and commits a `PlanState` that binds it by `inputPlanAuthorityStateId`. `PlanState` contains only the final successor plan-ID ledger, plan outputs (`PlanIR`, planned file/path/grant/dependency/source-reference/contract/review registries), and their generated read-only views; it does not duplicate the specification, repository facts, principles, research evidence, or baseline file authority. Transaction validation resolves every input join through the separately persisted `PlanInputAuthorityState` and proves that `PlanState.inputPlanAuthorityStateId` equals the current workflow pointer. Immediately before preparation, the engine rereads `spec.md`; a direct typed difference discards the candidate and builds/commits a successor input authority before regenerating. Successful generation enters `plan_review_pending`. The user validates the plan, research, design, contract, and quickstart views.
+
+- Approval is recorded against the current `planStateId` and advances state to `planned`.
+- Rejection supplies feedback through the engine. Actions map it to explicit plan unit IDs; those units are repaired/regenerated, full validation/rendering reruns under a new state ID, and review restarts. Generated files are not edited.
+
+`plan` is complete only if:
+
+- specification preconditions remain valid;
+- repository facts/preset selection are unambiguous;
+- Phase 0 research records pass;
+- Phase 1 artifact manifest and artifacts pass;
+- Phase 2 task-generation approach passes;
+- all coverage obligations pass;
+- no specification or plan clarification remains open;
+- no implementation-side change occurred;
+- the artifact transaction commits;
+- current canonical plan state has explicit approval;
+- workflow state transitions `specified -> planning -> plan_clarification_pending -> planning` as needed, then `plan_review_pending -> planned`.
+
+---
+
+## 19. Tasks stage design
+
+### 19.1 Inputs and preconditions
+
+The stage gate requires workflow state `planned`, an approval bound to the current `planStateId`, and an editable `spec.md` whose normalized IR equals the separately stored plan-input specification. It loads/validates the clarification registry and exits nonzero with `UPSTREAM_PLAN_CLARIFICATION_OPEN` if any `SNN` or `PNN` is open. It then revalidates the current `PlanInputAuthorityState` and bound `PlanState`, rebuilds repository facts and directly compares all gate-sensitive typed values with the input authority's registry, validates every required read-only view against deterministic rendering, and confirms that absent `not_applicable` artifacts have reasons. It uses the engine's canonical-state/artifact registry rather than a helper's incomplete `AVAILABLE_DOCS` list.
+
+Actions build a complete `ObligationLedger` from:
+
+- `AC-*`, `FR-*`, `EC-*`, and `BR-*` records;
+- user-visible outcomes and states;
+- exact-copy obligations;
+- scope boundaries, non-goals, and prohibited behaviors;
+- data/state obligations;
+- contract obligations;
+- research prerequisites;
+- quickstart scenarios;
+- accessibility and responsive expectations;
+- visual-system tokens;
+- source-supported value-treatment rules;
+- plan coverage entries and missing-repository prerequisites.
+
+Obligations without public spec IDs receive internal stable IDs so coverage can still be checked mechanically.
+
+### 19.2 LLM work
+
+The LLM receives one related obligation cluster and returns `TaskClusterRouteResult`: task proposals or one typed clarification need. It decides:
+
+- useful work decomposition;
+- one clear responsibility per task;
+- implementation versus integration versus verification intent;
+- semantic dependencies;
+- whether related obligations can safely share a task;
+- manual scenario selection when no automation exists;
+- descriptive wording.
+
+It must select files by existing `fileId` where the plan already identified them. If a new path is genuinely required but absent from the plan, the response is invalid and planning must be repaired/re-run; tasks cannot silently expand architecture.
+
+The LLM returns only `TaskDefinitionProposal`. It does not assign `TNNN`, checkbox text, `[P]`, final ordering, runtime status, canonical evidence, resource locks, or arbitrary commands. A proposal carries `obligationIds` from the task-local `ObligationLedger` allowlist—never a generic `sourceId` that could collide with a reference-source namespace. It may return `CommandSelection {commandId, typedArguments}` only; it cannot set `CommandInvocation.origin`. After validation, actions assign task IDs, resolve internal-key dependencies and any red-to-green target to canonical task IDs, construct model-optional and engine-required command invocations, derive mandatory evidence predicates/resources, and finally build canonical `TaskDefinition` records.
+
+Shared resources are never free strings or paths. The engine builds a closed `SharedResourceRegistry` from known manifest/lockfile file IDs, project/schema/generated-index adapters, and command capabilities. Actions derive the complete resource set and lock mode from task files, commands, project ownership, and registered adapters, validate every ID/mode, and construct `SharedResourceLock` records; the model cannot select, mint, or suppress a lock.
+
+Evidence expectations use the closed, kind-discriminated `EvidencePredicate` union. Each variant accepts only the IDs and fixed status semantics appropriate to a precommit validated file delta, configured command, intended-red diagnostic, parser/resolver, manual scenario, or task delta. `FileDeltaValidatedPredicate` can be satisfied from the sealed overlay transition/evidence before WAL preparation; it never claims that project bytes are already committed. Durable file completion is derived only from the later `TaskTransaction` commit marker. `mustBecomeGreenByTaskId` is produced only after the proposal's internal key has resolved through the assigned task-ID map. There is no arbitrary `expected` value or free-form assertion that a model can make true by wording it differently.
+
+After all clusters have schema-valid proposals, the engine builds a `TaskProposalGraph` keyed only by unique `internalKey`s and creates a compact global index containing those keys, responsibility, obligation IDs, produced/consumed `fileId`s, capabilities, and existing edges. A bounded `tasks.dependencies.reconcile` route may propose missing internal-key edges over that index. For large graphs the route processes overlapping partitions and a final compact boundary index. The engine validates every proposed edge, then runs proposal-graph unknown-node, cycle, and phase-edge actions. After deterministic topological ordering it assigns `TNNN` IDs, resolves every dependency and red-to-green internal key through that map, derives commands/evidence/resources, builds canonical task definitions, constructs the final ID-keyed graph, and reruns `ValidateCanonicalTaskGraphAction`. The model may suggest semantic dependencies; only the engine merges them. No canonical task or graph is required before the IDs it contains exist.
+
+### 19.3 Tasks clarification behavior
+
+A task-generation need is deduplicated through the shared registry and allocated `T01` through `T99` only for a new subject. Its exact path is `<paths.specs>/<featureId>/clarify/TNN.md`. The pause transaction enters `tasks_clarification_pending` without committing a candidate `TaskDefinitionState`, runtime state, or `tasks.md`.
+
+On a subsequent tasks run, the engine first rejects any open `SNN`/`PNN`, then refreshes the current approved plan/spec/reference/principle/repository authority set. A reference/spec/plan change is routed through and approved at its owning upstream stage before task generation resumes; tasks never absorb an upstream change into a hidden local answer. A current non-conflicting authority resolution or revision-current authenticated closed `TNN` form closes the existing record. The engine regenerates the complete tasks stage, reruns global graph/coverage checks, and allocates no duplicate clarification ID. `tasks.md` remains a read-only projection.
+
+### 19.4 Deterministic task validation
+
+Each proposed task must have:
+
+- one allowed phase and kind;
+- one concise responsibility;
+- a non-placeholder description;
+- at least one known obligation/source ID;
+- one or more declared read and/or write `fileId`s for file work;
+- or one concrete configured command/scenario for a verification-only task;
+- dependency keys that exist after merge;
+- a verification mode and evidence expectation appropriate to its kind.
+
+Every `fileId` resolves to a plan-approved path that is revalidated against the selected preset and plan authorization. Automated verification commands must exist in the available command registry. Mandatory checks are derived by `DeriveRequiredChecksAction` from task kind, file kinds, evidence policy, and later the implementation diff. A model may request only an optional additional command from the supplied registry. Test paths must match the configured test type, roots, extension, naming, and placement.
+
+Phase/kind/mode compatibility is closed and validated:
+
+| Task intent | Allowed placement |
+|---|---|
+| Setup/prerequisite | `setup` before consumers |
+| New automated behavior check | `automated_verification` with `red_then_green`; expected red evidence must name the intended assertion/diagnostic and the dependent implementation task that must turn the same check green |
+| Existing regression/check | `automated_verification` with `existing_check`; may run at the dependency-appropriate verification or integration point |
+| Source/integration change | `source_change` or `integration_change` in implementation/integration |
+| Manual observation after code | `manual_verification` with `manual_after_change` in integration/polish, after the changed behavior exists |
+
+An expected command failure counts only as bounded red evidence when the configured check reaches the intended assertion/diagnostic; an unrelated syntax, import, setup, or infrastructure failure does not satisfy it. Final completion requires the same check to pass.
+
+Global validators then:
+
+1. deterministically deduplicate only normalized byte-equivalent records whose responsibility, sources, file IDs, commands/scenarios, and verification are identical; semantic equivalence is model-assisted and never silently merged;
+2. build dependency edges;
+3. reject unknown dependencies and cycles;
+4. reject dependencies that contradict immutable phase constraints;
+5. merge validated cross-cluster dependency suggestions and add mechanically required setup-before-capability edges from declared prerequisites;
+6. validate `red_then_green`, `existing_check`, and `manual_after_change` phase/dependency/evidence rules;
+7. check every required obligation has implementation and/or verification coverage according to its coverage rule;
+8. require both implementation and verification coverage for value-treatment behavior;
+9. require implementation coverage for every preserved-token obligation and manual visual-verification coverage for visual token kinds;
+10. require explicit preservation work for prohibited behavior when code could otherwise introduce it;
+11. reject any path outside the plan-selected surface;
+12. calculate safe parallel eligibility from transitive dependencies, write/write conflicts, unsafe read/write conflicts, shared-resource locks, and exclusive command capabilities;
+13. topologically order tasks within the required phase progression;
+14. assign `T001...` after final ordering;
+15. render `[P]` only for engine-approved parallel tasks;
+16. render all tasks initially as `- [ ]`.
+
+A task that says only “review,” “analyze,” or “lock requirements” cannot pass unless its typed kind names a concrete configured verification command/scenario. Semantic task minimality can receive model-assisted review, but structural executability is deterministic.
+
+### 19.5 Parallelism policy
+
+A task is parallel-eligible only if all are true:
+
+- it has no dependency path to or from another concurrently runnable task;
+- write sets do not overlap;
+- a read path is not written by another task unless the read is declared snapshot-safe;
+- shared-resource locks do not overlap;
+- neither task runs an exclusive or dependency-mutating command;
+- neither task produces an input needed by the other;
+- both can execute in isolated overlays and their commits can be serialized without conflict.
+
+The default execution concurrency is one. `[P]` describes eligibility; it does not force concurrent execution.
+
+### 19.6 Rendering and gate
+
+The renderer creates phase headings, `TNNN`, checkboxes, requirement source tags, paths, dependencies, and parallel examples from the validated graph. It does not ask the LLM to emit task Markdown.
+
+The engine commits the current clarification registry/forms, immutable `TaskDefinitionState` bound to its exact clarification-state ID/revision, revision-zero `RuntimeFileState`, empty revision-zero `ExecutionEvidenceRegistryState`, engine-owned `TaskRuntimeState` bound to both, and the read-only `tasks.md` view in one transaction, then enters `tasks_review_pending`. Approval tied to the current `taskDefinitionStateId` advances to `tasked`. Rejection maps feedback to task unit IDs; if feedback exposes missing authority it follows the `TNN` lifecycle, otherwise the affected units are rebuilt/revalidated under a new definition ID and runtime revision zero. `tasks.md` is never imported as state.
+
+`tasks` is complete only when:
+
+- all predecessors revalidate;
+- every task is executable and preset-valid;
+- the graph is acyclic and fully resolvable;
+- complete obligation coverage passes;
+- no `SNN`, `PNN`, or `TNN` clarification remains open;
+- parallel flags are engine-derived;
+- rendered `tasks.md` exactly equals deterministic rendering of the current task definition ID and runtime revision;
+- the artifact transaction commits;
+- current immutable task definition state has explicit approval;
+- workflow state transitions `planned -> tasking -> tasks_clarification_pending -> tasking` as needed, then `tasks_review_pending -> tasked`.
+
+---
+
+## 20. Implement stage design
+
+### 20.1 Inputs and preconditions
+
+The stage gate requires workflow state `tasked`, current task definition/runtime state, and an approval whose `taskDefinitionStateId` equals the current immutable graph. Runtime revision changes do not invalidate that approval. It loads/validates the current clarification registry first and exits nonzero with `UPSTREAM_TASKS_CLARIFICATION_OPEN` when any `SNN`, `PNN`, or `TNN` is open; implementation never asks the code-generation model to answer it. It reparses editable `spec.md`, requires equality with the stored plan-input specification IR, loads canonical plan/task/reference state, checks every generated view against deterministic rendering for its recorded definition/runtime binding, and revalidates:
+
+- specification and reference obligations;
+- plan artifacts and declared repository surface;
+- task IR, requirement coverage, paths, dependency DAG, and parallel eligibility;
+- current environment/project/preset resolution;
+- current gate-sensitive repository fact values against the complete fact registry bound into `PlanState`;
+- availability of commands required by pending tasks.
+
+If current repository facts make a task path invalid—for example a project was removed—the stage blocks. It does not ask the LLM to improvise a different architecture.
+
+### 20.2 Task selection
+
+`CalculateRunnableSetAction` calculates ready tasks, `SelectRunnableTaskAction` chooses the lowest phase/order candidate, and `ClaimTaskLeaseAction` atomically changes that task to `executing` while reserving its declared locks. If the compare-and-swap claim fails, selection repeats from fresh state. A task execution journal distinguishes:
+
+- `pending`;
+- `executing`;
+- `validation_failed`;
+- `failed`;
+- `blocked`;
+- `completed`;
+- `needs_reconciliation`.
+
+`tasks.md` remains the human view (`[ ]` or `[X]`); richer transient/recovery state is stored in engine state. A task is never rendered `[X]` before its transaction and evidence commit.
+
+### 20.3 Task context
+
+The model receives only:
+
+- task responsibility and description;
+- linked requirement/obligation records;
+- relevant plan decisions;
+- exact allowed read/write `fileId`s;
+- exact allowed copy `sourceId`s from the current immutable source-registry revision;
+- bounded current contents of target and directly related files;
+- nearby repository conventions selected deterministically;
+- applicable raw principle guidance and separately enforceable preset rules;
+- exact available command IDs;
+- required evidence;
+- one response schema.
+
+Before this packet is built, the engine canonically orders eligible repository/reference/template selectors, derives the closed registry/source tuples with `DeriveCopySourceRegistryIdAction` and `DeriveCopySourceIdAction`, and `BuildCopySourceRegistryAction` captures their task-scoped immutable allowlist. It then initializes the task-execution ledger and commits a `preparation` checkpoint containing that ledger and source registry before either identity can cross the model-provider boundary. The model is not asked to rediscover the repository, choose a different target/source, assign an ID, or execute tools.
+
+### 20.4 Change planning and filename validation
+
+For a multi-file task, a model call may propose an ordered list of operation intents. Every destination must be a plan-approved `fileId`; implementation cannot mint a path or `fileId`. Planning compiles each record's allowed runtime capabilities from its declared intent, file-kind policy, explicit whole-file/copy policy, and approval scope. A missing destination or missing capability is an upstream plan/task defect. Filename guidance and atomic filename repair occur in planning, where a `ProjectPathCandidate` exists.
+
+Code is generated one file operation at a time. A response cannot include a raw path, engine content handle, trusted byte length, or command. Create/replace responses carry one schema-bounded UTF-8 string and update carries one allowed patch-format ID plus UTF-8 patch string. Actions compute the actual serialized/body lengths, capture valid bytes in the run-local immutable candidate store, and only then construct the canonical handle-bearing operation. The closed canonical operation set is:
+
+- `CreateFile`: complete content to an approved absent destination;
+- `UpdateFile`: a patch to an approved existing destination;
+- `ReplaceFile`: complete replacement content for an approved existing destination;
+- `CopyFile`: byte-exact content from an engine-resolved repository/reference/template `sourceId` to an approved destination;
+- `DeleteFile`: disabled by default and separately policy-authorized.
+
+The engine builds the copy-source registry before task generation/context selection. Its registry ID is a closed tuple of exact task-definition/task/lease/base-overlay/contract authorities; each source ID is the registry ID plus the source's unique ordinal in canonical normalized-selector order. Existing repository sources are captured as write-once task-context blobs bound to the exact base overlay revision; reference sources point to write-once blobs in the current `ReferenceSnapshot`; approved template sources point to a blob in an exactly versioned template package. Registry revision, blob ID, byte length, media type, provenance/license data, and copy-policy ID are immutable. The model sees only the source IDs authorized for the current task; it cannot supply a raw path, blob handle, revision, ordinal, or new source.
+
+`CopyFile` validates source kind, provenance, media type, size, permission, and destination capability. A copy to an absent target requires `copy_destination` plus create-copy permission; overwrite requires `copy_destination`, `replace`, and an explicit copy-overwrite policy. The model returns no expected target state. `ValidateExpectedTargetStateAction` derives it from the current file record and overlay metadata, and `OperationAuthorization` binds it, the target descriptor revision, overlay revision, copy-registry revision, and exact source blob. A commit-time descriptor/no-follow compare-and-swap prevents an out-of-band target swap. A later adaptation is a separately authorized `UpdateFile` or `ReplaceFile` operation.
+
+Before invoking a model, the engine estimates the maximum serialized response size. `CreateFile` and `ReplaceFile` are permitted only when complete content fits both the file kind's `contentLimits.modelCompleteFileBytes` and the route's hard byte/token output ceilings after fixed schema/escaping overhead. A provider adapter must reserve that overhead and reject an unprovable fit before the call. A larger change must use an exact `CopyFile` source within `copiedSourceBytes` plus bounded updates, parser-addressed/hunk updates, or an explicitly replanned set of smaller files; responses are never truncated and partial “complete content” is never applied. This keeps nano-class calls bounded while allowing large existing code to be copied deterministically.
+
+### 20.5 Candidate workspace and validation
+
+[View the task implementation and transaction diagram](diagrams/04-task-implementation-transaction.mmd).
+
+After the implementation stage gate and before loading a task checkpoint or invoking any task model/overlay/command adapter, the engine derives and acquires the current run's structural feature-execution process lease, validates its OS-backed ownership, then acquires and validates the exclusive feature-execution lock. The latter is distinct from the short `FeatureTransactionCollectionLockCapability`: feature WAL locks still surround only recovery/commit operations, while the feature-execution lock remains runner-held across task scheduling, adapter-boundary recovery, every task overlay, and final validation. A raw lease rejection and raw lock contention are validated and must prove that no capability/token was issued; an acquired observation that fails validation is released through the rejected-observation action and its cleanup validator. Every terminal success/error/cancel branch first builds closed final-validation overlay collection-lock terminal evidence—`not_attempted`, validated contention without a capability, rejected acquired observation with validated cleanup, or validated ordinary release—then releases/validates the acquired feature-execution lock, builds the closed feature-lock terminal evidence, and only then releases/validates a successfully acquired process lease. Raw overlay-lock observations and an unvalidated acquired capability can never satisfy this ordering. A rejected process-lease acquisition has no lease to release. Process death releases both adapter capabilities; a fresh run derives a new nonrebindable lease tuple and may not infer liveness from a PID, heartbeat timeout, timestamp, or stale file.
+
+Each task executes in an isolated workspace overlay. Each operation has a child savepoint based on the same pre-operation task-overlay revision:
+
+1. create the task overlay from the current committed workspace and build a revision-zero `OperationJournal` bound to the task lease, overlay, and canonical operation-intent plan;
+2. assign the operation-authorization and operation-savepoint IDs from successive ledger revisions, build the authorization and `operation_apply_ready` boundary, then durably checkpoint the IDs, authorization, boundary, and successor ledger. Derive/validate its structural one-key adapter record set and create the child only through the port call that durably appends the entry record atomically with child publication;
+3. apply one authorized create/update/replace/copy/delete operation to the savepoint;
+4. ensure only that operation's declared destination changed and validate expected target state;
+5. run operation-local checks: path/scope, patch applicability, source parse/syntax, local declaration/filename rules, complete parser/extractor plus fallback path-token coverage for every model-authored body range, and copy-source policy;
+6. on failure, discard the savepoint while durably appending its structural discard receipt atomically with child removal; commit the boundary-free `pending_release` checkpoint, release/validate the record set, and commit/reload its cleanup-only `none` successor before any repair. Every repair is then reapplied to the unchanged pre-operation snapshot;
+7. after a local pass, copy the exact operation body/patch into the task-execution write-once store (or retain the validated immutable copy binding), prove it reproduces the savepoint delta, assign/build/append an `OperationRecord`, assign the promotion-authorization ID, and bind that record in the single-use promotion authorization. Replace the pending boundary with `operation_promotion_ready`, persisting the predecessor apply key/entry ID, and commit the pre-promotion checkpoint containing all allocated IDs and evidence. Derive/validate the complete two-key record set, then promote through the port: exact before-images/absence tombstones, promotion-boundary entry, and receipt become durable before or atomically with parent-revision publication. Build one journal entry referencing the record plus exact intent/authorization/promotion-authorization/savepoint/receipt-bound evidence and revisions, append by journal compare-and-swap, clear the boundary only with promotion/discard proof, and persist the boundary-free `pending_release` checkpoint. Only then release the complete set idempotently, commit/reload the cleanup-only successor checkpoint with cleanup state `none`, and permit the next ordinary step;
+8. after all declared operations are staged, prove the journal contains every approved intent exactly once in order with a contiguous overlay-revision chain, then run coupled/task checks: imports, module/project ownership, compilation/type analysis, lint, targeted tests, and full authorized-delta validation;
+9. localize a coupled failure to one operation where evidence permits, repair that operation, and deterministically rebuild the task overlay from the clean task base by replaying the journal's ordered immutable `OperationRecord`s; a missing/retired record or blob-owner mismatch blocks recovery. Use an explicitly authorized `replace_group` only when the failure is genuinely inseparable;
+10. derive mandatory task/phase commands from policy; for every task-level command, assign its authorization and savepoint IDs from successive task-ledger revisions, build `command_run_ready`, durably checkpoint the boundary, derive/validate its structural one-key record set, and create the child only with an entry record durable atomically with publication;
+11. run the command in its recorded savepoint and decode/diff the complete child delta into the closed variants. Reject any path matching both persistent and ephemeral classes; permit persistent classification only for regular-file changes whose file IDs are in the task/policy intersection and whose create/modify/delete kind is bound in `CommandAuthorization`; permit ephemeral regular-file and structural-directory create/delete entries only when their complete path matches an ephemeral rule and a validated generated/cache/private-temp root. A terminal `/**` rule includes its root directory. Reject persistent directories, symlinks, hard-link aliases, devices, sockets, FIFOs, and every other node type, and discard the entire savepoint on command failure or any invalid delta while atomically retaining the task-boundary discard receipt; before retry/exit, commit `pending_release`, release/validate, and commit/reload the cleanup-only `none` checkpoint;
+12. on success, discard all ephemeral regular-file and directory outputs and compare-and-swap only that exact persistent regular-file intersection into the task overlay, with complete exact before-images/absence tombstones and the promotion receipt durable before or with parent publication; bind the receipt into evidence, commit a boundary-free `pending_release` checkpoint, then release the one-key set idempotently and commit/reload its cleanup-only `none` successor before any ordinary work;
+13. rerun every impacted path, source, import/resource-resolution, static-policy, and tool validator against the post-promotion overlay, then validate manual-evidence gates;
+14. run the complete required non-promoting validation set and one final no-unexpected-change check immediately before sealing the task transaction; a truly read-only command receives a read-only mount, while a compiler/test that needs output runs in a disposable savepoint that admits only declared ephemeral paths and is always discarded.
+
+Evidence allocation is a strict compare-and-swap chain inside that flow. `AssignOperationPromotionEvidenceIdAction` and `AssignCommandPromotionEvidenceIdAction`, like `AssignVerificationEvidenceIdAction`, return both the identity and the exact successor `ExecutionEvidenceIdLedger`. Building a record does not advance the ledger. `AppendExecutionEvidenceAction` accepts only the allocation successor for that record and carries it into the prospective registry. For a successful persistent command, the fixed order is command-promotion allocation/build/append, then verification allocation from that append's successor/build/append; allocating both from the same predecessor is invalid. Receipt-only recovery uses the identical operation-promotion chain before it can build terminal recovery evidence.
+
+If any builder or validator fails after one of those evidence/diagnostic allocations but before its valid record append, `RetireExecutionEvidenceAllocatedIdAction` consumes that exact allocation-successor ledger and proves no canonical record references the ID. Before retry or clean exit, the owner persists the retirement successor in an otherwise authority-equal checkpoint or outcome transaction. If a durable adapter boundary is still ready, the checkpoint retains that same boundary byte/value-equal; the next run must complete its normal recovery branch before ordinary work. No retirement path clears, repeats, or reclassifies an adapter effect. A crash before the in-memory failed identity reaches any durable/external boundary simply reloads the prior ledger and may reselect that ordinal; once retirement is durable the ordinal is never reused.
+
+The exact checks depend on compiled capability, not a universal assumption. Per-operation checks never reject a valid temporary cross-file incompleteness. For example, a JavaScript-only Node project may have no compile command; a Maven Java project will normally compile; a UI-only feature may require a manual visual scenario in addition to unit tests.
+
+When a configured predicate permits manual verification, a raw observation never becomes evidence directly. The engine captures exact workflow/task/runtime/checkpoint/evidence-registry/predicate/scenario revisions, performs freshness/shape/policy checks before consuming authentication, canonicalizes the observation to bounded `BusinessText`, authenticates and binds the validated handle, reserves the execution-evidence ID, and derives the owner-local manual-submission ID from it. `BuildManualEvidenceAction` and `ValidateManualEvidenceAction` then produce one typed record. A `ManualVerificationTransaction` atomically appends actor and execution evidence while proving project delta, overlay, workflow, runtime, and file state unchanged. Automated paths use the explicit unchanged actor-registry mutation; a stale, malformed, unauthenticated, or disabled submission cannot satisfy a gate or force a no-op actor revision.
+
+### 20.6 Code repair
+
+Compiler/linter/test repair is scoped to the smallest semantically coupled unit supported by the diagnostic:
+
+- one scalar/config value;
+- one import declaration;
+- one declaration or function;
+- one patch hunk;
+- one file when the tool cannot localize further;
+- one tightly coupled declaration/reference group within a single authorized file when no smaller parser-valid unit exists.
+
+The repair request includes the failing diagnostic, relevant excerpt, immutable requirement/plan context, allowed `fileId`, pre-operation revision, and exact replacement schema. It does not include other writable files. If the repair legitimately requires a different file, the current task proposal is structurally incomplete; execution follows the explicit upstream-rework protocol rather than expanding scope silently.
+
+### 20.7 Command execution
+
+Only engine-derived mandatory commands and validated model-requested optional command IDs can run. The model may not create a command or omit a required one. The command runner:
+
+- executes `executable` plus argv without a shell;
+- uses a contained working directory;
+- supplies only allowlisted environment variables;
+- enforces timeout, output limit, network policy, and mutability class;
+- treats bounded stdout/stderr and exit status as raw observations; only a validated typed command result becomes evidence;
+- treats a non-success exit as a diagnostic;
+- snapshots/diffs declared effects after every mutating command and exposes no undeclared result to commit;
+- never interprets command output as model instructions.
+
+Every command process tree is confined by an OS-level sandbox or container boundary, not by post-hoc diffing alone. Before a task command reaches that nontransactional adapter, its `AssignCommandAuthorizationIdAction` and `AssignCommandSavepointIdAction` successors and `command_run_ready` boundary are durable in a checkpoint. Stage-level final-validation commands are outside any one task ledger: `DeriveFinalValidationInvocationIdAction` binds the exact canonical workflow revision to the fresh feature-log run, and per-check authorization/savepoint IDs are closed tuples of that invocation, canonical check ordinal, bounded retry ordinal, and overlay revision. Thus neither path accepts an ambient/model ID and a process restart cannot reuse a final-validation adapter identity. The adapter exposes only authorized persistent file IDs and declared ephemeral generated/cache/private-temp roots as writable capabilities; all other project inputs and engine state are mounted read-only or not at all. A write mediator/audit facility must fail the process on every unauthorized create/open-for-write/rename/link/delete attempt, including a transient modification later restored before exit. The same mediator enforces authorization-bound ceilings for created-entry count, cumulative bytes written, current delta bytes, per-file bytes, and private-temp bytes during execution, before disk exhaustion is possible; successful exit telemetry is validated again. The adapter provides only that bounded private temporary area, applies an environment allowlist, confines descendants for timeout/kill, and enforces the configured network namespace/policy. A package-manager script may internally invoke a shell, but that descendant inherits the same mediation. Diff validation remains mandatory as a second check and for promotion classification; it is not the primary write boundary. If the active platform adapter cannot enforce the declared per-path filesystem/process/network/quota contract, mutating and dependency commands are unavailable; read-only commands are available only when writes can be denied mechanically and their private-temp quota enforced.
+
+Dependency-mutating commands run only in the task overlay and require task-approved manifest/lockfile IDs that also match the command authorization and per-file delta kind. A command cannot delete an update-only record, replace a create-only target, or create an update-only target merely because its path matches. Delete requires the file's delete capability, task authorization, command policy, and the global delete gate. Symlinks, devices, sockets, and other special-file deltas are always rejected. Externally irreversible effects are not automatically executed; they block for explicit policy/user authorization.
+
+Every mutating command runs in a `CommandSavepoint` bound to the exact discriminated overlay binding in its authorization. `promote_intersection` is valid only with a task-overlay binding; a final-validation binding requires `discard_all`, empty promotable files, and an exact validation-overlay revision. For final validation, `CreateCommandSavepointAction` calls the dedicated overlay-port child-create method and always returns the closed created-or-adapter-failed outcome. `ValidateFinalValidationCommandSavepointCreationAction` proves the structural authorization/savepoint/parent/header/owner/feature-lock joins and absence of a task adapter record before `RunConfiguredCommandAction` is reachable. An adapter failure, indeterminate publication, or invalid observation makes execution unreachable and authorizes only recursive removal addressed by the already validated parent header; the engine never trusts or addresses the candidate child. A failed process may have written partial files, but those bytes remain confined to the child savepoint and are discarded. Promotion requires successful exit evidence, a valid command-delta record, and a compare-and-swap against the unchanged task-overlay revision. Promotion invalidates prior evidence for every affected file; the engine reruns affected deterministic validators and required tools.
+
+Immediately before transaction sealing, final validation is non-promoting: truly read-only commands run with writes mechanically denied, while React/Vite, Maven/Gradle, MSBuild, test, and similar tools may write only their declared ephemeral outputs inside a disposable child savepoint. The engine diff-gates that savepoint and invokes `DiscardCommandSavepointAction` for successful `discard_all` as well as failed/invalid outcomes, so all bytes are discarded regardless of exit status. The final branch uses only `FinalValidationOverlayPort.discardFinalValidationCommandSavepoint`, then a separate inspection action captures raw child presence/bytes, parent revision, task-record count, completeness/ceiling flags, and adapter identity. `ValidateFinalValidationCommandSavepointDiscardAction` accepts only a complete independent postcondition proof; any adapter-indeterminate, residual, incomplete, mutated-parent, or mismatched result forbids verification and routes to parent-only recursive abort. `ValidateFinalValidationOverlayDiscardAction` returns a discriminated normal discard or recursive-abort evidence. Only normal evidence can enter `FinalValidationRecord`; recursive-abort evidence contains the typed child failure/rejection and zero-residual parent-tree proof without pretending that an untrusted child had ordinary child-discard evidence. A final command that requires a persistent write is invalid policy; that mutation must be an earlier task-authorized operation/command followed by revalidation.
+
+### 20.8 Commit and task completion
+
+A task commit authorization exists only after:
+
+- all operations were preset-valid and task-authorized;
+- all patches applied;
+- no unplanned files changed;
+- required syntax/static/import checks passed;
+- required configured commands passed, or a `red_then_green` verification task produced the specifically authorized expected-red evidence that its dependent implementation must later turn green;
+- required manual evidence was recorded, or the task remains pending;
+- the overlay is internally consistent.
+
+The engine first builds the next `TaskRuntimeState` revision without changing `TaskDefinitionState`, renders `tasks.md` against both identities, and seals one `TaskTransaction` containing the exact project overlay delta, verification evidence, execution journal, task definition ID, next runtime revision, rendered tasks view, lease/lock transition, and next workflow state when applicable. A single-use authorization is bound to the sealed overlay revision and exact entry set.
+
+The journaled transaction is then prepared, applied entry by entry, and marked committed only after every project/state/evidence/view entry is durable. The commit marker is last. Only that marker permits `[X]` to be reported. Lock release is part of the committed state or is recovered idempotently; an orchestrator never releases it directly. If any persistence step fails before the marker, recovery rolls the complete transaction back. This intentionally differs from the current prompt's warning-and-continue behavior (`prompts/sdd-implement.md:117-127`).
+
+### 20.9 Failure propagation
+
+- A transition to `validation_failed`, `failed`, or `blocked` is committed through a sealed state-only `TaskOutcomeTransaction`. It atomically persists the next runtime revision, diagnostics/evidence, execution-journal delta, definition/runtime-bound `tasks.md` view, and lease/lock release, with no project delta. The ordinary Section 25 journal/authorization protocol applies; an orchestrator never durably releases a lease separately from its outcome state.
+- A failed sequential task blocks its dependents and its phase.
+- A failed parallel-eligible task does not cancel independent in-flight tasks, but it blocks its dependents.
+- Successful independent tasks may commit; failures are aggregated at a scheduling boundary.
+- No pending or blocked task is marked complete.
+- `failed`, `blocked`, and `completed` are distinct workflow results.
+- Retry exhaustion returns the last valid candidate, diagnostics, and exact repair unit; it never accepts invalid code.
+
+### 20.10 Final implementation gate
+
+`FinalValidationOrchestrator` never runs a build/test directly in the committed workspace. Under the already validated feature-execution lock/process lease it acquires the separate registered overlay-collection lock and holds the same capability/epoch continuously across bounded raw inventory, complete owner-ref liveness inspection/validation, inventory classification, orphan cleanup, cleanup validation, and new header/overlay publication. That opaque collection-lock token is adapter/OS process-owned, automatically released when its owner process dies, and never rebound; a fresh process may acquire only a new epoch. Raw inventory carries the observed malformed/unowned count, bytes, entry count, completeness, ceiling booleans, and adapter identity rather than success constants. The liveness action queries the feature-execution control adapter for every unique structurally readable header owner while the collection lock remains held; its validated run-local registry must cover every such owner exactly once. Only a nonrebindable prior-run lease observably absent/terminal can make an entry orphaned. A live current or other owner, malformed/unowned entry, ceiling breach, incomplete inventory, or mismatched authority produces a representable typed rejection. Final-validation overlay resume is unsupported.
+
+After a validated acquisition, the ordinary collection-lock release action is legal only while that exact lock and both outer capabilities remain validated/live. Validated contention instead proves no capability/token/table entry. A rejected acquired observation goes only through rejected-token cleanup. A create call always returns a closed outcome: any adapter failure, indeterminate publication, or invalid created observation must be cleaned by engine-derived candidate identity under the still-held lock, independently validated to zero bytes, and only then released through the creation-cleanup evidence variant. It is never relabelled as a prepublication failure. These branches close into `FinalValidationOverlayCollectionLockTerminalEvidence` before either outer capability is released.
+
+Loss, absence, or epoch substitution of the process lease, feature lock, or collection lock is not converted into ordinary release evidence. The runner capability guard stops invoking nodes, records `RunnerCapabilityLossFailStopEvidence`, and fail-stops the owner process; OS ownership releases any remaining tokens. The interrupted run returns no success/blocked pipeline outcome. A fresh invocation acquires new nonrebindable epochs, performs the bounded inventory/liveness sweep, and deletes only entries whose prior owner lease is now observably terminal. Every overlay has a write-once structural header durable before publication and bound to the fresh run-scoped invocation, exact process-lease owner, and feature-execution-lock epoch. No prior identity or bytes are reused, read, imported, or promoted. This closes inventory/create TOCTOU and keeps repeated-crash scratch bounded without treating residual bytes as project or canonical-state authority.
+
+After cleanup validates, the orchestrator creates a disposable validation overlay from the final committed revision, runs each check under `promotionMode: discard_all`, permits only declared ephemeral outputs, applies the same sandbox/write-attempt audit and complete delta gate, records bounded evidence, and discards every overlay/savepoint byte. A truly read-only tool receives a mechanically read-only project mount. Only the validated evidence and final workflow/view state enter the stage transaction; no final-validation filesystem delta can be promoted.
+
+A failing final check is not repaired inside that overlay. After discard, `FinalValidationFailedStageTransaction` atomically enters `final_validation_failed`, appends the failed evidence revision, binds the unchanged task-runtime revision, and commits the regenerated task view. Only that durable record is passed to `LocalizeFinalValidationDiagnosticAction`. If affected file/evidence IDs resolve uniquely to an already approved completed task and the repair stays inside that task's write/capability set, a second `LocalizedTaskRemediationStageTransaction` atomically retires exactly the affected evidence, changes only that runtime record to `remediation_pending`, regenerates `tasks.md`, and returns the workflow to `implementing`. The scheduler then opens a fresh task overlay from the current committed workspace and normal intent/operation/repair/commit rules apply. If ownership is ambiguous or the fix needs a new file/capability/task, `ImplementationReconciliationStageTransaction` atomically retires stale evidence, marks affected completed tasks `needs_reconciliation`, and enters `implementation_reconciliation_tasks`; the engine generates one bounded remediation `TaskDefinitionProposal`, rebuilds the immutable definition state, and requires renewed task approval before implementation. After either path commits, the entire final-validation set reruns from a new disposable overlay. Thus final validation is a gate and diagnostic source, never a hidden writable repair workspace.
+
+The stage completes only when:
+
+- every required task is `[X]` with committed evidence;
+- no task is `remediation_pending`, executing, failed, blocked, or `needs_reconciliation`, and no reconciliation/final-validation-failed state is active;
+- configured final build/lint/type/test checks pass;
+- required manual quickstart evidence is recorded;
+- actual changed paths are within the union of validated task write sets;
+- every final command's disposable effects pass its non-promoting delta gate and all validation-overlay bytes are absent from the commit set;
+- requirement/obligation evidence remains complete;
+- `tasks.md` exactly equals deterministic rendering of the approved task definition ID and completed runtime revision;
+- workflow state transitions from `tasked` to `implemented` after final persistence.
+
+---
+
+## 21. Deterministic validation catalogue
+
+This catalogue is normative for the first engine version. A project may add validators or raise severity. It may not disable locked safety validators.
+
+### 21.1 Cross-stage validators
+
+| Validator | Method | Blocking condition | Repair owner |
+|---|---|---|---|
+| Config schema | JSON Schema plus semantic rules | Missing/unknown/invalid config | User/environment |
+| Preset schema | JSON Schema, resource checks, placeholder rejection | Invalid/unresolved preset | User/environment |
+| Environment resolution | Manifest adapters and root specificity | Zero/multiple project owners | User/environment |
+| Stage order | Workflow state enum | Requested predecessor not complete | User/workflow |
+| Artifact presence | Engine artifact registry and filesystem | Required artifact absent/unreadable | User/workflow |
+| Predecessor validity | Reparse editable spec; load canonical generated state; compare deterministic views; run stage validators | Current predecessor no longer passes | Prior-stage repair |
+| Path containment | Canonical path and symlink resolution | Escape/absolute/forbidden path | Usually not model-repairable; path field may be repaired only when otherwise safe |
+| Model protocol | Request identity plus closed response schema | Malformed/wrong route response | Model retry/repair |
+| Placeholder | Template/model sentinel scan | Unresolved placeholder remains | Model atomic |
+| Transaction boundary | Staged-set path and membership checks | Missing/extra/outside write | Engine/workflow |
+
+### 21.2 Specify validators
+
+| Validator | Deterministic rule | Semantic remainder |
+|---|---|---|
+| Argument contract | Exact `sdd specify --reference <relative-selector>` grammar; one non-empty value; every removed/unknown/positional input rejected | None |
+| Feature identity | Versioned slug algorithm, configured maximum length, no collision | Display title quality |
+| Reference root | Configured-root containment, readable directory, no symlink escape | None |
+| Reference accounting | Stable inventory equals processed-status inventory | Relevance of content |
+| Reader support | MIME sniff plus installed reader | Meaning of decoded content |
+| Citation | Source ID, bounds, and verbatim text exist | Whether citation proves claim |
+| Required sections | Typed required fields and renderer contract | Whether prose is adequate |
+| Requirement IDs | Engine-assigned type/uniqueness; stable surviving IDs and monotonic new IDs | Whether the requirement is substantively correct |
+| Acceptance form | Nonempty Given/When/Then fields | Whether scenario is truly testable |
+| Clarification state | No unresolved typed clarification at success | Whether all ambiguity was discovered |
+| Business-only lint | No obvious code/path/framework/CSS leakage | Nuanced business/technical classification |
+| Exact-copy propagation | Byte-for-byte value from source ledger | Whether source copy is actually required |
+| Visual-token propagation | Every required token ID/value rendered in sidecar | Semantic classification of required token |
+| Reference conflict gate | Every known conflict has resolution/open question | Discovery of all semantic conflicts |
+
+### 21.3 Plan validators
+
+| Validator | Deterministic rule | Semantic remainder |
+|---|---|---|
+| Repo-fact consistency | Typed fact ID/value exists in repository/preset facts | Prose relevance and design interpretation |
+| Artifact manifest | Required/not-applicable enums match actual outputs | Whether applicability choice is wise |
+| Project path | Full preset path algorithm | Whether a new file is justified |
+| Existing touched area | File exists and has accepted ID/kind | Whether it is the minimal surface |
+| Research record | Required fields and fact/source references exist | Quality of rationale/trade-off |
+| Data-model integrity | Unique entities/fields; relationship targets resolve | Correct domain modeling |
+| Contract syntax | Registered schema validator passes | Whether contract captures full intent |
+| Quickstart integrity | Required typed steps plus real requirement/scenario/command IDs | Scenario adequacy unless executed |
+| Coverage | Every obligation ID mapped; no unknown ID | Whether mapping is semantically sufficient |
+| Visual obligation | Exact token appears in design and manual verification | Quality of chosen design |
+| Scope | Only feature artifacts staged; no `tasks.md`/source writes | None |
+| Progress | Phase/gate status derived from evidence | None |
+
+### 21.4 Tasks validators
+
+| Validator | Deterministic rule | Semantic remainder |
+|---|---|---|
+| Task definition | Closed schema and allowed phase/kind/mode; no model-owned runtime status | Task wording/minimality |
+| Source reference | Known obligation IDs only | Whether links are substantively correct |
+| Executability | Concrete write, command, or manual scenario exists | Whether work will achieve desired result |
+| Path authorization | Every path has `fileId`, plan authorization, preset pass | None |
+| Test kind/placement | Preset root/name/extension/mapping | Test-case quality |
+| Command availability | Known available command ID and typed arguments | Whether command is the best validation |
+| Required checks | Preset evidence policy derives mandatory checks from task/file/diff | Whether optional extra checks add value |
+| TDD evidence | Expected-red diagnostic is exact and same check is bound to a later green task | Whether the test captures all desired behavior |
+| Dependency integrity | Known nodes, DAG, valid phase direction | Missing semantic dependencies |
+| Parallel eligibility | No dependency/path/lock/command conflict | Hidden external shared resources not declared |
+| ID/order/render | Engine topological order and gap-free `TNNN` | None |
+| Coverage | Obligation-specific required task kinds exist | Semantic sufficiency of task content |
+| No placeholder task | No placeholder values; typed executable operation | Overly vague but syntactically concrete wording |
+
+### 21.5 Implement validators
+
+| Validator | Deterministic rule | Semantic remainder |
+|---|---|---|
+| Runnable task | Pending, dependencies complete, locks free | None |
+| Change schema | Closed operation schema and current task ID | None |
+| Write scope | Target belongs to declared task write set | None |
+| Operation validity | Create/update/replace/copy/delete state matches filesystem and policy | None |
+| Copy source | Engine source ID, provenance, media type, size, and permission pass | Whether copied code is the best design choice |
+| Patch scope/apply | Patch affects one declared target and applies | Whether change is desirable |
+| Filename/path | Full preset path algorithm | Filename meaningfulness within valid rules |
+| Source parse | Configured parser accepts code | Runtime behavior |
+| Language semantic name | Configured Java/type/namespace rules | Domain naming quality |
+| Import resolution | Resolver finds allowed targets | Architectural appropriateness where not mechanically encoded |
+| Manifest/dependency | Declared package/project and configured validator | Necessity/security suitability of dependency |
+| Tool checks | Exit code/output from formatter, compile, lint, test | Coverage of untested behavior |
+| Unexpected change | Overlay delta subset of authorized writes | None |
+| Command effects | Post-command delta subset of task plus declared command effects | None |
+| Evidence | All task evidence predicates satisfied | Manual observation when required |
+| Completion | Commit plus evidence plus status persistence | None |
+
+### 21.6 Validators that must not be overstated
+
+The following remain LLM-assisted or human-reviewed unless an executable/domain-specific rule exists:
+
+- whether a requirement is completely testable and unambiguous;
+- whether every behavior was extracted from arbitrary prose, images, or diagrams;
+- whether two arbitrary references conflict semantically;
+- whether a specification introduced an unsupported but plausible behavior;
+- whether a plan is truly the smallest viable implementation;
+- whether a task is optimally sized;
+- whether code fully satisfies intent beyond executable assertions;
+- subjective visual quality beyond exact token/layout checks.
+
+The engine records such findings with their real evidence class.
+
+---
+
+## 22. Atomic repair protocol
+
+### 22.1 Definition of atomic
+
+An atomic repair changes the smallest independently valid IR unit associated with one diagnostic. It is not necessarily one character. The unit may be:
+
+- one scalar field, such as a proposed path;
+- one list item, such as a requirement;
+- one structured record, such as a task;
+- one artifact section;
+- one coverage entry;
+- one dependency edge;
+- one patch hunk or declaration;
+- one complete file only when a parser/tool cannot localize the failure;
+- one explicitly declared coupled group of pointers within one authorized IR record or one authorized file when those pointers cannot be valid separately.
+
+Atomicity means unrelated valid units cannot change.
+
+### 22.2 Repair classification
+
+Every diagnostic declares one class:
+
+- `canonicalize`: a documented semantics-preserving normalization, such as slash normalization, applied before candidate identity is established;
+- `model_atomic`: the model produced an invalid repairable unit;
+- `user_input`: a missing decision, unresolved authoritative conflict, or explicit approval is required;
+- `environment`: configuration, reader, parser, repository, or command capability is missing/broken;
+- `not_repairable`: retrying a model cannot make the operation safe.
+
+Configuration and environment errors never consume LLM repair attempts.
+
+### 22.3 Repair authorization
+
+`CreateRepairAuthorizationAction` creates an immutable authorization after diagnostic ordering and selection actions have run. It copies the exact `compiledEnginePolicyStateId`, stable diagnostic code/rule IDs, validator-contract ID, discriminated mechanical authority provenance (preset, platform policy, or engine contract), and complete typed rule values used by that diagnostic into the authorization. `RepairRuleBinding` has closed variants for path/extension/filesystem rules, atomic schema/cardinality/enum/identifier constraints, exact registry references, coverage, graph/phase, dependency, command-selection, content-validator, and exact-value rules. An authorization is invalid if the selected diagnostic's validator declares a rule dependency that is absent; arbitrary principle prose cannot stand in for a binding. A semantic principle conflict instead follows semantic review and plan/task clarification/review. This makes mechanically repairable filename and non-filename repairs equally self-contained:
+
+[View the Repair authorization sample](code.md#repair-authorization).
+
+The operation and every target pointer/key/anchor are selected by the engine. The model cannot choose what to modify. Guidance is rendered only from authorization-bound rules and must not re-query an ambient “current” preset, so initial guidance, the diagnostic, validation, and repair remain on one exact policy revision. `candidateRevision` is run-local compare-and-swap control for concurrent repair attempts; it is not persisted as an artifact-freshness fingerprint.
+
+The repair algebra is closed:
+
+- `replace(pointer, expectedValue, replacement)`;
+- `insert(collectionPointer, stableKeyOrAnchor, replacement)`;
+- `delete(pointer, expectedValue)`;
+- `replace_group(unitId, exact {targetId, pointer, expectedValue, schema} set, replacementsByTargetId)`.
+
+`replace_group` is allowed only for a predeclared inseparable unit within one authorized IR record or one authorized `fileId`, and never as retry-scope expansion. A missing task uses `insert`; a removable dependency edge uses `delete`. Path renames remain planning operations and are not a code-repair group.
+
+### 22.4 Repair request and response
+
+The repair guidance contains:
+
+- the exact diagnostic code and rule;
+- rejected value;
+- expected values/patterns or concrete allowed candidates;
+- the current repair unit only;
+- minimal immutable context required to preserve meaning;
+- the fixed target pointer;
+- the exact replacement schema;
+- the instruction that unrelated fields must not be returned or changed.
+
+Example:
+
+[View the Repair request sample](code.md#repair-request).
+
+Valid response:
+
+[View the Repair response sample](code.md#repair-response).
+
+The response cannot include a pointer, operation kind, or extra replacement. Each operation has a distinct closed response schema. Group replacements are keyed by engine-assigned `targetId`, never paired by array position, and the exact authorized key set is required.
+
+### 22.5 Merge and revalidation
+
+1. Validate authorization, diagnostic, candidate ID, and candidate revision.
+2. Validate the exact response cardinality and replacements against the unit schema.
+3. Compare every authorized old-value/key/anchor precondition against the current candidate.
+4. Reject any attempt to change an immutable sibling or undeclared group member.
+5. Apply the closed operation to an in-memory copy with compare-and-swap, then increment the candidate revision.
+6. Run the validator that produced the diagnostic.
+7. Run declared dependent validators. A planning path change, for example, reruns project ownership, kind, filename, placement, plan authorization, task collision, and render-reference checks.
+8. If the unit passes, retain it and select the next diagnostic in stable order.
+9. When no local diagnostics remain, run the full candidate validation suite.
+10. Only a full pass can authorize rendering or commit.
+
+The engine never trusts a model field such as `valid: true`.
+
+### 22.6 Unparseable output
+
+When no IR exists because the model output cannot be decoded, no atomic pointer is available. `ModelProtocolRetryOrchestrator` permits a narrowly defined response-level retry containing:
+
+- the original schema;
+- decoder diagnostics only;
+- no request to reconsider semantics;
+- one valid minimal example.
+
+After the configured response-level attempts, the unit fails with `MODEL_RESPONSE_SCHEMA_INVALID`. Whole-stage regeneration is not used.
+
+### 22.7 Repair limits and escalation
+
+Limits apply per unit and per stage. Repeated identical failure at the same pointer ends early. Exhaustion returns:
+
+- last schema-valid candidate, if one exists;
+- all stable diagnostics;
+- attempted replacements and validation outcomes in redacted metadata form;
+- the exact blocked unit;
+- whether a stronger configured model route, user decision, or environment change is required.
+
+The engine never broadens repair scope automatically because attempts are running out.
+
+### 22.8 Repair examples
+
+#### Wrong planned filename
+
+In the normal path-intent flow the model never emits `src/loginTests.ts`. It selects a test semantic-role/file-kind/name-source tuple; the React preset deterministically enumerates a valid candidate such as `src/LoginForm.test.tsx`, and the plan selects its `pathCandidateId`. An invalid role, kind, or candidate selection is repaired as that one ID field before a `fileId` exists. Only a preset that explicitly enables raw fallback may receive a raw path; there, `src/loginTests.ts` fails the same preset validators and only `ProjectPathCandidate.repoRelativePath` is repairable. Tasks always receive the resulting `fileId`, never a filename. A defect found after approval invalidates descendants and requires new plan/task approvals.
+
+#### Missing coverage
+
+`FR-004` has no task. The repair unit is “one missing task record for obligation `FR-004`,” not the entire task list. The new record is validated, graph-merged, globally ordered, and then assigned an engine task ID.
+
+#### Dependency cycle
+
+If `task-a -> task-b -> task-a`, the diagnostic includes the cycle and selects one proposed edge for semantic reconsideration. The repair response may replace/delete only that edge. IDs and other tasks remain unchanged.
+
+#### Compiler failure
+
+A compiler points to one declaration. The repair unit is that declaration/hunk in one authorized file. The engine discards the invalid operation savepoint, reapplies the repaired candidate to the same pre-operation snapshot, promotes it after local validation, then rebuilds and performs the full task check.
+
+#### Scope expansion
+
+A code repair requires an undeclared second file. This is not treated as a larger code repair. It is a task/plan scope defect and blocks implementation until the upstream artifact is corrected.
+
+---
+
+## 23. Rendering and editability strategy
+
+The engine, not the LLM, renders persistent artifacts. `spec.md` is the only freely editable stage artifact. Clarification documents under `clarify/` are controlled input forms: the engine owns their filename, identity, question, schema, and revision fields, while the user may change only `requestedStatus` and the answer block. Every plan/task/reference artifact remains a read-only review/progress view backed by canonical state. This prevents display edits from changing execution while still giving the user an explicit file-based answer channel.
+
+Renderers own:
+
+- fixed headings and section order;
+- front matter/header fields;
+- dates and engine-known links;
+- `AC/FR/BR/EC` and `TNNN` identifiers;
+- checkboxes and phase/gate status;
+- Markdown table columns and escaping;
+- code fences around structured contracts where applicable;
+- repo-relative path formatting;
+- passive filename/path/URI rendering as inert inline-code text;
+- deterministic ordering;
+- exact preserved token values;
+- clarification filenames and immutable question/schema/revision regions, while preserving only the two declared user-editable fields;
+- completion summaries derived from state.
+
+Renderers have no ambient registry access. Each render/validation action receives the canonical wrapper named by the view plus its exact `FileRegistryState`, bound `PassiveLiteralRegistryState`, required bound `ReferenceSnapshot`, exact `WorkflowArtifactRegistry`, and recorded `RendererContract`. `SemanticText` file/source/passive nodes resolve only through those authorities. `GeneratedView.stateBinding` records the relevant plan/file/reference/passive/workflow-artifact registry identities so restart validation cannot accidentally render against a newer global registry.
+
+### 23.1 Canonical byte contract
+
+Every canonical-state serializer and generated-view renderer executes under an exact `rendererContractVersion`, stored in canonical workflow state and in each `GeneratedView` binding. `renderer/v1` requires strict UTF-8 with no BOM, NFC-normalized ordinary textual scalars, LF line endings, no trailing spaces introduced by the renderer, and exactly one final newline. Tagged `RawSourceScalar`/verbatim values are the underlying text exception: their validated UTF-8 scalar sequence bypasses NFC and is emitted through the versioned deterministic Markdown/JSON escape function without altering the represented value. `ExactBusinessCopy` can emit such a scalar only after its token ID and citation resolve to the same current snapshot scalar; it never carries inline model bytes. Opaque copied file bytes are not rendered or Unicode-normalized; their immutable blob contract remains byte-exact.
+
+Canonical JSON additionally sorts object keys by Unicode scalar value, preserves array order only where the domain schema declares it meaningful, uses the domain's stable sort key everywhere else, applies one fixed JSON string-escape table, emits lowercase `true`/`false`/`null`, and emits integers in base 10 with no leading plus or zeroes. Policy-bearing decimal values are represented as schema-normalized decimal strings; binary floating-point spellings are forbidden in canonical state. Markdown uses a versioned escape table for text/table cells, a deterministic fence length/language rule, fixed blank-line rules, and renderer-owned path/link formatting. A passive literal is emitted as non-link inline code: the delimiter is one backtick longer than the longest contiguous run in the value and the fixed CommonMark padding rule is applied. The renderer never emits it as a Markdown link, autolink, HTML anchor, or clickable local path. These rules define bytes, not merely equivalent text.
+
+Validation regenerates with the version recorded by the state/view and compares exact bytes. Recovery must load that renderer implementation; it must never use the host's newest renderer implicitly. If the recorded version is unavailable, recovery blocks with `RENDERER_VERSION_UNAVAILABLE`. A deliberate renderer migration creates new canonical/view revisions transactionally and requires renewed plan/task review whenever review-visible bytes change. No digest or fingerprint is stored or compared.
+
+`spec.md` is reparsed and normalized at the plan boundary; its IR must pass the full specification gate. The parser first captures each semantic field's exact UTF-8 bytes and record key. When current provenance marks a leaf as `ExactBusinessCopy`, `RebindExactBusinessCopyAction` compares the captured unescaped scalar byte-for-byte with the referenced preserved token and reconstructs the typed variant; any difference loses the binding and produces an exact-copy diagnostic. Every other leaf is deterministically segmented into NFC-normalized `BusinessLiteralText` and inert inline-code passive-literal spans. A known span resolves by exact `(kind, NFC bytes)` against the registry bound by the specification. A new user-written filename/path/URI cannot become a model repair or operational path: it requires a new engine-assigned passive ID and occurrence tied to the same authenticated specification acknowledgement, and the registry/acknowledgement/provenance/spec revisions commit together. A rejected or failed allocation is retired.
+
+A user may edit semantic fields and add, remove, or reorder semantic records, but engine-owned headings, status/checklist fields, and existing ID syntax remain protected by validation. Surviving IDs stay attached to their records; an un-ID'd new record receives the next monotonic ID; deleted IDs are not reused. A duplicate, malformed, or reassigned ID blocks with targeted guidance. Formatting is normalized by deterministic rendering, and that normalized spec plus exact passive-registry binding is staged with plan-input state so a crash cannot record a different planning input.
+
+Reference citations are not rendered into the business-only file. On reparse, the engine joins the persisted `SpecificationProvenanceState` only when the fixed/allocated record key and `BusinessContentIdentity` still equal the entry: ordered literal segment bytes plus self-contained passive `(ID, kind, bytes)` identities for normalized content, or exact token ID plus exact UTF-8 bytes for source-copy content. The containing state's exact registry validator must resolve every passive tuple, but adding an unrelated literal in a later registry revision does not change an existing record identity. Fixed singleton keys come from their protected structural slots; all repeatable records carry their rendered ID label. A changed or new record loses inherited provenance and must be re-attributed from the persisted `ReferenceSnapshot`, explicitly marked user-authored through a validated acknowledgement, or blocked when reference support is mandatory; the next passive-registry/provenance/acknowledgement revisions are committed with the normalized spec/plan input. If the spec is edited after downstream canonical state exists, the next gate invokes `CompareSpecificationIRAction` against the exact specification stored in canonical `PlanState`. A difference invalidates plan/task approvals and requires regeneration from `specified`; this is direct typed-state comparison, not fingerprinting.
+
+`reference-context.md`, `plan.md`, `research.md`, `data-model.md`, contract views, `quickstart.md`, and `tasks.md` are never parsed as authoritative execution input. The engine loads their canonical IR, renders the expected bytes, and checks the view for exact equality. A modified generated view produces `GENERATED_VIEW_MODIFIED`; the engine may regenerate the view from canonical state, but never imports the edit. Review feedback is submitted through the review API/CLI and targeted to IR units.
+
+Golden tests ensure byte-stable output for the same canonical IR. Where supported, generated views may also be marked read-only at the filesystem level, but permissions are only a usability guard; canonical-state authority is the security/correctness boundary.
+
+Because plan and task Markdown are projections, copying only those files does not preserve executable workflow state. Portability uses an explicit export/import bundle containing schema-versioned canonical reference/plan/task state, approvals when policy permits, and their views; the bundle contains no hashes. A repository may version-control `<paths.sddtoolkit>/features/<featureId>/` under an explicit policy (`.sddtoolkit/features/<featureId>/` only when the example/default config resolves `paths.sddtoolkit` to `.sddtoolkit`). CI or a clone without canonical state may validate/display `spec.md`, but cannot execute plan/tasks from Markdown alone.
+
+---
+
+## 24. State, sequence, and recovery without fingerprints
+
+### 24.1 Workflow state
+
+The root orchestrator carries state in memory, but crash/restart authority is always persisted at the required `WorkflowCanonicalState` singleton selected by the validated `WorkflowArtifactRegistry`. The registry unambiguously binds `canonicalSpecsFeatureRoot` to `<paths.specs>/<featureId>` for specification views/forms/logs, `canonicalEngineFeatureRoot` to `<paths.sddtoolkit>/features/<featureId>` for engine-owned feature data, and `canonicalEngineStateRoot` to that engine root's `state/` child. `WorkflowCanonicalState` resolves its state-root-relative child `workflow.json` beneath `canonicalEngineStateRoot` (equivalently feature-relative `state/workflow.json`). The exact result is `<paths.sddtoolkit>/features/<featureId>/state/workflow.json` (`.sddtoolkit/features/<featureId>/state/workflow.json` only under the example/default config); logs remain beneath `<paths.specs>/<featureId>/logs/`. These paths are neither optional nor ad hoc and cannot be independently configured, supplied by a model, or replaced by `.sddtoolkit/state/<featureId>.json`:
+
+[View the Workflow state sample](code.md#workflow-state).
+
+It contains no content hashes or fingerprints. Preset IDs/versions and artifact paths are metadata, not freshness proofs.
+
+### 24.2 Stage transition state machine
+
+[View the Stage transition state machine sample](code.md#stage-transition-state-machine).
+
+[View the workflow-state diagram](diagrams/02-workflow-state.mmd).
+
+Each in-progress state can transition to `blocked`, `failed`, or `cancelled` with a resumable prior committed state. Generated definition state is committed before entering its review-pending state. `planned` and `tasked` are entered only after approval tied to the exact current plan or task-definition ID.
+
+`spec_clarification_pending`, `plan_clarification_pending`, and `tasks_clarification_pending` are non-failure pauses with a committed clarification-registry revision and no newly accepted stage IR. A current validated authority resolution or authenticated response to the current record revision returns to `specifying`, `planning`, or `tasking`; the response transaction commits first, then every generation unit in the owning stage is regenerated from its current complete authority set. No pre-clarification unit candidate, merge result, or partial stage checkpoint is reused. If the user explicitly chooses `defer` while the answer is required, the same record remains open; `cancel` is a separate terminal transition. No default is invented, and a valid clarification pause consumes neither model retry nor repair budget.
+
+The closed downstream matrix is: plan requires no open `S`; tasks requires no open `S/P`; implement requires no open `S/P/T`. Each failure names the exact open IDs and form paths and returns nonzero. Review-pending states are reachable only after their stage's allowed prefix set is closed.
+
+### 24.3 Gate behavior
+
+State alone never authorizes a stage.
+
+- The editable `spec.md` is reparsed and fully validated.
+- The current clarification registry and exact `clarify/` inventory are parsed/validated; only registered current-revision answer regions are imported, and the requested stage's closed-prefix matrix is enforced.
+- When canonical plan state exists, the engine compares current normalized `SpecificationIR` directly with the stored plan-input `SpecificationIR`. A difference invalidates plan/task canonical state and approvals and returns the workflow to `specified`.
+- Canonical reference, the separately persisted `PlanInputAuthorityState`, its bound `PlanState`, task-definition, and task-runtime IR are loaded from engine state and revalidated directly.
+- Current repository facts are rebuilt. Each gate-sensitive value is directly compared through `CompareRepositoryFactValueAction`; during implementation, only a `transition_requires_task_binding` fact with a matching approved `FactTransitionBinding`, transition rule, and committed named-task journal may differ from the plan input. An unexplained difference triggers the relevant plan/task reconciliation path.
+- Read-only views are compared byte-for-byte with deterministic rendering from their canonical IR. A changed view is regenerated or blocks; it never changes execution state.
+- The next stage requires an approval record whose `planStateId` or `taskDefinitionStateId` equals the current immutable definition state. Runtime-only task progress does not affect approval.
+
+No hashes or fingerprints are created. Direct typed-state/view comparison is possible because the workflow is ordered and the engine already owns canonical plan/task inputs. A future generalized out-of-band freshness system would be a separate design decision.
+
+### 24.4 Recovery
+
+On restart, recovery actions:
+
+1. resolve/acquire the fixed project transaction collection, load/validate its transaction-ID ledger, scan bounded journals, and roll back journals without a marker or idempotently roll forward marked journals before reading `FeatureIdentityRegistryState`; v1 has no project state-ID ledger;
+2. validate the recovered project `TransactionIdLedger` and tuple-identified `FeatureIdentityRegistryState`, resolve the selected existing feature when applicable, and release the project lock after its last recovery/read or mutation;
+3. from validated ownership, load the workflow-artifact registry just far enough to resolve `StageTransactionCollection`, acquire its feature lock, load/validate its transaction-ID ledger, and recover every feature stage/review/task/checkpoint/manual journal before trusting `WorkflowState`;
+4. retire orphan reserved transaction IDs only after rollback/absence proof; retain purpose-bound state-ID reservations for a legal retry, and discard only in-memory candidates that never crossed a durable reservation/exposure boundary;
+5. load/schema-validate `WorkflowState`, then its exact `PlanInputAuthorityState` pointer when present, then the bound `PlanState`; validate that specification, repository facts, baseline files, research, principles, and clarification inputs live only in the input authority and that plan outputs resolve through it;
+6. load/validate current clarification registry/forms, reference/request/provenance/acknowledgement authorities, task definition/runtime/file/evidence states, execution checkpoints, actor/review/control registries, and every cross-state pointer before use;
+7. rebuild current repository facts and directly compare gate-sensitive typed values with the `PlanInputAuthorityState`, accepting a planned transition only when an approved task-state binding/rule and named task transaction prove it;
+8. reparse current editable `spec.md`, rejoin valid persisted provenance, and compare it with the input authority's normalized specification;
+9. validate/regenerate read-only views, validate current plan/task approval targets, and reconcile task leases from committed transaction/runtime state;
+10. release the feature transaction lock after recovery/validation, reacquiring it through the normal storage ABI for the next commit, then resume from the first pending/invalid node.
+
+Recovery never infers completion solely from generated files or a model summary.
+
+### 24.5 Upstream rework and invalidation
+
+Backward movement is explicit and never inferred from a failed model call:
+
+| Changed authority | Current state | Implementation watermark | Transactional next state | Invalidated state | Mandatory forward path |
+|---|---|---|---|---|---|
+| Reference snapshot | `plan_review_pending`, `planned`, `tasking`, `tasks_review_pending`, `tasked`, or `implementing` | No task commit | `specifying` | Current feature request/provenance plus plan-input/plan/task definitions, runtime, views, and both approvals | `specifying -> specified -> planning -> plan_review_pending -> planned -> tasking -> tasks_review_pending -> tasked` |
+| Reference snapshot | `implementing` | At least one task commit | `implementation_reconciliation_spec`, then `specifying`, after explicit authorization | Current feature request/provenance and plan/task approvals; affected completed tasks become `needs_reconciliation` | Preserve code, regenerate complete specification, then regenerate/approve plan and task definitions before resuming implementation |
+| Authenticated editable specification | `plan_review_pending`, `planned`, `tasking`, `tasks_review_pending`, `tasked`, or `implementing` | No task commit | `specified` after full spec/provenance/acknowledgement transaction validation | Plan-input/plan/task definitions, runtime, views, and both approvals | Preserve the validated user edit; `planning -> plan_review_pending -> planned -> tasking -> tasks_review_pending -> tasked` |
+| Authenticated editable specification | `implementing` | At least one task commit | `implementation_reconciliation_spec`, then `specified`, after explicit authorization | Plan/task approvals; affected completed tasks become `needs_reconciliation` | Preserve code and the validated user edit, then regenerate/approve plan and task definitions before resuming implementation |
+| Bootstrap reference-ingestion or specification contract | Any state after feature activation | No task commit | `specifying` | Current reference/request/provenance as required by the classified component set, plus all descendants/approvals | Reingest when reference contracts changed; regenerate the complete specification; then follow normal plan/tasks reviews |
+| Bootstrap reference-ingestion or specification contract | `implementing` | At least one task commit | `implementation_reconciliation_spec`, then `specifying` | Same authorities plus affected completed task/evidence state | Preserve code, reconcile runtime/evidence, regenerate complete reference/specification authority, then plan/tasks reviews |
+| Bootstrap toolchain/environment/path/file-kind/parser/command/dependency/capability policy | Any state after `specified` | No task commit | `planning` | Plan/task definitions, views, runtime, and approvals | Regenerate/approve plan and tasks under the new exact preset registry before implementation |
+| Bootstrap toolchain/environment/path/file-kind/parser/command/dependency/capability policy | `implementing` | At least one task commit | `implementation_reconciliation_plan`, then `planning` | Plan/task approvals; affected completed tasks/evidence become reconciliation state | Preserve code, reconcile against the new mechanical authority, then regenerate/approve plan and tasks |
+| Principle registry | Any state after `specified` | No task commit | `planning` through a successor plan-input-authority transaction | Current plan-input/plan/task definitions, views, runtime, and active approvals | Rebuild complete principle selections, regenerate/approve plan and tasks; principle text never changes the business specification |
+| Principle registry | `implementing` | At least one task commit | `implementation_reconciliation_plan`, then `planning` | Plan/task active approvals; affected completed tasks/evidence become reconciliation state | Preserve code, record `principle_changed`, reconcile runtime/evidence, then regenerate/approve plan and tasks under the exact new raw spans |
+| Compatible logging/model-capacity-only bootstrap component | Any stable state | Any | Same semantic stage via `BootstrapAuthorityRefreshStageTransaction` | None | Advance only bootstrap/workflow identities; every other workflow value remains directly equal |
+| Project/artifact root, state serializer, review-visible renderer, workflow-artifact contract, or unsupported schema | Any | Any | Blocked administrative migration diagnostic; no pointer advance | None until migration is authorized and complete | Offline atomic migration followed by full bootstrap and normal classified gate |
+| Plan decision or plan-review feedback | `plan_review_pending`, `planned`, `tasking`, `tasks_review_pending`, `tasked`, or `implementing` | No task commit | `planning` | Current plan approval plus task definition/runtime/view/approval | `plan_review_pending -> planned -> tasking -> tasks_review_pending -> tasked` |
+| Plan decision | `implementing` | At least one task commit | `implementation_reconciliation_plan` after explicit authorization | Plan/task approvals; affected completed tasks become `needs_reconciliation` | Preserve code, regenerate/approve plan, then regenerate/approve tasks |
+| Task-definition feedback/gap | `tasks_review_pending`, `tasked`, or `implementing` | No task commit | `tasking` | Task definition/runtime/view/approval only | `tasks_review_pending -> tasked` |
+| Task-definition feedback/gap | `implementing` | At least one task commit | `implementation_reconciliation_tasks` after explicit authorization | Task approval; affected completed tasks become `needs_reconciliation` | Preserve code, regenerate/approve task definition, then reconcile/resume |
+
+Plan approval rereads and validates current `spec.md`/reference state against the plan input. Task approval additionally requires the current approved `planStateId` to equal `TaskDefinitionState.inputPlanStateId`. An approval action fails stale rather than advancing the state.
+
+`implemented` is forbidden while any runtime record is `needs_reconciliation`, while any reconciliation state is active, or while a descendant approval is absent. The engine never automatically deletes or rolls back accepted user/project code to satisfy a new upstream view.
+
+Every rework transition commits the invalidation record, affected canonical definitions, workflow active-approval projection, and generated views in one stage transaction. `ReviewDecisionRegistryState` remains immutable append-only history: invalidated decision IDs stay addressable for audit, while the next workflow state removes them from `activeApprovalDecisionIds` and the invalidation record names them exactly. When the implementation watermark says commits exist, that same transaction must also include the compare-and-swap input/next `TaskRuntimeState`, input/next `ExecutionEvidenceRegistryState`, and validated `ExecutionEvidenceInvalidationRecord`; all affected completed tasks become `needs_reconciliation` and exactly their stale evidence IDs become retired. The closed `no_committed_task_runtime` variant is permitted only when the watermark proves that no task commit exists. A rejected review creates a new plan or task-definition ID; an old approval can never authorize it.
+
+---
+
+## 25. Transaction and filesystem model
+
+[View the transaction-storage and ID-ledger lifecycle](diagrams/09-transaction-storage-lifecycle.mmd).
+
+### 25.1 Artifact transactions
+
+Specification output, canonical reference/plan/task/runtime state, approval/evidence records, generated views, and the next workflow-state document are built in memory and staged under an engine-controlled directory on the same filesystem when possible. A stage is not split into “artifact commit” and a later state write: both belong to one sealed `StageTransaction`.
+
+Before commit the engine validates:
+
+- exact intended path set;
+- no unapproved overwrite;
+- feature/workspace containment;
+- editable-spec render/reparse equivalence and generated-view equality with canonical state;
+- required artifact-set completeness.
+
+Every project/feature transaction first operates under the matching collection lock. Before a journal path is constructed, the engine loads and validates the collection-local `TransactionIdLedger`, assigns the next typed `TransactionId`, and atomically replaces/fsyncs the ledger with its `reserved` record. The sealed transaction and journal carry that exact identity and kind. This reservation protocol is independent of state-ID allocation and applies equally to activation, stage, review, task, task-outcome, checkpoint, and manual-verification transactions.
+
+Every multi-entry stage or task transaction then uses this durable journal state machine:
+
+`OPEN -> PREPARED -> APPLYING -> COMMITTED -> CLEANED`
+
+1. `OPEN`: candidates exist only in staging and may be discarded.
+2. `PREPARED`: the engine has sealed the exact entry set and revision, stored/fsynced the journal, before-images or creation tombstones, destination metadata, no-follow ancestor identities, and a single-use authorization. No destination has changed.
+3. `APPLYING`: for each deterministic entry, the adapter first writes/fsyncs `ENTRY_APPLYING`, opens a fresh descriptor-bound no-follow target token after ancestor-identity validation, applies through that token, then writes/fsyncs `ENTRY_APPLIED`. The workflow-state entry is ordered last among destinations but is still covered by the same journal.
+4. `COMMITTED`: after every entry is durable, the adapter writes/fsyncs the commit marker last. This marker makes the business transaction logically successful. While the collection lock remains held, `CommitTransactionIdAction` must next atomically replace/fsync the ID ledger from `reserved` to `committed`.
+5. `CLEANED`: only after the durable transaction-ID transition may staging and before-images be removed idempotently; loss during cleanup cannot undo success.
+
+Recovery builds and validates one total identity plan from the locked collection's ledger plus journal inventory before trusting canonical state. It rolls back every `ENTRY_APPLYING` or `ENTRY_APPLIED` entry in reverse order when no commit marker exists, using durable before-images/tombstones. Restoring an intent-marked entry is idempotent, covering a crash after destination mutation but before `ENTRY_APPLIED`; only after complete restoration does it durably retire the reserved transaction ID and discard the journal. With a commit marker recovery rolls forward/idempotently verifies every committed entry, durably catches a still-reserved ID up to `committed`, and only then cleans. After every cleanup it rescans/revalidates the collection and successor ledger before another ID can be assigned. Thus a crash after a marker but before ID-ledger catch-up cannot make a committed business transaction look like an orphan. The adapter never decides business validity; it only executes a preauthorized sealed transaction.
+
+### 25.2 Implementation overlays
+
+Implementation uses an overlay or equivalent transaction abstraction, independent of Git. It may be implemented with a copy-on-write virtual filesystem, temporary worktree, filesystem snapshot, or before-image journal. The interface guarantee is:
+
+- model-generated changes first affect only the overlay;
+- validators and commands run against the overlay;
+- a failed task can be discarded without changing committed project files;
+- authorized task writes commit as one logical unit;
+- unexpected changes block commit.
+
+Each proposed file operation additionally uses a child overlay/savepoint. Invalid create/update/replace/copy/delete deltas are discarded before repair. Promoted operations are replayable in declared order from the clean task base, allowing a localized operation to be repaired without accumulating invalid patches or accepting temporary cross-file failures.
+
+The sealed `TaskTransaction` contains project deltas, command/manual evidence, execution-journal changes, the immutable task-definition ID, next canonical `TaskRuntimeState` revision, the rendered tasks view bound to both, lease/lock changes, and any final workflow state. It never rewrites `TaskDefinitionState`. Its authorization is opaque, single-use, and bound to the sealed overlay revision. There is no moment when project code is committed but task completion state is outside the transaction.
+
+A non-success `TaskOutcomeTransaction` uses the same journal adapter but contains no project delta. It commits the failure/blocked runtime revision, diagnostics/evidence, execution journal, regenerated tasks view, and lease/lock release as one entry set. Recovery therefore cannot observe a released lease paired with an `executing` record, or a terminal record paired with held locks.
+
+No artifact fingerprint is needed for this transaction behavior. The engine controls sequential writes in the active run.
+
+### 25.3 Failpoint and durability contract
+
+Adapters must define which flush primitive makes a journal, file replacement, directory entry, and marker durable on each supported platform. Conformance tests inject a crash before and after every state transition, journal flush, before-image write, destination replacement, applied-entry record, workflow-state replacement, commit-marker write, and cleanup step. Every restart must yield exactly the pre-transaction or fully committed state—never a mixed state.
+
+### 25.4 Non-transactional effects
+
+Network calls, deployments, external database mutations, cloud operations, messages, and other externally irreversible effects cannot be rolled back by a workspace overlay. They are disabled by default. If a future task type supports them, it must declare an effect adapter, idempotency/compensation contract, policy, and explicit authorization outside this first implementation.
+
+---
+
+## 26. Security and safety
+
+### 26.1 LLM trust boundary
+
+Model and reference content are untrusted data:
+
+- reference text is delimited and labeled as data, never concatenated into system instructions;
+- instruction-like content in a reference cannot alter response schema, available tools, paths, or policy;
+- the model has no filesystem or shell capability;
+- model path/context requests use validated IDs;
+- model-returned status, executable text, or validation assertions outside a route's allowed typed semantic payload are schema-rejected and never acted upon;
+- provider output is size-bounded and schema-validated.
+
+### 26.2 Filesystem safety
+
+- reject absolute, drive, UNC, URI, traversal, NUL, and control-character paths;
+- use real-path containment and segment-aware root matching;
+- reject symlink escapes for reads and writes, then repeat target/ancestor identity checks at commit with descriptor-relative/no-follow operations or the supported platform equivalent;
+- deny VCS/engine/cache/generated roots by default;
+- separate create/update/replace/copy/delete semantics and validate expected target state;
+- require explicit delete policy and task authorization;
+- never overwrite an existing feature or artifact implicitly;
+- use transaction adapters for all writes.
+
+### 26.3 Command safety
+
+- no shell interpolation;
+- no raw model commands;
+- registered executable and argv templates only;
+- typed placeholders only;
+- contained working directory;
+- environment-variable allowlist and secret redaction;
+- time, output, concurrency, network, and mutability limits;
+- mandatory OS/container filesystem namespace, process-tree confinement, and inherited descendant restrictions;
+- per-operation write mediation/audit that fails even transient unauthorized writes before they can influence command evidence;
+- in-flight command quotas for created entries, cumulative/current bytes, per-file bytes, and private temporary storage;
+- no mutating command when the platform adapter cannot enforce its declared sandbox contract;
+- persistent command effects limited to the intersection of task-approved file IDs and command-authorized path policy plus the engine-derived per-file create/modify/delete capability, with special-file rejection and post-promotion revalidation;
+- validate command capability against actual project manifests;
+- isolate dependency mutations;
+- refuse externally irreversible operations by default.
+
+### 26.4 Reference safety
+
+- bounded per-file and total corpus size;
+- MIME sniffing rather than extension trust alone;
+- archive depth/file-count/compression-ratio limits if archive readers are enabled;
+- encrypted/corrupt content diagnostics;
+- sandboxed document/image parsers where feasible;
+- no macro execution;
+- no scripts embedded in reference content;
+- deterministic hidden-file and symlink policy;
+- explicit account for every discovered file.
+
+### 26.5 Secrets and logging
+
+The effective threshold is always compiled from `.sddtoolkit.json` `logs.level`; neither a prompt, model response, action, nor orchestrator may override it. The supplied example's lowercase `debug` is valid input. Configuration is case-normalized, `CRITICAL` is the input alias of canonical `fatal`, and `WARN` is the input alias of canonical `warning`. No other aliases or custom levels exist.
+
+| Accepted configured spelling | Canonical level/rank | Fixed meaning |
+|---|---:|---|
+| `FATAL`, `CRITICAL` | `fatal` / 60 | The process cannot continue safely, or a vital invariant/recovery/log-safety subsystem failed and needs immediate correction. |
+| `ERROR` | `error` / 50 | An operation, task, required command, stage, or durable write failed while the engine remains in a known stable state; the affected feature is broken/blocked. |
+| `WARNING`, `WARN` | `warning` / 40 | An unexpected, rejected, stale, or retryable condition occurred and the engine recovered or safely blocked it, but it needs attention. |
+| `INFO` | `info` / 30 | Normal run/stage/task/review/transaction lifecycle and durable recovery/commit outcomes. |
+| `DEBUG` | `debug` / 20 | Developer detail such as node lifecycle, validator summary, route/profile/token counts, and transaction entry counts. |
+| `TRACE` | `trace` / 10 | The most verbose step/branch/scheduling, typed-key/ID, rule-ID, and bounded count detail. It never enables raw content or weakens redaction. |
+
+An event is emitted iff `rank(event) >= rank(configured threshold)`. A closed versioned `LogEventDefinitionRegistry` owns the event's canonical level, template, field types, required fields, and sensitivity classification. Producers return typed facts without a level or message, so they cannot hide a fatal event as trace or label secret-bearing text public. Context-sensitive definitions are explicit: a schema failure is warning while a retry remains and error when exhausted; an intended red test is debug/info rather than error; an expected rollback is info, while rollback caused by persistence failure is error.
+
+Every activated run writes beneath the spec being run, never into the editable specification itself:
+
+- events: `<paths.specs>/<featureId>/logs/events/<runId>/<featureLogBindingId>/<segmentOrdinal>.jsonl`;
+- prompt exchanges, only when enabled: `<paths.specs>/<featureId>/logs/prompts/<runId>/<featureLogBindingId>/<segmentOrdinal>.jsonl`.
+
+These collection roots are fixed entries in the exact `WorkflowArtifactRegistry`; the engine renders the binding tuple to one registered portable path token, so no user/model/config path chooses a child. The binding layer prevents a same-run policy transition's ordinal-one successor segment from colliding with the historical binding. They use a separate append-only workflow access class and are excluded from `spec.md`, generated views, stage/task transaction membership, repository/reference discovery, model context, unexpected-project-change detection, and default artifact export. A new run buffers bounded metadata during deterministic reference preactivation; only after a new target's feature root is activated is that buffer flushed into its feature log. A **new-target** preactivation failure has no feature/spec directory and therefore uses only the process/emergency engine sink. An existing-target rerun already has its validated active feature directory and current log authority, so its preactivation failure remains feature-logged under that existing binding as defined by the startup flow.
+
+The event stream is metadata-only. It may contain registered IDs, enums, counts, durations, diagnostic codes, model route/profile and token counts, command IDs/exit codes, and evidence status. It never contains diagnostic `message`/`actual`/`expected`, environment-variable values, credentials, raw prompts, reference bodies, source code, patches, command output, or arbitrary maps. Prompt/body logging defaults off even when the threshold is `trace`. Enabling it requires independent request, response, reference-body, and code-body opt-ins. The engine builds a complete fragment manifest from the typed route request/result before provider serialization; every body field is exactly one `ordinary`, `reference_body`, or `code_body` fragment. A request/response direction opt-in is necessary for every fragment in that direction, and reference/code fragments additionally require their class opt-in. Opaque whole-body capture is forbidden, so disabling reference/code capture cannot leak those bytes inside an enabled request. Structured secret fields, mandatory credential/key detectors, and configured bounded RE2 detectors run first per selected fragment; replacement uses a fixed category marker that reveals neither value nor original length. Truncation happens only afterward at a UTF-8 scalar boundary. The bounded sanitized record is schema-validated again, passed only through transient logging-internal delta keys, and every fragment handle is destroyed whether the record is emitted or filtered out.
+
+Feature log directories use owner-only directory permissions and segments use owner read/write, exclusive-create, no-follow regular-file opens; aliases and insecure permissions block. One validated exclusive lock capability exists per `(featureId, runId, stream)` while a writer is inspecting, recovering, rotating, appending, pruning, or flushing. Sequence is assigned after threshold/redaction and is ordering authority; a same-run binding transition continues at the historical final sequence plus one, while a fresh run begins at one. Timestamps are informational. A complete bounded JSON object plus LF is encoded before lock acquisition and is never split. Before overflow the adapter fsyncs/closes the current segment and creates the next zero-padded binding-local ordinal only while the total number of segments across **all** bindings for `(featureId, runId, stream)` remains within `rotation.maxSegments`. Thus a policy transition cannot reset the lifetime cap; retention cannot make room and identities/ordinals are never reused within a binding. If the active segment cannot fit the record at the cap, `EvaluateFeatureLogRotationNeedAction` returns `LOG_SEGMENT_LIMIT_EXHAUSTED`; no segment identity or rotation authorization is created, and the sink follows the ordinary fail-closed logging-failure flow before any next business node rather than dropping the record or exceeding the cap. Every terminal branch releases the capability; after process death the adapter/OS releases ownership and recovery must reacquire before inspecting bytes. A later new run starts its own ordinal-one binding/sequence. Error/fatal and every terminal stage/task/transaction event force a flush; lower levels use the validated count/time policy.
+
+On restart, recovery may truncate only bytes after the last complete valid final LF-delimited record. Interior malformed JSON, wrong run/stream, sequence regression, alias, or permission failure is never skipped. Retention runs after recovery and rotation; a single-use authorization selects closed segments oldest-first by `(closedAtUtc, runId, ordinal)`, never the current segment. This is the only authorized destructive log operation.
+
+Logs are observability, not workflow authority. They are not members of a `StageTransaction` or `TaskTransaction`, and their absence cannot infer rollback or completion. Transaction events are submitted only after the corresponding durable journal/marker transition—especially `transaction.committed` after commit-marker fsync. If the feature sink fails, the engine writes one fixed content-free emergency stderr event without using the failed sink, finishes or rolls back any already prepared/applying transaction to a stable boundary, preserves a commit whose marker is durable, and blocks before the next node. It never recursively logs the logging failure.
+
+---
+
+## 27. Observability
+
+Every node is observed through the common runner contract; nodes do not call a logger. `NodeDelta.telemetryFactsAdded` and runner lifecycle facts pass through the discrete logging actions described in Section 13.9.
+
+[View the Observability events sample](code.md#observability-events).
+
+[View the feature logging pipeline](diagrams/06-feature-logging.mmd).
+
+Event fields include run/feature/stage/node IDs, parent/correlation IDs, attempt, duration, model route/profile, token usage, diagnostic codes, repair unit kind, command ID, exit code, and evidence status. Field definitions are registry-owned and sensitive content is excluded or redacted before serialization.
+
+Useful metrics:
+
+- model calls and tokens by stage/unit;
+- initial-pass and post-repair validation rate;
+- repairs by diagnostic code and preset;
+- average atomic repairs per accepted unit;
+- schema-failure rate by model route;
+- preset path rejection rate;
+- command pass/failure duration;
+- task throughput and blocked dependency count;
+- transaction rollback count;
+- unsupported reference formats.
+
+The metrics distinguish deterministic rejection from semantic-review rejection. This is necessary to see whether failures come from model capability, poor initial guidance, preset errors, or repository problems.
+
+---
+
+## 28. Testing strategy
+
+### 28.1 Action unit tests
+
+Each action is tested with immutable fixtures and fake narrow ports. Required cases include:
+
+- schema rejection of unknown keys, missing required fields, and unresolved `<!-- IMPLEMENT -->` placeholders;
+- nearest exact root `.sddtoolkit.json` discovery, rejection of the example filename/aliases, and derivation of every configured/fixed child root including `<paths.sddtoolkit>/principles/` and `<paths.sddtoolkit>/toolchainPresets/` with no source-tree fallback;
+- config path overlap and environment-root ambiguity;
+- exact specify CLI grammar with one compulsory `--reference`, rejection of removed/duplicate/positional inputs, and a reference-derived brief that cannot consume an invocation description;
+- feature slug normalization, maximum length, empty transliteration, and collision;
+- path traversal, absolute/drive/UNC paths, encoded separators, NUL/control characters, and symlink escape;
+- segment-prefix traps such as `src2` matching `src` incorrectly;
+- case-fold collisions;
+- compound extensions such as `.test.tsx`;
+- create versus update behavior for legacy filenames;
+- co-located and mirrored test mappings;
+- generated/forbidden path rejection;
+- Java package/path and public-type/basename rules;
+- .NET project ownership and test naming;
+- command placeholder typing and metacharacters passed as literal argv;
+- direct-equality bootstrap reuse versus planning-owned pre-`specified` deferral, including rejection when either closed route variant is substituted for the other;
+- identity-free aggregate bootstrap blueprints containing only typed candidate references, leaf-before-grammar-before-policy materialization, unresolved/cyclic reference rejection, and total derived-handle binding;
+- reference MIME mismatch, unsupported reader, corrupt file, and exact accounting;
+- citation bounds and verbatim mismatch;
+- requirement/task ID assignment and renderer escaping;
+- coverage for requirements, guards, copy, states, and preserved tokens, including visual-token checks where applicable;
+- task unknown dependency, cycle, phase violation, read/write conflict, and exclusive command;
+- patch scope, patch failure, unexpected file changes, and evidence predicates;
+- create/update/replace/copy/delete expected-state rules and copy-source authorization;
+- free-text principle capture with filename-only category hints, complete chunk accounting, deterministic applicable-category selection, and no principle loading into specification generation;
+- clarification subject-key equality/deduplication, `S/P/T` ordinal ceilings, transaction-private allocation, open-submission versus closed-audit view editability, exact complete conflict-set/view projection, stale answer rejection, and authority/user resolution on rerun;
+- log-level case normalization and `CRITICAL`/`WARN` aliases, fixed feature event/prompt paths, threshold filtering, prior-tail recovery, redaction-before-truncation, and fail-closed sink behavior;
+- `red_then_green` intended-failure matching and required later green evidence;
+- post-command declared, ephemeral, and undeclared delta handling;
+- task adapter structural record identities and complete record sets, including one-key apply/command, two-key promotion with exact parent-checkpoint/savepoint/overlay join, duplicate/noncanonical effect ordinals, wrong record kind/file binding, and rejection of random/path/content/digest/model-derived IDs;
+- recovered task adapter-boundary inspection/classification for never-entered, unpromoted-child, exactly promoted operation, prematurely promoted operation, promoted command, already-discarded-no-parent-effect, already-restored-no-parent-effect, corrupt/missing/conflicting receipt, missing before-image/tombstone, incomplete two-key set, and overlay-revision drift; only the locked clear/discard/reconstruct/restore/block disposition is accepted;
+- crash failpoints before/after child publication, forward discard receipt/removal, promotion entry/receipt/before-image durability, parent-revision publication, recovery discard, recovery restore, boundary-free checkpoint commit, and idempotent record release; every restart must recognize durable `already_discarded_no_parent_effect`/`already_restored_no_parent_effect` receipts and must never repeat or misclassify their adapter mutation;
+- operation-promotion, command-promotion, subsequent verification, and diagnostic evidence-ID allocation chains; every append must consume the exact allocation successor, sibling allocations from one predecessor must fail, and every post-allocation/pre-append failure must either remain transaction-private or persist the exact retirement ledger before retry/exit without clearing a ready adapter boundary;
+- feature-execution process-lease acquisition/rejection/validation-cleanup, feature-lock acquisition/contention/validation-cleanup, exact three-variant lock-terminal evidence, release ordering, process-death release, nonrebindable lease IDs, and rejection of PID/time/heartbeat-only liveness;
+- final-validation overlay startup inventory with raw nonzero malformed/unowned counts, incomplete observation, entry/byte ceiling breach, no orphans, multiple canonically ordered prior-run orphans, already-absent retry, and any current/other live entry; collection-lock contention/acquired-observation rejection/cleanup, opaque-token ownership, OS process-death release, nonrebindable epochs, outer-lock/lease or collection-lock loss/substitution fail-stop, concurrent create, adapter failure before/during/after header publication, invalid post-publication observation, engine-addressed candidate cleanup, and crashes midway through cleanup must all be exercised; one continuous validated lock spans inventory/liveness/cleanup/create, raw absence is never evidence, no stale bytes are imported/promoted, and fresh-run recovery converges to zero orphan scratch;
+- final-validation command-child created-or-adapter-failed and discard-observed-or-adapter-failed outcomes, independent post-discard observations with present child/nonzero bytes/incomplete/ceiling/task-record/parent-mutation variants, wrong authorization/savepoint/parent/header/lease/feature-lock joins, child alias, already-absent retry, and crash before discard; command execution requires validated creation, verification requires validated independent discard postconditions, normal final records accept only normal parent-discard evidence, and every rejected/indeterminate child routes to discriminated parent-only recursive-abort evidence without child addressing;
+- specification authority resolution with a changed reference, proving the successor snapshot, reference view, descendant/runtime/evidence invalidation, cleared downstream pointers, and reference-dominant bootstrap mutation are one transaction;
+- prior-run logging with active, already-closed, mixed, duplicate, missing-release, wrong-binding, and orphan-release groups; fresh policy/binding construction must remain unreachable until total finalization evidence validates;
+- transient unauthorized command writes that are restored before exit, which must still terminate the command and invalidate its evidence;
+- atomic commit/rollback failure paths.
+
+### 28.2 Property-based tests
+
+Generate large path/task/requirement spaces to prove invariants:
+
+- normalized paths never escape the root;
+- accepted create paths always match exactly one environment/project and pass their declared kind;
+- task graphs accepted as DAGs remain acyclic after ID assignment;
+- calculated parallel pairs never have declared write/write conflicts;
+- editable-spec render then parse preserves normalized specification IR;
+- every generated view equals deterministic rendering of canonical IR;
+- atomic repair never changes immutable sibling pointers;
+- stable inputs plus the same accepted model payload render identical bytes.
+
+### 28.3 Orchestrator tests
+
+Use spy child nodes; no real filesystem/model ports are available to the orchestrator.
+
+- bootstrap failure prevents every model action;
+- invalid reference preflight prevents artifact creation;
+- stage order is always specify, plan, tasks, implement;
+- predecessor revalidation occurs at every boundary;
+- open clarification prefix gates return nonzero `ERROR` before downstream model/write children (`S` blocks plan, `S/P` blocks tasks, and `S/P/T` blocks implement);
+- clarification reruns reuse exact subject identities, reconsider current allowed authorities/controlled answers, commit resolution before regeneration, and invoke every owning-stage generation child again rather than retaining partial candidates;
+- one invalid filename creates one repair request for one pointer;
+- valid sibling units are retained across repairs;
+- a repair outside scope is rejected;
+- retry exhaustion returns blocked/failed, not success;
+- stage commit occurs only after full validation;
+- a failed task blocks dependents and cannot mark `[X]`;
+- independent parallel failures aggregate correctly;
+- task status persistence failure prevents completion;
+- recovery discards uncommitted candidates and reconciles committed evidence;
+- a recovered pending task adapter boundary blocks all ordinary ID allocation/model/adapter children until the exact recovery branch commits and reloads a boundary-free checkpoint; operation-promotion reconstruction and operation/command before-image restoration are never interchanged;
+- adapter-record cleanup is invoked only by its SRP cleanup action after a committed boundary-free `pending_release` checkpoint, is retry-safe for released-now/already-released observations, and is followed by a cleanup-only `none` checkpoint commit/reload; ordinary work is unreachable before that closure and cleanup can never reauthorize an effect.
+
+Architecture tests also reject action fields/constructors typed as any node, dispatcher, node runner, executor callback, or service locator; reject node `execute` calls outside orchestrator modules; and enforce the orchestrator import allowlist. Orchestrators receive only child bindings and the capability-free `NodeRuntime`.
+
+### 28.4 Model fault-injection tests
+
+Stub routes deliberately return:
+
+- malformed JSON;
+- a wrong request/diagnostic ID;
+- extra schema fields;
+- a foreign absolute path;
+- wrong React casing/extension;
+- a misplaced unit test;
+- a Java public class/file mismatch;
+- a .NET file under no project;
+- a hallucinated command;
+- an unknown requirement ID;
+- a missing coverage item;
+- a task dependency cycle;
+- two parallel tasks writing one manifest;
+- a patch touching two files;
+- an unbound filename hidden in a task/plan prose field;
+- a copy operation with an unknown/raw-path source;
+- a code repair outside the authorized target;
+- a claim with a fabricated source citation;
+- repeated identical invalid repairs.
+
+Each test asserts that only the corresponding atomic repair unit is exposed and that invalid output never reaches a write/command action.
+
+### 28.5 Preset conformance fixtures
+
+Ship golden valid/invalid repositories for:
+
+- React + TypeScript + Vite;
+- Node JavaScript ESM;
+- Node TypeScript;
+- Java + Maven, including multi-module;
+- Java + Gradle;
+- .NET single project;
+- .NET solution with application and test projects;
+- monorepo containing more than one environment.
+
+Tests verify schema validity, detection ambiguity, roots, extensions, naming, placement, generated exclusions, parser/query resources, command capability, and cross-platform argv.
+
+### 28.6 Renderer and artifact tests
+
+- golden `spec.md`, `reference-context.md`, plan artifacts, and `tasks.md`;
+- Markdown escaping and code-fence safety;
+- exact token/copy preservation;
+- fixed heading order;
+- correct engine-derived checklist/progress state;
+- no `tasks.md` during plan;
+- editable `spec.md` parse/render round trip and provenance rejoin/invalidation after edits;
+- exact generated-view equality, tamper detection, and regeneration without importing edits.
+- open clarification views permit only the two registered regions, closed views permit none, and plan/task views reject every direct edit while editable `spec.md` retains its authenticated round-trip path.
+
+### 28.7 End-to-end tests
+
+In temporary repositories with a fake model gateway:
+
+1. run a feature with the mandatory smallest valid reference corpus through all four stages;
+2. run mixed Markdown/CSS/image/PDF references and verify full accounting;
+3. inject an authoritative conflict and verify specification blocks;
+4. force an invalid planned filename and verify atomic repair;
+5. generate missing task coverage and repair only one task;
+6. fail compilation, repair one code unit, and verify revalidation;
+7. crash before/after transaction commit and verify recovery;
+8. complete implementation and verify every `[X]` has evidence.
+9. approve plan/tasks by plan/task-definition ID, reject stale approvals, and exercise upstream rework invalidation;
+10. inject crashes at every transaction failpoint and verify all-or-nothing project/state/evidence/view recovery.
+11. reject every specify launch except one exact compulsory `--reference`, then prove the feature brief and identity derive from the validated reference corpus with no user/model description field;
+12. exercise new, duplicate, deferred, stale, user-resolved, authority-resolved, reopened, and exhausted `SNN`/`PNN`/`TNN` forms; prove exact filenames, controlled edit regions, no duplicate subject, full owning-stage regeneration, and each downstream prefix gate's nonzero `ERROR`;
+13. run with mixed-case `FATAL`/`CRITICAL`/`ERROR`/`WARNING`/`WARN`/`INFO`/`DEBUG`/`TRACE` inputs, verify canonical threshold behavior and exact per-feature paths, crash each event/prompt stream phase, and prove tail recovery or fail-closed blocking without using logs as authority;
+14. relocate configured `specs`, `references`, archive, and `sddtoolkit` roots, prove principles/presets load only from their derived runtime children, and prove identically named `new_engine/` samples are ignored;
+15. tamper with `plan.md` and `tasks.md`, verify rejection/regeneration without import, then edit `spec.md` through its authenticated path and prove ordinary downstream invalidation/review;
+16. crash/restart at specify, clarification, plan, review, tasks, task-checkpoint, adapter-effect, final-overlay, and final-stage boundaries and prove the common transaction/lock/ledger recovery gates converge before new model, allocation, write, or command work.
+
+---
+
+## 29. Suggested package/module structure
+
+This is logical and language-neutral:
+
+[View the Suggested package structure sample](code.md#suggested-package-structure).
+
+Domain modules have no infrastructure dependencies. The composition root is the only location that constructs concrete adapters and child-node graphs.
+
+---
+
+## 30. Delivery sequence for the new engine
+
+### Increment 1: contracts and deterministic core
+
+- Define config/preset/model-response schemas.
+- Define IR, diagnostic, evidence, action, orchestrator, and state contracts.
+- Implement nearest-root discovery for the exact project-root `.sddtoolkit.json`; derive the specs, references, archive, principles, toolchain-preset, engine-state, clarification, and feature-log roots without a `new_engine/` or packaged-example fallback.
+- Implement config/preset compilation, free-text principle inventory/capture/category-hint indexing, and path validation.
+- Implement editable-spec render/parse round trips, generated-view equality, and the project/feature WAL, transaction-ID ledgers, failpoint recovery, and durable artifact/state transactions used by every later increment.
+- Implement the common feature-event logging pipeline, canonical level/alias handling, fixed per-feature sinks, redaction, rotation, and crash recovery before any feature-producing stage is enabled.
+- Provide fake ports and architecture tests.
+
+### Increment 2: Specify
+
+- Implement invocation/identity and reference preflight.
+- Add the initial reader registry and citation system.
+- Implement structured reference/spec model routes.
+- Add specification/reference-context validators, no-invention routing, atomic repair, rendering, and commit.
+- Implement the complete `S01..S99` clarification lifecycle, exact subject deduplication, controlled forms, authority/user resolution, rerun regeneration, and the blocking plan gate.
+
+### Increment 3: Plan
+
+- Implement repository/manifest discovery and environment facts.
+- Implement plan IR, artifact applicability, and bounded applicable-principle selection over the bootstrap-captured free-text registry.
+- Add path/coverage/token/quickstart validators.
+- Implement `P01..P99` clarification pause/resume/deduplication, full plan regeneration, generated-view rendering, explicit plan review, and the blocking tasks gate.
+
+### Increment 4: Tasks
+
+- Implement obligation ledger and typed task proposal routes.
+- Build DAG, path/command validation, coverage, ordering, and parallel calculation.
+- Implement `T01..T99` clarification pause/resume/deduplication, full graph regeneration, deterministic read-only `tasks.md`, explicit task review, and the blocking implement gate.
+
+### Increment 5: Implement
+
+- Implement operation savepoints, create/update/replace/copy operations, configured command runner, AST/import checks, evidence, sealed task commit, and recovery.
+- Implement task-adapter boundary records, evidence-ledger chaining, feature-execution process leases/locks, liveness-classified disposable final-validation overlays, typed final-command child savepoints, and all associated crash/cleanup recovery before enabling real project writes.
+- Start with sequential task execution; enable validated concurrency only after overlay/lock tests pass.
+
+### Increment 6: preset breadth and hardening
+
+- Ship and test React/Node/Java/.NET compositions.
+- Add remaining reference readers.
+- Complete cross-stage crash/fault/security, clarification, logging, and root/preset/principle conformance testing; telemetry here means dashboards/metrics over the mandatory logging foundation delivered in Increment 1, not deferred event logging.
+- Generate human-facing prompt/reference documentation from the authoritative route/schema definitions to avoid duplicated prompt drift.
+
+Each increment must be usable with a fake model gateway before integrating a real provider.
+
+---
+
+## 31. Acceptance criteria for the design implementation
+
+The new engine is ready for production evaluation when all of the following are true:
+
+1. The root workflow cannot execute `plan` before a valid committed specification, `tasks` before an approved current plan state, or `implement` before an approved current task-definition state.
+2. Bootstrap accepts only the nearest exact `.sddtoolkit.json` located at the discovered project root, validates every required `paths` entry, and never treats `.sddtoolkit.json.example`, `new_engine/`, the invocation directory, or a packaged asset as runtime configuration/fallback.
+3. Runtime principles resolve only to `<paths.sddtoolkit>/principles/` and presets only to `<paths.sddtoolkit>/toolchainPresets/`; all other feature, clarification, log, transaction, state, and overlay locations are engine-derived from the configured roots and validated for separation/containment.
+4. Specify launches only as `sdd specify --reference <relative-selector>` (or an exactly equivalent one-selector API/compatibility adapter); missing/duplicate/removed/positional inputs fail before activation, and the title/description/goal are derived only from validated reference authority.
+5. No LLM action has a filesystem, process, state, logger, or unrestricted tool interface.
+6. No orchestrator imports or directly uses infrastructure/domain-operation ports; actions cannot contain/call actions or orchestrators, while orchestrators may contain only runner-owned child bindings to actions/orchestrators.
+7. Every action and orchestrator implements the same typed `PipelineNode` interface, communicates through immutable validated envelopes/deltas, and has the required isolated action or spy-child orchestrator tests.
+8. Mandatory metadata event logging resolves beneath `<paths.specs>/<featureId>/logs/`, uses the `.sddtoolkit.json` threshold with exact `CRITICAL -> fatal` and `WARN -> warning` aliases, survives prior-run tail recovery, and fails closed without becoming workflow authority; body/prompt logging remains independently opt-in, redacted, bounded, and off by default.
+9. Fixed workflow artifact paths are engine-assigned, and every path-like model field is structured, normalized, contained, classified, preset-validated, and authorized before it can enter specification, plan, tasks, or a write transaction.
+10. Planned new files use engine-enumerated `pathCandidateId` choices before minting a `fileId`; every actionable project-file reference in tasks/implementation is only a `fileId`, renderers alone display validated paths, and unbound path-shaped prose is rejected.
+11. React, Node, Maven/Gradle Java, and multi-project .NET fixtures have both accepted and rejected filename, placement, project-ownership, test-mapping, and content-coupled naming tests.
+12. Every LLM route—including implementation and repair—conforms with a nano-class model and has a closed response schema, bounded evidence/guidance packet, and deterministic request identity/accounting.
+13. A one-field filename defect causes one one-field repair request; valid sibling output is preserved.
+14. A repair cannot change a field outside its closed authorization and old-value/revision preconditions.
+15. Every repaired candidate receives impacted/dependent validation followed by full-candidate validation before persistence; retry exhaustion blocks/fails and never weakens policy.
+16. Unsupported references are reported and cannot be silently omitted; every selected source, decoded block, and bounded chunk has an exact disposition and accounting record.
+17. Persisted reference citations, provenance, claims, conflicts, and exact preserved tokens are mechanically verifiable across restart without a content fingerprint.
+18. An unsupported semantic assertion is converted only through the one-use no-invention repair authorization into `clarification_needed`; the engine and model never invent a plausible requirement, architecture decision, task fact, path, command, or resolution.
+19. Clarifications use only registered `<feature>/clarify/S01..S99.md`, `P01..P99.md`, and `T01..T99.md` identities/paths; exact subject keys prevent duplicates, open forms expose only controlled fields, closed historical views are read-only, reruns reconsider current reference/principle/answer authorities and regenerate the complete owning stage, and open `S`, `S/P`, or `S/P/T` sets respectively make plan, tasks, or implement emit `ERROR` and exit nonzero.
+20. `spec.md` is the sole freely editable stage artifact and round-trips to normalized specification IR; plan/design and task files are deterministic read-only review projections, are never parsed as authority, and require approvals bound to the current canonical state IDs.
+21. `spec.md` is business-only according to deterministic lint and configured semantic review, while technical/reference data remains in the sidecar.
+22. Principle filenames are category hints only, their complete bounded bodies remain free text, and the exact current principle registry is loaded/selected/cited at plan, tasks, implement, recovery, and clarification-resume gates but never used to invent specification requirements.
+23. Plan file records match real repository environments, all planned paths were preset-validated before rendering, and all requirements/scenarios/preserved-token obligations have coverage.
+24. Task IDs, runtime status, checkboxes, dependencies, ordering, mandatory checks, and `[P]` are engine-derived; every task file reference was already authorized by the validated plan file registry.
+25. The engine rejects dependency cycles and parallel write/resource conflicts.
+26. Implementation uses operation savepoints and supports authorized create, update, full replace, byte-exact copy-in plus separately authorized adaptation, and policy-gated delete without raw model paths.
+27. Only preset/config command IDs execute, without an engine shell and within configured sandbox/network/resource/effect limits; every mutating command receives a post-command delta gate.
+28. Operation/command promotion evidence and later verification evidence consume one exact monotonic successor-ledger chain; post-allocation failures are durably retired when exposed, and crash recovery cannot duplicate an ID or repeat/lose an ambiguous adapter effect.
+29. A task is marked `[X]` only after one durable transaction commits project delta, evidence, the next task runtime revision, the definition/runtime-bound rendered view, and lock state without changing the approved definition ID.
+30. Failed and blocked executions cannot be reported as completed.
+31. Every stage, review, clarification, task checkpoint, task result, and final transition uses the common WAL/transaction-ID lifecycle with failpoint-tested recovery; final-validation scratch is never promoted and orphan cleanup cannot delete another live process's overlay.
+32. Stage state, recovery, comparisons, and invalidation work without storing/comparing artifact fingerprints and without depending on Git flow.
+33. Generated views exactly match canonical rendering; tampering is detected and regenerated rather than imported.
+34. Prompt/response body logging cannot be enabled without the required direction/class opt-ins, redaction, truncation, retention, and sink protections.
+35. End-to-end fake-model tests cover valid flow, exact CLI/config roots, principles/presets, S/P/T clarification gates and reruns, approvals, generated-view tampering, mandatory event logging/recovery, malformed output, atomic repair, retry exhaustion, copy/replace, compiler/test repair, upstream rework, transaction/adapter/overlay failpoints, and final evidence.
+
+---
+
+## 32. Deferred implementation choices
+
+These choices do not alter the architecture and may be decided during implementation:
+
+- implementation language/runtime for the engine;
+- concrete JSON Schema, Markdown AST, tree-sitter/compiler, PDF, office, image/OCR, and overlay libraries;
+- the UI/API used to record manual verification evidence;
+- which binary reference readers ship in the first release versus plugins;
+- the first platform-specific multi-file transaction adapter;
+- when concurrency above one becomes enabled by default;
+- whether model-assisted semantic warnings block by default in development versus CI.
+
+They must not weaken the invariants, path policy, command safety, repair scoping, evidence requirements, or action/orchestrator separation defined above.
+
+---
+
+## 33. Prompt-to-engine migration matrix
+
+This matrix assigns every material responsibility in the existing four prompts to an engine component. “Repair” always means the closed protocol in Section 22; engine/user/environment failures do not consume model repair attempts.
+
+### 33.0 Cross-cutting responsibilities removed from prompts
+
+| Responsibility | Deterministic owner | LLM involvement | Required outcome |
+|---|---|---|---|
+| Discover project/config roots | Config discovery, schema, root-registry, and path-derivation actions | None | Use the nearest exact project-root `.sddtoolkit.json`; derive every configured base from `paths`, with principles fixed at `<paths.sddtoolkit>/principles/` and presets fixed at `<paths.sddtoolkit>/toolchainPresets/`; never use `new_engine/` as a runtime fallback. |
+| Load mechanical toolchain policy | The toolchain-preset action subgraph statically owned by `BootstrapOrchestrator` | None | Account for every bounded runtime resource, reject every legacy or unresolved document, resolve the configured exact package closure, and bind its immutable registry into bootstrap authority before any model call. |
+| Load semantic project guidance | Principle inventory/capture/filename-classification/chunk/registry actions; `SelectApplicablePrinciplesAction` and `BuildPrincipleGuidanceAction` only at technical stages | None for selection; the applicable stage model interprets exact cited free text | Preserve all raw spans; filenames provide category hints only; load no principles into specification generation; select every configured applicable chunk without summarizing, ranking, or compiling prose into mechanical rules. |
+| Create/recover per-feature logging | `FeatureLoggingOrchestrator`, fixed-path binding actions, inspect/create-or-recover actions, and append/rotation/retention actions | None | After reference preflight and atomic feature activation, create or recover `<featureDir>/logs/`; use the canonical level from root config and runner-generated, schema-valid, redacted records. Logging failure follows the fixed severity/failure policy and cannot recursively log itself. |
+| Authenticate user-controlled transitions | Runner-owned single-use authentication lease, authentication observation validation, evidence allocation/build/validation, and actor-registry transaction actions | None | Persist only public actor evidence IDs and bind answers, acknowledgements, reviews, decisions, and manual evidence to the exact current revisions; credentials never enter an envelope, log, model request, or state file. |
+| Handle missing knowledge | Stage route result validation plus `ClarificationLifecycleOrchestrator` | The stage route may return exactly `clarification_needed`; `clarification.resolve` may interpret current allowed authority | A valid need is a successful pause, is deduplicated by an engine subject key, receives the next engine ID/form, persists no partial stage IR, and consumes no retry/repair attempt. Unsupported asserted content is repaired atomically by replacing only that route-result unit with the clarification variant. |
+| Resume after clarification | Clarification response/authority-resolution transactions and the owning stage orchestrator | All generation routes of the owning stage run again | Commit the authenticated response or current-authority resolution first; then discard every pre-clarification unit candidate/checkpoint and regenerate the complete specification, plan, or task definition before whole-stage validation. |
+| Enforce ordered gates | `StageGateOrchestrator` and clarification-prefix validation | None | Plan rejects open `S`; tasks rejects open `S/P`; implement rejects open `S/P/T`, names exact IDs/form paths, emits an `ERROR`, and exits nonzero. |
+
+### 33.1 Specify prompt
+
+| Current prompt responsibility | Deterministic action/orchestrator owner | LLM route | Validation and repair unit | Side effect and gate |
+|---|---|---|---|---|
+| Parse required reference selector | Invocation actions in `SpecifyPreflightOrchestrator` | None | Exact single-flag grammar; removed/unknown/positional inputs are user diagnostics | None before valid input |
+| Choose feature identity/directory | `DeriveFeatureIdentityAction`, availability and artifact-registry actions | None | Versioned selector slug/length/portability/collision; no suffix or model repair | Activate only after deterministic reference preflight |
+| Resolve mandatory reference selector | Reference-root/inventory actions | None | Required non-empty selector, containment, type, symlink, size, and complete accounting; user/environment repair | No feature directory, per-spec log, model call, or artifact output before complete preflight |
+| Read arbitrary reference formats | Per-file reader orchestration and decode actions | `reference.extract` only for bounded model interpretation after deterministic decoding/region binding | Reader threshold/tie, decode status, block ledger | Stage canonical reference candidates only |
+| Extract requirements/signals/tokens | Structured-fact, chunk-ID, and chunk-accounting actions | `reference.extract` per `ReferenceChunk` | Closed claims, chunk-bounded citations, exact values; one claim/citation repair | In-memory snapshot candidate |
+| Reconcile all reference content | Hierarchical reconciliation orchestration | `reference.reconcile` over compact claim payloads | Known IDs, claim dispositions, conflict records | Block unresolved authoritative conflict |
+| Derive feature description | Feature-brief context/validation/request-state actions | `spec.feature-brief.generate` once over the complete bounded global reconciliation summary | Business-only closed brief plus exact claim/citation/passive joins | Canonical reference-derived `FeatureRequestState`; no model-owned feature/path ID |
+| Draft business specification or report an unknown | Unit-result validation/merge, completeness, ID assignment, and `BuildSpecificationIRAction` | `spec.section.generate` returns exactly stage content or one `ClarificationNeedProposal` | One content field/record, or one clarification route-result variant; unsupported asserted facts are repaired only by changing that same unit to `clarification_needed` | Complete canonical `SpecificationIR` candidate, or durable `spec_clarification_pending` with one deduplicated `SNN.md` and no partial specification IR |
+| Separate technical/reference detail | Reference-context assembly/render actions | `reference.extract`; `reference.reconcile` for cross-claim reconciliation | Typed sidecar sections and token/source coverage | Read-only view candidate |
+| Re-run after an `SNN` answer or reference change | Clarification-response/reference-revision transaction actions and `SpecifyOrchestrator` | Every `spec.feature-brief.generate` and `spec.section.generate` unit runs again | Current authenticated response or current reference authority must close the same subject; principles are never an `SNN` authority | Complete specification regenerated from the refreshed reference/answer set; no prior unit checkpoint reused |
+| Assign IDs/headings/checklists/status | ID and renderer actions | None | Renderer/IR equality | Engine-rendered `spec.md` |
+| Write outputs and announce readiness | Stage transaction orchestration | None | Full artifact/reference/state set | Durable marker enters `specified` |
+
+### 33.2 Plan prompt
+
+| Current prompt responsibility | Deterministic action/orchestrator owner | LLM route | Validation and repair unit | Side effect and gate |
+|---|---|---|---|---|
+| Resolve the current feature and check spec readiness | `StageGateOrchestrator`, feature/artifact registries, and spec parser/validators | None | Engine-derived stored feature identity/reference selector, current editable spec, provenance/conflicts, and no open `SNN`; no new feature-description input | No writes before gate |
+| Load project principles | Principle root/inventory/capture/decode/filename-category/chunk/registry actions, then `SelectApplicablePrinciplesAction` and `BuildPrincipleGuidanceAction` | None for loading/selection; planning routes interpret exact cited free text | Complete file/chunk accounting, filename-hint mapping, configured category coverage, byte budget; no prose schema or mechanical compilation | Immutable all-chunks selection bound to the exact principle-registry state; over-budget selection blocks for project-owner input |
+| Inspect repository/tooling | Manifest/project/command/parser actions | None | Real project/fact/capability evidence | Immutable repository fact registry |
+| Resolve research unknowns | Evidence selection actions | `plan.section.generate` per decision | Required evidence IDs; unresolved external evidence blocks | Canonical research decision candidate |
+| Propose dependency | Package/source policy actions | `plan.section.generate` | One typed proposal in an exact `PlanState` | No install; approval of that plan state authorizes later setup-task generation |
+| Choose minimal implementation shape or report an unknown | Plan-unit result validation/materialization/merge/completeness and `BuildPlanIRAction` | `plan.section.generate` returns exactly one `PlanUnitProposal` or one `ClarificationNeedProposal` | One plan unit/field, or one clarification route-result variant; an unsupported architectural assertion is repaired only by changing that unit to `clarification_needed` | Complete canonical `PlanIR` candidate, or durable `plan_clarification_pending` with one deduplicated `PNN.md` and no partial plan IR |
+| Describe a new-file intent without naming it | `ValidatePathIntentProposalAction` and intent-registry actions | `plan.path-intent.generate` returns an ID-only `PathIntentProposal` | One project/kind/role/engine-name-source/anchor/capability tuple; filename/path fields are schema-invalid | Validated intent only; no path or file ID yet |
+| Enumerate and choose touched/new filenames | Preset-template selection, deterministic transform/enumeration, full path validation, candidate-registry, and file-record actions | `plan.section.generate` maps its local proposal key only to one known `pathCandidateId`; existing files use only known `fileId` | One candidate-ID selection; retry guidance includes the exact allowed IDs and preset-derived rule that failed | Accepted `FileRecord`/`fileId`, no project write and no model-authored path string |
+| Decide artifact applicability | `ValidateArtifactDecisionProposalAction` then `BuildArtifactDecisionAction` against the workflow artifact registry | `plan.section.generate` | One path-free decision/section | Canonical artifact manifest with engine-owned paths |
+| Produce research/model/contracts/quickstart | Render actions over validated plan IR | `plan.section.generate` | Registered schema, fact IDs, scenario structure, coverage | Read-only view candidates |
+| Check principle alignment and coverage | Deterministic requirement/decision/scenario ledgers plus principle-selection/citation validation | `semantic.review` only for semantic interpretation of the complete selected raw spans | One cited semantic finding; mechanical coverage remains engine-owned and principle prose never becomes a validator | Blocking validation authorization or a cited `PNN` when a user decision is required |
+| Re-run after a `PNN` answer or current-authority change | Clarification response/authority-resolution transaction actions and `PlanOrchestrator` | Every planning generation/semantic route runs again | The current answer may come from an authenticated form edit, refreshed reference/spec/repository evidence, or cited principles; no stale unit candidate survives | Complete plan regenerated and revalidated before returning to review; changed principles invalidate downstream approvals |
+| Persist and validate plan | Stage transaction orchestration | None | Canonical IR, input spec IR, views, next state | Durable `plan_review_pending` |
+| User validates plan | `UserReviewOrchestrator` and review actions | `plan.section.generate` or `repair.structured` only for the targeted rejected unit | Approval exact `planStateId`; feedback unit | Approval enters `planned`; views remain read-only |
+
+### 33.3 Tasks prompt
+
+| Current prompt responsibility | Deterministic action/orchestrator owner | LLM route | Validation and repair unit | Side effect and gate |
+|---|---|---|---|---|
+| Load plan/design inputs | Stage gate and canonical-state readers | None | Current plan approval, spec-input equality, view equality | No writes before gate |
+| Select task-relevant principles | `SelectApplicablePrinciplesAction` and `BuildPrincipleGuidanceAction` over the bootstrap-bound free-text registry | None for deterministic category selection; task routes interpret the exact cited text | Complete configured stage/phase/file-kind category selection with all chunks and exact citations; no model ranking or prose compilation | Bounded immutable task guidance, or a blocking guidance-budget diagnostic |
+| Build complete work obligations | Requirement/obligation ledger actions | None | Known IDs, coverage rule completeness | Immutable ledger |
+| Decompose work or report an unknown | Task-result validation and canonical-definition builder actions | `tasks.cluster.generate` returns exactly one proposal/cluster result or one `ClarificationNeedProposal` | One `TaskDefinitionProposal`/field, or one clarification route-result variant; unsupported asserted detail is repaired only by changing that unit to `clarification_needed` | In-memory proposals with no model-owned IDs/status, or durable `tasks_clarification_pending` with one deduplicated `TNN.md` and no partial task-definition IR |
+| Select files/commands/scenarios | File registry and evidence-policy actions | `tasks.cluster.generate` selects known file IDs/scenarios and optional checks only | Plan authorization, preset path, command registry | Canonical task candidate |
+| Reconcile semantic dependencies | Compact global-index orchestration | `tasks.dependencies.reconcile` | One edge; known targets/phase rule | Validated edge candidates |
+| Build DAG/order/IDs | Build/validate/toposort internal-key `TaskProposalGraph`, `AssignTaskIdsAction`, resolve references, build definitions, then build/validate canonical graph | None | Unknown edge, cycle edge, phase edge, or failed ID join | Engine assigns `TNNN` before final graph construction |
+| Establish TDD/manual verification | Phase-kind/evidence actions | `tasks.cluster.generate` proposes intent/mode | One mode/predicate; intended-red and later-green binding | Canonical evidence requirements |
+| Calculate parallel markers | Runnable/conflict/lock actions | None | Graph/path/resource/command policy | Engine-derived `[P]` only |
+| Prove complete coverage | Traceability actions | `tasks.cluster.generate` for one missing obligation task when model-repairable | One coverage entry/task insertion | Full graph authorization |
+| Re-run after a `TNN` answer or current-authority change | Clarification response/authority-resolution transaction actions and `TasksOrchestrator` | Every task cluster/dependency route runs again | The current answer may come from an authenticated form edit or cited current reference/spec/plan/repository/principle authority; no stale cluster or graph checkpoint survives | Complete task graph regenerated, re-toposorted, and revalidated before returning to review |
+| Render/persist tasks | Renderer and stage transaction actions | None | Canonical graph/runtime/view equality | Durable `tasks_review_pending` |
+| User validates tasks | User-review actions | `tasks.cluster.generate`, `tasks.dependencies.reconcile`, or `repair.structured` for the exact rejected unit | Approval exact `taskDefinitionStateId` | Approval enters `tasked` |
+
+### 33.4 Implement prompt
+
+| Current prompt responsibility | Deterministic action/orchestrator owner | LLM route | Validation and repair unit | Side effect and gate |
+|---|---|---|---|---|
+| Check readiness/current inputs | Stage gate and canonical-state readers | None | Current task approval, editable-spec equality, view equality, environment capability | No execution before gate |
+| Select next work and parallelism | Runnable-set/select/lease actions under scheduler | None | Dependency/runtime/lock compare-and-swap | Atomic task lease |
+| Gather task context | Context selection/read actions | None | Only authorized file/content handles and relevant facts | Bounded immutable context |
+| Select implementation-relevant principles | `SelectApplicablePrinciplesAction` and `BuildPrincipleGuidanceAction` over the exact task-bound registry | None for deterministic category selection; implementation/semantic routes interpret the exact cited text | Complete configured task/file-kind selection, all chunks, exact registry/revision/citations, and budget; no model ranking or prose compilation | Bounded immutable implementation guidance, or block/rework if the bound authority changed or cannot fit |
+| Plan operations | Intent proposal validation, task-local intent-ID assignment, and plan builder actions | `implementation.change-plan.generate` | Authorized operation type and plan-assigned file/source IDs | Canonical ordered intents with stable IDs |
+| Create new code | Operation savepoint actions | `implementation.operation.generate` | One complete file in one savepoint | Overlay only |
+| Patch existing code | Operation savepoint actions | `implementation.operation.generate` | One patch/hunk in one `fileId` | Overlay only |
+| Replace an existing file | Operation savepoint actions | `implementation.operation.generate` | One complete replacement; target state is engine-derived | Overlay only |
+| Copy code/file content in | Copy-source resolution/validation and operation actions | None for byte copy; `implementation.operation.generate` for a separately authorized adaptation | One immutable source ID/destination ID; provenance/media/permission/revisions | Overlay only |
+| Delete a file | Operation/policy actions | `implementation.operation.generate` for typed justification and operation | One plan/task-authorized delete; disabled by default | Overlay only |
+| Repair filename | Section 24.5 invalidation/reconciliation followed by planning repair; never implementation | `repair.structured` in regenerated plan | One `ProjectPathCandidate.repoRelativePath` before file-ID minting | New plan/task states and renewed approvals before resume |
+| Repair code/tool failure | Atomic repair orchestration over discarded savepoint | `repair.code` | One authorized hunk/declaration/file/group with revision preconditions | Rebuilt overlay only |
+| Run syntax/import/build/lint/test | Local validators then derived command actions | None | Executable evidence; diagnostic-local repair where allowed | Command effects remain in overlay and are diff-gated |
+| Record manual evidence | `BuildManualEvidenceAction` and `ValidateManualEvidenceAction` through the evidence API | None | Exact configured scenario/observer record | Evidence candidate |
+| Mark task complete | Build state/render/seal/transaction actions | None | All evidence and final delta; model status ignored | One durable project/evidence/state/view/lock marker |
+| Handle failure/dependencies | `BuildValidationFailedTaskStateAction`, `BuildFailedTaskStateAction`, `BuildBlockedTaskStateAction`, and `SealTaskOutcomeTransactionAction` | None | Typed failed/blocked outcome | Atomic runtime/journal/view/lease outcome; dependents blocked |
+| Run final validation | Final-validation orchestration and derived commands | None | Full evidence, final post-command delta, all tasks complete | Durable `implemented` transition |
+
+---
+
+## 34. Final design position
+
+The current workflow has the correct high-level shape but gives the model too much operational authority. The new engine should preserve the semantic progression and artifact intent while reversing that authority:
+
+- The engine supplies facts and constraints before generation.
+- The LLM returns one small typed semantic or code unit.
+- The engine validates every mechanically decidable property.
+- The engine gives precise preset-derived guidance for exactly one failed unit.
+- The LLM repairs only that unit.
+- The engine renders, writes, runs, verifies, and advances state.
+
+This is the appropriate deterministic layer for lower-capability models: it does not ask a nano model to behave like a reliable workflow engine, and it does not attempt to replace the model where interpretation and synthesis are genuinely required.

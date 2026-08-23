@@ -1,0 +1,59 @@
+version: "1.0"
+
+package:
+  configFiles:
+    manifest: build.gradle.kts
+  commands:
+    install: "./gradlew dependencies"
+    validatePackage: "./gradlew dependencyInsight --dependency {{package}} --no-daemon > /dev/null"
+
+build:
+  commands:
+    compile: "./gradlew classes"
+    syntax: "./gradlew testClasses"
+  paths:
+    source: src/main/java/
+    output: build/
+  patterns:
+    file: "*.java"
+  language:
+    extensions:
+      - .java
+    name: java
+
+test:
+  unit:
+    commands:
+      runAll: "./gradlew test"
+    paths:
+      root: src/test/java/
+    placement: mirrored
+    patterns:
+      file: "*Test.java"
+      include:
+        - "**/*Test.java"
+        - "**/*Tests.java"
+  integration:
+    commands:
+      runAll: "./gradlew integrationTest"
+    paths:
+      root: src/integrationTest/java/
+    patterns:
+      file: "*IT.java"
+      include:
+        - "**/*IT.java"
+
+quality:
+  commands:
+    lint: "./gradlew check"
+
+protection:
+  patterns:
+    - "**/build/**"
+    - "**/.gradle/**"
+    - "**/bin/**"
+    - "**/.git/**"
+
+ast:
+  grammars:
+    .java: tree-sitter-java
