@@ -1,0 +1,22 @@
+{
+  "name": "sdde",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic SDD engine SEA bootstrap",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=24.2.0 <25"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "build:sea": "npm run build && node dist/compiled/scripts/build-sea.js",
+    "test:sea": "node --test dist/compiled/test/sea-smoke.js",
+    "test": "npm run build:sea && npm run test:sea",
+    "verify": "npm run build && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.1",
+    "postject": "1.0.0-alpha.6",
+    "typescript": "7.0.2"
+  }
+}

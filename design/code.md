@@ -10,6 +10,7 @@ This companion contains the sample contracts, schemas, configuration, flow notat
 4. [Pipeline envelope](#pipeline-envelope)
 5. [Pipeline outcome](#pipeline-outcome)
 6. [Shared domain types](#shared-domain-types)
+   - [Authority reconciliation contract](#authority-reconciliation-contract)
 7. [Specification IR](#specification-ir)
 8. [Reference-context IR](#reference-context-ir)
 9. [Plan IR](#plan-ir)
@@ -4850,6 +4851,7 @@ ClarificationPrefix = S | P | T
 
 ClarificationSubjectDescriptor =
   | SpecificationClarificationSubject {
+      authorityRequirementId: AuthorityRequirementId,
       unitKind,
       stableUnitSelector,
       requiredFieldId,
@@ -4858,6 +4860,7 @@ ClarificationSubjectDescriptor =
       supportingCitationIds[]
     }
   | PlanClarificationSubject {
+      authorityRequirementId: AuthorityRequirementId,
       planUnitKind,
       stableUnitSelector,
       requiredDecisionSlotId,
@@ -4865,6 +4868,7 @@ ClarificationSubjectDescriptor =
       supportingAuthorityIds[]
     }
   | TasksClarificationSubject {
+      authorityRequirementId: AuthorityRequirementId,
       stableUnitSelector,
       obligationIds[],
       requiredTaskFieldId,
@@ -4875,6 +4879,7 @@ ClarificationSubjectDescriptor =
 ClarificationSubjectKey =
   | ReferenceConflictClarificationSubjectKey {
       stage: spec,
+      authorityRequirementId: AuthorityRequirementId,
       stableUnitSelector: ReferenceConflictSubjectCoordinate,
       requiredSlotId: source_conflict_resolution,
       authorityGapKind: behavior_changing_reference_conflict,
@@ -4883,6 +4888,7 @@ ClarificationSubjectKey =
     }
   | AuthorityBoundClarificationSubjectKey {
       stage: ClarificationStage,
+      authorityRequirementId: AuthorityRequirementId,
       stableUnitSelector,
       requiredSlotId,             // required field/decision/task-field ID
       authorityGapKind,
@@ -4905,6 +4911,9 @@ ClarificationNeedProposal {
 
 ClarificationNeedOrigin =
   | { kind: direct_need, sourceSemanticFindings: [] }
+  | { kind: authority_reconciliation_gap,
+      authorityRequirementId: AuthorityRequirementId,
+      reconciliationValidationEvidenceIds[] }
   | { kind: no_invention_replacement,
       sourceSemanticFinding: SemanticFinding,
       replacementAuthorizationId }
@@ -4920,7 +4929,8 @@ ClarificationRecord {
   whyRequired: BusinessText,
   origins: ClarificationNeedOrigin[],
   // Nonempty, canonically ordered and deduplicated by direct owner or semantic-
-  // finding identity. Multiple origins never create a second clarification.
+  // finding/authority-requirement identity. Multiple origins never create a
+  // second clarification.
   answerSchema,
   recordRevision,
   lifecycle:
@@ -5165,6 +5175,166 @@ SpecificationClaimDispositionEntry {
     | { kind: blocking_conflict, conflictId }
     | { kind: open_question, signalId }
     | { kind: no_spec_relevance, reasonCode }
+}
+```
+
+<a id="authority-reconciliation-contract"></a>
+
+### 6.1 Authority reconciliation contract
+
+```text
+AuthorityOwnerStage = ClarificationStage
+AuthorityDetectionStage = spec | plan | tasks | implement | recovery
+
+AuthorityRequirementId {
+  ownerStage: AuthorityOwnerStage,
+  requirementKindId,
+  stableUnitSelector,
+  requiredSlotId,
+  contractVersion
+  // Structural tuple derived only from closed registries/current canonical
+  // inputs. Never model-authored, content-hashed, or caller-selected.
+}
+
+AuthorityRequirednessSource =
+  | SchemaRequiredness { schemaId, fieldId }
+  | ObligationRequiredness { obligationId }
+  | PolicyRequiredness { policyId, ruleId }
+  | AcceptedAuthorityRequiredness { authorityId, recordSelector }
+
+AuthorityRequirement {
+  authorityRequirementId: AuthorityRequirementId,
+  ownerStage: AuthorityOwnerStage,
+  requirementKindId,
+  requiredSlotId,
+  requirednessSources: AuthorityRequirednessSource[],
+  inputAuthorityIds[],
+  reconciliationPolicyId,
+  downstreamObligationIds[]
+}
+
+AuthorityRequirementLedger {
+  detectionStage: AuthorityDetectionStage,
+  inputAuthorityIds[],
+  ownershipRegistryVersion,
+  reconciliationPolicyRegistryVersion,
+  requirements: AuthorityRequirement[]
+  // Deterministic, exhaustive, canonical-order projection. It is rebuilt from
+  // canonical authority and is neither a persisted competing truth nor a
+  // fingerprint.
+}
+
+AuthorityCandidate {
+  candidateAuthorityId,
+  authorityRevision,
+  candidateKindId,
+  evidenceIds[],
+  citationIds[],
+  currentAuthorityValid: true
+}
+
+AuthorityCandidateSet {
+  authorityRequirementId: AuthorityRequirementId,
+  reconciliationPolicyId,
+  inspectedPermittedAuthorityIds[],
+  candidates: AuthorityCandidate[],
+  deterministicEquivalenceClasses: {
+    equivalenceRuleId,
+    memberCandidateAuthorityIds[]
+  }[]
+  // Complete permitted-source accounting. No ranking, fuzzy/nearest match,
+  // inferred candidate, or ambient model knowledge is representable.
+}
+
+AuthorityGapReason =
+  missing | ambiguous | conflicting | multiple_non_equivalent |
+  stale | unsupported | unregistered_ownership_or_policy
+
+AuthorityReconciliationOutcome =
+  | ResolvedExactlyOneAuthority {
+      kind: resolved_exactly_one,
+      authorityRequirementId: AuthorityRequirementId,
+      resolution:
+        | { kind: existing_authority, resolutionAuthorityId }
+        | { kind: supported_candidate,
+            immutableUnitOwnerId, candidateRevision,
+            supportingAuthorityIds[], semanticFindingIds[] },
+      supportingEquivalentAuthorityIds[],
+      evidenceIds[]
+    }
+  | ResolvedExplicitNotApplicableAuthority {
+      kind: resolved_explicit_not_applicable,
+      authorityRequirementId: AuthorityRequirementId,
+      basis:
+        | { kind: deterministic_rule, authorizingRuleId }
+        | { kind: supported_candidate,
+            immutableUnitOwnerId, candidateRevision,
+            supportingAuthorityIds[], semanticFindingIds[] },
+      evidenceIds[]
+    }
+  | ResolvedExplicitExceptionAuthority {
+      kind: resolved_explicit_exception,
+      authorityRequirementId: AuthorityRequirementId,
+      authenticatedExceptionDecisionId,
+      exactScopeEvidenceIds[]
+    }
+  | ClarificationRequiredAuthority {
+      kind: clarification_required,
+      authorityRequirementId: AuthorityRequirementId,
+      ownerStage: AuthorityOwnerStage,
+      reason: AuthorityGapReason,
+      supportingAuthorityIds[]
+    }
+  | UpstreamReworkRequiredAuthority {
+      kind: upstream_rework_required,
+      authorityRequirementId: AuthorityRequirementId,
+      detectedAtStage: AuthorityDetectionStage,
+      ownerStage: AuthorityOwnerStage,
+      invalidatedAuthorityIds[]
+    }
+  | AdministrativeAuthorityBlock {
+      kind: administrative_block,
+      authorityRequirementId: AuthorityRequirementId,
+      reason: unregistered_ownership_or_policy |
+              unauthorized_authority_creation |
+              required_external_or_environment_authority_unavailable,
+      diagnosticCode
+    }
+  // There is deliberately no unresolved-success, warning-only, default,
+  // approximate, closest-match, conventional-choice, current-stage fallback,
+  // or locally-repaired variant.
+
+AuthorityReconciliationEntry {
+  requirement: AuthorityRequirement,
+  candidateSet: AuthorityCandidateSet,
+  outcome: AuthorityReconciliationOutcome,
+  validationEvidenceIds[]
+}
+
+AuthorityReconciliationLedger {
+  requirementLedger: AuthorityRequirementLedger,
+  entries: AuthorityReconciliationEntry[],
+  continuation:
+    | { kind: all_resolved, successfulRequirementIds[] }
+    | { kind: gaps_present, orderedGapRequirementIds[] }
+  // Exactly one entry per requirement. all_resolved is valid only when every
+  // outcome is one of the three resolved variants.
+}
+
+ClarificationOwnershipRegistryEntry {
+  requirementKindId,
+  requiredSlotId,
+  ownerStage: AuthorityOwnerStage,
+  allowedReconciliationPolicyIds[],
+  allowedNotApplicableRuleIds[],
+  allowedExceptionScopePolicyIds[]
+}
+
+ClarificationOwnershipRegistry {
+  registryVersion,
+  entries: ClarificationOwnershipRegistryEntry[]
+  // Compiler-locked and exhaustive for every registered required slot. Unknown
+  // ownership blocks administratively; it never falls back to the detector.
 }
 ```
 
@@ -9889,6 +10059,9 @@ log.retention_completed
 run.started | run.completed | run.blocked | run.failed | run.cancelled
 stage.started | stage.completed | stage.blocked | stage.failed |
 stage.clarification_pending
+authority.requirements_built | authority.reconciliation_completed |
+authority.gap_routed | authority.upstream_rework_required |
+authority.administrative_blocked
 clarification.created | clarification.reused | clarification.deferred |
 clarification.response_committed | clarification.authority_resolved |
 clarification.reopened | clarification.gate_blocked
@@ -9936,6 +10109,7 @@ engine/
 │   │   ├── preset-ingestion/      # implementation modules, never runtime preset data
 │   │   ├── principles/
 │   │   ├── references/
+│   │   ├── authority-reconciliation/
 │   │   ├── clarifications/
 │   │   ├── authentication/
 │   │   ├── logging/
@@ -9950,6 +10124,7 @@ engine/
 │       ├── workflow/
 │       ├── stages/
 │       ├── generation/
+│       ├── reconciliation/
 │       ├── repair/
 │       ├── transactions/
 │       └── scheduling/
@@ -9957,6 +10132,7 @@ engine/
 │   ├── config/
 │   ├── preset/
 │   ├── principles/
+│   ├── authority/
 │   ├── clarifications/
 │   ├── workflow/
 │   ├── references/

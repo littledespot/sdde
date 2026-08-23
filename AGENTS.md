@@ -137,6 +137,16 @@ do not manufacture an architecture exercise.
 - Keep side effects behind narrow declared ports.
 - Keep compatibility behavior explicit, versioned, tested, and authorized.
 
+## Anti-overfitting rule
+
+- Never solve a cross-cutting invariant with a caller-, workflow-, domain-, format-, framework-, token-, filename-, fixture-, or example-specific branch. An example demonstrates a failure class; it does not define the architecture or limit the fix.
+- Interpret "lowest owning abstraction" as the narrowest shared contract that owns the complete failure class, not the closest function, stage, or file where one symptom appeared.
+- Before changing code or design, state the general violated invariant and inspect every producer, consumer, transition, validator, repair path, recovery path, and sibling implementation governed by it. If the rule crosses stages or domains, change the shared contract and thread it through all of them.
+- Domain-specific components may contribute typed facts, candidates, or evidence to a shared mechanism. They must not create independent continuation, fallback, exception, clarification, or success rules.
+- A new special case is allowed only when accepted authority distinguishes that case. Represent it as explicit typed policy with narrow scope, provenance, negative tests, and required approval; never infer it from the current example.
+- Regression evidence must cover the reported example and unrelated representatives of the same failure class. A fix proven only by the motivating fixture is incomplete.
+- If the general owning contract or intended scope cannot be established from current authority, stop and request the missing design decision instead of committing a local interpretation.
+
 ## Non-negotiable engine boundaries
 
 ### LLM boundary

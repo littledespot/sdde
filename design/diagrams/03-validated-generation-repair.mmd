@@ -1,5 +1,11 @@
 flowchart TD
-    VG[ValidatedGenerationOrchestrator] --> CTX[Select bounded authoritative context actions]
+    VG[ValidatedGenerationOrchestrator] --> AREQ[Build and validate complete AuthorityRequirementLedger<br/>from closed schemas obligations policies and accepted authority]
+    AREQ --> ARECON[AuthorityReconciliationOrchestrator<br/>one validated closed outcome per structural requirement]
+    ARECON -- All required authority resolved --> CTX[Select bounded authoritative context actions]
+    ARECON -- Same-stage clarification required --> GAPNEED[BuildAuthorityGapClarificationNeedAction<br/>registered subject question why and answer schema]
+    GAPNEED --> CL
+    ARECON -- Earlier owner requires rework --> REWORK[Section 24.5 owner-derived invalidation and regeneration<br/>no local substitute or shallower owner]
+    ARECON -- Administrative block --> STOP
     CTX --> PSTAGE{Route stage uses technical principles}
     PSTAGE -- Plan tasks or implement --> PSEL[Select every raw principle chunk/span in configured eligible filename categories<br/>free text is never ranked, summarized or omitted by inferred meaning]
     PSTAGE -- Reference or specify --> GUIDE[Build initial deterministic guidance action<br/>closed schema, allowed IDs, preset rules, limits and minimal example]
@@ -54,7 +60,11 @@ flowchart TD
     VALIDATE -- Non-repairable policy or environment defect --> CFAIL
     VALIDATE -- Repairable deterministic defect --> CREJECT
     VALIDATE -- Unit valid --> FULL[Run full candidate validator set]
-    FULL -- Valid --> UACCEPT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with accepted content route]
+    FULL -- Structurally and semantically valid candidate --> RECON2[Rebuild and validate the complete authority-reconciliation projection<br/>immediately before accepting the unit or stage candidate]
+    RECON2 -- All required authority resolved --> UACCEPT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with accepted content route]
+    RECON2 -- Same-stage gap --> GAPNEED
+    RECON2 -- Earlier-owner gap --> REWORK
+    RECON2 -- Administrative block --> CFAIL
     UACCEPT --> OK[Accepted typed unit]
     FULL -- Asserted content lacks or conflicts with authority, one repair only --> CREJECT
     FULL -- Non-repairable --> CFAIL

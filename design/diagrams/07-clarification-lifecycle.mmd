@@ -1,8 +1,10 @@
 flowchart TD
+    RECONGAP[Validated AuthorityReconciliationOutcome clarification_required<br/>structural requirement ID earliest owner closed gap reason and current evidence] --> GNEED[BuildAuthorityGapClarificationNeedAction<br/>compiler-registered subject question why and answer schema]
+    GNEED --> NEED[Validated stage-compatible clarification need]
     MODELNEED[Validated clarification_needed route result<br/>genuine current authority gap; no model-owned ID, path or status] --> NEED[Validated stage-compatible clarification need]
     RCONFLICT[Validated unresolved behavior-changing SourceConflict<br/>after complete ReferenceSnapshot validation] --> RCNEED[BuildReferenceConflictClarificationNeedAction<br/>closed engine claim-ID choices; no model or preferred answer]
     RCNEED --> NEED
-    NEED --> KEY[Build deterministic ClarificationSubjectKey<br/>stage, stable unit selector, required slot, gap kind and authority IDs]
+    NEED --> KEY[Build deterministic ClarificationSubjectKey<br/>AuthorityRequirementId, earliest owning stage, stable unit selector,<br/>required slot, gap kind and authority IDs]
     KEY --> LOOKUP[Lookup exact subject key in current ClarificationRegistryState]
     LOOKUP --> FOUND{Record already exists}
     FOUND -- Yes --> REUSE[Reuse the same record, stage prefix, ordinal and engine path]

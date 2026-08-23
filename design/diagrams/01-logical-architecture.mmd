@@ -17,6 +17,7 @@ flowchart TB
         TO[TasksOrchestrator]
         IO[ImplementOrchestrator]
         VG[ValidatedGenerationOrchestrator]
+        AC[AuthorityReconciliationOrchestrator]
         CL[ClarificationLifecycleOrchestrator]
         AR[AtomicRepairOrchestrator]
         TE[ImplementTaskOrchestrator]
@@ -32,6 +33,11 @@ flowchart TB
     TO -. nested orchestrator binding .-> VG
     VG -. nested orchestrator binding .-> CL
     VG -. nested orchestrator binding .-> AR
+    SO -. pre-generation and pre-commit binding .-> AC
+    PO -. pre-generation and pre-commit binding .-> AC
+    TO -. pre-generation and pre-commit binding .-> AC
+    IO -. gate and pre-commit binding .-> AC
+    AC -. same-stage gap binding .-> CL
     IO -. nested orchestrator binding .-> TE
     TE -. nested orchestrator binding .-> AR
 
@@ -47,12 +53,18 @@ flowchart TB
         PRINCIPLES[PrincipleRegistryState<br/>free-text, source-located guidance<br/>filename is only a category hint]
         PRESETS[ToolchainPresetRegistryState<br/>sole runtime root &lt;paths.sddtoolkit&gt;/toolchainPresets/<br/>paths, file kinds, commands and tools]
         STATE[Canonical workflow, actor, review, control-event,<br/>clarification and execution state]
+        APOLICY[Compiler-locked requiredness, ownership<br/>and reconciliation-policy registries]
     end
 
     PORTS --> REF
     PORTS --> PRINCIPLES
     PORTS --> PRESETS
     PORTS --> STATE
+    REF -. typed authority and evidence .-> AC
+    PRINCIPLES -. plan tasks implement authority only; never specification input .-> AC
+    PRESETS -. typed authority and evidence .-> AC
+    STATE -. current authority and approvals .-> AC
+    APOLICY -. exhaustive required slots and earliest owners .-> AC
     PRINCIPLES --> SELECT[SelectApplicablePrinciplesAction]
     SELECT --> PGUIDE[Complete bounded raw-span guidance in PipelineEnvelope]
     PGUIDE -. consumed by stage actions through typed data keys .-> PO

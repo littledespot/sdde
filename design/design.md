@@ -13,13 +13,14 @@
 
 The new engine must treat an LLM as an untrusted semantic content generator, not as the workflow runtime. The LLM must not choose the workflow sequence, perform filesystem operations, run arbitrary tools, declare its own output valid, or mark work complete. It receives a small typed assignment, preset-derived guidance, the relevant evidence, and an exact response schema. It returns a candidate. The engine parses, validates, repairs, renders, persists, and verifies that candidate.
 
-The design has five defining properties:
+The design has six defining properties:
 
 1. **Ordered workflow:** one feature flows through `specify`, `plan`, `tasks`, and `implement` in that order. Every stage revalidates the previous stage before it starts.
 2. **Deterministic shell around probabilistic work:** argument parsing, feature identity, paths, filenames, artifact structure, identifiers, traceability, dependency graphs, writes, commands, task state, and stage gates are engine-owned.
 3. **Preset-controlled project operations:** every model-proposed project path is classified and checked against the selected development-environment preset, such as React, Node, Java, or .NET, before it can be recorded in a plan, emitted as a task, or written during implementation.
 4. **Atomic repair:** a failed candidate is repaired at the smallest independently replaceable field, record, section, task, path, or code operation. Unrelated valid output is retained. The repaired candidate is never committed until all applicable validators pass.
 5. **Actions and orchestrators:** actions have one responsibility and a common typed interface. They do not coordinate other components. Orchestrators contain actions and/or other orchestrators, but perform no filesystem, LLM, parsing, validation, rendering, or command work themselves.
+6. **Closed authority reconciliation:** every datum or decision required by a workflow contract resolves to exactly one current supported authority, an explicitly authorized `not_applicable`/exception outcome, or a clarification owned by the earliest responsible stage. Missing, ambiguous, conflicting, multiple, stale, or unsupported authority never becomes a warning, default, approximation, or downstream local fix.
 
 The resulting boundary is:
 
@@ -84,6 +85,7 @@ The new engine adopts the following unambiguous rules:
 | Paths                   | Paths are canonical absolute values inside the engine and repository-relative POSIX-style values in model contracts and persistent artifacts. Foreign absolute paths are rejected.                                                                                                                     |
 | Platform                | The engine uses platform-neutral ports. Presets define executable/argument arrays; prompts never hard-code Bash or PowerShell scripts.                                                                                                                                                                 |
 | Fingerprinting          | No cross-stage content fingerprints are created or compared. Ordered stage gates reload and revalidate predecessor artifacts.                                                                                                                                                                          |
+| Required authority      | Every contract-required datum and decision is reconciled through one shared closed authority-reconciliation contract. Zero or multiple non-equivalent resolutions create a clarification at the earliest owning stage; a downstream discovery returns through explicit rework rather than accepting a local substitute.                                |
 
 ---
 
@@ -101,6 +103,7 @@ The new engine adopts the following unambiguous rules:
 - Support one or more development environments in a repository, including monorepos.
 - Make failure explicit, stable, diagnosable, and safe to retry.
 - Keep the specification editable while making plan/task outputs review-only projections with explicit approval gates.
+- Make authority completeness a cross-stage, fail-closed property so no workflow can compensate locally for missing or unreconciled upstream decisions.
 
 ### 3.2 Non-goals
 
@@ -133,6 +136,11 @@ The new engine adopts the following unambiguous rules:
 16. Only `spec.md` accepts free user edits as a stage artifact. A registered clarification form accepts edits only in its declared status/answer regions; generated plan/task/reference views are never parsed as authoritative state.
 17. Implementation cannot begin until the user has approved the current plan and current task graph.
 18. Every actionable project-file reference in model output is a typed `fileId` or a planning-stage `ProjectPathCandidate`; path-shaped tokens in free-text fields are invalid.
+19. Every datum or decision marked required by a closed schema, obligation, policy, or accepted authority has exactly one current supported resolution before its owning stage can commit.
+20. Zero resolutions, multiple non-equivalent resolutions, semantic ambiguity, conflict, staleness, or unsupported authority produces a typed clarification, explicit upstream rework, or administrative block; it never selects a default, approximation, nearest match, warning-only continuation, or caller-local exception.
+21. Clarification ownership is derived from a compiler-locked requirement-kind/decision-slot registry. A model, prompt, caller, principle, preset, or configuration value cannot choose a more convenient stage.
+22. A downstream stage never answers an upstream gap. It invalidates affected descendants and returns to the earliest owning stage; implementation may repair code only when all governing upstream decisions are already resolved and the repair remains inside its authorization.
+23. Domain-specific extractors and resolvers may contribute typed candidates and evidence, but all domains use the same reconciliation outcomes, ownership routing, clarification lifecycle, stage gates, and negative-test contract. No example, fixture, format, token kind, filename, framework, or caller receives a bypass or special continuation rule.
 
 ---
 
@@ -154,8 +162,12 @@ Deterministic checks should be used wherever the answer can be computed from con
 | Task graph                 | IDs, phase enum, references, coverage, DAG, dependency existence, write-set collisions, safe `[P]` calculation             | Decompose work, descriptions, non-obvious dependencies, read/write intent                                            | Engine may remove unsafe parallelism; it never invents missing semantic dependencies silently.   |
 | Code changes               | Allowed operation/path, patch applicability, declared scope, syntax, AST rules, import resolution, build/lint/test results | Generate code and repair semantic/compile/test failures                                                              | Behavioral correctness is only deterministic where an executable assertion exists.               |
 | Completion                 | Evidence requirements, committed transaction, task status, stage status                                                    | Summarize completed work                                                                                             | Model claims have no effect on state.                                                            |
+| Required-authority reconciliation | Build the required-slot ledger, validate candidate authority identity/currentness/cardinality, derive the earliest owner, and gate every stage | Classify semantic support/equivalence only within supplied candidates and citations when deterministic comparison cannot decide | Zero/multiple/ambiguous/conflicting/stale/unsupported results pause, rework, or block; no local default or approximation exists. |
 
-The operating rule is: **if a validator can answer from typed data or executable evidence, do not ask the LLM to answer it.**
+The operating rules are:
+
+- **if a validator can answer from typed data or executable evidence, do not ask the LLM to answer it;** and
+- **if current authority cannot support exactly one required answer, do not generate or repair a plausible answer—route the typed gap to its earliest owner.**
 
 ---
 
@@ -927,6 +939,29 @@ In particular, `result.reference-claims/v1` contains a bounded ordered collectio
 `result.clarification-resolution/v1` may only select one existing open clarification and existing current-authority IDs. It is used on a subsequent stage run when exact deterministic lookup cannot decide semantic sufficiency. The engine—not the model—checks the subject key, authority provenance, non-conflict, current revisions, and required-field coverage before closing the record. Failure to establish support leaves the same record open; it never creates an answer.
 
 The `reference.extract` descriptor additionally binds `unitPartitionContractId: reference-chunker/v1`. `ReferenceSnapshot.extractionContract` stores the exact route-registry version, route ID, request/result schema IDs, and partition contract. Recovery/re-extraction must resolve that closed descriptor and blocks with `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE` rather than silently using a newer schema or chunk boundary contract.
+
+### 12.8 Closed authority-reconciliation boundary
+
+[View the authority-reconciliation contract sample](code.md#authority-reconciliation-contract).
+
+Authority completeness is a shared engine contract, not behavior duplicated in prompts or implemented separately for particular domains. Before generation and again before stage commit, the engine deterministically builds an `AuthorityRequirementLedger` from every required field, decision slot, obligation, policy predicate, and accepted upstream authority applicable to that stage. Requiredness is closed: it comes only from a versioned schema, compiler-locked ownership/reconciliation policy, accepted canonical record, or explicit obligation. The engine does not ask about every fact that could exist, and the model cannot remove a required entry or create a new requiredness rule.
+
+Each ledger entry has a structural `AuthorityRequirementId`, earliest owning stage, required slot, exact input-authority set, reconciliation-policy ID, and downstream obligation IDs. Domain-specific extractors or resolvers may contribute candidate authorities and typed evidence, but they cannot choose a terminal outcome. The common reconciliation actions produce exactly one closed result:
+
+- `resolved_exactly_one`, naming either one current existing authority or one candidate resolution supported by current authority, together with its evidence IDs;
+- `resolved_explicit_not_applicable`, naming either the deterministic rule or one authority-supported candidate disposition that proves why the required slot does not apply;
+- `resolved_explicit_exception`, naming a current authenticated exception whose scope exactly covers the requirement;
+- `clarification_required`, with a closed reason and the earliest owning `spec | plan | tasks` stage;
+- `upstream_rework_required`, when a downstream stage encounters a gap owned by an earlier stage; or
+- `administrative_block`, when the kind/slot has no registered ownership/reconciliation policy or requires authority that the workflow is not authorized to create.
+
+There is no unresolved-success, warning-only, inferred-default, closest-match, conventional-choice, model-memory, or current-stage-fallback variant. Exact equality and equivalence use the registered policy for that requirement kind. If deterministic comparison cannot prove equivalence, a bounded semantic route may classify only the supplied candidates with citations; uncertainty remains a clarification and is never promoted to proof. Multiple directly equivalent candidates may collapse only when the policy defines canonical equivalence and records total member evidence; multiple non-equivalent candidates require clarification.
+
+`ClarificationOwnershipRegistry` maps every registered `(requirementKind, requiredSlotId)` to its earliest owner and allowed resolution policies. It is compiler-locked and exhaustive. Specification ownership covers feature intent and reference meaning; planning ownership covers design, architecture, project policy, repository/capability, and verification-strategy decisions; task ownership covers executable decomposition, dependency, authorized work, and evidence binding. Unknown ownership blocks administratively rather than falling back to the stage that noticed it.
+
+The ledger is a deterministic projection over current canonical authorities, not a competing persisted truth or fingerprint. It is rebuilt after authority refresh, clarification resolution, repair, recovery, and immediately before commit. Accepted canonical IR retains the authority, provenance, decision, obligation, and exception IDs needed to reproduce every successful entry. An open clarification retains its structural requirement/subject identity. A stage transaction is invalid unless the projection is exhaustive and every required entry is successfully resolved; any clarification/rework/block result instead follows its typed lifecycle with no partial stage IR.
+
+This contract is deliberately domain-neutral. Adding a new requirement kind requires its schema, ownership entry, reconciliation policy, accepted and rejected fixtures, and stage-gate tests. It never authorizes a caller-specific workaround or a special continuation for one example.
 
 ---
 
@@ -2149,6 +2184,26 @@ The runner-owned logging observer submits trusted lifecycle events and applied `
 
 ---
 
+### 13.10 Cross-stage authority-reconciliation actions
+
+| Action | Input | Output | Single responsibility |
+| --- | --- | --- | --- |
+| `BuildAuthorityRequirementLedgerAction` | exact stage, closed schema/policy registries, accepted upstream authorities, and current obligation sources | complete `AuthorityRequirementLedger` candidate | Enumerate every contract-required datum/decision exactly once with structural identity, earliest owner, required slot, reconciliation policy, and downstream obligations; add no domain interpretation. |
+| `ValidateAuthorityRequirementLedgerAction` | ledger candidate and the same closed requiredness/ownership registries | requirement-ledger evidence | Prove exhaustive required-slot coverage, unique structural IDs, current input-authority bindings, registered ownership/policy, and no model/caller-defined or omitted requirement. |
+| `BuildAuthorityCandidateSetAction` | one validated requirement and the exact authorities/read-only evidence permitted by its reconciliation policy | closed candidate-set candidate | Select and type every potentially supporting current authority under the registered policy; do not rank, approximate, choose a winner, or invoke semantic interpretation. |
+| `ValidateAuthorityCandidateSetAction` | candidate set, requirement, current authority registries, and policy | candidate-set evidence | Prove total permitted-source accounting, identity/currentness, no extra or missing candidate, and exact deterministic equivalence partitions where the policy defines them. |
+| `BuildAuthoritySemanticAssessmentRequestAction` | one validated candidate set whose policy permits semantic assessment and for which deterministic comparison cannot decide support/equivalence | bounded input for the existing `semantic.review` route | Expose only the requirement, supplied candidates, citations, and closed allowed assessment labels; create no authority or resolution. |
+| `BuildAuthorityReconciliationOutcomeAction` | one requirement, validated candidate set, deterministic comparison evidence, optional validated model-assisted assessment, current exception/clarification authorities, and ownership registry | one closed `AuthorityReconciliationOutcome` candidate | Produce exactly one resolution, clarification, upstream-rework, or administrative-block variant; never default, approximate, use model memory, or repair missing authority into content. |
+| `ValidateAuthorityReconciliationOutcomeAction` | outcome candidate and all bound requirement/candidate/authority/ownership evidence | reconciliation evidence | Prove cardinality, currentness, allowed `not_applicable`/exception scope, earliest-owner routing, semantic-assessment labelling, and the absence of a success variant for a gap. |
+| `BuildAuthorityReconciliationLedgerAction` | validated requirement ledger and exactly one validated outcome per requirement | complete reconciliation-ledger projection | Join outcomes to requirements in canonical structural order without dropping, merging, or locally reclassifying an entry. |
+| `ValidateAuthorityReconciliationLedgerAction` | reconciliation projection, requirement ledger, current stage/authorities, and closed stage-gate policy | complete-success evidence or exact ordered non-success entries | Prove one-to-one exhaustive coverage; authorize stage continuation only when every entry is an allowed resolved variant, otherwise return every gap for typed routing. |
+| `RouteAuthorityReconciliationGapAction` | validated non-success entries, current workflow stage, clarification registry, descendant/approval state, implementation watermark, and ownership/rework registries | one closed clarification, upstream-rework, or administrative-block route plan | Select the earliest owner by the locked dominance/order policy, deduplicate same-subject needs, include complete descendant/runtime/evidence invalidation when required, and never route to the detecting caller merely for convenience. |
+| `BuildAuthorityGapClarificationNeedAction` | one validated clarification route plan, its selected `clarification_required` outcome, structural requirement, and compiler-locked question/answer-schema descriptor | engine-built `ClarificationNeedProposal` candidate plus `authority_reconciliation_gap` origin | Build the bounded question/why/answer schema, subject descriptor, and exact requirement/evidence origin from registered fields and current evidence; accept no model/caller wording, owner, ID, path, resolution, or fallback. |
+
+These actions own the shared contract. Domain actions only produce registered requirements, candidates, and evidence. They may not create a parallel reconciliation outcome, clarification shortcut, or stage-specific success rule.
+
+---
+
 ## 14. Orchestrator composition
 
 [View the Orchestrator composition sample](code.md#orchestrator-composition).
@@ -2161,20 +2216,21 @@ An orchestrator “contains” children through composition. It does not contain
 
 This reusable orchestrator expresses the common model interaction:
 
-1. select context;
-2. build initial guidance;
-3. build request;
-4. invoke model;
-5. decode response;
-6. validate response schema;
-7. branch on the closed route-result discriminator;
-8. for `clarification_needed`, validate the need and invoke `ClarificationLifecycleOrchestrator`; a valid need returns `NeedsUser` and consumes neither retry nor repair budget;
-9. for content, run the validators registered for the unit;
-10. if valid, return the candidate;
+1. invoke `AuthorityReconciliationOrchestrator` for the unit's complete pre-generation required-authority projection and continue only from `all_resolved`;
+2. select context;
+3. build initial guidance;
+4. build request;
+5. invoke model;
+6. decode response;
+7. validate response schema;
+8. branch on the closed route-result discriminator;
+9. for `clarification_needed`, validate the need and invoke `ClarificationLifecycleOrchestrator`; a valid need returns `NeedsUser` and consumes neither retry nor repair budget;
+10. for content, run the validators registered for the unit;
 11. if model-repairable—including unsupported content that should have used the clarification variant—invoke actions that order diagnostics and select the next diagnostic, then invoke `AtomicRepairOrchestrator`;
 12. repeat local repair within limits;
 13. run all unit validators once more;
-14. return `Ok`, `NeedsUser`, `Blocked`, or `Failed`.
+14. rebuild the unit's complete post-candidate authority-reconciliation projection and continue only from `all_resolved`;
+15. return the candidate as `Ok`, or return the typed `NeedsUser`, `Blocked`, or `Failed` gap route.
 
 The orchestrator itself does not build guidance, call the model, validate, or merge content. It only invokes the actions that do so.
 
@@ -2189,7 +2245,8 @@ For a requested stage it:
 5. invokes `CompareSpecificationIRAction` wherever the stage or recovery matrix requires the current normalized spec to equal the exact specification stored in `PlanState` (and records typed changed-record evidence when it does not);
 6. loads/validates the current clarification registry and invokes `ValidateClarificationStageGateAction` for the requested stage;
 7. invokes `ValidateWorkflowMetadataAction` for each metadata invariant, such as whether a reference view is expected;
-8. returns the typed predecessor context or stops.
+8. invokes `AuthorityReconciliationOrchestrator` over the complete requested-stage gate projection and continues only from `all_resolved`;
+9. returns the typed predecessor context or stops.
 
 An unresolved `SNN` causes plan to terminate with `UPSTREAM_SPEC_CLARIFICATION_OPEN`; an unresolved `SNN` or `PNN` causes tasks to terminate with `UPSTREAM_PLAN_CLARIFICATION_OPEN`; any unresolved `SNN`, `PNN`, or `TNN` causes implement to terminate with `UPSTREAM_TASKS_CLARIFICATION_OPEN`. These are deterministic user-input errors with nonzero command status, not model-repair attempts.
 
@@ -2262,6 +2319,14 @@ Before a recovered task checkpoint can resume, this orchestrator branches only o
 The orchestrator then invokes exactly the plan-selected atomic branch: no adapter mutation for a proven never-entered apply/command boundary; no repeated adapter mutation for a proven `already_discarded_no_parent_effect` or `already_restored_no_parent_effect` receipt; one recovered-child discard for a present unpromoted savepoint (including promotion-ready before its promote call); exact before-image restoration for an unauthorized promotion beneath `operation_apply_ready` or an evidence-incomplete promotion beneath `command_run_ready`; or receipt-only reconstruction for an exactly promoted `operation_promotion_ready`. Reconstruction reuses the already persisted operation record, promotion authorization, and pre-promotion evidence, then invokes the ordinary promotion-evidence, file-transition, journal, and evidence-registry actions. Only IDs needed by that recovery branch and its checkpoint may advance before closure. An indeterminate observation blocks without mutation.
 
 Every successful branch builds terminal recovery evidence, clears the boundary, assigns/builds/validates a complete successor checkpoint whose cleanup state is `pending_release`, and commits it through the ordinary `task_checkpoint` transaction lifecycle. The completion validator reloads that durable `pendingAdapterBoundary: none` checkpoint and exact ledger/overlay/journal/evidence authorities. Only then do the cleanup actions bind the checkpoint's same complete record set, idempotently release it, and validate released-now or already-released absence. The engine may next use the generic checkpoint-ID allocator only for the cleanup-closure checkpoint: it advances the task ledger, copies all execution authorities byte/value-equal, changes `pending_release` to `none`, commits through `task_checkpoint`, and reloads. No ordinary allocation, model call, or other adapter invocation is permitted in between. `BuildTaskExecutionRecoveryResumeGateAction` requires this durable cleanup-closure evidence and zero residual records. A crash before release reloads `pending_release` and retries; a crash after release obtains `already_released` from exact authorized absence and commits the same closed successor path, so metadata is bounded rather than accumulating. Adapter entries, child records, promotion/discard/restore receipts, creation/deletion tombstones, and exact before-images are immutable engine metadata with structural tuple IDs and remain retained through the first boundary-free checkpoint commit; no ID is random, content/path/digest-derived, or model-controlled, and the adapter cannot delete a record merely because a child was consumed or a process exited. Thus restart neither reruns an ambiguous effect nor treats logs/process exit as authority.
+
+### 14.14 `AuthorityReconciliationOrchestrator`
+
+This reusable orchestrator runs at each stage's pre-generation boundary, after every authority refresh or clarification response, after candidate repair, immediately before stage transaction preparation, and at downstream/recovery gates. It invokes the discrete ledger-build/validate, per-requirement candidate-build/validate, optional bounded semantic-assessment, outcome-build/validate, complete-ledger-build/validate, and gap-routing actions from Section 13.10. The runner owns iteration in canonical requirement order; the orchestrator neither interprets a requirement nor chooses an owner or resolution.
+
+A fully resolved ledger yields only validation evidence for the current candidate/gate. Any non-success entry prevents generation continuation or commit. For a same-stage gap, the generic need-builder action constructs the registered typed need and then enters `ClarificationLifecycleOrchestrator`; an earlier-owner gap enters the Section 24.5 invalidation/rework route; an unregistered or administratively owned gap blocks. When multiple gaps exist, the routing action preserves the complete ordered set, chooses the earliest owner through the compiler-locked dominance policy, and sends the first canonical gap to the existing single-need clarification lifecycle. No other gap is treated as resolved or omitted; after that clarification resolves, full owning-stage regeneration rebuilds the ledger before another gap can be selected. The separately specified complete reference-conflict set transition remains the only v1 batch clarification mutation because its accepted snapshot-consistency contract explicitly requires atomic set equality.
+
+The orchestrator has no domain-specific branches. A new requirement kind becomes usable only through the common registry, actions, and conformance suite; adding a caller condition to this orchestrator is an architecture violation.
 
 ---
 
@@ -2439,6 +2504,8 @@ The LLM does not assign the feature ID, IDs, headings, paths, dates, status, che
 
 For each feature-brief or specification unit, the route returns either content or a clarification need. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
+Before each route and again over the assembled specification candidate, `AuthorityReconciliationOrchestrator` builds the complete specification-owned requirement set from the reconciled reference claims, required specification fields, preservation descriptors, and conflict/open-question rules. Feature intent or reference meaning that has zero current support, multiple non-equivalent interpretations, missing required detail, unresolved conflict, or uncertain semantic support produces an `SNN`; it cannot be downgraded to an assumption, non-goal, context-only signal, generic prose, or technical-stage decision merely to complete the specification. Entries owned by later technical stages are carried as cited context/obligations without asking principles to invent business intent.
+
 ### 17.4 Specification clarification behavior
 
 A valid specification need is deduplicated by its engine-built subject tuple. If it is new, the engine allocates the next `S01` through `S99` identity and derives `<paths.specs>/<featureId>/clarify/SNN.md`; otherwise it reuses the existing ID and path. It commits the registry/form/workflow pause together in `spec_clarification_pending`. The model is idle while the engine waits.
@@ -2472,6 +2539,7 @@ The engine validates:
 - mandatory `reference-context.md` existence, complete section set, and exact binding to the current reference snapshot;
 - equality between the reference inventory and the sidecar's rendered file inventory;
 - unresolved authoritative conflicts and blocking open questions;
+- complete successful authority reconciliation for every specification-owned required field/decision, with no warning-only, assumed, approximate, or later-stage substitute;
 - workflow artifact paths and transaction completeness.
 
 The technical-leakage validator is a strong lexical/static lint, not a complete semantic proof. A separate semantic-review action decides nuanced cases and labels them model-assisted.
@@ -2524,6 +2592,8 @@ The stage gate:
 7. rejects unresolved reference-conflict records;
 8. confirms resolved environments still match the current repository;
 9. builds/validates the normalized editable-spec authorities, baseline file and repository-fact registries, configured read-only research evidence, complete principle selection, and initial `PlanIdLedger`, then commits one `PlanInputAuthorityState` and a `planning` workflow pointer before the first plan model call. An authenticated spec edit and its acknowledgement/passive/provenance revisions are members of that transaction, so a later `PNN` cannot cite transient IDs.
+
+The pre-generation boundary also rebuilds the shared authority-requirement projection for all planning-owned decision slots. A successful specification or preserved upstream obligation is not itself proof that the project can implement it: every required design, architecture, policy, repository/capability, dependency, and verification-strategy resolution must have exactly one current supported outcome before plan content may commit.
 
 Starting `plan` treats the current validated `SpecificationIR` as the user's approved planning input. The engine first stores it in the immutable `PlanInputAuthorityState`; the final `PlanState` binds that exact input authority rather than relying on an in-memory parse. A later spec edit invalidates the current input/plan descendants through direct typed comparison without a fingerprint.
 
@@ -2582,6 +2652,8 @@ The LLM generates bounded plan units:
 
 Each plan route returns `PlanUnitRouteResult`: either one content unit or one typed clarification need. When an architecture, dependency, verification, repository, or policy decision cannot be supported by the supplied current authorities, the model must request clarification; it may not choose a plausible default from memory.
 
+The shared reconciliation outcome, not a domain-specific prompt instruction, decides whether support exists. A zero match, multiple non-equivalent matches, ambiguous principle interpretation, unsupported repository/capability claim, missing required decision, or stale authority routes to `PNN` when planning owns the slot. The planner cannot silently create an authority, select a nearest/conventional option, reinterpret an upstream obligation, or record the gap as accepted technical debt. A current authenticated exception is usable only when its typed scope exactly covers the requirement.
+
 Filename variability is removed at the plan boundary. Existing files are selected only by engine `fileId`. For a new file, `plan.path-intent.generate` first returns an ID-only `PathIntentProposal`—project, kind, semantic role, engine `nameSourceId`, optional placement-anchor file ID, and requested create/copy capability—with no filename field. Actions select preset path templates, apply versioned case/name/directory transforms, run the complete path/portability/collision algorithm, assign `pathCandidateId`s, and build a finite `PathCandidateRegistry`. The normal `plan.section.generate` response maps its local `proposalKey` only to one allowed `pathCandidateId`.
 
 The hardened default sets `allowRawPathFallback: false`. A specialized preset may explicitly enable fallback only when it cannot enumerate a name; in that branch the model's complete `ProjectPathCandidate` is create-only and passes the identical normalization/kind/root/name/extension/placement/portability chain plus atomic field repair before the engine adds it to the candidate registry. Thus a raw LLM filename is never canonical merely because it is schema-valid.
@@ -2634,6 +2706,7 @@ Validators enforce:
 - every `AC-*`, `FR-*`, and `EC-*` has exactly one normalized coverage entry;
 - business rules, exact copy, scope guards, visible states, accessibility/responsive obligations, and preserved tokens in the internal obligation ledger have design/verification coverage or an explicit blocking gap;
 - every required preserved token is carried by obligation ID; visual token kinds additionally have a manual visual-verification expectation;
+- every planning-owned required decision has one successful shared authority-reconciliation outcome; every missing, ambiguous, conflicting, multiple, stale, or unsupported outcome has become a `PNN`, upstream rework, or administrative block rather than plan content;
 - all planning artifacts remain under the feature directory;
 - no repository implementation files or `tasks.md` are staged or changed;
 - progress status is engine-derived: planning phases complete only after their validators pass, and implementation phases remain incomplete;
@@ -2690,6 +2763,8 @@ Actions build a complete `ObligationLedger` from:
 
 Obligations without public spec IDs receive internal stable IDs so coverage can still be checked mechanically.
 
+The task stage also derives task-owned authority requirements for executable decomposition, dependency, authorized work surface, command/scenario selection, and evidence binding. The ledger is complete only when every upstream obligation and every task-contract-required field participates; task generation cannot omit a difficult obligation or invent a local execution decision to make the graph close.
+
 ### 19.2 LLM work
 
 The LLM receives one related obligation cluster and returns `TaskClusterRouteResult`: task proposals or one typed clarification need. It decides:
@@ -2703,6 +2778,8 @@ The LLM receives one related obligation cluster and returns `TaskClusterRouteRes
 - descriptive wording.
 
 It must select files by existing `fileId` where the plan already identified them. If a new path is genuinely required but absent from the plan, the response is invalid and planning must be repaired/re-run; tasks cannot silently expand architecture.
+
+More generally, a gap whose ownership registry names `plan` or `spec` takes explicit upstream rework and complete descendant invalidation; it never becomes a `TNN` merely because tasks discovered it. A `TNN` is valid only for a task-owned required slot that cannot be reconciled from the current approved authorities.
 
 The LLM returns only `TaskDefinitionProposal`. It does not assign `TNNN`, checkbox text, `[P]`, final ordering, runtime status, canonical evidence, resource locks, or arbitrary commands. A proposal carries `obligationIds` from the task-local `ObligationLedger` allowlist—never a generic `sourceId` that could collide with a reference-source namespace. It may return `CommandSelection {commandId, typedArguments}` only; it cannot set `CommandInvocation.origin`. After validation, actions assign task IDs, resolve internal-key dependencies and any red-to-green target to canonical task IDs, construct model-optional and engine-required command invocations, derive mandatory evidence predicates/resources, and finally build canonical `TaskDefinition` records.
 
@@ -2764,6 +2841,8 @@ Global validators then:
 15. render `[P]` only for engine-approved parallel tasks;
 16. render all tasks initially as `- [ ]`.
 
+The same validation pass requires one successful shared reconciliation outcome for every task-owned requirement. Coverage that merely names an obligation does not cure missing authority, and a task description cannot serve as a resolution.
+
 A task that says only “review,” “analyze,” or “lock requirements” cannot pass unless its typed kind names a concrete configured verification command/scenario. Semantic task minimality can receive model-assisted review, but structural executability is deterministic.
 
 ### 19.5 Parallelism policy
@@ -2816,6 +2895,8 @@ The stage gate requires workflow state `tasked`, current task definition/runtime
 
 If current repository facts make a task path invalid—for example a project was removed—the stage blocks. It does not ask the LLM to improvise a different architecture.
 
+Before selecting work, implementation rebuilds the complete authority-reconciliation projection for every requirement consumed by the approved task and its evidence predicates. Implementation has no clarification ownership of its own and cannot create a new requirement, policy, exception, path, dependency, command, task, or design choice. A non-success outcome routes to `specify`, `plan`, or `tasks` according to the compiler-locked earliest owner and Section 24.5; an unknown owner blocks administratively. Only a code defect inside already resolved authority and the current operation authorization may enter code repair.
+
 ### 20.2 Task selection
 
 `CalculateRunnableSetAction` calculates ready tasks, `SelectRunnableTaskAction` chooses the lowest phase/order candidate, and `ClaimTaskLeaseAction` atomically changes that task to `executing` while reserving its declared locks. If the compare-and-swap claim fails, selection repeats from fresh state. A task execution journal distinguishes:
@@ -2851,6 +2932,8 @@ Before this packet is built, the engine canonically orders eligible repository/r
 ### 20.4 Change planning and filename validation
 
 For a multi-file task, a model call may propose an ordered list of operation intents. Every destination must be a plan-approved `fileId`; implementation cannot mint a path or `fileId`. Planning compiles each record's allowed runtime capabilities from its declared intent, file-kind policy, explicit whole-file/copy policy, and approval scope. A missing destination or missing capability is an upstream plan/task defect. Filename guidance and atomic filename repair occur in planning, where a `ProjectPathCandidate` exists.
+
+This rule is universal rather than path-specific: whenever execution would require any authority or decision absent from the approved task context, the operation plan is rejected and the shared gap router returns to the owning stage. Generating a locally convenient value, dependency, structure, validation method, exception, or behavior is prohibited even when it would make a command or test pass.
 
 Code is generated one file operation at a time. A response cannot include a raw path, engine content handle, trusted byte length, or command. Create/replace responses carry one schema-bounded UTF-8 string and update carries one allowed patch-format ID plus UTF-8 patch string. Actions compute the actual serialized/body lengths, capture valid bytes in the run-local immutable candidate store, and only then construct the canonical handle-bearing operation. The closed canonical operation set is:
 
@@ -3000,6 +3083,7 @@ This catalogue is normative for the first engine version. A project may add vali
 | Path containment       | Canonical path and symlink resolution                                                                    | Escape/absolute/forbidden path       | Usually not model-repairable; path field may be repaired only when otherwise safe |
 | Model protocol         | Request identity plus closed response schema                                                             | Malformed/wrong route response       | Model retry/repair                                                                |
 | Placeholder            | Template/model sentinel scan                                                                             | Unresolved placeholder remains       | Model atomic                                                                      |
+| Authority reconciliation | Closed required-slot ledger, exact candidate/currentness/cardinality checks, registered semantic assessment, and ownership routing | Any required entry is missing, ambiguous, conflicting, multiply non-equivalent, stale, unsupported, or unregistered | Earliest owning `SNN`/`PNN`/`TNN`, explicit upstream rework, or administrative block; never local/model repair |
 | Transaction boundary   | Staged-set path and membership checks                                                                    | Missing/extra/outside write          | Engine/workflow                                                                   |
 
 ### 21.2 Specify validators
@@ -3123,6 +3207,8 @@ Every diagnostic declares one class:
 - `not_repairable`: retrying a model cannot make the operation safe.
 
 Configuration and environment errors never consume LLM repair attempts.
+
+A missing or unreconciled authority is not a malformed candidate value and therefore is never repaired by generating a convenient replacement. The only model-assisted transition permitted for unsupported asserted content is the existing one-shot whole-route-result replacement to `clarification_needed`. If a later stage detects the gap, repair stops and the shared reconciliation router selects upstream rework. Local repair resumes only after the owning stage has regenerated, passed reconciliation, and renewed every affected approval.
 
 ### 22.3 Repair authorization
 
@@ -3301,6 +3387,7 @@ State alone never authorizes a stage.
 - When canonical plan state exists, the engine compares current normalized `SpecificationIR` directly with the stored plan-input `SpecificationIR`. A difference invalidates plan/task canonical state and approvals and returns the workflow to `specified`.
 - Canonical reference, the separately persisted `PlanInputAuthorityState`, its bound `PlanState`, task-definition, and task-runtime IR are loaded from engine state and revalidated directly.
 - Current repository facts are rebuilt. Each gate-sensitive value is directly compared through `CompareRepositoryFactValueAction`; during implementation, only a `transition_requires_task_binding` fact with a matching approved `FactTransitionBinding`, transition rule, and committed named-task journal may differ from the plan input. An unexplained difference triggers the relevant plan/task reconciliation path.
+- The complete authority-requirement and reconciliation projections are rebuilt from current canonical inputs. Any non-success entry blocks the requested stage and routes by its compiler-locked earliest owner; a downstream gate cannot treat predecessor success, an old approval, or existing code as a substitute resolution.
 - Read-only views are compared byte-for-byte with deterministic rendering from their canonical IR. A changed view is regenerated or blocks; it never changes execution state.
 - The next stage requires an approval record whose `planStateId` or `taskDefinitionStateId` equals the current immutable definition state. Runtime-only task progress does not affect approval.
 
@@ -3319,13 +3406,16 @@ On restart, recovery actions:
 7. rebuild current repository facts and directly compare gate-sensitive typed values with the `PlanInputAuthorityState`, accepting a planned transition only when an approved task-state binding/rule and named task transaction prove it;
 8. reparse current editable `spec.md`, rejoin valid persisted provenance, and compare it with the input authority's normalized specification;
 9. validate/regenerate read-only views, validate current plan/task approval targets, and reconcile task leases from committed transaction/runtime state;
-10. release the feature transaction lock after recovery/validation, reacquiring it through the normal storage ABI for the next commit, then resume from the first pending/invalid node.
+10. rebuild the complete authority-requirement/reconciliation projection for the resumed gate and route any gap to its earliest owner before any ordinary model, repair, task, overlay, or command work;
+11. release the feature transaction lock after recovery/validation, reacquiring it through the normal storage ABI for the next commit, then resume from the first pending/invalid node.
 
 Recovery never infers completion solely from generated files or a model summary.
 
 ### 24.5 Upstream rework and invalidation
 
 Backward movement is explicit and never inferred from a failed model call:
+
+The table lists common authority changes, but routing is not limited to those examples. Any validated `upstream_rework_required` reconciliation outcome uses the same owner-derived invalidation machinery: `spec` invalidates specification descendants, `plan` invalidates plan/task descendants, and `tasks` invalidates task-definition descendants. When implementation has committed work, the matching `implementation_reconciliation_spec | plan | tasks` state and runtime/evidence mutation are mandatory before backward movement. The detecting component never patches around the gap or chooses a shallower owner.
 
 | Changed authority                                                                                                   | Current state                                                                                    | Implementation watermark | Transactional next state                                                              | Invalidated state                                                                                                  | Mandatory forward path                                                                                                                      |
 | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -3520,6 +3610,7 @@ Useful metrics:
 - task throughput and blocked dependency count;
 - transaction rollback count;
 - unsupported reference formats.
+- authority-reconciliation outcomes and gap reasons by earliest owner and requirement kind, including upstream-rework and administrative-block counts.
 
 The metrics distinguish deterministic rejection from semantic-review rejection. This is necessary to see whether failures come from model capability, poor initial guidance, preset errors, or repository problems.
 
@@ -3552,6 +3643,7 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
 - citation bounds and verbatim mismatch;
 - requirement/task ID assignment and renderer escaping;
 - coverage for requirements, guards, copy, states, and preserved tokens, including visual-token checks where applicable;
+- shared authority reconciliation for required slots across unrelated domains: zero candidates, one current candidate, directly equivalent duplicates, multiple non-equivalent candidates, ambiguous semantic support, stale authority, scoped/unscoped exception, allowed/disallowed `not_applicable`, unknown ownership, and downstream discovery of an upstream-owned gap; every domain must produce the same closed outcomes and routing semantics;
 - task unknown dependency, cycle, phase violation, read/write conflict, and exclusive command;
 - patch scope, patch failure, unexpected file changes, and evidence predicates;
 - create/update/replace/copy/delete expected-state rules and copy-source authorization;
@@ -3583,6 +3675,8 @@ Generate large path/task/requirement spaces to prove invariants:
 - editable-spec render then parse preserves normalized specification IR;
 - every generated view equals deterministic rendering of canonical IR;
 - atomic repair never changes immutable sibling pointers;
+- every generated required-authority ledger is exhaustively partitioned one-to-one into closed outcomes, and no non-success outcome can satisfy a stage gate;
+- adding arbitrary registered requirement kinds cannot change reconciliation cardinality, earliest-owner routing, or the prohibition on default/approximate/local continuation;
 - stable inputs plus the same accepted model payload render identical bytes.
 
 ### 28.3 Orchestrator tests
@@ -3593,6 +3687,7 @@ Use spy child nodes; no real filesystem/model ports are available to the orchest
 - invalid reference preflight prevents artifact creation;
 - stage order is always specify, plan, tasks, implement;
 - predecessor revalidation occurs at every boundary;
+- authority reconciliation runs before generation and commit, routes every gap to the compiler-locked earliest owner, and makes all model/repair/write children unreachable on clarification, upstream-rework, or administrative-block outcomes;
 - open clarification prefix gates return nonzero `ERROR` before downstream model/write children (`S` blocks plan, `S/P` blocks tasks, and `S/P/T` blocks implement);
 - clarification reruns reuse exact subject identities, reconsider current allowed authorities/controlled answers, commit resolution before regeneration, and invoke every owning-stage generation child again rather than retaining partial candidates;
 - one invalid filename creates one repair request for one pointer;
@@ -3624,6 +3719,7 @@ Stub routes deliberately return:
 - a hallucinated command;
 - an unknown requirement ID;
 - a missing coverage item;
+- unsupported content offered instead of `clarification_needed`, a plausible default for a zero-candidate requirement, a closest-match selection, a current-stage answer for an upstream-owned gap, and a caller-specific exception for one fixture;
 - a task dependency cycle;
 - two parallel tasks writing one manifest;
 - a patch touching two files;
@@ -3633,7 +3729,7 @@ Stub routes deliberately return:
 - a claim with a fabricated source citation;
 - repeated identical invalid repairs.
 
-Each test asserts that only the corresponding atomic repair unit is exposed and that invalid output never reaches a write/command action.
+Each test asserts that only a genuinely malformed authorized candidate reaches atomic repair; missing/unreconciled authority reaches clarification/rework/block instead, and invalid output never reaches a write/command action.
 
 ### 28.5 Preset conformance fixtures
 
@@ -3682,6 +3778,7 @@ In temporary repositories with a fake model gateway:
 14. relocate configured `specs`, `references`, archive, and `sddtoolkit` roots, prove principles/presets load only from their derived runtime children, and prove identically named `new_engine/` samples are ignored;
 15. tamper with `plan.md` and `tasks.md`, verify rejection/regeneration without import, then edit `spec.md` through its authenticated path and prove ordinary downstream invalidation/review;
 16. crash/restart at specify, clarification, plan, review, tasks, task-checkpoint, adapter-effect, final-overlay, and final-stage boundaries and prove the common transaction/lock/ledger recovery gates converge before new model, allocation, write, or command work.
+17. exercise missing, ambiguous, conflicting, multiply matched, stale, unsupported, explicitly excepted, and explicitly not-applicable required authority across unrelated requirement kinds; prove identical shared reconciliation semantics, earliest-owner `S/P/T` routing, complete downstream invalidation, and that no plausible/local substitute reaches plan, tasks, implementation, or repair.
 
 ---
 
@@ -3701,6 +3798,7 @@ Domain modules have no infrastructure dependencies. The composition root is the 
 
 - Define config/preset/model-response schemas.
 - Define IR, diagnostic, evidence, action, orchestrator, and state contracts.
+- Implement the compiler-locked requiredness/ownership/reconciliation registries, structural authority-requirement ledger, closed reconciliation outcomes, complete-ledger validator, and generic earliest-owner gap router before enabling any stage model route.
 - Implement nearest-root discovery for the exact project-root `.sddtoolkit.json`; derive the specs, references, archive, principles, toolchain-preset, engine-state, clarification, and feature-log roots without a `new_engine/` or packaged-example fallback.
 - Implement config/preset compilation, free-text principle inventory/capture/category-hint indexing, and path validation.
 - Implement editable-spec render/parse round trips, generated-view equality, and the project/feature WAL, transaction-ID ledgers, failpoint recovery, and durable artifact/state transactions used by every later increment.
@@ -3713,6 +3811,7 @@ Domain modules have no infrastructure dependencies. The composition root is the 
 - Add the initial reader registry and citation system.
 - Implement structured reference/spec model routes.
 - Add specification/reference-context validators, no-invention routing, atomic repair, rendering, and commit.
+- Integrate the shared reconciliation boundary for every specification-owned field, reference-meaning decision, and preserved obligation; specification-local rules may contribute requirements/candidates only.
 - Implement the complete `S01..S99` clarification lifecycle, exact subject deduplication, controlled forms, authority/user resolution, rerun regeneration, and the blocking plan gate.
 
 ### Increment 3: Plan
@@ -3720,17 +3819,20 @@ Domain modules have no infrastructure dependencies. The composition root is the 
 - Implement repository/manifest discovery and environment facts.
 - Implement plan IR, artifact applicability, and bounded applicable-principle selection over the bootstrap-captured free-text registry.
 - Add path/coverage/token/quickstart validators.
+- Integrate the shared reconciliation boundary for every planning-owned architecture, policy, repository/capability, dependency, design, and verification-strategy decision; no plan-domain fallback may bypass it.
 - Implement `P01..P99` clarification pause/resume/deduplication, full plan regeneration, generated-view rendering, explicit plan review, and the blocking tasks gate.
 
 ### Increment 4: Tasks
 
 - Implement obligation ledger and typed task proposal routes.
 - Build DAG, path/command validation, coverage, ordering, and parallel calculation.
+- Integrate the shared reconciliation boundary for task-owned decomposition, authorization, dependency, command/scenario, and evidence slots, with upstream gaps routed back rather than absorbed.
 - Implement `T01..T99` clarification pause/resume/deduplication, full graph regeneration, deterministic read-only `tasks.md`, explicit task review, and the blocking implement gate.
 
 ### Increment 5: Implement
 
 - Implement operation savepoints, create/update/replace/copy operations, configured command runner, AST/import checks, evidence, sealed task commit, and recovery.
+- Rebuild reconciliation at implementation entry and before task/final commits; route every non-code authority gap to its earliest upstream owner and permit repair only inside fully resolved approved authority.
 - Implement task-adapter boundary records, evidence-ledger chaining, feature-execution process leases/locks, liveness-classified disposable final-validation overlays, typed final-command child savepoints, and all associated crash/cleanup recovery before enabling real project writes.
 - Start with sequential task execution; enable validated concurrency only after overlay/lock tests pass.
 
@@ -3784,6 +3886,11 @@ The new engine is ready for production evaluation when all of the following are 
 33. Generated views exactly match canonical rendering; tampering is detected and regenerated rather than imported.
 34. Prompt/response body logging cannot be enabled without the required direction/class opt-ins, redaction, truncation, retention, and sink protections.
 35. End-to-end fake-model tests cover valid flow, exact CLI/config roots, principles/presets, S/P/T clarification gates and reruns, approvals, generated-view tampering, mandatory event logging/recovery, malformed output, atomic repair, retry exhaustion, copy/replace, compiler/test repair, upstream rework, transaction/adapter/overlay failpoints, and final evidence.
+36. One shared, domain-neutral authority-reconciliation contract enumerates every schema/obligation/policy/accepted-authority-required datum or decision, assigns structural identity and a compiler-locked earliest owner, and produces exactly one validated closed outcome per entry before generation and commit.
+37. Zero support, multiple non-equivalent support, ambiguity, conflict, staleness, unsupported authority, and unregistered ownership can never satisfy a stage gate or enter ordinary atomic repair; they create an owner-correct clarification, explicit upstream rework, or administrative block with no default, approximation, nearest match, conventional choice, warning-only continuation, or model-memory substitute.
+38. Specify owns feature-intent/reference-meaning gaps, plan owns design/architecture/policy/repository/capability/verification-strategy gaps, tasks owns executable-decomposition/authorization/dependency/evidence-binding gaps, and implementation owns none of those decisions; discovering a gap downstream cannot change its owner.
+39. Every authority refresh, clarification resolution, repair, recovery, approval gate, and pre-commit boundary rebuilds and validates the complete reconciliation projection from current canonical authority; upstream changes invalidate all affected descendants, approvals, runtime, and evidence through the ordinary Section 24.5 route.
+40. Conformance tests apply the same reconciliation and routing assertions to multiple unrelated requirement kinds and reject caller-, fixture-, format-, framework-, token-, filename-, or example-specific continuation branches; a new kind is accepted only with a registered schema, ownership rule, reconciliation policy, and positive/negative tests.
 
 ---
 
@@ -3816,6 +3923,7 @@ This matrix assigns every material responsibility in the existing four prompts t
 | Load semantic project guidance           | Principle inventory/capture/filename-classification/chunk/registry actions; `SelectApplicablePrinciplesAction` and `BuildPrincipleGuidanceAction` only at technical stages | None for selection; the applicable stage model interprets exact cited free text                                            | Preserve all raw spans; filenames provide category hints only; load no principles into specification generation; select every configured applicable chunk without summarizing, ranking, or compiling prose into mechanical rules.                                                                                |
 | Create/recover per-feature logging       | `FeatureLoggingOrchestrator`, fixed-path binding actions, inspect/create-or-recover actions, and append/rotation/retention actions                                         | None                                                                                                                       | After reference preflight and atomic feature activation, create or recover `<featureDir>/logs/`; use the canonical level from root config and runner-generated, schema-valid, redacted records. Logging failure follows the fixed severity/failure policy and cannot recursively log itself.                     |
 | Authenticate user-controlled transitions | Runner-owned single-use authentication lease, authentication observation validation, evidence allocation/build/validation, and actor-registry transaction actions          | None                                                                                                                       | Persist only public actor evidence IDs and bind answers, acknowledgements, reviews, decisions, and manual evidence to the exact current revisions; credentials never enter an envelope, log, model request, or state file.                                                                                       |
+| Reconcile every required authority        | `AuthorityReconciliationOrchestrator` plus the compiler-locked requiredness, ownership, and reconciliation-policy registries                         | Only bounded classification of supplied candidates when a registered policy cannot decide semantics mechanically           | Build one exhaustive structural ledger and one closed outcome per required entry; continue only when all resolve, otherwise route the complete gap set to earliest-owner clarification, upstream rework, or administrative block. No domain/caller fallback exists.                                              |
 | Handle missing knowledge                 | Stage route result validation plus `ClarificationLifecycleOrchestrator`                                                                                                    | The stage route may return exactly `clarification_needed`; `clarification.resolve` may interpret current allowed authority | A valid need is a successful pause, is deduplicated by an engine subject key, receives the next engine ID/form, persists no partial stage IR, and consumes no retry/repair attempt. Unsupported asserted content is repaired atomically by replacing only that route-result unit with the clarification variant. |
 | Resume after clarification               | Clarification response/authority-resolution transactions and the owning stage orchestrator                                                                                 | All generation routes of the owning stage run again                                                                        | Commit the authenticated response or current-authority resolution first; then discard every pre-clarification unit candidate/checkpoint and regenerate the complete specification, plan, or task definition before whole-stage validation.                                                                       |
 | Enforce ordered gates                    | `StageGateOrchestrator` and clarification-prefix validation                                                                                                                | None                                                                                                                       | Plan rejects open `S`; tasks rejects open `S/P`; implement rejects open `S/P/T`, names exact IDs/form paths, emits an `ERROR`, and exits nonzero.                                                                                                                                                                |
@@ -3903,6 +4011,7 @@ This matrix assigns every material responsibility in the existing four prompts t
 The current workflow has the correct high-level shape but gives the model too much operational authority. The new engine should preserve the semantic progression and artifact intent while reversing that authority:
 
 - The engine supplies facts and constraints before generation.
+- The engine proves every required authority is exactly reconciled or returns to its earliest owner; no stage repairs an authority gap locally.
 - The LLM returns one small typed semantic or code unit.
 - The engine validates every mechanically decidable property.
 - The engine gives precise preset-derived guidance for exactly one failed unit.
