@@ -4,7 +4,7 @@
 
 ## Decision
 
-The bootstrap uses npm with an `npm` lockfile, TypeScript 7.0.2, Node 24.x (built and tested with 24.2.0), Node16 module resolution with CommonJS output, Node's `--experimental-sea-config` preparation flow, and `postject` 1.0.0-alpha.6 injection. The generated executable is named `dist/sdde` (`dist/sdde.exe` on Windows) and targets only the operating system and CPU architecture of the Node executable used to build it.
+The bootstrap uses npm with an `npm` lockfile, TypeScript 6.0.3, Node 24.x (built and tested with 24.2.0), Node16 module resolution with CommonJS output, Node's `--experimental-sea-config` preparation flow, and `postject` 1.0.0-alpha.6 injection. The generated executable is named `dist/sdde` (`dist/sdde.exe` on Windows) and targets only the operating system and CPU architecture of the Node executable used to build it.
 
 The SEA entry point is a single compiled CommonJS file. The application has no runtime npm dependencies, embedded assets, runtime configuration, dynamic loading, or native dependencies. The package build script invokes child processes with `shell: false`; the application does not execute commands.
 

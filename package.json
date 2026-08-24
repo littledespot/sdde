@@ -10,13 +10,22 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "build:sea": "npm run build && node dist/compiled/scripts/build-sea.js",
+    "test:unit": "node --test dist/compiled/test/main.test.js dist/compiled/test/sonar-environment.test.js",
     "test:sea": "node --test dist/compiled/test/sea-smoke.js",
-    "test": "npm run build:sea && npm run test:sea",
-    "verify": "npm run build && npm test"
+    "test": "npm run build:sea && npm run test:unit && npm run test:sea",
+    "test:coverage": "npm run build:sea && c8 --config .c8rc.json node --test dist/compiled/test/main.test.js dist/compiled/test/sonar-environment.test.js dist/compiled/test/sea-smoke.js",
+    "sonar": "npm run build && node --env-file-if-exists=.env dist/compiled/scripts/run-sonar.js",
+    "verify:changed": "npm run test",
+    "verify": "npm run build && npm test",
+    "precommit": "npm run verify:changed",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@sonar/scan": "5.0.0",
     "@types/node": "^24.2.1",
+    "c8": "12.0.0",
+    "husky": "9.1.7",
     "postject": "1.0.0-alpha.6",
-    "typescript": "7.0.2"
+    "typescript": "6.0.3"
   }
 }
