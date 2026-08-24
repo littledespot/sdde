@@ -11,6 +11,26 @@ The engine treats every LLM response as untrusted candidate data. Deterministic
 code, closed schemas, validators, transactions, executable evidence, and
 explicit human approvals own workflow authority.
 
+## Repository role
+
+This repository is the development workspace for the SDDE engine. Work in this
+folder builds, tests, packages, or documents the engine itself.
+
+The completed engine will run code-producing and code-governance workflows
+against target projects, including **specify, plan, tasks, implement, drift,
+and audit**.
+
+Keep these two contexts distinct:
+
+- **Engine development** changes SDDE in this repository.
+- **Engine execution** runs SDDE against an explicitly identified target
+  project to produce, inspect, or change that project's code and artifacts.
+
+Do not confuse building the SDDE engine with using SDDE to produce project
+code. A request to build, fix, test, or document the engine does not authorize
+running it against a target project. A request to use the engine must identify
+the target project and workflow explicitly.
+
 ## Current project state
 
 - **design/design.md** is the governing implementation baseline, but it is
