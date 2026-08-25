@@ -1,7 +1,7 @@
 flowchart TD
     START[Owning orchestrator requests one durable project or feature transaction<br/>with a closed DurableTransactionKind and transaction-specific candidate inputs] --> OWNER{Storage owner}
 
-    OWNER -- Project preownership feature_activation only --> PCOL[ResolveProjectTransactionCollectionAction<br/>fixed paths.sddtoolkit/transactions capability]
+    OWNER -- Project preownership feature_activation only --> PCOL[ResolveProjectTransactionCollectionAction<br/>fixed reserved paths.workflows/transactions capability]
     PCOL --> PHAS{Caller already carries the exact validated project lock<br/>from pre-selector recovery and ownership resolution}
     PHAS -- No --> PLOCK[AcquireProjectTransactionCollectionLockAction<br/>one opaque runner-held capability]
     PHAS -- Yes; reuse the same capability without reacquiring --> PSCAN

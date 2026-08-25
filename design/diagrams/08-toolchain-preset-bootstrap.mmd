@@ -1,19 +1,25 @@
 flowchart TD
     START[Invocation working directory] --> RUNNER[PipelineRunner executes BootstrapOrchestrator's<br/>bound actions/orchestrators through ChildNodeBinding]
-    RUNNER --> LOCATE[LocateExactEngineConfigAction<br/>nearest exact .sddtoolkit.json and canonical project root]
+    RUNNER --> LOCATE[LocateExactEngineConfigAction<br/>nearest ancestor's exact root .sddtoolkit.json;<br/>its containing directory is the canonical project root]
     LOCATE --> READ[ReadEngineConfigAction]
     READ --> PARSECFG[ParseEngineConfigAction]
     PARSECFG --> SCHEMACFG[ValidateEngineConfigSchemaAction<br/>closed config; no default basename or fallback root]
     LOCATE --> HOST[DetectWorkspaceFilesystemPolicyAction]
-    SCHEMACFG --> BASES[For each required paths key exactly once:<br/>specs, references, specsArchive and sddtoolkit]
+    SCHEMACFG --> BASES[For each required paths key exactly once:<br/>specs, references, specsArchive, workflows, toolchainPreset,<br/>principles and templates]
     HOST --> BASES
     BASES --> RESOLVEBASE[ResolveConfiguredBaseRootAction<br/>join one configured relative base to the exact project root]
     RESOLVEBASE --> VALIDBASE[ValidateConfiguredBaseRootAction<br/>containment, normalization, access and portability capability]
     VALIDBASE --> ROOTID[BuildBootstrapRootRegistryIdAction<br/>self-validating canonical project-root and contract-version tuple;<br/>consume no state ledger and inspect no content]
     ROOTID --> BUILDROOTS[BuildBootstrapRootRegistryAction<br/>identity, exact config/project descriptors plus complete configured-root capabilities]
-    BUILDROOTS --> VALIDROOTS{ValidateBootstrapRootRegistryAction<br/>all four keys exactly once; no escape, alias, duplicate or illegal overlap}
+    BUILDROOTS --> VALIDROOTS{ValidateBootstrapRootRegistryAction<br/>all seven directory roots exactly once; no escape, alias, duplicate or illegal overlap;<br/>only specsArchive may nest beneath specs}
     VALIDROOTS -- Invalid --> FAIL[Bootstrap fails with typed diagnostic<br/>no model call and no partial registry or compiled policy]
-    VALIDROOTS -- Valid --> PTXPATH[ResolveProjectTransactionCollectionAction<br/>fixed paths.sddtoolkit/transactions collection for preownership recovery and activation]
+    VALIDROOTS -- Valid --> WLAYOUT[BuildWorkflowAuthorityLayoutAction then<br/>ValidateWorkflowAuthorityLayoutAction;<br/>include features/ and transactions/ root entries for ownership accounting<br/>but exclude every descendant in both reserved subtrees]
+    WLAYOUT --> WINVENTORY[Enumerate and normalize every in-scope entry;<br/>validate the complete portability collision set, sort by Unicode-scalar path,<br/>then bind contiguous one-based inventory ordinals]
+    WINVENTORY --> WCLASSIFY[Classify every ordinal-bound entry as directory, exact reserved child,<br/>definition candidate or blocking; capture/parse/schema-validate each definition candidate<br/>without accepting a per-definition or source identity]
+    WCLASSIFY --> WACCOUNT[Build exactly one terminal entry account then<br/>BuildWorkflowAuthorityInventoryAction and<br/>ValidateWorkflowAuthorityInventoryAction;<br/>no blocking/unaccounted entry or reserved-child definition is legal]
+    WACCOUNT --> WVALID{BuildWorkflowDefinitionRegistryAction then<br/>ValidateWorkflowDefinitionRegistryAction;<br/>exactly one definition per specify, plan, tasks and implement role;<br/>unique captured source ordinals; compiler-locked order, boundaries,<br/>validation and capabilities cannot be weakened}
+    WVALID -- Invalid --> FAIL
+    WVALID -- Valid --> PTXPATH[ResolveProjectTransactionCollectionAction<br/>fixed reserved paths.workflows/transactions collection<br/>for preownership recovery and activation]
     PTXPATH --> PTXLOCK[AcquireProjectTransactionCollectionLockAction<br/>runner retains the opaque capability while project TransactionIdLedger recovery<br/>and FeatureIdentityRegistry ownership resolution are performed]
     PTXLOCK --> PTXSCAN[ScanTransactionJournalInventoryAction<br/>bounded raw journal/header/marker and transaction-ledger inventory<br/>before any FeatureIdentityRegistry read]
     PTXSCAN --> TLPATH[ResolveTransactionIdLedgerPathAction then ReadTransactionIdLedgerAction]
@@ -30,10 +36,11 @@ flowchart TD
     PTXRECOVER --> TLRECHECK{Revalidate transaction ledger/inventory and recovery plan}
     TLRECHECK -- More --> TLDISP
     TLRECHECK -- Stable --> PREFLIGHT
-    TLDISP -- Complete clean plan --> PREFLIGHT[Return validated pre-selector roots/config/portability,<br/>the recovered project TransactionIdLedger and held project-transaction capability;<br/>preset/principle inventory waits for the exact feature target]
+    TLDISP -- Complete clean plan --> PREFLIGHT[Return validated pre-selector roots/config/portability,<br/>validated workflow definitions, the recovered project TransactionIdLedger<br/>and held project-transaction capability;<br/>preset/project-toolchain-layer/principle inventory waits for the exact feature target]
     PREFLIGHT -. after exact CLI selector, validated FeatureStateInventory<br/>and exact feature-target resolution; no new-feature artifact registry is required .-> TARGETCTX{Post-selector exact feature target}
-    TARGETCTX --> TROOT[DeriveToolchainPresetsRootAction<br/>sole runtime root &lt;paths.sddtoolkit&gt;/toolchainPresets/]
-    TARGETCTX --> PROOT[DerivePrinciplesRootAction<br/>sole runtime child paths.sddtoolkit/principles]
+    TARGETCTX --> TROOT[ResolveConfiguredToolchainPresetRootAction<br/>sole runtime root paths.toolchainPreset]
+    TARGETCTX --> PROOT[ResolveConfiguredPrinciplesRootAction<br/>sole runtime root paths.principles]
+    VALIDROOTS -. validate the directory capability only;<br/>normal bootstrap never inventories, reads or copies template content .-> TEMPLATEINERT[paths.templates/*.template.md<br/>inert throughout v1; reserved for a future sdd init boundary]
     TARGETCTX -- New target --> NOPRIOR[Receive the validated initial in-memory feature StateIdLedger from diagram 05;<br/>use absent optional prior specialized registries and ledgers;<br/>all bootstrap-local namespaces begin at ordinal one and generic authority-state IDs<br/>remain unallocated until post-preactivation activation; retain the project lock]
     TARGETCTX -- Existing exact owner --> EHEADER[Require the exact owner plus only the validated WorkflowArtifactRegistry header<br/>and StageTransactionCollection recovery binding from FeatureStateInventory;<br/>trust no feature authority or specialized ledger yet]
     EHEADER --> EPRELEASE[ReleaseProjectTransactionCollectionLockAction<br/>immediately after ownership and feature recovery-path resolution]
@@ -53,33 +60,35 @@ flowchart TD
     NOPRIOR --> TPRIOR
     NOPRIOR --> PPRIOR
 
-    PROOT --> PRINCIPLES[PipelineRunner continues BootstrapOrchestrator<br/>with its free-text principle-ingestion actions]
+    PROOT --> LAYERREAD[Resolve and bounded-capture the exact root child toolchain.yaml;<br/>it is a typed project principle, never free-text or model authority]
+    LAYERREAD --> LAYERPARSE[ParseProjectToolchainLayerAction then<br/>ValidateProjectToolchainLayerSchemaAction;<br/>closed inheritance and project-layer data only]
+    PROOT --> PRINCIPLES[PipelineRunner continues BootstrapOrchestrator<br/>with free-text Markdown principle-ingestion actions;<br/>the exact toolchain.yaml child is excluded]
     PRINCIPLES --> PJOIN[Join the validated root capability with the optional<br/>validated prior registry and PrincipleIdLedger]
     PPRIOR --> PJOIN
     PJOIN --> PLEDGER[BuildPrincipleIdLedgerAction<br/>retain prior ordinals and tombstones or initialize every namespace]
     PLEDGER --> PLEDGER0{ValidatePrincipleIdLedgerAction<br/>current ledger ownership and prior join valid}
     PLEDGER0 -- Invalid --> FAIL
-    PLEDGER0 -- Valid --> PENUM[EnumeratePrincipleSourcesAction then validate every path,<br/>complete collision set and stable Unicode-scalar ordering]
+    PLEDGER0 -- Valid --> PENUM[EnumeratePrincipleSourcesAction accounts for every directory, regular file, link and special node;<br/>ClassifyPrinciplesRootEntryAction separates exact toolchain.yaml, normalized Markdown candidates,<br/>directories and blocking entries; validate collisions and sort the complete inventory]
     PENUM --> PENTRYID[AssignPrincipleInventoryEntryIdAction then<br/>BuildPrincipleInventoryEntryAction for every ordered node;<br/>each assignment consumes the exact current ledger and returns its successor]
-    PENTRYID --> PSESSION[BuildPrincipleCaptureBudgetSessionAction<br/>run-local entry, source-byte, time, memory and chunk ceilings;<br/>the provisional session is never persisted]
-    PSESSION --> PCAPTURE[ReservePrincipleSourceBytesAction, CapturePrincipleSourceAction<br/>and CommitPrincipleSourceDebitAction or ReleasePrincipleSourceReservationAction<br/>until every entry has one terminal provisional outcome]
-    PCAPTURE --> PSESSIONVALID{ValidatePrincipleCaptureBudgetSessionAction<br/>one terminal reservation per regular file, none for other nodes,<br/>exact totals and no unaccounted read}
+    PENTRYID --> PSESSION[BuildPrincipleCaptureBudgetSessionAction<br/>run-local entry, semantic-source-byte, time, memory and chunk ceilings;<br/>the provisional session is never persisted]
+    PSESSION --> PCAPTURE[For each validated semantic-Markdown candidate only:<br/>ReservePrincipleSourceBytesAction, CapturePrincipleSourceAction and<br/>CommitPrincipleSourceDebitAction or ReleasePrincipleSourceReservationAction;<br/>never capture toolchain.yaml through this lane]
+    PCAPTURE --> PSESSIONVALID{ValidatePrincipleCaptureBudgetSessionAction<br/>one terminal reservation per semantic-Markdown candidate;<br/>none for toolchain.yaml, directories or blocking entries;<br/>exact totals and no unaccounted semantic-source read}
     PSESSIONVALID -- Invalid --> FAIL
     PSESSIONVALID -- Valid --> PBID[AssignPrincipleBudgetLedgerStateIdAction<br/>after the complete session and captured owner/byte set are known;<br/>direct-equal retain or monotonic allocate; current ledger to successor]
     PBID --> PRESIDS[AssignPrincipleReservationIdAction<br/>retain or allocate one stable ID per provisional reservation<br/>in canonical inventory order]
     PRESIDS --> PRETIRE[RetireRemovedPrincipleReservationAction<br/>once per unmatched prior reservation; IDs are never reused]
     PRETIRE --> PBUDGET[BuildPrincipleSourceBudgetLedgerAction<br/>assemble the complete provisional-to-stable map, next ordinal,<br/>tombstones and exact totals; perform no allocation itself]
     PBUDGET --> PALLOC[For each stable captured source in order: AssignPrincipleSourceIdAction,<br/>BuildPrincipleCapturedSourceAction, DecodePrincipleFreeTextAction,<br/>AssignPrincipleSourceMapIdAction, BuildPrincipleSourceMapAction,<br/>ClassifyPrincipleCategoryFromFilenameAction, AssignPrincipleModuleIdAction,<br/>BuildPrincipleModuleAction, PartitionPrincipleTextAction,<br/>AssignPrincipleChunkIdAction and BuildPrincipleChunkAction;<br/>each ID action consumes the exact current ledger and returns the successor]
-    PALLOC --> PACCOUNT[BuildPrincipleEntryAccountAction<br/>exactly one directory, blocking or captured-source disposition per entry]
+    PALLOC --> PACCOUNT[BuildPrincipleEntryAccountAction<br/>exactly one directory_accounted, mechanical_toolchain_layer_excluded,<br/>blocking or captured_source disposition per encountered entry]
     PACCOUNT --> PINVID[AssignPrincipleInventoryStateIdAction<br/>direct-equal retain or allocate from the current ledger; return successor]
     PINVID --> PINVLEDGER{ValidatePrincipleIdLedgerAction<br/>inventory-bound successor, stable retained IDs and retired allocations}
     PINVLEDGER -- Invalid --> FAIL
-    PINVLEDGER -- Valid --> PINVSTATE[BuildPrincipleInventoryStateAction then<br/>ValidatePrincipleInventoryStateAction with that exact successor ledger]
+    PINVLEDGER -- Valid --> PINVSTATE[BuildPrincipleInventoryStateAction then<br/>ValidatePrincipleInventoryStateAction with that exact successor ledger;<br/>prove toolchain.yaml has one mechanical exclusion and no semantic reservation/source/source map]
     PINVSTATE --> PREGID[AssignPrincipleRegistryStateIdAction<br/>direct-equal retain or allocate; inventory successor to final successor]
     PREGID --> PFINALLEDGER{ValidatePrincipleIdLedgerAction<br/>complete final successor through registry_state}
     PFINALLEDGER -- Invalid --> FAIL
     PFINALLEDGER -- Valid --> PSERIAL[SerializePrincipleIdLedgerAction<br/>canonical ownership, next ordinals and tombstones]
-    PSERIAL --> PREG[BuildPrincipleRegistryStateAction then<br/>ValidatePrincipleRegistryStateAction with the same final ledger;<br/>filename supplies only a configured category hint and body remains free text]
+    PSERIAL --> PREG[BuildPrincipleRegistryStateAction then<br/>ValidatePrincipleRegistryStateAction with the same final ledger;<br/>prove no semantic source/module/chunk references toolchain.yaml;<br/>filename supplies only a configured category hint and body remains free text]
 
     TROOT --> RVALID{Readable no-follow directory, contained by its capability,<br/>not aliased and not equal to another protected root}
     RVALID -- No --> FAIL
@@ -186,16 +195,20 @@ flowchart TD
     FINALLEDGER -- Valid --> SERIALLEDGER[SerializeToolchainPresetIdLedgerAction<br/>canonical ownership, next ordinals and tombstones]
     SERIALLEDGER --> REG[BuildToolchainPresetRegistryStateAction<br/>validated inventory, same final successor ledger and every<br/>package, asset, declaration and reference join]
     REGCONTENT --> REG
-    REG --> REGVALID{ValidateToolchainPresetRegistryStateAction<br/>complete inventory/budget coverage, unique packages/assets,<br/>no orphan or multiply owned asset, exact version closure,<br/>and every configured preset resolves once}
+    REG --> REGVALID{ValidateToolchainPresetRegistryStateAction<br/>complete inventory/budget coverage, unique packages/assets,<br/>no orphan or multiply owned asset and closure of every package-declared reference;<br/>consult no project environment or project-toolchain selection}
     REGVALID -- Invalid --> FAIL
 
-    REGVALID -- Valid --> GRAPH[Build exact package ID/version composition graph<br/>language, runtime, package-manager, framework, build-tool,<br/>test-runner, environment and project-overlay layers]
+    REGVALID -- Valid --> LAYERJOIN{ResolveProjectToolchainInheritanceAction then<br/>BuildProjectToolchainLayerAction and ValidateProjectToolchainLayerAction<br/>against the complete preset registry;<br/>resolve exact direct inheritance and schema-typed overrides without merging<br/>or claiming that the eventual result preserves compiler locks}
+    LAYERPARSE --> LAYERJOIN
+    LAYERJOIN -- Invalid --> FAIL
+    LAYERJOIN -- Valid --> GRAPH[Build exact package ID/version composition graph<br/>language, runtime, package-manager, framework, build-tool,<br/>test-runner, environment and the typed project-toolchain layer]
     GRAPH --> GVALID{ValidatePresetVersionPinAction, ValidatePresetLayerEdgeAction,<br/>ValidatePresetDuplicateIdentityAction and DetectPresetCompositionCycleAction}
     GVALID -- Invalid --> FAIL
     GVALID -- Valid --> ORDER[TopologicallyOrderPresetCompositionAction<br/>dependency first with closed layer and ID/version tie-break]
     ORDER --> COMPOSE[CompilePresetSetAction<br/>explicit merge operators only; preserve field-level source evidence]
-
-    COMPOSE --> PATTERN[Compile and validate project-independent path patterns,<br/>file kinds, templates, rule IDs and placement contracts]
+    COMPOSE --> MERGEDVALID{ValidateCompiledPresetSetSafetyAction<br/>the effective merged result preserves every compiler lock and uses only<br/>declared precedence/operators without conflicting assignments or weakened<br/>path, command, capability, sandbox, network, resource or effect limits}
+    MERGEDVALID -- Invalid --> FAIL
+    MERGEDVALID -- Valid --> PATTERN[Compile and validate project-independent path patterns,<br/>file kinds, templates, rule IDs and placement contracts]
     PATTERN --> CAPABILITY[Resolve and validate create, update, replace, copy and delete<br/>file-intent capability ceilings]
     CAPABILITY --> COMMAND[Compile and validate structured command descriptors<br/>executable plus argv, cwd, environment, network, quotas,<br/>sandbox and persistent/ephemeral effects]
     COMMAND --> CSAFE{No shell scalar, redirect, glob expansion, mutable version,<br/>unresolved placeholder or unproven effect}
@@ -207,13 +220,15 @@ flowchart TD
     DISABLE --> DEP
 
     DEP --> DISCOVER[Run registered project-discovery adapters over bounded repository facts]
-    DISCOVER --> BIND[Bind manifests, project ownership, source roots, file kinds,<br/>commands and project-overlay IDs without model input]
+    DISCOVER --> BIND[Bind manifests, project ownership, source roots, file kinds,<br/>commands and project-toolchain environment bindings without model input]
     BIND --> MATERIALIZE[Resolve source-root selectors and materialize bound patterns]
     MATERIALIZE --> PROBE[Probe exact executable, script, parser, sandbox and quota capabilities]
     PROBE --> EVALID{Selected project/environment bindings are complete,<br/>contained, portable and unambiguous}
     EVALID -- No --> FAIL
     EVALID -- Yes --> EPOLICY[BuildCompiledEnvironmentPolicyAction then<br/>ValidateCompiledEnvironmentPolicyAction for every noncanonical leaf candidate;<br/>retain run-local handles and specialized preset identities only]
     EPOLICY --> BLUEPRINTS[BuildIdentityFreeSupersetPathTokenGrammarCandidateAction then<br/>ValidateIdentityFreeSupersetPathTokenGrammarCandidateAction; next call<br/>BuildIdentityFreeCompiledEnginePolicyCandidateAction then<br/>ValidateIdentityFreeCompiledEnginePolicyCandidateAction;<br/>both aggregate blueprints carry only typed run-local references to leaf candidates<br/>and contain no generic canonical component ID]
+    WVALID -. validated identity-free workflow-definition leaf .-> BLUEPRINTS
+    LAYERJOIN -. validated identity-free project-toolchain leaf .-> BLUEPRINTS
     PREG --> BLUEPRINTS
     BLUEPRINTS --> ENGINEPOLICY[BuildBootstrapOperationalCandidateAction<br/>bind every independently validated config/root/preset/leaf candidate plus the<br/>validated grammar and compiled-policy aggregate blueprints, route/reader/parser metadata<br/>and hard limits; allocate no generic project or feature authority-state ID]
     ENGINEPOLICY --> ENGINEVALID{ValidateBootstrapOperationalCandidateAction<br/>all specialized IDs, versions and run-local handle/DataKey/schema joins resolve once,<br/>identity domains are disjoint and every selected environment is complete}
@@ -293,7 +308,9 @@ flowchart TD
     FLOCK -- No --> FAILEND[Return the typed bootstrap failure]
     FRELEASE --> FAILEND
 
-    EXAMPLES[Repository new_engine/toolchainPresets and _structure.yaml files<br/>design/source examples only] -. never searched, installed or used as runtime fallback .-> EXCLUDED[Excluded from runtime bootstrap]
+    EXAMPLES[design/examples/.sddtoolkit.json<br/>abridged source sample only; not the complete normative schema] -. never searched, installed or used as runtime fallback .-> EXCLUDED[Excluded from runtime bootstrap]
     MIGRATE[Offline curated migration and human review] -. never invoked by bootstrap, specify, plan, tasks,<br/>implement or recovery .-> EXCLUDED
-    MIGRATE -. separate administrative workflow only .-> INSTALL[Atomically install a fully validated v1 package-and-asset set<br/>under the configured runtime root]
+    MIGRATE -. separate administrative workflow only .-> INSTALL[Atomically install a fully validated v1 package-and-asset set<br/>under paths.toolchainPreset]
     INSTALL -. a later independent bootstrap inventories every installed byte from the beginning .-> TROOT
+    TEMPLATEINERT -. reserved future contract only .-> FUTUREINIT[Future sdd init template-to-principles boundary;<br/>not a current v1 action or transaction and never model authority]
+    FUTUREINIT -. a later bootstrap could ingest future materialized Markdown .-> PROOT

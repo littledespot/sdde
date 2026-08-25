@@ -11,7 +11,7 @@ flowchart TB
     RUNNER --> ACTION
     RUNNER --> ORCH
 
-    subgraph STAGES[Reorganizable workflow composition]
+    subgraph STAGES[Validated workflow composition; compiler-locked stage order]
         SO[SpecifyOrchestrator]
         PO[PlanOrchestrator]
         TO[TasksOrchestrator]
@@ -45,24 +45,31 @@ flowchart TB
     PORTS --> FS[Contained filesystem and WAL adapter]
     PORTS --> MODEL[Versioned model-route adapter]
     PORTS --> PARSER[Markdown, data, AST and source-map parsers]
-    PORTS --> COMMAND[Restricted command / overlay adapter]
+    PORTS --> COMMAND[Restricted command / implementation-overlay adapter]
     PORTS --> AUTHN[Authentication and trusted-clock adapters]
 
     subgraph AUTHORITIES[Separate validated authorities]
+        WDEFS[WorkflowDefinitionRegistry<br/>closed specify, plan, tasks and implement definitions<br/>from paths.workflows; no capability or order changes]
         REF[Reference registry<br/>feature and business authority]
-        PRINCIPLES[PrincipleRegistryState<br/>free-text, source-located guidance<br/>filename is only a category hint]
-        PRESETS[ToolchainPresetRegistryState<br/>sole runtime root &lt;paths.sddtoolkit&gt;/toolchainPresets/<br/>paths, file kinds, commands and tools]
+        PRINCIPLES[PrincipleRegistryState<br/>free-text Markdown from paths.principles;<br/>exact toolchain.yaml is excluded]
+        PRESETS[ToolchainPresetRegistryState<br/>sole runtime root paths.toolchainPreset<br/>paths, file kinds, commands and tools]
+        TLAYER[ProjectToolchainLayer<br/>exact paths.principles/toolchain.yaml;<br/>closed typed data inheriting from presets]
         STATE[Canonical workflow, actor, review, control-event,<br/>clarification and execution state]
         APOLICY[Compiler-locked requiredness, ownership<br/>and reconciliation-policy registries]
     end
 
+    PORTS --> WDEFS
     PORTS --> REF
     PORTS --> PRINCIPLES
     PORTS --> PRESETS
+    PORTS --> TLAYER
     PORTS --> STATE
+    WDEFS -. runner composes only validated definitions .-> FWO
     REF -. typed authority and evidence .-> AC
     PRINCIPLES -. plan tasks implement authority only; never specification input .-> AC
     PRESETS -. typed authority and evidence .-> AC
+    PRESETS -. validated inheritance base .-> TLAYER
+    TLAYER -. typed project policy and evidence .-> AC
     STATE -. current authority and approvals .-> AC
     APOLICY -. exhaustive required slots and earliest owners .-> AC
     PRINCIPLES --> SELECT[SelectApplicablePrinciplesAction]
@@ -70,6 +77,9 @@ flowchart TB
     PGUIDE -. consumed by stage actions through typed data keys .-> PO
     PGUIDE -. consumed by stage actions through typed data keys .-> TO
     PGUIDE -. consumed by stage actions through typed data keys .-> IO
+
+    TEMPLATES[paths.templates/*.template.md<br/>inert throughout v1] -. reserved future copy contract .-> FUTUREINIT[Future sdd init template-to-principles boundary<br/>not a current v1 action or transaction; no model authority]
+    FUTUREINIT -. future materialized Markdown only .-> PRINCIPLES
 
     COMMON --> VALIDATE[Deterministic validation actions<br/>specialized action instances]
     RUNNER --> VALIDATE

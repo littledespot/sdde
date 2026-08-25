@@ -1,7 +1,7 @@
 flowchart TD
-    START[sdd specify --reference &lt;relative-selector&gt;] --> RUNNER[PipelineRunner<br/>invokes every node through a runner-owned ChildNodeBinding]
+    START[sdd specify --reference &lt;relative-selector&gt;] --> RUNNER[PipelineRunner<br/>invokes the validated specify workflow definition;<br/>every node uses a runner-owned ChildNodeBinding]
     RUNNER --> BOOT[FeatureWorkflowOrchestrator schedules BootstrapOrchestrator;<br/>invoke diagram 08 pre-selector project recovery/transaction-ID-ledger subgraph,<br/>acquire and retain its validated project-collection lock capability through target resolution]
-    BOOT --> CONFIG[Pre-selector bootstrap only: locate/read/parse/validate .sddtoolkit.json;<br/>build validated configured-root and base-portability authorities and carry the held project lock;<br/>do not inventory toolchain presets or principles yet]
+    BOOT --> CONFIG[Pre-selector bootstrap only: locate/read/parse/validate the exact<br/>project-root .sddtoolkit.json and all seven configured directory roots;<br/>validate closed workflow definitions and carry the held project lock;<br/>do not inventory toolchain presets, toolchain.yaml or free-text principles yet]
     CONFIG --> CLI[Parse exact invocation grammar]
     CLI --> COK{Exactly one non-empty --reference value<br/>and no -feature, --feature, --description, positional or unknown input}
     COK -- No --> INPUTERR[Nonzero user-input error<br/>no feature directory, feature log, model call or artifact write]
@@ -10,7 +10,7 @@ flowchart TD
     ROOT --> RDIR{Exists, readable directory and regular traversal root}
     RDIR -- No --> INPUTERR
     RDIR -- Yes --> FID[DeriveFeatureIdentityAction<br/>deterministic identity from canonical selector and naming policy]
-    FID --> FIPATH[ResolveFeatureIdentityRegistryPathAction<br/>sole project-level registry beneath paths.sddtoolkit/features]
+    FID --> FIPATH[ResolveFeatureIdentityRegistryPathAction<br/>sole project-level registry beneath the reserved paths.workflows/features child]
     FIPATH --> FIREAD[ReadFeatureIdentityRegistryAction<br/>bounded no-follow read; absence is valid only before first activation]
     FIREAD --> FIPRESENT{Registry bytes present}
     FIPRESENT -- No --> FIINITIAL[BuildInitialFeatureIdentityRegistryAction<br/>empty revision-zero ownership authority whose identity is exactly<br/>bootstrapRootRegistryId plus revision; consume no project state-ID ordinal]
@@ -49,8 +49,8 @@ flowchart TD
     SREFRESH -- Still open unchanged or refreshed --> SWAIT
     SREFRESH -- Final authority resolution --> POSTBOOT
     NEWCTX --> POSTBOOT[Run the post-selector runtime bootstrap in diagram 08<br/>using empty prior ledgers for new or validated prior ledgers for existing]
-    POSTBOOT --> PRESETS[Validated ToolchainPresetRegistryState, CompiledEnvironmentPolicies<br/>and command/parser/resource authorities]
-    POSTBOOT --> PREG[Validated separate PrincipleRegistryState<br/>complete opaque free text and deterministic transport chunks;<br/>filename supplies only the configured category hint]
+    POSTBOOT --> PRESETS[Validated ToolchainPresetRegistryState, typed project-toolchain layer,<br/>CompiledEnvironmentPolicies and command/parser/resource authorities]
+    POSTBOOT --> PREG[Validated separate PrincipleRegistryState<br/>complete opaque Markdown and deterministic transport chunks;<br/>exact paths.principles/toolchain.yaml is excluded from free-text ingestion]
     PREG -. selected only at plan tasks and implement; absent from reference/specify routes .-> LATER[Later-stage bounded complete category-based principle selections]
     PRESETS --> POLICY[Receive the ValidatedBootstrapOperationalCandidate from diagram 08:<br/>validated typed leaf candidates plus identity-free grammar/policy aggregate blueprints;<br/>no generic canonical component or bootstrap-state ID is allocated]
     PREG --> POLICY

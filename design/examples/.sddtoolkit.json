@@ -25,6 +25,9 @@
     "specs": "specs/",
     "references": "references/",
     "specsArchive": "specs/_archive/",
-    "sddtoolkit": ".sddtoolkit/"
+    "workflows": ".sddtoolkit/workflows",
+    "toolchainPreset": ".sddtoolkit/toolchainPreset",
+    "principles": ".sddtoolkit/principles",
+    "templates": ".sddtoolkit/templates"
   }
 }

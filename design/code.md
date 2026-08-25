@@ -876,13 +876,17 @@ PrincipleSourceMap {
 
 PrincipleInventoryEntryDisposition =
   | { kind: directory_accounted }
+  | { kind: mechanical_toolchain_layer_excluded, projectToolchainLayerPathId }
   | { kind: blocking, diagnosticId }
   | { kind: captured_source, principleSourceId }
+  // captured_source is legal only for a normalized bounded *.md regular file;
+  // every other regular file except exact toolchain.yaml is blocking.
 
 PrincipleInventoryState {
   principleInventoryStateId,
   revision,
   principlesRootPathId,
+  projectToolchainLayerPathId, // exact <paths.principles>/toolchain.yaml
   idLedger: PrincipleIdLedger,
   entries: PrincipleInventoryEntry[],
   sourceBudgetLedger: PrincipleSourceBudgetLedger,
@@ -914,6 +918,7 @@ PrincipleModule {
   byteLength
   // The body is opaque, bounded free text. It requires no front matter,
   // heading, Markdown shape, placeholder substitution, or content schema.
+  // The exact sibling `toolchain.yaml` can never produce a module or chunk.
 }
 
 PrincipleChunk {
@@ -930,7 +935,8 @@ PrincipleRegistryState {
   principleRegistryStateId,
   revision,
   configVersion,
-  principlesRootPathId,       // derived from <paths.sddtoolkit>/principles/
+  principlesRootPathId,       // direct configured <paths.principles> root
+  projectToolchainLayerPathId,
   categoryMappingVersion,
   idLedger: PrincipleIdLedger,
   inventory: PrincipleInventoryState,
@@ -1269,15 +1275,24 @@ ExactEngineConfigLocation {
   exactBasenameMatched: true
 }
 
+ConfiguredRootRole =
+  specs_artifacts | reference_sources | archived_specs | workflow_authority |
+  toolchain_preset_registry | project_principles | initialization_templates
+
 ConfiguredBaseRootCapability {
   configuredRootCapabilityId,
-  pathKey: specs | references | specs_archive | sddtoolkit,
+  pathKey: specs | references | specsArchive | workflows | toolchainPreset |
+           principles | templates,
+  rootRole: ConfiguredRootRole,
   projectRoot: canonicalProjectRoot,
   configuredRelativePath,
   canonicalPath,
   accessClass,
   existencePolicy,
   noFollowValidated: true
+  // The schema fixes the one-to-one pathKey/rootRole mapping. In particular,
+  // initialization_templates is reserved but unreadable by ordinary bootstrap
+  // readers and every four-stage action.
 }
 
 BootstrapRootRegistryId {
@@ -1286,9 +1301,117 @@ BootstrapRootRegistryId {
   // Self-validating engine tuple; it is never allocated by its own ledger.
 }
 
+WorkflowReservedChildName = features | transactions
+
+WorkflowAuthorityLayout {
+  bootstrapRootRegistryId,
+  configuredWorkflowsRootCapabilityId,
+  canonicalWorkflowAuthorityRoot,
+  definitionInventoryScope: {
+    base: workflow_authority_root,
+    includedReservedRootEntries: [features/, transactions/],
+    excludedReservedDescendantSubtrees: [features/**, transactions/**]
+  },
+  reservedChildren: [
+    { name: features, fixedRelativePath: features/, accessClass: engine_only },
+    { name: transactions, fixedRelativePath: transactions/, accessClass: engine_only }
+  ]
+  // Definitions live in the workflow-authority root but cannot collide with,
+  // traverse into, or claim either engine-owned child.
+}
+
+WorkflowAuthorityNodeKind = directory | regular_file | symlink | special
+
+WorkflowAuthorityRawInventoryEntry {
+  observedRootRelativePathBytes,
+  nodeKind: WorkflowAuthorityNodeKind,
+  noFollowFileIdentity?,
+  observedByteLength?
+  // Enumeration assigns no durable or caller-supplied identity.
+}
+
+WorkflowAuthorityNormalizedInventoryEntryCandidate {
+  normalizedRootRelativePath,
+  nodeKind: WorkflowAuthorityNodeKind,
+  noFollowFileIdentity?,
+  observedByteLength?
+}
+
+WorkflowAuthorityInventoryEntry {
+  inventoryOrdinal: PositiveInteger,
+  normalizedRootRelativePath,
+  nodeKind: WorkflowAuthorityNodeKind,
+  noFollowFileIdentity?,
+  observedByteLength?
+  // The ordinal is the one-based position after complete collision validation
+  // and Unicode-scalar path ordering. It is local to this immutable inventory.
+}
+
+WorkflowDefinitionCapture {
+  sourceInventoryOrdinal: PositiveInteger,
+  noFollowFileIdentity,
+  immutableBytesHandle,
+  byteLength,
+  completeRead: true
+}
+
+WorkflowAuthorityEntryDisposition =
+  | { kind: directory_accounted }
+  | { kind: reserved_child_accounted,
+      reservedChildName: WorkflowReservedChildName }
+  | { kind: captured_definition,
+      workflowRole: specify | plan | tasks | implement }
+  | { kind: blocking, diagnosticId }
+
+WorkflowAuthorityEntryAccount {
+  inventoryOrdinal: PositiveInteger,
+  disposition: WorkflowAuthorityEntryDisposition
+}
+
+WorkflowAuthorityInventory {
+  layout: WorkflowAuthorityLayout,
+  entries: WorkflowAuthorityInventoryEntry[],
+  captures: WorkflowDefinitionCapture[],
+  accounts: WorkflowAuthorityEntryAccount[]
+  // Every encountered entry has exactly one terminal account. Any encountered
+  // reserved root child uses reserved_child_accounted, and descendants of both
+  // reserved children are outside the inventory scope.
+}
+
+DeclarativeWorkflowDefinition {
+  sourceInventoryOrdinal: PositiveInteger,
+  workflowRole: specify | plan | tasks | implement,
+  schemaVersion,
+  compilerRegisteredWorkflowContractId,
+  parameters: ValidatedWorkflowParameterValue[],
+  selectedPolicyProfileIds[]
+  // Closed declarative data only. Node graphs, actions, orchestrators,
+  // successor selection, stage ordering, gates, and capabilities are absent.
+  // compilerRegisteredWorkflowContractId resolves only through the closed
+  // specify/plan/tasks/implement workflow-contract registry.
+}
+
+WorkflowDefinitionRegistryState {
+  workflowDefinitionRegistryId: BootstrapComponentId,
+  workflowAuthorityInventory: WorkflowAuthorityInventory,
+  definitions: DeclarativeWorkflowDefinition[4],
+  compilerLockedRequiredStageOrder: [specify, plan, tasks, implement],
+  nodeGraphRegistryVersion,
+  gateRegistryVersion,
+  capabilityRegistryVersion
+  // The BootstrapComponentId is the registry's only canonical identity.
+  // Exactly one definition owns each workflowRole, every sourceInventoryOrdinal
+  // is unique and resolves to one captured_definition account, and reserved
+  // children, when present, resolve only to their reserved accounts. Unknown
+  // fields/contracts, a reserved-child collision, or any attempted weakening of
+  // locked bindings rejects the complete registry before a workflow can run. A
+  // valid role/contract selection change is an administrative migration for an
+  // already active feature in v1.
+}
+
 ProjectTransactionCollectionPath {
   bootstrapRootRegistryId,
-  configuredSddtoolkitRootCapabilityId,
+  configuredWorkflowsRootCapabilityId,
   fixedRelativePath: transactions/,
   canonicalContainedPath,
   accessClass: engine_only
@@ -1337,8 +1460,10 @@ ValidatedTransactionStorageCapability =
 BootstrapRootRegistry {
   bootstrapRootRegistryId: BootstrapRootRegistryId,
   configLocation: ExactEngineConfigLocation,
-  configuredRoots: ConfiguredBaseRootCapability[]
-  // Closed keys: specs, references, specs_archive, sddtoolkit exactly once.
+  configuredRoots: ConfiguredBaseRootCapability[7]
+  // Closed keys: specs, references, specsArchive, workflows, toolchainPreset,
+  // principles, and templates exactly once. The only configurable peer-root
+  // nesting exception is specsArchive beneath specs.
   // This pre-preset authority contains no generated/discovered project roots.
 }
 
@@ -1598,7 +1723,7 @@ ToolchainPresetEntryAccount {
 ToolchainPresetInventoryState {
   inventoryStateId,
   revision,
-  toolchainPresetsRootPathId,
+  toolchainPresetRootPathId,
   idLedger: ToolchainPresetIdLedger,
   entries: ToolchainPresetInventoryEntry[],
   sourceBudgetLedger: ToolchainPresetSourceBudgetLedger,
@@ -1612,7 +1737,7 @@ ToolchainPresetRegistryState {
   toolchainPresetRegistryStateId,
   revision,
   configVersion,
-  toolchainPresetsRootPathId,   // sole derived <paths.sddtoolkit>/toolchainPresets/
+  toolchainPresetRootPathId,    // direct configured <paths.toolchainPreset> root
   registrySchemaVersion,
   idLedger: ToolchainPresetIdLedger,
   inventory: ToolchainPresetInventoryState,
@@ -1620,6 +1745,27 @@ ToolchainPresetRegistryState {
   assets: ToolchainPresetAssetRecord[]
   // Every runtime-root entry is accounted for. Closed v1 packages and their
   // exact typed assets enter policy; legacy source examples never do.
+}
+
+ProjectToolchainLayer {
+  projectToolchainLayerId: BootstrapComponentId,
+  configVersion,
+  principlesRootPathId,
+  projectToolchainLayerPathId,  // exact <paths.principles>/toolchain.yaml
+  schemaVersion,
+  encoding: yaml_1_2,
+  presetRegistryStateId,
+  environmentBindings: {
+    environmentId,
+    inheritedPresetIds[],
+    overrides: ValidatedProjectToolchainOverride[]
+  }[],
+  validationEvidenceIds[]
+  // This is a closed mechanical project layer. Every inherited preset resolves
+  // to one exact ID/version in the configured preset registry; ranges, unknown
+  // fields, or attempts to weaken a locked rule reject the layer. It is never
+  // decoded as free-text principle guidance even though it is stored in the
+  // project-principles directory.
 }
 
 SupersetPathTokenGrammar {
@@ -1644,7 +1790,9 @@ CompiledEnginePolicy {
   policyStateId: BootstrapComponentId,
   configVersion,
   bootstrapRootRegistryId,
+  workflowDefinitionRegistryId,
   toolchainPresetRegistryStateId,
+  projectToolchainLayerId,
   environmentPolicyIds[],
   portabilityPolicySetId,
   rootAccessRegistryId,
@@ -1743,7 +1891,11 @@ IdentityFreeCompiledEnginePolicyPayload {
   payloadSchemaId,
   configVersion,
   bootstrapRootRegistryId,
+  workflowDefinitionRegistryReference:
+    GenericBootstrapCandidateComponentReference,
   toolchainPresetRegistryStateId,
+  projectToolchainLayerReference:
+    GenericBootstrapCandidateComponentReference,
   environmentPolicyReferences:
     GenericBootstrapCandidateComponentReference[],
   portabilityPolicyReference: BootstrapCandidateDependencyReference,
@@ -1797,6 +1949,14 @@ BootstrapOperationalComponentCandidate =
   | LogEventDefinitionRegistryCandidate {
       handle: BootstrapCandidateComponentHandle,
       payload: IdentityFreeBootstrapComponentPayload<LogEventDefinitionRegistry>
+    }
+  | WorkflowDefinitionRegistryCandidate {
+      handle: BootstrapCandidateComponentHandle,
+      payload: IdentityFreeBootstrapComponentPayload<WorkflowDefinitionRegistryState>
+    }
+  | ProjectToolchainLayerCandidate {
+      handle: BootstrapCandidateComponentHandle,
+      payload: IdentityFreeBootstrapComponentPayload<ProjectToolchainLayer>
     }
   | BasePathTokenGrammarCandidate {
       handle: BootstrapCandidateComponentHandle,
@@ -1946,11 +2106,13 @@ MaterializedBootstrapChangeEvidence {
 BootstrapAuthorityComponentBundle {
   compiledEnginePolicy: CompiledEnginePolicy,
   bootstrapRootRegistry: BootstrapRootRegistry,
+  workflowDefinitionRegistry: WorkflowDefinitionRegistryState,
   rootAccessRegistry,
   projectRegistry,
   portabilityPolicySet: PortabilityPolicySet,
   compiledEnvironmentPolicies: CompiledEnvironmentPolicy[],
   toolchainPresetRegistry: ToolchainPresetRegistryState,
+  projectToolchainLayer: ProjectToolchainLayer,
   commandRegistry: CommandRegistry,
   discoveryFileRegistry: FileRegistryState,
   repositoryFactRegistry: RepositoryFactRegistryState,
@@ -2035,7 +2197,8 @@ BootstrapAuthorityChangePlan =
       assignments: BootstrapComponentImpactAssignment[],
       earliestOwner: administrative_block,
       obligations: BootstrapChangeObligations,
-      reasons: (project_root_or_artifact_layout | state_serializer |
+      reasons: (project_root_or_artifact_layout | workflow_definition_selection |
+                state_serializer |
                 workflow_artifact_registry_contract | renderer_contract |
                 unsupported_schema_transition)[]
     }
@@ -2255,7 +2418,7 @@ FeatureIdentityOwnershipRecord {
 }
 
 FeatureIdentityRegistryState {
-  // This is a fixed project-level registry under <paths.sddtoolkit>/features/.
+  // This is a fixed project-level registry under <paths.workflows>/features/.
   // Its identity is the closed tuple (bootstrapRootRegistryId, revision), not a hash.
   featureIdentityRegistryStateId: { bootstrapRootRegistryId, revision },
   bootstrapRootRegistryId,
@@ -2406,7 +2569,7 @@ WorkflowArtifactRegistry {
   configVersion,
   rendererContractVersion,
   canonicalSpecsFeatureRoot,    // exactly <paths.specs>/<featureId>
-  canonicalEngineFeatureRoot,   // exactly <paths.sddtoolkit>/features/<featureId>
+  canonicalEngineFeatureRoot,   // exactly <paths.workflows>/features/<featureId>
   canonicalEngineStateRoot,     // exactly <canonicalEngineFeatureRoot>/state
   entries: WorkflowArtifactPath[]
   // The closed selector table has exactly one entry per singleton selector.
@@ -8627,27 +8790,54 @@ Starting at the invocation working directory, the runtime walks ancestors in a
 fixed nearest-first order and stops at the first exact `.sddtoolkit.json`; that
 file's directory is the project root. The authoritative path is therefore
 `<projectRoot>/.sddtoolkit.json`. The repository file
-`new_engine/.sddtoolkit.json.example` is an example only; it is never a runtime
-fallback. A missing exact filename blocks invocation. Every base directory
-is supplied by the validated `paths` object. Derived descendants may be fixed
-by the engine, but no action may substitute a current-working-directory,
-`.specify/`, or `new_engine/` path. The principle root is the fixed derived
-descendant `<paths.sddtoolkit>/principles/`; it is not a second configurable
-base path. Toolchain presets likewise have the sole runtime root
-`<paths.sddtoolkit>/toolchainPresets/`.
+`design/examples/.sddtoolkit.json` is a legacy/source example only; it is never
+a runtime fallback and does not contain the complete policy shape illustrated
+below. A missing exact filename blocks invocation. Every base directory
+is supplied by the validated seven-key `paths` object. The configured
+`specs`, `references`, `specsArchive`, `workflows`, `toolchainPreset`,
+`principles`, and `templates` roots are distinct authorities; only
+`specsArchive` may be nested beneath `specs`. No action may substitute a
+current-working-directory, `.specify/`, source-tree, or example path.
+
+`paths.workflows` is the workflow-authority root. It contains exactly one
+bounded, closed, declarative definition for each `specify`, `plan`, `tasks`,
+and `implement` workflow plus the exact reserved engine-owned children
+`features/` and `transactions/`. A workflow definition can select only a
+compiler-registered workflow contract; it cannot define node graphs, reorder
+`specify -> plan -> tasks -> implement`, weaken a gate, cross the
+action/orchestrator boundary, grant a capability, or collide with a reserved
+child. Toolchain presets load directly from `paths.toolchainPreset`. The exact
+`<paths.principles>/toolchain.yaml` is a closed mechanical project toolchain
+layer that inherits registered presets; it is accounted for but excluded from
+free-text principle decoding and chunking. `paths.templates` is inert during
+ordinary bootstrap. Only an explicit `sdd init` workflow may copy selected
+principle templates into `paths.principles` under its separately validated init
+transaction, after which the copied files are ordinary project principle
+sources and receive no automatic placeholder expansion.
 
 ```text
 <projectRoot>/
 ├── .sddtoolkit.json
-└── <paths.sddtoolkit>/                 # `.sddtoolkit/` in this example
-    ├── principles/                     # free-text principle sources
-    └── toolchainPresets/               # closed v1 runtime preset packages
-
-new_engine/principles/ and new_engine/toolchainPresets/ are source/design
-examples only. The runtime never searches them and never copies them implicitly.
-Installation or migration into the two runtime children is an explicit,
-separately authorized administrative operation.
+├── specs/                              # paths.specs in this example
+│   └── _archive/                       # paths.specsArchive; sole nesting exception
+├── references/                         # paths.references
+└── .sddtoolkit/                        # an unconfigured common parent only
+    ├── workflows/                      # paths.workflows
+    │   ├── <declarative workflow definitions>
+    │   ├── features/                   # exact reserved engine-owned child
+    │   └── transactions/               # exact reserved engine-owned child
+    ├── toolchainPreset/                # paths.toolchainPreset; preset packages
+    ├── principles/                     # paths.principles
+    │   ├── toolchain.yaml              # closed mechanical project layer
+    │   └── *.md                        # free-text principle sources
+    └── templates/                      # paths.templates; inert until sdd init
+        └── *.template.md
 ```
+
+`design/templates/`, `design/toolchainPresets/`, and
+`design/examples/.sddtoolkit.json` are source/design examples only. Ordinary
+bootstrap never searches or packages them as runtime authority and never copies
+them implicitly.
 
 ```json
 {
@@ -8659,20 +8849,16 @@ separately authorized administrative operation.
     "specs": "specs/",
     "references": "references/",
     "specsArchive": "specs/_archive/",
-    "sddtoolkit": ".sddtoolkit/"
+    "workflows": ".sddtoolkit/workflows",
+    "toolchainPreset": ".sddtoolkit/toolchainPreset",
+    "principles": ".sddtoolkit/principles",
+    "templates": ".sddtoolkit/templates"
   },
   "environments": [
     {
       "id": "web",
       "root": ".",
-      "targetPlatforms": ["linux-posix", "windows-ntfs"],
-      "presets": [
-        "language/typescript@1.0.0",
-        "runtime/node@1.0.0",
-        "framework/react@1.0.0",
-        "build/vite@1.0.0"
-      ],
-      "projectOverlayId": "web"
+      "targetPlatforms": ["linux-posix", "windows-ntfs"]
     }
   ],
   "toolchainPresets": {
@@ -8897,6 +9083,29 @@ separately authorized administrative operation.
 }
 ```
 
+The complementary project layer at the exact
+`<paths.principles>/toolchain.yaml` path is parsed as YAML 1.2 through a
+versioned closed schema. This illustrative decoded shape moves preset
+inheritance out of the root-path map while retaining environment ownership:
+
+```yaml
+schemaVersion: project-toolchain/v1
+environmentBindings:
+  - environmentId: web
+    inherits:
+      - language/typescript@1.0.0
+      - runtime/node@1.0.0
+      - framework/react@1.0.0
+      - build/vite@1.0.0
+    overrides: {}
+```
+
+Every inherited ID must resolve in the registry loaded from
+`paths.toolchainPreset`. Unknown fields, unknown environments or presets,
+cycles, duplicate layers, and attempts to weaken locked policy reject
+bootstrap. This file supplies mechanical configuration only and contributes no
+`PrincipleModule`, `PrincipleChunk`, or model guidance.
+
 ---
 
 <a id="preset-identity-and-composition"></a>
@@ -8946,11 +9155,12 @@ projectDiscovery:
   selection: explicit-or-nearest-owner
 ```
 
-The compiler injects the engine-reserved discovery exclusion from the validated
-`BootstrapRootRegistry` entry for `<paths.sddtoolkit>` before merging these
-preset-owned rules. That typed reserved-root rule is locked, uses the resolved
-configured path rather than the literal `.sddtoolkit`, and cannot be removed,
-shadowed, or overridden by a preset.
+The compiler injects engine-reserved discovery exclusions from all seven exact
+`BootstrapRootRegistry` capabilities before merging these preset-owned rules.
+The locked rules use the resolved configured paths rather than assuming a
+literal `.sddtoolkit` directory. The `specsArchive` rule remains explicit even
+when its authorized nesting beneath `specs` makes it physically redundant.
+No preset can remove, shadow, or override these exclusions.
 
 ---
 
@@ -9193,8 +9403,9 @@ generatedPaths:
 ```
 
 `forbiddenPaths` above is only the preset-owned portion. The compiler always
-injects a higher-precedence `ReservedEngineRootPathPolicy` from the exact
-`BootstrapRootRegistry` `<paths.sddtoolkit>` capability. Presets cannot override
+injects a higher-precedence `ReservedEngineRootPathPolicy` from the seven exact
+`BootstrapRootRegistry` capabilities plus the engine-derived `features/` and
+`transactions/` children beneath `paths.workflows`. Presets cannot override
 that policy, and neither a model nor a preset supplies its path text.
 
 ---
@@ -9459,18 +9670,34 @@ FeatureWorkflowOrchestrator
 ```text
 Locate nearest ancestor containing exact .sddtoolkit.json and bind it as project root
   -> read/parse/validate that exact no-follow <projectRoot>/.sddtoolkit.json
-  -> resolve/validate each required paths base against that project root
-  -> build/validate BootstrapRootRegistry before any preset-derived root exists
-  -> derive the sole <paths.sddtoolkit>/toolchainPresets/ and
-     <paths.sddtoolkit>/principles/ children from that bootstrap registry
-  -> bounded inventory/capture of <paths.sddtoolkit>/toolchainPresets/
+  -> resolve/validate all seven required paths bases against that project root
+  -> prove peer-root separation, allowing only paths.specsArchive beneath paths.specs
+  -> build/validate BootstrapRootRegistry before any engine-derived child exists
+  -> derive/validate the paths.workflows authority layout and reserve its exact
+     engine-owned features/ and transactions/ children; inventory their root
+     entries when present but never traverse either reserved descendant subtree
+  -> bounded no-follow workflow-authority enumeration -> normalize every in-scope
+     path -> reject the complete collision set -> sort -> bind inventory ordinals
+  -> classify every entry -> capture/parse/validate definition candidates ->
+     build and validate exactly one terminal account for every inventory ordinal
+  -> prove exact four-role coverage from unique captured source ordinals -> bind
+     only compiler-registered workflow contracts
+  -> prove definitions cannot change stage order, node graphs, action/orchestrator
+     boundaries, gates, capabilities, or reserved-child ownership
+  -> build/validate the identity-free WorkflowDefinitionRegistryState candidate;
+     assign its owner-local component ID only in the generic bootstrap materialization phase
+  -> bounded inventory/capture of the direct paths.toolchainPreset root
   -> classify every resource -> reject legacy -> parse/validate closed v1 presets
   -> assign/build/validate ToolchainPresetRegistryState
+  -> capture exact no-follow <paths.principles>/toolchain.yaml
+  -> parse it as YAML 1.2 through its closed mechanical schema -> resolve every
+     exact inherited preset ID/version against ToolchainPresetRegistryState
+  -> build and validate the identity-free project toolchain layer
   -> detect and resolve the active workspace filesystem policy
   -> resolve every target-platform/filesystem policy ID
-  -> read/parse/validate every selected preset and overlay
+  -> select every inherited preset and validate every declared project override
   -> validate preset graph -> stable dependency-first topological order
-  -> merge preset set while retaining source-root templates
+  -> merge preset set while retaining preset source-root path-pattern templates
   -> validate environment roots -> enumerate/parse contained project manifests
   -> assemble project registry and manifest/dependency/VCS facts
   -> resolve source-root selectors -> materialize bound patterns
@@ -9482,9 +9709,12 @@ Locate nearest ancestor containing exact .sddtoolkit.json and bind it as project
      generic environment/repository/root dependencies remain typed run-local references
   -> validate dependency registry sources and resolve package/version grammars
   -> compile deny rules -> build and validate DependencyPolicyRegistry
-  -> enumerate/capture/decode bounded free-text principle files
+  -> enumerate/capture/decode bounded normalized *.md files under paths.principles,
+     assigning exact toolchain.yaml its mechanical-layer exclusion disposition and
+     rejecting every other unclassified regular file
   -> classify category hints from filenames -> partition transport chunks
   -> assign/build/validate PrincipleRegistryState without interpreting prose as policy
+  -> leave paths.templates unread and inert during ordinary bootstrap
   -> validate parser/query resources
   -> for each command: validate cwd -> resolve executable -> validate typed placeholders
        -> validate mutability/alias semantics -> compile/check effect policies
@@ -10125,7 +10355,9 @@ sdde/
 │   │   ├── composition_root.zig    # concrete adapters and child graphs
 │   │   ├── actions/
 │   │   │   ├── bootstrap/
+│   │   │   ├── workflow_definitions/
 │   │   │   ├── preset_ingestion/  # code only; never runtime preset data
+│   │   │   ├── project_toolchain/
 │   │   │   ├── principles/
 │   │   │   ├── references/
 │   │   │   ├── authority_reconciliation/
@@ -10149,7 +10381,9 @@ sdde/
 │   │       └── scheduling/
 │   ├── domain/
 │   │   ├── config/
+│   │   ├── workflow_definition/
 │   │   ├── preset/
+│   │   ├── project_toolchain/
 │   │   ├── principles/
 │   │   ├── authority/
 │   │   ├── clarifications/
@@ -10193,5 +10427,8 @@ sdde/
 │   ├── end_to_end/
 │   └── packaging/
 └── design/
+    ├── examples/
+    │   └── .sddtoolkit.json         # sample only; never runtime fallback
+    ├── templates/                   # sdd init source examples; never packaged authority
     └── toolchainPresets/            # examples only; never packaged authority
 ```
