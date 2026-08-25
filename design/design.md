@@ -2,9 +2,14 @@
 
 ## Architecture and detailed design for `specify -> plan -> tasks -> implement`
 
-**Status:** Design  
-**Scope:** A new engine. The current repository is source material for workflow behavior; it is not the implementation target.  
-**Primary inputs:** `prompts/sdd-specify.md`, `prompts/sdd-plan.md`, `prompts/sdd-tasks.md`, `prompts/sdd-implement.md`, their templates and flow documentation, `new_engine/_structure.yaml`, every example under `new_engine/toolchainPresets/`, `new_engine/.sddtoolkit.json.example`, and the category-guided free-text examples under `new_engine/principles/`.  
+**Status:** Proposed design
+
+**Implementation decision:** [ADR 0001](decisions/0001-zig-engine.md) accepts Zig and native-executable packaging; the remainder of this design stays proposed.
+
+**Scope:** The SDDE engine developed in this repository. The cited historical workflow material remains design input, not an authorization to execute SDDE against another project.
+
+**Primary inputs:** The historical prompts, templates, and flow documentation cited throughout this design, plus the current source examples under `design/toolchainPresets/`, `design/.sddtoolkit.json.example`, and `design/principles/`.
+
 **Out of scope:** Editing the current prompts/scripts, `init`, `drift`, `audit`, version-control workflow integration, and artifact fingerprinting.
 
 ---
@@ -13,14 +18,15 @@
 
 The new engine must treat an LLM as an untrusted semantic content generator, not as the workflow runtime. The LLM must not choose the workflow sequence, perform filesystem operations, run arbitrary tools, declare its own output valid, or mark work complete. It receives a small typed assignment, preset-derived guidance, the relevant evidence, and an exact response schema. It returns a candidate. The engine parses, validates, repairs, renders, persists, and verifies that candidate.
 
-The design has six defining properties:
+The design has seven defining properties:
 
 1. **Ordered workflow:** one feature flows through `specify`, `plan`, `tasks`, and `implement` in that order. Every stage revalidates the previous stage before it starts.
 2. **Deterministic shell around probabilistic work:** argument parsing, feature identity, paths, filenames, artifact structure, identifiers, traceability, dependency graphs, writes, commands, task state, and stage gates are engine-owned.
 3. **Preset-controlled project operations:** every model-proposed project path is classified and checked against the selected development-environment preset, such as React, Node, Java, or .NET, before it can be recorded in a plan, emitted as a task, or written during implementation.
 4. **Atomic repair:** a failed candidate is repaired at the smallest independently replaceable field, record, section, task, path, or code operation. Unrelated valid output is retained. The repaired candidate is never committed until all applicable validators pass.
-5. **Actions and orchestrators:** actions have one responsibility and a common typed interface. They do not coordinate other components. Orchestrators contain actions and/or other orchestrators, but perform no filesystem, LLM, parsing, validation, rendering, or command work themselves.
+5. **Actions and orchestrators:** actions have one responsibility and a common typed contract. They do not coordinate other components. Orchestrators contain actions and/or other orchestrators, but perform no filesystem, LLM, parsing, validation, rendering, or command work themselves.
 6. **Closed authority reconciliation:** every datum or decision required by a workflow contract resolves to exactly one current supported authority, an explicitly authorized `not_applicable`/exception outcome, or a clarification owned by the earliest responsible stage. Missing, ambiguous, conflicting, multiple, stale, or unsupported authority never becomes a warning, default, approximation, or downstream local fix.
+7. **Native Zig distribution:** the engine is implemented in Zig and packaged as a native executable. It has no Node.js runtime or Node SEA dependency; JavaScript/TypeScript and Node remain target-project technologies governed through presets.
 
 The resulting boundary is:
 
@@ -104,6 +110,7 @@ The new engine adopts the following unambiguous rules:
 - Make failure explicit, stable, diagnosable, and safe to retry.
 - Keep the specification editable while making plan/task outputs review-only projections with explicit approval gates.
 - Make authority completeness a cross-stage, fail-closed property so no workflow can compensate locally for missing or unreconciled upstream decisions.
+- Ship the engine as a native Zig executable whose production behavior does not depend on the source tree, Zig toolchain, build cache, Node.js, or development-only assets.
 
 ### 3.2 Non-goals
 
@@ -188,15 +195,21 @@ The operating rules are:
 
 Application and domain code depend on interfaces, never provider implementations. The LLM SDK, OS filesystem, shell/process API, YAML parser, Markdown parser, AST parser, and logger are adapters behind ports. This permits action unit tests without network access, repository mutation, or a real compiler.
 
+In Zig, this dependency direction is enforced through module imports, build
+configuration, and an independent architecture test. Filesystem, process,
+network/HTTP, C ABI, and provider-client imports are confined to their declared
+adapter modules. Domain modules cannot reach those capabilities through a
+generic context, erased service locator, or transitive re-export.
+
 Orchestrators receive runner-owned `ChildNodeBinding` instances from the composition root, never raw child nodes. They do not receive `FileSystem`, `ModelGateway`, `CommandRunner`, parser, or validator ports. This makes the rule “orchestrators organize; actions do” mechanically enforceable and prevents child execution from bypassing the runner.
 
 ---
 
 ## 6. Common action and orchestrator contract
 
-Every action **and** every orchestrator implements the same runtime interface. There is one envelope, one result vocabulary, and one dependency declaration mechanism across the engine. A concrete implementation may add generic compile-time facades, but it must preserve this common runtime ABI so nodes can be chained, reordered, replaced, or nested without bespoke adapters.
+Every action **and** every orchestrator conforms to the same runtime contract. There is one envelope, one result vocabulary, and one dependency declaration mechanism across the engine. Zig has no built-in interface construct, so the implementation must encode this contract with compile-time-checked descriptors and runner-owned bindings rather than structural convention or runtime reflection. The exact internal dispatch representation may be selected during implementation, but it must preserve the common call contract so nodes can be chained, reordered, replaced, or nested without bespoke adapters. Any type erasure required inside the runner/composition root is sealed there and never becomes a domain, action, orchestrator, or model-facing capability.
 
-[View the Pipeline node interfaces sample](code.md#pipeline-node-interfaces).
+[View the Pipeline node contracts sample](code.md#pipeline-node-interfaces).
 
 `NodeRuntime` is deliberately capability-free:
 
@@ -216,7 +229,9 @@ Examples of keys are `engine.config@1`, `environment.compiled.web@1`, `reference
 
 [View the Pipeline envelope sample](code.md#pipeline-envelope).
 
-The registry is not an untyped property bag. Every value is retrieved through a versioned `DataKey<T>` and schema-checked on insertion. A node may read only keys declared by `requires`/`optional`, write only keys declared by `produces`/`replaces`, and invalidate only declared keys. Large bodies use engine-controlled content handles; arbitrary model paths are never registry keys.
+In Zig, immutable means the runner owns the envelope and every reachable allocation, a node receives only a bounded const view for the duration of one invocation, and the node cannot retain aliases into that storage. A returned delta owns its new allocations until the runner either applies or destroys it. Allocator ownership, `deinit`, `defer`, and `errdefer` behavior are part of the contract and are exercised on every outcome and error path.
+
+The registry is not an untyped property bag. Every value is retrieved through a versioned typed key and schema-checked on insertion. A node may read only keys declared by `requires`/`optional`, write only keys declared by `produces`/`replaces`, and invalidate only declared keys. Large bodies use engine-controlled content handles; arbitrary model paths are never registry keys. The illustrative `DataKey<T>` notation denotes this contract; it does not require TypeScript generics or a heterogeneous unchecked map in Zig.
 
 `Outcome` is the same closed union for actions and orchestrators:
 
@@ -226,7 +241,7 @@ The registry is not an untyped property bag. Every value is retrieved through a 
 
 `NodeDelta.telemetryFactsAdded` is a closed union of IDs, enums, counts, timings, and outcomes. It contains no log level, message, arbitrary map, environment value, or raw model/reference/code body. Actions may add facts; orchestrator lifecycle/branch facts are derived by the runner. After contract/delta validation, the runner's `PipelineTelemetryObserver` starts a separate logging-internal `PipelineEnvelope` and passes those facts plus trusted run/node context through `FeatureLoggingOrchestrator`. Both business and logging nodes still use `PipelineNode` and return all intermediate values through validated `NodeDelta`s. Logging-only `DataKey`s are compiler-locked, transient, non-model-visible, excluded from business-envelope composition and self-observation, and destroyed by the runner on every terminal logging branch. Thus sanitized prompt records may pass between discrete logging actions without bypassing the common ABI, persisting in workflow state, or becoming model context. `NodeRuntime` continues to expose no logger.
 
-An `invalid` outcome is not an exception. It is the normal input to an atomic repair orchestrator. `blocked` and `failed` are never sent to an LLM repair loop unless the diagnostic explicitly declares that model repair is valid.
+An `invalid` outcome is not an operational error. It is the normal input to an atomic repair orchestrator. Zig error unions carry unexpected operational failures to a typed failure boundary; they do not replace the closed workflow outcome or permit a failure to become success. `blocked` and `failed` are never sent to an LLM repair loop unless the diagnostic explicitly declares that model repair is valid.
 
 The pipeline runner validates node contracts before execution, applies immutable deltas after a successful node, and refuses a chain with missing inputs, undeclared writes, incompatible schema versions, duplicate producers, or invalid side-effect ordering. An orchestrator schedules nodes; the runner performs contract/data plumbing.
 
@@ -3779,16 +3794,23 @@ In temporary repositories with a fake model gateway:
 15. tamper with `plan.md` and `tasks.md`, verify rejection/regeneration without import, then edit `spec.md` through its authenticated path and prove ordinary downstream invalidation/review;
 16. crash/restart at specify, clarification, plan, review, tasks, task-checkpoint, adapter-effect, final-overlay, and final-stage boundaries and prove the common transaction/lock/ledger recovery gates converge before new model, allocation, write, or command work.
 17. exercise missing, ambiguous, conflicting, multiply matched, stale, unsupported, explicitly excepted, and explicitly not-applicable required authority across unrelated requirement kinds; prove identical shared reconciliation semantics, earliest-owner `S/P/T` routing, complete downstream invalidation, and that no plausible/local substitute reaches plan, tasks, implementation, or repair.
+18. build the native executable with the pinned Zig toolchain, copy only the declared release artifacts into a clean temporary directory, and run the CLI/config-discovery smoke suite without the source tree, Zig toolchain, build cache, Node.js, or development-only assets.
 
 ---
 
 ## 29. Suggested package/module structure
 
-This is logical and language-neutral:
+The logical dependency boundaries map to this Zig source/build layout:
 
 [View the Suggested package structure sample](code.md#suggested-package-structure).
 
 Domain modules have no infrastructure dependencies. The composition root is the only location that constructs concrete adapters and child-node graphs.
+
+Zig unit tests may remain beside the owning declarations. Cross-module
+architecture, fixture, failpoint, packaged-executable, and end-to-end tests live
+under the top-level test tree shown in the sample. Runtime toolchain presets and
+project principles are loaded only from validated project configuration; the
+executable never falls back to the design examples or source tree.
 
 ---
 
@@ -3796,6 +3818,10 @@ Domain modules have no infrastructure dependencies. The composition root is the 
 
 ### Increment 1: contracts and deterministic core
 
+- Pin the accepted Zig compiler version and create the `build.zig` scaffold,
+  repository-defined verification steps, module import boundaries, and native
+  clean-environment packaging smoke test. Adding a production dependency still
+  requires explicit approval.
 - Define config/preset/model-response schemas.
 - Define IR, diagnostic, evidence, action, orchestrator, and state contracts.
 - Implement the compiler-locked requiredness/ownership/reconciliation registries, structural authority-requirement ledger, closed reconciliation outcomes, complete-ledger validator, and generic earliest-owner gap router before enabling any stage model route.
@@ -3857,7 +3883,7 @@ The new engine is ready for production evaluation when all of the following are 
 4. Specify launches only as `sdd specify --reference <relative-selector>` (or an exactly equivalent one-selector API/compatibility adapter); missing/duplicate/removed/positional inputs fail before activation, and the title/description/goal are derived only from validated reference authority.
 5. No LLM action has a filesystem, process, state, logger, or unrestricted tool interface.
 6. No orchestrator imports or directly uses infrastructure/domain-operation ports; actions cannot contain/call actions or orchestrators, while orchestrators may contain only runner-owned child bindings to actions/orchestrators.
-7. Every action and orchestrator implements the same typed `PipelineNode` interface, communicates through immutable validated envelopes/deltas, and has the required isolated action or spy-child orchestrator tests.
+7. Every action and orchestrator conforms to the same typed `PipelineNode` contract, communicates through immutable validated envelopes/deltas, and has the required isolated action or spy-child orchestrator tests.
 8. Mandatory metadata event logging resolves beneath `<paths.specs>/<featureId>/logs/`, uses the `.sddtoolkit.json` threshold with exact `CRITICAL -> fatal` and `WARN -> warning` aliases, survives prior-run tail recovery, and fails closed without becoming workflow authority; body/prompt logging remains independently opt-in, redacted, bounded, and off by default.
 9. Fixed workflow artifact paths are engine-assigned, and every path-like model field is structured, normalized, contained, classified, preset-validated, and authorized before it can enter specification, plan, tasks, or a write transaction.
 10. Planned new files use engine-enumerated `pathCandidateId` choices before minting a `fileId`; every actionable project-file reference in tasks/implementation is only a `fileId`, renderers alone display validated paths, and unbound path-shaped prose is rejected.
@@ -3891,14 +3917,25 @@ The new engine is ready for production evaluation when all of the following are 
 38. Specify owns feature-intent/reference-meaning gaps, plan owns design/architecture/policy/repository/capability/verification-strategy gaps, tasks owns executable-decomposition/authorization/dependency/evidence-binding gaps, and implementation owns none of those decisions; discovering a gap downstream cannot change its owner.
 39. Every authority refresh, clarification resolution, repair, recovery, approval gate, and pre-commit boundary rebuilds and validates the complete reconciliation projection from current canonical authority; upstream changes invalidate all affected descendants, approvals, runtime, and evidence through the ordinary Section 24.5 route.
 40. Conformance tests apply the same reconciliation and routing assertions to multiple unrelated requirement kinds and reject caller-, fixture-, format-, framework-, token-, filename-, or example-specific continuation branches; a new kind is accepted only with a registered schema, ownership rule, reconciliation policy, and positive/negative tests.
+41. The engine is built from a repository-pinned Zig compiler through `build.zig`, and its release artifact passes the clean native-executable smoke suite without the source tree, Zig toolchain, build cache, Node.js, or development-only assets.
 
 ---
 
-## 32. Deferred implementation choices
+## 32. Accepted and deferred implementation choices
 
-These choices do not alter the architecture and may be decided during implementation:
+The following implementation choice is accepted by [ADR 0001](decisions/0001-zig-engine.md):
 
-- implementation language/runtime for the engine;
+- the engine is implemented in Zig and distributed as a native executable;
+  TypeScript, Node.js, and Node SEA are not engine implementation or packaging
+  technologies. JavaScript/TypeScript and Node presets continue to describe
+  supported target-project environments.
+
+The following choices remain deferred and may be decided during implementation
+without altering the architecture:
+
+- exact Zig compiler version and upgrade policy, which must be pinned before
+  the implementation scaffold is accepted;
+- release build modes, linking strategy, and supported platform matrix;
 - concrete JSON Schema, Markdown AST, tree-sitter/compiler, PDF, office, image/OCR, and overlay libraries;
 - the UI/API used to record manual verification evidence;
 - which binary reference readers ship in the first release versus plugins;
@@ -4017,5 +4054,8 @@ The current workflow has the correct high-level shape but gives the model too mu
 - The engine gives precise preset-derived guidance for exactly one failed unit.
 - The LLM repairs only that unit.
 - The engine renders, writes, runs, verifies, and advances state.
+- Zig supplies the native executable, explicit ownership/error model, and
+  compile-time structure for these boundaries; it does not move workflow
+  authority out of the deterministic contracts.
 
 This is the appropriate deterministic layer for lower-capability models: it does not ask a nano model to behave like a reliable workflow engine, and it does not attempt to replace the model where interpretation and synthesis are genuinely required.

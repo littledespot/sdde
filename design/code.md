@@ -1,10 +1,21 @@
-# Deterministic SDD Engine code and interface samples
+# Deterministic SDD Engine contract and data-shape samples
 
 This companion contains the sample contracts, schemas, configuration, flow notation, and package layout referenced by [the engine design](design.md). The design document is normative; these samples illustrate its contracts and must evolve with it.
 
+The `text` blocks use language-neutral SDDE contract notation; they are not
+TypeScript or JavaScript source. In the Zig implementation, closed `A | B`
+variants map to `union(enum)`, exhaustive branches map to `switch`, optional
+values map to `?T`, and unexpected operational failures map to error unions.
+`immutable` means runner-owned storage exposed through bounded const views, not
+merely a const binding. Generic-looking forms such as `DataKey<T>` describe a
+typed relationship that Zig must enforce at compile time; they do not authorize
+an unchecked heterogeneous map or runtime reflection. Target-project YAML/JSON
+examples may still mention TypeScript, JavaScript, or Node because those are
+environments the Zig engine governs.
+
 ## Contents
 
-1. [Pipeline node interfaces](#pipeline-node-interfaces)
+1. [Pipeline node contracts](#pipeline-node-interfaces)
 2. [Capability-free node runtime](#node-runtime)
 3. [Node contract and typed data keys](#node-contract-and-data-keys)
 4. [Pipeline envelope](#pipeline-envelope)
@@ -45,10 +56,10 @@ This companion contains the sample contracts, schemas, configuration, flow notat
 
 <a id="pipeline-node-interfaces"></a>
 
-## 1. Pipeline node interfaces
+## 1. Pipeline node contracts
 
 ```text
-interface PipelineNode {
+contract PipelineNode {
   contract: NodeContract
   execute(
     envelope: PipelineEnvelope,
@@ -56,28 +67,28 @@ interface PipelineNode {
   ) -> Outcome
 }
 
-interface Action extends PipelineNode {
+contract Action conforms PipelineNode {
   contract.kind = "action"
   // Has no children, node runner, dispatcher, or orchestrator reference.
 }
 
-interface Orchestrator extends PipelineNode {
+contract Orchestrator conforms PipelineNode {
   contract.kind = "orchestrator"
-  childBindings: readonly ChildNodeBinding[]
+  childBindings: immutable sequence<ChildNodeBinding>
   // May invoke/schedule only runner-owned bindings and branch on Outcome metadata.
   // Has no filesystem, model, parser, validator, renderer, state, or process port.
 }
 
-interface ChildNodeBinding {
-  contract: ReadonlyNodeContract
+contract ChildNodeBinding {
+  contract: ImmutableNodeContract
   invoke(envelope: PipelineEnvelope, runtime: NodeRuntime) -> AppliedChildOutcome
   // Created only by PipelineRunner. Invocation always performs contract checks,
   // node-ID/attempt updates, delta application, and telemetry.
 }
 
-ReadonlyNodeContract = DeepReadonly<NodeContract>
+ImmutableNodeContract = Immutable<NodeContract>
 
-DeepReadonly<T> {
+Immutable<T> {
   // Type-system utility: every scalar/field/collection reachable from T is
   // immutable. It has no runtime mutation or reflection capability.
 }
@@ -123,15 +134,15 @@ TrustedNodeContext {
   // Constructed only by PipelineRunner and never accepted from a node/model.
 }
 
-interface PipelineTelemetryObserver {
+port PipelineTelemetryObserver {
   observeRunnerLifecycle(event: RunnerLifecycleEvent) -> void
   observeAppliedDelta(context: TrustedNodeContext,
-                      facts: readonly TelemetryFact[]) -> void
+                      facts: immutable sequence<TelemetryFact>) -> void
   // Owned by PipelineRunner. It is not a PipelineNode and is not reachable
   // from Action, Orchestrator, NodeRuntime, or model-facing data.
 }
 
-interface FeatureLogPort {
+port FeatureLogPort {
   acquireStreamLock(binding: FeatureLogBinding, stream, lockPolicy)
     -> FeatureLogStreamLockObservation
   inspect(binding: FeatureLogBinding, stream,
@@ -182,7 +193,7 @@ interface FeatureLogPort {
     -> FeatureLogRejectedLockCleanupObservation
 }
 
-interface TaskExecutionOverlayPort {
+port TaskExecutionOverlayPort {
   createOperationSavepoint(boundary: OperationApplyReadyBoundary,
                            key: TaskExecutionAdapterBoundaryRecordKey,
                            taskOverlayId, expectedTaskOverlayRevision)
@@ -228,7 +239,7 @@ interface TaskExecutionOverlayPort {
   // values, content-derived IDs, hashes, or an ambient adapter-side allocator.
 }
 
-interface FeatureExecutionControlPort {
+port FeatureExecutionControlPort {
   acquireProcessLease(
       identity: FeatureExecutionProcessLeaseId,
       boundedLeasePolicy)
@@ -262,7 +273,7 @@ interface FeatureExecutionControlPort {
   // lease identity is never rebound to a later process or run.
 }
 
-interface FinalValidationOverlayPort {
+port FinalValidationOverlayPort {
   acquireCollectionLock(
       collectionCapability,
       processLease: FeatureExecutionProcessLeaseCapability,
@@ -342,7 +353,7 @@ interface FinalValidationOverlayPort {
   // a fresh runner can reacquire only a new epoch before orphan inspection.
 }
 
-interface AuthenticationPort {
+port AuthenticationPort {
   authenticateAndConsume(authenticationLeaseRef, requiredAssurancePolicyId)
     -> AuthenticationObservation
   // The runner-owned lease table holds the credential handle outside every
@@ -399,10 +410,10 @@ DataKey<T> {
   valueSchema
 }
 
-interface ImmutableDataRegistry<K, V> {
+contract ImmutableDataRegistry<K, V> {
   contains(key: K) -> boolean
-  get(key: K) -> DeepReadonly<V> | absent
-  keys() -> readonly K[]
+  get(key: K) -> Immutable<V> | absent
+  keys() -> immutable sequence<K>
   // No set/delete/mutable-reference operation; PipelineRunner alone applies
   // validated NodeDelta values into a successor registry.
 }
@@ -9502,7 +9513,7 @@ Locate nearest ancestor containing exact .sddtoolkit.json and bind it as project
 ## 26. Reference reader contract
 
 ```text
-interface ReferenceReader {
+port ReferenceReader {
   id
   version
   supportedMediaTypes
@@ -10099,72 +10110,88 @@ task.started | task.completed | task.blocked | task.failed
 ## 35. Suggested package structure
 
 ```text
-engine/
-├── interface/
-│   ├── cli/
-│   └── api/
-├── application/
-│   ├── actions/
-│   │   ├── bootstrap/
-│   │   ├── preset-ingestion/      # implementation modules, never runtime preset data
+sdde/
+├── build.zig
+├── build.zig.zon
+├── src/
+│   ├── main.zig                    # process entry point only
+│   ├── root.zig                    # public library surface
+│   ├── interface/
+│   │   ├── cli.zig
+│   │   └── api.zig
+│   ├── application/
+│   │   ├── node.zig               # common contract/outcome/envelope
+│   │   ├── runner.zig             # sole delta application/invocation owner
+│   │   ├── composition_root.zig    # concrete adapters and child graphs
+│   │   ├── actions/
+│   │   │   ├── bootstrap/
+│   │   │   ├── preset_ingestion/  # code only; never runtime preset data
+│   │   │   ├── principles/
+│   │   │   ├── references/
+│   │   │   ├── authority_reconciliation/
+│   │   │   ├── clarifications/
+│   │   │   ├── authentication/
+│   │   │   ├── logging/
+│   │   │   ├── model/
+│   │   │   ├── artifacts/
+│   │   │   ├── paths/
+│   │   │   ├── validation/
+│   │   │   ├── tasks/
+│   │   │   ├── implementation/
+│   │   │   └── persistence/
+│   │   └── orchestrators/
+│   │       ├── workflow/
+│   │       ├── stages/
+│   │       ├── generation/
+│   │       ├── reconciliation/
+│   │       ├── repair/
+│   │       ├── transactions/
+│   │       └── scheduling/
+│   ├── domain/
+│   │   ├── config/
+│   │   ├── preset/
 │   │   ├── principles/
-│   │   ├── references/
-│   │   ├── authority-reconciliation/
+│   │   ├── authority/
 │   │   ├── clarifications/
-│   │   ├── authentication/
-│   │   ├── logging/
-│   │   ├── model/
-│   │   ├── artifacts/
-│   │   ├── paths/
-│   │   ├── validation/
+│   │   ├── workflow/
+│   │   ├── references/
+│   │   ├── specification/
+│   │   ├── planning/
 │   │   ├── tasks/
 │   │   ├── implementation/
-│   │   └── persistence/
-│   └── orchestrators/
-│       ├── workflow/
-│       ├── stages/
-│       ├── generation/
-│       ├── reconciliation/
-│       ├── repair/
-│       ├── transactions/
-│       └── scheduling/
-├── domain/
-│   ├── config/
-│   ├── preset/
-│   ├── principles/
-│   ├── authority/
-│   ├── clarifications/
-│   ├── workflow/
-│   ├── references/
-│   ├── specification/
-│   ├── planning/
-│   ├── tasks/
-│   ├── implementation/
-│   ├── diagnostics/
-│   └── evidence/
-├── ports/
-│   ├── filesystem/
-│   ├── model/
-│   ├── process/
-│   ├── parser/
-│   ├── readers/
-│   ├── state/
-│   ├── authentication/
-│   ├── feature-log/
-│   └── telemetry/
-├── adapters/
-│   ├── filesystem/
-│   ├── models/
-│   ├── processes/
-│   ├── parsers/
-│   ├── readers/
-│   ├── manifests/
-│   ├── authentication/
-│   ├── feature-log/
-│   └── telemetry/
-├── renderers/
-├── schemas/
-├── toolchain-preset-schemas-and-builtins/
-├── principle-category-mappings/
-└── tests/
+│   │   ├── diagnostics/
+│   │   └── evidence/
+│   ├── ports/
+│   │   ├── filesystem.zig
+│   │   ├── model.zig
+│   │   ├── process.zig
+│   │   ├── parser.zig
+│   │   ├── readers.zig
+│   │   ├── state.zig
+│   │   ├── authentication.zig
+│   │   ├── feature_log.zig
+│   │   └── telemetry.zig
+│   ├── adapters/
+│   │   ├── filesystem/
+│   │   ├── models/
+│   │   ├── processes/
+│   │   ├── parsers/
+│   │   ├── readers/
+│   │   ├── manifests/
+│   │   ├── authentication/
+│   │   ├── feature_log/
+│   │   └── telemetry/
+│   ├── renderers/
+│   ├── schemas/
+│   ├── preset_schema/              # schemas/compiler, no preset fallback data
+│   └── principle_categories/
+├── test/
+│   ├── architecture/
+│   ├── contracts/
+│   ├── properties/
+│   ├── fault_injection/
+│   ├── end_to_end/
+│   └── packaging/
+└── design/
+    └── toolchainPresets/            # examples only; never packaged authority
 ```

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Build a deterministic TypeScript single-executable application that implements
+Build a deterministic Zig native single-executable application that implements
 the workflow:
 
 **specify -> plan -> tasks -> implement**
@@ -36,18 +36,22 @@ the target project and workflow explicitly.
 - **design/design.md** is the governing implementation baseline, but it is
   currently marked **Proposed design**. Preserve that status until the user
   explicitly accepts or amends it.
-- **design/code.md** contains interface and code samples. Treat those samples as
-  illustrative unless the governing design explicitly makes a contract
-  normative.
+- **design/code.md** contains contract and data-shape samples. Treat those
+  samples as illustrative unless the governing design explicitly makes a
+  contract normative.
 - Files beneath **design/principles/** are templates/source material, not an
   instantiated constitution for this engine.
 - Files beneath **design/toolchainPresets/** and
   **design/.sddtoolkit.json.example** are source examples, not automatic runtime
   configuration or fallback data.
-- **CODEX_TODO.md** is the guardrail implementation plan and progress checklist.
-  It does not override the governing design.
-- TypeScript/Node SEA implementation choices remain undecided until an accepted
-  ADR or explicit user decision records them.
+- **CODEX_TODO.md** does not currently exist. If one is introduced, it is only
+  the guardrail implementation plan and progress checklist; it does not
+  override the governing design.
+- **design/decisions/0001-zig-engine.md** records the accepted implementation
+  language and distribution decision: the engine is written in Zig and built
+  as a native executable. TypeScript, Node.js, and Node SEA are not engine
+  implementation or packaging technologies. JavaScript/TypeScript and Node
+  presets remain valid policies for target projects.
 
 Do not silently convert a proposed decision, example, template, or TODO into
 accepted project authority.
@@ -86,7 +90,7 @@ sections below.
 | Work area | Required design sections |
 | --- | --- |
 | Any engine implementation | Sections 1, 3, 4, 30, and applicable items in 31 |
-| Node/runtime contracts | Sections 5-7; code samples 1-6 and 24 |
+| Pipeline-node/runtime contracts | Sections 5-7; code samples 1-6 and 24 |
 | Configuration/principles/presets | Sections 9-11 and 15; code samples 14-21 and 25 |
 | Model routes/context | Sections 12-13.4 and 21; code samples 22-24 |
 | Specify | Section 17 |
@@ -102,8 +106,9 @@ sections below.
 | Testing | Section 28 |
 | Package structure | Section 29; code sample 35 |
 
-For guardrail setup and sequencing, consult the applicable section of
-**CODEX_TODO.md** without treating unchecked proposals as accepted architecture.
+If **CODEX_TODO.md** is introduced, consult its applicable section for guardrail
+setup and sequencing without treating unchecked proposals as accepted
+architecture.
 
 ## Work authorization
 
@@ -194,7 +199,7 @@ do not manufacture an architecture exercise.
   typed outcomes/diagnostics.
 - An orchestrator performs no filesystem, model, parsing, rendering, validation,
   command, logging, state, or transaction work.
-- A capability-free node runtime stays capability-free.
+- A capability-free pipeline-node runtime stays capability-free.
 - Only the runner validates/applies node deltas and invokes node execution.
 - Only the composition root constructs concrete adapters and child-node graphs.
 - Domain code imports no infrastructure/provider implementation.
@@ -242,8 +247,9 @@ Do not introduce:
   runtime fallback;
 - duplicated validation, normalization, transition, retry, rendering, or
   command policy;
-- new any, unsafe broad casts, TypeScript suppression comments, swallowed
-  errors, or empty catch blocks;
+- unbounded `anytype`/`anyopaque` at domain or trust boundaries, unjustified
+  pointer/integer casts, `@constCast`, undefined-memory reads, ignored errors,
+  or cleanup omissions;
 - skipped/focused tests or weakened assertions;
 - schema, validator, type, lint, architecture, or test weakening merely to make
   the current task pass;
@@ -261,24 +267,35 @@ Do not introduce:
 If an exception is genuinely required, expose it as an explicit decision with a
 narrow contract, negative tests, and the required approval.
 
-## TypeScript implementation expectations
+## Zig implementation expectations
 
-Once the TypeScript scaffold exists:
+Once the Zig scaffold exists:
 
-- Enable strict checking plus unchecked-index, exact-optional-property,
-  implicit-override, fallthrough, and unknown-catch protections.
-- Use discriminated unions and exhaustive handling for outcomes and workflow
-  states.
-- Use opaque/branded types for validated IDs, paths, approvals, commands,
-  evidence, and transactions.
-- Version runtime schemas and reject unknown fields.
-- Separate raw, parsed, normalized, validated, approved, and committed types.
-- Enforce dependency direction with static import rules and an independent
+- Pin the supported Zig compiler version in repository-owned build metadata;
+  build and test only through `build.zig` steps once those steps exist.
+- Use tagged unions and exhaustive `switch` handling for outcomes, diagnostics,
+  workflow states, and every other closed variant set.
+- Use distinct wrapper types for validated IDs, paths, approvals, commands,
+  evidence, capabilities, and transactions; do not pass raw byte slices where
+  one of those states is required.
+- Parse external, persisted, configuration, and model bytes into versioned,
+  closed structs/unions that reject unknown fields and unsupported versions.
+- Keep raw, parsed, normalized, validated, approved, and committed types
+  separate and make conversions explicit.
+- Make allocator and ownership boundaries explicit. Borrowed slices cannot
+  outlive their owner; owned values have deterministic `deinit`, `defer`, and
+  `errdefer` cleanup on every success and error path.
+- Represent expected domain rejection with typed outcomes and unexpected
+  operational failure with Zig error unions; neither may be collapsed into
+  success or silently discarded.
+- Enforce dependency direction with module-import rules plus an independent
   architecture/dependency test.
-- Restrict Node built-ins and provider SDKs to their authorized adapters.
+- Restrict filesystem, process, network/HTTP, C ABI, and provider-client access
+  to their authorized adapters.
 
-Do not select concrete libraries for a deferred choice without recording the
-decision requested by the task.
+Do not select the Zig compiler version, concrete libraries, linking strategy,
+or supported platform matrix without recording the decision requested by the
+task.
 
 ## Testing expectations
 
@@ -294,9 +311,9 @@ decision requested by the task.
   every transaction phase, interruption, stale approval, and retry exhaustion.
 - End to end: each increment must work with a fake model gateway before using a
   real provider.
-- SEA: build and run the packaged executable from a clean temporary directory
-  without the source tree or node_modules whenever packaging/runtime behavior
-  is affected.
+- Native packaging: build and run the packaged executable from a clean
+  temporary directory without the source tree, Zig toolchain, build cache, or
+  development-only assets whenever packaging/runtime behavior is affected.
 
 Line coverage alone is not evidence that an invariant is enforced. Every policy
 needs accepted and rejected cases.
@@ -313,8 +330,8 @@ or claim they ran.
   cross-cutting work.
 - Run targeted tests first, then architecture/type/schema checks, then the
   required full suite.
-- Run the SEA clean-environment smoke test for runtime, build, asset, config
-  discovery, filesystem, process, or packaging changes.
+- Run the native-executable clean-environment smoke test for runtime, build,
+  asset, config discovery, filesystem, process, or packaging changes.
 - If a required check cannot run, explain why, run the strongest safe
   substitute, and disclose the missing evidence. Do not claim full completion.
 
@@ -331,7 +348,7 @@ A change is complete only when:
 - targeted and required full checks pass;
 - the complete diff has been reviewed for scope expansion, duplicated policy,
   fallbacks, bypasses, suppression, and weakened validation;
-- SEA packaging is built and smoke-tested when affected;
+- native packaging is built and smoke-tested when affected;
 - generated artifacts match canonical rendering when affected;
 - documentation/ADRs/traceability are updated when a contract changed;
 - the final report names changed contracts/files, tests, exact validation
@@ -366,7 +383,7 @@ A change is complete only when:
 - Safe path: return through the engine-owned typed validation, approval, and
   transaction flow.
 
-### SEA-only regressions
+### Packaged-executable regressions
 
 - Flag source-relative, current-directory, dynamic-loading, or unpackaged-asset
   assumptions that are tested only in the development runtime.
