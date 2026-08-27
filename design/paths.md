@@ -1,12 +1,15 @@
 # `.sddtoolkit.json` path contract
 
 Every SDDE project has exactly one `.sddtoolkit.json` at its project root. The
-file's location defines that root; the abridged source sample elsewhere in this
-repository is neither the complete normative schema nor a runtime fallback.
+file's location defines that root. The repository example defines the current
+reader-facing JSON shape but is never itself runtime configuration or a
+fallback.
 
-The closed `paths` object contains exactly seven project-relative directory
-roots. Each value is normalized and validated against the canonical project
-root before any path is used.
+The decoded `paths` object contains exactly seven strings representing intended
+project-relative directory roots. F0001 provides those strings as immutable
+configuration information. The path-policy owner separately normalizes and
+validates each value against the canonical project root before any path is
+used; decoding a string never grants path authority.
 
 | Key | Purpose |
 | --- | --- |
@@ -29,8 +32,7 @@ The engine derives, rather than separately configures, these storage children:
 | `<paths.workflows>/features/` | Engine-owned canonical per-feature workflow and execution state. |
 | `<paths.workflows>/transactions/` | Engine-owned project activation and recovery transaction collection. |
 
-The abridged source sample is
-[`examples/.sddtoolkit.json`](examples/.sddtoolkit.json). It illustrates selected
-fields of the mandatory project-root file; it is not the complete normative
-schema. The engine never searches `design/` or copies the sample into a project
-implicitly.
+The current reader-facing schema example is
+[`examples/.sddtoolkit.json`](examples/.sddtoolkit.json). The engine never
+searches `design/`, reads this repository copy as project configuration, or
+copies it into a project implicitly.

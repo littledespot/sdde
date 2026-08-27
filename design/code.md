@@ -8790,10 +8790,13 @@ Starting at the invocation working directory, the runtime walks ancestors in a
 fixed nearest-first order and stops at the first exact `.sddtoolkit.json`; that
 file's directory is the project root. The authoritative path is therefore
 `<projectRoot>/.sddtoolkit.json`. The repository file
-`design/examples/.sddtoolkit.json` is a legacy/source example only; it is never
-a runtime fallback and does not contain the complete policy shape illustrated
-below. A missing exact filename blocks invocation. Every base directory
-is supplied by the validated seven-key `paths` object. The configured
+`design/examples/.sddtoolkit.json` defines F0001's current closed reader-facing
+shape: `version`, `logs`, `models`, and `paths`. It is never a runtime fallback.
+The larger document below illustrates a proposed future versioned engine-policy
+extension; F0001 does not accept both shapes, infer missing fields, or migrate
+between them. A missing exact filename blocks invocation. Every base directory
+is supplied by the decoded seven-key `paths` object and must then be validated
+by the path-policy owner. The configured
 `specs`, `references`, `specsArchive`, `workflows`, `toolchainPreset`,
 `principles`, and `templates` roots are distinct authorities; only
 `specsArchive` may be nested beneath `specs`. No action may substitute a
@@ -8834,10 +8837,13 @@ sources and receive no automatic placeholder expansion.
         └── *.template.md
 ```
 
-`design/templates/`, `design/toolchainPresets/`, and
-`design/examples/.sddtoolkit.json` are source/design examples only. Ordinary
-bootstrap never searches or packages them as runtime authority and never copies
-them implicitly.
+`design/templates/` and `design/toolchainPresets/` are source/design material.
+`design/examples/.sddtoolkit.json` is the reader-facing schema example. None is
+searched, packaged as runtime authority, or copied implicitly by ordinary
+bootstrap.
+
+The following extended policy document is illustrative and is not the current
+F0001 input contract:
 
 ```json
 {
@@ -9669,7 +9675,8 @@ FeatureWorkflowOrchestrator
 
 ```text
 Locate nearest ancestor containing exact .sddtoolkit.json and bind it as project root
-  -> read/parse/validate that exact no-follow <projectRoot>/.sddtoolkit.json
+  -> read/parse/structurally decode that exact no-follow
+     <projectRoot>/.sddtoolkit.json into one immutable SDDToolKitConfig
   -> resolve/validate all seven required paths bases against that project root
   -> prove peer-root separation, allowing only paths.specsArchive beneath paths.specs
   -> build/validate BootstrapRootRegistry before any engine-derived child exists

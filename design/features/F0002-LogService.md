@@ -2,9 +2,9 @@
 
 **Status:** Proposed feature design
 
-**Implementation readiness:** Blocked until F0001's sealed projection contract
-and the log-level canonicalizer/policy-validator ownership prerequisite in
-Section 6.4 are accepted in the governing catalogues.
+**Implementation readiness:** Ready. The governing action catalogue now uses
+the typed `LogsConfig` handoff and the single canonicalizer-to-validator
+dependency recorded in Section 6.4.
 
 **Classification:** Core, cross-cutting feature-logging subsystem
 
@@ -19,11 +19,13 @@ informative view of the same boundary.
 
 **Required collaborator:** The proposed
 [F0001 — SDDToolKitReader](F0001-SDDToolKitReader.md) is the sole logical
-feature permitted to ingest `.sddtoolkit.json`. F0001 ends at a validated
-logging-settings projection; the specialized compiler and bootstrap-authority
-owner remain separate. Runtime F0002 consumes neither the reader projection
-nor the transient compiler fragment. It consumes only a validated
-`FeatureLogPolicy` reconstructed from persisted authority and an exact
+feature permitted to read and structurally decode `.sddtoolkit.json`. F0001
+ends at one immutable `SDDToolKitConfig`; the runner supplies only its const
+`LogsConfig` view to the specialized logging-policy compiler through the
+compiler's declared typed input. The compiler and bootstrap-authority owner
+remain separate. Runtime F0002 consumes neither the configuration nor the
+transient compiler fragment. It consumes only a validated `FeatureLogPolicy`
+reconstructed from persisted authority and an exact
 `FeatureLogBinding` constructed by the governing binding actions from that
 policy plus current feature, run, and artifact-registry authority.
 
@@ -162,15 +164,15 @@ The following owners remain outside the logical logging subsystem:
 
 | Owner | Responsibility |
 | --- | --- |
-| `SDDToolKitReader` | Exclusively discover, inspect, open, read, parse, and generally validate the one exact, bounded, no-follow project-root `.sddtoolkit.json`; publish only the narrow immutable logging-settings projection and evidence permitted by its closed consumer inventory. Raw bytes, the JSON tree, file handles, and filesystem capabilities remain private. |
-| Specialized logging-policy compiler | Consume only F0001's validated logging-settings projection and produce a feature-independent transient compiled fragment without interacting with the file, receiving unrelated fields, persisting authority, or activating runtime logging. The canonicalizer/validator ownership prerequisite in Section 6.4 must be resolved first. |
+| `SDDToolKitReader` | Exclusively discover, inspect, open, read, parse, and structurally decode the one exact, bounded, no-follow project-root `.sddtoolkit.json` into an immutable `SDDToolKitConfig`. Raw bytes, the JSON tree, file handles, and filesystem capabilities remain private. |
+| Specialized logging-policy compiler | Consume only the const `LogsConfig` view, canonicalize and validate logging semantics through the governing discrete actions, and produce a feature-independent transient compiled fragment without interacting with the file, receiving unrelated sections, persisting authority, or activating runtime logging. |
 | Compiler-owned event-definition registry | Solely define and version event kinds and assign one governing canonical level, template, field schema, and sensitivity classification to each. It does not redefine the canonical-level variants or ranks. F0002 receives the resolved immutable registry and never defines or mutates it. |
 | Bootstrap-authority owner | Incorporate the validated compiler fragment into compiled engine policy and persist it only through an accepted `BootstrapAuthorityState`; compare/adopt successor authority through the governing transaction route. |
 | Workflow-artifact registry owner | Derive and validate the fixed feature event/prompt collection paths and publish their typed collection identities. No F0002 action recalculates them. |
 | Producing service | Return only a registered, typed fact describing what occurred. |
-| Pipeline runner | Validate/apply node deltas, derive lifecycle facts, establish fact order, seed the logging-internal envelope, invoke the logging child binding, consume its standard `Outcome`/composite delta, and enforce business-node barriers. It performs no definition lookup, redaction, threshold, serialization, or sink work. |
+| Pipeline runner | Own the accepted immutable configuration, satisfy the logging compiler's declared `LogsConfig` input, validate/apply node deltas, derive lifecycle facts, establish fact order, seed the logging-internal envelope, invoke the logging child binding, consume its standard `Outcome`/composite delta, and enforce business-node barriers. It performs no configuration interpretation, definition lookup, redaction, threshold, serialization, or sink work. |
 | Transaction recovery | Stabilize a transaction that was already prepared or applying when logging failed. |
-| Composition root | Construct concrete adapters and the runner-owned logging graph. |
+| Composition root | Construct concrete adapters, the config-to-compiler binding, and the runner-owned logging graph. It executes no node and transports no runtime value. |
 
 LogService must not absorb these collaborators into a service locator or a
 generic capability bag, and an external collaborator must not take ownership of
@@ -330,11 +332,12 @@ transient compiler value.
 
 The ownership flow is fixed:
 
-1. F0001 validates the exact project-root configuration and produces only its
-   sealed, schema-valid logging-settings projection/evidence for runner-
-   validated application;
-2. the specialized compiler consumes that projection, performs the accepted
-   canonicalization/policy-validation contracts, and produces one
+1. F0001 reads the exact project-root configuration once and structurally
+   decodes it into one immutable `SDDToolKitConfig` for runner-validated
+   application;
+2. the runner supplies only its const `LogsConfig` view through the compiler's
+   declared typed input; the specialized compiler performs the canonicalization
+   and logging-policy-validation contracts and produces one
    feature-independent transient `CompiledFeatureLoggingPolicyFragment`;
 3. compiled-engine-policy/bootstrap-authority assembly incorporates the exact
    fragment, and only an accepted transaction persists it in
@@ -350,19 +353,20 @@ The ownership flow is fixed:
 
 Only after those joins pass may the runner seed the logging-internal envelope
 with `FeatureLogPolicy`, `FeatureLogBinding`, and the immutable registry.
-F0002 receives no `engine.config@1`, F0001 projection, transient compiler key,
-raw configured level, bootstrap candidate, arbitrary path, or reader/filesystem
+F0002 receives no `SDDToolKitConfig`, `LogsConfig`, transient compiler key, raw
+configured level, bootstrap candidate, arbitrary path, or reader/filesystem
 capability.
 
 F0002, the specialized compiler, and every other non-F0001 component are
 architecturally unable to discover, stat, open, watch, read, parse, or traverse
-`.sddtoolkit.json`. The composition root wires contracts but does not
-transport, transform, persist, or activate values.
+`.sddtoolkit.json`. The composition root constructs the bindings but does not
+execute nodes, transport runtime values, validate settings, persist authority,
+or activate policy.
 
 ### 6.2 Invalid or unavailable configuration and startup
 
-Discovery, read, parse, schema, ingestion-seal, projection, canonicalization, or
-policy-validation failure blocks bootstrap with no source-example, packaged
+Discovery, read, JSON parse, structural decode, canonicalization, or logging-
+policy validation failure blocks bootstrap with no source-example, packaged
 file, environment variable, model, caller, or hard-coded threshold fallback.
 
 Before a feature-log binding is active, reporting is limited to bounded,
@@ -388,30 +392,27 @@ binding's persisted authority lineage. It never interprets an existing segment
 with a new root configuration or candidate fragment. A fresh run activates the
 current persisted policy only after complete prior-run finalization.
 
-### 6.4 Governing catalogue prerequisite
+### 6.4 Canonicalizer and validator ownership
 
-F0001 Section 4.5 identifies a higher-order conflict that F0002 cannot resolve
-locally: `CanonicalizeLogLevelAction` owns spelling/alias conversion, while
-`ValidateLoggingPolicyAction` does not consume its result/evidence and also
-claims alias/threshold semantics. That creates duplicate functionality and an
-unrepresented order dependency under governing Section 6.3.
+`CanonicalizeLogLevelAction` is the sole owner of configured spelling, case,
+and alias conversion. It consumes `LogsConfig.level` and returns one canonical
+level plus alias evidence. `ValidateLoggingPolicyAction` consumes the complete
+`LogsConfig`, that canonical result/evidence, engine hard bounds, and the event-
+definition registry. It validates the complete logging-policy invariants but
+does not reinterpret or recanonicalize the configured level.
 
-The specialized compiler and F0002 integration remain blocked until the
-governing catalogue assigns one canonicalization owner and represents the
-dependency in typed inputs. The smallest single-responsibility resolution is
-for the canonicalizer to produce canonical level plus alias evidence and for
-the policy validator to consume that result while validating only complete
-policy invariants. F0002 must not canonicalize configured text, duplicate the
-check, depend on incidental graph order, or accept the raw spelling while this
-decision is unresolved.
+This typed dependency is part of the specialized compiler graph and removes
+both duplicate authority and incidental ordering. F0002 receives only the
+validated compiled result; it must not canonicalize configured text or accept
+the raw spelling.
 
 ## 7. Canonical level contract
 
 F0002 does not define a second level enum, spelling table, alias map, rank map,
 or severity meaning. Governing design Section 26.5 owns the six canonical
 variants, their ranks and meanings, and the closed configured-spelling/alias
-table. After Section 6.4 is resolved, `CanonicalizeLogLevelAction` is the sole
-configured-spelling conversion owner. The immutable
+table. `CanonicalizeLogLevelAction` is the sole configured-spelling conversion
+owner. The immutable
 `LogEventDefinitionRegistry` separately owns only the assignment of one of
 those canonical variants to each event definition; it does not own or redefine
 the variants or ranks.
@@ -723,15 +724,15 @@ This feature is acceptable only when all of the following are true:
    only accepts/orders facts and seeds the logging envelope; definition lookup,
    projection, redaction, thresholding, sequencing, serialization, and sink
    work remain discrete actions.
-4. F0001 is the sole `.sddtoolkit.json` ingestion boundary. The compiler
-   consumes only F0001's sealed logging projection; only the bootstrap-
-   authority transaction owner persists a state incorporating the transient
-   compiled fragment; runtime F0002 rejects raw config, the reader projection,
-   the transient compiler key, and an unpersisted bootstrap candidate.
-5. Before the logging compiler/F0002 seam is implemented, the governing action
-   catalogue resolves Section 6.4's duplicate canonicalization ownership and
-   represents the result/evidence dependency. No local duplicate, hidden order,
-   or raw-spelling shortcut is permitted.
+4. F0001 is the sole `.sddtoolkit.json` read/decode boundary. The compiler
+   consumes only the const `LogsConfig` view supplied from F0001's immutable
+   result; only the bootstrap-authority transaction owner persists a state
+   incorporating the transient compiled fragment; runtime F0002 rejects raw
+   config, `SDDToolKitConfig`, `LogsConfig`, the transient compiler key, and an
+   unpersisted bootstrap candidate.
+5. The compiler graph uses Section 6.4's single canonicalization owner and
+   explicit canonical-result/evidence dependency. No duplicate conversion,
+   hidden order, or raw-spelling shortcut is permitted.
 6. Runtime receives the one compiler-owned immutable
    `LogEventDefinitionRegistry`; F0002 cannot construct or mutate it, and one
    `ResolveLogEventDefinitionAction` lookup determines each fact's canonical
@@ -809,16 +810,16 @@ evidence at the owning boundaries.
 
 ### 14.1 Authority and architecture tests
 
-- one shared seam fixture proving the specialized compiler accepts exactly
-  F0001's sealed logging projection/evidence, while runtime F0002 accepts only a
-  persisted-authority-derived `FeatureLogPolicy`, exact
+- one shared seam fixture proving the specialized compiler accepts exactly the
+  const `LogsConfig` view from F0001's immutable result, while runtime F0002
+  accepts only a persisted-authority-derived `FeatureLogPolicy`, exact
   `FeatureLogBinding`, and immutable event-definition registry;
-- rejection of raw configuration, F0001 private/projection keys, transient
-  compiler fragments, unpersisted bootstrap candidates, and every direct
-  `.sddtoolkit.json` discovery/read/watch/reread capability outside F0001;
+- rejection of raw configuration, whole `SDDToolKitConfig`, undeclared sibling
+  sections, transient compiler fragments, unpersisted bootstrap candidates,
+  and every direct `.sddtoolkit.json` discovery/read/watch/reread capability
+  outside F0001;
 - a governing-catalogue conformance check proving Section 6.4 has one
-  canonicalization owner and an explicit typed dependency before the compiler
-  integration is enabled;
+  canonicalization owner and an explicit typed dependency;
 - compiler-owned tests (referenced, not duplicated here) for configured name,
   case, alias, canonicalization, invalid type/value, and no-fallback behavior;
 - complete F0002 canonical-level threshold matrix plus rejection of aliases in
@@ -920,7 +921,7 @@ evidence at the owning boundaries.
 | --- | --- |
 | Engine ownership and trust boundary | Sections 1, 3, and 4 |
 | Dependency direction and capability-free nodes | Sections 5 and 6 |
-| Exclusive `.sddtoolkit.json` ingestion and persisted-policy authority flow | [F0001 — SDDToolKitReader](F0001-SDDToolKitReader.md), plus Sections 9, 13.1-13.2, and 15 |
+| Exclusive `.sddtoolkit.json` read/decode and persisted-policy authority flow | [F0001 — SDDToolKitReader](F0001-SDDToolKitReader.md), plus Sections 9, 13.1-13.2, and 15 |
 | Discrete logging actions | Section 13.9 |
 | Separate sanitized prompt-record route | Section 13.4 |
 | Failure and policy-transition orchestration | Sections 14.9 and 14.10 |

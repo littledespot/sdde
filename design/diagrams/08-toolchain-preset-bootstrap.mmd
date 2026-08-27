@@ -3,7 +3,7 @@ flowchart TD
     RUNNER --> LOCATE[LocateExactEngineConfigAction<br/>nearest ancestor's exact root .sddtoolkit.json;<br/>its containing directory is the canonical project root]
     LOCATE --> READ[ReadEngineConfigAction]
     READ --> PARSECFG[ParseEngineConfigAction]
-    PARSECFG --> SCHEMACFG[ValidateEngineConfigSchemaAction<br/>closed config; no default basename or fallback root]
+    PARSECFG --> SCHEMACFG[DecodeSDDToolKitConfigAction<br/>closed reader-facing shape and supported version;<br/>immutable config value; no domain-policy compilation]
     LOCATE --> HOST[DetectWorkspaceFilesystemPolicyAction]
     SCHEMACFG --> BASES[For each required paths key exactly once:<br/>specs, references, specsArchive, workflows, toolchainPreset,<br/>principles and templates]
     HOST --> BASES
@@ -308,7 +308,7 @@ flowchart TD
     FLOCK -- No --> FAILEND[Return the typed bootstrap failure]
     FRELEASE --> FAILEND
 
-    EXAMPLES[design/examples/.sddtoolkit.json<br/>abridged source sample only; not the complete normative schema] -. never searched, installed or used as runtime fallback .-> EXCLUDED[Excluded from runtime bootstrap]
+    EXAMPLES[design/examples/.sddtoolkit.json<br/>current reader-facing schema example] -. never searched, installed or used as runtime fallback .-> EXCLUDED[Excluded from runtime bootstrap]
     MIGRATE[Offline curated migration and human review] -. never invoked by bootstrap, specify, plan, tasks,<br/>implement or recovery .-> EXCLUDED
     MIGRATE -. separate administrative workflow only .-> INSTALL[Atomically install a fully validated v1 package-and-asset set<br/>under paths.toolchainPreset]
     INSTALL -. a later independent bootstrap inventories every installed byte from the beginning .-> TROOT

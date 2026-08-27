@@ -1,7 +1,7 @@
 flowchart TD
     START[sdd specify --reference &lt;relative-selector&gt;] --> RUNNER[PipelineRunner<br/>invokes the validated specify workflow definition;<br/>every node uses a runner-owned ChildNodeBinding]
     RUNNER --> BOOT[FeatureWorkflowOrchestrator schedules BootstrapOrchestrator;<br/>invoke diagram 08 pre-selector project recovery/transaction-ID-ledger subgraph,<br/>acquire and retain its validated project-collection lock capability through target resolution]
-    BOOT --> CONFIG[Pre-selector bootstrap only: locate/read/parse/validate the exact<br/>project-root .sddtoolkit.json and all seven configured directory roots;<br/>validate closed workflow definitions and carry the held project lock;<br/>do not inventory toolchain presets, toolchain.yaml or free-text principles yet]
+    BOOT --> CONFIG[Pre-selector bootstrap only: locate/read/parse/structurally decode the exact<br/>project-root .sddtoolkit.json, then validate all seven configured directory roots;<br/>validate closed workflow definitions and carry the held project lock;<br/>do not inventory toolchain presets, toolchain.yaml or free-text principles yet]
     CONFIG --> CLI[Parse exact invocation grammar]
     CLI --> COK{Exactly one non-empty --reference value<br/>and no -feature, --feature, --description, positional or unknown input}
     COK -- No --> INPUTERR[Nonzero user-input error<br/>no feature directory, feature log, model call or artifact write]
