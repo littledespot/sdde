@@ -4186,23 +4186,39 @@ ProjectPathCandidate {
 
 PathIntentProposal {
   pathIntentKey,
-  projectId,
-  fileKindId,
-  semanticRoleId,
+  pathIntentOptionId,
   nameSourceId,
   placementAnchorFileId?,
   requestedCapabilities: (create | copy_destination)[]
 }
 
+PathIntentOptionId { optionRuleId, projectId, boundSourceRootIds[] }
+
+PathIntentOption {
+  pathIntentOptionId: PathIntentOptionId,
+  environmentId,
+  fileKindId,
+  semanticRoleId,
+  allowedPathTemplateIds[],
+  capabilityCeiling: (create | copy_destination)[]
+}
+
+PathIntentOptionRegistry {
+  compiledEnginePolicyStateId,
+  planUnitId,
+  options: PathIntentOption[]             // complete bounded choices for the unit
+}
+
 PresetPathTemplate {
   pathTemplateId,
+  pathIntentOptionRuleId,
   fileKindId,
   semanticRoleId,
   directoryStrategy:
     | { kind: fixed, repoRelativeDirectory }
     | { kind: colocated_with_anchor }
     | { kind: mirrored_from_anchor, sourceRootId, targetRootId },
-  nameTransform: pascal_case | camel_case | kebab_case | snake_case | exact_identifier,
+  nameTransformId,                       // compiler-owned and versioned
   basenamePrefix,
   basenameSuffix,
   extension,
@@ -4221,6 +4237,8 @@ PathNameSourceRegistry {
 PathCandidateRecord {
   pathCandidateId,
   pathIntentKey,
+  pathIntentOptionId,
+  nameSourceId,
   pathTemplateId?,
   candidate: ProjectPathCandidate,
   origin: engine_enumerated | validated_model_fallback,
@@ -4229,6 +4247,7 @@ PathCandidateRecord {
 
 PathCandidateRegistry {
   pathCandidateRegistryStateId,
+  compiledEnginePolicyStateId,
   inputFileRegistryStateId,
   nameSourceRegistryStateId,
   records: PathCandidateRecord[]
@@ -6033,9 +6052,8 @@ DependencyLockfileResolution =
       existingFileRegistryStateId
     }
   | RequiredAbsentDependencyLockfile {
-      lockfileKindId,
-      pathTemplateId,
-      semanticRoleId,
+      pathIntentOptionId,
+      requiredPathTemplateId,
       nameSourceId,
       requiredCapabilities: [create],
       policyEvidenceId
@@ -6047,9 +6065,7 @@ DependencyLockfileResolution =
 DependencyLockfilePathIntent {
   dependencyKey,
   pathIntentKey,
-  projectId,
-  fileKindId,
-  semanticRoleId,
+  pathIntentOptionId,
   nameSourceId,
   requiredPathTemplateId,
   requestedCapabilities: [create]
@@ -9355,9 +9371,10 @@ fileKinds:
     extensionCaseSensitive: true
     pathTemplates:
       - pathTemplateId: react-component.from-business-name
+        pathIntentOptionRuleId: react-component.create-ui-component
         semanticRoleId: ui-component
         directoryStrategy: { kind: fixed, repoRelativeDirectory: 'src/components' }
-        nameTransform: pascal_case
+        nameTransformId: path-name/pascal-case@1
         basenamePrefix: ''
         basenameSuffix: ''
         extension: '.tsx'
@@ -9394,9 +9411,10 @@ fileKinds:
     extensionCaseSensitive: true
     pathTemplates:
       - pathTemplateId: unit-test.colocated-with-source
+        pathIntentOptionRuleId: unit-test.create-colocated
         semanticRoleId: unit-test
         directoryStrategy: { kind: colocated_with_anchor }
-        nameTransform: exact_identifier
+        nameTransformId: path-name/exact-identifier@1
         basenamePrefix: ''
         basenameSuffix: '.test'
         extension: '.tsx'
@@ -9599,7 +9617,31 @@ PrincipleGuidance {
 }
 
 MechanicalGuidance =
-  | PathGuidance {
+  | PathIntentGuidance {
+      fieldPointer,
+      compiledEnginePolicyStateId,
+      planUnitId,
+      allowedOptions: {
+        pathIntentOptionId,
+        displayLabel,
+        allowedNameSourceIds[],
+        allowedPlacementAnchorFileIds[],
+        capabilityCeiling[]
+      }[],
+      complete: true
+    }
+  | PathCandidateSelectionGuidance {
+      fieldPointer,
+      pathCandidateRegistryStateId,
+      allowedCandidates: {
+        pathCandidateId,
+        displayPath,
+        fileKindId,
+        permittedCapabilities[]
+      }[],
+      complete: true
+    }
+  | PathGuidance {                    // explicit raw-path fallback only
       fieldPointer,
       applicableRuleIds[],
       environmentId,
@@ -9634,8 +9676,7 @@ MechanicalGuidance =
       }[],                       // configured targets plus active host
       inaccessibleRoots: PathPattern[],
       generatedReadOnlyRoots: PathPattern[],
-      collisionPaths[],
-      engineSuggestedCandidates[]
+      completeWithinRouteBudget: true
     }
   | PassiveLiteralGuidance {
       fieldPointers[],
@@ -10102,8 +10143,10 @@ RepairResponse =
 
 This filename-shaped repair is a fallback-only example for a specialized preset
 that explicitly enables `allowRawPathFallback`. In the normal flow the model
-returns a `PathIntentProposal`, the engine enumerates preset-valid candidates,
-and the model selects a `pathCandidateId`; no raw filename exists to repair.
+returns a `PathIntentProposal` containing one allowed `pathIntentOptionId` and
+`nameSourceId`, the engine enumerates preset-valid candidates through the
+registered name transform, and the model selects a `pathCandidateId`; no raw
+filename exists to repair.
 
 ```json
 {
