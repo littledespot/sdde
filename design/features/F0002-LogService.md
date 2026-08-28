@@ -5,7 +5,8 @@
 **Implementation readiness:** Ready for the bounded initial implementation.
 The workflow-owned `WorkflowLog` producer contract supplies
 `WorkflowShortcode`, the F0001 v2 logging shape supplies every configurable
-user choice, and all operational policy plus the two `feature-log/v2` CSV schemas are compiler-locked
+user choice, and all operational policy plus the two `feature-log/v2`
+pipe-delimited schemas are compiler-locked
 constants. The event registry, scalar row encodings, and operational limits in
 this document are complete for the proof of concept.
 
@@ -97,8 +98,8 @@ again. F0002 receives only the validated result.
 The accepted v2 `LogsConfig` has exactly three values:
 
 - `level`: the emission threshold spelling;
-- `console`: whether an additional CSV data-row mirror is enabled; it never
-  controls the mandatory file sink; and
+- `console`: whether an additional pipe-delimited data-row mirror is enabled;
+  it never controls the mandatory file sink; and
 - `promptCapture`: a unique list drawn from `request`, `response`,
   `reference_body`, and `code_body`; `[]` disables body capture.
 
@@ -107,7 +108,7 @@ F0001's direct typed decoder enforces the closed contract published as
 runtime schema dependency is required. The logging-policy compiler owns all
 value semantics and injects every operational constant in Section 6.4. Paths,
 levels on individual events, timestamp/format/limits, retention, flush,
-redaction, failure behavior, prompt byte limits, lock policy, and CSV
+redaction, failure behavior, prompt byte limits, lock policy, and delimited
 columns/headings are deliberately absent from configuration.
 
 Configuration read, decode, canonicalization, validation, persistence, and
@@ -258,7 +259,7 @@ defined in governing Section 13.9:
 4. evaluate the definition's canonical level against the canonical threshold;
 5. if admitted, assign the workflow shortcode, the same canonical level,
    trusted time, event identity, and sequence to the record;
-6. validate and serialize one bounded fixed-column CSV data row;
+6. validate and serialize one bounded fixed-column pipe-delimited data row;
 7. append and flush/rotate as required under the exact stream lock; and
 8. release the lock before returning the common outcome.
 
@@ -274,7 +275,7 @@ Logging-internal nodes are not recursively observed.
 ### 6.1 Mandatory workflow attribution
 
 Every serialized log record MUST contain exactly one `workflow_shortcode`
-value. In CSV it occupies the `workflow_shortcode` column; in the emergency
+value. In a delimited row it occupies the `workflow_shortcode` column; in the emergency
 record it occupies the `workflow` field. It MUST be the typed shortcode
 supplied by the workflow that produced the fact and MUST contain exactly four
 case-sensitive ASCII
@@ -297,7 +298,7 @@ second enum or alias table. The registry owns an event's level; the configured
 level is the emission threshold. A producer supplies neither value.
 
 Every serialized log record MUST contain one canonical `level` value from
-Section 26.5. CSV records use the `level` column and the emergency record uses
+Section 26.5. Delimited records use the `level` column and the emergency record uses
 the `level` field. This applies to mandatory event records,
 optional sanitized prompt-fragment records, console-mirrored records, and the
 fixed emergency record. A missing, aliased, unknown, or caller-supplied level
@@ -382,15 +383,15 @@ is accepted only from the validated sanitization pipeline. All other events
 exist only in the event stream. A fact/event not present in this table is
 rejected; adding one is a design change to this closed registry.
 
-### 6.3 Fixed-header CSV format
+### 6.3 Fixed-header pipe-delimited format
 
-`feature-log/v2` uses a deterministic fixed-header CSV format to avoid
+`feature-log/v2` uses a deterministic fixed-header pipe-delimited format to avoid
 repeating field names in every record. The initial F0002 implementation embeds
 exactly two schemas as compiler constants: `event-columns/v2` and
 `prompt-columns/v2`. It does not generate columns from the event registry or
 read headings/schema IDs from configuration, workflow files, persisted data,
 or plugins. The first row of each segment is exactly one matching
-stream-specific CSV column heading. The second row is one
+stream-specific column heading. The second row is one
 `segment_header` control row under that heading. It binds the schema, stream,
 policy/binding, column-schema, segment, and creation facts. Zero or more event
 or prompt rows follow; a normally closed segment ends with one
@@ -398,9 +399,9 @@ or prompt rows follow; a normally closed segment ends with one
 
 The hard-coded headings are:
 
-```csv
-record_kind,schema_version,stream,column_schema_id,log_policy_id,feature_log_binding_id,segment_ordinal,workflow_shortcode,event_id,sequence,occurred_at_utc,monotonic_offset,level,event_type,message_template_id,run_id,feature_id,stage,node_id,parent_event_id,correlation_id,attempt,task_id,duration_ms,diagnostic_code,validator_id,transaction_id,rule_id,model_route_id,model_profile_id,input_tokens,output_tokens,repair_unit_kind,command_id,exit_code,evidence_status,outcome,count
-record_kind,schema_version,stream,column_schema_id,log_policy_id,feature_log_binding_id,segment_ordinal,workflow_shortcode,event_id,sequence,occurred_at_utc,monotonic_offset,level,event_type,message_template_id,run_id,feature_id,stage,node_id,attempt,request_id,route_id,model_profile_id,fragment_id,direction,body_class,content,retained_bytes,truncated,redacted
+```text
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
 ```
 
 The first is the 38-column event heading; the second is the 30-column prompt
@@ -414,10 +415,10 @@ Prompt columns are scalar: `direction` is `request` or `response`;
 `body_class` is `ordinary`, `reference_body`, or `code_body`; `retained_bytes`
 is canonical unsigned decimal ASCII; and `truncated` and `redacted` are
 lowercase `true` or `false`. `content` is only the redacted, then
-UTF-8-boundary-truncated fragment and uses the ordinary CSV cell escaping below.
+UTF-8-boundary-truncated fragment and uses the escaping below.
 Request/response metadata is represented by event-stream model events and is
 not duplicated. Redaction/truncation evidence IDs remain internal validation
-evidence and are not serialized. There is no JSON, list delimiter, nested CSV,
+evidence and are not serialized. There is no JSON, list delimiter, nested row,
 or other composite-cell grammar.
 
 `record_kind` is one of `segment_header`, `event`, `prompt`, or
@@ -429,19 +430,24 @@ Every control/event/prompt row has exactly the same cell count and order as its
 segment heading.
 Required cells cannot be absent; an absent optional value uses the reserved
 `\N` cell, while an empty string remains empty. The canonical dialect is UTF-8
-without BOM, comma-delimited, ASCII double-quote with doubled embedded quotes,
-and one LF per physical row. Backslash, CR, and LF inside a value are encoded
-as `\\`, `\r`, and `\n` before CSV quoting. A cell is quoted exactly when its
-encoded value contains a comma or double-quote. Repeated, missing, reordered,
-duplicate, or unknown headings and extra or missing row cells fail closed.
+without BOM, uses ASCII `|` as its delimiter, is unquoted, and has one LF per
+physical row.
+Within a value, encode backslash first as `\\`, pipe as `\|`, CR as `\r`, and
+LF as `\n`. Because literal backslashes are escaped first, literal content
+cannot alias the reserved absent value. A decoder scans left to right, treats
+only an unescaped `|` as a cell boundary, checks the complete encoded cell for
+the reserved `\N`, and then decodes only `\\`, `\|`, `\r`, and `\n`. An unknown
+or dangling escape fails closed. For example, the value `plan|audit` is written
+as `plan\|audit` in one cell. Repeated, missing, reordered, duplicate, or
+unknown headings and extra or missing row cells fail closed.
 
 For example, the registered `task.started` event at `info` can produce this
 segment:
 
-```csv
-record_kind,schema_version,stream,column_schema_id,log_policy_id,feature_log_binding_id,segment_ordinal,workflow_shortcode,event_id,sequence,occurred_at_utc,monotonic_offset,level,event_type,message_template_id,run_id,feature_id,stage,node_id,parent_event_id,correlation_id,attempt,task_id,duration_ms,diagnostic_code,validator_id,transaction_id,rule_id,model_route_id,model_profile_id,input_tokens,output_tokens,repair_unit_kind,command_id,exit_code,evidence_status,outcome,count
-segment_header,feature-log/v2,event,event-columns/v2,LOGPOL-001,LOGBIND-001,1,\N,\N,\N,2026-08-28T10:15:00Z,\N,\N,\N,\N,RUN-001,F0002,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N
-event,feature-log/v2,event,event-columns/v2,LOGPOL-001,LOGBIND-001,1,IMPL,EVENT-0042,42,2026-08-28T10:15:30Z,1205,info,task.started,task.started/v1,RUN-001,F0002,implement,\N,\N,\N,\N,TASK-001,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N
+```text
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
+segment_header|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
+event|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0042|42|2026-08-28T10:15:30Z|1205|info|task.started|task.started/v1|RUN-001|F0002|implement|\N|\N|\N|\N|TASK-001|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
 ```
 
 `IMPL` is illustrative only; the workflow that produced the fact supplies the
@@ -449,18 +455,18 @@ actual shortcode through its `WorkflowLog` binding.
 
 When prompt capture is explicitly enabled, one sanitized fragment is one row:
 
-```csv
-record_kind,schema_version,stream,column_schema_id,log_policy_id,feature_log_binding_id,segment_ordinal,workflow_shortcode,event_id,sequence,occurred_at_utc,monotonic_offset,level,event_type,message_template_id,run_id,feature_id,stage,node_id,attempt,request_id,route_id,model_profile_id,fragment_id,direction,body_class,content,retained_bytes,truncated,redacted
-segment_header,feature-log/v2,prompt,prompt-columns/v2,LOGPOL-001,LOGBIND-001,1,\N,\N,\N,2026-08-28T10:15:00Z,\N,\N,\N,\N,RUN-001,F0002,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N,\N
-prompt,feature-log/v2,prompt,prompt-columns/v2,LOGPOL-001,LOGBIND-001,1,IMPL,EVENT-0043,43,2026-08-28T10:15:31Z,1206,debug,model.prompt_fragment,model.prompt_fragment/v1,RUN-001,F0002,implement,\N,1,REQ-001,ROUTE-001,PROFILE-001,FRAG-001,request,ordinary,Create plan with [REDACTED_SECRET],34,false,true
+```text
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
+segment_header|feature-log/v2|prompt|prompt-columns/v2|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
+prompt|feature-log/v2|prompt|prompt-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0043|43|2026-08-28T10:15:31Z|1206|debug|model.prompt_fragment|model.prompt_fragment/v1|RUN-001|F0002|implement|\N|1|REQ-001|ROUTE-001|PROFILE-001|FRAG-001|request|ordinary|Create plan with [REDACTED_SECRET]|34|false|true
 ```
 
-The console mirror, when enabled, displays only the applicable `event,...` or
-`prompt,...` data line above, byte-for-byte. It does not display either heading
+The console mirror, when enabled, displays only the applicable `event|...` or
+`prompt|...` data line above, byte-for-byte. It does not display either heading
 or `segment_header` row.
 
 With a configured threshold of `warning`, that `info` fact is filtered and no
-CSV data row is created. With a threshold of `info` or below, the emitted row's
+data row is created. With a threshold of `info` or below, the emitted row's
 `level` cell is `info` regardless of configured threshold spelling.
 
 The mandatory event stream is metadata-only. At every level, including
@@ -484,8 +490,8 @@ compiler injects them only after validating the three user choices.
 | Concern | Exact proof-of-concept contract |
 | --- | --- |
 | Timestamp | `timestamp` is exactly `true` |
-| File | always enabled; every admitted event/prompt record must be durably appended to its bound CSV segment before logging returns success |
-| Console | optional additional mirror only; format is exactly `csv`; when enabled, write the already-serialized event/prompt data row plus its existing LF to `stderr`, with no heading, color, prefix, or pretty formatter; console success never substitutes for file success |
+| File | always enabled; every admitted event/prompt record must be durably appended to its bound `.log` segment before logging returns success |
+| Console | optional additional mirror only; delimiter is exactly `|`; when enabled, write the already-serialized data row plus its existing LF to `stderr`, with no heading, color, or prefix; console success never substitutes for file success |
 | Record | `maxRecordBytes = 65,536`, including encoded cells and final LF |
 | Segment | `maxSegmentBytes = 8,388,608`, including heading and control rows |
 | Segment count | `maxSegments = 16` per feature/run/stream lifetime |
@@ -517,19 +523,20 @@ retry and does not prevent the required fail-closed result.
 The artifact registry owns the fixed destinations:
 
 - events:
-  `<paths.specs>/<featureId>/logs/events/<runId>/<featureLogBindingId>/<segmentOrdinal>.csv`;
+  `<paths.specs>/<featureId>/logs/events/<runId>/<featureLogBindingId>/<segmentOrdinal>.log`;
 - optional prompt fragments:
-  `<paths.specs>/<featureId>/logs/prompts/<runId>/<featureLogBindingId>/<segmentOrdinal>.csv`.
+  `<paths.specs>/<featureId>/logs/prompts/<runId>/<featureLogBindingId>/<segmentOrdinal>.log`.
 
 These shapes are conformance information, not configurable paths. F0002 uses
 only the validated binding and operation-specific storage ports. It never
 joins raw path strings. There is no shared or global persistent log.
 
-The fixed-header CSV file sink is mandatory and has no disable switch. Every newly created or rotated
-segment durably writes its canonical CSV column heading as the first row and
+The fixed-header pipe-delimited file sink is mandatory and has no disable
+switch. Every newly created or rotated segment durably writes its canonical
+column heading as the first row and
 its `segment_header` control row as the second before accepting event/prompt
 rows. A validated optional console mirror may display only the already-safe
-data row using the exact CSV bytes defined in Section 6.4. File permissions,
+data row using the exact delimited bytes defined in Section 6.4. File permissions,
 exclusive locking, sequence, flush, rotation,
 retention, prior-tail recovery, and policy transition behavior are governed
 once by Sections 13.9, 14.10, and 26.5 and are not redefined here.
@@ -584,7 +591,7 @@ F0002 does not:
   event severities, templates, fields, or sensitivity outside the closed
   Section 6.2 registry;
 - accept configured, workflow-supplied, registry-generated, or plugin-supplied
-  CSV columns/headings;
+  delimited columns/headings;
 - provide `log(level, message, fields)` or caller-selected destinations;
   `workflowLog.log(delta, TelemetryFact)` is the only producer convenience
   operation;
@@ -592,7 +599,7 @@ F0002 does not:
 - expose raw-content capture through `TelemetryFact`;
 - add network export, a query UI, asynchronous dispatch, or a production
   dependency;
-- implement compatibility parsing or migration for any earlier logging or CSV
+- implement compatibility parsing or migration for any earlier logging or delimited
   shape; or
 - duplicate the detailed action, recovery, and storage contracts already
   governed by the engine design.
@@ -620,12 +627,12 @@ F0002 does not:
    and runner scheduling each retain their single governing owner.
 8. Every serialized event, prompt-fragment, console-mirror, and emergency
    record contains exactly one workflow attribution equal to the calling
-   workflow's validated four-character value; CSV uses
+   workflow's validated four-character value; delimited rows use
    `workflow_shortcode`, emergency output uses `workflow`, and missing or
    malformed values are rejected.
 9. Every serialized event, prompt-fragment, console-mirror, and emergency
    record contains exactly one canonical `level` value resolved from
-   engine-owned authority; CSV uses the `level` column, emergency output uses
+   engine-owned authority; delimited rows use the `level` column, emergency output uses
    the `level` field, and missing, aliased, unknown, or caller-supplied levels
    are rejected.
 10. Every persisted segment starts with the exact `feature-log/v2` stream
@@ -655,7 +662,7 @@ F0002 does not:
     unregistered events and fields fail closed.
 19. Configuration contains only `level`, `console`, and `promptCapture`; the
     compiled policy injects every fixed behavior in Section 6.4, including the
-    2,000 ms one-attempt lock deadline, exact CSV console mirror, and exact
+    2,000 ms one-attempt lock deadline, exact pipe-delimited console mirror, and exact
     bounded emergency-line grammar.
 20. Only the current proof-of-concept v2 headings and contracts are accepted;
     no compatibility or migration branch exists.
@@ -676,17 +683,18 @@ negative cases:
   six-level threshold matrix; rejection of missing, aliased, unknown,
   mismatched, or caller-supplied record levels; typed field validation;
   redaction; drop-before-allocation; exhaustive event-registry mapping and
-  rejected unregistered events/fields; exact-once fixed CSV headings;
-  deterministic quoting/null
-  encoding; byte-for-byte checks of both built-in headings; rejection of any
+  rejected unregistered events/fields; exact-once fixed headings;
+  deterministic delimiter escaping/null encoding, including embedded pipe,
+  backslash, CR, and LF cases; byte-for-byte checks of both built-in headings;
+  rejection of unknown and dangling escapes and of any
   configured/dynamic heading; heading/control-row/row-width corruption; fixed
-  CSV serialization; one scalar row per prompt fragment in canonical order;
+  pipe-delimited serialization; one scalar row per prompt fragment in canonical order;
   zero-fragment behavior; and runner barrier behavior;
 - privacy: prohibited metadata, default-off prompt capture, sanitization
   handoff, and transient cleanup;
 - storage: exact per-feature bindings, cross-feature isolation, permissions,
   the exact 2,000 ms no-retry lock deadline, fixed size/retention/flush
-  constants, rotation/limits, exact CSV console
+  constants, rotation/limits, exact pipe-delimited console
   bytes, and representative clean-tail versus corrupt-tail recovery;
 - failure: each operation class reaches the one non-recursive emergency/block
   route, the emergency line is byte-exact and at most 128 ASCII bytes, a failed

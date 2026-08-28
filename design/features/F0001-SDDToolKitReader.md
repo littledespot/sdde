@@ -58,7 +58,7 @@ SDDToolKitConfig {
 
 LogsConfig {
   level: string,
-  console: boolean, // optional mirror only; file logging is always enabled
+  console: boolean, // optional pipe-delimited mirror; file logging is always enabled
   promptCapture: ("request" | "response" | "reference_body" | "code_body")[]
 }
 
@@ -89,8 +89,8 @@ selectors shown above; an empty list disables body capture. The version must be
 exactly `2.0`. All sink, format, size, retention, flush, redaction, failure,
 prompt-size, and lock values are F0002 compiler constants, not configuration.
 There is no file-output switch: every admitted F0002 record is written to its
-feature/run CSV file. `console` can only add or suppress the same safe CSV row
-on `stderr`; it can never replace or disable the file write.
+feature/run `.log` file. `console` can only add or suppress the same safe
+pipe-delimited row on `stderr`; it can never replace or disable the file write.
 
 Structural decoding does not grant operational authority. In particular:
 

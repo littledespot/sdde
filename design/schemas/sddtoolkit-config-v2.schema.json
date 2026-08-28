@@ -14,7 +14,7 @@
   "$defs": {
     "logs": {
       "type": "object",
-      "$comment": "File logging is mandatory. console enables only an additional CSV mirror.",
+      "$comment": "File logging is mandatory. console enables only an additional pipe-delimited mirror.",
       "additionalProperties": false,
       "required": ["level", "console", "promptCapture"],
       "properties": {

@@ -2690,23 +2690,26 @@ LogLevelPolicy {
   aliasEvidenceIds[]          // CRITICAL -> fatal; WARN -> warning
 }
 
-FeatureLogCsvDialect {
+FeatureLogDelimitedDialect {
   schemaVersion: feature-log/v2,
   encoding: utf8_without_bom,
-  delimiter: comma,
-  quote: ascii_double_quote,
-  embeddedQuote: doubled,
+  delimiter: ascii_pipe,
+  quoting: forbidden,
   rowTerminator: lf,
   embeddedBackslashEncoding: double_backslash,
+  embeddedPipeEncoding: backslash_pipe,
   embeddedCrEncoding: backslash_r,
   embeddedLfEncoding: backslash_n,
   absentOptionalCell: backslash_N,
-  quoting: only_when_encoded_cell_contains_comma_or_double_quote,
+  cellBoundary: unescaped_ascii_pipe,
+  absentCheck: before_escape_decoding,
+  acceptedEscapes: backslash | pipe | cr | lf,
+  unknownOrDanglingEscape: reject,
   repeatedHeaderRows: forbidden,
   multilinePhysicalRows: forbidden
 }
 
-FeatureLogCsvColumnSchema =
+FeatureLogColumnSchema =
   | BuiltInEventColumnsV2 {
       columnSchemaId: event-columns/v2,
       schemaVersion: feature-log/v2,
@@ -2722,7 +2725,7 @@ FeatureLogCsvColumnSchema =
         repair_unit_kind, command_id, exit_code,
         evidence_status, outcome, count
       ],
-      headerUtf8: "record_kind,schema_version,stream,column_schema_id,log_policy_id,feature_log_binding_id,segment_ordinal,workflow_shortcode,event_id,sequence,occurred_at_utc,monotonic_offset,level,event_type,message_template_id,run_id,feature_id,stage,node_id,parent_event_id,correlation_id,attempt,task_id,duration_ms,diagnostic_code,validator_id,transaction_id,rule_id,model_route_id,model_profile_id,input_tokens,output_tokens,repair_unit_kind,command_id,exit_code,evidence_status,outcome,count\n"
+      headerUtf8: "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n"
     }
   | BuiltInPromptColumnsV2 {
       columnSchemaId: prompt-columns/v2,
@@ -2736,7 +2739,7 @@ FeatureLogCsvColumnSchema =
         request_id, route_id, model_profile_id, fragment_id, direction,
         body_class, content, retained_bytes, truncated, redacted
       ],
-      headerUtf8: "record_kind,schema_version,stream,column_schema_id,log_policy_id,feature_log_binding_id,segment_ordinal,workflow_shortcode,event_id,sequence,occurred_at_utc,monotonic_offset,level,event_type,message_template_id,run_id,feature_id,stage,node_id,attempt,request_id,route_id,model_profile_id,fragment_id,direction,body_class,content,retained_bytes,truncated,redacted\n"
+      headerUtf8: "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted\n"
     }
   // These are compiler constants in the F0002 implementation, not data loaded
   // from config or an event registry. Event/prompt rows require
@@ -2747,13 +2750,13 @@ FeatureLogCsvColumnSchema =
 CompiledFeatureLoggingPolicyFragment {
   configVersion,
   levelPolicy: LogLevelPolicy,
-  format: fixed_header_csv,
+  format: fixed_header_pipe_delimited,
   timestampEnabled: true,
-  csvDialect: FeatureLogCsvDialect,
+  delimitedDialect: FeatureLogDelimitedDialect,
   eventColumnSchemaId: event-columns/v2,
   promptColumnSchemaId: none | prompt-columns/v2,
-  file: { enabled: true, format: fixed_header_csv },
-  console: { enabled: boolean, format: csv, heading: omitted }, // mirror only
+  file: { enabled: true, format: fixed_header_pipe_delimited },
+  console: { enabled: boolean, delimiter: ascii_pipe, heading: omitted }, // mirror only
   rotation: {
     maxRecordBytes: 65536,
     maxSegmentBytes: 8388608,
@@ -2806,11 +2809,11 @@ FeatureLogPolicy {
   featureId,
   levelPolicy: LogLevelPolicy,
   eventLogCollectionArtifactPathId,
-  file: { enabled: true, format: fixed_header_csv },
-  console: { enabled: boolean, format: csv, heading: omitted }, // mirror only
+  file: { enabled: true, format: fixed_header_pipe_delimited },
+  console: { enabled: boolean, delimiter: ascii_pipe, heading: omitted }, // mirror only
   timestampEnabled: true,
-  format: fixed_header_csv,
-  csvDialect: FeatureLogCsvDialect,
+  format: fixed_header_pipe_delimited,
+  delimitedDialect: FeatureLogDelimitedDialect,
   eventColumnSchemaId: event-columns/v2,
   promptColumnSchemaId: none | prompt-columns/v2,
   fileMode: owner_read_write,
@@ -2856,7 +2859,7 @@ LogEventDefinitionRegistry {
   // stream column. Definitions are exactly the exhaustive F0002 Section 6.2
   // table. Only model.prompt_fragment.content is sanitized_content; all other
   // registered fields are public_metadata. The registry cannot add/reorder
-  // CSV columns and no caller/plugin/configuration can extend it.
+  // delimited columns and no caller/plugin/configuration can extend it.
 }
 
 LogFieldValue =
@@ -3206,17 +3209,17 @@ FeatureLogSegmentCreationObservation {
   stream,
   ordinal,
   createdAtUtc,
-  csvColumnSchemaId,
-  csvColumnHeaderByteLength,
-  csvColumnHeaderEvidenceId,
-  csvColumnHeaderIsFirstRow: true,
+  columnSchemaId,
+  columnHeaderByteLength,
+  columnHeaderEvidenceId,
+  columnHeaderIsFirstRow: true,
   segmentHeaderControlRowByteLength,
   segmentHeaderControlRowEvidenceId,
   segmentHeaderControlRowIsSecondRow: true,
   headingAndControlRowDurable: true
 }
 
-FeatureLogCsvRecordKind = segment_header | event | prompt | segment_trailer
+FeatureLogRecordKind = segment_header | event | prompt | segment_trailer
 
 RecoveredFeatureLogStreamObservation {
   stream,
@@ -3237,7 +3240,7 @@ SerializedFeatureLogFrame {
   stream: event | prompt,
   sequence,
   columnSchemaId,
-  utf8CsvDataRowHandle,
+  utf8DelimitedDataRowHandle,
   cellCount,
   byteLength,
   endsWithSingleLf: true
@@ -3312,7 +3315,7 @@ SanitizedPromptExchangeLogRecord {
   modelProfileId,
   fragments: SanitizedPromptFragmentLogRecord[],
   // Sorted by promptBodyFragmentId. Metadata uses ordinary event records;
-  // evidence IDs remain internal and are never serialized to prompt CSV.
+  // evidence IDs remain internal and are never serialized to the prompt stream.
 }
 
 SanitizedPromptFragmentLogRecord {
