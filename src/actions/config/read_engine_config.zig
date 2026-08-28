@@ -10,7 +10,7 @@ pub fn execute(
     allocator: std.mem.Allocator,
 ) Error!reader.RawEngineConfig {
     const limit = reader.ReadLimit.init(config.max_engine_config_bytes) catch unreachable;
-    var outcome = reader.read(project_root, io, allocator, limit) catch {
+    const outcome = reader.read(project_root, io, allocator, limit) catch {
         return error.EngineConfigReadError;
     };
     return switch (outcome) {

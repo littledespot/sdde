@@ -12,11 +12,27 @@ comptime {
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const yaml_dependency = b.dependency("yaml", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const yaml_module = yaml_dependency.module("yaml");
+    const toolchain_yaml_syntax_module = b.createModule(.{
+        .root_source_file = b.path("src/adapters/parsers/yaml_syntax.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "yaml", .module = yaml_module },
+        },
+    });
 
     const sdde_module = b.addModule("sdde", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{
+            .{ .name = "toolchain_yaml_syntax", .module = toolchain_yaml_syntax_module },
+        },
     });
 
     const executable = b.addExecutable(.{
@@ -58,6 +74,11 @@ pub fn build(b: *std.Build) void {
     });
     const run_config_reader_tests = b.addRunArtifact(config_reader_tests);
 
+    const yaml_safety_tests = b.addTest(.{
+        .root_module = toolchain_yaml_syntax_module,
+    });
+    const run_yaml_safety_tests = b.addRunArtifact(yaml_safety_tests);
+
     const version_policy_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("build/zig_version.zig"),
@@ -71,6 +92,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_module_tests.step);
     test_step.dependOn(&run_executable_tests.step);
     test_step.dependOn(&run_config_reader_tests.step);
+    test_step.dependOn(&run_yaml_safety_tests.step);
     test_step.dependOn(&run_version_policy_tests.step);
 
     const smoke_command = packaging_smoke.add(b, executable);
