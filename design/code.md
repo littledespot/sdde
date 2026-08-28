@@ -8951,8 +8951,13 @@ Diagnostic {
 The runtime captures and canonicalizes the native executable's invocation
 working directory once and treats it as the project root. It resolves only the
 exact `<projectRoot>/.sddtoolkit.json` child and never searches an ancestor or
-descendant. A missing exact file returns `ENGINE_CONFIG_MISSING` and terminates
-the invocation with a nonzero exit before workflow work. The repository file
+descendant. Failure to safely and completely read it returns
+`ENGINE_CONFIG_READ_ERROR`; failure to decode its bytes as the exact closed v2
+contract returns `ENGINE_CONFIG_PARSE_ERROR`. Either terminates with a nonzero
+exit before workflow work. The runtime config is
+accepted only up to the compiler-owned
+`maxEngineConfigBytes = 1,048,576` (1 MiB) limit, enforced from file metadata
+and again during the read. The repository file
 `design/schemas/sddtoolkit-config-v2.schema.json` defines F0001's current closed
 reader-facing shape, and `design/examples/.sddtoolkit.json` is one accepted
 instance. Neither is a runtime fallback. The larger document below illustrates
@@ -9813,10 +9818,11 @@ FeatureWorkflowOrchestrator
 
 ```text
 Capture the invocation working directory as project root and resolve only its
-exact .sddtoolkit.json child; missing returns ENGINE_CONFIG_MISSING and fails
-the invocation without searching an ancestor or descendant
-  -> read/directly decode that exact no-follow
-     <projectRoot>/.sddtoolkit.json into one immutable SDDToolKitConfig
+exact .sddtoolkit.json child; any location/read failure returns
+ENGINE_CONFIG_READ_ERROR without searching an ancestor or descendant
+  -> read that exact no-follow file under the internal 1 MiB guard
+  -> directly decode it, with any JSON/version/shape failure returning
+     ENGINE_CONFIG_PARSE_ERROR, into one immutable SDDToolKitConfig
   -> resolve/validate all seven required paths bases against that project root
   -> prove peer-root separation, allowing only paths.specsArchive beneath paths.specs
   -> build/validate BootstrapRootRegistry before any engine-derived child exists

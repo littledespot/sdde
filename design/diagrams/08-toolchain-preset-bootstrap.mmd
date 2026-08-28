@@ -1,9 +1,11 @@
 flowchart TD
     START[Invocation working directory] --> RUNNER[PipelineRunner executes BootstrapOrchestrator's<br/>bound actions/orchestrators through ChildNodeBinding]
     RUNNER --> LOCATE[LocateExactEngineConfigAction<br/>invocation working directory is the canonical project root;<br/>resolve only its exact .sddtoolkit.json; never search parents/children]
-    LOCATE -- Missing --> FAIL[ENGINE_CONFIG_MISSING<br/>terminal failed outcome and nonzero exit;<br/>no workflow/model/log/write starts]
-    LOCATE --> READ[ReadEngineConfigAction]
+    LOCATE -- Cannot resolve safe file --> READFAIL[ENGINE_CONFIG_READ_ERROR<br/>terminal failed outcome and nonzero exit;<br/>no workflow/model/log/write starts]
+    LOCATE --> READ[ReadEngineConfigAction<br/>compiler-owned maximum 1 MiB / 1,048,576 bytes]
+    READ -- Cannot read or over guard --> READFAIL
     READ --> SCHEMACFG[DecodeSDDToolKitConfigAction<br/>parse directly to the closed reader-facing shape and supported version;<br/>immutable config value; no generic JSON tree or domain-policy compilation]
+    SCHEMACFG -- Invalid JSON, version or shape --> PARSEFAIL[ENGINE_CONFIG_PARSE_ERROR<br/>terminal failed outcome and nonzero exit;<br/>no workflow/model/log/write starts]
     LOCATE --> HOST[DetectWorkspaceFilesystemPolicyAction]
     SCHEMACFG --> BASES[For each required paths key exactly once:<br/>specs, references, specsArchive, workflows, toolchainPreset,<br/>principles and templates]
     HOST --> BASES

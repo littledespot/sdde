@@ -33,9 +33,9 @@ The implementation has three actions:
 
 | Action | Sole responsibility |
 | --- | --- |
-| `LocateExactEngineConfigAction` | Canonicalize the invocation working directory as the project root and resolve only its exact `.sddtoolkit.json` child. Do not search a parent or child directory. |
-| `ReadEngineConfigAction` | Read that validated no-follow regular file into bounded owned bytes. |
-| `DecodeSDDToolKitConfigAction` | Parse those bytes directly into the closed `SDDToolKitConfig` type and reject structural violations. |
+| `LocateExactEngineConfigAction` | Canonicalize the invocation working directory as the project root and resolve only its exact `.sddtoolkit.json` child. Any failure to resolve a safe readable file returns `ENGINE_CONFIG_READ_ERROR`. Do not search a parent or child directory. |
+| `ReadEngineConfigAction` | Read that validated no-follow regular file into owned bytes up to the internal 1 MiB guard; any failure returns `ENGINE_CONFIG_READ_ERROR`. |
+| `DecodeSDDToolKitConfigAction` | Parse those bytes directly into the exact closed v2 `SDDToolKitConfig`; any JSON, version, or structural failure returns `ENGINE_CONFIG_PARSE_ERROR`. |
 
 There is no generic JSON-document action or intermediate JSON tree. JSON
 syntax parsing is part of decoding one known JSON contract.
@@ -125,31 +125,30 @@ working directory is captured and canonicalized once as the project root; the
 runtime does not search ancestors or descendants and does not accept aliases,
 alternate names, environment overrides, repository examples, packaged assets,
 or default documents. The file is opened read-only, no-follow, beneath that
-root and read under engine limits.
+root and read under the compiler-owned `maxEngineConfigBytes = 1,048,576`
+(1 MiB) limit. This limit is not configurable. A file whose byte length exceeds
+the limit is rejected before decoding; the reader also enforces the same limit
+while reading so a stale or inaccurate size observation cannot bypass it.
 
-If the exact file is missing, F0001 returns the typed
-`ENGINE_CONFIG_MISSING` diagnostic. Bootstrap returns a terminal `failed`
-outcome, the native executable exits nonzero, and no workflow node, model call,
-F0002 feature log, or project write starts. The message identifies the exact
-expected `<current-working-directory>/.sddtoolkit.json` path; it never searches
-for or suggests an automatically selected parent configuration.
+F0001 exposes exactly two terminal configuration errors:
 
-Expected rejection covers:
+| Error | Meaning |
+| --- | --- |
+| `ENGINE_CONFIG_READ_ERROR` | The exact current-directory file cannot be safely and completely read. This includes missing, permissions/I/O failure, unsafe type/symlink/alias, working-directory failure, and exceeding the internal 1 MiB guard. |
+| `ENGINE_CONFIG_PARSE_ERROR` | The bytes cannot be decoded as the exact closed v2 config. This includes malformed JSON, trailing content, unsupported version, and missing, unknown, duplicate, or wrong-kind members. |
 
-- missing or unsafe file identity/type;
-- working-directory canonicalization or byte limits;
-- malformed JSON or trailing content;
-- unsupported version, including the retired `1.0` logging shape; and
-- any closed-shape violation described in Section 3.
+Either error makes bootstrap return terminal `failed`, makes the executable
+exit nonzero, and prevents every workflow node, model call, F0002 feature log,
+and project write. The low-level cause may appear in bounded human-readable
+diagnostic detail, but it does not create another public error code or control
+branch.
 
 This pre-release proof of concept has no compatibility target. Config `2.0` is
 updated in place, obsolete v2 drafts are rejected, and F0001 contains no
 migration, alias, dual-reader, or fallback branch.
 
-Unexpected filesystem, allocation, cancellation, or timeout failure remains an
-operational error. Neither rejection nor operational failure publishes a
-partial config, writes a cache, creates project content, calls a model, or
-starts runtime logging.
+Neither error publishes a partial config, writes a cache, creates project
+content, calls a model, or starts runtime logging.
 
 ## 6. F0002 handoff
 
@@ -186,6 +185,11 @@ owner's work.
    timeout, and operational failure.
 10. The packaged executable works without repository examples, the source
     tree, build cache, or Zig toolchain.
+11. `maxEngineConfigBytes` is the compiler-owned constant 1,048,576; exactly
+    that many bytes may be decoded and 1,048,577 bytes are rejected.
+12. The public configuration failure surface contains only
+    `ENGINE_CONFIG_READ_ERROR` and `ENGINE_CONFIG_PARSE_ERROR`; every failure
+    maps to exactly one of them and both terminate before workflow work.
 
 ## 8. Verification
 
@@ -193,11 +197,13 @@ Tests must cover the owning boundaries rather than every incidental parser
 branch:
 
 - root binding: exact current-directory file, proof that parent/child configs are
-  ignored, missing-file terminal failure/nonzero exit, wrong type, symlink,
-  limit, and no-fallback cases;
+  ignored, missing-file terminal `ENGINE_CONFIG_READ_ERROR`/nonzero exit, wrong type, symlink,
+  exact 1 MiB acceptance, 1 MiB plus one-byte rejection, short-read/growth
+  enforcement, and no-fallback cases;
 - decoding: the repository fixture, reordered members, malformed JSON,
   unsupported version, and representative missing/unknown/wrong-kind cases at
-  each closed nesting level, checked against the published v2 schema;
+  each closed nesting level, checked against the published v2 schema and all
+  mapped to `ENGINE_CONFIG_PARSE_ERROR`;
 - ownership: one read/decode, immutable typed queries, no mutation or reread,
   semantic rejection remaining with the relevant consumer, and cleanup on
   every terminal class; and
