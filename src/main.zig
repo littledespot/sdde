@@ -2,10 +2,19 @@ const std = @import("std");
 const sdde = @import("sdde");
 
 pub fn main(init: std.process.Init) !void {
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_file_writer: std.Io.File.Writer = .init(.stdout(), init.io, &stdout_buffer);
-    const stdout = &stdout_file_writer.interface;
+    var outcome = sdde.bootstrap.run(init.io, init.gpa);
+    defer outcome.deinit();
 
-    try stdout.writeAll(sdde.greeting);
-    try stdout.flush();
+    switch (outcome) {
+        .ready => return,
+        .failed => |failure| {
+            var stderr_buffer: [256]u8 = undefined;
+            var stderr_file_writer: std.Io.File.Writer = .init(.stderr(), init.io, &stderr_buffer);
+            const stderr = &stderr_file_writer.interface;
+            try stderr.writeAll(failure.text());
+            try stderr.writeByte('\n');
+            try stderr.flush();
+            std.process.exit(1);
+        },
+    }
 }

@@ -133,8 +133,8 @@ For code, schema, configuration, test, or architecture changes:
 3. Cite the applicable design sections, invariants, and acceptance criteria.
 4. Inspect all producers, consumers, transitions, and sibling implementations
    of the affected contract.
-5. Check whether the change affects persistence, compatibility, security,
-   packaging, or recovery.
+5. Check whether the change affects persistence, security, packaging, or
+   recovery.
 6. State the causal defect or planned contract change.
 7. Identify expected files, tests, validation, and any required approval.
 
@@ -145,6 +145,9 @@ do not manufacture an architecture exercise.
 
 - Fix defects at the lowest abstraction that owns the violated contract.
 - Add a regression test at that owning boundary.
+- Apply single responsibility to every abstraction. Each module, type,
+  function, action, orchestrator, adapter, and port must have one cohesive
+  reason to change; split mixed responsibilities at the owning boundary.
 - Prefer the smallest architecturally complete change, not the smallest textual
   diff.
 - Preserve unrelated validated behavior.
@@ -160,7 +163,12 @@ do not manufacture an architecture exercise.
   strings, or loosely related booleans.
 - Make illegal states and transitions unrepresentable where practical.
 - Keep side effects behind narrow declared ports.
-- Keep compatibility behavior explicit, versioned, tested, and authorized.
+- Remove legacy and superseded code in the same change, including obsolete
+  paths, adapters, flags, schemas, tests, fixtures, and documentation. Do not
+  leave dead or parallel implementations.
+- Backward compatibility is not required. Do not add or retain compatibility
+  shims, aliases, migrations, dual readers/writers, deprecated entry points, or
+  fallback behavior.
 
 ## Anti-overfitting rule
 
@@ -243,8 +251,7 @@ Do not introduce:
 - a caller-specific workaround for a shared-contract defect;
 - a special case for one fixture/model/filename/test unless an accepted
   requirement distinguishes it;
-- an undocumented fallback, compatibility path, or source-tree/packaged-example
-  runtime fallback;
+- a source-tree/packaged-example runtime fallback;
 - duplicated validation, normalization, transition, retry, rendering, or
   command policy;
 - unbounded `anytype`/`anyopaque` at domain or trust boundaries, unjustified

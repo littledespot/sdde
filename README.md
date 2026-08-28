@@ -1,11 +1,10 @@
 # SDDE
 
 SDDE is being developed as a deterministic native Zig executable. The current
-implementation scaffold prints:
-
-```text
-Hello, world!
-```
+increment loads the exact `.sddtoolkit.json` in the invocation working
+directory. A missing or unreadable file exits with
+`ENGINE_CONFIG_READ_ERROR`; malformed or structurally invalid v2 content exits
+with `ENGINE_CONFIG_PARSE_ERROR` before workflow work begins.
 
 ## Requirements
 
