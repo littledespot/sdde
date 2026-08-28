@@ -461,8 +461,9 @@ example, and the typed contract in
 exactly `version`, `logs`, `models`, and `paths`; fixed records reject missing,
 duplicate, and unknown members. `models.slots` is the one keyed collection and
 each value has the closed slot shape. The `logs` object contains exactly the
-F0002 threshold, console-mirror boolean, and closed prompt-capture selector
-list. All CSV, timestamp, size, retention, flush, redaction, failure,
+F0002 threshold, optional console-mirror boolean, and closed prompt-capture
+selector list. File logging is mandatory and has no configuration switch. All
+CSV, timestamp, size, retention, flush, redaction, failure,
 prompt-size, emergency, and lock policy is compiler-owned. After release
 acceptance, future extensions must use another version and
 publish an equally closed formal JSON Schema.
@@ -3679,7 +3680,7 @@ Model and reference content are untrusted data:
 
 ### 26.5 Secrets and logging
 
-The effective threshold is always compiled from v2 `.sddtoolkit.json` `logs.level`; neither a prompt, model response, action, nor orchestrator may override it. The only other logging inputs are the `logs.console` boolean and unique `logs.promptCapture` selector list. Configuration supplies no path, timestamp, format, size, retention, flush, failure, redaction, prompt byte limit, lock value, per-event level, CSV schema ID, or heading. The example's lowercase `debug` is valid input. Configuration is case-normalized, `CRITICAL` is the input alias of canonical `fatal`, and `WARN` is the input alias of canonical `warning`. No other aliases or custom levels exist.
+The effective threshold is always compiled from v2 `.sddtoolkit.json` `logs.level`; neither a prompt, model response, action, nor orchestrator may override it. File logging is always enabled and cannot be configured away. The only other logging inputs are the optional `logs.console` mirror boolean and unique `logs.promptCapture` selector list. Console output never substitutes for a successful file append. Configuration supplies no path, file-enable switch, timestamp, format, size, retention, flush, failure, redaction, prompt byte limit, lock value, per-event level, CSV schema ID, or heading. The example's lowercase `debug` is valid input. Configuration is case-normalized, `CRITICAL` is the input alias of canonical `fatal`, and `WARN` is the input alias of canonical `warning`. No other aliases or custom levels exist.
 
 | Accepted configured spelling | Canonical level/rank | Fixed meaning                                                                                                                                                  |
 | ---------------------------- | -------------------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |

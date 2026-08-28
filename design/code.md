@@ -2752,7 +2752,8 @@ CompiledFeatureLoggingPolicyFragment {
   csvDialect: FeatureLogCsvDialect,
   eventColumnSchemaId: event-columns/v2,
   promptColumnSchemaId: none | prompt-columns/v2,
-  console: { enabled: boolean, format: csv, heading: omitted },
+  file: { enabled: true, format: fixed_header_csv },
+  console: { enabled: boolean, format: csv, heading: omitted }, // mirror only
   rotation: {
     maxRecordBytes: 65536,
     maxSegmentBytes: 8388608,
@@ -2805,7 +2806,8 @@ FeatureLogPolicy {
   featureId,
   levelPolicy: LogLevelPolicy,
   eventLogCollectionArtifactPathId,
-  console: { enabled: boolean, format: csv, heading: omitted },
+  file: { enabled: true, format: fixed_header_csv },
+  console: { enabled: boolean, format: csv, heading: omitted }, // mirror only
   timestampEnabled: true,
   format: fixed_header_csv,
   csvDialect: FeatureLogCsvDialect,

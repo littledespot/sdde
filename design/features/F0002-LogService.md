@@ -97,7 +97,8 @@ again. F0002 receives only the validated result.
 The accepted v2 `LogsConfig` has exactly three values:
 
 - `level`: the emission threshold spelling;
-- `console`: whether the CSV data-row mirror is enabled; and
+- `console`: whether an additional CSV data-row mirror is enabled; it never
+  controls the mandatory file sink; and
 - `promptCapture`: a unique list drawn from `request`, `response`,
   `reference_body`, and `code_body`; `[]` disables body capture.
 
@@ -483,7 +484,8 @@ compiler injects them only after validating the three user choices.
 | Concern | Exact proof-of-concept contract |
 | --- | --- |
 | Timestamp | `timestamp` is exactly `true` |
-| Console | `format` is exactly `csv`; when enabled, write the already-serialized event/prompt data row plus its existing LF to `stderr`, with no heading, color, prefix, or pretty formatter |
+| File | always enabled; every admitted event/prompt record must be durably appended to its bound CSV segment before logging returns success |
+| Console | optional additional mirror only; format is exactly `csv`; when enabled, write the already-serialized event/prompt data row plus its existing LF to `stderr`, with no heading, color, prefix, or pretty formatter; console success never substitutes for file success |
 | Record | `maxRecordBytes = 65,536`, including encoded cells and final LF |
 | Segment | `maxSegmentBytes = 8,388,608`, including heading and control rows |
 | Segment count | `maxSegments = 16` per feature/run/stream lifetime |
@@ -523,7 +525,7 @@ These shapes are conformance information, not configurable paths. F0002 uses
 only the validated binding and operation-specific storage ports. It never
 joins raw path strings. There is no shared or global persistent log.
 
-The fixed-header CSV event sink is mandatory. Every newly created or rotated
+The fixed-header CSV file sink is mandatory and has no disable switch. Every newly created or rotated
 segment durably writes its canonical CSV column heading as the first row and
 its `segment_header` control row as the second before accepting event/prompt
 rows. A validated optional console mirror may display only the already-safe
@@ -637,7 +639,9 @@ F0002 does not:
     sanitized fragment in canonical fragment-ID order, with no composite cell
     encoding.
 12. Every persistent record uses the exact feature/run binding and registered
-   feature-log collection; no shared persistent sink exists.
+   feature-log collection; no shared persistent sink exists, console output
+   never substitutes for it, and success is impossible without the required
+   file append/flush result.
 13. Filtering allocates no record identity, sequence, segment, or lock.
 14. Storage/recovery follows the governing lock, ordering, rotation, retention,
    restart, and policy-transition contracts without a second implementation.
