@@ -1,16 +1,9 @@
 {
-  "version": "1.0",
+  "version": "2.0",
   "logs": {
     "level": "debug",
-    "format": "pretty",
-    "timestamp": true,
-    "output": "console",
-    "promptLogs": {
-      "enabled": true,
-      "logFile": "logs/prompts.log",
-      "includeResponse": true,
-      "maxResponseLength": 5000
-    }
+    "console": true,
+    "promptCapture": []
   },
   "models": {
     "slots": {

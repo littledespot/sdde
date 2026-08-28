@@ -1,9 +1,9 @@
 flowchart TD
     START[Invocation working directory] --> RUNNER[PipelineRunner executes BootstrapOrchestrator's<br/>bound actions/orchestrators through ChildNodeBinding]
-    RUNNER --> LOCATE[LocateExactEngineConfigAction<br/>nearest ancestor's exact root .sddtoolkit.json;<br/>its containing directory is the canonical project root]
+    RUNNER --> LOCATE[LocateExactEngineConfigAction<br/>invocation working directory is the canonical project root;<br/>resolve only its exact .sddtoolkit.json; never search parents/children]
+    LOCATE -- Missing --> FAIL[ENGINE_CONFIG_MISSING<br/>terminal failed outcome and nonzero exit;<br/>no workflow/model/log/write starts]
     LOCATE --> READ[ReadEngineConfigAction]
-    READ --> PARSECFG[ParseEngineConfigAction]
-    PARSECFG --> SCHEMACFG[DecodeSDDToolKitConfigAction<br/>closed reader-facing shape and supported version;<br/>immutable config value; no domain-policy compilation]
+    READ --> SCHEMACFG[DecodeSDDToolKitConfigAction<br/>parse directly to the closed reader-facing shape and supported version;<br/>immutable config value; no generic JSON tree or domain-policy compilation]
     LOCATE --> HOST[DetectWorkspaceFilesystemPolicyAction]
     SCHEMACFG --> BASES[For each required paths key exactly once:<br/>specs, references, specsArchive, workflows, toolchainPreset,<br/>principles and templates]
     HOST --> BASES

@@ -5,7 +5,8 @@ flowchart TD
     LEVEL --> RANK[Bind severity rank<br/>fatal 60, error 50, warning 40, info 30, debug 20, trace 10]
     FRAGMENT --> PID[BuildFeatureLogPolicyIdAction<br/>exact feature, bootstrap-state, config-version and feature_logging slot tuple]
     PID --> POLICY[BuildFeatureLogPolicyAction then ValidateFeatureLogPolicyAction]
-    DEFS[Immutable event-definition registry<br/>engine-owned level, template and typed field schema] --> POLICY
+    DEFS[Closed PoC event-definition registry<br/>exact F0002 event to level, template, fields and sensitivity] --> POLICY
+    CSVSCHEMA[Compiler-locked feature-log/v2 CSV constants<br/>38-column event and 30-column scalar prompt schemas;<br/>never supplied by config or generated dynamically] --> POLICY
     RANK --> POLICY
     FRAGMENT --> POLICY
     POLICY --> PBIND[Bind policy to fixed event and prompt collection artifact IDs]
@@ -34,7 +35,7 @@ flowchart TD
     HLOCK -- Invalid --> HREJECT[ReleaseRejectedFeatureLogStreamLockObservationAction]
     HREJECT --> FAULT
     HLOCK -- Valid --> HINSPECT[InspectFeatureLogStreamAction under the ordinary<br/>single historical-binding capability]
-    HINSPECT -- existing-active-tail --> HRECOVER[RecoverFeatureLogTailAction<br/>validate frames and truncate only an incomplete final frame]
+    HINSPECT -- existing-active-tail --> HRECOVER[RecoverFeatureLogTailAction<br/>validate CSV heading/control/data rows and truncate only<br/>an incomplete final event or prompt row]
     HRECOVER --> HCLOSE[CloseRecoveredHistoricalFeatureLogStreamAction<br/>fsync one crash-finalization trailer and create no successor segment]
     HINSPECT -- existing-closed-only --> HCLOSED[ValidateAlreadyClosedHistoricalFeatureLogStreamAction<br/>reconstruct finalization evidence without rewriting bytes]
     HINSPECT -- Missing or corrupt --> HFAILREL
@@ -60,7 +61,7 @@ flowchart TD
     SNEXT -- Complete validated lock set held --> INSPECT[Run InspectFeatureLogStreamAction once per enabled stream<br/>with its exact matching held capability]
     INSPECT --> EXISTS{Complete startup inspection set}
     EXISTS -- No stream has a segment --> SEGID[AssignFeatureLogSegmentIdAction for the next enabled stream's ordinal one]
-    SEGID --> CREATE[CreateInitialFeatureLogSegmentAction<br/>exclusive-create owner-only segment and durable header]
+    SEGID --> CREATE[CreateInitialFeatureLogSegmentAction<br/>exclusive-create owner-only .csv segment;<br/>exact CSV heading first, durable segment_header control row second]
     CREATE --> ISTREAM[BuildInitialFeatureLogStreamStateAction<br/>next sequence one and no durable event sequence]
     CREATE --> IRECORD[BuildInitialFeatureLogSegmentRecordAction<br/>active ordinal-one inventory record]
     ISTREAM --> ICOLLECT[Collect the initial state and record for this enabled stream]
@@ -68,7 +69,7 @@ flowchart TD
     ICOLLECT --> IMORE{Another enabled stream requires initialization}
     IMORE -- Yes --> SEGID
     IMORE -- No --> ISINK[BuildInitialFeatureLogSinkStateAction from all enabled streams]
-    EXISTS -- Every enabled stream has segments --> RECOVER[Run RecoverFeatureLogTailAction for every enabled stream<br/>validate frames and truncate only an incomplete final frame]
+    EXISTS -- Every enabled stream has segments --> RECOVER[Run RecoverFeatureLogTailAction for every enabled stream<br/>validate CSV heading/control/data rows and truncate only<br/>an incomplete final event or prompt row]
     EXISTS -- Mixed, raced or invalid startup set --> SFAILREL
     ISINK --> INVENTORY[Build and validate segment inventory and sink state]
     RECOVER --> RSINK[BuildRecoveredFeatureLogSinkStateAction<br/>assemble all recovered stream states and records without touching segments]
@@ -86,7 +87,7 @@ flowchart TD
     ISINK -- Failure --> SFAILREL
     RSINK -- Failure --> SFAILREL
 
-    REFRESH[Any committed successor bootstrap whose validated change plan requires<br/>transitionFeatureLogging; pause normal workflow nodes and buffer only bounded typed TelemetryFacts] --> NPOLICY[BuildFeatureLogPolicyIdAction, BuildFeatureLogPolicyAction and<br/>ValidateFeatureLogPolicyAction for the committed successor;<br/>BuildFeatureLogBindingIdAction, ResolveFeatureLogBindingAction and<br/>ValidateFeatureLogBindingAction for the same feature/run]
+    REFRESH[Any committed successor bootstrap whose validated change plan requires<br/>transitionFeatureLogging; pause normal workflow nodes and buffer only bounded<br/>workflow-attributed WorkflowTelemetryFacts] --> NPOLICY[BuildFeatureLogPolicyIdAction, BuildFeatureLogPolicyAction and<br/>ValidateFeatureLogPolicyAction for the committed successor;<br/>BuildFeatureLogBindingIdAction, ResolveFeatureLogBindingAction and<br/>ValidateFeatureLogBindingAction for the same feature/run]
     NPOLICY --> TBUILD[BuildFeatureLogPolicyTransitionAction then<br/>ValidateFeatureLogPolicyTransitionAction with current/successor authorities,<br/>materialized change evidence, policies, bindings and complete enabled-stream set]
     TBUILD --> TNEXT{Next enabled stream in fixed event then prompt order}
     TNEXT -- Yes --> TACQUIRE[AcquireFeatureLogStreamLockAction under the current binding<br/>for the exact featureId, runId and stream physical lock tuple]
@@ -100,7 +101,7 @@ flowchart TD
     TDUAL -- Rejected; ordinary capability retained --> TORDREL
     TORDREL --> FAULT
     TDUAL -- Valid dual-binding capability --> TOLDINSPECT[InspectFeatureLogStreamAction using the old side<br/>against the exact historical policy/binding]
-    TOLDINSPECT -- existing-active-tail --> TOLD[RecoverFeatureLogTailAction<br/>validate/truncate only an incomplete last frame under historical authority]
+    TOLDINSPECT -- existing-active-tail --> TOLD[RecoverFeatureLogTailAction<br/>validate CSV structure and truncate only an incomplete<br/>last event or prompt row under historical authority]
     TOLD --> TCLOSE[CloseFeatureLogStreamForPolicyTransitionAction<br/>fsync and close the old-binding active segment; create no successor]
     TOLDINSPECT -- existing-closed-only --> TCLOSED[ValidateClosedHistoricalFeatureLogStreamAction<br/>reconstruct exact close-boundary evidence without rewriting the trailer]
     TOLDINSPECT -- missing or corrupt --> TFAULTREL
@@ -123,8 +124,10 @@ flowchart TD
     TRELEASE -- Failure --> FAULT
     TFAULTREL --> FAULT
 
-    RUNNER[PipelineRunner] -- trusted node lifecycle --> OBS[PipelineTelemetryObserver]
-    RUNNER -- contract-accepted TelemetryFacts from applied NodeDelta --> OBS
+    WLOG[Calling workflow owns WorkflowLog<br/>validates one four-character shortcode;<br/>log appends WorkflowTelemetryFact only] --> RUNNER
+    RUNNER[PipelineRunner] -- workflow-attributed trusted lifecycle --> OBS[PipelineTelemetryObserver]
+    RUNNER -- contract-accepted WorkflowTelemetryFacts from applied NodeDelta --> OBS
+    WLOG --> DRAFT
     OBS --> LROOT[Runner-owned instrumentation root binding]
     LROOT --> LOG[FeatureLoggingOrchestrator<br/>coordination only; no logger in NodeRuntime]
     READY --> LOG
@@ -139,19 +142,20 @@ flowchart TD
     DDROP --> NEXT
 
     THRESHOLD -- Emit --> SEQ[AssignLogEventSequenceAction<br/>trusted timestamp, event ID and next per-run/per-stream sequence]
-    SEQ --> PROMPT{Raw prompt exchange supplied}
+    SEQ --> PROMPT{Sanitized prompt fragment set supplied}
     PROMPT -- No --> SAFE[ValidateSafeLogRecordAction]
     PROMPT -- Yes --> PENABLED{Prompt logging explicitly enabled}
-    PENABLED -- Yes --> SAN[Redact mandatory patterns and secrets; truncate each bounded field]
-    SAN --> PVALID[Validate sanitized prompt exchange and retain only safe bounded bytes]
+    PENABLED -- Yes --> SAN[Redact mandatory patterns and secrets; truncate each bounded fragment]
+    SAN --> PVALID[Sort by promptBodyFragmentId and validate each sanitized fragment;<br/>expand to one scalar-only prompt row per fragment;<br/>no metadata, evidence-vector or composite cells]
     PVALID -- Valid --> SAFE
     PVALID -- Invalid --> FAULT
     PENABLED -- No --> OMIT[Omit exchange; retain metadata-only event]
     OMIT --> SAFE
     SAFE -- Invalid or oversized --> FAULT[Logging safety or sink failure]
-    SAFE -- Valid --> SERIAL[SerializeFeatureLogRecordAction<br/>one fixed-order UTF-8 JSONL frame plus LF]
-    SERIAL --> EDESTROY[DestroyRawPromptLogHandlesAction<br/>safe serialized frame remains; transient fragments do not]
-    EDESTROY --> EACQUIRE[AcquireFeatureLogStreamLockAction<br/>only after the complete bounded JSONL frame is encoded;<br/>lock the frame's exact featureId, runId and stream tuple]
+    CSVSCHEMA --> SAFE
+    SAFE -- Valid --> SERIAL[SerializeFeatureLogRecordAction<br/>one event row or one row per sanitized prompt fragment<br/>in the exact built-in stream column order plus LF;<br/>no repeated or configurable heading]
+    SERIAL --> EDESTROY[DestroyRawPromptLogHandlesAction<br/>safe serialized CSV row remains; transient fragments do not]
+    EDESTROY --> EACQUIRE[AcquireFeatureLogStreamLockAction<br/>only after the complete bounded CSV data row is encoded;<br/>one attempt, fixed 2000 ms deadline, no backoff;<br/>lock the row's exact featureId, runId and stream tuple]
     EACQUIRE -- Contention or acquisition failure --> FAULT
     EACQUIRE -- Raw observation --> ELOCK{ValidateFeatureLogStreamLockAction<br/>exact owner, binding, adapter and runner lock-table uniqueness}
     ELOCK -- Invalid --> EREJECT[ReleaseRejectedFeatureLogStreamLockObservationAction<br/>terminalize the rejected raw acquired-lock observation]
@@ -164,9 +168,9 @@ flowchart TD
     RDEC -- Rotation required with exact next ordinal --> NSEG[AssignFeatureLogSegmentIdAction for the exact next ordinal]
     NSEG --> RAUTH[BuildLogRotationAuthorizationAction<br/>bind request, next identity and current sink revision without redeciding fit]
     RAUTH --> RSEG[RotateFeatureLogSegmentAction<br/>flush and close active segment; exclusive-create authorized next ordinal]
-    RSEG --> RRETAIN[BuildFeatureLogRetentionAuthorizationAction<br/>after rotation, select eligible closed segments only]
+    RSEG --> RRETAIN[BuildFeatureLogRetentionAuthorizationAction<br/>after rotation closes with segment_trailer and creates the next<br/>CSV heading plus segment_header rows, select eligible closed segments only]
     RRETAIN --> RPRUNE[PruneFeatureLogSegmentAction<br/>delete only the single-use authorized closed set under the held lock]
-    RPRUNE --> APPEND[AppendFeatureLogRecordAction<br/>append one complete frame with expected sequence/segment state,<br/>apply mandatory flush policy and advance sink state]
+    RPRUNE --> APPEND[AppendFeatureLogRecordAction<br/>append one complete CSV data row with expected sequence/segment state,<br/>apply mandatory flush policy and advance sink state]
     APPEND -- Success --> ERELEASE[ReleaseFeatureLogStreamLockAction<br/>release this exact capability with the successful append outcome]
     ERELEASE -- Released --> NEXT[Continue workflow; no stream lock remains held;<br/>logs remain outside stage/task transaction membership]
     ERELEASE -- Release failure --> FAULT
@@ -185,7 +189,7 @@ flowchart TD
     RPRUNE -- Failure --> EFAILREL
     APPEND -- Failure --> EFAILREL
     FAULT --> FDESTROY[DestroyRawPromptLogHandlesAction if transient handles remain]
-    FDESTROY --> EMERGENCY[EmitEmergencyLogFailureRecordAction<br/>fixed content-free stderr record with failure code only]
+    FDESTROY --> EMERGENCY[EmitEmergencyLogFailureRecordAction<br/>one direct stderr attempt, max 128 ASCII bytes:<br/>SDDE_LOG_FAILURE workflow=CODE level=fatal code=FAILURE_CODE]
     EMERGENCY --> TXSTATE{Workflow, stage or task transaction is prepared or applying}
     TXSTATE -- No --> STABLE[Typed no-prepared-transaction stable-boundary outcome]
     TXSTATE -- Yes --> RECOVERY[Invoke the recovery subroutine in diagram 09:<br/>acquire the exact project/feature collection lock, validate storage capability,<br/>run TransactionRecoveryOrchestrator and ReadTransactionRecoveryStateAction;<br/>RestoreTransactionEntryAction in reverse without a marker or<br/>VerifyCommittedTransactionEntryAction forward with a marker;<br/>commit/retire transaction ID, clean up and release exactly once]

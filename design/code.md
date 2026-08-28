@@ -135,9 +135,10 @@ TrustedNodeContext {
 }
 
 port PipelineTelemetryObserver {
-  observeRunnerLifecycle(event: RunnerLifecycleEvent) -> void
+  observeRunnerLifecycle(workflowLog: WorkflowLog,
+                         event: RunnerLifecycleEvent) -> void
   observeAppliedDelta(context: TrustedNodeContext,
-                      facts: immutable sequence<TelemetryFact>) -> void
+                      facts: immutable sequence<WorkflowTelemetryFact>) -> void
   // Owned by PipelineRunner. It is not a PipelineNode and is not reachable
   // from Action, Orchestrator, NodeRuntime, or model-facing data.
 }
@@ -494,7 +495,7 @@ NodeDelta {
   dataInvalidations[],
   evidenceAdded: Evidence[],
   diagnosticsAdded: Diagnostic[],
-  telemetryFactsAdded: TelemetryFact[],
+  telemetryFactsAdded: WorkflowTelemetryFact[],
   runnerAccountingTransition?: RepairAccountingTransition
 }
 
@@ -519,18 +520,58 @@ RepairAccountingTransition =
 // the next envelope. It is not a general node-controlled runner mutation.
 
 TelemetryFact =
-  | ModelCallFact { requestId, routeId, modelProfileId, outcome,
-                    inputBytes, outputBytes, inputTokens?, outputTokens? }
-  | ValidationFact { validatorId, outcome, diagnosticCodes[] }
-  | RepairFact { authorizationId, repairClass, outcome, attempt }
-  | TransactionFact { transactionId, phase, entryCount }
-  | CommandFact { commandId, outcome, exitCode?, durationMs }
-  | TaskFact { taskId, transition }
-  | ReviewFact { reviewKind, targetStateId, decision }
-  | SecurityDenialFact { ruleId, diagnosticCode }
+  | RunStartedFact
+  | RunCompletedFact { outcome, durationMs? }
+  | RunBlockedFact { diagnosticCode, outcome }
+  | RunFailedFact { diagnosticCode, outcome }
+  | RunCancelledFact { outcome }
+  | StageStartedFact
+  | StageCompletedFact { outcome, durationMs? }
+  | StageBlockedFact { diagnosticCode, outcome }
+  | StageFailedFact { diagnosticCode, outcome, durationMs? }
+  | StageClarificationPendingFact { outcome }
+  | ActionStartedFact
+  | ActionCompletedFact { outcome, durationMs? }
+  | ActionInvalidFact { diagnosticCode, outcome }
+  | ActionFailedFact { diagnosticCode, outcome, durationMs? }
+  | ModelRequestedFact { modelRouteId, modelProfileId }
+  | ModelCompletedFact { modelRouteId, modelProfileId, outcome,
+                         inputTokens?, outputTokens?, durationMs? }
+  | ModelProtocolFailedFact { modelRouteId, modelProfileId,
+                              diagnosticCode, outcome }
+  | ModelSchemaFailedFact { modelRouteId, modelProfileId,
+                            diagnosticCode, outcome }
+  | ValidationCompletedFact { validatorId, outcome, count?, durationMs? }
+  | ValidationFailedFact { validatorId, diagnosticCode, outcome, count? }
+  | RepairRequestedFact { repairUnitKind }
+  | RepairAppliedFact { repairUnitKind, outcome }
+  | RepairRejectedFact { repairUnitKind, diagnosticCode, outcome }
+  | RepairExhaustedFact { repairUnitKind, diagnosticCode, outcome }
+  | ReviewRequestedFact
+  | ReviewApprovedFact { outcome }
+  | ReviewRejectedFact { outcome }
+  | TransactionPreparedFact { transactionId, count }
+  | TransactionApplyingFact { transactionId, count }
+  | TransactionCommittedFact { transactionId, count, outcome }
+  | TransactionRolledBackFact { transactionId, diagnosticCode,
+                                outcome, count? }
+  | TransactionRecoveredFact { transactionId, outcome, count? }
+  | CommandStartedFact { commandId }
+  | CommandCompletedFact { commandId, outcome, exitCode?, durationMs? }
+  | CommandFailedFact { commandId, diagnosticCode, outcome,
+                        exitCode?, durationMs? }
+  | TaskStartedFact { taskId }
+  | TaskCompletedFact { taskId, outcome, durationMs? }
+  | TaskBlockedFact { taskId, diagnosticCode, outcome }
+  | TaskFailedFact { taskId, diagnosticCode, outcome, durationMs? }
+  | SecurityDeniedFact { ruleId, diagnosticCode, outcome }
 
-// Facts contain IDs, enums, counts, and bounded numeric telemetry only. They
-// never contain model/reference/code bodies, arbitrary messages, or a level.
+// Each variant maps one-to-one, by lower-snake variant name to dotted event
+// type, to the exhaustive F0002 Section 6.2 registry. Its payload is exactly
+// that row's required/optional field set. model.prompt_fragment is not a
+// TelemetryFact; it is produced only by the separate sanitization pipeline.
+// Common identity/time/context is runner-supplied. Facts contain no body,
+// arbitrary message/map/list, shortcode, sensitivity, or level.
 ```
 
 ---
@@ -2622,6 +2663,25 @@ ConfiguredLogLevel = FATAL | CRITICAL | ERROR | WARNING | WARN |
                      info | debug | trace
 CanonicalLogLevel = fatal | error | warning | info | debug | trace
 
+WorkflowShortcode {
+  bytes: [4]u8
+  // Constructed by WorkflowLog.init from exactly four ASCII A-Z, a-z, or 0-9
+  // bytes. Case is retained and significant. No workflow YAML field exists.
+}
+
+WorkflowTelemetryFact {
+  workflowShortcode: WorkflowShortcode,
+  fact: TelemetryFact
+}
+
+WorkflowLog {
+  workflowShortcode: WorkflowShortcode,
+  init(shortcodeBytes: []const u8) -> WorkflowLog | InvalidWorkflowShortcode,
+  log(self, delta: *NodeDelta, fact: TelemetryFact) -> void | AllocationError
+  // Pure delta construction: append one WorkflowTelemetryFact. No sink,
+  // filesystem, clock, level, formatter, or direct logging capability.
+}
+
 LogLevelPolicy {
   configuredValue: ConfiguredLogLevel,
   threshold: CanonicalLogLevel,
@@ -2630,23 +2690,94 @@ LogLevelPolicy {
   aliasEvidenceIds[]          // CRITICAL -> fatal; WARN -> warning
 }
 
+FeatureLogCsvDialect {
+  schemaVersion: feature-log/v2,
+  encoding: utf8_without_bom,
+  delimiter: comma,
+  quote: ascii_double_quote,
+  embeddedQuote: doubled,
+  rowTerminator: lf,
+  embeddedBackslashEncoding: double_backslash,
+  embeddedCrEncoding: backslash_r,
+  embeddedLfEncoding: backslash_n,
+  absentOptionalCell: backslash_N,
+  quoting: only_when_encoded_cell_contains_comma_or_double_quote,
+  repeatedHeaderRows: forbidden,
+  multilinePhysicalRows: forbidden
+}
+
+FeatureLogCsvColumnSchema =
+  | BuiltInEventColumnsV2 {
+      columnSchemaId: event-columns/v2,
+      schemaVersion: feature-log/v2,
+      stream: event,
+      orderedColumnIds: [
+        record_kind, schema_version, stream, column_schema_id, log_policy_id,
+        feature_log_binding_id, segment_ordinal, workflow_shortcode, event_id,
+        sequence, occurred_at_utc, monotonic_offset, level, event_type,
+        message_template_id, run_id, feature_id, stage, node_id,
+        parent_event_id, correlation_id, attempt, task_id, duration_ms,
+        diagnostic_code, validator_id, transaction_id, rule_id,
+        model_route_id, model_profile_id, input_tokens, output_tokens,
+        repair_unit_kind, command_id, exit_code,
+        evidence_status, outcome, count
+      ],
+      headerUtf8: "record_kind,schema_version,stream,column_schema_id,log_policy_id,feature_log_binding_id,segment_ordinal,workflow_shortcode,event_id,sequence,occurred_at_utc,monotonic_offset,level,event_type,message_template_id,run_id,feature_id,stage,node_id,parent_event_id,correlation_id,attempt,task_id,duration_ms,diagnostic_code,validator_id,transaction_id,rule_id,model_route_id,model_profile_id,input_tokens,output_tokens,repair_unit_kind,command_id,exit_code,evidence_status,outcome,count\n"
+    }
+  | BuiltInPromptColumnsV2 {
+      columnSchemaId: prompt-columns/v2,
+      schemaVersion: feature-log/v2,
+      stream: prompt,
+      orderedColumnIds: [
+        record_kind, schema_version, stream, column_schema_id, log_policy_id,
+        feature_log_binding_id, segment_ordinal, workflow_shortcode, event_id,
+        sequence, occurred_at_utc, monotonic_offset, level, event_type,
+        message_template_id, run_id, feature_id, stage, node_id, attempt,
+        request_id, route_id, model_profile_id, fragment_id, direction,
+        body_class, content, retained_bytes, truncated, redacted
+      ],
+      headerUtf8: "record_kind,schema_version,stream,column_schema_id,log_policy_id,feature_log_binding_id,segment_ordinal,workflow_shortcode,event_id,sequence,occurred_at_utc,monotonic_offset,level,event_type,message_template_id,run_id,feature_id,stage,node_id,attempt,request_id,route_id,model_profile_id,fragment_id,direction,body_class,content,retained_bytes,truncated,redacted\n"
+    }
+  // These are compiler constants in the F0002 implementation, not data loaded
+  // from config or an event registry. Event/prompt rows require
+  // workflow_shortcode and level; control rows use the same width with \N in
+  // event-only cells. During the pre-release proof of concept v2 is edited in
+  // place and obsolete headings are rejected; there is no compatibility path.
+
 CompiledFeatureLoggingPolicyFragment {
   configVersion,
   levelPolicy: LogLevelPolicy,
-  optionalConsoleMirror: boolean,
-  rotation: { maxRecordBytes, maxSegmentBytes, maxSegments },
-  retentionDays,
-  flush: { atOrAbove: error, everyRecords, intervalMs },
+  format: fixed_header_csv,
+  timestampEnabled: true,
+  csvDialect: FeatureLogCsvDialect,
+  eventColumnSchemaId: event-columns/v2,
+  promptColumnSchemaId: none | prompt-columns/v2,
+  console: { enabled: boolean, format: csv, heading: omitted },
+  rotation: {
+    maxRecordBytes: 65536,
+    maxSegmentBytes: 8388608,
+    maxSegments: 16
+  },
+  retentionDays: 14,
+  flush: {
+    atOrAbove: error,
+    everyRecords: 32,
+    intervalMs: 1000
+  },
+  streamLockDeadlineMs: 2000,
+  streamLockAttemptCount: 1,
   failureMode: block_new_work,
+  emergency: {
+    maxAsciiBytes: 128,
+    attemptCount: 1,
+    format: "SDDE_LOG_FAILURE workflow=<CODE> level=fatal code=<FAILURE_CODE>\\n"
+  },
   prompt: {
-    enabled,
-    includeRequestBody,
-    includeResponseBody,
-    includeReferenceBodies,
-    includeCodeBodies,
-    maxContentBytes,
+    captureSelectors: unique subset<request | response | reference_body | code_body>,
+    maxContentBytes: 5000,
     redactSecrets: true,
-    detectorRegistryId
+    detectorRegistryId: redaction/default-v1,
+    configuredDetectors: forbidden
   }
   // Persisted in CompiledEnginePolicy so historical policy can be rebuilt
   // without consulting a changed current config file.
@@ -2674,34 +2805,40 @@ FeatureLogPolicy {
   featureId,
   levelPolicy: LogLevelPolicy,
   eventLogCollectionArtifactPathId,
-  optionalConsoleMirror: boolean,
+  console: { enabled: boolean, format: csv, heading: omitted },
   timestampEnabled: true,
-  format: jsonl,
+  format: fixed_header_csv,
+  csvDialect: FeatureLogCsvDialect,
+  eventColumnSchemaId: event-columns/v2,
+  promptColumnSchemaId: none | prompt-columns/v2,
   fileMode: owner_read_write,
   rotation: {
-    maxRecordBytes,
-    maxSegmentBytes,
-    maxSegments                 // hard lifetime count per (featureId, runId, stream)
+    maxRecordBytes: 65536,
+    maxSegmentBytes: 8388608,
+    maxSegments: 16             // hard lifetime count per (featureId, runId, stream)
   },
-  retentionDays,
-  flush: { atOrAbove: error, everyRecords, intervalMs },
+  retentionDays: 14,
+  flush: {
+    atOrAbove: error,
+    everyRecords: 32,
+    intervalMs: 1000
+  },
+  streamLockDeadlineMs: 2000,
+  streamLockAttemptCount: 1,
   failureMode: block_new_work,
   prompt: {
-    enabled,
+    captureSelectors: unique subset<request | response | reference_body | code_body>,
     promptLogCollectionArtifactPathId?,
-    includeRequestBody,
-    includeResponseBody,
-    includeReferenceBodies,
-    includeCodeBodies,
-    maxContentBytes,
+    maxContentBytes: 5000,
     redactSecrets: true,
-    detectorRegistryId
+    detectorRegistryId: redaction/default-v1,
+    configuredDetectors: forbidden
   }
 }
 
 LogEventDefinitionRegistry {
-  registryId,
-  version,
+  registryId: feature-log-events/poc-v2,
+  version: 2,
   definitions: {
     eventType,
     canonicalLevel: CanonicalLogLevel,
@@ -2709,10 +2846,15 @@ LogEventDefinitionRegistry {
     fields: {
       fieldId,
       valueTypeId,
-      classification: public_metadata | potentially_sensitive,
+      classification: public_metadata | sanitized_content,
       required: boolean
     }[]
   }[]
+  // Every registered fieldId must map to one existing compiler-locked
+  // stream column. Definitions are exactly the exhaustive F0002 Section 6.2
+  // table. Only model.prompt_fragment.content is sanitized_content; all other
+  // registered fields are public_metadata. The registry cannot add/reorder
+  // CSV columns and no caller/plugin/configuration can extend it.
 }
 
 LogFieldValue =
@@ -2729,6 +2871,7 @@ LogField {
 
 LogEventDraft {
   eventType,
+  workflowShortcode: WorkflowShortcode,
   runId,
   featureId,
   stage,
@@ -2742,6 +2885,7 @@ LogEvent {
   sequence,
   occurredAtUtc,             // trusted runner clock, fixed UTC RFC3339 form
   monotonicOffset,
+  workflowShortcode: WorkflowShortcode,
   level: CanonicalLogLevel,
   eventType,
   messageTemplateId,
@@ -2968,21 +3112,27 @@ FeatureLogRejectedLockCleanupObservation {
 
 ValidatedSafeLogRecord =
   | SafeEventLogRecord {
-      schemaVersion: feature-log/v1,
+      schemaVersion: feature-log/v2,
       stream: event,
+      columnSchemaId: event-columns/v2,
       event: LogEvent,
       serializedByteLength,
       safetyEvidenceIds[]
     }
-  | SafePromptLogRecord {
-      schemaVersion: feature-log/v1,
+  | SafePromptFragmentLogRecord {
+      schemaVersion: feature-log/v2,
       stream: prompt,
+      columnSchemaId: prompt-columns/v2,
       event: LogEvent,
-      promptExchange: SanitizedPromptExchangeLogRecord,
+      requestId,
+      routeId,
+      modelProfileId,
+      fragment: SanitizedPromptFragmentLogRecord,
       serializedByteLength,
-      truncationApplied,
       safetyEvidenceIds[]
     }
+  // One SafePromptFragmentLogRecord is produced for each selected sanitized
+  // fragment in canonical promptBodyFragmentId order. No composite cell exists.
 
 LogRotationAuthorization {
   authorizationId,
@@ -3054,9 +3204,17 @@ FeatureLogSegmentCreationObservation {
   stream,
   ordinal,
   createdAtUtc,
-  headerByteLength,
-  headerEvidenceId
+  csvColumnSchemaId,
+  csvColumnHeaderByteLength,
+  csvColumnHeaderEvidenceId,
+  csvColumnHeaderIsFirstRow: true,
+  segmentHeaderControlRowByteLength,
+  segmentHeaderControlRowEvidenceId,
+  segmentHeaderControlRowIsSecondRow: true,
+  headingAndControlRowDurable: true
 }
+
+FeatureLogCsvRecordKind = segment_header | event | prompt | segment_trailer
 
 RecoveredFeatureLogStreamObservation {
   stream,
@@ -3076,7 +3234,9 @@ FeatureLogStreamState {
 SerializedFeatureLogFrame {
   stream: event | prompt,
   sequence,
-  utf8JsonlHandle,
+  columnSchemaId,
+  utf8CsvDataRowHandle,
+  cellCount,
   byteLength,
   endsWithSingleLf: true
 }
@@ -3091,8 +3251,8 @@ FeatureLogSegmentRecord {
   lastSequence?,
   byteLength,
   createdAtUtc,
-  closedAtUtc?,              // durable trailer value; forbidden while active
-  headerAndTrailerEvidenceIds[]
+  closedAtUtc?,              // segment_trailer value; forbidden while active
+  headingAndControlRowEvidenceIds[]
 }
 
 FeatureLogSegmentInventory {
@@ -3148,18 +3308,20 @@ SanitizedPromptExchangeLogRecord {
   requestId,
   routeId,
   modelProfileId,
-  requestMetadataFields: LogField[],
-  responseMetadataFields: LogField[],
-  fragments: {
+  fragments: SanitizedPromptFragmentLogRecord[],
+  // Sorted by promptBodyFragmentId. Metadata uses ordinary event records;
+  // evidence IDs remain internal and are never serialized to prompt CSV.
+}
+
+SanitizedPromptFragmentLogRecord {
     promptBodyFragmentId,
     direction: request | response,
     bodyClass: PromptBodyClass,
     redactedUtf8Handle,
     retainedBytes,
-    truncated: boolean
-  }[],
-  redactionEvidenceIds[],
-  truncationEvidenceIds[]
+    truncated: boolean,
+    redacted: boolean,
+    safetyEvidenceIds[]
 }
 
 ReferenceManifest {
@@ -8786,21 +8948,24 @@ Diagnostic {
 
 ## 14. Engine configuration
 
-Starting at the invocation working directory, the runtime walks ancestors in a
-fixed nearest-first order and stops at the first exact `.sddtoolkit.json`; that
-file's directory is the project root. The authoritative path is therefore
-`<projectRoot>/.sddtoolkit.json`. The repository file
-`design/examples/.sddtoolkit.json` defines F0001's current closed reader-facing
-shape: `version`, `logs`, `models`, and `paths`. It is never a runtime fallback.
-The larger document below illustrates a proposed future versioned engine-policy
-extension; F0001 does not accept both shapes, infer missing fields, or migrate
-between them. A missing exact filename blocks invocation. Every base directory
+The runtime captures and canonicalizes the native executable's invocation
+working directory once and treats it as the project root. It resolves only the
+exact `<projectRoot>/.sddtoolkit.json` child and never searches an ancestor or
+descendant. A missing exact file returns `ENGINE_CONFIG_MISSING` and terminates
+the invocation with a nonzero exit before workflow work. The repository file
+`design/schemas/sddtoolkit-config-v2.schema.json` defines F0001's current closed
+reader-facing shape, and `design/examples/.sddtoolkit.json` is one accepted
+instance. Neither is a runtime fallback. The larger document below illustrates
+a proposed future versioned engine-policy extension; only its `logs` member is
+kept identical to the accepted v2 `LogsConfig`. F0001 does not accept its other
+extra top-level members, infer missing fields, or migrate between versions. A
+missing exact filename blocks invocation. Every base directory
 is supplied by the decoded seven-key `paths` object and must then be validated
 by the path-policy owner. The configured
 `specs`, `references`, `specsArchive`, `workflows`, `toolchainPreset`,
 `principles`, and `templates` roots are distinct authorities; only
 `specsArchive` may be nested beneath `specs`. No action may substitute a
-current-working-directory, `.specify/`, source-tree, or example path.
+different root, `.specify/`, source-tree, or example path.
 
 `paths.workflows` is the workflow-authority root. It contains exactly one
 bounded, closed, declarative definition for each `specify`, `plan`, `tasks`,
@@ -8838,9 +9003,10 @@ sources and receive no automatic placeholder expansion.
 ```
 
 `design/templates/` and `design/toolchainPresets/` are source/design material.
-`design/examples/.sddtoolkit.json` is the reader-facing schema example. None is
-searched, packaged as runtime authority, or copied implicitly by ordinary
-bootstrap.
+`design/schemas/sddtoolkit-config-v2.schema.json` and
+`design/examples/.sddtoolkit.json` are the reader-facing schema and example.
+None of these design assets is searched, packaged as runtime authority, or
+copied implicitly by ordinary bootstrap.
 
 The following extended policy document is illustrative and is not the current
 F0001 input contract:
@@ -9055,36 +9221,8 @@ F0001 input contract:
   },
   "logs": {
     "level": "debug",
-    "timestamp": true,
-    "console": {
-      "enabled": true,
-      "format": "pretty"
-    },
-    "featureFile": {
-      "format": "jsonl",
-      "maxRecordBytes": 65536,
-      "maxSegmentBytes": 8388608,
-      "maxSegments": 16,
-      "retentionDays": 14,
-      "flushAtOrAbove": "error",
-      "flushEveryRecords": 32,
-      "flushIntervalMs": 1000,
-      "failureMode": "block_new_work"
-    },
-    "redaction": {
-      "policyId": "redaction/default-v1",
-      "additionalSecretNamePatterns": [],
-      "additionalValuePatterns": []
-    },
-    "prompt": {
-      "enabled": false,
-      "includeRequestBody": false,
-      "includeResponseBody": false,
-      "includeReferenceBodies": false,
-      "includeCodeBodies": false,
-      "redactSecrets": true,
-      "maxContentBytes": 5000
-    }
+    "console": true,
+    "promptCapture": []
   }
 }
 ```
@@ -9674,8 +9812,10 @@ FeatureWorkflowOrchestrator
 ## 25. Bootstrap flow
 
 ```text
-Locate nearest ancestor containing exact .sddtoolkit.json and bind it as project root
-  -> read/parse/structurally decode that exact no-follow
+Capture the invocation working directory as project root and resolve only its
+exact .sddtoolkit.json child; missing returns ENGINE_CONFIG_MISSING and fails
+the invocation without searching an ancestor or descendant
+  -> read/directly decode that exact no-follow
      <projectRoot>/.sddtoolkit.json into one immutable SDDToolKitConfig
   -> resolve/validate all seven required paths bases against that project root
   -> prove peer-root separation, allowing only paths.specsArchive beneath paths.specs
@@ -10295,29 +10435,10 @@ Levels use the shared CanonicalLogLevel definition from Section 3.
 Configured aliases = CRITICAL -> fatal | WARN -> warning
 Emission rule = rank(eventDefinition.level) >= rank(featureLogPolicy.threshold)
 
-bootstrap.config_discovered | bootstrap.config_rejected
-toolchain.inventory_completed | toolchain.legacy_rejected |
-toolchain.package_validated | toolchain.registry_bound
-principles.inventory_completed | principles.registry_bound |
-principles.selection_completed | principles.guidance_budget_exceeded |
-principles.registry_changed
-feature.activated | feature.activation_recovered
-log.stream_created | log.stream_recovered | log.segment_rotated |
-log.retention_completed
 run.started | run.completed | run.blocked | run.failed | run.cancelled
 stage.started | stage.completed | stage.blocked | stage.failed |
 stage.clarification_pending
-authority.requirements_built | authority.reconciliation_completed |
-authority.gap_routed | authority.upstream_rework_required |
-authority.administrative_blocked
-clarification.created | clarification.reused | clarification.deferred |
-clarification.response_committed | clarification.authority_resolved |
-clarification.reopened | clarification.gate_blocked
-actor.authenticated | actor.authentication_rejected |
-actor.evidence_committed
 action.started | action.completed | action.invalid | action.failed
-orchestrator.started | orchestrator.branch_selected | orchestrator.completed |
-orchestrator.failed
 model.requested | model.completed | model.protocol_failed |
 model.schema_failed
 validation.completed | validation.failed
@@ -10325,19 +10446,20 @@ repair.requested | repair.applied | repair.rejected | repair.exhausted
 review.requested | review.approved | review.rejected
 transaction.prepared | transaction.applying | transaction.committed |
 transaction.rolled_back | transaction.recovered
-command.started | command.completed | command.failed |
-command.delta_rejected
-operation.savepoint_started | operation.savepoint_discarded |
-operation.savepoint_promoted
+command.started | command.completed | command.failed
 task.started | task.completed | task.blocked | task.failed
+security.denied
+model.prompt_fragment // prompt stream only
 
-// Each name resolves through LogEventDefinitionRegistry to one immutable
-// level, template, field schema, required-field set, and sensitivity class.
+// This is the exhaustive proof-of-concept registry. Exact levels, required and
+// optional fields, and sensitivity are the F0002 Section 6.2 table. Each name
+// resolves to the immutable <event_type>/v1 template.
 // Producers supply typed facts only; they cannot choose the name's level or
 // message. No event carries arbitrary text, raw model/reference/code content,
 // command output, credentials, or diagnostic expected/actual values.
-// The logging subsystem's own failure emits one fixed content-free emergency
-// stderr record outside this pipeline and cannot recursively observe itself.
+// model.prompt_fragment.content is accepted only after sanitization. The
+// logging subsystem's own failure emits the exact bounded F0002 Section 6.4
+// emergency stderr line outside this registry and cannot observe itself.
 ```
 
 ---
