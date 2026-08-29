@@ -604,6 +604,16 @@ alone invokes its nodes. Project workflow files are never executable scripts,
 infrastructure selectors, raw path/command sources, or operational
 capabilities.
 
+The v1 definition media contract is fixed by
+[F0005 — WorkflowDefinitionRegistryService](features/F0005-WorkflowDefinitionRegistryService.md)
+and the formal
+[workflow-definition v1 schema](schemas/workflow-definition-v1.schema.json).
+Definitions are strict UTF-8 JSON regular files discovered recursively by the
+exact case-sensitive `*.workflow.json` suffix outside the two reserved
+descendant subtrees. Each file contains one closed `schemaVersion: "1.0"`
+object; filenames never determine workflow identity. Other encodings,
+includes, aliases, and compatibility readers are not supported in v1.
+
 The `specify`, `plan`, `tasks`, and `implement` definitions are the initial SDD
 suite. Their registered predecessor gates enforce their feature order even
 though unrelated workflows are not placed into that sequence.
@@ -2864,7 +2874,7 @@ Calls are split into typed units:
 - entities, only if business data is involved;
 - semantic ambiguity/open-question review.
 
-The LLM does not assign the feature ID, IDs, headings, paths, dates, status, checklist state, passive-literal values, clarification lifecycle, or execution status. Every initial brief/spec record selects either real claim/citation IDs, one or more exact resolved clarification-response IDs, or an allowed combination. The engine assigns canonical IDs and mechanically verifies all authority joins and citation unions. Semantic entailment of arbitrary prose is model-assisted and ultimately user-reviewed; it is never misrepresented as deterministic proof. For path/filename/URI display text the model may select only a unit-allowlisted passive ID from the exact registry. There is no unreferenced command description to use as provenance. The model returns typed business content rather than Markdown.
+The LLM does not assign the feature ID, IDs, headings, paths, dates, status, checklist state, passive-literal values, clarification lifecycle, or execution status. Every initial brief/spec record selects either real claim/citation IDs, one or more exact resolved clarification-response IDs, or an allowed combination. The engine assigns canonical IDs and mechanically verifies all authority joins and citation unions. Semantic entailment of arbitrary prose is model-assisted and ultimately user-reviewed; it is never misrepresented as deterministic proof. For path/filename/URI display text the model may select only a unit-allowlisted passive ID from the exact registry. There is no unreferenced command description to use as provenance. The model returns typed business content rather than Markdown. Each acceptance-criterion proposal contains exactly one nonempty typed `given`, `when`, and `then` value; the model does not supply Markdown labels or combine the three values into free-form prose.
 
 For each feature-brief or specification unit, the route returns either content or a clarification need. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
@@ -2887,7 +2897,7 @@ The engine validates:
 - route response schema and source references;
 - nonempty mandatory IR fields;
 - fixed singleton provenance keys plus engine-assigned, unique, well-formed `AC/UO/EC/FR/BR/AS/NG/PB/EN/OQ-*` identifiers; initial generation is gap-free per prefix, while edits preserve surviving IDs, allocate new monotonically increasing IDs, and never reuse deleted IDs;
-- explicit `given`, `when`, and `then` fields for each acceptance criterion;
+- exactly one nonempty `given`, `when`, and `then` field for each acceptance criterion; combined free-form, unlabeled, missing, duplicated, or reordered acceptance-condition content is invalid;
 - duplicate or byte-identical requirements;
 - typed clarification state rather than fragile substring matching;
 - citation validity and reference-file accounting;
@@ -2922,6 +2932,26 @@ After validation:
 8. validate the transaction;
 9. commit the set and durable state marker;
 10. report engine-known paths and readiness for user spec editing/validation, then `plan`.
+
+The canonical acceptance-criteria section in `spec.md` is always rendered in
+this form:
+
+```markdown
+## Acceptance Criteria
+
+**AC-001**
+- **GIVEN** <nonempty business precondition>
+- **WHEN** <nonempty business event or action>
+- **THEN** <nonempty observable business outcome>
+```
+
+Every criterion has one engine-owned `AC-*` identity followed by exactly those
+three uppercase labels in `GIVEN`, `WHEN`, `THEN` order. The renderer owns the
+heading, labels, order, and Markdown structure; the typed values supply only
+their business text. The editable-specification parser accepts only this
+canonical structure and rejects prose-only bullets, unlabeled scenarios,
+lowercase or mixed-case labels, missing or duplicate labels, reordered labels,
+and additional unlabeled content within a criterion.
 
 The initial acknowledgement state is present even when its `entries` array is empty. Its ID, the feature-request-state ID, passive-literal-registry ID, and their engine-derived paths are stored in workflow metadata and bound by `SpecificationIR`, `SpecificationProvenanceState`, and any reference snapshot; stage gates and recovery load and validate all authorities before model selection, provenance acceptance, or rendering. No fingerprint is written. If the engine process is restarted, later stages reload and revalidate the current artifacts.
 
@@ -3464,7 +3494,7 @@ This catalogue is normative for the first engine version. A project may add vali
 | Citation                 | Source ID, bounds, and verbatim text exist                                                                                        | Whether citation proves claim                    |
 | Required sections        | Typed required fields and renderer contract                                                                                       | Whether prose is adequate                        |
 | Requirement IDs          | Engine-assigned type/uniqueness; stable surviving IDs and monotonic new IDs                                                       | Whether the requirement is substantively correct |
-| Acceptance form          | Nonempty Given/When/Then fields                                                                                                   | Whether scenario is truly testable               |
+| Acceptance form          | Exactly one nonempty typed `given`/`when`/`then` value; `spec.md` uses only the canonical uppercase `GIVEN`/`WHEN`/`THEN` labels in that order | Whether scenario is truly testable               |
 | Clarification state      | No unresolved typed clarification at success                                                                                      | Whether all ambiguity was discovered             |
 | Business-only lint       | No obvious code/path/framework/CSS leakage                                                                                        | Nuanced business/technical classification        |
 | Exact-copy propagation   | Byte-for-byte value from source ledger                                                                                            | Whether source copy is actually required         |
@@ -3688,6 +3718,8 @@ Renderers own:
 - front matter/header fields;
 - dates and engine-known links;
 - `AC/FR/BR/EC` and `TNNN` identifiers;
+- the exact `## Acceptance Criteria` heading and uppercase `GIVEN`, `WHEN`,
+  `THEN` labels in that order for every `AC-*` record;
 - checkboxes and phase/gate status;
 - Markdown table columns and escaping;
 - code fences around structured contracts where applicable;
@@ -3710,7 +3742,7 @@ Validation regenerates with the version recorded by the state/view and compares 
 
 `spec.md` is reparsed and normalized at the plan boundary; its IR must pass the full specification gate. The parser first captures each semantic field's exact UTF-8 bytes and record key. When current provenance marks a leaf as `ExactBusinessCopy`, `RebindExactBusinessCopyAction` compares the captured unescaped scalar byte-for-byte with the referenced preserved token and reconstructs the typed variant; any difference loses the binding and produces an exact-copy diagnostic. Every other leaf is deterministically segmented into NFC-normalized `BusinessLiteralText` and inert inline-code passive-literal spans. A known span resolves by exact `(kind, NFC bytes)` against the registry bound by the specification. A new user-written filename/path/URI cannot become a model repair or operational path: it requires a new engine-assigned passive ID and occurrence tied to the same authenticated specification acknowledgement, and the registry/acknowledgement/provenance/spec revisions commit together. A rejected or failed allocation is retired.
 
-A user may edit semantic fields and add, remove, or reorder semantic records, but engine-owned headings, status/checklist fields, and existing ID syntax remain protected by validation. Surviving IDs stay attached to their records; an un-ID'd new record receives the next monotonic ID; deleted IDs are not reused. A duplicate, malformed, or reassigned ID blocks with targeted guidance. Formatting is normalized by deterministic rendering, and that normalized spec plus exact passive-registry binding is staged with plan-input state so a crash cannot record a different planning input.
+A user may edit semantic fields and add, remove, or reorder semantic records, but engine-owned headings, status/checklist fields, acceptance-criterion labels/order, and existing ID syntax remain protected by validation. Each acceptance criterion must remain an explicit `GIVEN`/`WHEN`/`THEN` triplet; free-form or partially labeled criteria do not normalize into authority. Surviving IDs stay attached to their records; an un-ID'd new record receives the next monotonic ID; deleted IDs are not reused. A duplicate, malformed, or reassigned ID blocks with targeted guidance. Formatting is normalized by deterministic rendering, and that normalized spec plus exact passive-registry binding is staged with plan-input state so a crash cannot record a different planning input.
 
 Reference citations are not rendered into the business-only file. On reparse, the engine joins the persisted `SpecificationProvenanceState` only when the fixed/allocated record key and `BusinessContentIdentity` still equal the entry: ordered literal segment bytes plus self-contained passive `(ID, kind, bytes)` identities for normalized content, or exact token ID plus exact UTF-8 bytes for source-copy content. The containing state's exact registry validator must resolve every passive tuple, but adding an unrelated literal in a later registry revision does not change an existing record identity. Fixed singleton keys come from their protected structural slots; all repeatable records carry their rendered ID label. A changed or new record loses inherited provenance and must be re-attributed from the persisted `ReferenceSnapshot`, explicitly marked user-authored through a validated acknowledgement, or blocked when reference support is mandatory; the next passive-registry/provenance/acknowledgement revisions are committed with the normalized spec/plan input. If the spec is edited after downstream canonical state exists, the next gate invokes `CompareSpecificationIRAction` against the exact specification stored in canonical `PlanState`. A difference invalidates plan/task approvals and requires regeneration from `specified`; this is direct typed-state comparison, not fingerprinting.
 
@@ -4193,6 +4225,9 @@ Tests verify schema validity, detection ambiguity, roots, extensions, naming, pl
 - Markdown escaping and code-fence safety;
 - exact token/copy preservation;
 - fixed heading order;
+- exact uppercase `GIVEN`/`WHEN`/`THEN` acceptance-criterion rendering and
+  parser rejection of unlabeled, free-form, lowercase/mixed-case, missing,
+  duplicate, additional, and reordered criterion fields;
 - correct engine-derived checklist/progress state;
 - no `tasks.md` during plan;
 - editable `spec.md` parse/render round trip and provenance rejoin/invalidation after edits;
@@ -4360,7 +4395,7 @@ The new engine is ready for production evaluation when all of the following are 
 17. Persisted reference citations, provenance, claims, conflicts, and exact preserved tokens are mechanically verifiable across restart without a content fingerprint.
 18. An unsupported semantic assertion is converted only through the one-use no-invention repair authorization into `clarification_needed`; the engine and model never invent a plausible requirement, architecture decision, task fact, path, command, or resolution.
 19. Clarifications use only registered `<feature>/clarify/S01..S99.md`, `P01..P99.md`, and `T01..T99.md` identities/paths; exact subject keys prevent duplicates, open forms expose only controlled fields, closed historical views are read-only, reruns reconsider current reference/principle/answer authorities and regenerate the complete owning stage, and open `S`, `S/P`, or `S/P/T` sets respectively make plan, tasks, or implement emit `ERROR` and exit nonzero.
-20. `spec.md` is the sole freely editable stage artifact and round-trips to normalized specification IR; plan/design and task files are deterministic read-only review projections, are never parsed as authority, and require approvals bound to the current canonical state IDs.
+20. `spec.md` is the sole freely editable stage artifact, every acceptance criterion uses the canonical uppercase `GIVEN`/`WHEN`/`THEN` triplet, and the file round-trips to normalized specification IR; plan/design and task files are deterministic read-only review projections, are never parsed as authority, and require approvals bound to the current canonical state IDs.
 21. `spec.md` is business-only according to deterministic lint and configured semantic review, while technical/reference data remains in the sidecar.
 22. Semantic Markdown principle filenames are category hints only, their complete bounded bodies remain free text, and the exact current principle registry is loaded/selected/cited at plan, tasks, implement, recovery, and clarification-resume gates but never used to invent specification requirements; exact `toolchain.yaml` is instead closed mechanical policy inherited from validated preset packages and never enters semantic guidance.
 23. Plan file records match real repository environments, all planned paths were preset-validated before rendering, and all requirements/scenarios/preserved-token obligations have coverage.
@@ -4404,18 +4439,19 @@ The following implementation choices are accepted:
   arbitrary bounded number of declarative definitions from `paths.workflows`,
   compiles graphs only from registered `PipelineNode` contracts, and executes
   an exactly selected `WorkflowId`; the four initial SDD workflows retain their
-  predecessor gates without fixing the engine registry.
+  predecessor gates without fixing the engine registry;
+- [F0005](features/F0005-WorkflowDefinitionRegistryService.md): v1 workflow
+  definitions are strict UTF-8 JSON in recursively discovered, case-sensitive
+  `*.workflow.json` regular files and conform to the closed
+  [workflow-definition v1 schema](schemas/workflow-definition-v1.schema.json).
+  Identity comes only from validated content, and v1 has no alternate encoding,
+  alias, include, compatibility reader, or runtime schema-file fallback.
 
 The following choices remain deferred and may be decided during implementation
 without altering the architecture:
 
 - exact Zig compiler version and upgrade policy, which must be pinned before
   the implementation scaffold is accepted;
-- exact workflow-definition filenames and supported declarative encoding,
-  provided `WorkflowId` comes from validated content rather than filenames, the
-  format expresses graph topology only through registered `PipelineNode`
-  contract IDs and closed typed transitions, and it cannot express executable
-  code, infrastructure selection, raw paths/commands, or capability grants;
 - release build modes, linking strategy, and supported platform matrix;
 - concrete JSON Schema, Markdown AST, tree-sitter/compiler, PDF, office, image/OCR, and overlay libraries;
 - the UI/API used to record manual verification evidence;

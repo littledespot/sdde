@@ -93,8 +93,10 @@ Immutable<T> {
   // immutable. It has no runtime mutation or reflection capability.
 }
 
+PipelineOutcomeStatus = ok | needs_user | invalid | blocked | failed | cancelled
+
 AppliedChildOutcome {
-  status: ok | needs_user | invalid | blocked | failed | cancelled,
+  status: PipelineOutcomeStatus,
   nextEnvelope,          // runner-created by applying the child's one NodeDelta
   candidateDelta?        // available only on the invalid branch for authorized repair
 }
@@ -484,7 +486,7 @@ PipelineEnvelope {
 
 ```text
 Outcome {
-  status: ok | needs_user | invalid | blocked | failed | cancelled,
+  status: PipelineOutcomeStatus,
   delta: NodeDelta,
   candidateDelta?        // retained off the committed data path for repair
 }
@@ -1342,8 +1344,31 @@ BootstrapRootRegistryId {
   // Self-validating engine tuple; it is never allocated by its own ledger.
 }
 
-WorkflowId = opaque validated project-authored workflow identifier
-WorkflowNodeId = opaque definition-local node identifier
+WorkflowId = opaque validated project-authored lower-kebab identifier,
+             1..64 ASCII bytes
+WorkflowNodeId = opaque validated definition-local lower-kebab identifier,
+                 1..64 ASCII bytes
+WorkflowParameterId = opaque validated definition-local lower-kebab identifier,
+                      1..64 ASCII bytes
+WorkflowEnumToken = opaque validated lower-kebab token, 1..64 ASCII bytes
+WorkflowRegisteredRef = opaque validated exact registered reference,
+                        `[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*@[1-9][0-9]*`,
+                        at most 128 ASCII bytes
+WorkflowDefinitionSchemaVersion = "1.0"
+WorkflowVersion = opaque validated integer in 1..4294967295
+
+ValidatedWorkflowParameterValue =
+  | { kind: boolean, value: boolean }
+  | { kind: integer, value: i64 }
+  | { kind: enum, value: WorkflowEnumToken }
+  | { kind: registered_id, value: WorkflowRegisteredRef }
+
+WorkflowParameterBinding {
+  parameterId: WorkflowParameterId,
+  value: ValidatedWorkflowParameterValue
+  // The referenced node contract supplies the exact definition-safe
+  // required/optional IDs, kinds, bounds/enums, and registered-ID namespace.
+}
 
 WorkflowReservedChildName = features | transactions
 
@@ -1424,8 +1449,8 @@ WorkflowAuthorityInventory {
 
 DeclarativeWorkflowNode {
   workflowNodeId: WorkflowNodeId,
-  pipelineNodeContractId,
-  parameters: ValidatedWorkflowParameterValue[]
+  pipelineNodeContractId: WorkflowRegisteredRef,
+  parameters: WorkflowParameterBinding[]
   // The contract ID resolves only through the compiler-registered PipelineNode
   // registry. No adapter, implementation symbol, path, command, or capability
   // is representable here.
@@ -1433,22 +1458,22 @@ DeclarativeWorkflowNode {
 
 DeclarativeWorkflowTransition {
   fromWorkflowNodeId: WorkflowNodeId,
-  outcomeTag,
+  outcomeTag: PipelineOutcomeStatus,
   target:
     | { kind: node, workflowNodeId: WorkflowNodeId }
-    | { kind: terminal, outcomeTag }
+    | { kind: terminal, outcomeTag: PipelineOutcomeStatus }
 }
 
 DeclarativeWorkflowDefinition {
   sourceInventoryOrdinal: PositiveInteger,
   workflowId: WorkflowId,
-  schemaVersion,
-  workflowVersion,
+  schemaVersion: WorkflowDefinitionSchemaVersion,
+  workflowVersion: WorkflowVersion,
   workflowShortcode: WorkflowShortcode,
-  invocationContractNodeId,
+  invocationContractNodeId: WorkflowRegisteredRef,
   // Resolves to one registered capability-free PipelineNode contract. The
   // runner invokes it before graph entry to produce validated typed run context.
-  workflowPolicyProfileId,
+  workflowPolicyProfileId: WorkflowRegisteredRef,
   entryWorkflowNodeId: WorkflowNodeId,
   nodes: DeclarativeWorkflowNode[],
   transitions: DeclarativeWorkflowTransition[]
@@ -1509,6 +1534,12 @@ WorkflowDefinitionRegistryState {
   // comparison uses CompiledWorkflowSemanticAuthority only, never inventory
   // ordinals, registry identity, or graph evidence.
 }
+
+ValidatedWorkflowDefinitionRegistry =
+  Validated<IdentityFreeBootstrapComponentPayload<WorkflowDefinitionRegistryState>>
+  // Preselection view exposed by WorkflowDefinitionRegistryService. It has
+  // complete registry evidence but no BootstrapComponentId; later bootstrap
+  // materialization may consume it to construct WorkflowDefinitionRegistryState.
 
 EngineStartupGraph {
   contractVersion,
@@ -4038,6 +4069,8 @@ RawSourceScalarProposal {
 AcceptanceCriterionRequirementProjection {
   requirementId,
   specificationRecordId,
+  // Typed values only. The specification renderer owns the uppercase
+  // GIVEN, WHEN, THEN labels and their fixed order.
   given: BusinessValue,
   when: BusinessValue,
   then: BusinessValue,
@@ -5802,6 +5835,7 @@ SpecificationContentProposal {
   displayName: AttributedBusinessText,
   primaryUserStory: AttributedBusinessText,
   acceptanceCriteria: {
+    // Closed typed triplet; never model-authored Markdown or free-form prose.
     given: BusinessValue, when: BusinessValue, then: BusinessValue,
     claimIds[], citationIds[], clarificationResponseIds[]
   }[],
@@ -5842,6 +5876,8 @@ SpecificationIR {
   displayName: FixedSpecificationField,
   primaryUserStory: FixedSpecificationField,
   acceptanceCriteria: {
+    // Renders beneath the exact `## Acceptance Criteria` heading as one
+    // uppercase GIVEN/WHEN/THEN triplet in that order.
     id, given: BusinessValue, when: BusinessValue, then: BusinessValue,
     claimIds[], citationIds[], clarificationResponseIds[]
   }[],
@@ -5859,6 +5895,24 @@ SpecificationIR {
   openQuestions: { id, text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[]
 }
 ```
+
+The canonical `spec.md` projection for each `SpecificationIR.acceptanceCriteria`
+record is:
+
+```markdown
+## Acceptance Criteria
+
+**AC-001**
+- **GIVEN** <nonempty `given` value>
+- **WHEN** <nonempty `when` value>
+- **THEN** <nonempty `then` value>
+```
+
+The heading appears once and each subsequent `AC-*` record repeats only the
+identity and three labeled lines. The renderer owns the labels and order. The
+editable-specification parser rejects any acceptance criterion that is
+free-form, unlabeled, partially labeled, duplicated, reordered, or uses label
+casing other than the exact uppercase form.
 
 ---
 

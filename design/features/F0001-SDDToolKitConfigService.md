@@ -117,7 +117,7 @@ Semantic ownership remains outside F0001:
 | --- | --- |
 | Logging-policy compiler | Canonicalize `config.logs.level` once, validate console/prompt choices, inject every F0002 operational constant, and produce the persisted logging-policy fragment. |
 | Model-route compiler | Validate `config.models` and resolve registered providers, models, and routes. |
-| Path-policy compiler | Validate `config.paths` against the project root and construct typed root capabilities. |
+| [F0004 bootstrap-root path-policy boundary](F0004-BootstrapRootRegistryService.md) | Validate `config.paths` against the project root and construct the typed `BootstrapRootRegistry`; F0001 does not resolve a path itself. |
 
 Consumers may read the immutable configuration but cannot mutate it, trigger a
 reread, obtain raw bytes, or gain filesystem access. The runner releases the
