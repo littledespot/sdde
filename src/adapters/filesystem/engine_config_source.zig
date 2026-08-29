@@ -6,6 +6,7 @@
 const std = @import("std");
 const config = @import("../../domain/config.zig");
 const engine_config_source = @import("../../ports/engine_config_source.zig");
+const file_identity = @import("file_identity.zig");
 
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -42,6 +43,12 @@ pub const Adapter = struct {
         ) catch return error.EngineConfigReadFailure;
         errdefer allocator.free(canonical_project_root);
 
+        const canonical_config_path = std.fs.path.joinZ(
+            allocator,
+            &.{ canonical_project_root, config.engine_config_basename },
+        ) catch return error.EngineConfigReadFailure;
+        errdefer allocator.free(canonical_config_path);
+
         var file = project_root.openFile(self.io, config.engine_config_basename, .{
             .mode = .read_only,
             .allow_directory = false,
@@ -52,6 +59,9 @@ pub const Adapter = struct {
 
         const file_stat = file.stat(self.io) catch return error.EngineConfigReadFailure;
         if (file_stat.kind != .file) return error.EngineConfigReadFailure;
+        const observed_identity = file_identity.inspect(file.handle) catch {
+            return error.EngineConfigReadFailure;
+        };
 
         const open_engine_config_file = allocator.create(OpenEngineConfigFile) catch {
             return error.EngineConfigReadFailure;
@@ -63,6 +73,8 @@ pub const Adapter = struct {
 
         return engine_config_source.ExactEngineConfigFile.init(
             canonical_project_root,
+            canonical_config_path,
+            observed_identity,
             open_engine_config_file,
             &exact_config_file_vtable,
         );
@@ -154,6 +166,10 @@ test "locates and reads only the exact config from the supplied working director
     var located = try adapter.locator().locate(allocator);
     defer located.deinit(allocator);
     try std.testing.expect(std.fs.path.isAbsolute(located.canonical_project_root));
+    try std.testing.expectEqualStrings(
+        config.engine_config_basename,
+        std.fs.path.basename(located.canonical_config_path),
+    );
 
     var raw = try located.read(allocator, expected.len);
     defer raw.deinit(allocator);

@@ -19,6 +19,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\  }
         \\}
     );
+    _ = package_directory.add(".sddtoolkit/workflows/.keep", "");
 
     const smoke_command = std.Build.Step.Run.create(b, "run packaged SDDE executable");
     smoke_command.addFileArg(packaged_executable);

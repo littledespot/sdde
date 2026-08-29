@@ -1,9 +1,10 @@
-const config_error = @import("../domain/config_error.zig");
-const sddtoolkit_config_service = @import("sddtoolkit_config_service.zig");
+const bootstrap_error = @import("../domain/bootstrap_error.zig");
+const bootstrap_services = @import("bootstrap_services.zig");
 
 pub const StepOutcome = union(enum) {
     ok,
-    failed: config_error.PublicError,
+    failed: bootstrap_error.PublicError,
+    cancelled,
 };
 
 pub const ChildBindings = struct {
@@ -14,7 +15,13 @@ pub const ChildBindings = struct {
         locate: *const fn (*anyopaque) StepOutcome,
         read: *const fn (*anyopaque) StepOutcome,
         decode: *const fn (*anyopaque) StepOutcome,
-        take_config_service: *const fn (*anyopaque) sddtoolkit_config_service.SDDToolKitConfigService,
+        validate_root_paths: *const fn (*anyopaque) StepOutcome,
+        resolve_roots: *const fn (*anyopaque) StepOutcome,
+        validate_roots: *const fn (*anyopaque) StepOutcome,
+        build_registry_id: *const fn (*anyopaque) StepOutcome,
+        build_registry: *const fn (*anyopaque) StepOutcome,
+        validate_registry: *const fn (*anyopaque) StepOutcome,
+        take_services: *const fn (*anyopaque) bootstrap_services.BootstrapServices,
     };
 
     pub fn invokeLocate(self: ChildBindings) StepOutcome {
@@ -29,7 +36,31 @@ pub const ChildBindings = struct {
         return self.vtable.decode(self.context);
     }
 
-    pub fn takeConfigService(self: ChildBindings) sddtoolkit_config_service.SDDToolKitConfigService {
-        return self.vtable.take_config_service(self.context);
+    pub fn invokeValidateRootPaths(self: ChildBindings) StepOutcome {
+        return self.vtable.validate_root_paths(self.context);
+    }
+
+    pub fn invokeResolveRoots(self: ChildBindings) StepOutcome {
+        return self.vtable.resolve_roots(self.context);
+    }
+
+    pub fn invokeValidateRoots(self: ChildBindings) StepOutcome {
+        return self.vtable.validate_roots(self.context);
+    }
+
+    pub fn invokeBuildRegistryId(self: ChildBindings) StepOutcome {
+        return self.vtable.build_registry_id(self.context);
+    }
+
+    pub fn invokeBuildRegistry(self: ChildBindings) StepOutcome {
+        return self.vtable.build_registry(self.context);
+    }
+
+    pub fn invokeValidateRegistry(self: ChildBindings) StepOutcome {
+        return self.vtable.validate_registry(self.context);
+    }
+
+    pub fn takeServices(self: ChildBindings) bootstrap_services.BootstrapServices {
+        return self.vtable.take_services(self.context);
     }
 };

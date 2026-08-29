@@ -1,36 +1,42 @@
 const std = @import("std");
-const config_error = @import("../domain/config_error.zig");
+const bootstrap_error = @import("../domain/bootstrap_error.zig");
 const child_bindings = @import("bootstrap_child_bindings.zig");
-const sddtoolkit_config_service = @import("sddtoolkit_config_service.zig");
+const bootstrap_services = @import("bootstrap_services.zig");
 
 pub const Outcome = union(enum) {
-    ready: sddtoolkit_config_service.SDDToolKitConfigService,
-    failed: config_error.PublicError,
+    ready: bootstrap_services.BootstrapServices,
+    failed: bootstrap_error.PublicError,
+    cancelled,
 
     pub fn deinit(self: *Outcome) void {
         switch (self.*) {
-            .ready => |*config_service| config_service.deinit(),
-            .failed => {},
+            .ready => |*services| services.deinit(),
+            .failed, .cancelled => {},
         }
         self.* = undefined;
     }
 };
 
 pub fn run(children: child_bindings.ChildBindings) Outcome {
-    switch (children.invokeLocate()) {
-        .ok => {},
-        .failed => |failure| return .{ .failed = failure },
-    }
-    switch (children.invokeRead()) {
-        .ok => {},
-        .failed => |failure| return .{ .failed = failure },
-    }
-    switch (children.invokeDecode()) {
-        .ok => {},
-        .failed => |failure| return .{ .failed = failure },
-    }
+    if (terminal(children.invokeLocate())) |outcome| return outcome;
+    if (terminal(children.invokeRead())) |outcome| return outcome;
+    if (terminal(children.invokeDecode())) |outcome| return outcome;
+    if (terminal(children.invokeValidateRootPaths())) |outcome| return outcome;
+    if (terminal(children.invokeResolveRoots())) |outcome| return outcome;
+    if (terminal(children.invokeValidateRoots())) |outcome| return outcome;
+    if (terminal(children.invokeBuildRegistryId())) |outcome| return outcome;
+    if (terminal(children.invokeBuildRegistry())) |outcome| return outcome;
+    if (terminal(children.invokeValidateRegistry())) |outcome| return outcome;
 
-    return .{ .ready = children.takeConfigService() };
+    return .{ .ready = children.takeServices() };
+}
+
+fn terminal(step: child_bindings.StepOutcome) ?Outcome {
+    return switch (step) {
+        .ok => null,
+        .failed => |failure| .{ .failed = failure },
+        .cancelled => .cancelled,
+    };
 }
 
 test "coordinates child bindings in order and preserves a decode failure" {
@@ -39,12 +45,28 @@ test "coordinates child bindings in order and preserves a decode failure" {
     defer outcome.deinit();
 
     try std.testing.expectEqual(
-        config_error.PublicError.ENGINE_CONFIG_PARSE_ERROR,
+        bootstrap_error.PublicError.ENGINE_CONFIG_PARSE_ERROR,
         outcome.failed,
     );
     try std.testing.expectEqualSlices(
         Step,
         &.{ .locate, .read, .decode },
+        spy.calls[0..spy.call_count],
+    );
+}
+
+test "stops after a failed root binding" {
+    var spy: SpyBindings = .{ .fail_at = .validate_roots };
+    var outcome = run(spy.bindings());
+    defer outcome.deinit();
+
+    try std.testing.expectEqual(
+        bootstrap_error.PublicError.BOOTSTRAP_ROOT_RESOLUTION_ERROR,
+        outcome.failed,
+    );
+    try std.testing.expectEqualSlices(
+        Step,
+        &.{ .locate, .read, .decode, .validate_root_paths, .resolve_roots, .validate_roots },
         spy.calls[0..spy.call_count],
     );
 }
@@ -55,7 +77,7 @@ test "stops after a failed locate binding" {
     defer outcome.deinit();
 
     try std.testing.expectEqual(
-        config_error.PublicError.ENGINE_CONFIG_READ_ERROR,
+        bootstrap_error.PublicError.ENGINE_CONFIG_READ_ERROR,
         outcome.failed,
     );
     try std.testing.expectEqualSlices(
@@ -65,11 +87,35 @@ test "stops after a failed locate binding" {
     );
 }
 
-const Step = enum { locate, read, decode };
+test "preserves explicit cancellation and stops later children" {
+    var spy: SpyBindings = .{ .cancel_at = .resolve_roots };
+    var outcome = run(spy.bindings());
+    defer outcome.deinit();
+
+    try std.testing.expect(outcome == .cancelled);
+    try std.testing.expectEqualSlices(
+        Step,
+        &.{ .locate, .read, .decode, .validate_root_paths, .resolve_roots },
+        spy.calls[0..spy.call_count],
+    );
+}
+
+const Step = enum {
+    locate,
+    read,
+    decode,
+    validate_root_paths,
+    resolve_roots,
+    validate_roots,
+    build_registry_id,
+    build_registry,
+    validate_registry,
+};
 
 const SpyBindings = struct {
-    fail_at: Step,
-    calls: [3]Step = undefined,
+    fail_at: ?Step = null,
+    cancel_at: ?Step = null,
+    calls: [9]Step = undefined,
     call_count: usize = 0,
 
     fn bindings(self: *SpyBindings) child_bindings.ChildBindings {
@@ -82,10 +128,13 @@ const SpyBindings = struct {
     fn record(self: *SpyBindings, step: Step) child_bindings.StepOutcome {
         self.calls[self.call_count] = step;
         self.call_count += 1;
+        if (self.cancel_at == step) return .cancelled;
         if (self.fail_at != step) return .ok;
         return .{ .failed = switch (step) {
             .locate, .read => .ENGINE_CONFIG_READ_ERROR,
             .decode => .ENGINE_CONFIG_PARSE_ERROR,
+            .validate_root_paths, .resolve_roots, .validate_roots => .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
+            .build_registry_id, .build_registry, .validate_registry => .BOOTSTRAP_ROOT_REGISTRY_INVALID,
         } };
     }
 };
@@ -94,7 +143,13 @@ const spy_vtable: child_bindings.ChildBindings.VTable = .{
     .locate = spyLocate,
     .read = spyRead,
     .decode = spyDecode,
-    .take_config_service = spyTakeConfigService,
+    .validate_root_paths = spyValidateRootPaths,
+    .resolve_roots = spyResolveRoots,
+    .validate_roots = spyValidateRoots,
+    .build_registry_id = spyBuildRegistryId,
+    .build_registry = spyBuildRegistry,
+    .validate_registry = spyValidateRegistry,
+    .take_services = spyTakeServices,
 };
 
 fn spyLocate(context: *anyopaque) child_bindings.StepOutcome {
@@ -112,6 +167,36 @@ fn spyDecode(context: *anyopaque) child_bindings.StepOutcome {
     return spy.record(.decode);
 }
 
-fn spyTakeConfigService(_: *anyopaque) sddtoolkit_config_service.SDDToolKitConfigService {
+fn spyValidateRootPaths(context: *anyopaque) child_bindings.StepOutcome {
+    const spy: *SpyBindings = @ptrCast(@alignCast(context));
+    return spy.record(.validate_root_paths);
+}
+
+fn spyResolveRoots(context: *anyopaque) child_bindings.StepOutcome {
+    const spy: *SpyBindings = @ptrCast(@alignCast(context));
+    return spy.record(.resolve_roots);
+}
+
+fn spyValidateRoots(context: *anyopaque) child_bindings.StepOutcome {
+    const spy: *SpyBindings = @ptrCast(@alignCast(context));
+    return spy.record(.validate_roots);
+}
+
+fn spyBuildRegistryId(context: *anyopaque) child_bindings.StepOutcome {
+    const spy: *SpyBindings = @ptrCast(@alignCast(context));
+    return spy.record(.build_registry_id);
+}
+
+fn spyBuildRegistry(context: *anyopaque) child_bindings.StepOutcome {
+    const spy: *SpyBindings = @ptrCast(@alignCast(context));
+    return spy.record(.build_registry);
+}
+
+fn spyValidateRegistry(context: *anyopaque) child_bindings.StepOutcome {
+    const spy: *SpyBindings = @ptrCast(@alignCast(context));
+    return spy.record(.validate_registry);
+}
+
+fn spyTakeServices(_: *anyopaque) bootstrap_services.BootstrapServices {
     unreachable;
 }

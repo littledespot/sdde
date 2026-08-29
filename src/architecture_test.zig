@@ -1,4 +1,5 @@
 const std = @import("std");
+const bootstrap_root_registry = @import("domain/bootstrap_root_registry.zig");
 
 test "every action imports only standard domain and port modules" {
     const io = std.testing.io;
@@ -36,6 +37,25 @@ test "public root does not re-export ports or infrastructure adapters" {
     const source = @embedFile("root.zig");
     try expectAbsent(source, "adapters/");
     try expectAbsent(source, "ports/");
+    try expectAbsent(source, "bootstrap_roots");
+}
+
+test "validated bootstrap registry authority is opaque" {
+    switch (@typeInfo(bootstrap_root_registry.BootstrapRootRegistry)) {
+        .@"opaque" => {},
+        else => return error.RegistryAuthorityMustBeOpaque,
+    }
+    switch (@typeInfo(bootstrap_root_registry.ConfiguredBaseRootCapability)) {
+        .@"opaque" => {},
+        else => return error.RootCapabilityMustBeOpaque,
+    }
+
+    const service_source = @embedFile("application/bootstrap_root_registry_service.zig");
+    try expectAbsent(service_source, "bootstrap_roots");
+    try expectAbsent(service_source, "ValidatedConfiguredRoot");
+
+    const inspector_source = @embedFile("adapters/filesystem/bootstrap_root_inspector.zig");
+    try expectAbsent(inspector_source, "workspacePathPolicy");
 }
 
 test "configuration domain ownership is independent of the JSON parser" {

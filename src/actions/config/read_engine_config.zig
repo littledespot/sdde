@@ -31,6 +31,8 @@ test "reads only through the exact-config-file capability at the compiler limit"
     const canonical_root = try allocator.dupeZ(u8, "/validated/project");
     var exact_config_file = engine_config_source.ExactEngineConfigFile.init(
         canonical_root,
+        try allocator.dupeZ(u8, "/validated/project/.sddtoolkit.json"),
+        .{ .filesystem_id = 1, .file_id = 1 },
         &fake,
         &fake_exact_config_file_vtable,
     );
