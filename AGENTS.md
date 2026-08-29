@@ -2,10 +2,18 @@
 
 ## Purpose
 
-Build a deterministic Zig native single-executable application that implements
-the workflow:
+Build a deterministic Zig native single-executable workflow engine that loads,
+validates, and executes closed declarative workflows from the configured
+`paths.workflows` root.
+
+The initial SDD workflow suite implements the feature flow:
 
 **specify -> plan -> tasks -> implement**
+
+Those four names are workflow definitions, not a fixed engine registry. The
+workflow root may contain any bounded number of definitions. The generic engine
+may execute any validated definition composed from registered pipeline-node
+contracts; project definitions never supply executable code or capabilities.
 
 The engine treats every LLM response as untrusted candidate data. Deterministic
 code, closed schemas, validators, transactions, executable evidence, and
@@ -52,6 +60,11 @@ the target project and workflow explicitly.
   as a native executable. TypeScript, Node.js, and Node SEA are not engine
   implementation or packaging technologies. JavaScript/TypeScript and Node
   presets remain valid policies for target projects.
+- **design/decisions/0003-generic-workflow-engine.md** records the accepted
+  workflow-runtime decision: definitions are discovered beneath
+  `paths.workflows`, compiled from registered pipeline-node contracts, and
+  executed by the generic engine. The four initial SDD workflows retain their
+  domain predecessor gates but do not define the registry cardinality.
 
 Do not silently convert a proposed decision, example, template, or TODO into
 accepted project authority.
@@ -208,8 +221,17 @@ do not manufacture an architecture exercise.
 - An orchestrator performs no filesystem, model, parsing, rendering, validation,
   command, logging, state, or transaction work.
 - A capability-free pipeline-node runtime stays capability-free.
+- The generic workflow engine is a capability-free orchestrator: it resolves
+  one validated workflow and follows only its compiled typed transitions
+  through runner-owned child bindings.
 - Only the runner validates/applies node deltas and invokes node execution.
-- Only the composition root constructs concrete adapters and child-node graphs.
+- Only the composition root constructs concrete adapters, binds registered node
+  implementations, and assembles the fixed engine-startup graph needed to load
+  project workflows. Only the workflow compiler constructs executable
+  project-workflow graph descriptors, and only from validated definitions and
+  registered node contracts. The startup graph is not project-authored or
+  selectable through `paths.workflows` and has no project/feature transaction
+  lock capability.
 - Domain code imports no infrastructure/provider implementation.
 
 ### Paths and commands
@@ -228,7 +250,9 @@ do not manufacture an architecture exercise.
 
 ### Workflow, repair, and persistence
 
-- Enforce specify -> plan -> tasks -> implement in order.
+- For the initial SDD suite, enforce
+  `specify -> plan -> tasks -> implement` through each workflow's predecessor
+  gate; do not impose that sequence on unrelated workflows.
 - Revalidate current predecessor authority at every downstream gate.
 - Bind plan/task approvals to exact current state IDs.
 - Upstream changes invalidate affected downstream authority.

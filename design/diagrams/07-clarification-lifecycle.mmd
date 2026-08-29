@@ -122,7 +122,7 @@ flowchart TD
     RESOLVED --> NEXT{Another open clarification for this owning stage}
     NEXT -- Yes; workflow remains clarification_pending --> ORDER
     NEXT -- No --> RTYPE{Committed resolution is a closed user response<br/>for a conflict-bound specification SNN}
-    RTYPE -- Yes --> SCREFRESH[Return the durable closed response and prior registry/reference bindings<br/>to diagram 05; rerun post-selector bootstrap and the complete selected-directory flow:<br/>fresh no-follow preactivation/canonical ingestion, extraction and reconciliation;<br/>do not reuse any prior-snapshot blob]
+    RTYPE -- Yes --> SCREFRESH[Return the durable closed response and prior registry/reference bindings<br/>to diagram 05; rerun target-context bootstrap and the complete selected-directory flow:<br/>fresh no-follow preactivation/canonical ingestion, extraction and reconciliation;<br/>do not reuse any prior-snapshot blob]
     SCREFRESH --> SCPRIOR[BuildPriorReferenceConflictClarificationSubjectSetAction then<br/>ValidatePriorReferenceConflictClarificationSubjectSetAction for the complete canonical P]
     SCPRIOR --> SCCURRENT[BuildCurrentUnresolvedReferenceConflictSubjectSetAction then<br/>ValidateCurrentUnresolvedReferenceConflictSubjectSetAction for every unresolved<br/>behavior-changing conflict in the complete validated fresh snapshot C]
     SCCURRENT --> SCRECON[ReconcileReferenceConflictSubjectSetsAction then<br/>ValidateReferenceConflictSubjectSetReconciliationAction;<br/>prove the exact disjoint exhaustive P intersection C, P minus C and C minus P partitions]

@@ -1333,7 +1333,7 @@ ConfiguredBaseRootCapability {
   noFollowValidated: true
   // The schema fixes the one-to-one pathKey/rootRole mapping. In particular,
   // initialization_templates is reserved but unreadable by ordinary bootstrap
-  // readers and every four-stage action.
+  // readers and every action in the initial SDD workflow suite.
 }
 
 BootstrapRootRegistryId {
@@ -1341,6 +1341,9 @@ BootstrapRootRegistryId {
   bootstrapRootContractVersion
   // Self-validating engine tuple; it is never allocated by its own ledger.
 }
+
+WorkflowId = opaque validated project-authored workflow identifier
+WorkflowNodeId = opaque definition-local node identifier
 
 WorkflowReservedChildName = features | transactions
 
@@ -1401,7 +1404,7 @@ WorkflowAuthorityEntryDisposition =
   | { kind: reserved_child_accounted,
       reservedChildName: WorkflowReservedChildName }
   | { kind: captured_definition,
-      workflowRole: specify | plan | tasks | implement }
+      workflowId: WorkflowId }
   | { kind: blocking, diagnosticId }
 
 WorkflowAuthorityEntryAccount {
@@ -1419,35 +1422,102 @@ WorkflowAuthorityInventory {
   // reserved children are outside the inventory scope.
 }
 
+DeclarativeWorkflowNode {
+  workflowNodeId: WorkflowNodeId,
+  pipelineNodeContractId,
+  parameters: ValidatedWorkflowParameterValue[]
+  // The contract ID resolves only through the compiler-registered PipelineNode
+  // registry. No adapter, implementation symbol, path, command, or capability
+  // is representable here.
+}
+
+DeclarativeWorkflowTransition {
+  fromWorkflowNodeId: WorkflowNodeId,
+  outcomeTag,
+  target:
+    | { kind: node, workflowNodeId: WorkflowNodeId }
+    | { kind: terminal, outcomeTag }
+}
+
 DeclarativeWorkflowDefinition {
   sourceInventoryOrdinal: PositiveInteger,
-  workflowRole: specify | plan | tasks | implement,
+  workflowId: WorkflowId,
   schemaVersion,
-  compilerRegisteredWorkflowContractId,
-  parameters: ValidatedWorkflowParameterValue[],
-  selectedPolicyProfileIds[]
-  // Closed declarative data only. Node graphs, actions, orchestrators,
-  // successor selection, stage ordering, gates, and capabilities are absent.
-  // compilerRegisteredWorkflowContractId resolves only through the closed
-  // specify/plan/tasks/implement workflow-contract registry.
+  workflowVersion,
+  workflowShortcode: WorkflowShortcode,
+  invocationContractNodeId,
+  // Resolves to one registered capability-free PipelineNode contract. The
+  // runner invokes it before graph entry to produce validated typed run context.
+  workflowPolicyProfileId,
+  entryWorkflowNodeId: WorkflowNodeId,
+  nodes: DeclarativeWorkflowNode[],
+  transitions: DeclarativeWorkflowTransition[]
+  // Closed declarative graph data only. Executable code, infrastructure
+  // adapters, raw paths/commands, capability grants, and runner controls are
+  // absent. The compiler resolves and validates every referenced contract.
+}
+
+CompiledWorkflowSemanticAuthority {
+  workflowId,
+  schemaVersion,
+  workflowVersion,
+  workflowShortcode,
+  resolvedInvocationContractNodeIdAndVersion,
+  workflowPolicyProfileId,
+  entryWorkflowNodeId,
+  resolvedNodeContractsParametersAndVersions,
+  resolvedTransitions,
+  validatedGateSet,
+  effectiveCapabilities
+  // Canonical typed value used for bound-workflow change classification.
+  // Source path/order, registry identity, and validation evidence are excluded.
+}
+
+CompiledWorkflowGraph {
+  definition: DeclarativeWorkflowDefinition,
+  resolvedInvocationContractNode, // registered runner-invoked PipelineNode
+  resolvedNodes: CompiledWorkflowNode[],
+  resolvedTransitions: CompiledWorkflowTransition[],
+  validatedGateSet,
+  effectiveCapabilities,
+  semanticAuthority: CompiledWorkflowSemanticAuthority,
+  graphEvidence
+  // Immutable and executable only through PipelineRunner. Effective
+  // capabilities are derived from registered node contracts and must remain
+  // within the selected workflow policy; the definition cannot add them.
+  // sourceInventoryOrdinal and graphEvidence remain provenance and never make
+  // an otherwise unchanged bound semantic graph appear changed.
 }
 
 WorkflowDefinitionRegistryState {
   workflowDefinitionRegistryId: BootstrapComponentId,
   workflowAuthorityInventory: WorkflowAuthorityInventory,
-  definitions: DeclarativeWorkflowDefinition[4],
-  compilerLockedRequiredStageOrder: [specify, plan, tasks, implement],
-  nodeGraphRegistryVersion,
+  workflowsById: Map<WorkflowId, CompiledWorkflowGraph>,
+  pipelineNodeRegistryVersion,
+  invocationContractNodeRegistryVersion,
+  workflowPolicyRegistryVersion,
   gateRegistryVersion,
   capabilityRegistryVersion
   // The BootstrapComponentId is the registry's only canonical identity.
-  // Exactly one definition owns each workflowRole, every sourceInventoryOrdinal
-  // is unique and resolves to one captured_definition account, and reserved
-  // children, when present, resolve only to their reserved accounts. Unknown
-  // fields/contracts, a reserved-child collision, or any attempted weakening of
-  // locked bindings rejects the complete registry before a workflow can run. A
-  // valid role/contract selection change is an administrative migration for an
-  // already active feature in v1.
+  // The bounded map has no fixed cardinality. Workflow IDs, shortcodes, and
+  // sourceInventoryOrdinals are unique; every source ordinal
+  // resolves to one captured_definition account; and reserved children resolve
+  // only to their reserved accounts. Every encountered definition and compiled
+  // graph must validate before the registry is usable. An invocation resolves
+  // its requested WorkflowId exactly once. A valid graph change affecting an
+  // already active feature remains an administrative migration in v1. That
+  // comparison uses CompiledWorkflowSemanticAuthority only, never inventory
+  // ordinals, registry identity, or graph evidence.
+}
+
+EngineStartupGraph {
+  contractVersion,
+  childNodeContractIds: compilerLockedConfigAndWorkflowLoadCompileRegisterNodes,
+  selectable: false,
+  projectExtensible: false
+  // Assembled by the composition root so project workflows can be compiled
+  // before any project-authored graph exists. It is absent from
+  // WorkflowDefinitionRegistryState.
 }
 
 ProjectTransactionCollectionPath {
@@ -2665,8 +2735,10 @@ CanonicalLogLevel = fatal | error | warning | info | debug | trace
 
 WorkflowShortcode {
   bytes: [4]u8
-  // Constructed by WorkflowLog.init from exactly four ASCII A-Z, a-z, or 0-9
-  // bytes. Case is retained and significant. No workflow YAML field exists.
+  parse(rawBytes) -> WorkflowShortcode | InvalidWorkflowShortcode
+  // Validated from a declarative workflow definition as exactly four ASCII
+  // A-Z, a-z, or 0-9 bytes. Case is retained and significant. The workflow
+  // registry proves shortcode uniqueness before any workflow executes.
 }
 
 WorkflowTelemetryFact {
@@ -2676,10 +2748,11 @@ WorkflowTelemetryFact {
 
 WorkflowLog {
   workflowShortcode: WorkflowShortcode,
-  init(shortcodeBytes: []const u8) -> WorkflowLog | InvalidWorkflowShortcode,
+  init(shortcode: WorkflowShortcode) -> WorkflowLog,
   log(self, delta: *NodeDelta, fact: TelemetryFact) -> void | AllocationError
-  // Pure delta construction: append one WorkflowTelemetryFact. No sink,
-  // filesystem, clock, level, formatter, or direct logging capability.
+  // Constructed by the runner for the selected compiled workflow. Pure delta
+  // construction: append one WorkflowTelemetryFact. No sink, filesystem,
+  // clock, level, formatter, or direct logging capability.
 }
 
 LogLevelPolicy {
@@ -4775,6 +4848,11 @@ WorkflowState {
   featureId,
   revision,
   stage: WorkflowStage,
+  boundWorkflowIds: WorkflowId[],
+  // Sorted unique IDs whose compiled graphs have participated in durable
+  // feature history. Registry refresh compares their stable semantic authority;
+  // source-ordinal shifts and unrelated definitions do not invalidate this
+  // feature.
   workflowArtifactRegistryStateId,
   bootstrapAuthorityStateId,
   currentReferenceStateId?,     // absent only in a newly activated pre-snapshot specifying state
@@ -8993,14 +9071,18 @@ by the path-policy owner. The configured
 `specsArchive` may be nested beneath `specs`. No action may substitute a
 different root, `.specify/`, source-tree, or example path.
 
-`paths.workflows` is the workflow-authority root. It contains exactly one
-bounded, closed, declarative definition for each `specify`, `plan`, `tasks`,
-and `implement` workflow plus the exact reserved engine-owned children
-`features/` and `transactions/`. A workflow definition can select only a
-compiler-registered workflow contract; it cannot define node graphs, reorder
-`specify -> plan -> tasks -> implement`, weaken a gate, cross the
-action/orchestrator boundary, grant a capability, or collide with a reserved
-child. Toolchain presets load directly from `paths.toolchainPreset`. The exact
+`paths.workflows` is the workflow-authority root. It contains an arbitrary
+bounded number of closed declarative workflow definitions plus the exact
+reserved engine-owned children `features/` and `transactions/`. Each definition
+has a unique validated `WorkflowId` and logging shortcode and describes graph
+topology only through registered `PipelineNode` contract IDs, closed parameters,
+and typed transitions. It cannot contain executable code, select
+infrastructure, provide raw paths/commands, grant a capability, weaken a
+registered gate, bypass runner validation, or collide with a reserved child.
+The initial `specify`, `plan`, `tasks`, and `implement` definitions preserve
+their order through their own predecessor gates; the generic engine does not
+hard-code that sequence. Toolchain presets load directly from
+`paths.toolchainPreset`. The exact
 `<paths.principles>/toolchain.yaml` is a closed mechanical project toolchain
 layer that inherits registered presets; it is accounted for but excluded from
 free-text principle decoding and chunking. `paths.templates` is inert during
@@ -9789,7 +9871,23 @@ MechanicalGuidance =
 
 ```text
 PipelineRunner
-├── FeatureWorkflowOrchestrator (business pipeline below)
+├── WorkflowEngineOrchestrator (capability-free graph coordination)
+│   ├── BootstrapOrchestrator preselection portion through a runner-owned child binding
+│   │   ├── configuration/root actions
+│   │   ├── workflow inventory/capture/parse/schema actions
+│   │   ├── workflow graph compile/validate actions
+│   │   └── variable-size workflow registry actions; no project/feature lock
+│   ├── ParseWorkflowSelectionAction and ValidateWorkflowIdAction through runner-owned child bindings
+│   ├── ResolveSelectedWorkflowAction through a runner-owned child binding
+│   └── Selected CompiledWorkflowGraph
+│       ├── registered invocation-contract node through a runner-owned binding
+│       │   └── parser/validator child bindings when that contract composes them
+│       ├── selected-graph target-context setup binding when required
+│       │   ├── project-WAL/feature-ownership recovery and lock lifecycle
+│       │   ├── toolchain-preset registry/compilation actions
+│       │   ├── free-text principles ingestion/indexing actions
+│       │   └── repository discovery actions
+│       └── follow typed transitions; each registered node uses a runner-owned binding
 └── FeatureLoggingOrchestrator (runner observer; instrumentation-internal)
     ├── severity/field projection actions
     ├── threshold/redaction/safety actions
@@ -9803,13 +9901,9 @@ PipelineRunner
         │   └── VerifyCommittedTransactionEntryAction per committed entry, forward order
         └── fail-closed runner-control action
 
-FeatureWorkflowOrchestrator
-├── BootstrapOrchestrator
-│   ├── configuration actions
-│   ├── toolchain-preset registry/compilation actions
-│   ├── free-text principles ingestion/indexing actions
-│   └── repository discovery actions
-├── SpecifyOrchestrator
+Initial registered SDD workflow graphs (each selected independently)
+
+WorkflowId specify -> SpecifyOrchestrator
 │   ├── SpecifyPreflightOrchestrator
 │   ├── ReferenceIngestionOrchestrator (mandatory)
 │   │   └── ReferenceDocumentOrchestrator (one per file)
@@ -9818,7 +9912,8 @@ FeatureWorkflowOrchestrator
 │   │   ├── ModelProtocolRetryOrchestrator (when no IR exists)
 │   │   └── AtomicRepairOrchestrator (on Invalid)
 │   └── ArtifactCommitOrchestrator
-├── PlanOrchestrator
+
+WorkflowId plan -> PlanOrchestrator
 │   ├── StageGateOrchestrator
 │   ├── RepositoryAnalysisOrchestrator
 │   ├── ValidatedGenerationOrchestrator (one plan unit at a time)
@@ -9826,7 +9921,8 @@ FeatureWorkflowOrchestrator
 │   │   └── AtomicRepairOrchestrator
 │   ├── ArtifactCommitOrchestrator
 │   └── UserReviewOrchestrator (approve or targeted rejection feedback)
-├── TasksOrchestrator
+
+WorkflowId tasks -> TasksOrchestrator
 │   ├── StageGateOrchestrator
 │   ├── ObligationIndexOrchestrator
 │   ├── ValidatedGenerationOrchestrator (one obligation cluster at a time)
@@ -9835,7 +9931,8 @@ FeatureWorkflowOrchestrator
 │   ├── TaskGraphOrchestrator
 │   ├── ArtifactCommitOrchestrator
 │   └── UserReviewOrchestrator (approve or targeted rejection feedback)
-└── ImplementOrchestrator
+
+WorkflowId implement -> ImplementOrchestrator
     ├── StageGateOrchestrator
     ├── derive/acquire/validate feature-execution process lease actions
     │   └── rejected acquired-observation cleanup/validation branch
@@ -9879,12 +9976,25 @@ ENGINE_CONFIG_READ_ERROR without searching an ancestor or descendant
      path -> reject the complete collision set -> sort -> bind inventory ordinals
   -> classify every entry -> capture/parse/validate definition candidates ->
      build and validate exactly one terminal account for every inventory ordinal
-  -> prove exact four-role coverage from unique captured source ordinals -> bind
-     only compiler-registered workflow contracts
-  -> prove definitions cannot change stage order, node graphs, action/orchestrator
-     boundaries, gates, capabilities, or reserved-child ownership
+  -> compile every definition from a registered invocation-contract PipelineNode,
+     graph-node, outcome, gate, and workflow-policy contracts
+  -> prove arbitrary bounded definition cardinality, unique WorkflowIds,
+     logging shortcodes, and source ordinals, plus graph/transition closure
+  -> prove definitions contain no executable payload or infrastructure selector,
+     cannot add a capability, weaken a registered gate, bypass runner validation,
+     or claim reserved-child ownership
   -> build/validate the identity-free WorkflowDefinitionRegistryState candidate;
      assign its owner-local component ID only in the generic bootstrap materialization phase
+  -> return the complete validated workflow registry to WorkflowEngineOrchestrator
+     without acquiring a project/feature transaction lock;
+     ParseWorkflowSelectionAction, ValidateWorkflowIdAction and
+     ResolveSelectedWorkflowAction run outside bootstrap
+  -> only when the selected graph references the registered target-context
+     setup, invoke that portion after its invocation-contract node produces
+     validated workflow context; unrelated workflows do not inherit this branch
+  -> for the initial SDD graphs, resolve the fixed project transaction
+     collection, acquire its lock, recover the project WAL/ID ledger, resolve
+     exact feature ownership, and release or transfer ownership on every branch
   -> bounded inventory/capture of the direct paths.toolchainPreset root
   -> classify every resource -> reject legacy -> parse/validate closed v1 presets
   -> assign/build/validate ToolchainPresetRegistryState
@@ -10535,7 +10645,10 @@ sdde/
 │   ├── application/
 │   │   ├── node.zig               # common contract/outcome/envelope
 │   │   ├── runner.zig             # sole delta application/invocation owner
-│   │   ├── composition_root.zig    # concrete adapters and child graphs
+│   │   ├── workflow_engine.zig     # select, run invocation contract, execute graph
+│   │   ├── workflow_compiler.zig   # validated project definition -> registered-node graph
+│   │   ├── workflow_registry.zig   # unique WorkflowId -> compiled graph
+│   │   ├── composition_root.zig    # adapters, node bindings, fixed startup graph
 │   │   ├── actions/
 │   │   │   ├── bootstrap/
 │   │   │   ├── workflow_definitions/

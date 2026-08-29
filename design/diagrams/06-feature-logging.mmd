@@ -124,10 +124,9 @@ flowchart TD
     TRELEASE -- Failure --> FAULT
     TFAULTREL --> FAULT
 
-    WLOG[Calling workflow owns WorkflowLog<br/>validates one four-character shortcode;<br/>log appends WorkflowTelemetryFact only] --> RUNNER
+    WLOG[Workflow definition supplies one four-character shortcode;<br/>schema delegates to the canonical type parser and registry validates uniqueness;<br/>runner creates WorkflowLog; log appends WorkflowTelemetryFact only] --> RUNNER
     RUNNER[PipelineRunner] -- workflow-attributed trusted lifecycle --> OBS[PipelineTelemetryObserver]
     RUNNER -- contract-accepted WorkflowTelemetryFacts from applied NodeDelta --> OBS
-    WLOG --> DRAFT
     OBS --> LROOT[Runner-owned instrumentation root binding]
     LROOT --> LOG[FeatureLoggingOrchestrator<br/>coordination only; no logger in NodeRuntime]
     READY --> LOG

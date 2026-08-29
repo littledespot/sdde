@@ -3,10 +3,11 @@
 **Status:** Proposed feature design
 
 **Implementation readiness:** Ready for the bounded initial implementation.
-The workflow-owned `WorkflowLog` producer contract supplies
-`WorkflowShortcode`, the F0001 v2 logging shape supplies every configurable
-user choice, and all operational policy plus the two `feature-log/v2`
-pipe-delimited schemas are compiler-locked
+The workflow-definition schema supplies `WorkflowShortcode`, the registry
+validates uniqueness, and the runner-created `WorkflowLog` producer binding
+carries it. The F0001 v2 logging shape supplies every configurable user choice,
+and all operational policy plus the two `feature-log/v2` pipe-delimited schemas
+are compiler-locked
 constants. The event registry, scalar row encodings, and operational limits in
 this document are complete for the proof of concept.
 
@@ -25,7 +26,8 @@ SDDE against a target project.
 
 **Governing authority:** [Engine design](../design.md), especially Sections
 5-6, 9, 13.9, 14.9-14.10, 26.5, and 27-31; [F0001 —
-SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); and the
+SDDToolKitConfigService](F0001-SDDToolKitConfigService.md);
+[ADR 0003](../decisions/0003-generic-workflow-engine.md); and the
 [feature logging diagram](../diagrams/06-feature-logging.mmd).
 
 ---
@@ -42,9 +44,9 @@ logging policy and binding into a safe non-authoritative record. An input is
 either filtered, persisted successfully, or produces a typed fail-closed
 outcome.
 
-Every F0002 input originates from a workflow-owned producer binding. Every
-emitted record carries the mandatory four-character shortcode supplied by that
-calling workflow.
+Every F0002 input originates from the runner-created producer binding for the
+selected compiled workflow. Every emitted record carries that workflow
+definition's mandatory registry-validated four-character shortcode.
 
 F0002 is not a general logger. Producers cannot choose a level, message, path,
 sink, format, or redaction rule, and they never receive a filesystem or logger
@@ -116,37 +118,44 @@ runtime logging therefore each have one owner and one direction of flow.
 
 ### 3.2 Workflow shortcode flow
 
-The shortcode originates from the workflow that calls the producer API:
+The shortcode originates as closed observability metadata in the declarative
+workflow definition:
 
 ```text
-workflow constructs WorkflowLog("IMPL") once
-  -> WorkflowLog validates and retains WorkflowShortcode
-  -> workflow calls workflowLog.log(delta, TelemetryFact)
+workflow definition supplies workflowShortcode: "IMPL"
+  -> workflow-definition schema delegates syntax to WorkflowShortcode.parse
+  -> workflow registry proves shortcode uniqueness
+  -> runner constructs one WorkflowLog from the typed value
+  -> executing node calls workflowLog.log(delta, TelemetryFact)
   -> WorkflowTelemetryFact in the candidate delta
   -> runner validates and applies the delta
   -> F0002 record
 ```
 
-`WorkflowLog.init` accepts exactly four case-sensitive ASCII alphanumeric
-characters and constructs the typed `WorkflowShortcode`. A workflow normally
-constructs this binding once and reuses it for all its calls. The shortcode is
-not read from `*.workflow.yaml`, configuration, a model response, or stored log
-data. It is observability metadata, not workflow identity or authority.
+The canonical `WorkflowShortcode.parse` constructor accepts exactly four
+case-sensitive ASCII alphanumeric characters.
+`ValidateWorkflowDefinitionSchemaAction` delegates to that constructor rather
+than duplicating shortcode syntax.
+`ValidateWorkflowDefinitionRegistryAction` rejects duplicates. After the
+selected `WorkflowId` resolves, the runner constructs one `WorkflowLog` from
+that typed value and supplies the binding to the executing graph. A model,
+stored log, node parameter, or runtime caller cannot replace it. It is
+observability metadata, not workflow identity or operational authority.
 
-Illustrative workflow-owned bindings are:
+Illustrative definition values are:
 
-```zig
-const specify_log = try WorkflowLog.init("SPEC");
-const plan_log = try WorkflowLog.init("PLAN");
-const tasks_log = try WorkflowLog.init("TASK");
-const implement_log = try WorkflowLog.init("IMPL");
-const audit_log = try WorkflowLog.init("AUDT");
-const drift_log = try WorkflowLog.init("DRFT");
-const initialise_log = try WorkflowLog.init("INIT");
+```text
+specify: SPEC
+plan: PLAN
+tasks: TASK
+implement: IMPL
+audit: AUDT
+drift: DRFT
+initialise: INIT
 ```
 
-These values are examples, not a registry. Each workflow owns its selected
-value.
+These values are examples, not a required workflow registry. Every admitted
+definition owns one unique validated value.
 
 The workflow roles currently being considered are:
 
@@ -158,24 +167,25 @@ The workflow roles currently being considered are:
 6. `drift`; and
 7. `initialise`.
 
-This is a consideration list, not an accepted role registry. The governing v1
-workflow remains `specify -> plan -> tasks -> implement`; accepting `audit`,
-`drift`, or `initialise` requires the corresponding governing workflow design,
-graph, gate, and acceptance-test changes. Any implemented workflow must supply
-its own valid shortcode whenever it produces a log fact.
+This is a consideration list, not an engine role registry. The initial SDD
+suite remains `specify -> plan -> tasks -> implement`; adding `audit`, `drift`,
+or `initialise` requires its domain graph, gates, state contract, and acceptance
+tests, but does not expand a fixed engine workflow-name union. Every definition
+must supply its own valid unique shortcode.
 
 ### 3.3 Other authorities
 
 | Authority | Sole owner |
 | --- | --- |
 | Event level, template, field schema, and sensitivity | `LogEventDefinitionRegistry` |
-| Four-character workflow shortcode source and validation | Calling workflow through `WorkflowLog.init` |
+| Four-character workflow shortcode source and validation | Workflow definition; canonical `WorkflowShortcode` parser; workflow-registry uniqueness validation |
 | Workflow-shortcode/fact binding | `WorkflowLog.log` and delta validation |
 | Emit/drop comparison | `EvaluateLogThresholdAction` |
 | Feature log collection paths | `WorkflowArtifactRegistry` and validated `FeatureLogBinding` |
 | Fact ordering and business-node barriers | Pipeline runner |
 | Transaction stabilization | `TransactionRecoveryOrchestrator` |
-| Concrete adapters and child graph construction | Composition root |
+| Concrete adapters and registered node implementation bindings | Composition root |
+| Immutable executable workflow graph construction | Workflow compiler |
 
 F0002 does not recreate any of these decisions. The actions in governing
 Section 13.9 remain the canonical responsibility catalogue; this feature does
@@ -183,11 +193,11 @@ not define a parallel action list.
 
 ## 4. Producer contract
 
-Each workflow constructs one pure producer binding and its actions report
-observability through that binding:
+The runner constructs one pure producer binding for the selected compiled
+workflow, and its executing actions report observability through that binding:
 
 ```zig
-const workflow_log = try WorkflowLog.init("IMPL");
+const workflow_log = WorkflowLog.init(compiled_workflow.workflow_shortcode);
 
 pub fn log(
     self: WorkflowLog,
@@ -200,8 +210,9 @@ The call is delta construction, not direct logging I/O. It appends the fact to
 `NodeDelta.telemetryFactsAdded` together with `self.workflow_shortcode` as one
 `WorkflowTelemetryFact`; it grants no sink, filesystem, clock, or runner
 capability. The runner validates and applies the complete delta before handing
-the attributed fact to the logging graph. The calling workflow, not a workflow
-YAML document or the runner, supplies the shortcode.
+the attributed fact to the logging graph. The runner supplies the binding only
+after the workflow definition and complete registry validate; executing nodes
+cannot supply or replace the shortcode.
 
 The call shape is intentionally concise:
 
@@ -253,7 +264,7 @@ For an accepted fact, the runner-invoked graph performs the discrete actions
 defined in governing Section 13.9:
 
 1. require the exact-four-character `WorkflowShortcode` carried by the
-   workflow-produced `WorkflowTelemetryFact`;
+   runner-bound workflow's `WorkflowTelemetryFact`;
 2. resolve the one registered event definition;
 3. project only its allowed typed fields and apply required redaction;
 4. evaluate the definition's canonical level against the canonical threshold;
@@ -277,18 +288,21 @@ Logging-internal nodes are not recursively observed.
 Every serialized log record MUST contain exactly one `workflow_shortcode`
 value. In a delimited row it occupies the `workflow_shortcode` column; in the emergency
 record it occupies the `workflow` field. It MUST be the typed shortcode
-supplied by the workflow that produced the fact and MUST contain exactly four
-case-sensitive ASCII
+supplied by the selected compiled workflow's runner-created binding and MUST
+contain exactly four case-sensitive ASCII
 alphanumeric characters. This applies to mandatory event records, optional
 sanitized prompt-fragment records, console-mirrored records, and the fixed
 emergency record.
 
-`WorkflowLog.init` is the single shortcode validator. F0002 accepts only the
-resulting typed value; it does not truncate, pad, normalize, infer, or replace a
+The canonical `WorkflowShortcode` parser is the single shortcode syntax
+validator, and `ValidateWorkflowDefinitionRegistryAction` is the single
+uniqueness validator. The workflow-definition schema delegates to the parser.
+F0002 accepts only the resulting typed value through the runner binding; it
+does not truncate, pad, normalize, infer, or replace a
 missing value. Raw shortcode text inside a fact, model output, configuration,
-workflow YAML, or stored log record is never accepted. Missing or malformed
-values fail before the fact enters an applied delta; a missing or invalid typed
-binding at the runtime boundary fails closed before serialization.
+node parameter, or stored log record is never accepted. Missing, malformed, or
+duplicate definition values fail before workflow selection; a missing or
+invalid typed binding at the runtime boundary fails closed before serialization.
 
 ### 6.2 Levels and content safety
 
@@ -450,8 +464,8 @@ segment_header|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|\N
 event|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0042|42|2026-08-28T10:15:30Z|1205|info|task.started|task.started/v1|RUN-001|F0002|implement|\N|\N|\N|\N|TASK-001|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
 ```
 
-`IMPL` is illustrative only; the workflow that produced the fact supplies the
-actual shortcode through its `WorkflowLog` binding.
+`IMPL` is illustrative only; the selected compiled workflow's definition
+supplies the actual shortcode through the runner-created `WorkflowLog` binding.
 
 When prompt capture is explicitly enabled, one sanitized fragment is one row:
 
@@ -573,11 +587,12 @@ commit remains committed; an uncommitted transaction reaches a stable boundary
 before blocking.
 
 Before a current feature binding exists, the bounded content-free emergency
-path is available only after the calling workflow's validated `WorkflowLog`
-binding exists. Without that attribution F0002 emits no log record; bootstrap
-uses its non-logging diagnostic path and blocks. Restart and same-run policy
-changes use the historical/current authority rules in Sections 14.10 and 26.5;
-F0002 never reinterprets stored records with raw or candidate configuration.
+path is available only after the selected compiled workflow's runner-created
+`WorkflowLog` binding exists. Without that attribution F0002 emits no log
+record; bootstrap uses its non-logging diagnostic path and blocks. Restart and
+same-run policy changes use the historical/current authority rules in Sections
+14.10 and 26.5; F0002 never reinterprets stored records with raw or candidate
+configuration.
 
 ## 9. Explicit non-responsibilities
 
@@ -586,7 +601,7 @@ F0002 does not:
 - read, decode, cache, or expose configuration;
 - canonicalize configured log-level text;
 - infer, pad, truncate, normalize, or repair a workflow shortcode after
-  `WorkflowLog.init` validation;
+  workflow-definition schema and registry validation;
 - allow a producer, workflow, model, plugin, or configuration value to define
   event severities, templates, fields, or sensitivity outside the closed
   Section 6.2 registry;
@@ -613,9 +628,10 @@ F0002 does not:
 2. F0001 structurally decodes the closed v2 logging shape; the logging-policy
    compiler alone validates its three choices and injects all operational
    constants, and configured level conversion has one owner.
-3. Each calling workflow constructs a `WorkflowLog` from exactly four
-   case-sensitive ASCII alphanumeric characters; no `*.workflow.yaml` or
-   workflow-definition schema supplies logging attribution.
+3. Each workflow definition supplies exactly one four-character
+   case-sensitive ASCII alphanumeric shortcode; schema validation delegates to
+   the canonical typed parser, registry validation proves uniqueness, and the
+   runner constructs the selected workflow's `WorkflowLog` binding.
 4. `WorkflowLog.log` binds that shortcode to exactly one `TelemetryFact` as a
    `WorkflowTelemetryFact` before it enters the candidate delta.
 5. Producers use only `workflowLog.log(delta, TelemetryFact)`; the operation
@@ -626,8 +642,8 @@ F0002 does not:
 7. Event definition, threshold decision, workflow attribution, path binding,
    and runner scheduling each retain their single governing owner.
 8. Every serialized event, prompt-fragment, console-mirror, and emergency
-   record contains exactly one workflow attribution equal to the calling
-   workflow's validated four-character value; delimited rows use
+   record contains exactly one workflow attribution equal to the selected
+   compiled workflow's validated four-character value; delimited rows use
    `workflow_shortcode`, emergency output uses `workflow`, and missing or
    malformed values are rejected.
 9. Every serialized event, prompt-fragment, console-mirror, and emergency
@@ -674,12 +690,13 @@ negative cases:
 
 - authority: three-value config-to-compiler-to-runtime handoff, rejection of
   every removed tuning key, one level canonicalizer,
-  workflow-owned `WorkflowLog` construction, exact shortcode/fact binding, and
-  rejection of raw config/path/message/shortcode inputs or runtime file
-  rereads;
+  workflow-definition shortcode syntax plus registry uniqueness, runner-owned
+  `WorkflowLog` construction, exact shortcode/fact binding, and rejection of
+  raw config/path/message/shortcode inputs or runtime file rereads;
 - processing: `workflowLog.log` appends exactly one attributed typed fact and
-  performs no I/O; rejection of missing, shorter, longer, or malformed workflow
-  shortcodes at binding construction and runtime validation; exhaustive
+  performs no I/O; rejection of missing, shorter, longer, malformed, or
+  duplicate workflow shortcodes during definition/registry validation and
+  rejection of a mismatched typed runtime binding; exhaustive
   six-level threshold matrix; rejection of missing, aliased, unknown,
   mismatched, or caller-supplied record levels; typed field validation;
   redaction; drop-before-allocation; exhaustive event-registry mapping and
@@ -709,7 +726,7 @@ rather than copied into this feature document.
 | Concern | Authority |
 | --- | --- |
 | Config read/decode and handoff | F0001; Design Sections 9 and 13.1 |
-| Workflow shortcode source, syntax, validation, and fact binding | Calling workflow; `WorkflowLog.init` and `WorkflowLog.log` |
+| Workflow shortcode source, syntax, validation, and fact binding | Workflow definition; canonical `WorkflowShortcode` parser; workflow registry; runner-created `WorkflowLog`; `WorkflowLog.log` |
 | Action and orchestrator boundaries | Design Sections 5-6, 13.9, and 14.9-14.10 |
 | Levels, privacy, paths, storage, and recovery | Design Section 26.5 |
 | Runner-owned observability | Design Section 27 |

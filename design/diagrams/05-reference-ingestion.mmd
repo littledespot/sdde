@@ -1,16 +1,21 @@
 flowchart TD
-    START[sdd specify --reference &lt;relative-selector&gt;] --> RUNNER[PipelineRunner<br/>invokes the validated specify workflow definition;<br/>every node uses a runner-owned ChildNodeBinding]
-    RUNNER --> BOOT[FeatureWorkflowOrchestrator schedules BootstrapOrchestrator;<br/>invoke diagram 08 pre-selector project recovery/transaction-ID-ledger subgraph,<br/>acquire and retain its validated project-collection lock capability through target resolution]
-    BOOT --> CONFIG[Pre-selector bootstrap only: use the invocation working directory as project root;<br/>read/directly decode only its exact .sddtoolkit.json or fail the invocation if missing;<br/>validate all seven configured directory roots and closed workflow definitions;<br/>carry the held project lock; do not inventory presets/toolchain.yaml/principles yet]
-    CONFIG --> CLI[Parse exact invocation grammar]
-    CLI --> COK{Exactly one non-empty --reference value<br/>and no -feature, --feature, --description, positional or unknown input}
+    START[sdd specify --reference &lt;relative-selector&gt;] --> RUNNER[PipelineRunner<br/>sole node invocation and delta application owner]
+    RUNNER --> ENGINE[WorkflowEngineOrchestrator<br/>no workflow-name branch;<br/>coordinate only through runner-owned ChildNodeBinding values]
+    ENGINE -. bootstrap child binding .-> RUNNER
+    RUNNER --> BOOT[Invoke the fixed startup BootstrapOrchestrator through its runner-owned binding;<br/>diagram 08 loads and compiles the variable-size workflow registry without selecting a workflow<br/>and returns without acquiring a project or feature transaction lock]
+    BOOT --> CONFIG[Engine startup only: use the invocation working directory as project root;<br/>read/directly decode only its exact .sddtoolkit.json or fail the invocation if missing;<br/>validate all seven configured directory roots and every discovered workflow definition;<br/>do not inventory presets/toolchain.yaml/principles yet]
+    CONFIG --> WSELECT[Runner invokes ParseWorkflowSelectionAction then ValidateWorkflowIdAction;<br/>extract exactly WorkflowId specify and preserve the remaining arguments]
+    WSELECT --> WRESOLVE[Runner invokes ResolveSelectedWorkflowAction;<br/>exactly one match in the validated registry; no default or filename inference]
+    WRESOLVE --> CLI[Registered specify invocation-contract node;<br/>runner invokes its ParseSpecifyInvocationAction child]
+    CLI --> COK{Runner invokes its ValidateSpecifyArgumentsAction child:<br/>exactly one non-empty --reference value<br/>and no -feature, --feature, --description, positional or unknown input}
     COK -- No --> INPUTERR[Nonzero user-input error<br/>no feature directory, feature log, model call or artifact write]
-    COK -- Yes --> SEL[Normalize required relative selector beneath configured paths.references]
+    COK -- Yes; return validated specify invocation context --> SEL[Normalize required relative selector beneath configured paths.references]
     SEL --> ROOT[Resolve no-follow contained reference root]
     ROOT --> RDIR{Exists, readable directory and regular traversal root}
     RDIR -- No --> INPUTERR
     RDIR -- Yes --> FID[DeriveFeatureIdentityAction<br/>deterministic identity from canonical selector and naming policy]
-    FID --> FIPATH[ResolveFeatureIdentityRegistryPathAction<br/>sole project-level registry beneath the reserved paths.workflows/features child]
+    FID --> SDDSETUP[Selected specify graph invokes diagram 08 SDD feature-context setup;<br/>resolve the fixed project transaction collection, acquire its lock,<br/>and recover the project WAL and transaction-ID ledger before feature ownership reads]
+    SDDSETUP --> FIPATH[ResolveFeatureIdentityRegistryPathAction<br/>sole project-level registry beneath the reserved paths.workflows/features child]
     FIPATH --> FIREAD[ReadFeatureIdentityRegistryAction<br/>bounded no-follow read; absence is valid only before first activation]
     FIREAD --> FIPRESENT{Registry bytes present}
     FIPRESENT -- No --> FIINITIAL[BuildInitialFeatureIdentityRegistryAction<br/>empty revision-zero ownership authority whose identity is exactly<br/>bootstrapRootRegistryId plus revision; consume no project state-ID ordinal]
@@ -48,7 +53,7 @@ flowchart TD
     SRESUME -- No submission --> SREFRESH[Invoke diagram 07 authority refresh/resolver path;<br/>compare direct current authorities, deduplicate the same subject, and commit any<br/>same-open pause or authority resolution before leaving the pending stage]
     SREFRESH -- Still open unchanged or refreshed --> SWAIT
     SREFRESH -- Final authority resolution --> POSTBOOT
-    NEWCTX --> POSTBOOT[Run the post-selector runtime bootstrap in diagram 08<br/>using empty prior ledgers for new or validated prior ledgers for existing]
+    NEWCTX --> POSTBOOT[The selected specify graph invokes the target-context setup portion in diagram 08<br/>using empty prior ledgers for new or validated prior ledgers for existing]
     POSTBOOT --> PRESETS[Validated ToolchainPresetRegistryState, typed project-toolchain layer,<br/>CompiledEnvironmentPolicies and command/parser/resource authorities]
     POSTBOOT --> PREG[Validated separate PrincipleRegistryState<br/>complete opaque Markdown and deterministic transport chunks;<br/>exact paths.principles/toolchain.yaml is excluded from free-text ingestion]
     PREG -. selected only at plan tasks and implement; absent from reference/specify routes .-> LATER[Later-stage bounded complete category-based principle selections]
@@ -285,7 +290,7 @@ flowchart TD
     CWAL --> CPENDING[NeedsUser in spec_clarification_pending;<br/>no feature brief or partial specification IR is persisted]
     CPENDING -. a later invocation restarts at START and must pass the SOPEN resume gate .-> START
     CRESPONSE[Committed final closed conflict-bound SNN response from the current-run resume gate]
-    CRESPONSE --> CREFRUN[Run the complete current post-selector bootstrap and selected-directory flow again:<br/>fresh no-follow inventory, bounded capture/decode, provisional preactivation,<br/>canonical identity reservation/materialization, extraction and reconciliation;<br/>the committed response is authority, but prior blobs/snapshot are not reused]
+    CRESPONSE --> CREFRUN[Run the complete current target-context bootstrap and selected-directory flow again:<br/>fresh no-follow inventory, bounded capture/decode, provisional preactivation,<br/>canonical identity reservation/materialization, extraction and reconciliation;<br/>the committed response is authority, but prior blobs/snapshot are not reused]
     CREFRUN --> POSTBOOT
     SUCCESSOR -- No; new feature initial conflict-free ingestion --> BRIEF[Begin or regenerate the complete specification stage from its first unit<br/>spec.feature-brief.generate from durable bounded reconciled authority]
     SUCCESSOR -- Yes --> RRTX[Assemble complete ReferenceRevision inputs:<br/>successor snapshot, complete reference-conflict set transition, next clarification registry,<br/>complete clarification view set with an empty submittable projection, current actor/passive<br/>authorities, retain-current bootstrap mutation, relevant ledger successors, exact<br/>no/uncommitted/committed descendant mutation, reference view and resumed specifying workflow state]
@@ -335,7 +340,7 @@ flowchart TD
 
     INPUTERR --> ILOCK{Project-transaction lock capability is held}
     ILOCK -- Yes --> IRELEASE[ReleaseProjectTransactionCollectionLockAction<br/>with user-input failure terminal outcome]
-    ILOCK -- No; bootstrap failed before acquisition --> ISTOP[Return the typed nonzero outcome]
+    ILOCK -- No; failure occurred before selected SDD setup acquired it --> ISTOP[Return the typed nonzero outcome]
     IRELEASE --> ISTOP
     PREBLOCK --> PLOCK{Project-transaction lock capability is held}
     PLOCK -- Yes --> PRELEASE[ReleaseProjectTransactionCollectionLockAction<br/>with preactivation/ownership block terminal outcome]

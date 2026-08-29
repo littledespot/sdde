@@ -17,11 +17,13 @@ flowchart TD
     VALIDROOTS -- Invalid --> FAIL[Bootstrap fails with typed diagnostic<br/>no model call and no partial registry or compiled policy]
     VALIDROOTS -- Valid --> WLAYOUT[BuildWorkflowAuthorityLayoutAction then<br/>ValidateWorkflowAuthorityLayoutAction;<br/>include features/ and transactions/ root entries for ownership accounting<br/>but exclude every descendant in both reserved subtrees]
     WLAYOUT --> WINVENTORY[Enumerate and normalize every in-scope entry;<br/>validate the complete portability collision set, sort by Unicode-scalar path,<br/>then bind contiguous one-based inventory ordinals]
-    WINVENTORY --> WCLASSIFY[Classify every ordinal-bound entry as directory, exact reserved child,<br/>definition candidate or blocking; capture/parse/schema-validate each definition candidate<br/>without accepting a per-definition or source identity]
+    WINVENTORY --> WCLASSIFY[Classify every ordinal-bound entry as directory, exact reserved child,<br/>definition candidate or blocking; capture/parse/schema-validate each definition candidate;<br/>accept WorkflowId only from validated content, never filename inference]
     WCLASSIFY --> WACCOUNT[Build exactly one terminal entry account then<br/>BuildWorkflowAuthorityInventoryAction and<br/>ValidateWorkflowAuthorityInventoryAction;<br/>no blocking/unaccounted entry or reserved-child definition is legal]
-    WACCOUNT --> WVALID{BuildWorkflowDefinitionRegistryAction then<br/>ValidateWorkflowDefinitionRegistryAction;<br/>exactly one definition per specify, plan, tasks and implement role;<br/>unique captured source ordinals; compiler-locked order, boundaries,<br/>validation and capabilities cannot be weakened}
+    WACCOUNT --> WCOMPILE[CompileWorkflowGraphAction then ValidateCompiledWorkflowGraphAction<br/>for every schema-valid definition; resolve only registered invocation-contract and graph PipelineNodes,<br/>outcome, gate and workflow-policy contracts; invoke no node]
+    WCOMPILE --> WVALID{BuildWorkflowDefinitionRegistryAction then<br/>ValidateWorkflowDefinitionRegistryAction;<br/>arbitrary bounded definition count; unique WorkflowIds, logging shortcodes and source ordinals;<br/>complete graph/outcome closure; no executable payload, infrastructure selection,<br/>capability addition, gate weakening or runner bypass}
     WVALID -- Invalid --> FAIL
-    WVALID -- Valid --> PTXPATH[ResolveProjectTransactionCollectionAction<br/>fixed reserved paths.workflows/transactions collection<br/>for preownership recovery and activation]
+    WVALID -- Valid --> PREFLIGHT[Return validated roots/config/portability and the complete workflow registry;<br/>acquire no project or feature transaction lock; workflow selection remains outside bootstrap]
+    PREFLIGHT -. only after a selected SDD invocation-contract node produces valid typed context;<br/>unrelated workflows and selection/invocation failures do not enter this branch .-> PTXPATH[ResolveProjectTransactionCollectionAction<br/>fixed reserved paths.workflows/transactions collection<br/>for SDD preownership recovery and activation]
     PTXPATH --> PTXLOCK[AcquireProjectTransactionCollectionLockAction<br/>runner retains the opaque capability while project TransactionIdLedger recovery<br/>and FeatureIdentityRegistry ownership resolution are performed]
     PTXLOCK --> PTXSCAN[ScanTransactionJournalInventoryAction<br/>bounded raw journal/header/marker and transaction-ledger inventory<br/>before any FeatureIdentityRegistry read]
     PTXSCAN --> TLPATH[ResolveTransactionIdLedgerPathAction then ReadTransactionIdLedgerAction]
@@ -37,9 +39,9 @@ flowchart TD
     TLDISP -- retire_orphan, rollback_and_retire,<br/>recover_commit_id or verify_committed --> PTXRECOVER[Invoke the matching recovery portion of diagram 09<br/>under the same held project lock and validated storage capability]
     PTXRECOVER --> TLRECHECK{Revalidate transaction ledger/inventory and recovery plan}
     TLRECHECK -- More --> TLDISP
-    TLRECHECK -- Stable --> PREFLIGHT
-    TLDISP -- Complete clean plan --> PREFLIGHT[Return validated pre-selector roots/config/portability,<br/>validated workflow definitions, the recovered project TransactionIdLedger<br/>and held project-transaction capability;<br/>preset/project-toolchain-layer/principle inventory waits for the exact feature target]
-    PREFLIGHT -. after exact CLI selector, validated FeatureStateInventory<br/>and exact feature-target resolution; no new-feature artifact registry is required .-> TARGETCTX{Post-selector exact feature target}
+    TLRECHECK -- Stable --> FEATUREPREP
+    TLDISP -- Complete clean plan --> FEATUREPREP[Return the recovered project TransactionIdLedger<br/>and held project-transaction capability to the selected SDD graph for exact feature ownership resolution]
+    FEATUREPREP -. after diagram 05 validates FeatureStateInventory and resolves the exact feature target;<br/>the selected SDD graph alone continues this setup .-> TARGETCTX{Post-feature-selector exact target}
     TARGETCTX --> TROOT[ResolveConfiguredToolchainPresetRootAction<br/>sole runtime root paths.toolchainPreset]
     TARGETCTX --> PROOT[ResolveConfiguredPrinciplesRootAction<br/>sole runtime root paths.principles]
     VALIDROOTS -. validate the directory capability only;<br/>normal bootstrap never inventories, reads or copies template content .-> TEMPLATEINERT[paths.templates/*.template.md<br/>inert throughout v1; reserved for a future sdd init boundary]
@@ -236,7 +238,7 @@ flowchart TD
     ENGINEPOLICY --> ENGINEVALID{ValidateBootstrapOperationalCandidateAction<br/>all specialized IDs, versions and run-local handle/DataKey/schema joins resolve once,<br/>identity domains are disjoint and every selected environment is complete}
     ENGINEVALID -- Invalid --> FAIL
     ENGINEVALID -- Valid --> CANDIDATE[ValidatedBootstrapOperationalCandidate<br/>generic project/feature component IDs unallocated; candidate is unserialized,<br/>unpersisted and held only by bounded non-loggable run-local handles]
-    CANDIDATE --> HANDOFF[Return candidate to FeatureWorkflowOrchestrator;<br/>no model-bearing stage node may run yet]
+    CANDIDATE --> HANDOFF[Return candidate to the selected compiled workflow execution;<br/>no model-bearing workflow node may run yet]
 
     HANDOFF --> HCASE{Exact feature target}
     HCASE -- New target --> NHANDOFF[Return the validated identity-free candidate to diagram 05 only;<br/>retain the project lock; after reference preactivation that diagram allocates the feature-local<br/>bootstrap/artifact/initial states and commits the sole feature_activation transaction]

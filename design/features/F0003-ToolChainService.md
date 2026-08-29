@@ -158,8 +158,9 @@ remains runner/transaction work outside this read-only boundary.
 
 F0003 uses F0002 LogService as its only logging mechanism. Because F0002 is
 not a general logger, the service receives no logger or sink capability; the
-runner reports F0003 nodes through the calling workflow's validated
-`WorkflowLog` and the existing registered `action.*` lifecycle facts.
+runner reports F0003 nodes through the selected compiled workflow's validated,
+runner-created `WorkflowLog` binding and the existing registered `action.*`
+lifecycle facts.
 
 Read-only means F0003 has no create, update, rename, delete, install, migrate,
 process, command, model, network, transaction, state-transition, or project
@@ -325,8 +326,9 @@ Future implementation tests must cover the owning boundaries:
   source reads only, one post-composition safety-valid published view, no
   service on every earlier or failed branch, no reload or mutation path, and
   cleanup on every outcome;
-- logging: the calling workflow's shortcode on existing F0002 action lifecycle
-  events after binding, the typed non-logging diagnostic before binding, no
+- logging: the selected compiled workflow's registry-validated shortcode on
+  existing F0002 action lifecycle events after binding, the typed non-logging
+  diagnostic before binding, no
   service-selected message/path/body or competing logger, and fail-closed
   logging error; and
 - packaging: clean native-executable bootstrap with only target-owned runtime
