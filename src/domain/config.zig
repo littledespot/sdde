@@ -1,6 +1,7 @@
 const std = @import("std");
 
 pub const engine_config_key = "engine.config@1";
+pub const basename = ".sddtoolkit.json";
 pub const version = "2.0";
 pub const max_engine_config_bytes: usize = 1024 * 1024;
 
@@ -45,40 +46,26 @@ pub const SDDToolKitConfig = struct {
 };
 
 pub const Owned = struct {
-    parsed: std.json.Parsed(SDDToolKitConfig),
+    arena: std.heap.ArenaAllocator,
+    config: SDDToolKitConfig,
+
+    pub fn init(backing_allocator: std.mem.Allocator) Owned {
+        return .{
+            .arena = .init(backing_allocator),
+            .config = undefined,
+        };
+    }
+
+    pub fn allocator(self: *Owned) std.mem.Allocator {
+        return self.arena.allocator();
+    }
 
     pub fn value(self: *const Owned) *const SDDToolKitConfig {
-        return &self.parsed.value;
+        return &self.config;
     }
 
     pub fn deinit(self: *Owned) void {
-        self.parsed.deinit();
-        self.* = undefined;
-    }
-};
-
-pub const PublicError = enum {
-    ENGINE_CONFIG_READ_ERROR,
-    ENGINE_CONFIG_PARSE_ERROR,
-
-    pub fn text(self: PublicError) []const u8 {
-        return @tagName(self);
-    }
-};
-
-pub const Registry = struct {
-    config: Owned,
-
-    pub fn init(config: Owned) Registry {
-        return .{ .config = config };
-    }
-
-    pub fn query(self: *const Registry) *const SDDToolKitConfig {
-        return self.config.value();
-    }
-
-    pub fn deinit(self: *Registry) void {
-        self.config.deinit();
+        self.arena.deinit();
         self.* = undefined;
     }
 };

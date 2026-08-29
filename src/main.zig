@@ -2,7 +2,7 @@ const std = @import("std");
 const sdde = @import("sdde");
 
 pub fn main(init: std.process.Init) !void {
-    var outcome = sdde.bootstrap.run(init.io, init.gpa);
+    var outcome = sdde.run(init.io, init.gpa);
     defer outcome.deinit();
 
     switch (outcome) {

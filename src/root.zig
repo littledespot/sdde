@@ -1,8 +1,12 @@
 const std = @import("std");
+const composition = @import("composition/root.zig");
 
 pub const config = @import("domain/config.zig");
-pub const bootstrap = @import("application/bootstrap.zig");
-pub const engine_config_reader = @import("adapters/filesystem/engine_config_reader.zig");
+pub const BootstrapOutcome = @import("application/bootstrap.zig").Outcome;
+
+pub fn run(io: std.Io, allocator: std.mem.Allocator) BootstrapOutcome {
+    return composition.run(io, allocator);
+}
 
 fn refAllDeclsRecursive(comptime T: type) void {
     inline for (comptime std.meta.declarations(T)) |decl| {

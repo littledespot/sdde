@@ -65,15 +65,6 @@ pub fn build(b: *std.Build) void {
     });
     const run_executable_tests = b.addRunArtifact(executable_tests);
 
-    const config_reader_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/adapters/filesystem/engine_config_reader.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    const run_config_reader_tests = b.addRunArtifact(config_reader_tests);
-
     const yaml_safety_tests = b.addTest(.{
         .root_module = toolchain_yaml_syntax_module,
     });
@@ -88,12 +79,22 @@ pub fn build(b: *std.Build) void {
     });
     const run_version_policy_tests = b.addRunArtifact(version_policy_tests);
 
+    const architecture_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/architecture_test.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_architecture_tests = b.addRunArtifact(architecture_tests);
+    run_architecture_tests.setCwd(b.path("."));
+
     const test_step = b.step("test", "Run all unit tests");
     test_step.dependOn(&run_module_tests.step);
     test_step.dependOn(&run_executable_tests.step);
-    test_step.dependOn(&run_config_reader_tests.step);
     test_step.dependOn(&run_yaml_safety_tests.step);
     test_step.dependOn(&run_version_policy_tests.step);
+    test_step.dependOn(&run_architecture_tests.step);
 
     const smoke_command = packaging_smoke.add(b, executable);
     const smoke_step = b.step("smoke", "Test the packaged executable in a clean directory");

@@ -1,30 +1,47 @@
 const std = @import("std");
 const config = @import("../../domain/config.zig");
+const pipeline = @import("../../domain/pipeline.zig");
 
 pub const Error = error{EngineConfigParseError};
 
-pub fn execute(allocator: std.mem.Allocator, bytes: []const u8) Error!config.Owned {
-    var parsed = std.json.parseFromSlice(
-        config.SDDToolKitConfig,
-        allocator,
-        bytes,
-        .{
-            .duplicate_field_behavior = .@"error",
-            .ignore_unknown_fields = false,
-            .allocate = .alloc_always,
-        },
-    ) catch return error.EngineConfigParseError;
-    errdefer parsed.deinit();
+pub const Action = struct {
+    pub const contract: pipeline.NodeContract = .{
+        .id = "decode-sddtoolkit-config@1",
+        .kind = .action,
+        .requires = &.{.raw_engine_config},
+        .produces = &.{.engine_config},
+        .side_effect = .none,
+    };
 
-    if (!std.mem.eql(u8, parsed.value.version, config.version)) {
-        return error.EngineConfigParseError;
-    }
-    if (!promptCaptureIsUnique(parsed.value.logs.promptCapture)) {
-        return error.EngineConfigParseError;
-    }
+    pub fn execute(
+        _: Action,
+        allocator: std.mem.Allocator,
+        bytes: []const u8,
+    ) Error!config.Owned {
+        var owned = config.Owned.init(allocator);
+        errdefer owned.deinit();
 
-    return .{ .parsed = parsed };
-}
+        owned.config = std.json.parseFromSliceLeaky(
+            config.SDDToolKitConfig,
+            owned.allocator(),
+            bytes,
+            .{
+                .duplicate_field_behavior = .@"error",
+                .ignore_unknown_fields = false,
+                .allocate = .alloc_always,
+            },
+        ) catch return error.EngineConfigParseError;
+
+        if (!std.mem.eql(u8, owned.config.version, config.version)) {
+            return error.EngineConfigParseError;
+        }
+        if (!promptCaptureIsUnique(owned.config.logs.promptCapture)) {
+            return error.EngineConfigParseError;
+        }
+
+        return owned;
+    }
+};
 
 fn promptCaptureIsUnique(values: []const config.PromptCapture) bool {
     var seen: std.EnumSet(config.PromptCapture) = .initEmpty();
@@ -50,7 +67,7 @@ const valid_config =
 ;
 
 test "decodes the closed v2 structure directly into the owned type" {
-    var decoded = try execute(std.testing.allocator, valid_config);
+    var decoded = try (Action{}).execute(std.testing.allocator, valid_config);
     defer decoded.deinit();
 
     try std.testing.expectEqualStrings("2.0", decoded.value().version);
@@ -76,7 +93,10 @@ test "rejects malformed unsupported unknown missing duplicate and wrong-kind inp
     };
 
     for (invalid) |bytes| {
-        try std.testing.expectError(error.EngineConfigParseError, execute(std.testing.allocator, bytes));
+        try std.testing.expectError(
+            error.EngineConfigParseError,
+            (Action{}).execute(std.testing.allocator, bytes),
+        );
     }
 }
 
@@ -84,7 +104,7 @@ test "accepts JSON member reordering" {
     const reordered =
         \\{"paths":{"templates":"x","principles":"p","toolchainPreset":"t","workflows":"w","specsArchive":"s/a","references":"r","specs":"s"},"models":{"slots":{}},"logs":{"promptCapture":[],"console":false,"level":"INFO"},"version":"2.0"}
     ;
-    var decoded = try execute(std.testing.allocator, reordered);
+    var decoded = try (Action{}).execute(std.testing.allocator, reordered);
     defer decoded.deinit();
     try std.testing.expectEqualStrings("INFO", decoded.value().logs.level);
 }

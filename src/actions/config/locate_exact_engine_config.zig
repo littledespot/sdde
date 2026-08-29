@@ -1,32 +1,49 @@
 const std = @import("std");
-
-pub const ProjectRoot = struct {
-    canonical_path: [:0]u8,
-    dir: std.Io.Dir,
-
-    pub fn deinit(self: *ProjectRoot, allocator: std.mem.Allocator) void {
-        allocator.free(self.canonical_path);
-        self.* = undefined;
-    }
-};
+const pipeline = @import("../../domain/pipeline.zig");
+const source = @import("../../ports/engine_config_source.zig");
 
 pub const Error = error{EngineConfigReadError};
 
-pub fn execute(io: std.Io, allocator: std.mem.Allocator) Error!ProjectRoot {
-    const path = std.process.currentPathAlloc(io, allocator) catch {
-        return error.EngineConfigReadError;
-    };
-    errdefer allocator.free(path);
-    if (!std.fs.path.isAbsolute(path)) return error.EngineConfigReadError;
+pub const Action = struct {
+    locator: source.Locator,
 
-    return .{
-        .canonical_path = path,
-        .dir = .cwd(),
+    pub const contract: pipeline.NodeContract = .{
+        .id = "locate-exact-engine-config@1",
+        .kind = .action,
+        .requires = &.{.invocation_working_directory},
+        .produces = &.{.exact_engine_config},
+        .side_effect = .filesystem_read,
     };
+
+    pub fn execute(self: Action, allocator: std.mem.Allocator) Error!source.ExactEngineConfig {
+        return self.locator.locate(allocator) catch error.EngineConfigReadError;
+    }
+};
+
+test "maps locator rejection without taking on read work" {
+    var fake = RejectingLocator{};
+    const action: Action = .{ .locator = fake.port() };
+
+    try std.testing.expectError(
+        error.EngineConfigReadError,
+        action.execute(std.testing.allocator),
+    );
+    try std.testing.expectEqual(@as(usize, 1), fake.calls);
 }
 
-test "binds the invocation working directory once" {
-    var root = try execute(std.testing.io, std.testing.allocator);
-    defer root.deinit(std.testing.allocator);
-    try std.testing.expect(std.fs.path.isAbsolute(root.canonical_path));
-}
+const RejectingLocator = struct {
+    calls: usize = 0,
+
+    fn port(self: *RejectingLocator) source.Locator {
+        return .{
+            .context = self,
+            .locate_fn = locate,
+        };
+    }
+
+    fn locate(context: *anyopaque, _: std.mem.Allocator) source.Error!source.ExactEngineConfig {
+        const self: *RejectingLocator = @ptrCast(@alignCast(context));
+        self.calls += 1;
+        return error.EngineConfigReadFailure;
+    }
+};
