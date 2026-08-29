@@ -1,6 +1,6 @@
 pub const DataKey = enum {
     invocation_working_directory,
-    exact_engine_config,
+    exact_engine_config_file,
     raw_engine_config,
     engine_config,
 };

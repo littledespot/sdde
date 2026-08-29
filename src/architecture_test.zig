@@ -26,7 +26,7 @@ test "every action imports only standard domain and port modules" {
 }
 
 test "bootstrap orchestrator imports only binding and result contracts" {
-    const source = @embedFile("application/bootstrap.zig");
+    const source = @embedFile("application/bootstrap_orchestrator.zig");
     try expectAbsent(source, "/actions/");
     try expectAbsent(source, "/adapters/");
     try expectAbsent(source, "std.Io");
@@ -43,6 +43,35 @@ test "configuration domain ownership is independent of the JSON parser" {
     try expectAbsent(source, "std.json.Parsed");
     try expectAbsent(source, "PublicError");
     try expectAbsent(source, "Registry");
+}
+
+test "feature service filenames and headings end in Service" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var features = try std.Io.Dir.cwd().openDir(io, "design/features", .{ .iterate = true });
+    defer features.close(io);
+
+    var iterator = features.iterate();
+    while (try iterator.next(io)) |entry| {
+        if (entry.kind != .file or
+            !std.mem.startsWith(u8, entry.name, "F") or
+            !std.mem.endsWith(u8, entry.name, ".md"))
+        {
+            continue;
+        }
+
+        try std.testing.expect(std.mem.endsWith(u8, entry.name, "Service.md"));
+        const source = try features.readFileAlloc(
+            io,
+            entry.name,
+            allocator,
+            .limited(1024 * 1024),
+        );
+        defer allocator.free(source);
+        const heading_end = std.mem.indexOfScalar(u8, source, '\n') orelse source.len;
+        const heading = std.mem.trimEnd(u8, source[0..heading_end], "\r");
+        try std.testing.expect(std.mem.endsWith(u8, heading, "Service"));
+    }
 }
 
 fn expectAbsent(source: []const u8, forbidden: []const u8) !void {

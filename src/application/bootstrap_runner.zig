@@ -1,12 +1,12 @@
 const std = @import("std");
 const config = @import("../domain/config.zig");
 const pipeline = @import("../domain/pipeline.zig");
-const source = @import("../ports/engine_config_source.zig");
+const engine_config_source = @import("../ports/engine_config_source.zig");
 const locate = @import("../actions/config/locate_exact_engine_config.zig");
 const read = @import("../actions/config/read_engine_config.zig");
 const decode = @import("../actions/config/decode_sddtoolkit_config.zig");
 const child_bindings = @import("bootstrap_child_bindings.zig");
-const config_registry = @import("config_registry.zig");
+const sddtoolkit_config_service = @import("sddtoolkit_config_service.zig");
 
 comptime {
     pipeline.validateLinear(
@@ -24,8 +24,8 @@ pub const Runner = struct {
     locate_action: locate.Action,
     read_action: read.Action,
     decode_action: decode.Action,
-    exact_config: ?source.ExactEngineConfig = null,
-    raw_config: ?source.RawEngineConfig = null,
+    exact_config_file: ?engine_config_source.ExactEngineConfigFile = null,
+    raw_config: ?engine_config_source.RawEngineConfig = null,
     decoded_config: ?config.Owned = null,
 
     pub fn init(
@@ -52,15 +52,15 @@ pub const Runner = struct {
     pub fn deinit(self: *Runner) void {
         if (self.decoded_config) |*owned| owned.deinit();
         if (self.raw_config) |*raw| raw.deinit(self.allocator);
-        if (self.exact_config) |*exact| exact.deinit(self.allocator);
+        if (self.exact_config_file) |*exact_config_file| exact_config_file.deinit(self.allocator);
         self.* = undefined;
     }
 
     fn invokeLocate(context: *anyopaque) child_bindings.StepOutcome {
         const self: *Runner = @ptrCast(@alignCast(context));
-        std.debug.assert(self.exact_config == null);
+        std.debug.assert(self.exact_config_file == null);
 
-        self.exact_config = self.locate_action.execute(self.allocator) catch {
+        self.exact_config_file = self.locate_action.execute(self.allocator) catch {
             return .{ .failed = .ENGINE_CONFIG_READ_ERROR };
         };
         return .ok;
@@ -68,11 +68,11 @@ pub const Runner = struct {
 
     fn invokeRead(context: *anyopaque) child_bindings.StepOutcome {
         const self: *Runner = @ptrCast(@alignCast(context));
-        std.debug.assert(self.exact_config != null);
+        std.debug.assert(self.exact_config_file != null);
         std.debug.assert(self.raw_config == null);
 
         self.raw_config = self.read_action.execute(
-            &self.exact_config.?,
+            &self.exact_config_file.?,
             self.allocator,
         ) catch {
             return .{ .failed = .ENGINE_CONFIG_READ_ERROR };
@@ -94,7 +94,7 @@ pub const Runner = struct {
         return .ok;
     }
 
-    fn takeRegistry(context: *anyopaque) config_registry.Registry {
+    fn takeConfigService(context: *anyopaque) sddtoolkit_config_service.SDDToolKitConfigService {
         const self: *Runner = @ptrCast(@alignCast(context));
         const owned = self.decoded_config.?;
         self.decoded_config = null;
@@ -106,5 +106,5 @@ const bindings_vtable: child_bindings.ChildBindings.VTable = .{
     .locate = Runner.invokeLocate,
     .read = Runner.invokeRead,
     .decode = Runner.invokeDecode,
-    .take_registry = Runner.takeRegistry,
+    .take_config_service = Runner.takeConfigService,
 };

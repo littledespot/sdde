@@ -1,8 +1,8 @@
 const std = @import("std");
 
 pub const engine_config_key = "engine.config@1";
-pub const basename = ".sddtoolkit.json";
-pub const version = "2.0";
+pub const engine_config_basename = ".sddtoolkit.json";
+pub const engine_config_version = "2.0";
 pub const max_engine_config_bytes: usize = 1024 * 1024;
 
 pub const PromptCapture = enum {

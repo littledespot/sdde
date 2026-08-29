@@ -457,7 +457,7 @@ cache, or second configuration authority exists.
 For the bounded F0001 reader increment, the current closed shape is the formal
 [v2 JSON Schema](schemas/sddtoolkit-config-v2.schema.json), the repository
 example, and the typed contract in
-[F0001 — SDDToolKitReader](features/F0001-SDDToolKitReader.md). The root has
+[F0001 — SDDToolKitConfigService](features/F0001-SDDToolKitConfigService.md). The root has
 exactly `version`, `logs`, `models`, and `paths`; fixed records reject missing,
 duplicate, and unknown members. `models.slots` is the one keyed collection and
 each value has the closed slot shape. The `logs` object contains exactly the

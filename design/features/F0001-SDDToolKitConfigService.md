@@ -1,4 +1,4 @@
-# F0001 — SDDToolKitReader
+# F0001 — SDDToolKitConfigService
 
 **Status:** Proposed feature design
 
@@ -40,9 +40,10 @@ The implementation has three actions:
 There is no generic JSON-document action or intermediate JSON tree. JSON
 syntax parsing is part of decoding one known JSON contract.
 
-The runner invokes the actions, validates/applies their deltas, and owns the
-accepted value at the single typed key `engine.config@1`. The composition root
-only constructs the adapter and bindings. No action calls another action.
+The runner invokes the actions, validates/applies their deltas, constructs one
+`SDDToolKitConfigService`, and owns its accepted value at the single typed key
+`engine.config@1`. The composition root only constructs the adapter and
+bindings. No action calls another action.
 
 ## 3. Configuration shape
 
@@ -102,10 +103,11 @@ Structural decoding does not grant operational authority. In particular:
 ## 4. Query and ownership contract
 
 A consumer that needs configuration declares `engine.config@1` and receives a
-borrowed `*const SDDToolKitConfig`. It queries typed fields directly, for
+borrowed `*const SDDToolKitConfig` from
+`SDDToolKitConfigService.config()`. It queries typed fields directly, for
 example `config.logs.level` or `config.paths.specs`.
 
-This is the only configuration value and query mechanism. There are no copied
+This service is the only configuration value and query mechanism. There are no copied
 section values, section-specific registry keys, string-key getters, JSON
 Pointer APIs, mutable settings singletons, caches, or reader capabilities.
 
@@ -178,7 +180,8 @@ owner's work.
 3. Decode goes directly from owned bytes to one closed owned
    `SDDToolKitConfig`; no generic JSON tree is retained or published.
 4. A successful invocation reads and decodes the file once.
-5. The runner publishes exactly one immutable value at `engine.config@1`.
+5. The runner constructs exactly one `SDDToolKitConfigService` and publishes
+   its immutable value at `engine.config@1`.
 6. Consumers query typed fields without a second config value, cache, generic
    getter, or reread path.
 7. Structural success grants no logging, model, path, command, transaction, or

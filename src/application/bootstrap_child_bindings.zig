@@ -1,5 +1,5 @@
 const config_error = @import("../domain/config_error.zig");
-const config_registry = @import("config_registry.zig");
+const sddtoolkit_config_service = @import("sddtoolkit_config_service.zig");
 
 pub const StepOutcome = union(enum) {
     ok,
@@ -14,7 +14,7 @@ pub const ChildBindings = struct {
         locate: *const fn (*anyopaque) StepOutcome,
         read: *const fn (*anyopaque) StepOutcome,
         decode: *const fn (*anyopaque) StepOutcome,
-        take_registry: *const fn (*anyopaque) config_registry.Registry,
+        take_config_service: *const fn (*anyopaque) sddtoolkit_config_service.SDDToolKitConfigService,
     };
 
     pub fn invokeLocate(self: ChildBindings) StepOutcome {
@@ -29,7 +29,7 @@ pub const ChildBindings = struct {
         return self.vtable.decode(self.context);
     }
 
-    pub fn takeRegistry(self: ChildBindings) config_registry.Registry {
-        return self.vtable.take_registry(self.context);
+    pub fn takeConfigService(self: ChildBindings) sddtoolkit_config_service.SDDToolKitConfigService {
+        return self.vtable.take_config_service(self.context);
     }
 };

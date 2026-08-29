@@ -2,7 +2,7 @@ const std = @import("std");
 const composition = @import("composition/root.zig");
 
 pub const config = @import("domain/config.zig");
-pub const BootstrapOutcome = @import("application/bootstrap.zig").Outcome;
+pub const BootstrapOutcome = @import("application/bootstrap_orchestrator.zig").Outcome;
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator) BootstrapOutcome {
     return composition.run(io, allocator);

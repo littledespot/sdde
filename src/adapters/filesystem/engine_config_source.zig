@@ -5,7 +5,7 @@
 
 const std = @import("std");
 const config = @import("../../domain/config.zig");
-const source = @import("../../ports/engine_config_source.zig");
+const engine_config_source = @import("../../ports/engine_config_source.zig");
 
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -21,14 +21,17 @@ pub const Adapter = struct {
         };
     }
 
-    pub fn locator(self: *Adapter) source.Locator {
+    pub fn locator(self: *Adapter) engine_config_source.Locator {
         return .{
             .context = self,
             .locate_fn = locate,
         };
     }
 
-    fn locate(context: *anyopaque, allocator: Allocator) source.Error!source.ExactEngineConfig {
+    fn locate(
+        context: *anyopaque,
+        allocator: Allocator,
+    ) engine_config_source.Error!engine_config_source.ExactEngineConfigFile {
         const self: *Adapter = @ptrCast(@alignCast(context));
         const project_root = self.invocation_working_directory;
 
@@ -39,7 +42,7 @@ pub const Adapter = struct {
         ) catch return error.EngineConfigReadFailure;
         errdefer allocator.free(canonical_project_root);
 
-        var file = project_root.openFile(self.io, config.basename, .{
+        var file = project_root.openFile(self.io, config.engine_config_basename, .{
             .mode = .read_only,
             .allow_directory = false,
             .follow_symlinks = false,
@@ -50,18 +53,18 @@ pub const Adapter = struct {
         const file_stat = file.stat(self.io) catch return error.EngineConfigReadFailure;
         if (file_stat.kind != .file) return error.EngineConfigReadFailure;
 
-        const open_config = allocator.create(OpenConfig) catch {
+        const open_engine_config_file = allocator.create(OpenEngineConfigFile) catch {
             return error.EngineConfigReadFailure;
         };
-        open_config.* = .{
+        open_engine_config_file.* = .{
             .io = self.io,
             .file = file,
         };
 
-        return source.ExactEngineConfig.init(
+        return engine_config_source.ExactEngineConfigFile.init(
             canonical_project_root,
-            open_config,
-            &exact_config_vtable,
+            open_engine_config_file,
+            &exact_config_file_vtable,
         );
     }
 };
@@ -70,7 +73,7 @@ fn canonicalProjectRoot(
     project_root: Io.Dir,
     io: Io,
     allocator: Allocator,
-) source.Error![:0]u8 {
+) engine_config_source.Error![:0]u8 {
     const canonical_path = if (project_root.handle == Io.Dir.cwd().handle)
         std.process.currentPathAlloc(io, allocator) catch {
             return error.EngineConfigReadFailure;
@@ -87,34 +90,34 @@ fn canonicalProjectRoot(
     return canonical_path;
 }
 
-const OpenConfig = struct {
+const OpenEngineConfigFile = struct {
     io: Io,
     file: Io.File,
 };
 
-const exact_config_vtable: source.ExactEngineConfig.VTable = .{
+const exact_config_file_vtable: engine_config_source.ExactEngineConfigFile.VTable = .{
     .read = read,
-    .deinit = deinitExactConfig,
+    .deinit = deinitExactConfigFile,
 };
 
 fn read(
     context: *anyopaque,
     allocator: Allocator,
     max_bytes: usize,
-) source.Error!source.RawEngineConfig {
-    const open_config: *OpenConfig = @ptrCast(@alignCast(context));
+) engine_config_source.Error!engine_config_source.RawEngineConfig {
+    const open_engine_config_file: *OpenEngineConfigFile = @ptrCast(@alignCast(context));
     if (max_bytes == 0 or max_bytes == std.math.maxInt(usize)) {
         return error.EngineConfigReadFailure;
     }
 
-    const file_stat = open_config.file.stat(open_config.io) catch {
+    const file_stat = open_engine_config_file.file.stat(open_engine_config_file.io) catch {
         return error.EngineConfigReadFailure;
     };
     if (file_stat.size > max_bytes) {
         return error.EngineConfigReadFailure;
     }
 
-    var file_reader = open_config.file.reader(open_config.io, &.{});
+    var file_reader = open_engine_config_file.file.reader(open_engine_config_file.io, &.{});
     const bytes = file_reader.interface.allocRemaining(
         allocator,
         .limited(max_bytes + 1),
@@ -129,10 +132,10 @@ fn read(
     return .{ .bytes = bytes };
 }
 
-fn deinitExactConfig(context: *anyopaque, allocator: Allocator) void {
-    const open_config: *OpenConfig = @ptrCast(@alignCast(context));
-    open_config.file.close(open_config.io);
-    allocator.destroy(open_config);
+fn deinitExactConfigFile(context: *anyopaque, allocator: Allocator) void {
+    const open_engine_config_file: *OpenEngineConfigFile = @ptrCast(@alignCast(context));
+    open_engine_config_file.file.close(open_engine_config_file.io);
+    allocator.destroy(open_engine_config_file);
 }
 
 test "locates and reads only the exact config from the supplied working directory" {
@@ -143,7 +146,7 @@ test "locates and reads only the exact config from the supplied working director
     var project_root = std.testing.tmpDir(.{});
     defer project_root.cleanup();
     try project_root.dir.writeFile(io, .{
-        .sub_path = config.basename,
+        .sub_path = config.engine_config_basename,
         .data = expected,
     });
 
@@ -183,7 +186,7 @@ test "does not inspect parent or child directories" {
     var parent = std.testing.tmpDir(.{});
     defer parent.cleanup();
     try parent.dir.writeFile(io, .{
-        .sub_path = config.basename,
+        .sub_path = config.engine_config_basename,
         .data = "{}",
     });
     try parent.dir.createDir(io, "child", .default_dir);
@@ -197,10 +200,10 @@ test "does not inspect parent or child directories" {
     );
 
     try child.writeFile(io, .{
-        .sub_path = config.basename,
+        .sub_path = config.engine_config_basename,
         .data = "{}",
     });
-    try parent.dir.deleteFile(io, config.basename);
+    try parent.dir.deleteFile(io, config.engine_config_basename);
     var parent_adapter = Adapter.init(io, parent.dir);
     try std.testing.expectError(
         error.EngineConfigReadFailure,
@@ -218,7 +221,7 @@ test "rejects a symlink during locate" {
         .sub_path = "config-target.json",
         .data = "{}",
     });
-    try project_root.dir.symLink(io, "config-target.json", config.basename, .{});
+    try project_root.dir.symLink(io, "config-target.json", config.engine_config_basename, .{});
 
     var adapter = Adapter.init(io, project_root.dir);
     try std.testing.expectError(
@@ -233,7 +236,7 @@ test "rejects a non-regular resource during locate" {
 
     var project_root = std.testing.tmpDir(.{});
     defer project_root.cleanup();
-    try project_root.dir.createDir(io, config.basename, .default_dir);
+    try project_root.dir.createDir(io, config.engine_config_basename, .default_dir);
 
     var adapter = Adapter.init(io, project_root.dir);
     try std.testing.expectError(
@@ -249,7 +252,7 @@ test "read accepts the byte limit and rejects a larger file" {
     var project_root = std.testing.tmpDir(.{});
     defer project_root.cleanup();
     try project_root.dir.writeFile(io, .{
-        .sub_path = config.basename,
+        .sub_path = config.engine_config_basename,
         .data = "{ }",
     });
 

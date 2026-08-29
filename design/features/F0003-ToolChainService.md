@@ -20,7 +20,7 @@ or amend the governing proposed design.
 
 **Governing authority:** [Engine design](../design.md), especially Sections
 1, 3-6, 9-11, 15, 28, and 30-31; [F0001 —
-SDDToolKitReader](F0001-SDDToolKitReader.md); [F0002 —
+SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); [F0002 —
 LogService](F0002-LogService.md); the [path contract](../paths.md); and the
 [toolchain-preset bootstrap diagram](../diagrams/08-toolchain-preset-bootstrap.mmd).
 The [`_structure.yaml`](../toolchainPresets/_structure.yaml) file is reviewed

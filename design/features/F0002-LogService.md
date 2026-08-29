@@ -25,7 +25,7 @@ SDDE against a target project.
 
 **Governing authority:** [Engine design](../design.md), especially Sections
 5-6, 9, 13.9, 14.9-14.10, 26.5, and 27-31; [F0001 —
-SDDToolKitReader](F0001-SDDToolKitReader.md); and the
+SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); and the
 [feature logging diagram](../diagrams/06-feature-logging.mmd).
 
 ---

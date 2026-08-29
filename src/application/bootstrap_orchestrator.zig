@@ -1,15 +1,15 @@
 const std = @import("std");
 const config_error = @import("../domain/config_error.zig");
 const child_bindings = @import("bootstrap_child_bindings.zig");
-const config_registry = @import("config_registry.zig");
+const sddtoolkit_config_service = @import("sddtoolkit_config_service.zig");
 
 pub const Outcome = union(enum) {
-    ready: config_registry.Registry,
+    ready: sddtoolkit_config_service.SDDToolKitConfigService,
     failed: config_error.PublicError,
 
     pub fn deinit(self: *Outcome) void {
         switch (self.*) {
-            .ready => |*registry| registry.deinit(),
+            .ready => |*config_service| config_service.deinit(),
             .failed => {},
         }
         self.* = undefined;
@@ -30,7 +30,7 @@ pub fn run(children: child_bindings.ChildBindings) Outcome {
         .failed => |failure| return .{ .failed = failure },
     }
 
-    return .{ .ready = children.takeRegistry() };
+    return .{ .ready = children.takeConfigService() };
 }
 
 test "coordinates child bindings in order and preserves a decode failure" {
@@ -94,7 +94,7 @@ const spy_vtable: child_bindings.ChildBindings.VTable = .{
     .locate = spyLocate,
     .read = spyRead,
     .decode = spyDecode,
-    .take_registry = spyTakeRegistry,
+    .take_config_service = spyTakeConfigService,
 };
 
 fn spyLocate(context: *anyopaque) child_bindings.StepOutcome {
@@ -112,6 +112,6 @@ fn spyDecode(context: *anyopaque) child_bindings.StepOutcome {
     return spy.record(.decode);
 }
 
-fn spyTakeRegistry(_: *anyopaque) config_registry.Registry {
+fn spyTakeConfigService(_: *anyopaque) sddtoolkit_config_service.SDDToolKitConfigService {
     unreachable;
 }

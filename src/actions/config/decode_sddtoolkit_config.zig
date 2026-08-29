@@ -32,7 +32,7 @@ pub const Action = struct {
             },
         ) catch return error.EngineConfigParseError;
 
-        if (!std.mem.eql(u8, owned.config.version, config.version)) {
+        if (!std.mem.eql(u8, owned.config.version, config.engine_config_version)) {
             return error.EngineConfigParseError;
         }
         if (!promptCaptureIsUnique(owned.config.logs.promptCapture)) {
