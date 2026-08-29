@@ -55,7 +55,7 @@ const OwnerStorage = struct {
     registry: RegistryStorage,
 };
 
-pub fn validateAndOwn(
+pub fn createValidated(
     backing_allocator: std.mem.Allocator,
     candidate: roots.BootstrapRootRegistryCandidate,
 ) Error!*Owner {

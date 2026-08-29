@@ -62,6 +62,9 @@ pub const NodeDelta = struct {
 
 pub const DeltaError = error{
     MissingRequiredData,
+    DataAlreadyPresent,
+    ReplacementTargetMissing,
+    InvalidationTargetMissing,
     UndeclaredWrite,
     MissingDeclaredWrite,
     DuplicateWrite,
@@ -120,6 +123,16 @@ pub const PipelineEnvelope = struct {
             error.MissingDeclaredInvalidation,
             error.DuplicateInvalidation,
         );
+
+        for (delta.data_writes) |key| {
+            if (self.contains(key)) return error.DataAlreadyPresent;
+        }
+        for (delta.data_replacements) |key| {
+            if (!self.contains(key)) return error.ReplacementTargetMissing;
+        }
+        for (delta.data_invalidations) |key| {
+            if (!self.contains(key)) return error.InvalidationTargetMissing;
+        }
 
         var next = self;
         for (delta.data_writes) |key| next.available[@intFromEnum(key)] = true;
@@ -245,6 +258,11 @@ test "runner envelope rejects missing undeclared and duplicate writes" {
                 .configured_root_path_policy_set,
             },
         }),
+    );
+    const applied = try envelope.apply(contract, NodeDelta.successful(contract));
+    try std.testing.expectError(
+        error.DataAlreadyPresent,
+        applied.apply(contract, NodeDelta.successful(contract)),
     );
 }
 const std = @import("std");

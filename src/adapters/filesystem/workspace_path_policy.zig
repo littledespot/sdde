@@ -1,6 +1,7 @@
 //! Resolves the conservative portability policy for the active workspace.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const bootstrap_roots = @import("../../domain/bootstrap_roots.zig");
 const file_identity = @import("file_identity.zig");
 
@@ -48,14 +49,50 @@ pub const Resolver = struct {
         _ = file_identity.inspect(active_root.handle) catch {
             return error.WorkspacePathPolicyUnavailable;
         };
+        const active_limits = resolveActiveLimits(active_root.handle) catch {
+            return error.WorkspacePathPolicyUnavailable;
+        };
 
         return .{
-            .max_component_bytes = Io.Dir.max_name_bytes,
-            .max_relative_path_bytes = Io.Dir.max_path_bytes - 1,
-            .max_absolute_path_bytes = Io.Dir.max_path_bytes - 1,
+            .max_component_bytes = @min(Io.Dir.max_name_bytes, active_limits.component),
+            .max_relative_path_bytes = @min(Io.Dir.max_path_bytes - 1, active_limits.path),
+            .max_absolute_path_bytes = @min(Io.Dir.max_path_bytes - 1, active_limits.path),
         };
     }
 };
+
+const ActiveLimits = struct {
+    component: usize,
+    path: usize,
+};
+
+fn resolveActiveLimits(handle: std.posix.fd_t) Error!ActiveLimits {
+    const names = switch (builtin.os.tag) {
+        .linux => .{ .component = 3, .path = 4 },
+        .driverkit,
+        .ios,
+        .maccatalyst,
+        .macos,
+        .tvos,
+        .visionos,
+        .watchos,
+        .freebsd,
+        .openbsd,
+        .netbsd,
+        .dragonfly,
+        => .{ .component = 4, .path = 5 },
+        else => return error.WorkspacePathPolicyUnavailable,
+    };
+    const component = fpathconf(handle, names.component);
+    const path = fpathconf(handle, names.path);
+    if (component <= 0 or path <= 0) return error.WorkspacePathPolicyUnavailable;
+    return .{
+        .component = @intCast(component),
+        .path = @intCast(path),
+    };
+}
+
+extern "c" fn fpathconf(fd: std.posix.fd_t, name: c_int) c_long;
 
 test "resolves policy only after inspecting the active workspace" {
     const io = std.testing.io;

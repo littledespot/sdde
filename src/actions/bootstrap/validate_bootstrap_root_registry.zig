@@ -19,7 +19,7 @@ pub const Action = struct {
         allocator: std.mem.Allocator,
         candidate: bootstrap_roots.BootstrapRootRegistryCandidate,
     ) Error!*bootstrap_root_registry.Owner {
-        return bootstrap_root_registry.validateAndOwn(allocator, candidate) catch {
+        return bootstrap_root_registry.createValidated(allocator, candidate) catch {
             return error.BootstrapRootRegistryInvalid;
         };
     }
@@ -78,7 +78,13 @@ test "accepts the exact seven mappings and sole archive nesting exception" {
     const owner = try (Action{}).execute(std.testing.allocator, validCandidate());
     defer bootstrap_root_registry.deinitOwner(owner);
     const registry = bootstrap_root_registry.registry(owner);
-    try std.testing.expect(registry.workflowAuthority().isPresent());
+    const workflow_authority = registry.workflowAuthority();
+    try std.testing.expect(workflow_authority.isPresent());
+    try std.testing.expectEqual(bootstrap_roots.PathKey.workflows, workflow_authority.pathKey());
+    try std.testing.expectEqual(
+        bootstrap_roots.ConfiguredRootRole.workflow_authority,
+        workflow_authority.role(),
+    );
 }
 
 test "rejects duplicate missing relabelled and case-fold-equivalent capabilities" {

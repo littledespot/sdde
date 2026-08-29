@@ -118,7 +118,7 @@ test "a replaced directory receives a different physical identity" {
 
     var adapter = Adapter.init(io, project_root.dir);
     const before = (try adapter.inspector().inspect("replaceable")).directory;
-    try project_root.dir.deleteDir(io, "replaceable");
+    try project_root.dir.rename("replaceable", project_root.dir, "replaced", io);
     try project_root.dir.createDir(io, "replaceable", .default_dir);
     const after = (try adapter.inspector().inspect("replaceable")).directory;
 

@@ -1,5 +1,6 @@
 const std = @import("std");
 const bootstrap_root_registry = @import("domain/bootstrap_root_registry.zig");
+const bootstrap_root_registry_service = @import("application/bootstrap_root_registry_service.zig");
 
 test "every action imports only standard domain and port modules" {
     const io = std.testing.io;
@@ -56,6 +57,12 @@ test "validated bootstrap registry authority is opaque" {
 
     const inspector_source = @embedFile("adapters/filesystem/bootstrap_root_inspector.zig");
     try expectAbsent(inspector_source, "workspacePathPolicy");
+
+    const init_type = @typeInfo(@TypeOf(
+        bootstrap_root_registry_service.BootstrapRootRegistryService.init,
+    )).@"fn";
+    try std.testing.expectEqual(@as(usize, 1), init_type.params.len);
+    try std.testing.expect(init_type.params[0].type.? == *bootstrap_root_registry.Owner);
 }
 
 test "configuration domain ownership is independent of the JSON parser" {

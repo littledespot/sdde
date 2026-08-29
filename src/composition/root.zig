@@ -178,3 +178,34 @@ test "a complete root collision fails as a registry error" {
         outcome.failed,
     );
 }
+
+test "normalization-equivalent absent roots fail as a registry error" {
+    const io = std.testing.io;
+    const colliding_config =
+        \\{
+        \\  "version": "2.0",
+        \\  "logs": { "level": "debug", "console": false, "promptCapture": [] },
+        \\  "models": { "slots": {} },
+        \\  "paths": {
+        \\    "specs": "shared", "references": "shared/",
+        \\    "specsArchive": "shared/archive", "workflows": ".sdd/workflows",
+        \\    "toolchainPreset": ".sdd/presets",
+        \\    "principles": ".sdd/principles", "templates": ".sdd/templates"
+        \\  }
+        \\}
+    ;
+    var project_root = std.testing.tmpDir(.{});
+    defer project_root.cleanup();
+    try project_root.dir.writeFile(io, .{
+        .sub_path = ".sddtoolkit.json",
+        .data = colliding_config,
+    });
+    try project_root.dir.createDirPath(io, ".sdd/workflows");
+
+    var outcome = runInProject(io, std.testing.allocator, project_root.dir);
+    defer outcome.deinit();
+    try std.testing.expectEqual(
+        @import("../domain/bootstrap_error.zig").PublicError.BOOTSTRAP_ROOT_REGISTRY_INVALID,
+        outcome.failed,
+    );
+}
