@@ -137,7 +137,7 @@ classDiagram
     LogService ..> TelemetryBarrier : returns
     TelemetryBarrier ..> WorkflowTelemetryFact : accepts
     WorkflowPipelineRunner --> TelemetryBarrier : consumes after delta apply
-    WorkflowPipelineRunner *-- WorkflowLog : creates per workflow
+    WorkflowPipelineRunner ..> WorkflowLog : creates per workflow
     WorkflowLog ..> WorkflowTelemetryFact : adds to candidate delta
     FeatureLogRunner --> CompiledLoggingPolicy : borrows
     FeatureLogRunner --> ValidatedFeatureLogBinding : borrows

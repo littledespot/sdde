@@ -1,6 +1,7 @@
 const std = @import("std");
 const syntax = @import("bounded_yaml_syntax");
 const toolchain = @import("../../domain/toolchain.zig");
+const toolchain_schema = @import("../../domain/toolchain_schema.zig");
 const parser_port = @import("../../ports/toolchain_document_parser.zig");
 pub const Adapter = struct {
     pub fn parser(self: *Adapter) parser_port.Parser {
@@ -51,8 +52,8 @@ test "parses the closed project and preset YAML shapes" {
         .{ .name = "app.toolchain-preset.yaml", .bytes = "schema: toolchain-preset/v1\npackage: app@1.0.0\nlayer: framework\nextends: []\npolicies: []\n" },
     };
     const documents = try adapter.parser().parse(arena.allocator(), &captures);
-    const project = try toolchain.parseProject(arena.allocator(), documents[0]);
-    const registry = try toolchain.parseRegistry(arena.allocator(), documents[1..]);
+    const project = try toolchain_schema.parseProject(arena.allocator(), documents[0]);
+    const registry = try toolchain_schema.parseRegistry(arena.allocator(), documents[1..]);
     try std.testing.expectEqualStrings("app@1.0.0", project.presets[0]);
     try std.testing.expectEqualStrings("app@1.0.0", registry.presets[0].package);
 }
@@ -88,7 +89,7 @@ test "rejects unsafe YAML and closed-schema violations" {
         const documents = try adapter.parser().parse(arena.allocator(), &captures);
         try std.testing.expectError(
             error.InvalidToolchain,
-            toolchain.parseProject(arena.allocator(), documents[0]),
+            toolchain_schema.parseProject(arena.allocator(), documents[0]),
         );
     }
 }

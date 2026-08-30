@@ -34,6 +34,7 @@ const validate_workflow_registry = @import("../actions/workflow/validate_workflo
 const workflow_definition_registry_service = @import("workflow_definition_registry_service.zig");
 const bootstrap_services = @import("bootstrap_services.zig");
 const toolchain = @import("../domain/toolchain.zig");
+const toolchain_safety = @import("../domain/toolchain_safety.zig");
 const capture_project_toolchain = @import("../actions/toolchain/capture_project_toolchain.zig");
 const inventory_toolchain_presets = @import("../actions/toolchain/inventory_toolchain_presets.zig");
 const capture_toolchain_presets = @import("../actions/toolchain/capture_toolchain_presets.zig");
@@ -149,7 +150,7 @@ pub const Runner = struct {
     toolchain_registry: ?toolchain.Registry = null,
     resolved_toolchain: ?toolchain.Resolved = null,
     composed_toolchain: ?toolchain.Composed = null,
-    valid_toolchain_owner: ?*toolchain.Owner = null,
+    valid_toolchain_owner: ?*toolchain_safety.Owner = null,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -235,7 +236,7 @@ pub const Runner = struct {
         if (self.validated_log_owner) |owner| logging.deinitOwner(owner);
         if (self.validated_root_owner) |owner| bootstrap_root_registry.deinitOwner(owner);
         if (self.validated_workflow_owner) |owner| workflow.deinitOwner(owner);
-        if (self.valid_toolchain_owner) |owner| toolchain.deinitOwner(owner);
+        if (self.valid_toolchain_owner) |owner| toolchain_safety.deinitOwner(owner);
         self.toolchain_scratch.deinit();
         self.workflow_scratch.deinit();
         self.root_scratch.deinit();

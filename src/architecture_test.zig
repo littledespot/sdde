@@ -3,7 +3,7 @@ const bootstrap_root_registry = @import("domain/bootstrap_root_registry.zig");
 const bootstrap_root_registry_service = @import("application/bootstrap_root_registry_service.zig");
 const workflow_registry = @import("domain/workflow_registry.zig");
 const workflow_registry_service = @import("application/workflow_definition_registry_service.zig");
-const toolchain = @import("domain/toolchain.zig");
+const toolchain_safety = @import("domain/toolchain_safety.zig");
 
 test "every action imports only standard domain and port modules" {
     const io = std.testing.io;
@@ -120,7 +120,7 @@ test "workflow compiler and service preserve their authority boundaries" {
 }
 
 test "toolchain safety authority is opaque and path handoff has one adapter consumer" {
-    switch (@typeInfo(toolchain.ValidToolchain)) {
+    switch (@typeInfo(toolchain_safety.ValidToolchain)) {
         .@"opaque" => {},
         else => return error.ValidToolchainMustBeOpaque,
     }

@@ -1,20 +1,20 @@
-const domain_toolchain = @import("../domain/toolchain.zig");
+const safety = @import("../domain/toolchain_safety.zig");
 pub const ToolChainService = struct {
-    owner: *domain_toolchain.Owner,
-    pub fn init(owner: *domain_toolchain.Owner) ToolChainService {
+    owner: *safety.Owner,
+    pub fn init(owner: *safety.Owner) ToolChainService {
         return .{ .owner = owner };
     }
-    pub fn toolchain(self: *const ToolChainService) *const domain_toolchain.ValidToolchain {
-        return domain_toolchain.value(self.owner);
+    pub fn toolchain(self: *const ToolChainService) *const safety.ValidToolchain {
+        return safety.value(self.owner);
     }
     pub fn deinit(self: *ToolChainService) void {
-        domain_toolchain.deinitOwner(self.owner);
+        safety.deinitOwner(self.owner);
         self.* = undefined;
     }
 };
 
 test "exposes only the same borrowed safety-valid toolchain" {
-    const owner = try domain_toolchain.validateSafety(
+    const owner = try safety.validate(
         @import("std").testing.allocator,
         .{ .packages = &.{}, .policies = &.{} },
         .{ .contracts = &.{
