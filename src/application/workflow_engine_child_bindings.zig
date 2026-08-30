@@ -1,5 +1,5 @@
 const execution = @import("../domain/workflow_execution.zig");
-const workflow = @import("../domain/workflow_registry.zig");
+const workflow = @import("../domain/workflow.zig");
 
 pub const ChildBindings = struct {
     context: *anyopaque,

@@ -1,6 +1,7 @@
 const pipeline = @import("../domain/pipeline.zig");
 const execution = @import("../domain/workflow_execution.zig");
-const workflow = @import("../domain/workflow_registry.zig");
+const workflow = @import("../domain/workflow.zig");
+const compilation = @import("../domain/workflow_compilation.zig");
 
 pub const Error = error{NodeExecutionFailed};
 
@@ -9,7 +10,7 @@ pub const InvocationInput = struct {
 };
 
 pub const NodeInput = struct {
-    node: *const workflow.CompiledNode,
+    node: *const compilation.CompiledNode,
     log: pipeline.WorkflowLog,
 };
 
@@ -57,7 +58,7 @@ pub const Registry = struct {
         return found;
     }
 
-    pub fn matchesCompiler(self: Registry, compiler: workflow.CompilerRegistry) bool {
+    pub fn matchesCompiler(self: Registry, compiler: compilation.CompilerRegistry) bool {
         if (self.invocations.len != compiler.invocations.len or self.nodes.len != compiler.nodes.len) return false;
         for (compiler.invocations) |contract| {
             const id = workflow.RegisteredRef.parse(contract.id) orelse return false;

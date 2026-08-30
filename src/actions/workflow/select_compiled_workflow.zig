@@ -1,8 +1,8 @@
 const execution = @import("../../domain/workflow_execution.zig");
-const workflow = @import("../../domain/workflow_registry.zig");
+const registry = @import("../../domain/workflow_registry.zig");
 
 pub const Action = struct {
-    registry: *const workflow.ValidatedWorkflowDefinitionRegistry,
+    registry: *const registry.ValidatedWorkflowDefinitionRegistry,
 
     pub fn execute(self: Action, invocation: execution.Invocation) execution.InvocationError!execution.SelectedWorkflow {
         return .{

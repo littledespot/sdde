@@ -29,9 +29,9 @@ flowchart TB
     CROOT[Composition root<br/>adapters, registered node bindings,<br/>fixed nonselectable startup graph] --> BO
     CROOT --> BIND
     RUNNER -. first bound child .-> BO[EngineStartupGraph / BootstrapOrchestrator<br/>not present in project workflow registry]
-    BO -. runner-bound workflow authority actions .-> WLOAD[Workflow loader<br/>inventory, capture, parse and schema validation]
-    WLOAD --> WCOMP[Workflow compiler<br/>registered node contracts, typed transitions,<br/>gates and capability ceiling]
-    WCOMP --> WREG[Workflow registry<br/>arbitrary bounded definitions;<br/>unique WorkflowId and shortcode]
+    BO -. runner-bound workflow authority actions .-> WLOAD[Workflow loader<br/>inventory/path accounting and definition schema contracts;<br/>capture, parse and schema validation]
+    WLOAD --> WCOMP[Workflow compiler<br/>compiler contracts and compiled graph types;<br/>registered nodes, typed transitions, gates and capability ceiling]
+    WCOMP --> WREG[Workflow registry<br/>global validation, immutable ownership and exact lookup only;<br/>arbitrary bounded definitions with unique WorkflowId and shortcode]
     WREG --> WSELECT[Parse selector, validate WorkflowId,<br/>then exact registry resolution<br/>through separate runner-bound actions]
     WSELECT -. immutable selected graph .-> ENGINE
     RUNNER -. selected registered invocation-contract node binding .-> INVOKE[Typed run context<br/>before graph entry]

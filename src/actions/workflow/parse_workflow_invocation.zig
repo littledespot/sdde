@@ -1,5 +1,5 @@
 const execution = @import("../../domain/workflow_execution.zig");
-const workflow = @import("../../domain/workflow_registry.zig");
+const workflow = @import("../../domain/workflow.zig");
 
 pub const Action = struct {
     pub fn execute(_: Action, arguments: []const []const u8) execution.InvocationError!execution.Invocation {

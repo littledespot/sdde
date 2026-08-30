@@ -112,6 +112,31 @@ test "workflow compiler and service preserve their authority boundaries" {
     const workflow_domain = @embedFile("domain/workflow_registry.zig");
     try expectAbsent(workflow_domain, "std.json");
     try expectAbsent(workflow_domain, "bounded_yaml_syntax");
+    try expectAbsent(workflow_domain, "validInventoryPath");
+    try expectAbsent(workflow_domain, "classifyInventoryDescriptor");
+    try expectAbsent(workflow_domain, "RawNode");
+    try expectAbsent(workflow_domain, "CompilerRegistry");
+
+    const vocabulary = @embedFile("domain/workflow.zig");
+    try expectAbsent(vocabulary, "InventoryDescriptor");
+    try expectAbsent(vocabulary, "RawDefinition");
+    try expectAbsent(vocabulary, "CompiledWorkflow");
+    try expectAbsent(vocabulary, "ValidatedWorkflowDefinitionRegistry");
+
+    const inventory_domain = @embedFile("domain/workflow_inventory.zig");
+    try expectAbsent(inventory_domain, "RawDefinition");
+    try expectAbsent(inventory_domain, "CompilerRegistry");
+    try expectAbsent(inventory_domain, "CompiledWorkflow");
+
+    const definition_domain = @embedFile("domain/workflow_definition.zig");
+    try expectAbsent(definition_domain, "InventoryDescriptor");
+    try expectAbsent(definition_domain, "CompilerRegistry");
+    try expectAbsent(definition_domain, "ValidatedWorkflowDefinitionRegistry");
+
+    const compilation_domain = @embedFile("domain/workflow_compilation.zig");
+    try expectAbsent(compilation_domain, "InventoryDescriptor");
+    try expectAbsent(compilation_domain, "RawDefinition");
+    try expectAbsent(compilation_domain, "ValidatedWorkflowDefinitionRegistry");
 
     const capture = @embedFile("actions/workflow/capture_workflow_definitions.zig");
     const budget_index = std.mem.indexOf(u8, capture, "validateCaptureBudget") orelse return error.MissingWorkflowCaptureBudget;
@@ -139,6 +164,36 @@ test "toolchain safety authority is opaque and path handoff has one adapter cons
     try std.testing.expect(budget_index < read_index);
     const parser = @embedFile("actions/toolchain/parse_toolchain_documents.zig");
     try expectAbsent(parser, "validateCaptureBudget");
+
+    const contracts = @embedFile("domain/toolchain.zig");
+    try expectAbsent(contracts, "validateCaptureBudget(");
+    try expectAbsent(contracts, "parseProject(");
+    try expectAbsent(contracts, "parseRegistry(");
+    try expectAbsent(contracts, "validateCompleteRegistry(");
+    try expectAbsent(contracts, "pub fn resolve(");
+    try expectAbsent(contracts, "pub fn compose(");
+    try expectAbsent(contracts, "pub fn validate(");
+    try expectAbsent(contracts, "pub const Owner");
+
+    const accounting = @embedFile("domain/toolchain_accounting.zig");
+    try expectAbsent(accounting, "parseProject(");
+    try expectAbsent(accounting, "resolve(");
+    try expectAbsent(accounting, "compose(");
+    const schema = @embedFile("domain/toolchain_schema.zig");
+    try expectAbsent(schema, "validateCaptureBudget(");
+    try expectAbsent(schema, "validateCompleteRegistry(");
+    try expectAbsent(schema, "compose(");
+    const inheritance = @embedFile("domain/toolchain_inheritance.zig");
+    try expectAbsent(inheritance, "parseProject(");
+    try expectAbsent(inheritance, "compose(");
+    const composition = @embedFile("domain/toolchain_composition.zig");
+    try expectAbsent(composition, "parseProject(");
+    try expectAbsent(composition, "resolve(");
+    try expectAbsent(composition, "pub fn validate(");
+    const safety = @embedFile("domain/toolchain_safety.zig");
+    try expectAbsent(safety, "parseProject(");
+    try expectAbsent(safety, "validateCompleteRegistry(");
+    try expectAbsent(safety, "compose(");
 }
 
 test "feature log paths have one opaque artifact authority and one sink consumer" {

@@ -1,7 +1,8 @@
 const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
 const telemetry = @import("../../domain/telemetry.zig");
-const workflow = @import("../../domain/workflow_registry.zig");
+const workflow = @import("../../domain/workflow.zig");
+const definition = @import("../../domain/workflow_definition.zig");
 
 pub const Error = error{WorkflowDefinitionSchemaInvalid};
 
@@ -17,9 +18,9 @@ pub const Action = struct {
     pub fn execute(
         _: Action,
         allocator: std.mem.Allocator,
-        raw_values: []const workflow.RawDefinition,
-    ) Error![]const workflow.Definition {
-        const definitions = allocator.alloc(workflow.Definition, raw_values.len) catch return invalid();
+        raw_values: []const definition.RawDefinition,
+    ) Error![]const definition.Definition {
+        const definitions = allocator.alloc(definition.Definition, raw_values.len) catch return invalid();
         for (raw_values, definitions) |raw, *destination| {
             destination.* = try convert(allocator, raw.ordinal, raw.root);
         }
@@ -46,10 +47,10 @@ const transition_fields = [_][]const u8{ "fromWorkflowNodeId", "outcomeTag", "ta
 fn convert(
     allocator: std.mem.Allocator,
     ordinal: u16,
-    root: *workflow.RawNode,
-) Error!workflow.Definition {
+    root: *definition.RawNode,
+) Error!definition.Definition {
     const map = exactMapping(root, &root_fields) orelse return invalid();
-    if (!stringEquals(field(map, "schemaVersion"), workflow.schema_version)) return invalid();
+    if (!stringEquals(field(map, "schemaVersion"), definition.schema_version)) return invalid();
 
     const workflow_id = workflow.WorkflowId.parse(string(field(map, "workflowId")) orelse return invalid()) orelse return invalid();
     const version_value = integer(field(map, "workflowVersion")) orelse return invalid();
@@ -60,7 +61,7 @@ fn convert(
     const entry = workflow.WorkflowNodeId.parse(string(field(map, "entryWorkflowNodeId")) orelse return invalid()) orelse return invalid();
 
     const raw_nodes = sequence(field(map, "nodes")) orelse return invalid();
-    if (raw_nodes.len == 0 or raw_nodes.len > workflow.max_nodes) return invalid();
+    if (raw_nodes.len == 0 or raw_nodes.len > definition.max_nodes) return invalid();
     const nodes = allocator.alloc(workflow.DeclarativeNode, raw_nodes.len) catch return invalid();
     for (raw_nodes, nodes, 0..) |raw_node, *node, index| {
         node.* = try convertNode(allocator, raw_node);
@@ -71,7 +72,7 @@ fn convert(
     std.mem.sort(workflow.DeclarativeNode, nodes, {}, nodeLessThan);
 
     const raw_transitions = sequence(field(map, "transitions")) orelse return invalid();
-    if (raw_transitions.len == 0 or raw_transitions.len > workflow.max_transitions) return invalid();
+    if (raw_transitions.len == 0 or raw_transitions.len > definition.max_transitions) return invalid();
     const transitions = allocator.alloc(workflow.Transition, raw_transitions.len) catch return invalid();
     for (raw_transitions, transitions) |raw_transition, *transition| {
         transition.* = try convertTransition(raw_transition);
@@ -91,12 +92,12 @@ fn convert(
     };
 }
 
-fn convertNode(allocator: std.mem.Allocator, raw: *workflow.RawNode) Error!workflow.DeclarativeNode {
+fn convertNode(allocator: std.mem.Allocator, raw: *definition.RawNode) Error!workflow.DeclarativeNode {
     const map = exactMapping(raw, &node_fields) orelse return invalid();
     const id = workflow.WorkflowNodeId.parse(string(field(map, "workflowNodeId")) orelse return invalid()) orelse return invalid();
     const contract = workflow.RegisteredRef.parse(string(field(map, "pipelineNodeContractId")) orelse return invalid()) orelse return invalid();
     const raw_parameters = sequence(field(map, "parameters")) orelse return invalid();
-    if (raw_parameters.len > workflow.max_parameters) return invalid();
+    if (raw_parameters.len > definition.max_parameters) return invalid();
     const parameters = allocator.alloc(workflow.ParameterBinding, raw_parameters.len) catch return invalid();
     for (raw_parameters, parameters, 0..) |raw_parameter, *parameter, index| {
         parameter.* = try convertParameter(raw_parameter);
@@ -108,7 +109,7 @@ fn convertNode(allocator: std.mem.Allocator, raw: *workflow.RawNode) Error!workf
     return .{ .id = id, .contract_id = contract, .parameters = parameters };
 }
 
-fn convertParameter(raw: *workflow.RawNode) Error!workflow.ParameterBinding {
+fn convertParameter(raw: *definition.RawNode) Error!workflow.ParameterBinding {
     const map = exactMapping(raw, &parameter_fields) orelse return invalid();
     const id = workflow.WorkflowParameterId.parse(string(field(map, "parameterId")) orelse return invalid()) orelse return invalid();
     const value_map = exactMapping(field(map, "value") orelse return invalid(), &parameter_value_fields) orelse return invalid();
@@ -128,7 +129,7 @@ fn convertParameter(raw: *workflow.RawNode) Error!workflow.ParameterBinding {
     return .{ .id = id, .value = value };
 }
 
-fn convertTransition(raw: *workflow.RawNode) Error!workflow.Transition {
+fn convertTransition(raw: *definition.RawNode) Error!workflow.Transition {
     const map = exactMapping(raw, &transition_fields) orelse return invalid();
     return .{
         .from = workflow.WorkflowNodeId.parse(string(field(map, "fromWorkflowNodeId")) orelse return invalid()) orelse return invalid(),
@@ -137,7 +138,7 @@ fn convertTransition(raw: *workflow.RawNode) Error!workflow.Transition {
     };
 }
 
-fn convertTarget(raw: *workflow.RawNode) Error!workflow.TransitionTarget {
+fn convertTarget(raw: *definition.RawNode) Error!workflow.TransitionTarget {
     const map = mapping(raw) orelse return invalid();
     const kind = string(field(map, "kind")) orelse return invalid();
     if (std.mem.eql(u8, kind, "node")) {
@@ -153,7 +154,7 @@ fn convertTarget(raw: *workflow.RawNode) Error!workflow.TransitionTarget {
     return invalid();
 }
 
-fn exactMapping(node: *workflow.RawNode, expected: []const []const u8) ?[]const workflow.RawPair {
+fn exactMapping(node: *definition.RawNode, expected: []const []const u8) ?[]const definition.RawPair {
     const map = mapping(node) orelse return null;
     if (map.len != expected.len) return null;
     for (map, 0..) |pair, index| {
@@ -167,44 +168,44 @@ fn exactMapping(node: *workflow.RawNode, expected: []const []const u8) ?[]const 
     return map;
 }
 
-fn mapping(node: *workflow.RawNode) ?[]const workflow.RawPair {
+fn mapping(node: *definition.RawNode) ?[]const definition.RawPair {
     return switch (node.*) {
         .mapping => |value| value,
         else => null,
     };
 }
-fn sequence(node: ?*workflow.RawNode) ?[]const *workflow.RawNode {
+fn sequence(node: ?*definition.RawNode) ?[]const *definition.RawNode {
     const present = node orelse return null;
     return switch (present.*) {
         .sequence => |value| value,
         else => null,
     };
 }
-fn string(node: ?*workflow.RawNode) ?[]const u8 {
+fn string(node: ?*definition.RawNode) ?[]const u8 {
     const present = node orelse return null;
     return switch (present.*) {
         .scalar => |value| value,
         else => null,
     };
 }
-fn integer(node: ?*workflow.RawNode) ?i128 {
+fn integer(node: ?*definition.RawNode) ?i128 {
     const present = node orelse return null;
     return switch (present.*) {
         .integer => |value| value,
         else => null,
     };
 }
-fn boolean(node: ?*workflow.RawNode) ?bool {
+fn boolean(node: ?*definition.RawNode) ?bool {
     const present = node orelse return null;
     return switch (present.*) {
         .boolean => |value| value,
         else => null,
     };
 }
-fn stringEquals(node: ?*workflow.RawNode, expected: []const u8) bool {
+fn stringEquals(node: ?*definition.RawNode, expected: []const u8) bool {
     return if (string(node)) |actual| std.mem.eql(u8, actual, expected) else false;
 }
-fn field(map: []const workflow.RawPair, name: []const u8) ?*workflow.RawNode {
+fn field(map: []const definition.RawPair, name: []const u8) ?*definition.RawNode {
     for (map) |pair| {
         const key = string(pair.key) orelse return null;
         if (std.mem.eql(u8, key, name)) return pair.value;
@@ -232,42 +233,42 @@ fn invalid() Error {
 const RawBuilder = struct {
     allocator: std.mem.Allocator,
 
-    fn scalar(self: RawBuilder, value: []const u8) !*workflow.RawNode {
-        const node = try self.allocator.create(workflow.RawNode);
+    fn scalar(self: RawBuilder, value: []const u8) !*definition.RawNode {
+        const node = try self.allocator.create(definition.RawNode);
         node.* = .{ .scalar = value };
         return node;
     }
-    fn integer(self: RawBuilder, value: i128) !*workflow.RawNode {
-        const node = try self.allocator.create(workflow.RawNode);
+    fn integer(self: RawBuilder, value: i128) !*definition.RawNode {
+        const node = try self.allocator.create(definition.RawNode);
         node.* = .{ .integer = value };
         return node;
     }
-    fn boolean(self: RawBuilder, value: bool) !*workflow.RawNode {
-        const node = try self.allocator.create(workflow.RawNode);
+    fn boolean(self: RawBuilder, value: bool) !*definition.RawNode {
+        const node = try self.allocator.create(definition.RawNode);
         node.* = .{ .boolean = value };
         return node;
     }
-    fn nullValue(self: RawBuilder) !*workflow.RawNode {
-        const node = try self.allocator.create(workflow.RawNode);
+    fn nullValue(self: RawBuilder) !*definition.RawNode {
+        const node = try self.allocator.create(definition.RawNode);
         node.* = .null_value;
         return node;
     }
-    fn sequence(self: RawBuilder, values: []const *workflow.RawNode) !*workflow.RawNode {
-        const node = try self.allocator.create(workflow.RawNode);
-        node.* = .{ .sequence = try self.allocator.dupe(*workflow.RawNode, values) };
+    fn sequence(self: RawBuilder, values: []const *definition.RawNode) !*definition.RawNode {
+        const node = try self.allocator.create(definition.RawNode);
+        node.* = .{ .sequence = try self.allocator.dupe(*definition.RawNode, values) };
         return node;
     }
-    fn mapping(self: RawBuilder, pairs: []const workflow.RawPair) !*workflow.RawNode {
-        const node = try self.allocator.create(workflow.RawNode);
-        node.* = .{ .mapping = try self.allocator.dupe(workflow.RawPair, pairs) };
+    fn mapping(self: RawBuilder, pairs: []const definition.RawPair) !*definition.RawNode {
+        const node = try self.allocator.create(definition.RawNode);
+        node.* = .{ .mapping = try self.allocator.dupe(definition.RawPair, pairs) };
         return node;
     }
-    fn pair(self: RawBuilder, key: []const u8, value: *workflow.RawNode) !workflow.RawPair {
+    fn pair(self: RawBuilder, key: []const u8, value: *definition.RawNode) !definition.RawPair {
         return .{ .key = try self.scalar(key), .value = value };
     }
 };
 
-fn minimalRaw(builder: RawBuilder, add_unknown: bool) !*workflow.RawNode {
+fn minimalRaw(builder: RawBuilder, add_unknown: bool) !*definition.RawNode {
     const empty = try builder.sequence(&.{});
     const node = try builder.mapping(&.{
         try builder.pair("workflowNodeId", try builder.scalar("run")),
@@ -285,7 +286,7 @@ fn minimalRaw(builder: RawBuilder, add_unknown: bool) !*workflow.RawNode {
         try builder.pair("target", target),
     });
     const transitions = try builder.sequence(&.{transition});
-    var pairs: std.ArrayList(workflow.RawPair) = .empty;
+    var pairs: std.ArrayList(definition.RawPair) = .empty;
     try pairs.append(builder.allocator, try builder.pair("schemaVersion", try builder.scalar("1.0")));
     try pairs.append(builder.allocator, try builder.pair("workflowId", try builder.scalar("hello")));
     try pairs.append(builder.allocator, try builder.pair("workflowVersion", try builder.integer(1)));
@@ -303,7 +304,7 @@ test "converts the closed minimal raw schema" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const builder: RawBuilder = .{ .allocator = arena.allocator() };
-    const raw = [_]workflow.RawDefinition{.{ .ordinal = 1, .root = try minimalRaw(builder, false) }};
+    const raw = [_]definition.RawDefinition{.{ .ordinal = 1, .root = try minimalRaw(builder, false) }};
     const values = try (Action{}).execute(arena.allocator(), &raw);
     try std.testing.expectEqualStrings("hello", values[0].workflow_id.bytes);
 }
@@ -312,13 +313,13 @@ test "rejects unknown fields and YAML scalar kind mismatches" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const builder: RawBuilder = .{ .allocator = arena.allocator() };
-    const unknown = [_]workflow.RawDefinition{.{ .ordinal = 1, .root = try minimalRaw(builder, true) }};
+    const unknown = [_]definition.RawDefinition{.{ .ordinal = 1, .root = try minimalRaw(builder, true) }};
     try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, (Action{}).execute(arena.allocator(), &unknown));
 
     const wrong_kind_root = try minimalRaw(builder, false);
     const version = field(mapping(wrong_kind_root).?, "workflowVersion").?;
     version.* = .{ .scalar = "1" };
-    const wrong_kind = [_]workflow.RawDefinition{.{ .ordinal = 1, .root = wrong_kind_root }};
+    const wrong_kind = [_]definition.RawDefinition{.{ .ordinal = 1, .root = wrong_kind_root }};
     try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, (Action{}).execute(arena.allocator(), &wrong_kind));
 }
 
@@ -332,7 +333,7 @@ test "rejects missing fields versions malformed identifiers and empty graph sequ
     missing_root.* = .{ .mapping = missing_map[0 .. missing_map.len - 1] };
     try expectInvalid(missing_root);
 
-    const invalid_cases = [_]struct { field_name: []const u8, value: *workflow.RawNode }{
+    const invalid_cases = [_]struct { field_name: []const u8, value: *definition.RawNode }{
         .{ .field_name = "schemaVersion", .value = try builder.scalar("2.0") },
         .{ .field_name = "workflowId", .value = try builder.scalar("Hello") },
         .{ .field_name = "workflowVersion", .value = try builder.integer(0) },
@@ -359,7 +360,7 @@ test "every closed mapping rejects missing wrong-kind and prohibited fields" {
     for (root_fields) |field_name| {
         const missing_root = try minimalRaw(builder, false);
         const source = mapping(missing_root).?;
-        const reduced = try arena.allocator().alloc(workflow.RawPair, source.len - 1);
+        const reduced = try arena.allocator().alloc(definition.RawPair, source.len - 1);
         var destination: usize = 0;
         for (source) |pair_value| {
             if (std.mem.eql(u8, string(pair_value.key).?, field_name)) continue;
@@ -378,7 +379,7 @@ test "every closed mapping rejects missing wrong-kind and prohibited fields" {
     for (prohibited) |field_name| {
         const root = try minimalRaw(builder, false);
         const source = mapping(root).?;
-        const expanded = try arena.allocator().alloc(workflow.RawPair, source.len + 1);
+        const expanded = try arena.allocator().alloc(definition.RawPair, source.len + 1);
         @memcpy(expanded[0..source.len], source);
         expanded[source.len] = try builder.pair(field_name, try builder.scalar("forbidden"));
         root.* = .{ .mapping = expanded };
@@ -421,7 +422,7 @@ test "parameter variants are closed bounded and locally unique" {
     const builder: RawBuilder = .{ .allocator = arena.allocator() };
     const root = try minimalRaw(builder, false);
     const node = sequence(field(mapping(root).?, "nodes")).?[0];
-    const parameters = [_]*workflow.RawNode{
+    const parameters = [_]*definition.RawNode{
         try rawParameter(builder, "flag", "boolean", try builder.boolean(true)),
         try rawParameter(builder, "minimum", "integer", try builder.integer(std.math.minInt(i64))),
         try rawParameter(builder, "mode", "enum", try builder.scalar("safe-mode")),
@@ -436,7 +437,7 @@ test "parameter variants are closed bounded and locally unique" {
     field(mapping(duplicate_node).?, "parameters").?.* = .{ .sequence = &.{ repeated, repeated } };
     try expectInvalid(duplicate);
 
-    const invalid_values = [_]struct { kind: []const u8, value: *workflow.RawNode }{
+    const invalid_values = [_]struct { kind: []const u8, value: *definition.RawNode }{
         .{ .kind = "integer", .value = try builder.integer(@as(i128, std.math.maxInt(i64)) + 1) },
         .{ .kind = "enum", .value = try builder.scalar("Not-Kebab") },
         .{ .kind = "registered_id", .value = try builder.scalar("core.profile@0") },
@@ -458,13 +459,13 @@ test "schema sequence limits accept exact bounds and reject one more" {
     const builder: RawBuilder = .{ .allocator = arena.allocator() };
 
     const exact_nodes_root = try minimalRaw(builder, false);
-    const exact_nodes = try arena.allocator().alloc(*workflow.RawNode, workflow.max_nodes);
+    const exact_nodes = try arena.allocator().alloc(*definition.RawNode, definition.max_nodes);
     for (exact_nodes, 0..) |*node, index| node.* = try rawNode(builder, try std.fmt.allocPrint(arena.allocator(), "n{d}", .{index}), &.{});
     field(mapping(exact_nodes_root).?, "nodes").?.* = .{ .sequence = exact_nodes };
     _ = try (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = exact_nodes_root }});
 
     const too_many_nodes_root = try minimalRaw(builder, false);
-    const too_many_nodes = try arena.allocator().alloc(*workflow.RawNode, workflow.max_nodes + 1);
+    const too_many_nodes = try arena.allocator().alloc(*definition.RawNode, definition.max_nodes + 1);
     @memset(too_many_nodes, exact_nodes[0]);
     field(mapping(too_many_nodes_root).?, "nodes").?.* = .{ .sequence = too_many_nodes };
     try expectInvalid(too_many_nodes_root);
@@ -476,7 +477,7 @@ test "schema sequence limits accept exact bounds and reject one more" {
 
     const exact_parameters_root = try minimalRaw(builder, false);
     const exact_parameters_node = sequence(field(mapping(exact_parameters_root).?, "nodes")).?[0];
-    const exact_parameters = try arena.allocator().alloc(*workflow.RawNode, workflow.max_parameters);
+    const exact_parameters = try arena.allocator().alloc(*definition.RawNode, definition.max_parameters);
     for (exact_parameters, 0..) |*parameter, index| parameter.* = try rawParameter(
         builder,
         try std.fmt.allocPrint(arena.allocator(), "p{d}", .{index}),
@@ -485,24 +486,24 @@ test "schema sequence limits accept exact bounds and reject one more" {
     );
     field(mapping(exact_parameters_node).?, "parameters").?.* = .{ .sequence = exact_parameters };
     _ = try (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = exact_parameters_root }});
-    const too_many_parameters = try arena.allocator().alloc(*workflow.RawNode, workflow.max_parameters + 1);
+    const too_many_parameters = try arena.allocator().alloc(*definition.RawNode, definition.max_parameters + 1);
     @memset(too_many_parameters, exact_parameters[0]);
     field(mapping(exact_parameters_node).?, "parameters").?.* = .{ .sequence = too_many_parameters };
     try expectInvalid(exact_parameters_root);
 
     const exact_transitions_root = try minimalRaw(builder, false);
     const transition = sequence(field(mapping(exact_transitions_root).?, "transitions")).?[0];
-    const exact_transitions = try arena.allocator().alloc(*workflow.RawNode, workflow.max_transitions);
+    const exact_transitions = try arena.allocator().alloc(*definition.RawNode, definition.max_transitions);
     @memset(exact_transitions, transition);
     field(mapping(exact_transitions_root).?, "transitions").?.* = .{ .sequence = exact_transitions };
     _ = try (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = exact_transitions_root }});
-    const too_many_transitions = try arena.allocator().alloc(*workflow.RawNode, workflow.max_transitions + 1);
+    const too_many_transitions = try arena.allocator().alloc(*definition.RawNode, definition.max_transitions + 1);
     @memset(too_many_transitions, transition);
     field(mapping(exact_transitions_root).?, "transitions").?.* = .{ .sequence = too_many_transitions };
     try expectInvalid(exact_transitions_root);
 }
 
-fn expectInvalid(root: *workflow.RawNode) !void {
+fn expectInvalid(root: *definition.RawNode) !void {
     var scratch = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer scratch.deinit();
     try std.testing.expectError(
@@ -511,7 +512,7 @@ fn expectInvalid(root: *workflow.RawNode) !void {
     );
 }
 
-fn rawNode(builder: RawBuilder, id: []const u8, parameters: []const *workflow.RawNode) !*workflow.RawNode {
+fn rawNode(builder: RawBuilder, id: []const u8, parameters: []const *definition.RawNode) !*definition.RawNode {
     return builder.mapping(&.{
         try builder.pair("workflowNodeId", try builder.scalar(id)),
         try builder.pair("pipelineNodeContractId", try builder.scalar("core.noop@1")),
@@ -519,7 +520,7 @@ fn rawNode(builder: RawBuilder, id: []const u8, parameters: []const *workflow.Ra
     });
 }
 
-fn rawParameter(builder: RawBuilder, id: []const u8, kind: []const u8, value: *workflow.RawNode) !*workflow.RawNode {
+fn rawParameter(builder: RawBuilder, id: []const u8, kind: []const u8, value: *definition.RawNode) !*definition.RawNode {
     const tagged = try builder.mapping(&.{
         try builder.pair("kind", try builder.scalar(kind)),
         try builder.pair("value", value),
@@ -530,9 +531,9 @@ fn rawParameter(builder: RawBuilder, id: []const u8, kind: []const u8, value: *w
     });
 }
 
-fn appendUnknownField(builder: RawBuilder, node: *workflow.RawNode, name: []const u8) !void {
+fn appendUnknownField(builder: RawBuilder, node: *definition.RawNode, name: []const u8) !void {
     const source = mapping(node) orelse return error.ExpectedMapping;
-    const expanded = try builder.allocator.alloc(workflow.RawPair, source.len + 1);
+    const expanded = try builder.allocator.alloc(definition.RawPair, source.len + 1);
     @memcpy(expanded[0..source.len], source);
     expanded[source.len] = try builder.pair(name, try builder.scalar("forbidden"));
     node.* = .{ .mapping = expanded };

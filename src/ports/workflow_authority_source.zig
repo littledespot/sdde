@@ -1,7 +1,7 @@
 const std = @import("std");
 const bootstrap_root_registry = @import("../domain/bootstrap_root_registry.zig");
 const pipeline = @import("../domain/pipeline.zig");
-const workflow = @import("../domain/workflow_registry.zig");
+const inventory = @import("../domain/workflow_inventory.zig");
 
 pub const Error = error{ Cancelled, DeadlineExhausted, InventoryInvalid, DefinitionReadError };
 pub const Source = struct {
@@ -11,11 +11,11 @@ pub const Source = struct {
         *const bootstrap_root_registry.ConfiguredBaseRootCapability,
         std.mem.Allocator,
         pipeline.NodeRuntime,
-    ) Error![]workflow.InventoryDescriptor,
+    ) Error![]inventory.InventoryDescriptor,
     capture_fn: *const fn (
         *anyopaque,
         *const bootstrap_root_registry.ConfiguredBaseRootCapability,
-        workflow.InventoryDescriptor,
+        inventory.InventoryDescriptor,
         std.mem.Allocator,
         pipeline.NodeRuntime,
     ) Error![]const u8,
@@ -25,13 +25,13 @@ pub const Source = struct {
         capability: *const bootstrap_root_registry.ConfiguredBaseRootCapability,
         allocator: std.mem.Allocator,
         runtime: pipeline.NodeRuntime,
-    ) Error![]workflow.InventoryDescriptor {
+    ) Error![]inventory.InventoryDescriptor {
         return self.enumerate_fn(self.context, capability, allocator, runtime);
     }
     pub fn capture(
         self: Source,
         capability: *const bootstrap_root_registry.ConfiguredBaseRootCapability,
-        descriptor: workflow.InventoryDescriptor,
+        descriptor: inventory.InventoryDescriptor,
         allocator: std.mem.Allocator,
         runtime: pipeline.NodeRuntime,
     ) Error![]const u8 {

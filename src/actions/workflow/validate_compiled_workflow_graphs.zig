@@ -1,6 +1,8 @@
 const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
-const workflow = @import("../../domain/workflow_registry.zig");
+const workflow = @import("../../domain/workflow.zig");
+const definition = @import("../../domain/workflow_definition.zig");
+const compilation = @import("../../domain/workflow_compilation.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
@@ -16,8 +18,8 @@ pub const Action = struct {
     pub fn execute(
         _: Action,
         allocator: std.mem.Allocator,
-        graphs: []const workflow.CompiledWorkflow,
-    ) Error!workflow.ValidatedGraphs {
+        graphs: []const compilation.CompiledWorkflow,
+    ) Error!compilation.ValidatedGraphs {
         for (graphs) |graph| try validateGraph(allocator, graph);
         return .{ .values = graphs };
     }
@@ -26,9 +28,9 @@ pub const Action = struct {
 const key_count = @typeInfo(pipeline.DataKey).@"enum".fields.len;
 const KeyState = [key_count]bool;
 
-fn validateGraph(allocator: std.mem.Allocator, graph: workflow.CompiledWorkflow) Error!void {
+fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkflow) Error!void {
     const nodes = graph.authority.nodes;
-    if (nodes.len == 0 or nodes.len > workflow.max_nodes) return invalid();
+    if (nodes.len == 0 or nodes.len > definition.max_nodes) return invalid();
     const entry = nodeIndex(nodes, graph.authority.entry_node_id.bytes) orelse return invalid();
     const colors = allocator.alloc(u2, nodes.len) catch return invalid();
     @memset(colors, 0);
@@ -68,7 +70,7 @@ fn validateGraph(allocator: std.mem.Allocator, graph: workflow.CompiledWorkflow)
 }
 
 fn visit(
-    nodes: []const workflow.CompiledNode,
+    nodes: []const compilation.CompiledNode,
     transitions: []const workflow.Transition,
     index: usize,
     colors: []u2,
@@ -97,7 +99,7 @@ fn visit(
 }
 
 fn reachesTerminal(
-    nodes: []const workflow.CompiledNode,
+    nodes: []const compilation.CompiledNode,
     transitions: []const workflow.Transition,
     index: usize,
     memo: []u2,
@@ -123,7 +125,7 @@ fn reachesTerminal(
     return result;
 }
 
-fn applyDataContract(input: KeyState, node: workflow.CompiledNode) Error!KeyState {
+fn applyDataContract(input: KeyState, node: compilation.CompiledNode) Error!KeyState {
     var result = input;
     for (node.requires) |key| if (!input[@intFromEnum(key)]) return invalid();
     for (node.produces) |key| {
@@ -138,7 +140,7 @@ fn applyDataContract(input: KeyState, node: workflow.CompiledNode) Error!KeyStat
     return result;
 }
 
-fn nodeIndex(nodes: []const workflow.CompiledNode, expected: []const u8) ?usize {
+fn nodeIndex(nodes: []const compilation.CompiledNode, expected: []const u8) ?usize {
     for (nodes, 0..) |node, index| if (std.mem.eql(u8, node.id.bytes, expected)) return index;
     return null;
 }
@@ -149,7 +151,7 @@ fn invalid() Error {
 test "graph validator rejects cycles and unreachable registered nodes" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const nodes = [_]workflow.CompiledNode{
+    const nodes = [_]compilation.CompiledNode{
         .{ .id = workflow.WorkflowNodeId.parse("one").?, .contract_id = workflow.RegisteredRef.parse("core.one@1").?, .parameters = &.{}, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{.ok}, .side_effect = .none, .gates = &.{}, .capabilities = &.{} },
         .{ .id = workflow.WorkflowNodeId.parse("two").?, .contract_id = workflow.RegisteredRef.parse("core.two@1").?, .parameters = &.{}, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{.ok}, .side_effect = .none, .gates = &.{}, .capabilities = &.{} },
     };
@@ -157,7 +159,7 @@ test "graph validator rejects cycles and unreachable registered nodes" {
         .{ .from = nodes[0].id, .outcome = .ok, .target = .{ .node = nodes[1].id } },
         .{ .from = nodes[1].id, .outcome = .ok, .target = .{ .node = nodes[0].id } },
     };
-    const graph: workflow.CompiledWorkflow = .{
+    const graph: compilation.CompiledWorkflow = .{
         .source_ordinal = 1,
         .shortcode = @import("../../domain/telemetry.zig").WorkflowShortcode.parse("TEST") catch unreachable,
         .authority = .{
@@ -182,8 +184,8 @@ test "graph validator rejects cycles and unreachable registered nodes" {
 test "graph validator enforces the variable-size node boundary" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const nodes = try arena.allocator().alloc(workflow.CompiledNode, workflow.max_nodes + 1);
-    const node: workflow.CompiledNode = .{
+    const nodes = try arena.allocator().alloc(compilation.CompiledNode, definition.max_nodes + 1);
+    const node: compilation.CompiledNode = .{
         .id = workflow.WorkflowNodeId.parse("node").?,
         .contract_id = workflow.RegisteredRef.parse("core.noop@1").?,
         .parameters = &.{},
@@ -197,7 +199,7 @@ test "graph validator enforces the variable-size node boundary" {
         .capabilities = &.{},
     };
     @memset(nodes, node);
-    const graph: workflow.CompiledWorkflow = .{
+    const graph: compilation.CompiledWorkflow = .{
         .source_ordinal = 1,
         .shortcode = @import("../../domain/telemetry.zig").WorkflowShortcode.parse("SIZE") catch unreachable,
         .authority = .{
@@ -272,7 +274,7 @@ fn compiledNode(
     replaces: []const pipeline.DataKey,
     invalidates: []const pipeline.DataKey,
     outcomes: []const workflow.OutcomeTag,
-) workflow.CompiledNode {
+) compilation.CompiledNode {
     return .{
         .id = workflow.WorkflowNodeId.parse(id).?,
         .contract_id = workflow.RegisteredRef.parse("core.noop@1").?,
@@ -289,11 +291,11 @@ fn compiledNode(
 }
 
 fn testGraph(
-    nodes: []const workflow.CompiledNode,
+    nodes: []const compilation.CompiledNode,
     transitions: []const workflow.Transition,
     entry: workflow.WorkflowNodeId,
     invocation_outputs: []const pipeline.DataKey,
-) workflow.CompiledWorkflow {
+) compilation.CompiledWorkflow {
     return .{
         .source_ordinal = 1,
         .shortcode = @import("../../domain/telemetry.zig").WorkflowShortcode.parse("FLOW") catch unreachable,

@@ -1,6 +1,7 @@
 const std = @import("std");
 const syntax = @import("bounded_yaml_syntax");
-const workflow = @import("../../domain/workflow_registry.zig");
+const workflow_definition = @import("../../domain/workflow_definition.zig");
+const inventory = @import("../../domain/workflow_inventory.zig");
 const parser_port = @import("../../ports/workflow_definition_parser.zig");
 
 pub const Adapter = struct {
@@ -11,9 +12,9 @@ pub const Adapter = struct {
     fn parse(
         _: *anyopaque,
         allocator: std.mem.Allocator,
-        captures: []const workflow.Capture,
-    ) parser_port.Error![]const workflow.RawDefinition {
-        const definitions = allocator.alloc(workflow.RawDefinition, captures.len) catch {
+        captures: []const inventory.Capture,
+    ) parser_port.Error![]const workflow_definition.RawDefinition {
+        const definitions = allocator.alloc(workflow_definition.RawDefinition, captures.len) catch {
             return error.InvalidWorkflowDefinition;
         };
         for (captures, definitions) |capture, *definition| {
@@ -24,11 +25,11 @@ pub const Adapter = struct {
             }
             var diagnostic: syntax.Diagnostic = .{};
             var loaded = syntax.parse(allocator, capture.bytes, .{
-                .max_input_bytes = workflow.max_definition_bytes,
-                .max_event_count = workflow.max_yaml_events,
-                .max_token_count = workflow.max_yaml_tokens,
-                .max_nesting_depth = workflow.max_yaml_nesting_depth,
-                .max_scalar_bytes = workflow.max_yaml_scalar_bytes,
+                .max_input_bytes = workflow_definition.max_definition_bytes,
+                .max_event_count = workflow_definition.max_yaml_events,
+                .max_token_count = workflow_definition.max_yaml_tokens,
+                .max_nesting_depth = workflow_definition.max_yaml_nesting_depth,
+                .max_scalar_bytes = workflow_definition.max_yaml_scalar_bytes,
             }, &diagnostic) catch return error.InvalidWorkflowDefinition;
             defer loaded.deinit();
             if (loaded.root.* != .mapping) return error.InvalidWorkflowDefinition;
@@ -43,8 +44,8 @@ pub const Adapter = struct {
     }
 };
 
-fn convert(allocator: std.mem.Allocator, source: *const syntax.Node) !*workflow.RawNode {
-    const destination = try allocator.create(workflow.RawNode);
+fn convert(allocator: std.mem.Allocator, source: *const syntax.Node) !*workflow_definition.RawNode {
+    const destination = try allocator.create(workflow_definition.RawNode);
     destination.* = switch (source.*) {
         .null_value => .null_value,
         .bool_value => |value| .{ .boolean = value.value },
@@ -52,14 +53,14 @@ fn convert(allocator: std.mem.Allocator, source: *const syntax.Node) !*workflow.
         .float_value => |value| .{ .float = value.value },
         .scalar => |value| .{ .scalar = try allocator.dupe(u8, value.value) },
         .sequence => |sequence| blk: {
-            const items = try allocator.alloc(*workflow.RawNode, sequence.items.len);
+            const items = try allocator.alloc(*workflow_definition.RawNode, sequence.items.len);
             for (sequence.items, items) |item, *converted| {
                 converted.* = try convert(allocator, item);
             }
             break :blk .{ .sequence = items };
         },
         .mapping => |mapping| blk: {
-            const pairs = try allocator.alloc(workflow.RawPair, mapping.pairs.len);
+            const pairs = try allocator.alloc(workflow_definition.RawPair, mapping.pairs.len);
             for (mapping.pairs, pairs) |pair, *converted| {
                 converted.* = .{
                     .key = try convert(allocator, pair.key),
@@ -77,7 +78,7 @@ test "parses strict YAML into a workflow-owned raw value" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var adapter: Adapter = .{};
-    const captures = [_]workflow.Capture{.{
+    const captures = [_]inventory.Capture{.{
         .ordinal = 1,
         .bytes =
         \\schemaVersion: "1.0"
@@ -111,14 +112,14 @@ test "rejects duplicate keys aliases custom tags multiple documents and scalar o
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
         var adapter: Adapter = .{};
-        const captures = [_]workflow.Capture{.{ .ordinal = 1, .bytes = bytes }};
+        const captures = [_]inventory.Capture{.{ .ordinal = 1, .bytes = bytes }};
         try std.testing.expectError(
             error.InvalidWorkflowDefinition,
             adapter.parser().parse(arena.allocator(), &captures),
         );
     }
 
-    const exact = try std.testing.allocator.alloc(u8, workflow.max_yaml_scalar_bytes);
+    const exact = try std.testing.allocator.alloc(u8, workflow_definition.max_yaml_scalar_bytes);
     defer std.testing.allocator.free(exact);
     @memset(exact, 'a');
     const exact_bytes = try std.fmt.allocPrint(std.testing.allocator, "value: {s}\n", .{exact});
@@ -126,10 +127,10 @@ test "rejects duplicate keys aliases custom tags multiple documents and scalar o
     var exact_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer exact_arena.deinit();
     var exact_adapter: Adapter = .{};
-    const exact_capture = [_]workflow.Capture{.{ .ordinal = 1, .bytes = exact_bytes }};
+    const exact_capture = [_]inventory.Capture{.{ .ordinal = 1, .bytes = exact_bytes }};
     _ = try exact_adapter.parser().parse(exact_arena.allocator(), &exact_capture);
 
-    const oversized = try std.testing.allocator.alloc(u8, workflow.max_yaml_scalar_bytes + 1);
+    const oversized = try std.testing.allocator.alloc(u8, workflow_definition.max_yaml_scalar_bytes + 1);
     defer std.testing.allocator.free(oversized);
     @memset(oversized, 'a');
     const bytes = try std.fmt.allocPrint(std.testing.allocator, "value: {s}\n", .{oversized});
@@ -137,7 +138,7 @@ test "rejects duplicate keys aliases custom tags multiple documents and scalar o
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var adapter: Adapter = .{};
-    const captures = [_]workflow.Capture{.{ .ordinal = 1, .bytes = bytes }};
+    const captures = [_]inventory.Capture{.{ .ordinal = 1, .bytes = bytes }};
     try std.testing.expectError(
         error.InvalidWorkflowDefinition,
         adapter.parser().parse(arena.allocator(), &captures),
@@ -169,14 +170,14 @@ test "comments and equivalent block and flow YAML have identical raw authority" 
 }
 
 test "workflow YAML nesting accepts the exact limit and rejects one more" {
-    const exact = try nestedMapping(std.testing.allocator, workflow.max_yaml_nesting_depth);
+    const exact = try nestedMapping(std.testing.allocator, workflow_definition.max_yaml_nesting_depth);
     defer std.testing.allocator.free(exact);
     var exact_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer exact_arena.deinit();
     var adapter: Adapter = .{};
     _ = try adapter.parser().parse(exact_arena.allocator(), &.{.{ .ordinal = 1, .bytes = exact }});
 
-    const exceeded = try nestedMapping(std.testing.allocator, workflow.max_yaml_nesting_depth + 1);
+    const exceeded = try nestedMapping(std.testing.allocator, workflow_definition.max_yaml_nesting_depth + 1);
     defer std.testing.allocator.free(exceeded);
     var exceeded_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer exceeded_arena.deinit();

@@ -7,7 +7,11 @@ const file_identity = @import("adapters/filesystem/file_identity.zig");
 const bootstrap_registry = @import("domain/bootstrap_root_registry.zig");
 const bootstrap_roots = @import("domain/bootstrap_roots.zig");
 const pipeline = @import("domain/pipeline.zig");
-const workflow = @import("domain/workflow_registry.zig");
+const workflow = @import("domain/workflow.zig");
+const workflow_definition = @import("domain/workflow_definition.zig");
+const workflow_compilation = @import("domain/workflow_compilation.zig");
+const workflow_inventory = @import("domain/workflow_inventory.zig");
+const registry = @import("domain/workflow_registry.zig");
 const source_port = @import("ports/workflow_authority_source.zig");
 
 test "workflow inventory enforces definition and entry cardinality boundaries" {
@@ -21,16 +25,16 @@ test "workflow inventory enforces definition and entry cardinality boundaries" {
     const empty = try (inventory_action.Action{ .source = fake.port() }).execute(allocator, .{ .capability = capability }, .{});
     try std.testing.expectEqual(@as(usize, 0), empty.definition_ordinals.len);
 
-    fake.descriptors = try definitionDescriptors(allocator, workflow.max_definitions);
+    fake.descriptors = try definitionDescriptors(allocator, workflow_definition.max_definitions);
     const exact = try (inventory_action.Action{ .source = fake.port() }).execute(allocator, .{ .capability = capability }, .{});
-    try std.testing.expectEqual(workflow.max_definitions, exact.definition_ordinals.len);
-    fake.descriptors = try definitionDescriptors(allocator, workflow.max_definitions + 1);
+    try std.testing.expectEqual(workflow_definition.max_definitions, exact.definition_ordinals.len);
+    fake.descriptors = try definitionDescriptors(allocator, workflow_definition.max_definitions + 1);
     try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, (inventory_action.Action{ .source = fake.port() }).execute(allocator, .{ .capability = capability }, .{}));
 
-    fake.descriptors = try directoryDescriptors(allocator, workflow.max_inventory_entries);
+    fake.descriptors = try directoryDescriptors(allocator, workflow_inventory.max_inventory_entries);
     const exact_entries = try (inventory_action.Action{ .source = fake.port() }).execute(allocator, .{ .capability = capability }, .{});
-    try std.testing.expectEqual(workflow.max_inventory_entries, exact_entries.descriptors.len);
-    fake.descriptors = try directoryDescriptors(allocator, workflow.max_inventory_entries + 1);
+    try std.testing.expectEqual(workflow_inventory.max_inventory_entries, exact_entries.descriptors.len);
+    fake.descriptors = try directoryDescriptors(allocator, workflow_inventory.max_inventory_entries + 1);
     try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, (inventory_action.Action{ .source = fake.port() }).execute(allocator, .{ .capability = capability }, .{}));
 }
 
@@ -38,7 +42,7 @@ test "workflow inventory sorts adapter order and preserves contiguous accounts" 
     const root_owner = try createRootOwner(std.testing.allocator, .{ .filesystem_id = 1, .file_id = 99 });
     defer bootstrap_registry.deinitOwner(root_owner);
     const capability = bootstrap_registry.registry(root_owner).workflowAuthority();
-    const values = [_]workflow.InventoryDescriptor{
+    const values = [_]workflow_inventory.InventoryDescriptor{
         descriptor("z.workflow.yaml", .file, 1, 1),
         descriptor("a", .directory, 2, null),
         descriptor("m.workflow.yaml", .file, 3, 1),
@@ -88,15 +92,15 @@ test "filesystem inventory excludes exact reserved descendants and enforces dept
     defer arena.deinit();
     const inventory = try (inventory_action.Action{ .source = adapter.source() }).execute(arena.allocator(), .{ .capability = capability }, .{});
     try std.testing.expectEqual(@as(usize, 3), inventory.descriptors.len);
-    try std.testing.expectEqual(workflow.Disposition.reserved_child, inventory.accounts[0].disposition);
-    try std.testing.expectEqual(workflow.Disposition.definition, inventory.accounts[1].disposition);
-    try std.testing.expectEqual(workflow.Disposition.reserved_child, inventory.accounts[2].disposition);
+    try std.testing.expectEqual(workflow_inventory.Disposition.reserved_child, inventory.accounts[0].disposition);
+    try std.testing.expectEqual(workflow_inventory.Disposition.definition, inventory.accounts[1].disposition);
+    try std.testing.expectEqual(workflow_inventory.Disposition.reserved_child, inventory.accounts[2].disposition);
     for (inventory.descriptors) |item| try std.testing.expect(std.mem.indexOf(u8, item.path, "private") == null);
 
     var depth_path: std.ArrayList(u8) = .empty;
     defer depth_path.deinit(std.testing.allocator);
     try depth_path.appendSlice(std.testing.allocator, "workflows");
-    for (0..workflow.max_inventory_depth) |_| try depth_path.appendSlice(std.testing.allocator, "/d");
+    for (0..workflow_inventory.max_inventory_depth) |_| try depth_path.appendSlice(std.testing.allocator, "/d");
     try project.dir.createDirPath(io, depth_path.items);
     var exact_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer exact_arena.deinit();
@@ -142,7 +146,7 @@ test "capture budget is enforced before any definition read" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const descriptors = try definitionDescriptors(arena.allocator(), 17);
-    for (descriptors, 0..) |*item, index| item.size = if (index < 16) workflow.max_definition_bytes else 1;
+    for (descriptors, 0..) |*item, index| item.size = if (index < 16) workflow_definition.max_definition_bytes else 1;
     var fake: FakeSource = .{ .descriptors = descriptors };
     const inventory = try (inventory_action.Action{ .source = fake.port() }).execute(arena.allocator(), .{ .capability = capability }, .{});
     try std.testing.expectError(error.WorkflowDefinitionReadError, (capture_action.Action{ .source = fake.port() }).execute(arena.allocator(), inventory, .{}));
@@ -153,7 +157,7 @@ test "definition capture maps incomplete reads and preserves cancellation" {
     const root_owner = try createRootOwner(std.testing.allocator, .{ .filesystem_id = 1, .file_id = 99 });
     defer bootstrap_registry.deinitOwner(root_owner);
     const capability = bootstrap_registry.registry(root_owner).workflowAuthority();
-    const descriptors = [_]workflow.InventoryDescriptor{descriptor("one.workflow.yaml", .file, 1, 3)};
+    const descriptors = [_]workflow_inventory.InventoryDescriptor{descriptor("one.workflow.yaml", .file, 1, 3)};
     var fake: FakeSource = .{ .descriptors = &descriptors, .capture_failure = true };
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -175,7 +179,7 @@ test "definition capture maps incomplete reads and preserves cancellation" {
 
 test "filesystem capture accepts the exact byte limit and rejects a changed file" {
     const io = std.testing.io;
-    const exact_bytes = try std.testing.allocator.alloc(u8, workflow.max_definition_bytes);
+    const exact_bytes = try std.testing.allocator.alloc(u8, workflow_definition.max_definition_bytes);
     defer std.testing.allocator.free(exact_bytes);
     @memset(exact_bytes, 'a');
     var exact_project = std.testing.tmpDir(.{});
@@ -192,9 +196,9 @@ test "filesystem capture accepts the exact byte limit and rejects a changed file
     defer exact_arena.deinit();
     const exact_inventory = try (inventory_action.Action{ .source = exact_adapter.source() }).execute(exact_arena.allocator(), .{ .capability = exact_capability }, .{});
     const captures = try (capture_action.Action{ .source = exact_adapter.source() }).execute(exact_arena.allocator(), exact_inventory, .{});
-    try std.testing.expectEqual(workflow.max_definition_bytes, captures[0].bytes.len);
+    try std.testing.expectEqual(workflow_definition.max_definition_bytes, captures[0].bytes.len);
 
-    const oversized_bytes = try std.testing.allocator.alloc(u8, workflow.max_definition_bytes + 1);
+    const oversized_bytes = try std.testing.allocator.alloc(u8, workflow_definition.max_definition_bytes + 1);
     defer std.testing.allocator.free(oversized_bytes);
     @memset(oversized_bytes, 'a');
     var oversized_project = std.testing.tmpDir(.{});
@@ -261,15 +265,15 @@ test "validated workflow registry accepts zero definitions and owns one immutabl
     var root_owner_live = true;
     defer if (root_owner_live) bootstrap_registry.deinitOwner(root_owner);
     const capability = bootstrap_registry.registry(root_owner).workflowAuthority();
-    const empty_candidate: workflow.RegistryCandidate = .{
+    const empty_candidate: registry.RegistryCandidate = .{
         .inventory = .{ .capability = capability, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{} },
         .captures = &.{},
         .definitions = &.{},
         .graphs = &.{},
     };
-    const empty_owner = try workflow.createValidated(std.testing.allocator, empty_candidate);
-    defer workflow.deinitOwner(empty_owner);
-    try std.testing.expectEqual(@as(usize, 0), workflow.registry(empty_owner).count());
+    const empty_owner = try registry.createValidated(std.testing.allocator, empty_candidate);
+    defer registry.deinitOwner(empty_owner);
+    try std.testing.expectEqual(@as(usize, 0), registry.registry(empty_owner).count());
 
     var scratch = std.heap.ArenaAllocator.init(std.testing.allocator);
     var scratch_live = true;
@@ -279,13 +283,13 @@ test "validated workflow registry accepts zero definitions and owns one immutabl
     const definition = validDefinition(workflow_id, "HELO", 1);
     const graph = validGraph(definition);
     const path = try allocator.dupe(u8, "arbitrary.workflow.yaml");
-    const descriptors = [_]workflow.InventoryDescriptor{descriptor(path, .file, 1, 3)};
-    const accounts = [_]workflow.InventoryAccount{.{ .ordinal = 1, .path = path, .disposition = .definition }};
+    const descriptors = [_]workflow_inventory.InventoryDescriptor{descriptor(path, .file, 1, 3)};
+    const accounts = [_]workflow_inventory.InventoryAccount{.{ .ordinal = 1, .path = path, .disposition = .definition }};
     const ordinals = [_]u16{1};
-    const captures = [_]workflow.Capture{.{ .ordinal = 1, .bytes = "abc" }};
-    const definitions = [_]workflow.Definition{definition};
-    const graphs = [_]workflow.CompiledWorkflow{graph};
-    const owner = try workflow.createValidated(std.testing.allocator, .{
+    const captures = [_]workflow_inventory.Capture{.{ .ordinal = 1, .bytes = "abc" }};
+    const definitions = [_]workflow_definition.Definition{definition};
+    const graphs = [_]workflow_compilation.CompiledWorkflow{graph};
+    const owner = try registry.createValidated(std.testing.allocator, .{
         .inventory = .{ .capability = capability, .descriptors = &descriptors, .accounts = &accounts, .definition_ordinals = &ordinals },
         .captures = &captures,
         .definitions = &definitions,
@@ -309,29 +313,29 @@ test "registry rejects global identity collisions and incomplete joins" {
     defer bootstrap_registry.deinitOwner(root_owner);
     const capability = bootstrap_registry.registry(root_owner).workflowAuthority();
     inline for ([_]RegistryFault{ .workflow_id, .shortcode, .ordinal, .missing_graph, .extra_graph, .projection, .reserved_ordinal }) |fault| {
-        var descriptors = [_]workflow.InventoryDescriptor{
+        var descriptors = [_]workflow_inventory.InventoryDescriptor{
             descriptor("a.workflow.yaml", .file, 1, 3),
             descriptor("b.workflow.yaml", .file, 2, 3),
         };
-        var accounts = [_]workflow.InventoryAccount{
+        var accounts = [_]workflow_inventory.InventoryAccount{
             .{ .ordinal = 1, .path = descriptors[0].path, .disposition = .definition },
             .{ .ordinal = 2, .path = descriptors[1].path, .disposition = .definition },
         };
         var ordinals = [_]u16{ 1, 2 };
-        var captures = [_]workflow.Capture{
+        var captures = [_]workflow_inventory.Capture{
             .{ .ordinal = 1, .bytes = "one" },
             .{ .ordinal = 2, .bytes = "two" },
         };
-        var definitions = [_]workflow.Definition{
+        var definitions = [_]workflow_definition.Definition{
             validDefinition("alpha", "ALPH", 1),
             validDefinition("beta", "BETA", 2),
         };
-        var graphs = [_]workflow.CompiledWorkflow{
+        var graphs = [_]workflow_compilation.CompiledWorkflow{
             validGraph(definitions[0]),
             validGraph(definitions[1]),
             validGraph(definitions[1]),
         };
-        var graph_values: []const workflow.CompiledWorkflow = graphs[0..2];
+        var graph_values: []const workflow_compilation.CompiledWorkflow = graphs[0..2];
         switch (fault) {
             .workflow_id => {
                 definitions[1].workflow_id = definitions[0].workflow_id;
@@ -355,7 +359,7 @@ test "registry rejects global identity collisions and incomplete joins" {
                 accounts[1].disposition = .reserved_child;
             },
         }
-        try std.testing.expectError(error.InvalidWorkflowRegistry, workflow.createValidated(std.testing.allocator, .{
+        try std.testing.expectError(error.InvalidWorkflowRegistry, registry.createValidated(std.testing.allocator, .{
             .inventory = .{ .capability = capability, .descriptors = &descriptors, .accounts = &accounts, .definition_ordinals = &ordinals },
             .captures = &captures,
             .definitions = &definitions,
@@ -378,7 +382,7 @@ const declared_transitions = [_]workflow.Transition{.{
     .outcome = .ok,
     .target = .{ .terminal = .ok },
 }};
-const compiled_nodes = [_]workflow.CompiledNode{.{
+const compiled_nodes = [_]workflow_compilation.CompiledNode{.{
     .id = declared_nodes[0].id,
     .contract_id = declared_nodes[0].contract_id,
     .parameters = &.{},
@@ -392,7 +396,7 @@ const compiled_nodes = [_]workflow.CompiledNode{.{
     .capabilities = &.{},
 }};
 
-fn validDefinition(id: []const u8, shortcode: []const u8, ordinal: u16) workflow.Definition {
+fn validDefinition(id: []const u8, shortcode: []const u8, ordinal: u16) workflow_definition.Definition {
     return .{
         .source_ordinal = ordinal,
         .workflow_id = workflow.WorkflowId.parse(id).?,
@@ -406,7 +410,7 @@ fn validDefinition(id: []const u8, shortcode: []const u8, ordinal: u16) workflow
     };
 }
 
-fn validGraph(definition: workflow.Definition) workflow.CompiledWorkflow {
+fn validGraph(definition: workflow_definition.Definition) workflow_compilation.CompiledWorkflow {
     return .{
         .source_ordinal = definition.source_ordinal,
         .shortcode = definition.shortcode,
@@ -424,21 +428,21 @@ fn validGraph(definition: workflow.Definition) workflow.CompiledWorkflow {
 }
 
 const FakeSource = struct {
-    descriptors: []const workflow.InventoryDescriptor,
+    descriptors: []const workflow_inventory.InventoryDescriptor,
     capture_calls: usize = 0,
     capture_failure: bool = false,
     fn port(self: *FakeSource) source_port.Source {
         return .{ .context = self, .enumerate_fn = enumerate, .capture_fn = capture };
     }
-    fn enumerate(context: *anyopaque, _: *const bootstrap_registry.ConfiguredBaseRootCapability, allocator: std.mem.Allocator, runtime: pipeline.NodeRuntime) source_port.Error![]workflow.InventoryDescriptor {
+    fn enumerate(context: *anyopaque, _: *const bootstrap_registry.ConfiguredBaseRootCapability, allocator: std.mem.Allocator, runtime: pipeline.NodeRuntime) source_port.Error![]workflow_inventory.InventoryDescriptor {
         const self: *FakeSource = @ptrCast(@alignCast(context));
         return switch (runtime.status()) {
             .cancelled => error.Cancelled,
             .deadline_exhausted => error.DeadlineExhausted,
-            .active => allocator.dupe(workflow.InventoryDescriptor, self.descriptors) catch error.InventoryInvalid,
+            .active => allocator.dupe(workflow_inventory.InventoryDescriptor, self.descriptors) catch error.InventoryInvalid,
         };
     }
-    fn capture(context: *anyopaque, _: *const bootstrap_registry.ConfiguredBaseRootCapability, descriptor_value: workflow.InventoryDescriptor, allocator: std.mem.Allocator, runtime: pipeline.NodeRuntime) source_port.Error![]const u8 {
+    fn capture(context: *anyopaque, _: *const bootstrap_registry.ConfiguredBaseRootCapability, descriptor_value: workflow_inventory.InventoryDescriptor, allocator: std.mem.Allocator, runtime: pipeline.NodeRuntime) source_port.Error![]const u8 {
         const self: *FakeSource = @ptrCast(@alignCast(context));
         self.capture_calls += 1;
         if (self.capture_failure) return error.DefinitionReadError;
@@ -459,18 +463,18 @@ fn runtimeStatus(context: ?*anyopaque) pipeline.RuntimeStatus {
     return status.*;
 }
 
-fn descriptor(path: []const u8, kind: workflow.EntryKind, file_id: u64, size: ?u64) workflow.InventoryDescriptor {
+fn descriptor(path: []const u8, kind: workflow_inventory.EntryKind, file_id: u64, size: ?u64) workflow_inventory.InventoryDescriptor {
     return .{ .path = path, .kind = kind, .identity = .{ .filesystem_id = 1, .file_id = file_id }, .size = size };
 }
 
-fn definitionDescriptors(allocator: std.mem.Allocator, count: usize) ![]workflow.InventoryDescriptor {
-    const values = try allocator.alloc(workflow.InventoryDescriptor, count);
+fn definitionDescriptors(allocator: std.mem.Allocator, count: usize) ![]workflow_inventory.InventoryDescriptor {
+    const values = try allocator.alloc(workflow_inventory.InventoryDescriptor, count);
     for (values, 0..) |*value, index| value.* = descriptor(try std.fmt.allocPrint(allocator, "w{d:0>4}.workflow.yaml", .{index}), .file, index + 1, 1);
     return values;
 }
 
-fn directoryDescriptors(allocator: std.mem.Allocator, count: usize) ![]workflow.InventoryDescriptor {
-    const values = try allocator.alloc(workflow.InventoryDescriptor, count);
+fn directoryDescriptors(allocator: std.mem.Allocator, count: usize) ![]workflow_inventory.InventoryDescriptor {
+    const values = try allocator.alloc(workflow_inventory.InventoryDescriptor, count);
     for (values, 0..) |*value, index| value.* = descriptor(try std.fmt.allocPrint(allocator, "d{d:0>4}", .{index}), .directory, index + 1, null);
     return values;
 }

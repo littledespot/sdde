@@ -1,6 +1,9 @@
 const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
-const workflow = @import("../../domain/workflow_registry.zig");
+const definition = @import("../../domain/workflow_definition.zig");
+const compilation = @import("../../domain/workflow_compilation.zig");
+const inventory = @import("../../domain/workflow_inventory.zig");
+const registry = @import("../../domain/workflow_registry.zig");
 
 pub const Error = error{WorkflowRegistryInvalid};
 
@@ -21,20 +24,20 @@ pub const Action = struct {
     pub fn execute(
         _: Action,
         allocator: std.mem.Allocator,
-        inventory: workflow.Inventory,
-        captures: []const workflow.Capture,
-        definitions: []const workflow.Definition,
-        validated: workflow.ValidatedGraphs,
-    ) Error!workflow.RegistryCandidate {
-        const graphs = allocator.dupe(workflow.CompiledWorkflow, validated.values) catch {
+        inventory_value: inventory.Inventory,
+        captures: []const inventory.Capture,
+        definitions: []const definition.Definition,
+        validated: compilation.ValidatedGraphs,
+    ) Error!registry.RegistryCandidate {
+        const graphs = allocator.dupe(compilation.CompiledWorkflow, validated.values) catch {
             return error.WorkflowRegistryInvalid;
         };
-        std.mem.sort(workflow.CompiledWorkflow, graphs, {}, lessThan);
-        return .{ .inventory = inventory, .captures = captures, .definitions = definitions, .graphs = graphs };
+        std.mem.sort(compilation.CompiledWorkflow, graphs, {}, lessThan);
+        return .{ .inventory = inventory_value, .captures = captures, .definitions = definitions, .graphs = graphs };
     }
 };
 
-fn lessThan(_: void, left: workflow.CompiledWorkflow, right: workflow.CompiledWorkflow) bool {
+fn lessThan(_: void, left: compilation.CompiledWorkflow, right: compilation.CompiledWorkflow) bool {
     return std.mem.order(
         u8,
         left.authority.workflow_id.bytes,

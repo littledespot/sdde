@@ -1,7 +1,8 @@
 const std = @import("std");
 const pipeline = @import("domain/pipeline.zig");
 const execution = @import("domain/workflow_execution.zig");
-const workflow = @import("domain/workflow_registry.zig");
+const workflow = @import("domain/workflow.zig");
+const workflow_compilation = @import("domain/workflow_compilation.zig");
 const telemetry = @import("domain/telemetry.zig");
 const log_runtime = @import("domain/feature_log_runtime.zig");
 const implementation = @import("ports/workflow_node_implementation.zig");
@@ -74,7 +75,7 @@ fn invokeNode(context: ?*anyopaque, input: implementation.NodeInput) implementat
     return .{ .outcome = control.outcome, .delta = delta };
 }
 
-fn testGraph() !workflow.CompiledWorkflow {
+fn testGraph() !workflow_compilation.CompiledWorkflow {
     return .{
         .source_ordinal = 1,
         .shortcode = try telemetry.WorkflowShortcode.parse("TEST"),
@@ -92,7 +93,7 @@ fn testGraph() !workflow.CompiledWorkflow {
 }
 
 const test_outcomes = std.meta.tags(workflow.OutcomeTag);
-const test_nodes = [_]workflow.CompiledNode{.{
+const test_nodes = [_]workflow_compilation.CompiledNode{.{
     .id = .{ .bytes = "run" },
     .contract_id = .{ .bytes = "test.node@1" },
     .parameters = &.{},

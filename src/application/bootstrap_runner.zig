@@ -21,7 +21,11 @@ const child_bindings = @import("bootstrap_child_bindings.zig");
 const sddtoolkit_config_service = @import("sddtoolkit_config_service.zig");
 const bootstrap_root_registry_service = @import("bootstrap_root_registry_service.zig");
 const log_service = @import("log_service.zig");
-const workflow = @import("../domain/workflow_registry.zig");
+const workflow = @import("../domain/workflow.zig");
+const workflow_definition = @import("../domain/workflow_definition.zig");
+const workflow_compilation = @import("../domain/workflow_compilation.zig");
+const workflow_inventory = @import("../domain/workflow_inventory.zig");
+const workflow_registry = @import("../domain/workflow_registry.zig");
 const build_workflow_layout = @import("../actions/workflow/build_workflow_authority_layout.zig");
 const inventory_workflows = @import("../actions/workflow/inventory_workflow_authority.zig");
 const capture_workflows = @import("../actions/workflow/capture_workflow_definitions.zig");
@@ -132,15 +136,15 @@ pub const Runner = struct {
     registry_id: ?bootstrap_roots.BootstrapRootRegistryId = null,
     registry_candidate: ?bootstrap_roots.BootstrapRootRegistryCandidate = null,
     workflow_scratch: std.heap.ArenaAllocator,
-    workflow_layout: ?workflow.Layout = null,
-    workflow_inventory: ?workflow.Inventory = null,
-    workflow_captures: ?[]const workflow.Capture = null,
-    raw_workflow_definitions: ?[]const workflow.RawDefinition = null,
-    workflow_definitions: ?[]const workflow.Definition = null,
-    compiled_workflow_graphs: ?[]const workflow.CompiledWorkflow = null,
-    validated_workflow_graphs: ?workflow.ValidatedGraphs = null,
-    workflow_registry_candidate: ?workflow.RegistryCandidate = null,
-    validated_workflow_owner: ?*workflow.Owner = null,
+    workflow_layout: ?workflow_inventory.Layout = null,
+    workflow_inventory: ?workflow_inventory.Inventory = null,
+    workflow_captures: ?[]const workflow_inventory.Capture = null,
+    raw_workflow_definitions: ?[]const workflow_definition.RawDefinition = null,
+    workflow_definitions: ?[]const workflow_definition.Definition = null,
+    compiled_workflow_graphs: ?[]const workflow_compilation.CompiledWorkflow = null,
+    validated_workflow_graphs: ?workflow_compilation.ValidatedGraphs = null,
+    workflow_registry_candidate: ?workflow_registry.RegistryCandidate = null,
+    validated_workflow_owner: ?*workflow_registry.Owner = null,
     toolchain_scratch: std.heap.ArenaAllocator,
     project_toolchain_capture: ?toolchain.Capture = null,
     toolchain_preset_inventory: ?[]const toolchain.Entry = null,
@@ -235,7 +239,7 @@ pub const Runner = struct {
         if (self.decoded_config) |*owned| owned.deinit();
         if (self.validated_log_owner) |owner| logging.deinitOwner(owner);
         if (self.validated_root_owner) |owner| bootstrap_root_registry.deinitOwner(owner);
-        if (self.validated_workflow_owner) |owner| workflow.deinitOwner(owner);
+        if (self.validated_workflow_owner) |owner| workflow_registry.deinitOwner(owner);
         if (self.valid_toolchain_owner) |owner| toolchain_safety.deinitOwner(owner);
         self.toolchain_scratch.deinit();
         self.workflow_scratch.deinit();

@@ -1,8 +1,9 @@
 const execution = @import("../domain/workflow_execution.zig");
-const workflow = @import("../domain/workflow_registry.zig");
+const workflow = @import("../domain/workflow.zig");
+const compilation = @import("../domain/workflow_compilation.zig");
 const bindings = @import("workflow_engine_child_bindings.zig");
 
-pub fn run(graph: *const workflow.CompiledWorkflow, children: bindings.ChildBindings) execution.Outcome {
+pub fn run(graph: *const compilation.CompiledWorkflow, children: bindings.ChildBindings) execution.Outcome {
     const invocation = children.invokeInvocation();
     if (invocation.outcome != .ok) return invocation.outcome;
 

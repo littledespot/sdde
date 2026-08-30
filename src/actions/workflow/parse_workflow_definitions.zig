@@ -1,6 +1,7 @@
 const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
-const workflow = @import("../../domain/workflow_registry.zig");
+const definition = @import("../../domain/workflow_definition.zig");
+const inventory = @import("../../domain/workflow_inventory.zig");
 const parser_port = @import("../../ports/workflow_definition_parser.zig");
 
 pub const Error = error{WorkflowDefinitionParseError};
@@ -19,8 +20,8 @@ pub const Action = struct {
     pub fn execute(
         self: Action,
         allocator: std.mem.Allocator,
-        captures: []const workflow.Capture,
-    ) Error![]const workflow.RawDefinition {
+        captures: []const inventory.Capture,
+    ) Error![]const definition.RawDefinition {
         return self.parser.parse(allocator, captures) catch {
             return error.WorkflowDefinitionParseError;
         };

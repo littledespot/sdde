@@ -1,5 +1,6 @@
 const std = @import("std");
-const workflow = @import("../domain/workflow_registry.zig");
+const definition = @import("../domain/workflow_definition.zig");
+const inventory = @import("../domain/workflow_inventory.zig");
 
 pub const Error = error{InvalidWorkflowDefinition};
 
@@ -8,14 +9,14 @@ pub const Parser = struct {
     parse_fn: *const fn (
         *anyopaque,
         std.mem.Allocator,
-        []const workflow.Capture,
-    ) Error![]const workflow.RawDefinition,
+        []const inventory.Capture,
+    ) Error![]const definition.RawDefinition,
 
     pub fn parse(
         self: Parser,
         allocator: std.mem.Allocator,
-        captures: []const workflow.Capture,
-    ) Error![]const workflow.RawDefinition {
+        captures: []const inventory.Capture,
+    ) Error![]const definition.RawDefinition {
         return self.parse_fn(self.context, allocator, captures);
     }
 };

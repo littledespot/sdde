@@ -1,6 +1,6 @@
 const bootstrap_root_registry = @import("../../domain/bootstrap_root_registry.zig");
 const pipeline = @import("../../domain/pipeline.zig");
-const workflow = @import("../../domain/workflow_registry.zig");
+const inventory = @import("../../domain/workflow_inventory.zig");
 
 pub const Error = error{WorkflowAuthorityInventoryInvalid};
 
@@ -16,7 +16,7 @@ pub const Action = struct {
     pub fn execute(
         _: Action,
         registry: *const bootstrap_root_registry.BootstrapRootRegistry,
-    ) Error!workflow.Layout {
+    ) Error!inventory.Layout {
         return .{ .capability = registry.workflowAuthority() };
     }
 };

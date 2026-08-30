@@ -1,11 +1,13 @@
 const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
-const workflow = @import("../../domain/workflow_registry.zig");
+const workflow = @import("../../domain/workflow.zig");
+const workflow_definition = @import("../../domain/workflow_definition.zig");
+const compilation = @import("../../domain/workflow_compilation.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
 pub const Action = struct {
-    registry: *const workflow.CompilerRegistry,
+    registry: *const compilation.CompilerRegistry,
 
     pub const contract: pipeline.NodeContract = .{
         .id = "compile-workflow-graphs@1",
@@ -18,16 +20,16 @@ pub const Action = struct {
     pub fn execute(
         self: Action,
         allocator: std.mem.Allocator,
-        definitions: []const workflow.Definition,
-    ) Error![]const workflow.CompiledWorkflow {
-        const graphs = allocator.alloc(workflow.CompiledWorkflow, definitions.len) catch return invalid();
+        definitions: []const workflow_definition.Definition,
+    ) Error![]const compilation.CompiledWorkflow {
+        const graphs = allocator.alloc(compilation.CompiledWorkflow, definitions.len) catch return invalid();
         for (definitions, graphs) |definition, *graph| {
             const invocation = uniqueInvocation(self.registry.invocations, definition.invocation_contract_id.bytes) orelse return invalid();
             if (!invocation.capability_free) return invalid();
             const policy = uniquePolicy(self.registry.policies, definition.policy_profile_id.bytes) orelse return invalid();
             if (!hasNode(definition.nodes, definition.entry_node_id.bytes)) return invalid();
 
-            const nodes = allocator.alloc(workflow.CompiledNode, definition.nodes.len) catch return invalid();
+            const nodes = allocator.alloc(compilation.CompiledNode, definition.nodes.len) catch return invalid();
             for (definition.nodes, nodes) |source, *node| {
                 const node_contract = uniqueNode(self.registry.nodes, source.contract_id.bytes) orelse return invalid();
                 try validateParameters(node_contract, source.parameters);
@@ -70,7 +72,7 @@ pub const Action = struct {
     }
 };
 
-fn validateParameters(contract: workflow.NodeContract, parameters: []const workflow.ParameterBinding) Error!void {
+fn validateParameters(contract: compilation.NodeContract, parameters: []const workflow.ParameterBinding) Error!void {
     if (parameters.len > contract.parameters.len) return invalid();
     for (contract.parameters, 0..) |descriptor, index| {
         if (workflow.WorkflowParameterId.parse(descriptor.id) == null or !descriptor.workflow_definition_safe) {
@@ -97,9 +99,9 @@ fn validateParameters(contract: workflow.NodeContract, parameters: []const workf
 }
 
 fn validateTransitions(
-    definition: workflow.Definition,
-    nodes: []const workflow.CompiledNode,
-    policy: workflow.PolicyProfile,
+    definition: workflow_definition.Definition,
+    nodes: []const compilation.CompiledNode,
+    policy: compilation.PolicyProfile,
 ) Error!void {
     for (definition.transitions, 0..) |transition, index| {
         const source = findCompiledNode(nodes, transition.from.bytes) orelse return invalid();
@@ -129,24 +131,24 @@ fn validateTransitions(
     }
 }
 
-fn uniqueInvocation(values: []const workflow.InvocationContract, id: []const u8) ?workflow.InvocationContract {
-    var result: ?workflow.InvocationContract = null;
+fn uniqueInvocation(values: []const compilation.InvocationContract, id: []const u8) ?compilation.InvocationContract {
+    var result: ?compilation.InvocationContract = null;
     for (values) |value| if (std.mem.eql(u8, value.id, id)) {
         if (result != null or workflow.RegisteredRef.parse(value.id) == null) return null;
         result = value;
     };
     return result;
 }
-fn uniqueNode(values: []const workflow.NodeContract, id: []const u8) ?workflow.NodeContract {
-    var result: ?workflow.NodeContract = null;
+fn uniqueNode(values: []const compilation.NodeContract, id: []const u8) ?compilation.NodeContract {
+    var result: ?compilation.NodeContract = null;
     for (values) |value| if (std.mem.eql(u8, value.id, id)) {
         if (result != null or workflow.RegisteredRef.parse(value.id) == null) return null;
         result = value;
     };
     return result;
 }
-fn uniquePolicy(values: []const workflow.PolicyProfile, id: []const u8) ?workflow.PolicyProfile {
-    var result: ?workflow.PolicyProfile = null;
+fn uniquePolicy(values: []const compilation.PolicyProfile, id: []const u8) ?compilation.PolicyProfile {
+    var result: ?compilation.PolicyProfile = null;
     for (values) |value| if (std.mem.eql(u8, value.id, id)) {
         if (result != null or workflow.RegisteredRef.parse(value.id) == null) return null;
         result = value;
@@ -172,7 +174,7 @@ fn hasNode(values: []const workflow.DeclarativeNode, expected: []const u8) bool 
     for (values) |value| if (std.mem.eql(u8, value.id.bytes, expected)) return true;
     return false;
 }
-fn findCompiledNode(values: []const workflow.CompiledNode, expected: []const u8) ?workflow.CompiledNode {
+fn findCompiledNode(values: []const compilation.CompiledNode, expected: []const u8) ?compilation.CompiledNode {
     for (values) |value| if (std.mem.eql(u8, value.id.bytes, expected)) return value;
     return null;
 }
@@ -180,7 +182,7 @@ fn findParameter(values: []const workflow.ParameterBinding, expected: []const u8
     for (values) |value| if (std.mem.eql(u8, value.id.bytes, expected)) return value;
     return null;
 }
-fn findDescriptor(values: []const workflow.ParameterDescriptor, expected: []const u8) ?workflow.ParameterDescriptor {
+fn findDescriptor(values: []const compilation.ParameterDescriptor, expected: []const u8) ?compilation.ParameterDescriptor {
     for (values) |value| if (std.mem.eql(u8, value.id, expected)) return value;
     return null;
 }
@@ -192,7 +194,7 @@ fn invalid() Error {
     return error.WorkflowGraphCompileInvalid;
 }
 
-const test_registry: workflow.CompilerRegistry = .{
+const test_registry: compilation.CompilerRegistry = .{
     .invocations = &.{.{ .id = "core.empty@1", .capability_free = true, .produces = &.{} }},
     .nodes = &.{.{
         .id = "core.noop@1",
@@ -222,7 +224,7 @@ const test_missing_nodes = [_]workflow.DeclarativeNode{.{
     .parameters = &.{},
 }};
 
-fn testDefinition(contract_id: []const u8, transitions: []const workflow.Transition) workflow.Definition {
+fn testDefinition(contract_id: []const u8, transitions: []const workflow.Transition) workflow_definition.Definition {
     return .{
         .source_ordinal = 1,
         .workflow_id = workflow.WorkflowId.parse("arbitrary-flow").?,
@@ -248,11 +250,11 @@ test "compiler accepts an arbitrary registered workflow and rejects unknown node
         .outcome = .ok,
         .target = .{ .terminal = .ok },
     }};
-    const valid = [_]workflow.Definition{testDefinition("core.noop@1", &transitions)};
+    const valid = [_]workflow_definition.Definition{testDefinition("core.noop@1", &transitions)};
     const graphs = try (Action{ .registry = &test_registry }).execute(arena.allocator(), &valid);
     try std.testing.expectEqualStrings("arbitrary-flow", graphs[0].authority.workflow_id.bytes);
 
-    const unknown = [_]workflow.Definition{testDefinition("core.missing@1", &transitions)};
+    const unknown = [_]workflow_definition.Definition{testDefinition("core.missing@1", &transitions)};
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
         (Action{ .registry = &test_registry }).execute(arena.allocator(), &unknown),
@@ -262,13 +264,13 @@ test "compiler accepts an arbitrary registered workflow and rejects unknown node
 test "compiler rejects an incomplete transition table and capability escalation" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const incomplete = [_]workflow.Definition{testDefinition("core.noop@1", &.{})};
+    const incomplete = [_]workflow_definition.Definition{testDefinition("core.noop@1", &.{})};
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
         (Action{ .registry = &test_registry }).execute(arena.allocator(), &incomplete),
     );
 
-    const capable_nodes = [_]workflow.NodeContract{.{
+    const capable_nodes = [_]compilation.NodeContract{.{
         .id = "core.noop@1",
         .parameters = &.{},
         .requires = &.{},
@@ -286,13 +288,13 @@ test "compiler rejects an incomplete transition table and capability escalation"
         .outcome = .ok,
         .target = .{ .terminal = .ok },
     }};
-    const definition = [_]workflow.Definition{testDefinition("core.noop@1", &transitions)};
+    const definition = [_]workflow_definition.Definition{testDefinition("core.noop@1", &transitions)};
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
         (Action{ .registry = &registry }).execute(arena.allocator(), &definition),
     );
 
-    const allowed_policies = [_]workflow.PolicyProfile{.{
+    const allowed_policies = [_]compilation.PolicyProfile{.{
         .id = "core.safe@1",
         .allowed_capabilities = &capabilities,
         .allowed_terminal_outcomes = &.{.ok},
@@ -340,7 +342,7 @@ test "compiler resolves invocation and policy exactly and requires capability-fr
     definition.policy_profile_id = workflow.RegisteredRef.parse("core.missing@1").?;
     try expectCompileInvalid(arena.allocator(), &test_registry, definition);
 
-    const capable_invocations = [_]workflow.InvocationContract{.{
+    const capable_invocations = [_]compilation.InvocationContract{.{
         .id = "core.empty@1",
         .capability_free = false,
         .produces = &.{},
@@ -349,7 +351,7 @@ test "compiler resolves invocation and policy exactly and requires capability-fr
     registry.invocations = &capable_invocations;
     try expectCompileInvalid(arena.allocator(), &registry, testDefinition("core.noop@1", &transitions));
 
-    const ambiguous_invocations = [_]workflow.InvocationContract{
+    const ambiguous_invocations = [_]compilation.InvocationContract{
         .{ .id = "core.empty@1", .capability_free = true, .produces = &.{} },
         .{ .id = "core.empty@1", .capability_free = true, .produces = &.{} },
     };
@@ -357,12 +359,12 @@ test "compiler resolves invocation and policy exactly and requires capability-fr
     try expectCompileInvalid(arena.allocator(), &registry, testDefinition("core.noop@1", &transitions));
 
     registry = test_registry;
-    const ambiguous_nodes = [_]workflow.NodeContract{ test_registry.nodes[0], test_registry.nodes[0] };
+    const ambiguous_nodes = [_]compilation.NodeContract{ test_registry.nodes[0], test_registry.nodes[0] };
     registry.nodes = &ambiguous_nodes;
     try expectCompileInvalid(arena.allocator(), &registry, testDefinition("core.noop@1", &transitions));
 
     registry = test_registry;
-    const ambiguous_policies = [_]workflow.PolicyProfile{ test_registry.policies[0], test_registry.policies[0] };
+    const ambiguous_policies = [_]compilation.PolicyProfile{ test_registry.policies[0], test_registry.policies[0] };
     registry.policies = &ambiguous_policies;
     try expectCompileInvalid(arena.allocator(), &registry, testDefinition("core.noop@1", &transitions));
 }
@@ -370,13 +372,13 @@ test "compiler resolves invocation and policy exactly and requires capability-fr
 test "compiler enforces every definition-safe parameter constraint" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const descriptors = [_]workflow.ParameterDescriptor{
+    const descriptors = [_]compilation.ParameterDescriptor{
         .{ .id = "flag", .kind = .boolean, .required = true, .workflow_definition_safe = true },
         .{ .id = "count", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 1, .integer_max = 3 },
         .{ .id = "mode", .kind = .@"enum", .required = true, .workflow_definition_safe = true, .enum_members = &.{ "safe", "strict" } },
         .{ .id = "profile", .kind = .registered_id, .required = true, .workflow_definition_safe = true, .registered_values = &.{"core.profile@1"} },
     };
-    const contract = workflow.NodeContract{
+    const contract = compilation.NodeContract{
         .id = "core.parameterized@1",
         .parameters = &descriptors,
         .requires = &.{},
@@ -430,7 +432,7 @@ test "compiler rejects invalid transition closure and preserves registered gates
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const gates = [_][]const u8{"predecessor-current@1"};
-    const node_contracts = [_]workflow.NodeContract{.{
+    const node_contracts = [_]compilation.NodeContract{.{
         .id = "core.noop@1",
         .parameters = &.{},
         .requires = &.{},
@@ -439,7 +441,7 @@ test "compiler rejects invalid transition closure and preserves registered gates
         .side_effect = .none,
         .gates = &gates,
     }};
-    const policies = [_]workflow.PolicyProfile{.{
+    const policies = [_]compilation.PolicyProfile{.{
         .id = "core.safe@1",
         .allowed_capabilities = &.{},
         .allowed_terminal_outcomes = &.{ .ok, .failed },
@@ -465,7 +467,7 @@ test "compiler rejects invalid transition closure and preserves registered gates
     definition.transitions = &missing;
     try expectCompileInvalid(arena.allocator(), &registry, definition);
 
-    const restrictive_policies = [_]workflow.PolicyProfile{.{
+    const restrictive_policies = [_]compilation.PolicyProfile{.{
         .id = "core.safe@1",
         .allowed_capabilities = &.{},
         .allowed_terminal_outcomes = &.{.ok},
@@ -506,7 +508,7 @@ fn parameterBinding(id: []const u8, value: workflow.ParameterValue) workflow.Par
     return .{ .id = workflow.WorkflowParameterId.parse(id).?, .value = value };
 }
 
-fn expectCompileInvalid(allocator: std.mem.Allocator, registry: *const workflow.CompilerRegistry, definition: workflow.Definition) !void {
+fn expectCompileInvalid(allocator: std.mem.Allocator, registry: *const compilation.CompilerRegistry, definition: workflow_definition.Definition) !void {
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
         (Action{ .registry = registry }).execute(allocator, &.{definition}),

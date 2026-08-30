@@ -1,6 +1,7 @@
 const pipeline = @import("../domain/pipeline.zig");
 const execution = @import("../domain/workflow_execution.zig");
-const workflow = @import("../domain/workflow_registry.zig");
+const workflow = @import("../domain/workflow.zig");
+const compilation = @import("../domain/workflow_compilation.zig");
 const implementations = @import("../ports/workflow_node_implementation.zig");
 const telemetry_barrier = @import("../ports/telemetry_barrier.zig");
 const child_bindings = @import("workflow_engine_child_bindings.zig");
@@ -81,7 +82,7 @@ const vtable: child_bindings.ChildBindings.VTable = .{
     .invoke_node = invokeNode,
 };
 
-fn findNode(nodes: []const workflow.CompiledNode, id: workflow.WorkflowNodeId) ?*const workflow.CompiledNode {
+fn findNode(nodes: []const compilation.CompiledNode, id: workflow.WorkflowNodeId) ?*const compilation.CompiledNode {
     for (nodes) |*node| if (@import("std").mem.eql(u8, node.id.bytes, id.bytes)) return node;
     return null;
 }

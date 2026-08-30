@@ -1,7 +1,8 @@
 const std = @import("std");
 const bootstrap_root_registry = @import("../../domain/bootstrap_root_registry.zig");
 const pipeline = @import("../../domain/pipeline.zig");
-const workflow = @import("../../domain/workflow_registry.zig");
+const definition = @import("../../domain/workflow_definition.zig");
+const inventory = @import("../../domain/workflow_inventory.zig");
 const source_port = @import("../../ports/workflow_authority_source.zig");
 const file_identity = @import("file_identity.zig");
 
@@ -23,7 +24,7 @@ pub const Adapter = struct {
         capability: *const bootstrap_root_registry.ConfiguredBaseRootCapability,
         allocator: std.mem.Allocator,
         runtime: pipeline.NodeRuntime,
-    ) source_port.Error![]workflow.InventoryDescriptor {
+    ) source_port.Error![]inventory.InventoryDescriptor {
         const self: *Adapter = @ptrCast(@alignCast(context));
         const binding = bootstrap_root_registry.bindWorkflowAuthorityAdapter(capability) orelse {
             return error.InventoryInvalid;
@@ -39,16 +40,16 @@ pub const Adapter = struct {
         if (!(file_identity.inspect(root.handle) catch return error.InventoryInvalid).eql(binding.physical_identity)) {
             return error.InventoryInvalid;
         }
-        var descriptors: std.ArrayList(workflow.InventoryDescriptor) = .empty;
+        var descriptors: std.ArrayList(inventory.InventoryDescriptor) = .empty;
         var walker = root.walkSelectively(allocator) catch return error.InventoryInvalid;
         defer walker.deinit();
         while (walker.next(self.io) catch return error.InventoryInvalid) |entry| {
             try self.checkBounds(runtime);
-            if (descriptors.items.len == workflow.max_inventory_entries or
-                entry.depth() > workflow.max_inventory_depth) return error.InventoryInvalid;
+            if (descriptors.items.len == inventory.max_inventory_entries or
+                entry.depth() > inventory.max_inventory_depth) return error.InventoryInvalid;
             const path = allocator.dupe(u8, entry.path) catch return error.InventoryInvalid;
-            if (!workflow.validInventoryPath(path)) return error.InventoryInvalid;
-            var descriptor: workflow.InventoryDescriptor = .{ .path = path, .kind = classify(entry.kind) };
+            if (!inventory.validPath(path)) return error.InventoryInvalid;
+            var descriptor: inventory.InventoryDescriptor = .{ .path = path, .kind = classify(entry.kind) };
             switch (descriptor.kind) {
                 .file => {
                     var file = entry.dir.openFile(self.io, entry.basename, .{
@@ -85,7 +86,7 @@ pub const Adapter = struct {
     fn capture(
         context: *anyopaque,
         capability: *const bootstrap_root_registry.ConfiguredBaseRootCapability,
-        descriptor: workflow.InventoryDescriptor,
+        descriptor: inventory.InventoryDescriptor,
         allocator: std.mem.Allocator,
         runtime: pipeline.NodeRuntime,
     ) source_port.Error![]const u8 {
@@ -94,7 +95,7 @@ pub const Adapter = struct {
             return error.DefinitionReadError;
         };
         if (descriptor.kind != .file or descriptor.identity == null or descriptor.size == null or
-            descriptor.size.? > workflow.max_definition_bytes) return error.DefinitionReadError;
+            descriptor.size.? > definition.max_definition_bytes) return error.DefinitionReadError;
         try self.checkBounds(runtime);
         var root = self.project_root.openDir(self.io, binding.project_relative_path, .{
             .access_sub_paths = true,
@@ -118,7 +119,7 @@ pub const Adapter = struct {
         var reader = file.reader(self.io, &.{});
         const bytes = reader.interface.allocRemaining(
             allocator,
-            .limited(workflow.max_definition_bytes + 1),
+            .limited(definition.max_definition_bytes + 1),
         ) catch return error.DefinitionReadError;
         if (bytes.len != before.size) return error.DefinitionReadError;
         const after = file.stat(self.io) catch return error.DefinitionReadError;
@@ -135,7 +136,7 @@ pub const Adapter = struct {
         try checkRuntime(runtime);
         const started = self.started_at orelse return error.InventoryInvalid;
         if (started.durationTo(.now(self.io, .boot)).raw.toMilliseconds() >
-            workflow.max_inventory_duration_ms) return error.DeadlineExhausted;
+            inventory.max_inventory_duration_ms) return error.DeadlineExhausted;
     }
 };
 
@@ -146,7 +147,7 @@ fn checkRuntime(runtime: pipeline.NodeRuntime) source_port.Error!void {
         .deadline_exhausted => error.DeadlineExhausted,
     };
 }
-fn classify(kind: Io.File.Kind) workflow.EntryKind {
+fn classify(kind: Io.File.Kind) inventory.EntryKind {
     return switch (kind) {
         .directory => .directory,
         .file => .file,

@@ -1,5 +1,6 @@
 const pipeline = @import("pipeline.zig");
-const workflow = @import("workflow_registry.zig");
+const workflow = @import("workflow.zig");
+const compilation = @import("workflow_compilation.zig");
 
 pub const max_invocation_arguments: usize = 64;
 
@@ -10,7 +11,7 @@ pub const Invocation = struct {
 
 pub const SelectedWorkflow = struct {
     invocation: Invocation,
-    graph: *const workflow.CompiledWorkflow,
+    graph: *const compilation.CompiledWorkflow,
 };
 
 pub const Candidate = struct {

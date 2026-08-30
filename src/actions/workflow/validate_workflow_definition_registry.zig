@@ -1,6 +1,6 @@
 const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
-const workflow = @import("../../domain/workflow_registry.zig");
+const registry = @import("../../domain/workflow_registry.zig");
 
 pub const Error = error{WorkflowRegistryInvalid};
 
@@ -16,8 +16,8 @@ pub const Action = struct {
     pub fn execute(
         _: Action,
         allocator: std.mem.Allocator,
-        candidate: workflow.RegistryCandidate,
-    ) Error!*workflow.Owner {
-        return workflow.createValidated(allocator, candidate) catch error.WorkflowRegistryInvalid;
+        candidate: registry.RegistryCandidate,
+    ) Error!*registry.Owner {
+        return registry.createValidated(allocator, candidate) catch error.WorkflowRegistryInvalid;
     }
 };

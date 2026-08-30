@@ -1,6 +1,6 @@
 const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
-const workflow = @import("../../domain/workflow_registry.zig");
+const inventory = @import("../../domain/workflow_inventory.zig");
 const source_port = @import("../../ports/workflow_authority_source.zig");
 
 pub const Error = error{ Cancelled, WorkflowDefinitionReadError };
@@ -19,19 +19,19 @@ pub const Action = struct {
     pub fn execute(
         self: Action,
         allocator: std.mem.Allocator,
-        inventory: workflow.Inventory,
+        inventory_value: inventory.Inventory,
         runtime: pipeline.NodeRuntime,
-    ) Error![]const workflow.Capture {
-        workflow.validateCaptureBudget(inventory) catch {
+    ) Error![]const inventory.Capture {
+        inventory.validateCaptureBudget(inventory_value) catch {
             return error.WorkflowDefinitionReadError;
         };
-        const captures = allocator.alloc(workflow.Capture, inventory.definition_ordinals.len) catch {
+        const captures = allocator.alloc(inventory.Capture, inventory_value.definition_ordinals.len) catch {
             return error.WorkflowDefinitionReadError;
         };
-        for (inventory.definition_ordinals, captures) |ordinal, *capture| {
-            const descriptor = inventory.descriptors[ordinal - 1];
+        for (inventory_value.definition_ordinals, captures) |ordinal, *capture| {
+            const descriptor = inventory_value.descriptors[ordinal - 1];
             const bytes = self.source.capture(
-                inventory.capability,
+                inventory_value.capability,
                 descriptor,
                 allocator,
                 runtime,
