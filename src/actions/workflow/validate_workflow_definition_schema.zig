@@ -247,6 +247,11 @@ const RawBuilder = struct {
         node.* = .{ .boolean = value };
         return node;
     }
+    fn nullValue(self: RawBuilder) !*workflow.RawNode {
+        const node = try self.allocator.create(workflow.RawNode);
+        node.* = .null_value;
+        return node;
+    }
     fn sequence(self: RawBuilder, values: []const *workflow.RawNode) !*workflow.RawNode {
         const node = try self.allocator.create(workflow.RawNode);
         node.* = .{ .sequence = try self.allocator.dupe(*workflow.RawNode, values) };
@@ -346,6 +351,70 @@ test "rejects missing fields versions malformed identifiers and empty graph sequ
     }
 }
 
+test "every closed mapping rejects missing wrong-kind and prohibited fields" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const builder: RawBuilder = .{ .allocator = arena.allocator() };
+
+    for (root_fields) |field_name| {
+        const missing_root = try minimalRaw(builder, false);
+        const source = mapping(missing_root).?;
+        const reduced = try arena.allocator().alloc(workflow.RawPair, source.len - 1);
+        var destination: usize = 0;
+        for (source) |pair_value| {
+            if (std.mem.eql(u8, string(pair_value.key).?, field_name)) continue;
+            reduced[destination] = pair_value;
+            destination += 1;
+        }
+        missing_root.* = .{ .mapping = reduced };
+        try expectInvalid(missing_root);
+
+        const wrong_kind_root = try minimalRaw(builder, false);
+        field(mapping(wrong_kind_root).?, field_name).?.* = (try builder.nullValue()).*;
+        try expectInvalid(wrong_kind_root);
+    }
+
+    const prohibited = [_][]const u8{ "path", "command", "adapter", "capability", "script", "runnerControl" };
+    for (prohibited) |field_name| {
+        const root = try minimalRaw(builder, false);
+        const source = mapping(root).?;
+        const expanded = try arena.allocator().alloc(workflow.RawPair, source.len + 1);
+        @memcpy(expanded[0..source.len], source);
+        expanded[source.len] = try builder.pair(field_name, try builder.scalar("forbidden"));
+        root.* = .{ .mapping = expanded };
+        try expectInvalid(root);
+    }
+
+    const nested_root = try minimalRaw(builder, false);
+    const node = sequence(field(mapping(nested_root).?, "nodes")).?[0];
+    try appendUnknownField(builder, node, "adapter");
+    try expectInvalid(nested_root);
+
+    const parameter_root = try minimalRaw(builder, false);
+    const parameter_node = sequence(field(mapping(parameter_root).?, "nodes")).?[0];
+    const parameter_value = try rawParameter(builder, "flag", "boolean", try builder.boolean(true));
+    field(mapping(parameter_node).?, "parameters").?.* = .{ .sequence = &.{parameter_value} };
+    try appendUnknownField(builder, parameter_value, "path");
+    try expectInvalid(parameter_root);
+
+    const tagged_root = try minimalRaw(builder, false);
+    const tagged_node = sequence(field(mapping(tagged_root).?, "nodes")).?[0];
+    const tagged_parameter = try rawParameter(builder, "flag", "boolean", try builder.boolean(true));
+    field(mapping(tagged_node).?, "parameters").?.* = .{ .sequence = &.{tagged_parameter} };
+    try appendUnknownField(builder, field(mapping(tagged_parameter).?, "value").?, "command");
+    try expectInvalid(tagged_root);
+
+    const transition_root = try minimalRaw(builder, false);
+    const transition = sequence(field(mapping(transition_root).?, "transitions")).?[0];
+    try appendUnknownField(builder, transition, "script");
+    try expectInvalid(transition_root);
+
+    const target_root = try minimalRaw(builder, false);
+    const target_transition = sequence(field(mapping(target_root).?, "transitions")).?[0];
+    try appendUnknownField(builder, field(mapping(target_transition).?, "target").?, "capability");
+    try expectInvalid(target_root);
+}
+
 test "parameter variants are closed bounded and locally unique" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -399,6 +468,11 @@ test "schema sequence limits accept exact bounds and reject one more" {
     @memset(too_many_nodes, exact_nodes[0]);
     field(mapping(too_many_nodes_root).?, "nodes").?.* = .{ .sequence = too_many_nodes };
     try expectInvalid(too_many_nodes_root);
+
+    const duplicate_nodes_root = try minimalRaw(builder, false);
+    const duplicate_node = sequence(field(mapping(duplicate_nodes_root).?, "nodes")).?[0];
+    field(mapping(duplicate_nodes_root).?, "nodes").?.* = .{ .sequence = &.{ duplicate_node, duplicate_node } };
+    try expectInvalid(duplicate_nodes_root);
 
     const exact_parameters_root = try minimalRaw(builder, false);
     const exact_parameters_node = sequence(field(mapping(exact_parameters_root).?, "nodes")).?[0];
@@ -454,4 +528,12 @@ fn rawParameter(builder: RawBuilder, id: []const u8, kind: []const u8, value: *w
         try builder.pair("parameterId", try builder.scalar(id)),
         try builder.pair("value", tagged),
     });
+}
+
+fn appendUnknownField(builder: RawBuilder, node: *workflow.RawNode, name: []const u8) !void {
+    const source = mapping(node) orelse return error.ExpectedMapping;
+    const expanded = try builder.allocator.alloc(workflow.RawPair, source.len + 1);
+    @memcpy(expanded[0..source.len], source);
+    expanded[source.len] = try builder.pair(name, try builder.scalar("forbidden"));
+    node.* = .{ .mapping = expanded };
 }

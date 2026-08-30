@@ -213,3 +213,99 @@ test "graph validator enforces the variable-size node boundary" {
     };
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
 }
+
+test "graph validator enforces typed production replacement and invalidation flow" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const entry = compiledNode("entry", &.{}, &.{.engine_config}, &.{}, &.{}, &.{.ok});
+    const consume = compiledNode("consume", &.{.engine_config}, &.{}, &.{}, &.{}, &.{.ok});
+    const transitions = [_]workflow.Transition{
+        .{ .from = entry.id, .outcome = .ok, .target = .{ .node = consume.id } },
+        .{ .from = consume.id, .outcome = .ok, .target = .{ .terminal = .ok } },
+    };
+    var graph = testGraph(&.{ entry, consume }, &transitions, entry.id, &.{});
+    _ = try (Action{}).execute(arena.allocator(), &.{graph});
+
+    const missing = compiledNode("entry", &.{.engine_config}, &.{}, &.{}, &.{}, &.{.ok});
+    const missing_transition = [_]workflow.Transition{.{ .from = missing.id, .outcome = .ok, .target = .{ .terminal = .ok } }};
+    graph = testGraph(&.{missing}, &missing_transition, missing.id, &.{});
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
+
+    const duplicate = compiledNode("entry", &.{}, &.{.engine_config}, &.{}, &.{}, &.{.ok});
+    const duplicate_transition = [_]workflow.Transition{.{ .from = duplicate.id, .outcome = .ok, .target = .{ .terminal = .ok } }};
+    graph = testGraph(&.{duplicate}, &duplicate_transition, duplicate.id, &.{.engine_config});
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
+
+    const replace = compiledNode("entry", &.{}, &.{}, &.{.engine_config}, &.{}, &.{.ok});
+    const replace_transition = [_]workflow.Transition{.{ .from = replace.id, .outcome = .ok, .target = .{ .terminal = .ok } }};
+    graph = testGraph(&.{replace}, &replace_transition, replace.id, &.{});
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
+
+    const invalidate = compiledNode("entry", &.{}, &.{}, &.{}, &.{.engine_config}, &.{.ok});
+    const invalidate_transition = [_]workflow.Transition{.{ .from = invalidate.id, .outcome = .ok, .target = .{ .terminal = .ok } }};
+    graph = testGraph(&.{invalidate}, &invalidate_transition, invalidate.id, &.{});
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
+}
+
+test "graph validator rejects branches that merge different typed contexts" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const entry = compiledNode("entry", &.{}, &.{}, &.{}, &.{}, &.{ .ok, .failed });
+    const producer = compiledNode("producer", &.{}, &.{.engine_config}, &.{}, &.{}, &.{.ok});
+    const empty = compiledNode("empty", &.{}, &.{}, &.{}, &.{}, &.{.ok});
+    const merge = compiledNode("merge", &.{}, &.{}, &.{}, &.{}, &.{.ok});
+    const transitions = [_]workflow.Transition{
+        .{ .from = entry.id, .outcome = .ok, .target = .{ .node = producer.id } },
+        .{ .from = entry.id, .outcome = .failed, .target = .{ .node = empty.id } },
+        .{ .from = producer.id, .outcome = .ok, .target = .{ .node = merge.id } },
+        .{ .from = empty.id, .outcome = .ok, .target = .{ .node = merge.id } },
+        .{ .from = merge.id, .outcome = .ok, .target = .{ .terminal = .ok } },
+    };
+    const graph = testGraph(&.{ entry, producer, empty, merge }, &transitions, entry.id, &.{});
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
+}
+
+fn compiledNode(
+    id: []const u8,
+    requires: []const pipeline.DataKey,
+    produces: []const pipeline.DataKey,
+    replaces: []const pipeline.DataKey,
+    invalidates: []const pipeline.DataKey,
+    outcomes: []const workflow.OutcomeTag,
+) workflow.CompiledNode {
+    return .{
+        .id = workflow.WorkflowNodeId.parse(id).?,
+        .contract_id = workflow.RegisteredRef.parse("core.noop@1").?,
+        .parameters = &.{},
+        .requires = requires,
+        .produces = produces,
+        .replaces = replaces,
+        .invalidates = invalidates,
+        .outcomes = outcomes,
+        .side_effect = .none,
+        .gates = &.{},
+        .capabilities = &.{},
+    };
+}
+
+fn testGraph(
+    nodes: []const workflow.CompiledNode,
+    transitions: []const workflow.Transition,
+    entry: workflow.WorkflowNodeId,
+    invocation_outputs: []const pipeline.DataKey,
+) workflow.CompiledWorkflow {
+    return .{
+        .source_ordinal = 1,
+        .shortcode = @import("../../domain/telemetry.zig").WorkflowShortcode.parse("FLOW") catch unreachable,
+        .authority = .{
+            .workflow_id = workflow.WorkflowId.parse("flow").?,
+            .workflow_version = 1,
+            .invocation_contract_id = workflow.RegisteredRef.parse("core.empty@1").?,
+            .policy_profile_id = workflow.RegisteredRef.parse("core.safe@1").?,
+            .entry_node_id = entry,
+            .invocation_outputs = invocation_outputs,
+            .nodes = nodes,
+            .transitions = transitions,
+        },
+    };
+}

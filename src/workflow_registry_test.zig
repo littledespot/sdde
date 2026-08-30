@@ -1,6 +1,7 @@
 const std = @import("std");
 const inventory_action = @import("actions/workflow/inventory_workflow_authority.zig");
 const capture_action = @import("actions/workflow/capture_workflow_definitions.zig");
+const registry_service = @import("application/workflow_definition_registry_service.zig");
 const workflow_source = @import("adapters/filesystem/workflow_authority_source.zig");
 const file_identity = @import("adapters/filesystem/file_identity.zig");
 const bootstrap_registry = @import("domain/bootstrap_root_registry.zig");
@@ -148,6 +149,30 @@ test "capture budget is enforced before any definition read" {
     try std.testing.expectEqual(@as(usize, 0), fake.capture_calls);
 }
 
+test "definition capture maps incomplete reads and preserves cancellation" {
+    const root_owner = try createRootOwner(std.testing.allocator, .{ .filesystem_id = 1, .file_id = 99 });
+    defer bootstrap_registry.deinitOwner(root_owner);
+    const capability = bootstrap_registry.registry(root_owner).workflowAuthority();
+    const descriptors = [_]workflow.InventoryDescriptor{descriptor("one.workflow.yaml", .file, 1, 3)};
+    var fake: FakeSource = .{ .descriptors = &descriptors, .capture_failure = true };
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const inventory = try (inventory_action.Action{ .source = fake.port() }).execute(arena.allocator(), .{ .capability = capability }, .{});
+    try std.testing.expectError(
+        error.WorkflowDefinitionReadError,
+        (capture_action.Action{ .source = fake.port() }).execute(arena.allocator(), inventory, .{}),
+    );
+    try std.testing.expectEqual(@as(usize, 1), fake.capture_calls);
+
+    fake.capture_failure = false;
+    var status = pipeline.RuntimeStatus.cancelled;
+    const runtime: pipeline.NodeRuntime = .{ .context = &status, .status_fn = runtimeStatus };
+    try std.testing.expectError(
+        error.Cancelled,
+        (capture_action.Action{ .source = fake.port() }).execute(arena.allocator(), inventory, runtime),
+    );
+}
+
 test "filesystem capture accepts the exact byte limit and rejects a changed file" {
     const io = std.testing.io;
     const exact_bytes = try std.testing.allocator.alloc(u8, workflow.max_definition_bytes);
@@ -168,6 +193,30 @@ test "filesystem capture accepts the exact byte limit and rejects a changed file
     const exact_inventory = try (inventory_action.Action{ .source = exact_adapter.source() }).execute(exact_arena.allocator(), .{ .capability = exact_capability }, .{});
     const captures = try (capture_action.Action{ .source = exact_adapter.source() }).execute(exact_arena.allocator(), exact_inventory, .{});
     try std.testing.expectEqual(workflow.max_definition_bytes, captures[0].bytes.len);
+
+    const oversized_bytes = try std.testing.allocator.alloc(u8, workflow.max_definition_bytes + 1);
+    defer std.testing.allocator.free(oversized_bytes);
+    @memset(oversized_bytes, 'a');
+    var oversized_project = std.testing.tmpDir(.{});
+    defer oversized_project.cleanup();
+    try oversized_project.dir.createDirPath(io, "workflows");
+    try oversized_project.dir.writeFile(io, .{ .sub_path = "workflows/oversized.workflow.yaml", .data = oversized_bytes });
+    var oversized_root = try oversized_project.dir.openDir(io, "workflows", .{ .iterate = true });
+    defer oversized_root.close(io);
+    const oversized_owner = try createRootOwner(std.testing.allocator, try file_identity.inspect(oversized_root.handle));
+    defer bootstrap_registry.deinitOwner(oversized_owner);
+    const oversized_capability = bootstrap_registry.registry(oversized_owner).workflowAuthority();
+    var oversized_adapter = workflow_source.Adapter.init(io, oversized_project.dir);
+    var oversized_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer oversized_arena.deinit();
+    try std.testing.expectError(
+        error.WorkflowAuthorityInventoryInvalid,
+        (inventory_action.Action{ .source = oversized_adapter.source() }).execute(
+            oversized_arena.allocator(),
+            .{ .capability = oversized_capability },
+            .{},
+        ),
+    );
 
     inline for ([_]Mutation{ .grow, .shrink, .replace, .type_change }) |mutation| {
         var project = std.testing.tmpDir(.{});
@@ -207,12 +256,177 @@ test "filesystem capture accepts the exact byte limit and rejects a changed file
     }
 }
 
+test "validated workflow registry accepts zero definitions and owns one immutable graph" {
+    const root_owner = try createRootOwner(std.testing.allocator, .{ .filesystem_id = 1, .file_id = 99 });
+    var root_owner_live = true;
+    defer if (root_owner_live) bootstrap_registry.deinitOwner(root_owner);
+    const capability = bootstrap_registry.registry(root_owner).workflowAuthority();
+    const empty_candidate: workflow.RegistryCandidate = .{
+        .inventory = .{ .capability = capability, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{} },
+        .captures = &.{},
+        .definitions = &.{},
+        .graphs = &.{},
+    };
+    const empty_owner = try workflow.createValidated(std.testing.allocator, empty_candidate);
+    defer workflow.deinitOwner(empty_owner);
+    try std.testing.expectEqual(@as(usize, 0), workflow.registry(empty_owner).count());
+
+    var scratch = std.heap.ArenaAllocator.init(std.testing.allocator);
+    var scratch_live = true;
+    defer if (scratch_live) scratch.deinit();
+    const allocator = scratch.allocator();
+    const workflow_id = try allocator.dupe(u8, "hello");
+    const definition = validDefinition(workflow_id, "HELO", 1);
+    const graph = validGraph(definition);
+    const path = try allocator.dupe(u8, "arbitrary.workflow.yaml");
+    const descriptors = [_]workflow.InventoryDescriptor{descriptor(path, .file, 1, 3)};
+    const accounts = [_]workflow.InventoryAccount{.{ .ordinal = 1, .path = path, .disposition = .definition }};
+    const ordinals = [_]u16{1};
+    const captures = [_]workflow.Capture{.{ .ordinal = 1, .bytes = "abc" }};
+    const definitions = [_]workflow.Definition{definition};
+    const graphs = [_]workflow.CompiledWorkflow{graph};
+    const owner = try workflow.createValidated(std.testing.allocator, .{
+        .inventory = .{ .capability = capability, .descriptors = &descriptors, .accounts = &accounts, .definition_ordinals = &ordinals },
+        .captures = &captures,
+        .definitions = &definitions,
+        .graphs = &graphs,
+    });
+    scratch.deinit();
+    scratch_live = false;
+    bootstrap_registry.deinitOwner(root_owner);
+    root_owner_live = false;
+    var service = registry_service.WorkflowDefinitionRegistryService.init(owner);
+    defer service.deinit();
+    try std.testing.expect(service.registry() == service.registry());
+    try std.testing.expectEqual(@as(usize, 1), service.registry().count());
+    const resolved = service.registry().resolve(workflow.WorkflowId.parse("hello").?);
+    try std.testing.expect(resolved != null);
+    try std.testing.expectEqualStrings("core.noop@1", resolved.?.authority.nodes[0].contract_id.bytes);
+}
+
+test "registry rejects global identity collisions and incomplete joins" {
+    const root_owner = try createRootOwner(std.testing.allocator, .{ .filesystem_id = 1, .file_id = 99 });
+    defer bootstrap_registry.deinitOwner(root_owner);
+    const capability = bootstrap_registry.registry(root_owner).workflowAuthority();
+    inline for ([_]RegistryFault{ .workflow_id, .shortcode, .ordinal, .missing_graph, .extra_graph, .projection, .reserved_ordinal }) |fault| {
+        var descriptors = [_]workflow.InventoryDescriptor{
+            descriptor("a.workflow.yaml", .file, 1, 3),
+            descriptor("b.workflow.yaml", .file, 2, 3),
+        };
+        var accounts = [_]workflow.InventoryAccount{
+            .{ .ordinal = 1, .path = descriptors[0].path, .disposition = .definition },
+            .{ .ordinal = 2, .path = descriptors[1].path, .disposition = .definition },
+        };
+        var ordinals = [_]u16{ 1, 2 };
+        var captures = [_]workflow.Capture{
+            .{ .ordinal = 1, .bytes = "one" },
+            .{ .ordinal = 2, .bytes = "two" },
+        };
+        var definitions = [_]workflow.Definition{
+            validDefinition("alpha", "ALPH", 1),
+            validDefinition("beta", "BETA", 2),
+        };
+        var graphs = [_]workflow.CompiledWorkflow{
+            validGraph(definitions[0]),
+            validGraph(definitions[1]),
+            validGraph(definitions[1]),
+        };
+        var graph_values: []const workflow.CompiledWorkflow = graphs[0..2];
+        switch (fault) {
+            .workflow_id => {
+                definitions[1].workflow_id = definitions[0].workflow_id;
+                graphs[1] = validGraph(definitions[1]);
+            },
+            .shortcode => {
+                definitions[1].shortcode = definitions[0].shortcode;
+                graphs[1] = validGraph(definitions[1]);
+            },
+            .ordinal => {
+                captures[1].ordinal = 1;
+                definitions[1].source_ordinal = 1;
+                graphs[1] = validGraph(definitions[1]);
+            },
+            .missing_graph => graph_values = graphs[0..1],
+            .extra_graph => graph_values = graphs[0..3],
+            .projection => graphs[1].authority.workflow_version += 1,
+            .reserved_ordinal => {
+                descriptors[1] = descriptor("features", .directory, 2, null);
+                accounts[1].path = descriptors[1].path;
+                accounts[1].disposition = .reserved_child;
+            },
+        }
+        try std.testing.expectError(error.InvalidWorkflowRegistry, workflow.createValidated(std.testing.allocator, .{
+            .inventory = .{ .capability = capability, .descriptors = &descriptors, .accounts = &accounts, .definition_ordinals = &ordinals },
+            .captures = &captures,
+            .definitions = &definitions,
+            .graphs = graph_values,
+        }));
+    }
+}
+
 const Unsupported = enum { regular, symlink, reserved_wrong_kind, reserved_alias };
 const Mutation = enum { grow, shrink, replace, type_change };
+const RegistryFault = enum { workflow_id, shortcode, ordinal, missing_graph, extra_graph, projection, reserved_ordinal };
+
+const declared_nodes = [_]workflow.DeclarativeNode{.{
+    .id = workflow.WorkflowNodeId.parse("run").?,
+    .contract_id = workflow.RegisteredRef.parse("core.noop@1").?,
+    .parameters = &.{},
+}};
+const declared_transitions = [_]workflow.Transition{.{
+    .from = declared_nodes[0].id,
+    .outcome = .ok,
+    .target = .{ .terminal = .ok },
+}};
+const compiled_nodes = [_]workflow.CompiledNode{.{
+    .id = declared_nodes[0].id,
+    .contract_id = declared_nodes[0].contract_id,
+    .parameters = &.{},
+    .requires = &.{},
+    .produces = &.{},
+    .replaces = &.{},
+    .invalidates = &.{},
+    .outcomes = &.{.ok},
+    .side_effect = .none,
+    .gates = &.{},
+    .capabilities = &.{},
+}};
+
+fn validDefinition(id: []const u8, shortcode: []const u8, ordinal: u16) workflow.Definition {
+    return .{
+        .source_ordinal = ordinal,
+        .workflow_id = workflow.WorkflowId.parse(id).?,
+        .workflow_version = 1,
+        .shortcode = @import("domain/telemetry.zig").WorkflowShortcode.parse(shortcode) catch unreachable,
+        .invocation_contract_id = workflow.RegisteredRef.parse("core.empty@1").?,
+        .policy_profile_id = workflow.RegisteredRef.parse("core.safe@1").?,
+        .entry_node_id = declared_nodes[0].id,
+        .nodes = &declared_nodes,
+        .transitions = &declared_transitions,
+    };
+}
+
+fn validGraph(definition: workflow.Definition) workflow.CompiledWorkflow {
+    return .{
+        .source_ordinal = definition.source_ordinal,
+        .shortcode = definition.shortcode,
+        .authority = .{
+            .workflow_id = definition.workflow_id,
+            .workflow_version = definition.workflow_version,
+            .invocation_contract_id = definition.invocation_contract_id,
+            .policy_profile_id = definition.policy_profile_id,
+            .entry_node_id = definition.entry_node_id,
+            .invocation_outputs = &.{},
+            .nodes = &compiled_nodes,
+            .transitions = &declared_transitions,
+        },
+    };
+}
 
 const FakeSource = struct {
     descriptors: []const workflow.InventoryDescriptor,
     capture_calls: usize = 0,
+    capture_failure: bool = false,
     fn port(self: *FakeSource) source_port.Source {
         return .{ .context = self, .enumerate_fn = enumerate, .capture_fn = capture };
     }
@@ -227,10 +441,15 @@ const FakeSource = struct {
     fn capture(context: *anyopaque, _: *const bootstrap_registry.ConfiguredBaseRootCapability, descriptor_value: workflow.InventoryDescriptor, allocator: std.mem.Allocator, runtime: pipeline.NodeRuntime) source_port.Error![]const u8 {
         const self: *FakeSource = @ptrCast(@alignCast(context));
         self.capture_calls += 1;
+        if (self.capture_failure) return error.DefinitionReadError;
         return switch (runtime.status()) {
             .cancelled => error.Cancelled,
             .deadline_exhausted => error.DeadlineExhausted,
-            .active => allocator.alloc(u8, @intCast(descriptor_value.size orelse return error.DefinitionReadError)) catch error.DefinitionReadError,
+            .active => blk: {
+                const bytes = allocator.alloc(u8, @intCast(descriptor_value.size orelse return error.DefinitionReadError)) catch return error.DefinitionReadError;
+                @memset(bytes, 0);
+                break :blk bytes;
+            },
         };
     }
 };
