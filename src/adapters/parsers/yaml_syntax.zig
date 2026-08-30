@@ -1,8 +1,8 @@
 //! Private bounded YAML 1.2 syntax adapter.
 //!
 //! This adapter owns YAML loading only. Its generic document may be consumed
-//! only inside the toolchain parser/action boundary and must never be exported
-//! from the SDDE root module or returned by a service. It does not map fields,
+//! only inside a domain parser adapter and must never be exported from the
+//! SDDE root module or returned by a service. It does not map fields,
 //! validate a domain schema, resolve inheritance, log, or perform filesystem
 //! I/O.
 
@@ -11,6 +11,7 @@ const yaml = @import("yaml");
 
 pub const Diagnostic = yaml.Diagnostic;
 pub const Document = yaml.LoadedDocument;
+pub const Node = yaml.Node;
 pub const Error = yaml.Error;
 
 pub const Limits = struct {
@@ -109,5 +110,21 @@ test "rejects unsafe YAML document features" {
 test "enforces caller-supplied limits" {
     var limits = test_limits;
     limits.max_input_bytes = 4;
+    try expectRejected("name: value\n", limits);
+
+    limits = test_limits;
+    limits.max_event_count = 1;
+    try expectRejected("name: value\n", limits);
+
+    limits = test_limits;
+    limits.max_token_count = 1;
+    try expectRejected("name: value\n", limits);
+
+    limits = test_limits;
+    limits.max_nesting_depth = 1;
+    try expectRejected("outer:\n  inner: value\n", limits);
+
+    limits = test_limits;
+    limits.max_scalar_bytes = 1;
     try expectRejected("name: value\n", limits);
 }

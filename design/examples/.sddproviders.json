@@ -1,0 +1,38 @@
+{
+  "providers": [
+    {
+      "provider": "aws-bedrock",
+      "models": [
+        {
+          "model": "global.amazon.nova-2-lite-v1:0",
+          "config": {
+            "region": "ap-southeast-2"
+          }
+        }
+      ]
+    },
+    {
+      "provider": "openai",
+      "models": [
+        {
+          "model": "gpt-5-nano",
+          "config": {
+            "baseUrl": "https://api.openai.com/v1"
+          }
+        },
+        {
+          "model": "gpt-5.4-nano",
+          "config": {
+            "baseUrl": "https://api.openai.com/v1"
+          }
+        },
+        {
+          "model": "gpt-5.4-mini",
+          "config": {
+            "baseUrl": "https://api.openai.com/v1"
+          }
+        }
+      ]
+    }
+  ]
+}

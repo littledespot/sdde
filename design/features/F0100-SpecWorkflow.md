@@ -1,0 +1,341 @@
+# F0100 — SpecWorkflow
+
+**Status:** Proposed feature design
+
+**Implementation readiness:** The generic YAML boundary, logical Specify flow,
+`spec.md` section hierarchy, and clarification separation are defined below. An
+executable definition still requires F0005's workflow-specific YAML parser
+limits, the exact registered Specify invocation/node/outcome/parameter/policy
+contracts, and the renderer/parser decisions called out in Section 5.6.
+
+**Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
+workflow-definition boundary; F0100 adds no reader or Specify-specific media
+rule.
+
+**Classification:** Initial SDD workflow definition
+
+**Scope:** SDDE engine development. This feature defines declarative topology
+and the business-facing `spec.md` projection. It defines no executable code or
+model capability.
+
+**Governing authority:** [Engine design](../design.md), especially Sections 1,
+3-7, 12-14, 17, and 21-25; accepted [ADR
+0003](../decisions/0003-generic-workflow-engine.md); and the closed
+workflow-definition field and graph shape in [F0005](F0005-WorkflowDefinitionRegistryService.md).
+F0005 owns YAML discovery, decoding, schema validation, and compilation.
+
+---
+
+## 1. Responsibility
+
+`spec.workflow.yaml` is one ordinary definition beneath `paths.workflows`. It
+declares the `specify` workflow's identity and graph topology using registered
+`PipelineNode` contracts. The generic workflow engine selects it by validated
+content-derived `WorkflowId` and follows its compiled typed transitions through
+runner-owned bindings; it contains no `specify` name branch.
+
+Registered nodes in the selected graph build and validate `SpecificationIR`,
+render and reparse `spec.md`, render `reference-context.md`, and commit the
+complete artifact/state transaction. The generic workflow engine performs none
+of that Specify-specific work. The YAML contains no output path, Markdown
+template, prompt body, command, adapter, capability, or executable payload.
+
+## 2. Closed YAML shape
+
+The root contains exactly:
+
+| Field | Meaning |
+| --- | --- |
+| `schemaVersion` | Closed workflow-definition schema version. |
+| `workflowId` | `specify`; identity comes from content, not the filename. |
+| `workflowVersion` | Positive workflow-definition version. |
+| `workflowShortcode` | Validated unique four-character logging shortcode. |
+| `invocationContractNodeId` | Exact registered Specify invocation contract. |
+| `workflowPolicyProfileId` | Exact registered workflow policy profile. |
+| `entryWorkflowNodeId` | Definition-local entry-node ID. |
+| `nodes` | Registered pipeline-node references with closed parameters. |
+| `transitions` | One typed target for every declared node outcome. |
+
+Each node contains only `workflowNodeId`, `pipelineNodeContractId`, and
+`parameters`. A parameter is one closed `boolean`, `integer`, `enum`, or
+`registered_id` value accepted by that registered contract.
+
+Each transition uses one of `ok`, `needs_user`, `invalid`, `blocked`, `failed`,
+or `cancelled`, and targets either another local node or the same terminal
+outcome. The compiler rejects missing or duplicate outcome transitions, cycles,
+unreachable nodes, invalid typed data flow, gate weakening, and capability
+escalation.
+
+## 3. Structural outline
+
+The placeholders below are deliberate: the governing design has not yet fixed
+the exact registered Specify contract IDs or their definition-safe parameters.
+
+```yaml
+schemaVersion: "1.0"
+workflowId: specify
+workflowVersion: <positive-u32>
+workflowShortcode: "<validated-unique-four-character-shortcode>"
+invocationContractNodeId: "<registered-ref@version>"
+workflowPolicyProfileId: "<registered-ref@version>"
+entryWorkflowNodeId: "<local-entry-node-id>"
+
+nodes:
+  - workflowNodeId: "<local-node-id>"
+    pipelineNodeContractId: "<registered-ref@version>"
+    parameters: []
+
+transitions:
+  - fromWorkflowNodeId: "<local-node-id>"
+    outcomeTag: "<declared-outcome>"
+    target:
+      kind: terminal
+      outcomeTag: "<same-declared-outcome>"
+```
+
+This is a shape outline, not an executable fixture. A concrete definition is
+valid only after every placeholder is replaced by a registered value and every
+registered node outcome has exactly one transition. A nonterminal transition
+uses `kind: node` and one existing `workflowNodeId` instead of the terminal
+target shown above.
+
+## 4. Required logical coverage
+
+The compiled registered contracts collectively cover:
+
+1. parse and validate only `sdd specify --reference <relative-selector>`;
+2. perform deterministic feature, recovery, and reference preflight;
+3. ingest and reconcile the complete supported reference corpus;
+4. generate a reference-grounded feature brief and the typed units mapped in
+   Section 5;
+5. route missing, unsupported, ambiguous, or conflicting specification
+   authority to an `SNN` clarification transaction without persisting a partial
+   `SpecificationIR` or `spec.md`;
+6. atomically repair only engine-authorized invalid candidate units, then rerun
+   impacted and complete validation;
+7. assign engine-owned record IDs and build and validate the complete
+   `SpecificationIR`;
+8. render the exact Section 5 hierarchy and `reference-context.md`, reparse
+   `spec.md`, and compare normalized IR; and
+9. atomically commit the complete artifact/state set before entering
+   `specified`.
+
+Exact grouping into definition-visible graph nodes follows the registered node
+contracts; this feature does not invent their IDs.
+
+## 5. `spec.md` projection contract
+
+### 5.1 Ownership and hierarchy
+
+`spec.md` is a business-facing renderer projection, never a model-authored
+Markdown response. To preserve the existing fixed `displayName` field and a
+valid heading tree, the renderer emits the display name as the document H1,
+then these sections in exact order:
+
+```markdown
+# <display name>
+
+## User Scenarios & Testing *(mandatory)*
+
+### Primary User Story
+
+### Acceptance Criteria
+
+### User-Visible Outcomes
+
+### Edge Cases
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+### Business Rules
+
+### Assumptions & Scope Boundaries
+
+#### Assumptions
+
+#### Explicit Non-Goals
+
+#### Prohibited Behaviors
+
+### Key Entities *(include if feature involves data)*
+```
+
+The angle-bracketed display-name token above documents the renderer slot; it is
+not emitted literally. `User Scenarios & Testing` and `Requirements` are always
+present. `Key Entities` is present only after a validated applicability decision
+establishes that the feature involves business data.
+
+### 5.2 Typed content mapping
+
+| Section | `SpecificationIR` content | Purpose |
+| --- | --- | --- |
+| Document H1 | `displayName` | Reference-grounded human feature name. |
+| Primary User Story | `primaryUserStory` | Main user journey in plain business language. |
+| Acceptance Criteria | `acceptanceCriteria` / `AC-*` | Testable initial state, action, and expected outcome. |
+| User-Visible Outcomes | `userVisibleOutcomes` / `UO-*` | Results, validation, confirmation, or terminal responses a user can directly observe. |
+| Edge Cases | `edgeCases` / `EC-*` | Boundary/error condition and expected business response. |
+| Functional Requirements | `functionalRequirements` / `FR-*` | Required system or user capability in business terms. |
+| Business Rules | `businessRules` / `BR-*` | Constraint, validation rule, or policy controlling behavior. |
+| Assumptions | `assumptions` / `AS-*` | Supported assumption that keeps the feature bounded. |
+| Explicit Non-Goals | `nonGoals` / `NG-*` | Supported adjacent behavior deliberately outside scope. |
+| Prohibited Behaviors | `prohibitedBehaviors` / `PB-*` | Behavior the feature must not perform. |
+| Key Entities | validated applicability plus `entities` / `EN-*` | Business data concepts and relationships, without implementation detail. |
+
+The engine assigns and preserves record IDs; the model supplies neither IDs nor
+Markdown. The historical template's unnumbered example bullets do not permit
+anonymous persisted records.
+
+### 5.3 Acceptance-criterion rendering
+
+The historical inline `Given`/`When`/`Then` example describes semantic fields.
+The canonical engine-rendered form retains the governing uppercase triplet and
+nests it under the restored section hierarchy:
+
+```markdown
+### Acceptance Criteria
+
+**AC-001**
+- **GIVEN** <nonempty business precondition>
+- **WHEN** <nonempty business event or action>
+- **THEN** <nonempty observable business outcome>
+```
+
+Every criterion contains exactly one nonempty value for each label in that
+order. The renderer owns the heading, identity, labels, casing, order, and
+Markdown structure.
+
+### 5.4 Empty and conditional collections
+
+The hierarchy does not authorize invented filler:
+
+- `displayName`, `primaryUserStory`, and every contract-required record must be
+  supported by current reference or resolved clarification authority;
+- a repeatable collection with zero supported records renders its fixed heading
+  with no bullet, placeholder, or synthetic `None` entry unless its registered
+  requiredness policy requires content;
+- if required content is absent, the workflow takes the clarification path in
+  Section 5.5 rather than rendering an empty successful specification; and
+- `Key Entities` is omitted only from a validated `not_applicable` decision. An
+  empty `entities` collection alone cannot prove that the feature involves no
+  business data.
+
+The registered Specify contract must expose the closed Key Entities
+applicability decision before implementation; its exact contract is not yet
+defined.
+
+### 5.5 Clarification is not specification content
+
+`spec.md` never contains `[CLARIFICATION]`, `[CLAFIFICATION]`,
+`[NEEDS CLARIFICATION: ...]`, `TBD`, unresolved template instructions, or an
+inline clarification question. Every bracketed phrase in the historical
+template is authoring metasyntax and is never emitted or accepted as authority.
+
+When required specification knowledge is missing, ambiguous, unsupported, or
+conflicting, the engine:
+
+1. returns the typed `clarification_needed` route;
+2. allocates or reuses the engine-owned `SNN` identity;
+3. renders the controlled form only beneath `<featureDir>/clarify/SNN.md`;
+4. atomically commits the clarification registry, form, required current
+   authorities, and `spec_clarification_pending` workflow state;
+5. returns terminal `needs_user` with no partial `SpecificationIR` or `spec.md`;
+   and
+6. after a current authenticated answer or authority resolution commits,
+   regenerates every specification unit before validation and rendering.
+
+There is no committed `Open Questions` section in `spec.md`. Specification-owned
+unknowns use the clarification lifecycle above; reference-context questions
+remain in their separate sidecar authority. The proposed `OQ-*` specification
+record shown elsewhere in the design must therefore be removed or narrowed
+before implementation so render/reparse remains lossless.
+
+### 5.6 Remaining renderer/parser decisions
+
+The user-approved hierarchy and clarification boundary are fixed here. Before
+implementation, the registered renderer/parser contract must additionally fix:
+
+- synchronization of the proposed Design Sections 17.6 and 23 and the
+  illustrative SpecificationIR renderer sample from the old standalone
+  `## Acceptance Criteria` heading to Section 5.1's nested hierarchy;
+- exact Markdown grammar for non-acceptance repeatable records;
+- the closed Key Entities applicability value and its provenance;
+- exact visible identity grammar for entity records while retaining `EN-*`;
+- whether functional-requirement modality is renderer-owned or part of validated
+  semantic text; and
+- removal or narrowing of the proposed specification `openQuestions`/`OQ-*`
+  field in accordance with Section 5.5.
+
+These decisions cannot be inferred from historical placeholder text.
+
+## 6. Diagrams
+
+- [Specify workflow logical topology](../diagrams/10-spec-workflow.md) shows
+  selection, typed generation, clarification, rendering, and commit.
+- [`spec.md` projection structure](../diagrams/11-spec-document-structure.md)
+  shows the fixed heading hierarchy and conditional entities section.
+- [Reference ingestion and Specify completion](../diagrams/05-reference-ingestion.md)
+  owns the detailed reference/generation transaction flow.
+- [Clarification lifecycle](../diagrams/07-clarification-lifecycle.md) owns the
+  durable `SNN` pause and later full regeneration path.
+
+The diagrams are behavior and artifact views, not substitutes for the closed
+YAML definition.
+
+## 7. Acceptance criteria
+
+1. `spec.workflow.yaml` is discovered, decoded, validated, compiled, selected,
+   and executed through the same generic YAML workflow-definition path as every
+   other definition, and has `workflowId: specify`.
+2. Every invocation, node, parameter, policy, outcome, gate, and capability
+   reference resolves exactly through an engine registry.
+3. The graph is acyclic, fully reachable, terminal-reachable, data-compatible,
+   outcome-complete, and policy-bounded.
+4. No YAML value selects an artifact path, command, implementation, adapter,
+   capability, prompt, Markdown template, or executable payload.
+5. Registered graph nodes—not the generic workflow engine—own Specify content,
+   validation, rendering, transaction, and state work.
+6. A model returns typed candidate content only; the engine owns IDs, paths,
+   headings, validation, rendering, repair scope, persistence, and completion.
+7. `spec.md` renders the exact Section 5.1 hierarchy, with both mandatory parent
+   sections and a policy-validated conditional Key Entities section.
+8. `spec.md` contains no template placeholder, inline clarification marker, or
+   unresolved specification question; all such needs use `clarify/SNN.md` and
+   terminal `needs_user` with no partial specification.
+9. `needs_user`, `invalid`, `blocked`, `failed`, and `cancelled` cannot be
+   relabelled as `ok`.
+10. Success requires a committed valid specification, complete reference
+   accounting, valid `reference-context.md`, no open `SNN`, and workflow state
+   `specified`.
+11. Adding any other correctly configured workflow YAML composed only from
+   registered contracts requires no workflow-name branch or engine rebuild.
+
+## 8. Verification
+
+- closed YAML fixtures reject missing, unknown, duplicate, and wrong-kind
+  fields and every prohibited operational value;
+- compiler tests cover exact reference resolution, complete outcomes, graph
+  closure, typed data flow, preserved gates, and capability limits;
+- fake-model tests cover valid generation, `SNN` clarification, atomic repair
+  and exhaustion, malformed output, and failure propagation;
+- renderer/parser fixtures cover exact heading order, missing mandatory groups,
+  zero-record collections without filler, data-required entities, validated
+  non-data omission, and render/parse equality;
+- negative fixtures reject every placeholder spelling, inline clarification,
+  unresolved question, malformed/reordered record ID, and invalid acceptance
+  triplet; and
+- golden tests prove byte-stable `spec.md`, mandatory sidecar generation, and
+  atomic commit before `specified`.
+
+## 9. Traceability
+
+| Concern | Authority |
+| --- | --- |
+| Generic declarative workflow execution | ADR 0003; Design Sections 5-6 and 14 |
+| Closed definition and transition shape | F0005 Sections 3 and 7 |
+| Specify behavior and success gate | Design Section 17 |
+| Validation, repair, and no invention | Design Sections 21-22 |
+| Engine-owned rendering and editability | Design Section 23; F0100 Section 5 |
+| Clarification pause and full regeneration | Design Sections 17.4 and 24; diagram 07 |
+| Atomic specification commit | Design Section 25; diagram 09 |

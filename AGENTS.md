@@ -52,6 +52,11 @@ the target project and workflow explicitly.
 - Files beneath **design/toolchainPresets/** and
   **design/.sddtoolkit.json.example** are source examples, not automatic runtime
   configuration or fallback data.
+- Files beneath **design/diagrams/** are Markdown documents containing fenced
+  Mermaid diagrams. Keep the `.md` extension and the `mermaid` fence so each
+  diagram renders in VS Code's built-in Markdown preview (`Cmd+Shift+V` on
+  macOS or `Ctrl+Shift+V` on Windows/Linux); do not use another diagram-source
+  extension.
 - **CODEX_TODO.md** does not currently exist. If one is introduced, it is only
   the guardrail implementation plan and progress checklist; it does not
   override the governing design.
@@ -309,8 +314,10 @@ Once the Zig scaffold exists:
 - Use distinct wrapper types for validated IDs, paths, approvals, commands,
   evidence, capabilities, and transactions; do not pass raw byte slices where
   one of those states is required.
-- Parse external, persisted, configuration, and model bytes into versioned,
-  closed structs/unions that reject unknown fields and unsupported versions.
+- Parse configuration bytes into the single unversioned closed configuration
+  contract and reject unknown fields. Parse other external, persisted, and
+  model bytes into their governing closed contracts, including version checks
+  where those contracts define a version.
 - Keep raw, parsed, normalized, validated, approved, and committed types
   separate and make conversions explicit.
 - Make allocator and ownership boundaries explicit. Borrowed slices cannot
@@ -334,8 +341,8 @@ task.
   input/output assertions.
 - Orchestrators: spy child-binding tests for order, branching, retry, limits,
   and failure propagation.
-- Contracts: accepted/rejected schema fixtures, including unknown fields and
-  version mismatch.
+- Contracts: accepted/rejected schema fixtures, including unknown fields and,
+  for versioned contracts, version mismatch.
 - Properties: paths, DAGs, conflicts, transitions, repairs, rendering, IDs, and
   transaction convergence.
 - Fault injection: malformed model output, parser/command/filesystem failure,

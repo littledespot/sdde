@@ -11,7 +11,7 @@ SDDE against a target project.
 
 **Governing authority:** [Engine design](../design.md), especially Sections
 5-6, 9, 13.1, 25-26, and 28-31; [path contract](../paths.md); the accepted
-[configuration schema](../schemas/sddtoolkit-config-v2.schema.json); and its
+[configuration schema](../schemas/sddtoolkit-config.schema.json); and its
 [example instance](../examples/.sddtoolkit.json).
 
 ---
@@ -35,15 +35,15 @@ The implementation has three actions:
 | --- | --- |
 | `LocateExactEngineConfigAction` | Canonicalize the invocation working directory as the project root and resolve only its exact `.sddtoolkit.json` child. Any failure to resolve a safe readable file returns `ENGINE_CONFIG_READ_ERROR`. Do not search a parent or child directory. |
 | `ReadEngineConfigAction` | Read that validated no-follow regular file into owned bytes up to the internal 1 MiB guard; any failure returns `ENGINE_CONFIG_READ_ERROR`. |
-| `DecodeSDDToolKitConfigAction` | Parse those bytes directly into the exact closed v2 `SDDToolKitConfig`; any JSON, version, or structural failure returns `ENGINE_CONFIG_PARSE_ERROR`. |
+| `DecodeSDDToolKitConfigAction` | Parse those bytes directly into the exact closed `SDDToolKitConfig`; any JSON or structural failure returns `ENGINE_CONFIG_PARSE_ERROR`. |
 
 There is no generic JSON-document action or intermediate JSON tree. JSON
 syntax parsing is part of decoding one known JSON contract.
 
 The runner invokes the actions, validates/applies their deltas, constructs one
-`SDDToolKitConfigService`, and owns its accepted value at the single typed key
-`engine.config@1`. The composition root only constructs the adapter and
-bindings. No action calls another action.
+`SDDToolKitConfigService`, and returns it through the typed bootstrap result.
+The composition root only constructs the adapter and bindings. No action calls
+another action.
 
 ## 3. Configuration shape
 
@@ -51,7 +51,6 @@ The reader-facing contract mirrors the repository fixture:
 
 ```text
 SDDToolKitConfig {
-  version: "2.0",
   logs: LogsConfig,
   models: ModelsConfig,
   paths: PathsConfig
@@ -83,11 +82,11 @@ PathsConfig {
 ```
 
 The root and every fixed nested object are closed by
-`sddtoolkit-config-v2.schema.json`. Missing, duplicate, unknown, or wrong-kind
+`sddtoolkit-config.schema.json`. Missing, duplicate, unknown, or wrong-kind
 members are rejected. Model slot names are data, but every slot value has the
 same closed shape. `promptCapture` is a unique list of at most the four closed
-selectors shown above; an empty list disables body capture. The version must be
-exactly `2.0`. All sink, format, size, retention, flush, redaction, failure,
+selectors shown above; an empty list disables body capture. All sink, format,
+size, retention, flush, redaction, failure,
 prompt-size, and lock values are F0002 compiler constants, not configuration.
 There is no file-output switch: every admitted F0002 record is written to its
 feature/run `.log` file. `console` can only add or suppress the same safe
@@ -102,8 +101,8 @@ Structural decoding does not grant operational authority. In particular:
 
 ## 4. Query and ownership contract
 
-A consumer that needs configuration declares `engine.config@1` and receives a
-borrowed `*const SDDToolKitConfig` from
+A consumer receives the typed `SDDToolKitConfigService` from the bootstrap
+result and borrows `*const SDDToolKitConfig` from
 `SDDToolKitConfigService.config()`. It queries typed fields directly, for
 example `config.logs.level` or `config.paths.specs`.
 
@@ -140,7 +139,7 @@ F0001 exposes exactly two terminal configuration errors:
 | Error | Meaning |
 | --- | --- |
 | `ENGINE_CONFIG_READ_ERROR` | The exact current-directory file cannot be safely and completely read. This includes missing, permissions/I/O failure, unsafe type/symlink/alias, working-directory failure, and exceeding the internal 1 MiB guard. |
-| `ENGINE_CONFIG_PARSE_ERROR` | The bytes cannot be decoded as the exact closed v2 config. This includes malformed JSON, trailing content, unsupported version, and missing, unknown, duplicate, or wrong-kind members. |
+| `ENGINE_CONFIG_PARSE_ERROR` | The bytes cannot be decoded as the exact closed config. This includes malformed JSON, trailing content, and missing, unknown, duplicate, or wrong-kind members. |
 
 Either error makes bootstrap return terminal `failed`, makes the executable
 exit nonzero, and prevents every workflow node, model call, F0002 feature log,
@@ -148,9 +147,10 @@ and project write. The low-level cause may appear in bounded human-readable
 diagnostic detail, but it does not create another public error code or control
 branch.
 
-This pre-release proof of concept has no compatibility target. Config `2.0` is
-updated in place, obsolete v2 drafts are rejected, and F0001 contains no
-migration, alias, dual-reader, or fallback branch.
+This pre-release proof of concept has no compatibility target or configuration
+version discriminator. The single closed contract is updated in place. A
+document containing a `version` member is rejected as unknown, and F0001
+contains no migration, alias, dual-reader, or fallback branch.
 
 Neither error publishes a partial config, writes a cache, creates project
 content, calls a model, or starts runtime logging.
@@ -180,8 +180,8 @@ owner's work.
 3. Decode goes directly from owned bytes to one closed owned
    `SDDToolKitConfig`; no generic JSON tree is retained or published.
 4. A successful invocation reads and decodes the file once.
-5. The runner constructs exactly one `SDDToolKitConfigService` and publishes
-   its immutable value at `engine.config@1`.
+5. The runner constructs exactly one `SDDToolKitConfigService` and returns it
+   through the typed bootstrap result.
 6. Consumers query typed fields without a second config value, cache, generic
    getter, or reread path.
 7. Structural success grants no logging, model, path, command, transaction, or
@@ -206,9 +206,10 @@ branch:
   ignored, missing-file terminal `ENGINE_CONFIG_READ_ERROR`/nonzero exit, wrong type, symlink,
   exact 1 MiB acceptance, 1 MiB plus one-byte rejection, short-read/growth
   enforcement, and no-fallback cases;
-- decoding: the repository fixture, reordered members, malformed JSON,
-  unsupported version, and representative missing/unknown/wrong-kind cases at
-  each closed nesting level, checked against the published v2 schema and all
+- decoding: the repository fixture, reordered members, malformed JSON, a
+  rejected legacy `version` member, and representative
+  missing/unknown/wrong-kind cases at each closed nesting level, checked
+  against the published schema and all
   mapped to `ENGINE_CONFIG_PARSE_ERROR`;
 - ownership: one read/decode, immutable typed queries, no mutation or reread,
   semantic rejection remaining with the relevant consumer, and cleanup on

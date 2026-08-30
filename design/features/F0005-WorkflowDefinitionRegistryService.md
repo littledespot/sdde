@@ -2,14 +2,14 @@
 
 **Status:** Proposed feature design
 
-**Implementation readiness:** Ready for the bounded workflow-authority loading,
-graph-compilation, and registry-construction increment after F0004 can supply a
-validated `workflow_authority` capability. The exact v1 transport, schema,
-lexical rules, and hard limits are fixed below.
+**Implementation readiness:** The YAML reader boundary, workflow-specific
+parser bounds, closed schema, graph-compilation, and registry-construction
+contract are defined below.
 
 **Compatibility:** None. This pre-release increment accepts only the exact v1
-contract. It has no YAML reader, migration, alias, legacy filename, dual
-reader, implicit default, source example, or packaged fallback.
+YAML contract. It has no JSON or `.yml` reader, migration, YAML alias,
+legacy filename, dual reader, implicit default, source example, or packaged
+fallback.
 
 **Classification:** Core, read-only workflow bootstrap authority provider
 
@@ -22,8 +22,9 @@ mutating project or engine state.
 0003](../decisions/0003-generic-workflow-engine.md); [F0002 —
 LogService](F0002-LogService.md); [F0004 —
 BootstrapRootRegistryService](F0004-BootstrapRootRegistryService.md); the [path
-contract](../paths.md); and the formal [workflow-definition v1 JSON
-Schema](../schemas/workflow-definition-v1.schema.json).
+contract](../paths.md); and the formal [workflow-definition v1 structural
+schema](../schemas/workflow-definition-v1.schema.json), expressed as JSON
+Schema documentation of the decoded YAML shape.
 
 ---
 
@@ -50,7 +51,7 @@ The one feature outcome is built by separate owners:
 | Owner | Sole responsibility |
 | --- | --- |
 | F0004 | Supply the validated `workflow_authority` root capability; no workflow loader reinterprets the raw config string. |
-| Workflow loader actions | Derive the reserved layout, inventory every in-scope entry, capture definition bytes, parse JSON, validate the closed schema, and totally account for the inventory. |
+| Workflow loader actions | Derive the reserved layout, inventory every in-scope entry, capture definition bytes, decode YAML 1.2, validate the closed schema, and totally account for the inventory. |
 | Workflow compiler actions | Resolve registered contracts and compile one validated immutable graph per schema-valid definition. |
 | Registry actions | Index all compiled graphs and prove global uniqueness and total coverage. |
 | Fixed startup orchestrator | Coordinate those runner-owned child bindings in order and branch only on typed outcomes. |
@@ -77,11 +78,19 @@ query, mutable map, copied projection, reload, or fallback API.
 
 ## 2. Increment boundary
 
-The current implementation stops after F0001's exact config locate/read/decode
-flow and a small compile-time `NodeContract` set. This increment adds the
-workflow domain types, narrow read/parser ports, loader/compiler/registry
-actions, complete registered contract inputs, runner bindings, and fixed
-startup coordination required to produce the validated registry candidate.
+The workflow-definition media boundary:
+
+- classifies and captures only exact `*.workflow.yaml` definitions;
+- uses the private bounded YAML 1.2 syntax adapter for infrastructure-only
+  reuse without merging toolchain and workflow domain contracts;
+- exposes a narrow workflow-definition parser port and composition-root adapter;
+- converts parser-library values once into a workflow-owned raw value passed to
+  the closed schema-validation boundary; and
+- uses the YAML contract for workflow fixtures, parser tests, runtime tests,
+  and clean-package smoke inputs.
+
+The existing loader/compiler/registry responsibilities, registered contract
+inputs, runner bindings, and fixed startup coordination remain unchanged.
 
 It begins with:
 
@@ -107,30 +116,40 @@ registry and acquires no project/feature transaction lock.
 
 ## 3. Closed workflow-definition encoding and schema
 
-### 3.1 File and JSON contract
+### 3.1 File and YAML contract
 
-V1 supports exactly one encoding: UTF-8 JSON in a regular file whose basename
-has at least one character before the exact case-sensitive suffix
-`.workflow.json`. One file contains exactly one definition object. Discovery is
+V1 supports exactly one encoding: UTF-8 YAML 1.2 in a regular file whose
+basename has at least one character before the exact case-sensitive suffix
+`.workflow.yaml`. One file contains exactly one definition mapping. Discovery is
 recursive beneath the validated workflow-authority root, subject to the
 reserved-child exclusion in Section 5. A filename never supplies or constrains
 `WorkflowId`; identity comes only from validated content.
 
-The parser rejects a UTF-8 BOM, invalid UTF-8, comments, duplicate object keys
-at any depth, a non-object root, a second/trailing JSON value, non-integer
-number tokens containing a fraction or exponent anywhere in the document, and
-malformed JSON. The parser returns a bounded ordinal-bound raw JSON value and
+The syntax reader uses the YAML 1.2 core schema and accepts exactly one
+document. It rejects a UTF-8 BOM, invalid UTF-8, duplicate mapping keys at any
+depth, aliases, custom tags, a non-mapping root, a second document, and
+malformed YAML. It returns a bounded ordinal-bound workflow-owned raw value and
 applies no workflow policy. The schema validator alone converts that raw value
 into an owned `DeclarativeWorkflowDefinition`.
 
+`ParseWorkflowDefinitionAction` depends only on a narrow
+`WorkflowDefinitionParser` port. The composition root binds a workflow adapter
+backed by the shared private bounded YAML 1.2 syntax adapter. That low-level
+adapter may also serve F0003, but workflow and toolchain parser ports, raw
+values, conversions, and schema validators remain separate. The workflow
+adapter converts parser-library nodes directly into the workflow-owned raw
+value; no parser-library type crosses the port or enters domain/service state,
+and there is no YAML-to-JSON text conversion or second parse.
+
 V1 acceptance is the conjunction of three non-overlapping contracts:
 
-1. this section's lexical media policy owns UTF-8, BOM, comments, duplicate
-   object keys, integer-only number-token syntax, one-root-value, and
-   trailing-content rules;
+1. this section's lexical media policy owns UTF-8, BOM, YAML 1.2 syntax,
+   duplicate mapping keys, aliases, custom tags, the one-document mapping root,
+   and multiple-document rejection;
 2. `design/schemas/workflow-definition-v1.schema.json`, using JSON Schema
-   draft 2020-12, is the normative closed structural projection for object
-   fields, tagged shapes, scalar types/patterns, and static array bounds; and
+   draft 2020-12, is the normative closed structural projection of the decoded
+   YAML data for mapping fields, tagged shapes, scalar types/patterns, and
+   static sequence bounds; and
 3. typed validators own relational rules that JSON Schema cannot express here:
    `ValidateWorkflowDefinitionSchemaAction` alone owns definition-local node-ID
    and per-node parameter-ID uniqueness, while the compiler owns transition-key
@@ -139,9 +158,9 @@ V1 acceptance is the conjunction of three non-overlapping contracts:
 
 The executable does not read the repository schema file at runtime. Its Zig
 types and validators implement all three layers; conformance fixtures prove
-the structural layer matches the JSON Schema and separately prove lexical and
-relational cases. The schema, design examples, and source tree are never
-runtime fallbacks or packaged authority.
+that decoded YAML matches the JSON Schema projection and separately prove
+lexical and relational cases. The schema, design examples, and source tree are
+never runtime fallbacks or packaged authority.
 
 ### 3.2 Root shape
 
@@ -156,8 +175,8 @@ Every definition contains exactly these fields:
 | `invocationContractNodeId` | Exact versioned reference to one registered capability-free invocation-contract node. |
 | `workflowPolicyProfileId` | Exact versioned reference to one registered workflow policy profile. |
 | `entryWorkflowNodeId` | Definition-local ID of the graph entry node. |
-| `nodes` | One to 256 closed node objects. |
-| `transitions` | One to `nodes x 6`, with a schema ceiling of 1,536 closed transition objects. |
+| `nodes` | One to 256 closed node mappings. |
+| `transitions` | One to `nodes x 6`, with a schema ceiling of 1,536 closed transition mappings. |
 
 `sourceInventoryOrdinal` is engine-derived provenance and is not accepted in a
 file. Definitions also have no field for a path, command, script, adapter,
@@ -185,21 +204,19 @@ version range, `latest`, filename, implementation symbol, or near match.
 
 A node contains exactly:
 
-```json
-{
-  "workflowNodeId": "preflight",
-  "pipelineNodeContractId": "sdd.specify-preflight@1",
-  "parameters": []
-}
+```yaml
+workflowNodeId: preflight
+pipelineNodeContractId: sdd.specify-preflight@1
+parameters: []
 ```
 
 `workflowNodeId` is unique within the definition, as proven once by the typed
 schema validator. The registered node reference identifies a contract, not a
 concrete implementation or adapter.
 
-`parameters` is a required array of zero to 32 bindings with unique
+`parameters` is a required sequence of zero to 32 bindings with unique
 `parameterId` values as proven by the typed schema validator. It is never an
-open JSON map. Each binding contains exactly `parameterId` and `value`, and a
+open mapping. Each binding contains exactly `parameterId` and `value`, and a
 value is exactly one closed tagged variant:
 
 ```text
@@ -209,7 +226,7 @@ value is exactly one closed tagged variant:
 { kind: "registered_id", value: RegisteredRef }
 ```
 
-There is no null, float, free-text string, composite object/list, raw path,
+There is no null, float, free-text string, composite mapping/sequence, raw path,
 raw command, adapter, executable, capability, or runner-control parameter.
 Each registered node contract supplies one immutable
 definition-safe-parameter descriptor: exact required/optional IDs, expected
@@ -222,15 +239,12 @@ schema validator's parameter-ID uniqueness evidence.
 A transition contains exactly a source `workflowNodeId`, one common outcome
 tag, and one tagged target:
 
-```json
-{
-  "fromWorkflowNodeId": "preflight",
-  "outcomeTag": "ok",
-  "target": {
-    "kind": "terminal",
-    "outcomeTag": "ok"
-  }
-}
+```yaml
+fromWorkflowNodeId: preflight
+outcomeTag: ok
+target:
+  kind: terminal
+  outcomeTag: ok
 ```
 
 The closed outcome tags are `ok`, `needs_user`, `invalid`, `blocked`, `failed`,
@@ -242,7 +256,7 @@ v1 terminal target must preserve the source transition tag exactly; graph
 policy may further prohibit a tag from terminating. It cannot relabel a
 non-`ok` result as `ok`.
 
-Node, parameter, and transition array positions have no semantic authority.
+Node, parameter, and transition sequence positions have no semantic authority.
 The compiler canonicalizes nodes and parameters by their typed IDs and
 transitions by `(fromWorkflowNodeId, outcomeTag)` before constructing
 `CompiledWorkflowSemanticAuthority`. Reordering a file without changing its
@@ -250,33 +264,24 @@ typed content cannot change the compiled semantic graph.
 
 ### 3.4 Minimal accepted shape
 
-```json
-{
-  "schemaVersion": "1.0",
-  "workflowId": "specify",
-  "workflowVersion": 1,
-  "workflowShortcode": "SPEC",
-  "invocationContractNodeId": "sdd.specify-invocation@1",
-  "workflowPolicyProfileId": "sdd.hardened@1",
-  "entryWorkflowNodeId": "preflight",
-  "nodes": [
-    {
-      "workflowNodeId": "preflight",
-      "pipelineNodeContractId": "sdd.specify-preflight@1",
-      "parameters": []
-    }
-  ],
-  "transitions": [
-    {
-      "fromWorkflowNodeId": "preflight",
-      "outcomeTag": "ok",
-      "target": {
-        "kind": "terminal",
-        "outcomeTag": "ok"
-      }
-    }
-  ]
-}
+```yaml
+schemaVersion: "1.0"
+workflowId: specify
+workflowVersion: 1
+workflowShortcode: SPEC
+invocationContractNodeId: sdd.specify-invocation@1
+workflowPolicyProfileId: sdd.hardened@1
+entryWorkflowNodeId: preflight
+nodes:
+  - workflowNodeId: preflight
+    pipelineNodeContractId: sdd.specify-preflight@1
+    parameters: []
+transitions:
+  - fromWorkflowNodeId: preflight
+    outcomeTag: ok
+    target:
+      kind: terminal
+      outcomeTag: ok
 ```
 
 The values are illustrative. `specify` is not a required registry member and
@@ -297,6 +302,15 @@ allocation or continued traversal can exceed them:
 | `maxWorkflowDefinitionTotalBytes` | 16,777,216 bytes per inventory |
 | `maxWorkflowNodesPerDefinition` | 256 nodes |
 | `maxWorkflowParametersPerNode` | 32 bindings |
+| `maxWorkflowYamlEvents` | 262,144 events per definition |
+| `maxWorkflowYamlTokens` | 262,144 tokens per definition |
+| `maxWorkflowYamlNestingDepth` | 16 levels per definition |
+| `maxWorkflowYamlScalarBytes` | 128 bytes per scalar |
+
+These YAML limits are workflow-owned and are passed to the shared bounded
+syntax adapter. The event and token ceilings admit the maximum v1 graph shape
+within the one-mebibyte file ceiling; nesting and individual scalars remain
+tightly bounded by the closed schema. F0003 owns its different YAML limits.
 
 Transitions have no independent policy knob. The six closed outcome tags and
 unique `(fromWorkflowNodeId, outcomeTag)` key bound a 256-node graph to 1,536
@@ -346,7 +360,8 @@ The loader follows the governing action sequence without combining owners:
 8. capture every definition through its exact no-follow descriptor while
    proving stable identity, regular-file type, and length under both byte
    ceilings;
-9. parse each capture as the one JSON encoding and schema-validate it,
+9. decode each capture through the one YAML 1.2 document contract and
+   schema-validate it,
    including local node-ID and per-node parameter-ID uniqueness, without
    inferring identity from its filename;
 10. build exactly one terminal account for every ordinal; and
@@ -442,7 +457,7 @@ families:
 | --- | --- |
 | `WORKFLOW_AUTHORITY_INVENTORY_INVALID` | Layout, enumeration, normalization, collision, media classification, limits, or total accounting failed. |
 | `WORKFLOW_DEFINITION_READ_ERROR` | A definition could not be captured completely and stably through its descriptor. |
-| `WORKFLOW_DEFINITION_PARSE_ERROR` | Bytes are not the exact supported UTF-8 JSON encoding. |
+| `WORKFLOW_DEFINITION_PARSE_ERROR` | Bytes violate the exact supported UTF-8 YAML 1.2 document contract. |
 | `WORKFLOW_DEFINITION_SCHEMA_INVALID` | The raw value violates the closed v1 structural, typed-value, or definition-local identity rules. |
 | `WORKFLOW_GRAPH_COMPILE_INVALID` | Registered-reference, parameter, topology, data-flow, transition, gate, or capability validation failed. |
 | `WORKFLOW_REGISTRY_INVALID` | Global identity uniqueness or total definition/graph/account coverage failed. |
@@ -452,8 +467,8 @@ source path operational authority. No failure falls back to another file,
 encoding, definition set, cached registry, hard-coded workflow, or source
 asset.
 
-Raw bytes, raw JSON, schema-valid definitions, compiled candidates, registry
-candidates, handles, and evidence remain distinct owned values. Each is
+Raw bytes, decoded raw values, schema-valid definitions, compiled candidates,
+registry candidates, handles, and evidence remain distinct owned values. Each is
 destroyed exactly once on success, deterministic rejection, cancellation,
 timeout, and unexpected operational error. Before workflow selection there is
 no model call, workflow log binding, state write, cache write, transaction,
@@ -471,8 +486,9 @@ F0005 does not implement:
 - concrete initial `specify`, `plan`, `tasks`, or `implement` node behavior;
 - project-authored executable code, plugins, dynamic libraries, scripts,
   adapters, commands, capabilities, retries, or concurrency;
-- YAML or another workflow encoding, includes/imports, reusable subgraphs,
-  metadata, display descriptions, authoring aliases, or compatibility readers;
+- JSON or another workflow encoding, YAML aliases or custom tags,
+  includes/imports, reusable subgraphs, metadata, display descriptions,
+  authoring aliases, or compatibility readers;
 - bootstrap component ID allocation, persistence, registry refresh/migration,
   active-feature change classification, or recovery;
 - feature state, project WAL, toolchain/preset/principle loading, repository
@@ -485,8 +501,9 @@ Those concerns remain with their accepted owners or later increments.
 
 1. Definitions load only from F0004's validated `workflow_authority`
    capability; raw `config.paths.workflows` is never used by F0005.
-2. V1 admits only recursive regular `*.workflow.json` files encoded as strict
-   UTF-8 JSON and conforming to the formal closed schema.
+2. V1 admits only recursive regular `*.workflow.yaml` files encoded as one
+   strict UTF-8 YAML 1.2 mapping document without aliases or custom tags and
+   conforming to the formal closed structural schema.
 3. Workflow identity comes only from content; a filename/content mismatch does
    not rename, reject, or select the workflow.
 4. Exact root children `features/` and `transactions/` are accounted when
@@ -498,7 +515,7 @@ Those concerns remain with their accepted owners or later increments.
    enumeration order.
 7. All limits in Section 4 are compiler-owned, enforced at their owning
    boundary, and cannot be relaxed by configuration or a definition.
-8. The external schema has no open object or free-form parameter value, and
+8. The external schema has no open mapping or free-form parameter value, and
    schema validation delegates typed constructor syntax to the canonical ID
    and F0002 shortcode parsers.
 9. Every node, parameter, outcome, gate, policy, and capability reference
@@ -508,8 +525,9 @@ Those concerns remain with their accepted owners or later increments.
     preserved gates, and policy-bounded effective capabilities.
 11. The compiler cannot construct adapters, invoke nodes, or introduce behavior
     absent from registered contracts.
-12. Registry cardinality is variable from zero through 256; no workflow name or
-    four-workflow count is required.
+12. Registry cardinality is variable from zero through 256 and accepts
+    arbitrary schema-valid workflow IDs; no workflow name or four-workflow
+    count is required.
 13. Workflow IDs, four-character shortcodes, and source ordinals are globally
     unique, and every definition/account/compiled-graph/map join is one-to-one.
 14. Source order/path, registry identity, and validation evidence cannot change
@@ -538,15 +556,19 @@ Implementation tests must cover the owning boundaries:
   rejection.
 - **Inventory:** zero, one, many, 256, and 257 definitions; 4,096 and 4,097
   entries; depths 16 and 17; deadline/cancellation; randomized adapter order;
-  contiguous Unicode-scalar-sorted ordinals; unsupported regular files, links,
-  and special nodes; and exact one-account-per-entry coverage.
+  contiguous Unicode-scalar-sorted ordinals; exact `*.workflow.yaml`
+  acceptance; `.workflow.json`, `.workflow.yml`, case variants, suffix-only
+  basenames, unsupported regular files, links, and special nodes rejection; and
+  exact one-account-per-entry coverage.
 - **Capture/parse:** exactly 1,048,576 and 1,048,577 bytes; exact and exceeded
   total bytes; short read, growth, shrink, replacement, and type change;
-  invalid UTF-8, BOM, comments, duplicate keys, malformed JSON, non-object root,
-  and trailing value.
+  invalid UTF-8, BOM, duplicate mapping keys, aliases, custom tags, malformed
+  YAML, non-mapping root, multiple documents, and every accepted parser-limit
+  boundary; comments and equivalent block/flow spellings have no semantic
+  authority.
 - **Schema:** accepted minimal and parameterized definitions; every
   required/unknown/wrong-kind field; unsupported schema version; malformed IDs,
-  references, version, shortcode, parameter variants, integer limits, arrays,
+  references, version, shortcode, parameter variants, integer limits, sequences,
   local duplicate IDs, and prohibited path/command/adapter/capability/script or
   runner-control shapes.
 - **Compiler:** unknown/version-mismatched invocation, node, policy, parameter,
@@ -565,11 +587,13 @@ Implementation tests must cover the owning boundaries:
   `CompiledWorkflowSemanticAuthority`; initial SDD predecessor/approval gates
   cannot be weakened by any accepted parameter combination.
 - **Architecture and startup:** actions cannot call nodes; the compiler imports
-  no filesystem/provider implementation; the startup orchestrator has only
-  child bindings; the runner is the sole node/delta owner; the fixed startup
-  graph is absent from the registry; no write, model call, command, or
-  project/feature lock occurs; and all owned intermediates are released on
-  every terminal branch.
+  no filesystem/provider implementation; the workflow parse action depends
+  only on its narrow parser port; the YAML library and syntax-node types remain
+  adapter-private; workflow and toolchain ports/raw values/schema validators do
+  not merge; the startup orchestrator has only child bindings; the runner is
+  the sole node/delta owner; the fixed startup graph is absent from the
+  registry; no write, model call, command, or project/feature lock occurs; and
+  all owned intermediates are released on every terminal branch.
 - **Packaging:** load a valid relocated variable registry with the native
   executable in a clean directory containing only target-owned runtime inputs,
   never `design/`, source files, build cache, or a Zig toolchain.
@@ -580,7 +604,7 @@ Implementation tests must cover the owning boundaries:
 | --- | --- |
 | Generic loader/compiler/registry split | ADR 0003; Design Sections 5.2 and 15 |
 | Shared path capability and reserved ownership | F0004; Design Section 9.1; `design/paths.md` |
-| Closed v1 transport | `design/schemas/workflow-definition-v1.schema.json`; Design Section 32 |
+| Closed v1 YAML transport and structural projection | F0005 Section 3; `design/schemas/workflow-definition-v1.schema.json`; Design Section 32 |
 | Action, runner, orchestrator, and composition-root boundaries | Design Sections 5-6 and 13.1 |
 | Registered-node graph and common outcomes | Design Sections 6-7; `design/code.md` Sections 1-6 and 24 |
 | Workflow shortcode | F0002 Sections 3.2 and 6.1 |

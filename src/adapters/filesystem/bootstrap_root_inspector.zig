@@ -71,6 +71,14 @@ pub const Adapter = struct {
         if (stat.kind != .directory) {
             return error.BootstrapRootInspectionFailure;
         }
+        current.access(self.io, ".", .{
+            .follow_symlinks = false,
+            .read = true,
+            .execute = true,
+        }) catch |access_error| return switch (access_error) {
+            error.Canceled => error.Cancelled,
+            else => error.BootstrapRootInspectionFailure,
+        };
         const identity = file_identity.inspect(current.handle) catch {
             return error.BootstrapRootInspectionFailure;
         };
@@ -103,6 +111,10 @@ test "rejects regular files and symlinked path components" {
     try std.testing.expectError(
         error.BootstrapRootInspectionFailure,
         adapter.inspector().inspect("file"),
+    );
+    try std.testing.expectError(
+        error.BootstrapRootInspectionFailure,
+        adapter.inspector().inspect("linked"),
     );
     try std.testing.expectError(
         error.BootstrapRootInspectionFailure,

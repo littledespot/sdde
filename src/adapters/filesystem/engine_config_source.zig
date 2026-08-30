@@ -118,25 +118,38 @@ fn read(
     max_bytes: usize,
 ) engine_config_source.Error!engine_config_source.RawEngineConfig {
     const open_engine_config_file: *OpenEngineConfigFile = @ptrCast(@alignCast(context));
-    if (max_bytes == 0 or max_bytes == std.math.maxInt(usize)) {
-        return error.EngineConfigReadFailure;
-    }
-
     const file_stat = open_engine_config_file.file.stat(open_engine_config_file.io) catch {
         return error.EngineConfigReadFailure;
     };
-    if (file_stat.size > max_bytes) {
+
+    var file_reader = open_engine_config_file.file.reader(open_engine_config_file.io, &.{});
+    return captureExactObservedBytes(
+        allocator,
+        &file_reader.interface,
+        file_stat.size,
+        max_bytes,
+    );
+}
+
+fn captureExactObservedBytes(
+    allocator: Allocator,
+    reader: *Io.Reader,
+    observed_size: u64,
+    max_bytes: usize,
+) engine_config_source.Error!engine_config_source.RawEngineConfig {
+    if (max_bytes == 0 or max_bytes == std.math.maxInt(usize) or
+        observed_size > max_bytes)
+    {
         return error.EngineConfigReadFailure;
     }
 
-    var file_reader = open_engine_config_file.file.reader(open_engine_config_file.io, &.{});
-    const bytes = file_reader.interface.allocRemaining(
+    const bytes = reader.allocRemaining(
         allocator,
         .limited(max_bytes + 1),
     ) catch return error.EngineConfigReadFailure;
-    errdefer allocator.free(bytes);
 
-    if (bytes.len > max_bytes) {
+    const expected_size: usize = @intCast(observed_size);
+    if (bytes.len != expected_size) {
         allocator.free(bytes);
         return error.EngineConfigReadFailure;
     }
@@ -261,23 +274,56 @@ test "rejects a non-regular resource during locate" {
     );
 }
 
-test "read accepts the byte limit and rejects a larger file" {
+test "read accepts exactly the compiler byte limit and rejects one byte more" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
 
     var project_root = std.testing.tmpDir(.{});
     defer project_root.cleanup();
+
+    const exact_bytes = try allocator.alloc(u8, config.max_engine_config_bytes);
+    defer allocator.free(exact_bytes);
+    @memset(exact_bytes, ' ');
     try project_root.dir.writeFile(io, .{
         .sub_path = config.engine_config_basename,
-        .data = "{ }",
+        .data = exact_bytes,
     });
 
     var adapter = Adapter.init(io, project_root.dir);
     var located = try adapter.locator().locate(allocator);
-    defer located.deinit(allocator);
+    var raw = try located.read(allocator, config.max_engine_config_bytes);
+    try std.testing.expectEqual(config.max_engine_config_bytes, raw.bytes.len);
+    raw.deinit(allocator);
+    located.deinit(allocator);
 
+    const oversized_bytes = try allocator.alloc(u8, config.max_engine_config_bytes + 1);
+    defer allocator.free(oversized_bytes);
+    @memset(oversized_bytes, ' ');
+    try project_root.dir.writeFile(io, .{
+        .sub_path = config.engine_config_basename,
+        .data = oversized_bytes,
+    });
+
+    var oversized = try adapter.locator().locate(allocator);
+    defer oversized.deinit(allocator);
     try std.testing.expectError(
         error.EngineConfigReadFailure,
-        located.read(allocator, 2),
+        oversized.read(allocator, config.max_engine_config_bytes),
+    );
+}
+
+test "read rejects shrink and growth after the observed size" {
+    const allocator = std.testing.allocator;
+
+    var shrunk_reader: Io.Reader = .fixed("ab");
+    try std.testing.expectError(
+        error.EngineConfigReadFailure,
+        captureExactObservedBytes(allocator, &shrunk_reader, 3, 4),
+    );
+
+    var grown_reader: Io.Reader = .fixed("abc");
+    try std.testing.expectError(
+        error.EngineConfigReadFailure,
+        captureExactObservedBytes(allocator, &grown_reader, 2, 4),
     );
 }

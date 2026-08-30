@@ -2,10 +2,10 @@ const std = @import("std");
 const composition = @import("composition/root.zig");
 
 pub const config = @import("domain/config.zig");
-pub const BootstrapOutcome = @import("application/bootstrap_orchestrator.zig").Outcome;
+pub const RunOutcome = @import("domain/run_outcome.zig").Outcome;
 
-pub fn run(io: std.Io, allocator: std.mem.Allocator) BootstrapOutcome {
-    return composition.run(io, allocator);
+pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) RunOutcome {
+    return composition.run(io, allocator, arguments);
 }
 
 fn refAllDeclsRecursive(comptime T: type) void {
@@ -22,4 +22,5 @@ fn refAllDeclsRecursive(comptime T: type) void {
 
 test {
     refAllDeclsRecursive(@This());
+    _ = @import("runtime_tests.zig");
 }

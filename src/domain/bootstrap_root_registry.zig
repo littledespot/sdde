@@ -22,13 +22,122 @@ pub const ConfiguredBaseRootCapability = opaque {
 };
 
 pub const BootstrapRootRegistry = opaque {
+    pub fn specsArtifacts(
+        self: *const BootstrapRootRegistry,
+    ) *const ConfiguredBaseRootCapability {
+        return capabilityFor(self, .specs);
+    }
+
+    pub fn referenceSources(
+        self: *const BootstrapRootRegistry,
+    ) *const ConfiguredBaseRootCapability {
+        return capabilityFor(self, .references);
+    }
+
+    pub fn archivedSpecs(
+        self: *const BootstrapRootRegistry,
+    ) *const ConfiguredBaseRootCapability {
+        return capabilityFor(self, .specs_archive);
+    }
+
     pub fn workflowAuthority(
         self: *const BootstrapRootRegistry,
     ) *const ConfiguredBaseRootCapability {
-        const stored = &registryStorage(self).configured_roots[@intFromEnum(roots.PathKey.workflows)];
-        return @ptrCast(stored);
+        return capabilityFor(self, .workflows);
+    }
+
+    pub fn toolchainPresetRegistry(
+        self: *const BootstrapRootRegistry,
+    ) *const ConfiguredBaseRootCapability {
+        return capabilityFor(self, .toolchain_preset);
+    }
+
+    pub fn projectPrinciples(
+        self: *const BootstrapRootRegistry,
+    ) *const ConfiguredBaseRootCapability {
+        return capabilityFor(self, .principles);
+    }
+
+    pub fn initializationTemplates(
+        self: *const BootstrapRootRegistry,
+    ) *const ConfiguredBaseRootCapability {
+        return capabilityFor(self, .templates);
     }
 };
+
+/// Internal adapter handoff. Architecture tests restrict this function to the
+/// workflow-authority filesystem adapter; services and consumers retain only
+/// the opaque capability.
+pub const WorkflowAuthorityAdapterBinding = struct {
+    project_relative_path: []const u8,
+    physical_identity: roots.PhysicalDirectoryIdentity,
+};
+
+pub fn bindWorkflowAuthorityAdapter(
+    capability: *const ConfiguredBaseRootCapability,
+) ?WorkflowAuthorityAdapterBinding {
+    const stored = capabilityStorage(capability);
+    if (stored.path_key != .workflows or stored.root_role != .workflow_authority or
+        stored.access_class != .engine_only or stored.existence_policy != .required_directory)
+    {
+        return null;
+    }
+    return switch (stored.observation) {
+        .absent => null,
+        .directory => |identity| .{
+            .project_relative_path = stored.configured_relative_path,
+            .physical_identity = identity,
+        },
+    };
+}
+
+pub const ToolchainAuthorityKind = enum { principles, preset_registry };
+pub const ToolchainAuthorityAdapterBinding = struct {
+    kind: ToolchainAuthorityKind,
+    project_relative_path: []const u8,
+    physical_identity: roots.PhysicalDirectoryIdentity,
+};
+
+/// Internal handoff restricted to the toolchain filesystem adapter.
+pub fn bindToolchainAuthorityAdapter(
+    capability: *const ConfiguredBaseRootCapability,
+) ?ToolchainAuthorityAdapterBinding {
+    const stored = capabilityStorage(capability);
+    const kind: ToolchainAuthorityKind = switch (stored.path_key) {
+        .principles => if (stored.root_role == .project_principles) .principles else return null,
+        .toolchain_preset => if (stored.root_role == .toolchain_preset_registry) .preset_registry else return null,
+        else => return null,
+    };
+    if (stored.access_class != .engine_only or stored.existence_policy != .optional_directory) return null;
+    return switch (stored.observation) {
+        .absent => null,
+        .directory => |identity| .{ .kind = kind, .project_relative_path = stored.configured_relative_path, .physical_identity = identity },
+    };
+}
+
+pub const SpecsArtifactAdapterBinding = struct {
+    project_relative_path: []const u8,
+    physical_identity: roots.PhysicalDirectoryIdentity,
+};
+
+/// Internal handoff restricted to the workflow-artifact registry builder.
+pub fn bindSpecsArtifactRegistry(
+    capability: *const ConfiguredBaseRootCapability,
+) ?SpecsArtifactAdapterBinding {
+    const stored = capabilityStorage(capability);
+    if (stored.path_key != .specs or stored.root_role != .specs_artifacts or
+        stored.access_class != .engine_only or stored.existence_policy != .optional_directory)
+    {
+        return null;
+    }
+    return switch (stored.observation) {
+        .absent => null,
+        .directory => |identity| .{
+            .project_relative_path = stored.configured_relative_path,
+            .physical_identity = identity,
+        },
+    };
+}
 
 pub const Owner = opaque {};
 
@@ -169,7 +278,7 @@ fn validateCapabilities(candidate: roots.BootstrapRootRegistryCandidate) Error!v
                 candidate.id.canonical_project_root,
             ) or
             capability.configured_relative_path.len == 0 or
-            !matchesResolvedPath(
+            !roots.matchesResolvedPath(
                 candidate.id.canonical_project_root,
                 capability.canonical_path,
                 capability.configured_relative_path,
@@ -250,19 +359,12 @@ fn portableDescendant(child: []const u8, parent: []const u8) bool {
         child[parent.len] == '/';
 }
 
-fn matchesResolvedPath(root: []const u8, child: []const u8, relative: []const u8) bool {
-    if (!std.mem.startsWith(u8, child, root) or child.len <= root.len) return false;
-    var child_index = root.len;
-    if (!(root.len == 1 and std.fs.path.isSep(root[0]))) {
-        if (!std.fs.path.isSep(child[child_index])) return false;
-        child_index += 1;
-    }
-    if (child.len - child_index != relative.len) return false;
-    for (child[child_index..], relative) |child_byte, relative_byte| {
-        if (std.fs.path.isSep(child_byte) and relative_byte == '/') continue;
-        if (child_byte != relative_byte) return false;
-    }
-    return true;
+fn capabilityFor(
+    registry_value: *const BootstrapRootRegistry,
+    key: roots.PathKey,
+) *const ConfiguredBaseRootCapability {
+    const stored = &registryStorage(registry_value).configured_roots[@intFromEnum(key)];
+    return @ptrCast(stored);
 }
 
 fn capabilityStorage(capability: *const ConfiguredBaseRootCapability) *const CapabilityStorage {

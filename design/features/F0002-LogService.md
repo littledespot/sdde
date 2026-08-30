@@ -5,15 +5,15 @@
 **Implementation readiness:** Ready for the bounded initial implementation.
 The workflow-definition schema supplies `WorkflowShortcode`, the registry
 validates uniqueness, and the runner-created `WorkflowLog` producer binding
-carries it. The F0001 v2 logging shape supplies every configurable user choice,
+carries it. The F0001 logging shape supplies every configurable user choice,
 and all operational policy plus the two `feature-log/v2` pipe-delimited schemas
 are compiler-locked
 constants. The event registry, scalar row encodings, and operational limits in
 this document are complete for the proof of concept.
 
 **Compatibility:** None. This is a pre-release proof of concept with no
-deployed predecessor. `feature-log/v2`, its two column schemas, and config
-`2.0` are updated in place; the implementation MUST NOT contain migrations,
+deployed predecessor. `feature-log/v2` and its two column schemas are updated
+in place; the implementation MUST NOT contain migrations,
 aliases, dual readers/writers, historical conversion, or compatibility
 fallbacks. Recovery accepts only the exact current headings and contracts.
 After a contract is explicitly accepted for release, subsequent incompatible
@@ -28,7 +28,7 @@ SDDE against a target project.
 5-6, 9, 13.9, 14.9-14.10, 26.5, and 27-31; [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md);
 [ADR 0003](../decisions/0003-generic-workflow-engine.md); and the
-[feature logging diagram](../diagrams/06-feature-logging.mmd).
+[feature logging diagram](../diagrams/06-feature-logging.md).
 
 ---
 
@@ -97,7 +97,7 @@ canonical level. `ValidateLoggingPolicyAction` consumes that canonical result
 and validates the remaining logging policy; it does not canonicalize the level
 again. F0002 receives only the validated result.
 
-The accepted v2 `LogsConfig` has exactly three values:
+The accepted `LogsConfig` has exactly three values:
 
 - `level`: the emission threshold spelling;
 - `console`: whether an additional pipe-delimited data-row mirror is enabled;
@@ -106,7 +106,7 @@ The accepted v2 `LogsConfig` has exactly three values:
   `reference_body`, and `code_body`; `[]` disables body capture.
 
 F0001's direct typed decoder enforces the closed contract published as
-`design/schemas/sddtoolkit-config-v2.schema.json`; no generic JSON tree or
+`design/schemas/sddtoolkit-config.schema.json`; no generic JSON tree or
 runtime schema dependency is required. The logging-policy compiler owns all
 value semantics and injects every operational constant in Section 6.4. Paths,
 levels on individual events, timestamp/format/limits, retention, flush,
@@ -527,8 +527,8 @@ SDDE_LOG_FAILURE workflow=IMPL level=fatal code=LOG_SINK_FAILURE
 
 The terminating byte is LF. `IMPL` is replaced only by the exact typed
 four-character shortcode. `code` is one of `LOG_LOCK_TIMEOUT`,
-`LOG_SERIALIZATION_FAILURE`, `LOG_SINK_FAILURE`, `LOG_FLUSH_FAILURE`, or
-`LOG_RELEASE_FAILURE`. No message, path, content, identifier, or additional
+`LOG_SERIALIZATION_FAILURE`, `LOG_SINK_FAILURE`, `LOG_FLUSH_FAILURE`,
+`LOG_RELEASE_FAILURE`, or `LOG_SEGMENT_LIMIT_EXHAUSTED`. No message, path, content, identifier, or additional
 field is permitted. Failure to perform this single emergency write does not
 retry and does not prevent the required fail-closed result.
 
@@ -625,7 +625,7 @@ F0002 does not:
    attributed `WorkflowTelemetryFact`, validated policy, binding, and
    event-definition registry, never raw configuration or unvalidated shortcode
    text.
-2. F0001 structurally decodes the closed v2 logging shape; the logging-policy
+2. F0001 structurally decodes the closed logging shape; the logging-policy
    compiler alone validates its three choices and injects all operational
    constants, and configured level conversion has one owner.
 3. Each workflow definition supplies exactly one four-character

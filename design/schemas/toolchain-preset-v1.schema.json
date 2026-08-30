@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sddtoolkit.dev/schemas/toolchain-preset-v1.schema.json",
+  "title": "Toolchain preset package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "package", "layer", "extends", "policies"],
+  "properties": {
+    "schema": { "const": "toolchain-preset/v1" },
+    "package": { "$ref": "project-toolchain-v1.schema.json#/$defs/packageRef" },
+    "layer": { "enum": ["language", "runtime", "framework", "build", "test", "environment"] },
+    "extends": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "$ref": "project-toolchain-v1.schema.json#/$defs/packageRef" }
+    },
+    "policies": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "project-toolchain-v1.schema.json#/$defs/policyRef" }
+    }
+  }
+}

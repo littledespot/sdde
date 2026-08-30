@@ -88,6 +88,17 @@ pub const ConfiguredRootCandidate = struct {
     path: NormalizedConfiguredPath,
     canonical_project_root: []const u8,
     canonical_path: []const u8,
+
+    pub fn isStructurallyValid(self: ConfiguredRootCandidate) bool {
+        return self.path.root_role == self.path.path_key.role() and
+            normalizedRelativePathShape(self.path.relative_path) and
+            std.fs.path.isAbsolute(self.canonical_project_root) and
+            matchesResolvedPath(
+                self.canonical_project_root,
+                self.canonical_path,
+                self.path.relative_path,
+            );
+    }
 };
 
 pub const PhysicalDirectoryIdentity = filesystem_identity.FileIdentity;
@@ -126,6 +137,35 @@ pub const BootstrapRootRegistryCandidate = struct {
     configured_roots: [PathKey.count]ValidatedConfiguredRoot,
 };
 
+pub fn matchesResolvedPath(root: []const u8, child: []const u8, relative: []const u8) bool {
+    if (!std.mem.startsWith(u8, child, root) or child.len <= root.len) return false;
+    var child_index = root.len;
+    if (!(root.len == 1 and std.fs.path.isSep(root[0]))) {
+        if (!std.fs.path.isSep(child[child_index])) return false;
+        child_index += 1;
+    }
+    if (child.len - child_index != relative.len) return false;
+    for (child[child_index..], relative) |child_byte, relative_byte| {
+        if (std.fs.path.isSep(child_byte) and relative_byte == '/') continue;
+        if (child_byte != relative_byte) return false;
+    }
+    return true;
+}
+
+fn normalizedRelativePathShape(path: []const u8) bool {
+    if (path.len == 0 or std.fs.path.isAbsolute(path) or
+        path[path.len - 1] == '/' or std.mem.indexOfScalar(u8, path, '\\') != null)
+    {
+        return false;
+    }
+    var components = std.mem.splitScalar(u8, path, '/');
+    while (components.next()) |component| {
+        if (component.len == 0 or std.mem.eql(u8, component, ".") or
+            std.mem.eql(u8, component, "..")) return false;
+    }
+    return true;
+}
+
 test "path keys own one closed role access and existence mapping" {
     inline for (@typeInfo(PathKey).@"enum".fields) |field| {
         const key: PathKey = @enumFromInt(field.value);
@@ -137,4 +177,29 @@ test "path keys own one closed role access and existence mapping" {
     try std.testing.expectEqual(ConfiguredRootRole.workflow_authority, PathKey.workflows.role());
     try std.testing.expectEqual(ExistencePolicy.required_directory, PathKey.workflows.existencePolicy());
     try std.testing.expectEqual(RootAccessClass.inaccessible, PathKey.templates.accessClass());
+}
+
+test "configured-root candidates retain an exact normalized contained join" {
+    const valid: ConfiguredRootCandidate = .{
+        .path = .{
+            .path_key = .workflows,
+            .root_role = .workflow_authority,
+            .relative_path = ".sdd/workflows",
+        },
+        .canonical_project_root = "/project",
+        .canonical_path = "/project/.sdd/workflows",
+    };
+    try std.testing.expect(valid.isStructurallyValid());
+
+    var relabelled = valid;
+    relabelled.path.root_role = .reference_sources;
+    try std.testing.expect(!relabelled.isStructurallyValid());
+
+    var mismatched = valid;
+    mismatched.canonical_path = "/project/other";
+    try std.testing.expect(!mismatched.isStructurallyValid());
+
+    var ambiguous = valid;
+    ambiguous.path.relative_path = ".sdd//workflows";
+    try std.testing.expect(!ambiguous.isStructurallyValid());
 }

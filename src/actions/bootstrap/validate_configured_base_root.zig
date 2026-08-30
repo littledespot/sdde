@@ -20,7 +20,7 @@ pub const Action = struct {
         self: Action,
         candidate: bootstrap_roots.ConfiguredRootCandidate,
     ) Error!bootstrap_roots.ValidatedConfiguredRoot {
-        if (candidate.path.root_role != candidate.path.path_key.role()) {
+        if (!candidate.isStructurallyValid()) {
             return error.BootstrapRootResolutionError;
         }
         const observation = self.inspector.inspect(candidate.path.relative_path) catch |inspection_error| {
@@ -85,6 +85,17 @@ test "requires the workflow authority directory at preselection" {
         error.BootstrapRootResolutionError,
         (Action{ .inspector = fake.port() }).execute(testCandidate(.workflows)),
     );
+}
+
+test "rejects a structurally mismatched candidate before filesystem inspection" {
+    var fake: FakeInspector = .{ .observation = .absent };
+    var candidate = testCandidate(.references);
+    candidate.canonical_path = "/project/other";
+    try std.testing.expectError(
+        error.BootstrapRootResolutionError,
+        (Action{ .inspector = fake.port() }).execute(candidate),
+    );
+    try std.testing.expectEqual(@as(usize, 0), fake.calls);
 }
 
 test "maps an unreadable workflow directory to root resolution failure" {

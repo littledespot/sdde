@@ -87,6 +87,30 @@ test "accepts the exact seven mappings and sole archive nesting exception" {
     );
 }
 
+test "publishes each configured root through one concrete typed accessor" {
+    const owner = try (Action{}).execute(std.testing.allocator, validCandidate());
+    defer bootstrap_root_registry.deinitOwner(owner);
+    const registry = bootstrap_root_registry.registry(owner);
+    const capabilities = [_]*const bootstrap_root_registry.ConfiguredBaseRootCapability{
+        registry.specsArtifacts(),
+        registry.referenceSources(),
+        registry.archivedSpecs(),
+        registry.workflowAuthority(),
+        registry.toolchainPresetRegistry(),
+        registry.projectPrinciples(),
+        registry.initializationTemplates(),
+    };
+
+    for (capabilities, 0..) |capability, index| {
+        const expected: bootstrap_roots.PathKey = @enumFromInt(index);
+        try std.testing.expectEqual(expected, capability.pathKey());
+        try std.testing.expectEqual(expected.role(), capability.role());
+        for (capabilities[0..index]) |previous| {
+            try std.testing.expect(capability != previous);
+        }
+    }
+}
+
 test "rejects duplicate missing relabelled and case-fold-equivalent capabilities" {
     var duplicate = validCandidate();
     duplicate.configured_roots[1].path_key = .specs;

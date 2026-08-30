@@ -2,27 +2,22 @@
 
 **Status:** Proposed feature design
 
-**Implementation readiness:** Ready for a bounded internal
-capture/parse/schema-validation increment only. A separate
-`project-toolchain/v1` schema artifact and a new public diagnostic catalogue are
-not prerequisites: parsing produces an owned raw value and the schema validator
-produces the closed owned Zig layer. Ordinary internal read/parse failure uses
-the common outcome boundary. This increment does not construct
-`ToolChainService` or expose a query. Service publication requires
-preset-registry validation, inheritance, deterministic composition, and
-post-composition safety validation.
+**Implementation readiness:** Ready. The closed project and preset contracts,
+package layout, bounds, inheritance, merge, and safety-valid output are defined
+below. The JSON Schema files in `design/schemas/` are normative documentation
+of the same runtime-validated YAML shapes; runtime code does not load them.
 
 **Classification:** Core, read-only mechanical toolchain provider
 
 **Scope:** SDDE engine development. This document does not authorize running
-SDDE against a target project. It authorizes no code change and does not accept
-or amend the governing proposed design.
+SDDE against a target project.
 
 **Governing authority:** [Engine design](../design.md), especially Sections
 1, 3-6, 9-11, 15, 28, and 30-31; [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); [F0002 —
-LogService](F0002-LogService.md); the [path contract](../paths.md); and the
-[toolchain-preset bootstrap diagram](../diagrams/08-toolchain-preset-bootstrap.mmd).
+LogService](F0002-LogService.md); [F0004 — BootstrapRootRegistryService](F0004-BootstrapRootRegistryService.md);
+the [path contract](../paths.md); and the
+[toolchain-preset bootstrap diagram](../diagrams/08-toolchain-preset-bootstrap.md).
 The [`_structure.yaml`](../toolchainPresets/_structure.yaml) file is reviewed
 as source material in Section 5; it is not promoted to runtime authority.
 
@@ -57,69 +52,98 @@ The runner owns the service for the invocation lifetime.
 
 ## 2. Path authority and the requested upstream service
 
-For F0003, `SDDToolchainService` is the narrow upstream provider of the already
-validated principles-root capability. It derives that capability from F0001's
-immutable configuration through the bootstrap-root/path-policy owner; it does
-not reread configuration, accept a caller path, or create another path
-authority. F0003 obtains the `toolchain.yaml` location only from that typed
-capability.
+F0004's `BootstrapRootRegistryService` is the sole upstream path-authority
+provider. F0003 consumes only the registry's typed `projectPrinciples()` and
+`toolchainPresetRegistry()` capabilities. It does not receive F0001 config,
+derive a capability from a decoded path string, reread configuration, accept a
+caller path, or create another path authority. The filesystem adapter resolves
+the exact `toolchain.yaml` child only through the typed principles capability;
+the preset loader receives only the typed preset-registry capability.
 
 The two legal source locations are:
 
 | Source | Location authority |
 | --- | --- |
-| Project toolchain layer | The exact no-follow child `<projectRoot>/<paths.principles>/toolchain.yaml`, resolved from the validated principles-root capability. |
-| Preset registry | The exact validated `<projectRoot>/<paths.toolchainPreset>` root, where the raw configuration value comes only from F0001's `paths.toolchainPreset`. |
+| Project toolchain layer | The exact no-follow child `toolchain.yaml` resolved through F0004's typed `projectPrinciples()` capability. |
+| Preset registry | F0004's exact typed `toolchainPresetRegistry()` capability. |
 
 Decoded path strings are information, not filesystem authority. F0003 never
 accepts a caller path, absolute path, alternate filename, environment override,
 ancestor/descendant search result, `paths.templates` substitute, source-tree
 example, or packaged fallback.
 
-## 3. Bounded loading and publication contract
+## 3. Closed loading and publication contract
 
-The first implementation increment contains only these responsibilities:
+### 3.1 Package layout and limits
 
-1. Receive the validated principles-root capability from
-   `SDDToolchainService`.
-2. `ResolveProjectToolchainLayerPathAction` resolves only its exact
-   `toolchain.yaml` child.
-3. `CaptureProjectToolchainLayerAction` reads that child once as a bounded,
-   read-only, no-follow regular file.
-4. `ParseProjectToolchainLayerAction` parses YAML 1.2 into one owned
-   `RawProjectToolchain` candidate. It rejects duplicate mapping keys and other
-   forbidden YAML syntax, but preserves every remaining field name and node
-   kind without applying domain schema rules. The provider-specific YAML graph
-   remains private to this parser/action boundary.
-5. `ValidateProjectToolchainLayerSchemaAction` is the sole owner of the closed
-   type's required, unknown, placeholder, and field-kind rules. It returns a
-   `SchemaValidProjectToolchainLayer`. No separate schema file or public
-   toolchain-specific diagnostic catalogue is required.
+The project document is exactly `<paths.principles>/toolchain.yaml`. The preset
+registry contains only direct regular-file children ending in
+`.toolchain-preset.yaml`; directories, links, special nodes, alternate suffixes,
+and more than 256 entries reject the complete registry. Each document is at
+most 1 MiB, the captured total is at most 16 MiB, nesting is at most 16, and a
+document contains at most 32 package references and 64 policy references.
 
-These values move only between the exact runner-owned bootstrap child bindings.
-The first increment ends with a typed outcome for the next bootstrap action; it
-does not publish a key, construct `ToolChainService`, or provide any consumer
-query API.
+All files are YAML 1.2, one document, without aliases or custom tags. Duplicate
+keys, unknown fields, placeholders, nulls, implicit objects, and wrong node
+kinds fail closed. Runtime validation implements the same contracts documented
+by `project-toolchain-v1.schema.json` and
+`toolchain-preset-v1.schema.json`.
 
-The first increment does not read `paths.toolchainPreset`, resolve inheritance,
-merge presets, compile operational policy, persist authority, or expose a
-reload/watch API. It therefore cannot publish `ToolChainService`. Later
-increments reuse the governing bootstrap slice:
+### 3.2 Exact schemas
 
-1. `ResolveConfiguredToolchainPresetRootAction` selects the sole validated
-   preset-registry capability from `paths.toolchainPreset`.
-2. Preset inventory and validation account for the complete registry
-   independently of project selection.
-3. `ResolveProjectToolchainInheritanceAction` resolves every exact direct
-   preset identity and version against that registry.
-4. Graph, ordering, composition, and safety actions reject missing, duplicate,
-   conflicting-version, incompatible-layer, and cyclic closures; apply only
-   contract-declared merge operators; and validate the effective result against
-   compiler-locked safety policy.
-5. `ValidateCompiledPresetSetSafetyAction` is the sole gate that can turn the
-   merged result into `ValidToolchain`.
-6. Only after that gate succeeds does the runner construct
-   `ToolChainService` and make it available to declared consumers.
+The project document has exactly three required fields:
+
+```yaml
+schema: project-toolchain/v1
+presets: [zig@0.16.0]
+policies: [project.zig@1]
+```
+
+A preset package has exactly five required fields:
+
+```yaml
+schema: toolchain-preset/v1
+package: zig@0.16.0
+layer: language
+extends: []
+policies: [project.zig@1]
+```
+
+`package` and every `presets`/`extends` item is an exact
+`<package-id>@<MAJOR.MINOR.PATCH>` reference. Package IDs are lowercase ASCII
+segments separated by `.` or `-`; versions are canonical decimal triples with
+no range, prefix, prerelease, build suffix, alias, or `latest`. `layer` is one
+of `language`, `runtime`, `framework`, `build`, `test`, or `environment`.
+Policy references are exact registered `<policy-id>@<positive-integer>` IDs.
+Lists contain no duplicates.
+
+### 3.3 Inheritance and merge
+
+The complete preset registry validates before project selection. Package
+identity comes only from `package`, never the filename. Each identity occurs
+once. Every dependency resolves exactly, dependency cycles fail, and one
+closure cannot contain two versions of the same package ID. Dependencies are
+ordered before dependants; otherwise packages use fixed layer order followed
+by bytewise package-reference order.
+
+There is one merge operator: stable set union of policy references. Preset
+policies are unioned in resolved package order, then project `policies` are
+unioned. Duplicate values collapse without changing the first occurrence.
+There is no recursive map merge, replacement, removal, override, subtraction,
+or implicit precedence rule.
+
+### 3.4 Safety and publication
+
+The composition root supplies the immutable policy registry. Every selected
+policy must resolve to one registered policy marked project-selectable. The
+safety gate also injects every compiler-locked required policy and rejects a
+missing/duplicate registry definition. Package documents cannot define a
+command, path, capability, executable implementation, or safety exception.
+
+Only the safety gate constructs `ValidToolchain`. It owns the deterministic
+ordered exact package references and immutable compiled policy descriptors;
+it contains no raw YAML, source path, mutable map, unregistered policy, or
+pre-safety candidate. The runner then constructs `ToolChainService`.
 
 The service exposes exactly one accessor:
 
@@ -136,8 +160,8 @@ instance.
 Every declared inheritance binding names an exact preset package identity and
 version, not a directory, filename guess, version range, implicit `latest`, or
 untyped map. Preset packages may have a validated transitive composition graph;
-the project `toolchain.yaml` supplies only its exact direct bindings and typed
-overrides. Project-layer validation alone makes no safety claim; the
+the project `toolchain.yaml` supplies only its exact direct bindings and policy
+union entries. Project-layer validation alone makes no safety claim; the
 post-composition safety validator rejects any effective merged result that
 weakens compiler-locked safety.
 
@@ -193,11 +217,11 @@ runtime object. It remains unchanged by this feature.
 | Identity and inheritance are absent | `version: "1.0"` carries no API/package identity, exact package version, layer discriminator, direct project-binding contract, transitive preset-dependency contract, or typed override contract. | Keep project-layer bindings and preset-package identity/dependencies in separate typed contracts. Never infer identity from a filename. |
 | Layer responsibilities are mixed | The seed nests language under build, while sibling examples combine framework, package manager, runtime/language, build, test, protection, and parser policy in monoliths. | Preserve composable language/runtime/framework/build/test/environment package layers from governing Section 10. |
 | Shapes drift across source examples | Siblings add undeclared `protection`, `test.runner`, and `build.language.name`; grammar values alternate between scalars and untagged objects. | Treat the seed and siblings as inconsistent source evidence, not as a union to accept. |
-| Commands are unsafe raw text | Commands, detached flags, and placeholders are strings; siblings contain redirection, glob expansion, nested quoting, and unproven `npx` behavior. No argv, cwd, environment, network, timeout, resource, mutability, effect, or sandbox contract exists. | F0003 never admits these legacy shapes as runtime authority. Accepted runtime packages contain structured command descriptors validated by the command-policy owner. |
+| Commands are unsafe raw text | Commands, detached flags, and placeholders are strings; siblings contain redirection, glob expansion, nested quoting, and unproven `npx` behavior. No argv, cwd, environment, network, timeout, resource, mutability, effect, or sandbox contract exists. | F0003 never admits commands in project or preset documents. A separate command-policy contract would be required before commands could become runtime authority. |
 | Merge behavior is unspecified | The file defines neither per-field precedence nor map, set, array, atomic-command, append, remove, or locked-rule semantics. | Use only contract-declared operators and reject an unsafe effective merge. No generic recursive merge belongs in F0003. |
 | Paths and patterns are ambiguous | Roots and globs lack stable rule IDs, base/target domains, pattern type, case policy, ownership, and portability semantics. Brace globs used by siblings are outside the governing grammar; `pathPolicies` covers only config/style. | Path-pattern and file-kind policy owners compile typed rules after inheritance. F0003 exposes nothing pre-compilation as authority. |
 | Parser/query identity is incomplete | Extension maps point to raw grammar names or project-relative query paths without package/version identity, required captures, containment, compilation, resolver, fallback, or missing-resource behavior. | Preset registry validation must close every declared asset reference before project selection. |
-| Capability absence is ambiguous | Some examples declare E2E locations without commands and cannot distinguish unsupported capability from omitted data. Other package-add commands do not prove manifest mutation. | Require a typed supported or disabled-with-reason result; never infer capability from a nearby string. |
+| Capability absence is ambiguous | Some examples declare E2E locations without commands and cannot distinguish unsupported capability from omitted data. Other package-add commands do not prove manifest mutation. | The closed F0003 contract contains no inferred capability; absence is simply outside this service's authority. |
 
 The current `_structure.yaml` and sibling examples therefore remain
 non-normative source material. A separate offline migration may accept an
@@ -247,7 +271,7 @@ The main evidence is in `src/workflow/toolchainService.ts`,
 | Runtime merges then validates, while the legacy file validator validates the raw project layer and resolved preset separately. | One canonical post-composition validation pipeline. | Split judges that can disagree on the same `toolchain.yaml`. |
 | Loader code performs synchronous filesystem reads and obtains a global logger; the setup handler separately accepts a free-text debug callback. | Narrow no-follow read ports and F0002 lifecycle observability. | Direct infrastructure imports, two logging mechanisms, free-text messages, caller-chosen fields, or raw path/preset data in logs. |
 | Reads use existence/stat checks followed by unbounded reads and may resolve through links. | Bounded capture, stable descriptor evidence, and contained source identity. | Time-of-check/time-of-use gaps, unbounded input, followed links, or optional treatment of an invalid present file. |
-| Configuration-derived values, per-call/shared-state overrides, and built-in defaults compete to select principles/templates roots. | One F0001/path-policy authority for each exact root. | Derivation from a common toolkit path, caller precedence, or built-in fallback roots. |
+| Configuration-derived values, per-call/shared-state overrides, and built-in defaults compete to select principles/templates roots. | One F0004 typed capability for each exact root. | F0003 access to F0001, derivation from a common toolkit path, caller precedence, or built-in fallback roots. |
 | Legacy configuration has `paths.templates` but no `paths.toolchainPreset`. | Presets come only from the explicit configured preset-registry root. | Treating templates as executable preset authority or using a source/package fallback. |
 
 The useful concepts are therefore fixed-location capture, provenance,
@@ -263,18 +287,19 @@ design inputs.
    bounded loading actions remain separate and expose no consumer query.
 2. F0001 remains the only `.sddtoolkit.json` reader, and the path-policy owner
    remains the only owner that turns its raw path strings into capabilities.
-3. The first increment reads only exact
-   `<paths.principles>/toolchain.yaml`. A later inheritance increment reads the
-   direct `paths.toolchainPreset` registry. Neither uses an alternate,
+   F0003 receives those capabilities only through F0004's
+   `projectPrinciples()` and `toolchainPresetRegistry()` accessors.
+3. Bootstrap reads only exact `<paths.principles>/toolchain.yaml` and direct
+   children of the `paths.toolchainPreset` registry. Neither uses an alternate,
    template, source, packaged, ancestor, descendant, or current-directory
    fallback.
 4. The project layer parses into an owned raw value and then validates into a
    closed owned Zig layer. The complete preset registry passes its separate
-   typed validation before inheritance is resolved; no standalone
-   project-toolchain schema artifact is required. Raw and schema-valid results
+   typed validation before inheritance is resolved. The two JSON Schema files
+   document those same closed YAML shapes but are not runtime inputs. Raw and schema-valid results
    are runner-private intermediates and cannot construct `ToolChainService`.
 5. Every inherited preset identity/version resolves exactly once; missing,
-   duplicate, conflicting, incompatible, ranged/latest, and cyclic closures
+   duplicate, conflicting-version, ranged/latest, and cyclic closures
    fail closed.
 6. Only deterministic contract-declared merge behavior is used, and the merged
    result cannot reach a consumer before post-composition safety validation.
@@ -300,25 +325,24 @@ design inputs.
 
 ## 8. Verification
 
-Future implementation tests must cover the owning boundaries:
+Implementation tests cover the owning boundaries:
 
-- path authority: the first increment's exact principles root and no-follow
+- path authority: the exact principles root and no-follow
   file, plus rejection of missing, escaping, aliased, linked, special-node,
   alternate, source-example, template, and packaged-fallback cases; the later
-  preset increment separately covers its exact configured root;
+  preset registry separately covers its exact configured root;
 - typed decoding and boundary confinement: accepted project documents plus
   malformed YAML, duplicate/unknown/missing/wrong-kind fields, unresolved
   placeholders, `_structure.yaml`, and unrelated representative legacy
   documents; raw/schema-valid candidates pass only through their exact
   runner-owned bindings and cannot construct or enter a public service API;
-- later preset-registry work: accepted packages, unsupported versions,
+- preset-registry work: accepted packages, unsupported versions,
   unresolved assets, legacy documents, and an invalid unselected package;
 - inheritance: multiple unrelated valid compositions and rejected missing,
-  duplicate, conflicting-version, wrong-layer, ranged/latest, and cyclic
+  duplicate, conflicting-version, ranged/latest, and cyclic
   representatives;
-- composition: stable ordering and field provenance, explicit map/set/atomic
-  command/array operators, and a structurally valid override whose effective
-  result weakens a compiler lock;
+- composition: stable dependency/layer/reference ordering, stable policy-set
+  union, and rejection of unregistered policy or attempted compiler-lock weakening;
 - validated accessor: only safety-gate evidence can construct
   `ValidToolchain`; repeated `toolchain()` calls return the same borrowed value
   without I/O or allocation, and no generic or pre-safety accessor exists;
@@ -343,6 +367,6 @@ Future implementation tests must cover the owning boundaries:
 | Exact `toolchain.yaml`, preset root, inheritance, merge, and safety | Design Sections 9.3-10 and 15 |
 | Path and command safety | Design Sections 11 and 26 |
 | Logging handoff | F0002; Design Sections 13.9, 26.5, and 27 |
-| Bootstrap ownership and sequencing | `design/diagrams/08-toolchain-preset-bootstrap.mmd` |
+| Bootstrap ownership and sequencing | `design/diagrams/08-toolchain-preset-bootstrap.md` |
 | `_structure.yaml` and legacy-example status | Design Section 10; `design/toolchainPresets/_structure.yaml` |
 | Verification and clean packaging | Design Sections 28 and 30-31 |

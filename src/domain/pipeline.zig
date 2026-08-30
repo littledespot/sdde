@@ -3,17 +3,47 @@ pub const DataKey = enum {
     exact_engine_config_file,
     raw_engine_config,
     engine_config,
+    canonical_log_level,
+    logging_policy,
     configured_root_path_policy_set,
     configured_root_candidate_set,
     configured_root_capability_set,
     bootstrap_root_registry_id,
     bootstrap_root_registry,
     bootstrap_root_registry_evidence,
+    workflow_authority_layout,
+    workflow_authority_inventory,
+    workflow_definition_captures,
+    raw_workflow_definitions,
+    declarative_workflow_definitions,
+    compiled_workflow_graphs,
+    validated_workflow_graphs,
+    workflow_definition_registry_candidate,
+    workflow_definition_registry,
+    project_toolchain_capture,
+    toolchain_preset_inventory,
+    toolchain_preset_captures,
+    raw_toolchain_documents,
+    schema_valid_project_toolchain,
+    schema_valid_toolchain_registry,
+    resolved_toolchain_inheritance,
+    composed_toolchain,
+    valid_toolchain,
+    feature_log_binding,
+    log_event_definition,
+    log_emit_decision,
+    feature_log_stream_lock,
+    feature_log_stream_state,
+    feature_log_retention_authorization,
+    identified_log_event,
+    serialized_log_record,
+    feature_log_append_evidence,
 };
 
 pub const SideEffect = enum {
     none,
     filesystem_read,
+    filesystem_write,
 };
 
 pub const NodeKind = enum {
@@ -50,6 +80,8 @@ pub const NodeDelta = struct {
     data_writes: []const DataKey = &.{},
     data_replacements: []const DataKey = &.{},
     data_invalidations: []const DataKey = &.{},
+    telemetry_facts: [telemetry.max_facts_per_delta]telemetry.WorkflowTelemetryFact = undefined,
+    telemetry_fact_count: u8 = 0,
 
     pub fn successful(contract: NodeContract) NodeDelta {
         return .{
@@ -57,6 +89,35 @@ pub const NodeDelta = struct {
             .data_replacements = contract.replaces,
             .data_invalidations = contract.invalidates,
         };
+    }
+
+    pub fn addedTelemetryFacts(self: *const NodeDelta) []const telemetry.WorkflowTelemetryFact {
+        return self.telemetry_facts[0..self.telemetry_fact_count];
+    }
+};
+
+pub const WorkflowLog = struct {
+    workflow_shortcode: telemetry.WorkflowShortcode,
+
+    pub const Error = error{TelemetryFactLimitExceeded};
+
+    pub fn init(shortcode: telemetry.WorkflowShortcode) WorkflowLog {
+        return .{ .workflow_shortcode = shortcode };
+    }
+
+    pub fn log(
+        self: WorkflowLog,
+        delta: *NodeDelta,
+        fact: telemetry.TelemetryFact,
+    ) Error!void {
+        if (delta.telemetry_fact_count == telemetry.max_facts_per_delta) {
+            return error.TelemetryFactLimitExceeded;
+        }
+        delta.telemetry_facts[delta.telemetry_fact_count] = .{
+            .workflow_shortcode = self.workflow_shortcode,
+            .fact = fact,
+        };
+        delta.telemetry_fact_count += 1;
     }
 };
 
@@ -219,6 +280,17 @@ fn alwaysActive(_: ?*anyopaque) RuntimeStatus {
     return .active;
 }
 
+test "workflow log adds attributed facts to a candidate delta without I/O" {
+    const shortcode = try telemetry.WorkflowShortcode.parse("TEST");
+    var delta: NodeDelta = .{};
+    try WorkflowLog.init(shortcode).log(&delta, .{ .event_type = .run_started });
+    try std.testing.expectEqual(@as(usize, 1), delta.addedTelemetryFacts().len);
+    try std.testing.expectEqualStrings(
+        "TEST",
+        delta.addedTelemetryFacts()[0].workflow_shortcode.slice(),
+    );
+}
+
 test "runner envelope applies only the exact declared delta" {
     const contract: NodeContract = .{
         .id = "test@1",
@@ -266,3 +338,4 @@ test "runner envelope rejects missing undeclared and duplicate writes" {
     );
 }
 const std = @import("std");
+const telemetry = @import("telemetry.zig");

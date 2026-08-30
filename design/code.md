@@ -9105,18 +9105,18 @@ The runtime captures and canonicalizes the native executable's invocation
 working directory once and treats it as the project root. It resolves only the
 exact `<projectRoot>/.sddtoolkit.json` child and never searches an ancestor or
 descendant. Failure to safely and completely read it returns
-`ENGINE_CONFIG_READ_ERROR`; failure to decode its bytes as the exact closed v2
+`ENGINE_CONFIG_READ_ERROR`; failure to decode its bytes as the exact closed
 contract returns `ENGINE_CONFIG_PARSE_ERROR`. Either terminates with a nonzero
 exit before workflow work. The runtime config is
 accepted only up to the compiler-owned
 `maxEngineConfigBytes = 1,048,576` (1 MiB) limit, enforced from file metadata
 and again during the read. The repository file
-`design/schemas/sddtoolkit-config-v2.schema.json` defines F0001's current closed
+`design/schemas/sddtoolkit-config.schema.json` defines F0001's current closed
 reader-facing shape, and `design/examples/.sddtoolkit.json` is one accepted
 instance. Neither is a runtime fallback. The larger document below illustrates
-a proposed future versioned engine-policy extension; only its `logs` member is
-kept identical to the accepted v2 `LogsConfig`. F0001 does not accept its other
-extra top-level members, infer missing fields, or migrate between versions. A
+a proposed future engine-policy extension; only its `logs` member is kept
+identical to the accepted `LogsConfig`. F0001 does not accept its other extra
+top-level members, infer missing fields, or provide a compatibility reader. A
 missing exact filename blocks invocation. Every base directory
 is supplied by the decoded seven-key `paths` object and must then be validated
 by the path-policy owner. The configured
@@ -9165,7 +9165,7 @@ sources and receive no automatic placeholder expansion.
 ```
 
 `design/templates/` and `design/toolchainPresets/` are source/design material.
-`design/schemas/sddtoolkit-config-v2.schema.json` and
+`design/schemas/sddtoolkit-config.schema.json` and
 `design/examples/.sddtoolkit.json` are the reader-facing schema and example.
 None of these design assets is searched, packaged as runtime authority, or
 copied implicitly by ordinary bootstrap.
@@ -9175,8 +9175,6 @@ F0001 input contract:
 
 ```json
 {
-  "$schema": "https://schemas.sddtoolkit.dev/engine/v1.json",
-  "schemaVersion": "1.0",
   "routeRegistryVersion": "routes/v1",
   "rendererContractVersion": "renderer/v1",
   "paths": {

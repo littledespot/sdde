@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const yaml_module = yaml_dependency.module("yaml");
-    const toolchain_yaml_syntax_module = b.createModule(.{
+    const bounded_yaml_syntax_module = b.createModule(.{
         .root_source_file = b.path("src/adapters/parsers/yaml_syntax.zig"),
         .target = target,
         .optimize = optimize,
@@ -31,7 +31,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "toolchain_yaml_syntax", .module = toolchain_yaml_syntax_module },
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
         },
     });
 
@@ -66,7 +66,7 @@ pub fn build(b: *std.Build) void {
     const run_executable_tests = b.addRunArtifact(executable_tests);
 
     const yaml_safety_tests = b.addTest(.{
-        .root_module = toolchain_yaml_syntax_module,
+        .root_module = bounded_yaml_syntax_module,
     });
     const run_yaml_safety_tests = b.addRunArtifact(yaml_safety_tests);
 

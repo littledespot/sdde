@@ -1,0 +1,89 @@
+```mermaid
+flowchart TD
+    START[Owning orchestrator requests one durable project or feature transaction<br/>with a closed DurableTransactionKind and transaction-specific candidate inputs] --> OWNER{Storage owner}
+
+    OWNER -- Project preownership feature_activation only --> PCOL[ResolveProjectTransactionCollectionAction<br/>fixed reserved paths.workflows/transactions capability]
+    PCOL --> PHAS{Caller already carries the exact validated project lock<br/>from pre-feature-target recovery and ownership resolution}
+    PHAS -- No --> PLOCK[AcquireProjectTransactionCollectionLockAction<br/>one opaque runner-held capability]
+    PHAS -- Yes; reuse the same capability without reacquiring --> PSCAN
+    PLOCK --> PSCAN[ScanTransactionJournalInventoryAction<br/>bounded raw project journal and transaction-ID-ledger inventory under the exact lock]
+    OWNER -- Feature closed kinds --> FKIND[bootstrap_authority_refresh; state_identity_reservation or retirement;<br/>specification_acknowledgement_id_retirement; clarification_pause, response or authority_resolution;<br/>specify_completion; plan_input_authority, plan_candidate, tasks_candidate; reference_revision;<br/>rework_invalidation; final_validation_failed; localized_task_remediation;<br/>implementation_reconciliation or completion; review_decision;<br/>task_checkpoint, manual_verification, task_success or task_outcome]
+    FKIND --> FCOL[Resolve validated WorkflowArtifactRegistry StageTransactionCollection<br/>under the committed ActiveFeatureDirectoryCapability]
+    FCOL --> FLOCK[AcquireFeatureTransactionCollectionLockAction<br/>one opaque runner-held capability for the exact feature collection]
+    FLOCK --> FSCAN[ScanTransactionJournalInventoryAction<br/>bounded raw feature journal and transaction-ID-ledger inventory under the exact lock]
+
+    PSCAN --> LEDGERPATH[ResolveTransactionIdLedgerPathAction<br/>one fixed collection-local ledger child]
+    FSCAN --> LEDGERPATH
+    LEDGERPATH --> LREAD[ReadTransactionIdLedgerAction<br/>bounded no-follow read under the same held collection lock]
+    LREAD --> LPRESENT{Ledger bytes present}
+    LPRESENT -- No; first collection transaction only --> LINIT[BuildInitialTransactionIdLedgerAction<br/>revision zero and next ordinal one]
+    LPRESENT -- Yes --> LPARSE[ParseTransactionIdLedgerAction<br/>all owner revision ordinal status and tombstone values remain untrusted]
+    LINIT --> LVALID{ValidateTransactionJournalInventoryAction then ValidateTransactionIdLedgerAction<br/>over the same raw inventory and parsed/initial ledger;<br/>prove exact owner, monotonic IDs and total journal/reservation accounting}
+    LPARSE --> LVALID
+    LVALID -- Invalid --> EARLYFAIL
+    LVALID -- Valid --> RPLAN[BuildTransactionIdentityRecoveryPlanAction then<br/>ValidateTransactionIdentityRecoveryPlanAction<br/>one ordered total disposition per journal/reservation pair]
+    RPLAN --> DISP{Next typed recovery disposition}
+    DISP -- block --> EARLYFAIL
+    DISP -- retire_orphan --> ORETIRE[RetireTransactionIdAction<br/>tombstone the proven orphan under the same collection lock]
+    DISP -- rollback_and_retire --> RSTORAGE[BuildTransactionStorageCapabilityAction then<br/>ValidateTransactionStorageCapabilityAction against the recorded sealed transaction,<br/>current transaction-ID ledger, exact collection and held recovery lock]
+    DISP -- recover_commit_id --> RSTORAGE
+    DISP -- verify_committed --> RSTORAGE
+    RSTORAGE --> RECOVERY[PipelineRunner invokes TransactionRecoveryOrchestrator<br/>for exactly the current validated plan disposition; it schedules only the following<br/>typed read/restore/verify actions and defers journal cleanup until the ID transition below]
+    RECOVERY --> RREAD[ReadTransactionRecoveryStateAction<br/>using that exact validated recovery storage capability]
+    RREAD --> RDO{Validated plan disposition}
+    RDO -- rollback_and_retire --> RESTORE[RestoreTransactionEntryAction once per intent-marked entry<br/>in deterministic reverse order]
+    RDO -- recover_commit_id --> VERIFY[VerifyCommittedTransactionEntryAction once per committed entry<br/>in deterministic forward order]
+    RDO -- verify_committed --> VONLY[VerifyCommittedTransactionEntryAction once per committed entry<br/>without repeating its already committed transaction-ID transition]
+    RESTORE --> RRETIRE[RetireTransactionIdAction<br/>retire the restored uncommitted journal reservation]
+    VERIFY --> RCOMMIT[CommitTransactionIdAction<br/>advance the recovered marker-bearing reservation to committed]
+    RRETIRE --> RCLEANREC[Clean the recovered journal only after the matching<br/>RetireTransactionIdAction or CommitTransactionIdAction is durable]
+    RCOMMIT --> RCLEANREC
+    VONLY --> RCLEANREC
+    RCLEANREC --> RMORE{Another validated recovery-plan disposition}
+    ORETIRE --> RMORE
+    RMORE -- Yes --> DISP
+    RMORE -- No --> RESCAN[ScanTransactionJournalInventoryAction<br/>rebuild the bounded raw inventory after every recovery cleanup and ID transition]
+    RESCAN --> REINV{ValidateTransactionJournalInventoryAction<br/>produce the exact successor journal inventory under the still-held lock}
+    REINV -- Invalid --> EARLYFAIL
+    REINV -- Valid --> LREVALID{ValidateTransactionIdLedgerAction<br/>reprove the post-recovery ledger against that successor journal inventory}
+    LREVALID -- Invalid --> EARLYFAIL
+    LREVALID -- Valid --> MODE
+    DISP -- Complete clean plan --> MODE{Invocation mode}
+    MODE -- Recovery-only preflight --> RELEASE
+    MODE -- New durable transaction requested --> TID[AssignTransactionIdAction<br/>reserve exactly the next collection-local ordinal for the closed DurableTransactionKind]
+    TID --> TPERSIST[PersistTransactionIdReservationAction<br/>compare-and-swap and fsync the ledger before constructing or exposing a journal path]
+    TPERSIST --> STORAGE[BuildTransactionStorageCapabilityAction<br/>bind exact project/feature collection, held lock, current ledger and DurableTransactionKind]
+    STORAGE --> BUILD[Transaction-specific builder constructs the candidate with<br/>StateIdentityTransactionMember plus TransactionIdentityMember<br/>as the mandatory DurableTransactionMember]
+    BUILD --> TVALID[Run the transaction-specific validator and<br/>ValidateTransactionIdentityMemberAction]
+    TVALID --> SVALID{ValidateTransactionStorageCapabilityAction<br/>owner, kind, path, process, lock-table and sealed transaction all exact}
+    SVALID -- Invalid before journal creation --> RETIRE
+
+    SVALID -- Valid --> PREPARE[Prepare the journal only through the validated storage capability]
+    PREPARE --> INTENT[Record and fsync each destination intent before its mutation]
+    INTENT --> APPLY[Apply one exact entry]
+    APPLY --> APPLIED[Record and fsync the applied entry]
+    APPLIED --> MORE{Another sealed entry}
+    MORE -- Yes --> INTENT
+    MORE -- No --> MARKER[Write and fsync the durable transaction commit marker last]
+    MARKER --> TCOMMIT[CommitTransactionIdAction<br/>mark the matching reservation committed only after the marker]
+    TCOMMIT --> CLEAN[Run bounded journal/staging cleanup under the same storage capability]
+    CLEAN --> RELEASE{Storage owner}
+
+    PREPARE -- Failure before marker --> ROLLBACK[PipelineRunner invokes TransactionRecoveryOrchestrator<br/>to restore every intent-marked entry before retirement]
+    INTENT -- Failure before marker --> ROLLBACK
+    APPLY -- Failure before marker --> ROLLBACK
+    APPLIED -- Failure before marker --> ROLLBACK
+    ROLLBACK --> RETIRE[RetireTransactionIdAction<br/>permanently tombstone the uncommitted reservation after rollback/cleanup]
+    RETIRE --> RCLEAN[Clean the uncommitted journal/staging area under the same capability]
+    RCLEAN --> RELEASE
+    MARKER -- Later verification or cleanup interruption --> RVERIFY[TransactionRecoveryOrchestrator verifies or rolls forward the committed journal]
+    RVERIFY --> TCOMMIT
+
+    EARLYFAIL[Typed storage/ledger/recovery failure before a new transaction reservation] --> RELEASE
+    RELEASE -- Project --> PRELEASE[ReleaseProjectTransactionCollectionLockAction<br/>exactly once with the terminal project-storage outcome]
+    RELEASE -- Feature --> FRELEASE[ReleaseFeatureTransactionCollectionLockAction<br/>exactly once with the terminal feature-storage outcome]
+    PRELEASE --> DONE[Return committed retired or failed typed outcome; no lock remains held]
+    FRELEASE --> DONE
+
+    START -. no model call serializer diagnostic journal path or destination mutation<br/>may observe a new transaction ID before TPERSIST .-> TPERSIST
+```

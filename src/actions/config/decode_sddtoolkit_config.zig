@@ -32,9 +32,6 @@ pub const Action = struct {
             },
         ) catch return error.EngineConfigParseError;
 
-        if (!std.mem.eql(u8, owned.config.version, config.engine_config_version)) {
-            return error.EngineConfigParseError;
-        }
         if (!promptCaptureIsUnique(owned.config.logs.promptCapture)) {
             return error.EngineConfigParseError;
         }
@@ -54,7 +51,6 @@ fn promptCaptureIsUnique(values: []const config.PromptCapture) bool {
 
 const valid_config =
     \\{
-    \\  "version": "2.0",
     \\  "logs": { "level": "debug", "console": true, "promptCapture": [] },
     \\  "models": { "slots": { "implementation": { "provider": "openai", "model": "gpt-5.4-mini" } } },
     \\  "paths": {
@@ -66,29 +62,59 @@ const valid_config =
     \\}
 ;
 
-test "decodes the closed v2 structure directly into the owned type" {
+test "decodes the closed structure directly into the owned type" {
     var decoded = try (Action{}).execute(std.testing.allocator, valid_config);
     defer decoded.deinit();
 
-    try std.testing.expectEqualStrings("2.0", decoded.value().version);
     try std.testing.expect(decoded.value().logs.console);
     try std.testing.expectEqual(@as(usize, 1), decoded.value().models.slots.map.count());
 }
 
-test "rejects malformed unsupported unknown missing duplicate and wrong-kind input" {
+test "decodes a valid document at the exact compiler byte limit" {
+    const allocator = std.testing.allocator;
+    const bytes = try allocator.alloc(u8, config.max_engine_config_bytes);
+    defer allocator.free(bytes);
+    @memset(bytes, ' ');
+    @memcpy(bytes[0..valid_config.len], valid_config);
+
+    var decoded = try (Action{}).execute(allocator, bytes);
+    defer decoded.deinit();
+    try std.testing.expectEqualStrings("debug", decoded.value().logs.level);
+}
+
+test "rejects malformed unknown missing duplicate and wrong-kind input" {
     const invalid = [_][]const u8{
         "{",
-        \\{"version":"1.0","logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        valid_config ++ "\ntrue",
+        \\{"version":"legacy","logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
         ,
-        \\{"version":"2.0","extra":true,"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"extra":true,"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
         ,
-        \\{"version":"2.0","logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}}}
         ,
-        \\{"version":"2.0","version":"2.0","logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"logs":{"level":"info","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
         ,
-        \\{"version":"2.0","logs":{"level":"debug","console":"no","promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":"no","promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
         ,
-        \\{"version":"2.0","logs":{"level":"debug","console":false,"promptCapture":["request","request"]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[],"extra":true},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        ,
+        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        ,
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{},"extra":true},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        ,
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":[]},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        ,
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{"implementation":{"provider":"openai"}}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        ,
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","extra":"x"}}
+        ,
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p"}}
+        ,
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":1,"references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        ,
+        \\{"logs":{"level":"debug","console":false,"promptCapture":["unknown"]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        ,
+        \\{"logs":{"level":"debug","console":false,"promptCapture":["request","request"]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
         ,
     };
 
@@ -102,7 +128,7 @@ test "rejects malformed unsupported unknown missing duplicate and wrong-kind inp
 
 test "accepts JSON member reordering" {
     const reordered =
-        \\{"paths":{"templates":"x","principles":"p","toolchainPreset":"t","workflows":"w","specsArchive":"s/a","references":"r","specs":"s"},"models":{"slots":{}},"logs":{"promptCapture":[],"console":false,"level":"INFO"},"version":"2.0"}
+        \\{"paths":{"templates":"x","principles":"p","toolchainPreset":"t","workflows":"w","specsArchive":"s/a","references":"r","specs":"s"},"models":{"slots":{}},"logs":{"promptCapture":[],"console":false,"level":"INFO"}}
     ;
     var decoded = try (Action{}).execute(std.testing.allocator, reordered);
     defer decoded.deinit();

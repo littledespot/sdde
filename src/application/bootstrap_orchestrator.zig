@@ -21,12 +21,32 @@ pub fn run(children: child_bindings.ChildBindings) Outcome {
     if (terminal(children.invokeLocate())) |outcome| return outcome;
     if (terminal(children.invokeRead())) |outcome| return outcome;
     if (terminal(children.invokeDecode())) |outcome| return outcome;
+    if (terminal(children.invokeCanonicalizeLogLevel())) |outcome| return outcome;
+    if (terminal(children.invokeValidateLoggingPolicy())) |outcome| return outcome;
     if (terminal(children.invokeValidateRootPaths())) |outcome| return outcome;
     if (terminal(children.invokeResolveRoots())) |outcome| return outcome;
     if (terminal(children.invokeValidateRoots())) |outcome| return outcome;
     if (terminal(children.invokeBuildRegistryId())) |outcome| return outcome;
     if (terminal(children.invokeBuildRegistry())) |outcome| return outcome;
     if (terminal(children.invokeValidateRegistry())) |outcome| return outcome;
+    if (terminal(children.invokeBuildWorkflowLayout())) |outcome| return outcome;
+    if (terminal(children.invokeInventoryWorkflows())) |outcome| return outcome;
+    if (terminal(children.invokeCaptureWorkflows())) |outcome| return outcome;
+    if (terminal(children.invokeParseWorkflows())) |outcome| return outcome;
+    if (terminal(children.invokeValidateWorkflowSchema())) |outcome| return outcome;
+    if (terminal(children.invokeCompileWorkflows())) |outcome| return outcome;
+    if (terminal(children.invokeValidateWorkflowGraphs())) |outcome| return outcome;
+    if (terminal(children.invokeBuildWorkflowRegistry())) |outcome| return outcome;
+    if (terminal(children.invokeValidateWorkflowRegistry())) |outcome| return outcome;
+    if (terminal(children.invokeCaptureProjectToolchain())) |outcome| return outcome;
+    if (terminal(children.invokeInventoryToolchainPresets())) |outcome| return outcome;
+    if (terminal(children.invokeCaptureToolchainPresets())) |outcome| return outcome;
+    if (terminal(children.invokeParseToolchainDocuments())) |outcome| return outcome;
+    if (terminal(children.invokeValidateProjectToolchainSchema())) |outcome| return outcome;
+    if (terminal(children.invokeValidateToolchainPresetRegistry())) |outcome| return outcome;
+    if (terminal(children.invokeResolveToolchainInheritance())) |outcome| return outcome;
+    if (terminal(children.invokeComposeToolchain())) |outcome| return outcome;
+    if (terminal(children.invokeValidateToolchainSafety())) |outcome| return outcome;
 
     return .{ .ready = children.takeServices() };
 }
@@ -66,7 +86,16 @@ test "stops after a failed root binding" {
     );
     try std.testing.expectEqualSlices(
         Step,
-        &.{ .locate, .read, .decode, .validate_root_paths, .resolve_roots, .validate_roots },
+        &.{
+            .locate,
+            .read,
+            .decode,
+            .canonicalize_log_level,
+            .validate_logging_policy,
+            .validate_root_paths,
+            .resolve_roots,
+            .validate_roots,
+        },
         spy.calls[0..spy.call_count],
     );
 }
@@ -95,27 +124,82 @@ test "preserves explicit cancellation and stops later children" {
     try std.testing.expect(outcome == .cancelled);
     try std.testing.expectEqualSlices(
         Step,
-        &.{ .locate, .read, .decode, .validate_root_paths, .resolve_roots },
+        &.{
+            .locate,
+            .read,
+            .decode,
+            .canonicalize_log_level,
+            .validate_logging_policy,
+            .validate_root_paths,
+            .resolve_roots,
+        },
         spy.calls[0..spy.call_count],
     );
+}
+
+test "toolchain actions remain separate ordered child bindings" {
+    var spy: SpyBindings = .{ .fail_at = .parse_toolchain_documents };
+    var outcome = run(spy.bindings());
+    defer outcome.deinit();
+
+    try std.testing.expectEqual(bootstrap_error.PublicError.TOOLCHAIN_INVALID, outcome.failed);
+    try std.testing.expectEqualSlices(
+        Step,
+        &.{
+            .capture_project_toolchain,
+            .inventory_toolchain_presets,
+            .capture_toolchain_presets,
+            .parse_toolchain_documents,
+        },
+        spy.calls[20..spy.call_count],
+    );
+}
+
+test "toolchain cancellation stops before later safety publication" {
+    var spy: SpyBindings = .{ .cancel_at = .resolve_toolchain_inheritance };
+    var outcome = run(spy.bindings());
+    defer outcome.deinit();
+
+    try std.testing.expect(outcome == .cancelled);
+    try std.testing.expectEqual(Step.resolve_toolchain_inheritance, spy.calls[spy.call_count - 1]);
 }
 
 const Step = enum {
     locate,
     read,
     decode,
+    canonicalize_log_level,
+    validate_logging_policy,
     validate_root_paths,
     resolve_roots,
     validate_roots,
     build_registry_id,
     build_registry,
     validate_registry,
+    build_workflow_layout,
+    inventory_workflows,
+    capture_workflows,
+    parse_workflows,
+    validate_workflow_schema,
+    compile_workflows,
+    validate_workflow_graphs,
+    build_workflow_registry,
+    validate_workflow_registry,
+    capture_project_toolchain,
+    inventory_toolchain_presets,
+    capture_toolchain_presets,
+    parse_toolchain_documents,
+    validate_project_toolchain_schema,
+    validate_toolchain_preset_registry,
+    resolve_toolchain_inheritance,
+    compose_toolchain,
+    validate_toolchain_safety,
 };
 
 const SpyBindings = struct {
     fail_at: ?Step = null,
     cancel_at: ?Step = null,
-    calls: [9]Step = undefined,
+    calls: [29]Step = undefined,
     call_count: usize = 0,
 
     fn bindings(self: *SpyBindings) child_bindings.ChildBindings {
@@ -133,8 +217,25 @@ const SpyBindings = struct {
         return .{ .failed = switch (step) {
             .locate, .read => .ENGINE_CONFIG_READ_ERROR,
             .decode => .ENGINE_CONFIG_PARSE_ERROR,
+            .canonicalize_log_level, .validate_logging_policy => .LOGGING_POLICY_INVALID,
             .validate_root_paths, .resolve_roots, .validate_roots => .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
             .build_registry_id, .build_registry, .validate_registry => .BOOTSTRAP_ROOT_REGISTRY_INVALID,
+            .build_workflow_layout, .inventory_workflows => .WORKFLOW_AUTHORITY_INVENTORY_INVALID,
+            .capture_workflows => .WORKFLOW_DEFINITION_READ_ERROR,
+            .parse_workflows => .WORKFLOW_DEFINITION_PARSE_ERROR,
+            .validate_workflow_schema => .WORKFLOW_DEFINITION_SCHEMA_INVALID,
+            .compile_workflows, .validate_workflow_graphs => .WORKFLOW_GRAPH_COMPILE_INVALID,
+            .build_workflow_registry, .validate_workflow_registry => .WORKFLOW_REGISTRY_INVALID,
+            .capture_project_toolchain,
+            .inventory_toolchain_presets,
+            .capture_toolchain_presets,
+            .parse_toolchain_documents,
+            .validate_project_toolchain_schema,
+            .validate_toolchain_preset_registry,
+            .resolve_toolchain_inheritance,
+            .compose_toolchain,
+            .validate_toolchain_safety,
+            => .TOOLCHAIN_INVALID,
         } };
     }
 };
@@ -143,12 +244,32 @@ const spy_vtable: child_bindings.ChildBindings.VTable = .{
     .locate = spyLocate,
     .read = spyRead,
     .decode = spyDecode,
+    .canonicalize_log_level = spyCanonicalizeLogLevel,
+    .validate_logging_policy = spyValidateLoggingPolicy,
     .validate_root_paths = spyValidateRootPaths,
     .resolve_roots = spyResolveRoots,
     .validate_roots = spyValidateRoots,
     .build_registry_id = spyBuildRegistryId,
     .build_registry = spyBuildRegistry,
     .validate_registry = spyValidateRegistry,
+    .build_workflow_layout = spyBuildWorkflowLayout,
+    .inventory_workflows = spyInventoryWorkflows,
+    .capture_workflows = spyCaptureWorkflows,
+    .parse_workflows = spyParseWorkflows,
+    .validate_workflow_schema = spyValidateWorkflowSchema,
+    .compile_workflows = spyCompileWorkflows,
+    .validate_workflow_graphs = spyValidateWorkflowGraphs,
+    .build_workflow_registry = spyBuildWorkflowRegistry,
+    .validate_workflow_registry = spyValidateWorkflowRegistry,
+    .capture_project_toolchain = spyCaptureProjectToolchain,
+    .inventory_toolchain_presets = spyInventoryToolchainPresets,
+    .capture_toolchain_presets = spyCaptureToolchainPresets,
+    .parse_toolchain_documents = spyParseToolchainDocuments,
+    .validate_project_toolchain_schema = spyValidateProjectToolchainSchema,
+    .validate_toolchain_preset_registry = spyValidateToolchainPresetRegistry,
+    .resolve_toolchain_inheritance = spyResolveToolchainInheritance,
+    .compose_toolchain = spyComposeToolchain,
+    .validate_toolchain_safety = spyValidateToolchainSafety,
     .take_services = spyTakeServices,
 };
 
@@ -165,6 +286,16 @@ fn spyRead(context: *anyopaque) child_bindings.StepOutcome {
 fn spyDecode(context: *anyopaque) child_bindings.StepOutcome {
     const spy: *SpyBindings = @ptrCast(@alignCast(context));
     return spy.record(.decode);
+}
+
+fn spyCanonicalizeLogLevel(context: *anyopaque) child_bindings.StepOutcome {
+    const spy: *SpyBindings = @ptrCast(@alignCast(context));
+    return spy.record(.canonicalize_log_level);
+}
+
+fn spyValidateLoggingPolicy(context: *anyopaque) child_bindings.StepOutcome {
+    const spy: *SpyBindings = @ptrCast(@alignCast(context));
+    return spy.record(.validate_logging_policy);
 }
 
 fn spyValidateRootPaths(context: *anyopaque) child_bindings.StepOutcome {
@@ -195,6 +326,65 @@ fn spyBuildRegistry(context: *anyopaque) child_bindings.StepOutcome {
 fn spyValidateRegistry(context: *anyopaque) child_bindings.StepOutcome {
     const spy: *SpyBindings = @ptrCast(@alignCast(context));
     return spy.record(.validate_registry);
+}
+
+fn spyBuildWorkflowLayout(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.build_workflow_layout);
+}
+fn spyInventoryWorkflows(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.inventory_workflows);
+}
+fn spyCaptureWorkflows(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.capture_workflows);
+}
+fn spyParseWorkflows(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.parse_workflows);
+}
+fn spyValidateWorkflowSchema(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.validate_workflow_schema);
+}
+fn spyCompileWorkflows(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.compile_workflows);
+}
+fn spyValidateWorkflowGraphs(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.validate_workflow_graphs);
+}
+fn spyBuildWorkflowRegistry(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.build_workflow_registry);
+}
+fn spyValidateWorkflowRegistry(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.validate_workflow_registry);
+}
+fn spyCaptureProjectToolchain(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.capture_project_toolchain);
+}
+fn spyInventoryToolchainPresets(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.inventory_toolchain_presets);
+}
+fn spyCaptureToolchainPresets(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.capture_toolchain_presets);
+}
+fn spyParseToolchainDocuments(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.parse_toolchain_documents);
+}
+fn spyValidateProjectToolchainSchema(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.validate_project_toolchain_schema);
+}
+fn spyValidateToolchainPresetRegistry(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.validate_toolchain_preset_registry);
+}
+fn spyResolveToolchainInheritance(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.resolve_toolchain_inheritance);
+}
+fn spyComposeToolchain(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.compose_toolchain);
+}
+fn spyValidateToolchainSafety(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.validate_toolchain_safety);
+}
+
+fn castSpy(context: *anyopaque) *SpyBindings {
+    return @ptrCast(@alignCast(context));
 }
 
 fn spyTakeServices(_: *anyopaque) bootstrap_services.BootstrapServices {

@@ -11,7 +11,7 @@ declarative workflow runtime; the remainder of this design stays proposed.
 
 **Scope:** The SDDE engine developed in this repository. The cited historical workflow material remains design input, not an authorization to execute SDDE against another project.
 
-**Primary inputs:** The historical prompts, templates, and flow documentation cited throughout this design, plus `design/paths.md`, `design/schemas/sddtoolkit-config-v2.schema.json`, and the current source examples under `design/toolchainPresets/`, `design/examples/.sddtoolkit.json`, and `design/templates/`.
+**Primary inputs:** The historical prompts, templates, and flow documentation cited throughout this design, plus `design/paths.md`, `design/schemas/sddtoolkit-config.schema.json`, and the current source examples under `design/toolchainPresets/`, `design/examples/.sddtoolkit.json`, and `design/templates/`.
 
 **Out of scope:** Editing the current prompts/scripts; defining the domain
 contracts for `init`, `drift`, or `audit`; version-control workflow integration;
@@ -211,7 +211,7 @@ The operating rules are:
 
 ## 5. Logical architecture
 
-[View the logical architecture diagram](diagrams/01-logical-architecture.mmd).
+[View the logical architecture diagram](diagrams/01-logical-architecture.md).
 
 ### 5.1 Layers
 
@@ -288,7 +288,7 @@ The common contract makes data dependencies explicit:
 
 An action declares its contract directly. An orchestrator's externally visible `requires`, `produces`, `replaces`, `invalidates`, side-effect summary, and barriers are derived and checked from its child graph by the workflow compiler; an orchestrator cannot hide a child's capability or claim a narrower effect. Its internal child-only keys are not exposed outside the composition boundary.
 
-Examples of keys are `engine.config@1`, `environment.compiled.web@1`, `reference.manifest@1`, `spec.ir@1`, `plan.ir@1`, `tasks.graph@1`, and `implementation.overlay.T007@1`. Keys are constants supplied by domain modules, never ad hoc strings inside actions.
+Examples of keys are `environment.compiled.web@1`, `reference.manifest@1`, `spec.ir@1`, `plan.ir@1`, `tasks.graph@1`, and `implementation.overlay.T007@1`. Keys are constants supplied by domain modules, never ad hoc strings inside actions.
 
 `PipelineEnvelope` is immutable and identical for all nodes:
 
@@ -506,17 +506,17 @@ Evidence is separate from diagnostics. It records facts such as a decoded source
 
 ## 9. Engine configuration
 
-`design/schemas/sddtoolkit-config-v2.schema.json` defines the current
+`design/schemas/sddtoolkit-config.schema.json` defines the current
 reader-facing JSON contract, and `design/examples/.sddtoolkit.json` is one
-accepted instance. The closed top-level members are `version`, `logs`,
-`models`, and `paths`; `version` is exactly `2.0`. Neither file is a runtime
+accepted instance. The closed top-level members are `logs`, `models`, and
+`paths`. Neither file is a runtime
 default, packaged asset, search location, or fallback. Bootstrap captures and
 canonicalizes the native executable's invocation working directory once and
 uses it as the project root. It resolves only the exact
 `<projectRoot>/.sddtoolkit.json`; it does not search an ancestor or descendant.
 If that exact file cannot be safely and completely read, bootstrap returns
 `ENGINE_CONFIG_READ_ERROR`. If its bytes cannot be decoded as the exact closed
-v2 contract, bootstrap returns `ENGINE_CONFIG_PARSE_ERROR`. Either terminates
+contract, bootstrap returns `ENGINE_CONFIG_PARSE_ERROR`. Either terminates
 with a nonzero exit before any workflow node, model call, feature log, or
 project write. These are the only public configuration error codes.
 
@@ -528,26 +528,27 @@ input shape shown in `design/code.md`; the unrelated additional policy sections
 in that larger sample remain proposed future extensions and are not alternate
 members that F0001 accepts today.
 
-The runner owns the complete immutable value at the single typed key
-`engine.config@1`. A consumer that declares that key queries the applicable
-typed field directly. No section key, copied projection, generic string lookup,
-cache, or second configuration authority exists.
+The runner owns the complete immutable value and returns one
+`SDDToolKitConfigService` through the typed bootstrap result. A consumer queries
+the applicable typed field directly. No configuration key, section key, copied
+projection, generic string lookup, cache, or second configuration authority
+exists.
 
 ### 9.1 Required configuration shape
 
 For the bounded F0001 reader increment, the current closed shape is the formal
-[v2 JSON Schema](schemas/sddtoolkit-config-v2.schema.json), the repository
+[JSON Schema](schemas/sddtoolkit-config.schema.json), the repository
 example, and the typed contract in
 [F0001 — SDDToolKitConfigService](features/F0001-SDDToolKitConfigService.md). The root has
-exactly `version`, `logs`, `models`, and `paths`; fixed records reject missing,
+exactly `logs`, `models`, and `paths`; fixed records reject missing,
 duplicate, and unknown members. `models.slots` is the one keyed collection and
 each value has the closed slot shape. The `logs` object contains exactly the
 F0002 threshold, optional console-mirror boolean, and closed prompt-capture
 selector list. File logging is mandatory and has no configuration switch. The
 delimiter, timestamp, size, retention, flush, redaction, failure,
-prompt-size, emergency, and lock policy is compiler-owned. After release
-acceptance, future extensions must use another version and
-publish an equally closed formal JSON Schema.
+prompt-size, emergency, and lock policy is compiler-owned. Configuration has no
+version discriminator or compatibility reader; contract changes update this
+single closed schema and all consumers together.
 
 [View the proposed extended engine configuration sample](code.md#engine-configuration).
 
@@ -608,11 +609,12 @@ The v1 definition media contract is fixed by
 [F0005 — WorkflowDefinitionRegistryService](features/F0005-WorkflowDefinitionRegistryService.md)
 and the formal
 [workflow-definition v1 schema](schemas/workflow-definition-v1.schema.json).
-Definitions are strict UTF-8 JSON regular files discovered recursively by the
-exact case-sensitive `*.workflow.json` suffix outside the two reserved
+Definitions are strict UTF-8 YAML 1.2 regular files discovered recursively by
+the exact case-sensitive `*.workflow.yaml` suffix outside the two reserved
 descendant subtrees. Each file contains one closed `schemaVersion: "1.0"`
-object; filenames never determine workflow identity. Other encodings,
-includes, aliases, and compatibility readers are not supported in v1.
+mapping document; filenames never determine workflow identity. Other
+encodings, YAML aliases or custom tags, includes, and compatibility readers are
+not supported in v1.
 
 The `specify`, `plan`, `tasks`, and `implement` definitions are the initial SDD
 suite. Their registered predecessor gates enforce their feature order even
@@ -636,23 +638,22 @@ Canonical feature state is always derived as `<paths.workflows>/features/`. Pres
 ### 9.2 Configuration validation
 
 F0001 rejects a missing, unsafe, oversized, malformed, or structurally invalid
-document or unsupported reader contract version before any LLM call or
+document before any LLM call or
 workflow side effect. Structural acceptance grants no path, model, logging,
 command, state, or workflow authority. Each section owner validates its
 supplied typed view once before any value can influence an operation.
 
-The logging-policy compiler rejects a structurally valid v2 `logs` value before
+The logging-policy compiler rejects a structurally valid `logs` value before
 any LLM call unless its level, console boolean, and unique prompt-capture
 selector list form one valid F0002 policy. It injects every operational
 constant, including the pipe-delimited dialect and column schemas; none is configurable.
 
 Bootstrap and the current section-owning compilers additionally reject every
 applicable current input below. When the remaining proposed extended
-engine-policy fields are introduced in a future version, their compilers must
+engine-policy fields are introduced, their compilers must
 preserve the applicable rejections. Before any LLM call, bootstrap rejects
 when:
 
-- `version` or any future `schemaVersion` is unsupported;
 - `routeRegistryVersion` or `rendererContractVersion` is unsupported;
 - an unknown key appears in a closed schema;
 - the `paths` object does not contain exactly `specs`, `references`, `specsArchive`, `workflows`, `toolchainPreset`, `principles`, and `templates`;
@@ -799,19 +800,12 @@ After every adopting route—not only runtime-only refresh—the runner checks `
 ### 9.5 Configuration evolution
 
 This is a pre-release proof of concept with no deployed compatibility target.
-The current `version: "2.0"` reader-facing document is edited in place and
-F0001 does not migrate any predecessor. The former `1.0` logging shape and any
-earlier v2 draft are unsupported rather than accepted through a compatibility
-branch. The structural decoder rejects unsupported versions and obsolete
-shapes; it does not infer, rename, discard, default, dual-read, or convert
-fields. Once a configuration contract is explicitly accepted for release, a
-subsequent incompatible revision must introduce a new closed versioned
-`SDDToolKitConfig` contract and update every affected consumer and fixture.
-
-If an offline migration is later required, it is a separate administrative
-workflow with an explicit mapping and human review. It is never invoked by
-bootstrap, `specify`, `plan`, `tasks`, `implement`, or recovery and never
-becomes a runtime compatibility fallback.
+The reader-facing configuration has no version discriminator. Its single closed
+contract is edited in place, and every affected consumer and fixture changes
+together. A document containing `version`, `schemaVersion`, or any other
+obsolete member is rejected as unknown. F0001 does not infer, rename, discard,
+default, migrate, dual-read, or convert fields, and no runtime or offline
+compatibility path is supported.
 
 ---
 
@@ -819,7 +813,7 @@ becomes a runtime compatibility fallback.
 
 The runtime preset root is exactly `<projectRoot>/<paths.toolchainPreset>`, resolved directly from the root `.sddtoolkit.json`. It is the sole validated package registry from which the exact `<paths.principles>/toolchain.yaml` project layer may inherit. `design/toolchainPresets/` and `design/toolchainPresets/_structure.yaml` are design/source material only; runtime bootstrap never loads those source locations and has no packaged-example fallback.
 
-[View the toolchain-preset bootstrap diagram](diagrams/08-toolchain-preset-bootstrap.mmd).
+[View the toolchain-preset bootstrap diagram](diagrams/08-toolchain-preset-bootstrap.md).
 
 `design/toolchainPresets/_structure.yaml` inventories framework identity, package, build, test, path, quality, and AST concerns. It is a seed, not a v1 schema. Its “mandatory” rules exist only in comments, unresolved `<!-- IMPLEMENT -->` values are valid YAML strings, commands are raw strings, and AST resources are incompletely identified. A v1 preset and the project `toolchain.yaml` layer must instead pass their respective closed, versioned contracts; unresolved placeholders and missing mandatory values are rejected in both mechanical lanes. This placeholder rule does **not** apply to semantic Markdown principle bodies.
 
@@ -1242,10 +1236,10 @@ Catalogue-wide durable-transaction rule: every action anywhere in Sections 13.1-
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `LocateExactEngineConfigAction`                               | invocation working directory and trusted filesystem adapter                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | exact config location and canonical project-root descriptor, or `ENGINE_CONFIG_READ_ERROR`                                              | Capture/canonicalize the invocation working directory as project root and resolve only its exact `.sddtoolkit.json` child; map every unsafe/unreadable result to the one read error and never inspect an ancestor/descendant or accept a fallback/default name.                                                                                                                                                                                                                                          |
 | `ReadEngineConfigAction`                                      | validated exact config location and bounded no-follow descriptor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | owned engine-config bytes or `ENGINE_CONFIG_READ_ERROR`                                                                                  | Read that one engine config resource completely through the validated descriptor, accepting at most the internal `maxEngineConfigBytes = 1,048,576` bytes, and map every read/limit failure to the one public read error.                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `DecodeSDDToolKitConfigAction`                                | owned engine-config bytes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | immutable `SDDToolKitConfig` or `ENGINE_CONFIG_PARSE_ERROR`                                                                              | Parse JSON directly into the exact closed v2 reader-facing structure; map malformed JSON, trailing content, unsupported version, and structural violations to the one parse error, retain no generic JSON tree, and compile no domain policy.                                                                                                                                                                                                                                                                      |
+| `DecodeSDDToolKitConfigAction`                                | owned engine-config bytes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | immutable `SDDToolKitConfig` or `ENGINE_CONFIG_PARSE_ERROR`                                                                              | Parse JSON directly into the exact closed reader-facing structure; map malformed JSON, trailing content, and structural violations to the one parse error, retain no generic JSON tree, and compile no domain policy.                                                                                                                                                                                                                                                                      |
 | `CanonicalizeLogLevelAction`                                  | `LogsConfig.level`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | canonical level and alias evidence                                                                                                      | Solely normalize the closed configured spelling and map `CRITICAL` to `fatal` and `WARN` to `warning`; no other action reinterprets the configured level and no event producer chooses severity.                                                                                                                                                                                                                                                                                                        |
 | `ResolveLogEventDefinitionRegistryAction`                     | exact built-in registry version                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | immutable event/field-definition registry                                                                                               | Resolve the closed event-to-level/template/field-schema authority.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `ValidateLoggingPolicyAction`                                 | complete three-value v2 `LogsConfig`, canonical level and alias evidence, event-definition registry, and compiler-locked F0002 policy/delimiter constants                                                                                                                                                                                                                                                                                                                                                                                                                              | validated logging policy fragment                                                                                                       | Validate the console boolean and unique closed prompt-capture selectors, require a direction for non-empty capture, and inject the exact F0002 Section 6.4 timestamp, delimiter, size, retention, flush, failure, redaction, prompt-byte, lock, and emergency constants. Do not default/reinterpret the configured level or accept any operational override/dynamic schema.                                                                                                                            |
+| `ValidateLoggingPolicyAction`                                 | complete three-value `LogsConfig`, canonical level and alias evidence, event-definition registry, and compiler-locked F0002 policy/delimiter constants                                                                                                                                                                                                                                                                                                                                                                                                                              | validated logging policy fragment                                                                                                       | Validate the console boolean and unique closed prompt-capture selectors, require a direction for non-empty capture, and inject the exact F0002 Section 6.4 timestamp, delimiter, size, retention, flush, failure, redaction, prompt-byte, lock, and emergency constants. Do not default/reinterpret the configured level or accept any operational override/dynamic schema.                                                                                                                            |
 | `ValidateEnginePathPolicyAction`                              | one configured path relation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | path-policy evidence                                                                                                                    | Validate one engine path/overlap relation.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `ResolveConfiguredBaseRootAction`                             | exact project-root descriptor, one decoded `PathsConfig` entry, and active workspace filesystem policy                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | configured-root candidate                                                                                                               | Join exactly one required relative configured base to project root without following aliases or deriving fixed children.                                                                                                                                                                                                                                                                                                                                                                             |
 | `ValidateConfiguredBaseRootAction`                            | one configured-root candidate, exact config location, portability limits, and engine root rules                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | configured-root capability                                                                                                              | Prove normalization, containment, representability, access class, and permitted existence/type for one `paths` base.                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -2506,7 +2500,7 @@ These actions own the shared contract. Domain actions only produce registered re
 
 [View the Orchestrator composition sample](code.md#orchestrator-composition).
 
-[View the validated-generation and atomic-repair diagram](diagrams/03-validated-generation-repair.mmd).
+[View the validated-generation and atomic-repair diagram](diagrams/03-validated-generation-repair.md).
 
 An orchestrator “contains” children through composition. It does not contain their logic. Actions expose no child collection or dispatcher, so an action cannot contain or call an orchestrator.
 
@@ -2613,7 +2607,7 @@ This orchestrator is used only when decoding or route-schema validation produced
 
 ### 14.7 `ClarificationLifecycleOrchestrator`
 
-[View the clarification lifecycle diagram](diagrams/07-clarification-lifecycle.mmd).
+[View the clarification lifecycle diagram](diagrams/07-clarification-lifecycle.md).
 
 This shared orchestrator is used by specify, plan, and tasks. For a new typed need it invokes subject-key construction, exact registry lookup, uniqueness validation, ID allocation only when absent, record/view construction, and the clarification-pause transaction. It never interprets the question, chooses an answer, edits a form, or closes a record.
 
@@ -2770,7 +2764,7 @@ Ordinary structured facts are supplied as evidence to the chunk's typed claim pr
 
 ### 16.4 Semantic extraction flow
 
-[View the reference-ingestion diagram](diagrams/05-reference-ingestion.mmd).
+[View the reference-ingestion diagram](diagrams/05-reference-ingestion.md).
 
 The linked diagram and this sequence are normative; an orchestrator must require the typed evidence from every named phase before advancing:
 
@@ -3347,7 +3341,7 @@ Before invoking a model, the engine estimates the maximum serialized response si
 
 ### 20.5 Candidate workspace and validation
 
-[View the task implementation and transaction diagram](diagrams/04-task-implementation-transaction.mmd).
+[View the task implementation and transaction diagram](diagrams/04-task-implementation-transaction.md).
 
 After the implementation stage gate and before loading a task checkpoint or invoking any task model/overlay/command adapter, the engine derives and acquires the current run's structural feature-execution process lease, validates its OS-backed ownership, then acquires and validates the exclusive feature-execution lock. The latter is distinct from the short `FeatureTransactionCollectionLockCapability`: feature WAL locks still surround only recovery/commit operations, while the feature-execution lock remains runner-held across task scheduling, adapter-boundary recovery, every task overlay, and final validation. A raw lease rejection and raw lock contention are validated and must prove that no capability/token was issued; an acquired observation that fails validation is released through the rejected-observation action and its cleanup validator. Every terminal success/error/cancel branch first builds closed final-validation overlay collection-lock terminal evidence—`not_attempted`, validated contention without a capability, rejected acquired observation with validated cleanup, or validated ordinary release—then releases/validates the acquired feature-execution lock, builds the closed feature-lock terminal evidence, and only then releases/validates a successfully acquired process lease. Raw overlay-lock observations and an unvalidated acquired capability can never satisfy this ordering. A rejected process-lease acquisition has no lease to release. Process death releases both adapter capabilities; a fresh run derives a new nonrebindable lease tuple and may not infer liveness from a PID, heartbeat timeout, timestamp, or stale file.
 
@@ -3782,7 +3776,7 @@ It contains no content hashes or fingerprints. Preset IDs/versions and artifact 
 
 [View the Stage transition state machine sample](code.md#stage-transition-state-machine).
 
-[View the workflow-state diagram](diagrams/02-workflow-state.mmd).
+[View the workflow-state diagram](diagrams/02-workflow-state.md).
 
 Each in-progress state can transition to `blocked`, `failed`, or `cancelled` with a resumable prior committed state. Generated definition state is committed before entering its review-pending state. `planned` and `tasked` are entered only after approval tied to the exact current plan or task-definition ID.
 
@@ -3858,7 +3852,7 @@ Every rework transition commits the invalidation record, affected canonical defi
 
 ## 25. Transaction and filesystem model
 
-[View the transaction-storage and ID-ledger lifecycle](diagrams/09-transaction-storage-lifecycle.mmd).
+[View the transaction-storage and ID-ledger lifecycle](diagrams/09-transaction-storage-lifecycle.md).
 
 ### 25.1 Artifact transactions
 
@@ -4019,7 +4013,7 @@ logging actions described in Section 13.9.
 
 [View the Observability events sample](code.md#observability-events).
 
-[View the feature logging pipeline](diagrams/06-feature-logging.mmd).
+[View the feature logging pipeline](diagrams/06-feature-logging.md).
 
 Event fields include the validated four-character workflow shortcode, run/feature/stage/node IDs, parent/correlation IDs, attempt, duration, model route/profile, token usage, diagnostic codes, repair unit kind, command ID, exit code, and evidence status. Field definitions are registry-owned and sensitive content is excluded or redacted before serialization.
 
@@ -4377,7 +4371,7 @@ The new engine is ready for production evaluation when all of the following are 
    remains the sole node invocation and delta owner. Bound-graph change
    classification compares stable semantic authority rather than source ordinal,
    registry identity, or validation evidence.
-2. Bootstrap treats the invocation working directory as project root and accepts only its exact `.sddtoolkit.json` up to the internal 1,048,576-byte guard. Any safe-read failure returns `ENGINE_CONFIG_READ_ERROR`; any JSON/version/closed-shape failure returns `ENGINE_CONFIG_PARSE_ERROR`; either exits nonzero before workflow work. It requires exactly `specs`, `references`, `specsArchive`, `workflows`, `toolchainPreset`, `principles`, and `templates`, applies only the `specsArchive`-beneath-`specs` nesting exception, never searches a parent/child directory, and never treats `design/examples/.sddtoolkit.json`, a source tree, or a packaged asset as runtime configuration/fallback.
+2. Bootstrap treats the invocation working directory as project root and accepts only its exact `.sddtoolkit.json` up to the internal 1,048,576-byte guard. Any safe-read failure returns `ENGINE_CONFIG_READ_ERROR`; any JSON/closed-shape failure returns `ENGINE_CONFIG_PARSE_ERROR`; either exits nonzero before workflow work. It requires exactly `specs`, `references`, `specsArchive`, `workflows`, `toolchainPreset`, `principles`, and `templates`, applies only the `specsArchive`-beneath-`specs` nesting exception, never searches a parent/child directory, and never treats `design/examples/.sddtoolkit.json`, a source tree, or a packaged asset as runtime configuration/fallback.
 3. Workflow definitions plus reserved `features/` and `transactions/` resolve only beneath `paths.workflows`; presets resolve directly beneath `paths.toolchainPreset`, whose complete registry validates independently of project selection; the mechanical project layer resolves only as `<paths.principles>/toolchain.yaml`, and only its post-composition safety-valid merged result can feed environment/path/command/capability consumers; the total principles inventory accounts for that file exactly once as mechanically excluded while semantic capture accepts only other normalized Markdown beneath `paths.principles`; and `paths.templates` remains unread/inert throughout the initial SDD suite. All configured/derived locations are validated for separation, containment, and reserved ownership.
 4. Specify launches only as `sdd specify --reference <relative-selector>` (or an exactly equivalent one-selector API/compatibility adapter); missing/duplicate/removed/positional inputs fail before activation, and the title/description/goal are derived only from validated reference authority.
 5. No LLM action has a filesystem, process, state, logger, or unrestricted tool interface.
@@ -4441,11 +4435,12 @@ The following implementation choices are accepted:
   an exactly selected `WorkflowId`; the four initial SDD workflows retain their
   predecessor gates without fixing the engine registry;
 - [F0005](features/F0005-WorkflowDefinitionRegistryService.md): v1 workflow
-  definitions are strict UTF-8 JSON in recursively discovered, case-sensitive
-  `*.workflow.json` regular files and conform to the closed
+  definitions are strict UTF-8 YAML 1.2 in recursively discovered,
+  case-sensitive `*.workflow.yaml` regular files and conform to the closed
   [workflow-definition v1 schema](schemas/workflow-definition-v1.schema.json).
   Identity comes only from validated content, and v1 has no alternate encoding,
-  alias, include, compatibility reader, or runtime schema-file fallback.
+  YAML alias or custom tag, include, compatibility reader, or runtime
+  schema-file fallback.
 
 The following choices remain deferred and may be decided during implementation
 without altering the architecture:

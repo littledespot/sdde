@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sddtoolkit.dev/schemas/project-toolchain-v1.schema.json",
+  "title": "Project toolchain",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "presets", "policies"],
+  "properties": {
+    "schema": { "const": "project-toolchain/v1" },
+    "presets": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/packageRef" }
+    },
+    "policies": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/policyRef" }
+    }
+  },
+  "$defs": {
+    "packageRef": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*@(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" },
+    "policyRef": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*@[1-9][0-9]*$" }
+  }
+}
