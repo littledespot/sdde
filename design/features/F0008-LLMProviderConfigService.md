@@ -107,15 +107,15 @@ The bytes remain untrusted. Only F0006's decoder may interpret them.
 ## 5. Failure and orchestration boundary
 
 F0008 returns the closed outcomes `ready`, `failed`, or `cancelled`. Every
-locate or capture rejection returns `failed`; the future F0006 model-provider
-bootstrap boundary maps it to `LLM_PROVIDER_CONFIG_READ_ERROR`. No partial
-service is published.
+locate or capture rejection returns `failed`; F0006's future conditional
+model-provider bootstrap integration maps it to the already accepted
+`LLM_PROVIDER_CONFIG_READ_ERROR`. No partial service is published.
 
 F0008 does not decide whether a selected workflow needs model capability.
-F0006's capability-free model-provider bootstrap orchestrator remains the
-owner of that branch. A capability-free workflow must not probe or read the
-provider document merely because `paths.providers` is reserved during root
-validation.
+F0006's accepted capability-free model-provider bootstrap orchestrator owns
+that branch. A workflow whose derived requirement is `not_required` must not
+probe or read the provider document merely because `paths.providers` is
+reserved during root validation.
 
 ## 6. Acceptance criteria
 

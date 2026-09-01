@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sddtoolkit.dev/config/sddproviders.schema.json",
+  "title": "SDDE provider catalogue common structure",
+  "$comment": "This schema owns only the closed common container. Each config object is subsequently validated against exactly one compiler-registered closed provider-specific variant. Runtime additionally enforces strict UTF-8 without BOM, duplicate-key rejection, integer-only numeric tokens, nesting depth 16, at most 256 models total, unique provider definitions, and unique provider/model tuples.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["providers"],
+  "properties": {
+    "providers": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/provider" }
+    }
+  },
+  "$defs": {
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "models"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "models": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/model" }
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "config"],
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "config": {
+          "type": "object",
+          "$comment": "Closed by the compiler-registered provider-specific schema during whole-catalogue construction."
+        }
+      }
+    }
+  }
+}

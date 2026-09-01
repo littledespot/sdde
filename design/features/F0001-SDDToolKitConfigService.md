@@ -208,9 +208,11 @@ owner's work.
     tree, build cache, or Zig toolchain.
 11. `maxEngineConfigBytes` is the compiler-owned constant 1,048,576; exactly
     that many bytes may be decoded and 1,048,577 bytes are rejected.
-12. The public configuration failure surface contains only
-    `ENGINE_CONFIG_READ_ERROR` and `ENGINE_CONFIG_PARSE_ERROR`; every failure
-    maps to exactly one of them and both terminate before workflow work.
+12. F0001's public failure surface contains only `ENGINE_CONFIG_READ_ERROR` and
+    `ENGINE_CONFIG_PARSE_ERROR`; every F0001 failure maps to exactly one of them
+    and both terminate before workflow work. The separately owned F0006
+    provider-catalogue and allowlist diagnostics do not broaden or replace this
+    reader boundary.
 13. F0001 grants no model authority: the F0006 semantic consumer must prove
     that every slot's exact `(provider, model)` tuple exists once in the
     validated provider catalogue. The slots may select some or all catalogue

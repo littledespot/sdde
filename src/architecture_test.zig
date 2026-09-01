@@ -4,6 +4,11 @@ const bootstrap_root_registry_service = @import("application/bootstrap_root_regi
 const workflow_registry = @import("domain/workflow_registry.zig");
 const workflow_registry_service = @import("application/workflow_definition_registry_service.zig");
 const toolchain_safety = @import("domain/toolchain_safety.zig");
+const llm_provider_registry = @import("domain/llm_provider_registry.zig");
+const repository_model_allowlist = @import("domain/repository_model_allowlist.zig");
+const llm_provider_registry_service = @import("application/llm_provider_registry_service.zig");
+const derive_provider_requirement = @import("actions/provider/derive_provider_requirement.zig");
+const workflow_execution = @import("domain/workflow_execution.zig");
 
 test "every action imports only standard domain and port modules" {
     const io = std.testing.io;
@@ -105,6 +110,70 @@ test "provider config orchestration is capability free and runner owned" {
     const composition = @embedFile("composition/root.zig");
     try std.testing.expect(std.mem.indexOf(u8, composition, "llm_provider_config_source.Adapter.init") != null);
     try std.testing.expect(std.mem.indexOf(u8, composition, "llm_provider_config_runner.Runner.init") != null);
+}
+
+test "provider catalogue and repository allowlist have one immutable authority each" {
+    switch (@typeInfo(llm_provider_registry.ValidatedLLMProviderRegistry)) {
+        .@"opaque" => {},
+        else => return error.LLMProviderRegistryMustBeOpaque,
+    }
+    switch (@typeInfo(repository_model_allowlist.ValidatedRepositoryModelAllowlist)) {
+        .@"opaque" => {},
+        else => return error.RepositoryModelAllowlistMustBeOpaque,
+    }
+
+    const service = @embedFile("application/llm_provider_registry_service.zig");
+    try expectAbsent(service, "std.json");
+    try expectAbsent(service, "llm_provider_document");
+    try expectAbsent(service, "config.zig");
+    const init_type = @typeInfo(@TypeOf(
+        llm_provider_registry_service.LLMProviderRegistryService.init,
+    )).@"fn";
+    try std.testing.expectEqual(@as(usize, 1), init_type.params.len);
+    try std.testing.expect(init_type.params[0].type.? == *llm_provider_registry.Owner);
+
+    const registry = @embedFile("domain/llm_provider_registry.zig");
+    try expectAbsent(registry, "/adapters/");
+    try expectAbsent(registry, "/ports/");
+    try expectAbsent(registry, "anyopaque");
+
+    const allowlist_fields = @typeInfo(repository_model_allowlist.Entry).@"struct".fields;
+    try std.testing.expectEqual(@as(usize, 3), allowlist_fields.len);
+    try std.testing.expectEqualStrings("slot_name", allowlist_fields[0].name);
+    try std.testing.expectEqualStrings("registry_entry_id", allowlist_fields[1].name);
+    try std.testing.expectEqualStrings("reasoning_effort", allowlist_fields[2].name);
+    try std.testing.expect(allowlist_fields[1].type == llm_provider_registry.RegistryEntryId);
+
+    const allowlist = @embedFile("domain/repository_model_allowlist.zig");
+    try expectAbsent(allowlist, "ValidatedProviderConfig");
+    try expectAbsent(allowlist, "ProviderModelContract");
+    try expectAbsent(allowlist, "/adapters/");
+    try expectAbsent(allowlist, "/ports/");
+}
+
+test "provider requirement derives only from one exactly selected compiled workflow" {
+    const action_source = @embedFile("actions/provider/derive_provider_requirement.zig");
+    try expectAbsent(action_source, "/adapters/");
+    try expectAbsent(action_source, "/ports/");
+    try expectAbsent(action_source, "std.Io");
+    try expectAbsent(action_source, "config.zig");
+    try expectAbsent(action_source, "sddproviders");
+    try expectAbsent(action_source, "\"specify\"");
+    try expectAbsent(action_source, "\"implement\"");
+
+    const execute_type = @typeInfo(@TypeOf(derive_provider_requirement.Action.execute)).@"fn";
+    try std.testing.expectEqual(@as(usize, 2), execute_type.params.len);
+    try std.testing.expect(execute_type.params[1].type.? == *const workflow_execution.SelectedWorkflow);
+    try std.testing.expectEqualSlices(
+        @import("domain/pipeline.zig").DataKey,
+        &.{.selected_compiled_workflow},
+        derive_provider_requirement.Action.contract.requires,
+    );
+    try std.testing.expectEqualSlices(
+        @import("domain/pipeline.zig").DataKey,
+        &.{.model_provider_requirement},
+        derive_provider_requirement.Action.contract.produces,
+    );
 }
 
 test "workflow compiler and service preserve their authority boundaries" {

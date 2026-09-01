@@ -4,10 +4,13 @@
 
 **Implementation readiness:** The configured provider-document path and
 read-only byte service are accepted and implemented by F0001/F0004/F0008. The
-provider-catalogue to repository-slot subset rule is also accepted. The
-provider-neutral port, decoding/registry, route-to-slot assignment, and
-provider-operation work remain blocked on the unresolved governing amendments
-in Section 2.
+strict common decoder, compiler-contract registry join, immutable
+`LLMProviderRegistryService`, and repository-slot allowlist are accepted and
+implemented. The fixed conditional bootstrap owner and exact
+provider-requirement derivation are accepted, and the derivation action is
+implemented. Its runner bindings, production provider contracts,
+route-to-slot assignment, provider-neutral port, and provider-operation work
+remain incomplete or blocked on the remaining amendments in Section 2.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -22,7 +25,8 @@ project-content change.
 
 **Governing authority:** [Engine design](../design.md), especially Sections 1,
 3-6, 9, 12-13.4, 15, 21-22, and 26-31; [ADR 0001 — Zig native
-engine](../decisions/0001-zig-engine.md); [F0001 —
+engine](../decisions/0001-zig-engine.md); [ADR 0004 — conditional
+model-provider bootstrap](../decisions/0004-model-provider-bootstrap.md); [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); [F0002 —
 LogService](F0002-LogService.md); [F0008 —
 LLMProviderConfigService](F0008-LLMProviderConfigService.md); the [path
@@ -66,12 +70,15 @@ executable code, dynamically load a provider, or create a capability.
 
 Current authority now defines the exact project-root `.sddtoolkit.json`, its
 required `paths.providers` member, F0004's opaque provider-document path
-capability, and F0008's bounded read-only byte service. It still defines no
-provider registry, active-run change rule, or externally counted provider
-operation.
+capability, F0008's bounded read-only byte service, the strict provider
+catalogue, its immutable registry service, and the repository model allowlist.
+It also accepts the fixed conditional run-preparation owner and exact
+selected-graph requirement derivation. Runner integration, active-run change
+rules, production provider contracts, and externally counted provider
+operations remain undefined or incomplete.
 
-Remaining implementation requires the governing amendments below; items 1 and
-6 record accepted prerequisites:
+Remaining implementation requires the governing amendments below; items 1-4
+and 6 record accepted increments:
 
 1. **Accepted by F0001/F0004/F0008:** require `paths.providers`, validate its
    normalized project-relative path and exact `.sddproviders.json` basename,
@@ -79,18 +86,19 @@ Remaining implementation requires the governing amendments below; items 1 and
    the complete collision proof against `.sddtoolkit.json` and every configured
    root. F0008 alone locates and captures the file when the F0006 branch requests
    it;
-2. adds a fixed engine-owned, capability-free
-   `ModelProviderBootstrapOrchestrator` after selected-workflow compilation and
-   before selected-workflow execution. It coordinates runner-owned bindings for
-   the conditional existence/read/decode/build/validate sequence in Sections
-   3-5 and 9; this explicitly amends the current fixed startup-graph authority
-   rather than relying on runner convention;
-3. makes the closed document and provider-specific configuration union in
-   Section 3 normative, including byte, collection, nesting, and identity
-   limits;
-4. explicitly extends the currently closed F0001 two-code configuration
-   surface with the provider-file diagnostics in Section 10 instead of
-   silently reusing or broadening those codes;
+2. **Accepted; requirement derivation implemented:** adds a fixed engine-owned,
+   capability-free `ModelProviderBootstrapOrchestrator` after selected-workflow
+   compilation and before selected-workflow execution. It coordinates
+   runner-owned bindings for the conditional
+   existence/read/decode/build/validate sequence in Sections 3-5 and 9; this
+   explicitly amends the current fixed startup-graph authority rather than
+   relying on runner convention;
+3. **Accepted and implemented:** makes the closed document and registered
+   provider-specific configuration union in Section 3 normative, including
+   byte, collection, nesting, and identity limits;
+4. **Accepted and implemented:** extends the public diagnostic vocabulary with
+   the separately owned provider-file codes in Section 10 without reusing or
+   broadening F0001's two reader codes;
 5. defines bootstrap refresh and active-run change classification for the
    provider file;
 6. **Accepted configuration relationship:** `.sddproviders.json` is the
@@ -144,6 +152,13 @@ must select a configured slot and produce the same
 `ValidatedProviderModelBinding` before any provider operation.
 
 ## 3. Exact `.sddproviders.json` contract
+
+The formal common structural contract is
+[`sddproviders.schema.json`](../schemas/sddproviders.schema.json). Constraints
+that JSON Schema cannot express—duplicate-key rejection, strict transport,
+nesting depth, total model count, global identity uniqueness, compiled-contract
+joins, and provider-specific configuration closure—remain normative here and
+are enforced by the implementation.
 
 The runtime source is exactly `<projectRoot>/<paths.providers>`, where
 `projectRoot` is the same canonical invocation root established for F0001 and
@@ -290,6 +305,14 @@ LLMProviderDispatch = union(enum) {
 }
 ```
 
+The current production contract registry is empty. The generic registry and
+allowlist boundary is exercised with private compiler-supplied test contracts
+whose configuration schema is the closed empty object; those contracts are not
+installed by production composition and cannot activate a project provider.
+F0007 or another accepted provider feature must add a production contract,
+configuration variant, implementation discriminator, and later dispatch branch
+together.
+
 Every union variant conforms directly to `LLMProviderInterface`; dispatch
 forwards exactly one operation and introduces no second port. Adding a provider
 therefore requires a source change and architecture tests. Unused entries do
@@ -306,30 +329,34 @@ alias, and containment rules. A collision blocks even when provider content
 loading will be skipped. Reservation grants no provider capability and does not
 probe file existence or content.
 
-After the workflow compiler has resolved the selected graph,
+After the validated workflow registry has resolved the selected graph,
 `DeriveProviderRequirementAction` derives whether its effective capability set
-contains model-provider capability. A project workflow cannot manufacture that
-capability by naming a provider node or field.
+contains the exact compiler-owned `model-provider` capability. It reads no
+workflow/node name, parameter, policy allowance alone, configuration, route, or
+provider content. A project workflow cannot manufacture that capability by
+naming a provider node or field; it can receive it only through an accepted
+registered node contract under an allowing workflow policy.
 
 The fixed `ModelProviderBootstrapOrchestrator` then branches only on that typed
 outcome through runner-owned child bindings:
 
 - If the selected compiled graph's effective capability set contains no
-  model-provider capability, file existence probing, opening, reading,
+  exact `model-provider` capability, file existence probing, opening, reading,
   decoding, and registry construction are unreachable. A missing or malformed
   file is not observed and has no effect on that run.
-- If it contains model-provider capability, F0008 must successfully capture
-  the exact configured provider file, and the complete document must build and
-  validate before `ValidateRepositoryModelAllowlistAction` joins the complete
-  `models.slots` map to that catalogue. Both the complete catalogue and complete
+- If it contains the exact `model-provider` capability, F0008 must successfully
+  capture the exact configured provider file, and the complete document must
+  build and validate before `ValidateRepositoryModelAllowlistAction` joins the
+  complete `models.slots` map to that catalogue. Both the complete catalogue and complete
   allowlist must validate before the first selected-workflow node runs.
   Missing, malformed, unsupported, partially valid, or catalogue-missing slot
   input blocks run preparation; no partial allowlist is published.
 
 The orchestrator performs no filesystem, parsing, registry, state, logging, or
-provider work itself. This fixed run-preparation placement and the expansion of
-current startup-graph authority require the Section 2 amendment; the runner
-does not infer or sequence it by convention.
+provider work itself. ADR 0004 accepts this fixed run-preparation placement and
+the narrow expansion beyond the startup graph; the runner does not infer or
+sequence it by convention. Runner bindings for the branch remain a separate
+implementation increment.
 
 The accepted amendment must decide how a file identity participates in active
 run change classification. No implementation may hot-reload it, retain a
@@ -702,7 +729,7 @@ never chooses `blocked`, `failed`, `cancelled`, retry, or fallback.
 
 | Owner | Sole responsibility |
 | --- | --- |
-| `DeriveProviderRequirementAction` | Determine whether the selected compiled graph requires model capability. |
+| `DeriveProviderRequirementAction` | Return `required` only when the selected compiled graph contains the exact compiler-owned `model-provider` capability; otherwise return `not_required`. |
 | `LocateLLMProviderConfigAction` (F0008) | Open only the exact F0004-authorized no-follow regular file. |
 | `ReadLLMProviderConfigAction` (F0008) | Capture that already-opened file completely under its fixed bound. |
 | `LLMProviderConfigService` (F0008) | Own the complete capture and expose immutable untrusted bytes without I/O or parsing. |
@@ -741,14 +768,14 @@ filesystem, process, state, transaction, or command capability.
 
 ## 10. Diagnostics, security, and cleanup
 
-The proposed provider-file diagnostics are:
+The accepted provider-file diagnostics are:
 
 | Code | Meaning |
 | --- | --- |
 | `LLM_PROVIDER_CONFIG_READ_ERROR` | The exact required file cannot be safely and completely located or read under the no-follow and size contract. |
 | `LLM_PROVIDER_CONFIG_PARSE_ERROR` | Bytes do not decode as strict JSON with the exact closed common container and bounded raw `config` objects. |
 | `LLM_PROVIDER_REGISTRY_INVALID` | A registered provider-config variant, model/contract join, capability, target policy, bound, uniqueness, discriminator, or total-accounting proof fails. This includes an unimplemented provider in an otherwise structurally decoded file. |
-| `LLM_PROVIDER_MODEL_BINDING_INVALID` | A selected route/provider/model/options tuple does not resolve exactly or cannot satisfy the route contract. |
+| `LLM_PROVIDER_MODEL_BINDING_INVALID` | Any repository slot's provider/model/options tuple does not resolve exactly in the complete validated catalogue; the complete allowlist is rejected. |
 
 Runtime failures use only the Section 8 union and bounded public rule evidence.
 They contain no raw request/response body, arbitrary provider JSON, header,
@@ -812,8 +839,8 @@ F0006 does not:
 5. The repository example is never a runtime default or fallback. Its common
    shape can decode, but its OpenAI entries make whole-registry build fail until
    an OpenAI feature is compiled and accepted.
-6. If the selected compiled graph's effective capability set has no
-   model-provider capability, file probing/loading is unreachable; otherwise
+6. If the selected compiled graph's effective capability set has no exact
+   `model-provider` capability, file probing/loading is unreachable; otherwise
    the entire exact file must validate before selected-workflow execution.
 7. One invalid or unsupported sibling publishes no partial registry.
 8. Every `.sddtoolkit.json` slot tuple and its options resolve exactly to one
@@ -918,6 +945,7 @@ Implementation evidence must cover:
 | Concern | Authority |
 | --- | --- |
 | Candidate-only LLM boundary | Design Sections 1, 3-4, 12, and 26.1 |
+| Fixed conditional provider bootstrap and derivation | ADR 0004; Design Sections 3-6 and 13.1 |
 | Common port, action, runner, and dependency direction | Design Sections 5-6 and 13.4; ADR 0001 |
 | Current engine configuration ownership | Design Section 9; F0001; `design/paths.md` |
 | Request/invoke/decode separation | Design Sections 12.1-12.4 and 13.4; `design/code.md` Sections 21-24 |
