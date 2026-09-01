@@ -30,11 +30,15 @@ contract](../paths.md).
 ## 1. Responsibility
 
 `LLMProviderConfigService` owns one complete bounded byte capture of the
-configured `.sddproviders.json` document and exposes those bytes immutably.
+configured `.sddproviders.json` catalogue document and exposes those bytes
+immutably. Catalogue membership describes an available configured model
+instance; it does not add that model to the repository's allowed
+`.sddtoolkit.json` `models.slots` set.
 
 The service does not decode JSON, validate provider definitions, construct a
-provider registry, select a route, obtain credentials, or invoke a provider.
-Those remain F0006/F0007 responsibilities.
+provider registry, validate the slot-to-catalogue subset relationship, select a
+route, obtain credentials, or invoke a provider. Those remain F0006/F0007
+responsibilities.
 
 ## 2. Path authority
 

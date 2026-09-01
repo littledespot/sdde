@@ -21,7 +21,7 @@ authority.
 | `toolchainPreset` | The installed toolchain preset packages from which the project's `toolchain.yaml` inherits. Presets remain candidate policy until parsed, composed, and deterministically validated. |
 | `principles` | Project principles. Markdown files are free-text principle sources. The exact root child `toolchain.yaml` is also a project principle, but it is parsed separately as a closed typed project-toolchain layer and never ingested as free text. |
 | `templates` | Inert `*.template.md` principle templates reserved for a future `sdd init` template-to-principles boundary. Current v1 defines no init action or transaction and normal bootstrap and feature workflows neither ingest nor copy these files. A future accepted init design may materialize copies in `principles`, where they would become ordinary project principle input. |
-| `providers` | Engine-read-only LLM-provider document path. It is a normalized project-relative file path whose basename is exactly `.sddproviders.json`. F0004 reserves it without reading it; F0008 is its sole reader and F0006 owns later decoding. |
+| `providers` | Engine-read-only LLM-provider catalogue document path. It is a normalized project-relative file path whose basename is exactly `.sddproviders.json`. F0004 reserves it without reading it; F0008 is its sole reader and F0006 owns later decoding. Catalogue membership does not add a model to the repository's allowed `models.slots` set. |
 
 Except for `specsArchive` beneath `specs`, the seven configured directory
 roots are disjoint. `paths.providers` may not equal, contain, or be contained

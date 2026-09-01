@@ -9182,7 +9182,10 @@ None of these design assets is searched, packaged as runtime authority, or
 copied implicitly by ordinary bootstrap.
 
 The following extended policy document is illustrative and is not the current
-F0001 input contract:
+F0001 input contract. Its `models.slots` member nevertheless follows the current
+authority split: slots are repository-allowed exact provider/model references,
+and every referenced tuple must exist in the separately configured
+`.sddproviders.json` catalogue:
 
 ```json
 {
@@ -9254,30 +9257,12 @@ F0001 input contract:
     ]
   },
   "models": {
-    "profiles": {
-      "nano": {
-        "provider": "openai",
-        "model": "gpt-5-nano",
-        "reasoningEffort": "low",
-        "temperature": 0,
-        "maxOutputTokens": 4000
-      }
-    },
-    "routes": {
-      "reference.extract": "nano",
-      "reference.reconcile": "nano",
-      "spec.feature-brief.generate": "nano",
-      "spec.section.generate": "nano",
-      "plan.path-intent.generate": "nano",
-      "plan.section.generate": "nano",
-      "tasks.cluster.generate": "nano",
-      "tasks.dependencies.reconcile": "nano",
-      "clarification.resolve": "nano",
-      "implementation.change-plan.generate": "nano",
-      "implementation.operation.generate": "nano",
-      "repair.structured": "nano",
-      "repair.code": "nano",
-      "semantic.review": "nano"
+    "slots": {
+      "audit_analysis": { "provider": "openai", "model": "gpt-5-nano" },
+      "drift_analysis": { "provider": "openai", "model": "gpt-5-nano" },
+      "spec_generation": { "provider": "openai", "model": "gpt-5-nano", "reasoningEffort": "low" },
+      "design_section_generation": { "provider": "openai", "model": "gpt-5.4-nano" },
+      "implementation": { "provider": "openai", "model": "gpt-5.4-mini" }
     }
   },
   "workflow": {

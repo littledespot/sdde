@@ -534,6 +534,22 @@ the applicable typed field directly. No configuration key, section key, copied
 projection, generic string lookup, cache, or second configuration authority
 exists.
 
+The two model configuration sources have distinct authority. The
+`.sddproviders.json` document at `paths.providers` is the bounded catalogue of
+configured provider/model instances. The `models.slots` map in
+`.sddtoolkit.json` selects the models allowed for this repository: every slot's
+exact case-sensitive `(provider, model)` tuple must resolve to exactly one entry
+in the completely validated provider catalogue. The selected tuple set may be
+equal to or a subset of the catalogue tuple set, never a superset. Catalogue
+entries not referenced by any slot are valid but are not repository-authorized
+or callable merely because they exist. Neither source supplies an implicit
+default, nearest match, or fallback. The validated repository model allowlist
+is the sole join authority: it stores slot identity, the exact referenced
+catalogue-entry identity, and validated slot options, but does not copy provider
+configuration or model-contract facts from the catalogue. The subset invariant
+compares distinct `(provider, model)` tuples, not slot count; multiple named
+slots may reference the same catalogue entry.
+
 ### 9.1 Required configuration shape
 
 For the bounded F0001 reader increment, the current closed shape is the formal
@@ -565,7 +581,7 @@ bootstrap:
 | `toolchainPreset` | The direct root/registry of closed, validated preset packages from which the project toolchain layer may inherit. |
 | `principles` | Project principles: the exact mechanical `<paths.principles>/toolchain.yaml` layer and semantic Markdown principle files. |
 | `templates` | Inert `*.template.md` principle templates. The initial SDD workflows never import or copy them; only an explicit `sdd init` operation may copy them into `paths.principles`. |
-| `providers` | Engine-read-only provider document. It is a normalized project-relative file path whose basename is exactly `.sddproviders.json`; bootstrap reserves it without reading it, and F0008 reads it only when the selected compiled workflow requires model-provider capability. |
+| `providers` | Engine-read-only provider catalogue document. It is a normalized project-relative file path whose basename is exactly `.sddproviders.json`; bootstrap reserves it without reading it, and F0008 reads it only when the selected compiled workflow requires model-provider capability. Catalogue membership configures an instance but does not add it to the repository's allowed `models.slots` set. |
 
 Every configured location is taken solely from the decoded `PathsConfig` in the
 exact current-working-directory project-root `.sddtoolkit.json`, then
@@ -1167,7 +1183,20 @@ Some current gates—testability, ambiguity, minimality, unsupported behavior, a
 
 ### 12.7 Versioned route registry
 
-`routeRegistryVersion` selects a closed registry shipped with the engine. Configuration may map an exact route ID to a model profile, but it cannot redefine that route's unit, schemas, context-request type, guidance/example assets, ceilings, or repair algebra. Unknown routes, missing required routes, duplicate descriptors, and provider profiles whose advertised limits cannot satisfy a descriptor fail at bootstrap. The effective provider limit is the stricter of the profile and route limit.
+The engine ships a closed versioned route registry. The current
+`.sddtoolkit.json` contract does not define route descriptors or provider
+profiles: its `models.slots` values are the repository's allowed exact
+provider/model references. Any accepted route-to-slot binding must first select
+one configured slot, then resolve that slot's `(provider, model)` tuple to
+exactly one validated `.sddproviders.json` catalogue entry and one compiled
+provider/model contract. A route cannot name or activate an unlisted model
+directly. Configuration cannot redefine a route's unit, schemas,
+context-request type, guidance/example assets, ceilings, or repair algebra.
+The exact route-to-slot assignment remains a separate required design decision.
+Unknown routes, missing required slots, catalogue-missing slot tuples, duplicate
+descriptors, and configured models whose compiled limits cannot satisfy a
+descriptor fail before a provider operation. The effective provider limit is
+the stricter of the compiled model contract and route limit.
 
 The initial `routes/v1` registry is:
 
@@ -4377,7 +4406,7 @@ The new engine is ready for production evaluation when all of the following are 
    remains the sole node invocation and delta owner. Bound-graph change
    classification compares stable semantic authority rather than source ordinal,
    registry identity, or validation evidence.
-2. Bootstrap treats the invocation working directory as project root and accepts only its exact `.sddtoolkit.json` up to the internal 1,048,576-byte guard. Any safe-read failure returns `ENGINE_CONFIG_READ_ERROR`; any JSON/closed-shape failure returns `ENGINE_CONFIG_PARSE_ERROR`; either exits nonzero before workflow work. It requires exactly `specs`, `references`, `specsArchive`, `workflows`, `toolchainPreset`, `principles`, `templates`, and `providers`; applies only the `specsArchive`-beneath-`specs` nesting exception; requires `providers` to identify a distinct project-relative `.sddproviders.json` file; never searches a parent/child directory; and never treats `design/examples/.sddtoolkit.json`, a fixed provider filename, a source tree, or a packaged asset as runtime configuration/fallback.
+2. Bootstrap treats the invocation working directory as project root and accepts only its exact `.sddtoolkit.json` up to the internal 1,048,576-byte guard. Any safe-read failure returns `ENGINE_CONFIG_READ_ERROR`; any JSON/closed-shape failure returns `ENGINE_CONFIG_PARSE_ERROR`; either exits nonzero before workflow work. It requires exactly `specs`, `references`, `specsArchive`, `workflows`, `toolchainPreset`, `principles`, `templates`, and `providers`; applies only the `specsArchive`-beneath-`specs` nesting exception; requires `providers` to identify a distinct project-relative `.sddproviders.json` file; never searches a parent/child directory; and never treats `design/examples/.sddtoolkit.json`, a fixed provider filename, a source tree, or a packaged asset as runtime configuration/fallback. For a model-capable selected workflow, every exact `(provider, model)` tuple named by `models.slots` resolves once in the completely validated provider catalogue; the repository may allow some or all catalogue entries but never a model absent from that catalogue, and unused entries gain no repository authority.
 3. Workflow definitions plus reserved `features/` and `transactions/` resolve only beneath `paths.workflows`; presets resolve directly beneath `paths.toolchainPreset`, whose complete registry validates independently of project selection; the mechanical project layer resolves only as `<paths.principles>/toolchain.yaml`, and only its post-composition safety-valid merged result can feed environment/path/command/capability consumers; the total principles inventory accounts for that file exactly once as mechanically excluded while semantic capture accepts only other normalized Markdown beneath `paths.principles`; and `paths.templates` remains unread/inert throughout the initial SDD suite. All configured/derived locations are validated for separation, containment, and reserved ownership.
 4. Specify launches only as `sdd specify --reference <relative-selector>` (or an exactly equivalent one-selector API/compatibility adapter); missing/duplicate/removed/positional inputs fail before activation, and the title/description/goal are derived only from validated reference authority.
 5. No LLM action has a filesystem, process, state, logger, or unrestricted tool interface.
@@ -4452,7 +4481,13 @@ The following implementation choices are accepted:
   authority. F0004 reserves its distinct opaque `.sddproviders.json` file
   capability, and F0008 alone performs its bounded read-only capture without
   parsing, provider-registry construction, fixed-location fallback, or
-  unconditional loading.
+  unconditional loading;
+- [F0006](features/F0006-LLMProviderInterface.md), configuration relationship
+  only: `.sddproviders.json` is the configured provider/model catalogue and
+  `.sddtoolkit.json` `models.slots` is the repository allowlist. Every slot tuple
+  must be present exactly once in the validated catalogue; slots may reference
+  some or all catalogue models, never an additional model. Unreferenced
+  catalogue entries are not repository-authorized.
 
 The following choices remain deferred and may be decided during implementation
 without altering the architecture:

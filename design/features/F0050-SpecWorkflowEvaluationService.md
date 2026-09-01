@@ -125,9 +125,11 @@ behavior.
 ### 3.3 Settle the fake model boundary and route bindings
 
 F0006 is explicitly blocked on governing amendments and proposes replacing the
-design's `ModelGateway` name with `LLMProviderInterface`. Current configuration
-also has no accepted exact mapping from `models.slots` to the versioned routes
-needed by reference extraction/reconciliation, feature-brief generation,
+design's `ModelGateway` name with `LLMProviderInterface`. The configuration
+relationship is settled: `models.slots` is the repository allowlist and every
+slot tuple must exist in the `.sddproviders.json` catalogue. What remains
+unsettled is the exact mapping from the versioned routes to those configured
+slots for reference extraction/reconciliation, feature-brief generation,
 specification-unit generation, semantic review, protocol retry, and repair.
 
 The smallest decision for the offline milestone may authorize a test
@@ -179,7 +181,7 @@ fixture.
 | Boundary | Implemented evidence | Readiness for this goal |
 | --- | --- | --- |
 | Native build and packaging | Zig 0.16.0 pin, native executable, lint/test/smoke/verify build steps, clean temporary-directory smoke | Foundation exists. The smoke proves only a packaged generic no-op workflow. |
-| Exact configuration | Exact-CWD `.sddtoolkit.json` location/read/decode and closed `logs`, `models.slots`, and seven-path shape | Foundation exists; there is no accepted model-route/provider binding. |
+| Exact configuration | Exact-CWD `.sddtoolkit.json` location/read/decode and closed `logs`, `models.slots`, and eight-path shape | The slot-to-provider-catalogue subset rule is accepted; registry decoding and exact route-to-slot bindings remain missing. |
 | Bootstrap roots | Normalization, active-filesystem checks, root roles, separation, and root registry | Foundation exists. The named fixture has no runtime config or roots. |
 | Feature logging | Policy, records, sinks, rotation, retention, recovery, and composition tests | Subsystem exists, but no Specify activation/state transaction binds it to a feature run. |
 | Workflow authority | Bounded inventory/capture/YAML parse/schema validation, compiler, graph validator, and immutable ID registry | Strong generic foundation exists. The current uncommitted tests strengthen this boundary only. |

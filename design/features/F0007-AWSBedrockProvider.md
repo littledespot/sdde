@@ -161,8 +161,11 @@ process, retry count, proxy, CA bundle, header, guardrail, tool, request
 metadata, token limit, context window, structured-output flag, tokenizer, or
 arbitrary model JSON.
 
-The provider file selects a registered instance; it does not describe model
-capability. The compiler-owned contract is representative of:
+The provider file catalogues a configured registered instance; it does not
+place that instance in the repository allowlist or describe model capability.
+Only an exact `.sddtoolkit.json` `models.slots` reference may select it for the
+repository, and that reference still grants no capability beyond the
+compiler-owned contract. The contract is representative of:
 
 ```text
 AWSBedrockModelContract {
@@ -694,8 +697,10 @@ F0007 does not implement:
 3. Provider data cannot declare a capability, limit, endpoint, target tag,
    tokenizer, structured-output mode, credential, retry, header, or arbitrary
    request field.
-4. Every model joins exactly to a compiled Bedrock contract and one of the
-   three closed target variants; all other target kinds fail before I/O.
+4. Every Bedrock catalogue model joins exactly to a compiled Bedrock contract
+   and one of the three closed target variants; all other target kinds fail
+   before I/O. Invocation additionally requires an exact repository-allowlist
+   slot reference to that catalogue entry.
 5. Source region, partition, target availability, geographic destination set or
    worldwide scope, and data-routing policy validate before authorization.
 6. Global inference requires acceptance of worldwide routing including future

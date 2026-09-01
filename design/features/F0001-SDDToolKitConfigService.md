@@ -93,12 +93,25 @@ There is no file-output switch: every admitted F0002 record is written to its
 feature/run `.log` file. `console` can only add or suppress the same safe
 pipe-delimited row on `stderr`; it can never replace or disable the file write.
 
+`models.slots` is the repository's allowed model set, expressed as named exact
+`(provider, model)` references plus closed slot options. The configured
+`.sddproviders.json` document is the catalogue of available configured model
+instances. After both inputs validate, every slot tuple must resolve to exactly
+one catalogue entry. Slots may reference some or all catalogue models, never a
+model outside the catalogue. An unreferenced catalogue entry is not allowed for
+this repository merely because it is configured. F0001 only decodes the slot
+values; F0006 owns this cross-document semantic join. Multiple named slots may
+reference the same catalogue entry; the subset rule compares distinct exact
+provider/model tuples, not the number of slot names.
+
 Structural decoding does not grant operational authority. In particular:
 
 - a decoded path string is not normalized, contained, or authorized;
 - a decoded log level or prompt-capture selector list is not canonical or
   validated logging policy; and
-- a decoded provider/model string is not a resolved model route.
+- a decoded provider/model string is neither repository-authorized nor a
+  resolved model binding until it joins exactly to the validated provider
+  catalogue.
 
 ## 4. Query and ownership contract
 
@@ -116,7 +129,7 @@ Semantic ownership remains outside F0001:
 | Consumer | Owned semantic work |
 | --- | --- |
 | Logging-policy compiler | Canonicalize `config.logs.level` once, validate console/prompt choices, inject every F0002 operational constant, and produce the persisted logging-policy fragment. |
-| Model-route compiler | Validate `config.models` and resolve registered providers, models, and routes. |
+| F0006 repository-model allowlist boundary | Validate every `config.models.slots` tuple against the complete provider catalogue, publish immutable slot-to-catalogue-entry references without copying provider configuration, and later resolve accepted route-to-slot bindings. |
 | [F0004 bootstrap-root path-policy boundary](F0004-BootstrapRootRegistryService.md) | Validate the seven configured directory roots plus `config.paths.providers`, reserve their distinct typed roles, and construct the `BootstrapRootRegistry`; F0001 does not resolve a path itself. |
 | [F0008 provider-config reader](F0008-LLMProviderConfigService.md) | Consume only F0004's opaque provider-document capability and capture its bytes; it does not reread F0001 or resolve the raw string. |
 
@@ -198,6 +211,10 @@ owner's work.
 12. The public configuration failure surface contains only
     `ENGINE_CONFIG_READ_ERROR` and `ENGINE_CONFIG_PARSE_ERROR`; every failure
     maps to exactly one of them and both terminate before workflow work.
+13. F0001 grants no model authority: the F0006 semantic consumer must prove
+    that every slot's exact `(provider, model)` tuple exists once in the
+    validated provider catalogue. The slots may select some or all catalogue
+    entries, never an entry outside it.
 
 ## 8. Verification
 

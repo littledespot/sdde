@@ -3,9 +3,11 @@
 **Status:** Proposed feature design
 
 **Implementation readiness:** The configured provider-document path and
-read-only byte service are accepted and implemented by F0001/F0004/F0008.
-The provider-neutral port, decoding/registry, routing, and provider-operation
-work remain blocked on the unresolved governing amendments in Section 2.
+read-only byte service are accepted and implemented by F0001/F0004/F0008. The
+provider-catalogue to repository-slot subset rule is also accepted. The
+provider-neutral port, decoding/registry, route-to-slot assignment, and
+provider-operation work remain blocked on the unresolved governing amendments
+in Section 2.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -68,8 +70,8 @@ capability, and F0008's bounded read-only byte service. It still defines no
 provider registry, active-run change rule, or externally counted provider
 operation.
 
-Remaining implementation requires the governing amendments below; item 1
-records the accepted prerequisite already delivered by F0008:
+Remaining implementation requires the governing amendments below; items 1 and
+6 record accepted prerequisites:
 
 1. **Accepted by F0001/F0004/F0008:** require `paths.providers`, validate its
    normalized project-relative path and exact `.sddproviders.json` basename,
@@ -91,8 +93,13 @@ records the accepted prerequisite already delivered by F0008:
    silently reusing or broadening those codes;
 5. defines bootstrap refresh and active-run change classification for the
    provider file;
-6. defines the exact mapping from current `.sddtoolkit.json` `models.slots`
-   selections to the built-in versioned model-route registry;
+6. **Accepted configuration relationship:** `.sddproviders.json` is the
+   configured provider/model catalogue, while current `.sddtoolkit.json`
+   `models.slots` is the repository allowlist. Every slot's exact
+   `(provider, model)` tuple must resolve to exactly one validated catalogue
+   entry. Slots may select some or all catalogue entries, never an additional
+   model; unused catalogue entries gain no repository authority. The exact
+   built-in route-to-slot assignment still requires acceptance;
 7. amends `AdvanceModelAttemptAccountingAction`, design Sections 12.1 and
    13.4, and `ModelRequestLifecycle` for the Section 7 full-attempt semantics:
    reserve once before the first external provider operation; define count and
@@ -122,13 +129,19 @@ Until then, the two project inputs have distinct proposed responsibilities:
 
 | File | Responsibility |
 | --- | --- |
-| `.sddtoolkit.json` | Select the provider/model for a named model slot and carry its currently accepted options. F0001 remains its sole reader and decoder. |
-| `.sddproviders.json` | Declare the bounded installed provider/model instances and their closed provider-specific deployment configuration. It contains no route assignment, capability claim, executable implementation, or secret. |
+| `.sddtoolkit.json` | Define the repository's allowed model set through named slots containing exact provider/model references and accepted options. F0001 remains its sole reader and decoder. |
+| `.sddproviders.json` | Catalogue the bounded configured provider/model instances and their closed provider-specific deployment configuration. It contains no repository allowlist, route assignment, capability claim, executable implementation, or secret. |
 
-F0006 does not replace `models.slots` with the illustrative
-`models.profiles`/`models.routes` samples in `design/code.md`, and it does not
-invent a compatibility mapping. The accepted route resolver must produce the
-same `ValidatedProviderModelBinding` before any provider operation.
+Let `C` be the exact validated catalogue tuple set and `S` the tuple set
+projected from `models.slots`. The required relationship is `S ⊆ C`. Equality
+is valid, as is a strict subset; `S` containing any tuple outside `C` rejects
+the repository model configuration. No reverse completeness requirement exists,
+and `C - S` remains configured but unauthorized for this repository. Distinct
+slot names may reference the same member of `C`; this does not increase `S` or
+duplicate the catalogue entry. F0006 does not replace `models.slots` with a
+profiles/routes compatibility shape. The separately accepted route resolver
+must select a configured slot and produce the same
+`ValidatedProviderModelBinding` before any provider operation.
 
 ## 3. Exact `.sddproviders.json` contract
 
@@ -179,9 +192,10 @@ fail.
 There are no common project-authored `endpoint`, `contextWindow`,
 `maxOutputTokens`, `supportsTemperature`, `structuredOutput`, `tokenizer`, or
 wire-parameter fields. Those are trusted compiler-registered model-contract
-facts described in Section 4. A project file may select only a known provider,
-known model, and the fields permitted by that provider's closed `config`
-variant.
+facts described in Section 4. The provider catalogue may declare only a known
+provider, known model, and the fields permitted by that provider's closed
+`config` variant. Catalogue membership alone does not make that model
+repository-authorized.
 
 `RegisteredProviderModelConfig` is a closed tagged union selected by the
 validated enclosing provider. For example, `provider: "aws-bedrock"` requires
@@ -217,9 +231,11 @@ features may add only narrowly typed, explicitly accepted fields.
 
 The current provider source example includes one Bedrock entry and
 unimplemented OpenAI entries, while the current [toolkit source
-example](../examples/.sddtoolkit.json) selects OpenAI models. Those files
-demonstrate source shapes independently; they are not a conforming paired
-runtime fixture, do not enable an OpenAI adapter, and do not provide a fallback.
+example](../examples/.sddtoolkit.json) selects only OpenAI catalogue models and
+leaves the Bedrock entry unreferenced. It therefore demonstrates a valid strict
+slot-to-catalogue subset, including multiple slots referencing `gpt-5-nano`.
+It is still not a conforming runtime fixture because no accepted OpenAI provider
+implementation exists; it does not enable an adapter or provide a fallback.
 
 ## 4. Registered contracts and immutable registry
 
@@ -256,6 +272,8 @@ Registry ownership is separated as follows:
 | `ValidateLLMProviderRegistryAction` | Prove closed variants, exact joins, uniqueness, resource totals, target policy, model capability, and registered provider discriminator availability for the entire candidate. |
 | Pipeline runner | Apply the validated delta and materialize the run-owned immutable `LLMProviderRegistryService`; destroy the candidate on every rejected path. |
 | `LLMProviderRegistryService` | Expose borrowed immutable lookup by exact `(provider, model)` tuple; it does not read files, mutate entries, choose a route, or perform I/O. |
+| `ValidateRepositoryModelAllowlistAction` | Join the complete F0001 `models.slots` map to the validated catalogue and produce immutable slot-to-entry references only when every tuple resolves exactly once. |
+| `ValidatedRepositoryModelAllowlist` | Be the sole repository model-allowlist authority. It owns slot identity, catalogue-entry identity, and validated slot options; it copies no provider configuration, contract facts, adapter, client, or capability. |
 | Composition root | Construct the fixed provider/model contract registry, concrete provider adapters, the private exhaustive dispatcher, and their narrow dependencies; inject the common port only into provider-operation actions. |
 
 Registry entries and pipeline bindings contain immutable provider/model facts
@@ -302,9 +320,11 @@ outcome through runner-owned child bindings:
   file is not observed and has no effect on that run.
 - If it contains model-provider capability, F0008 must successfully capture
   the exact configured provider file, and the complete document must build and
-  validate before the first
-  selected-workflow node runs. Missing, malformed, unsupported, or partially
-  valid input blocks run preparation.
+  validate before `ValidateRepositoryModelAllowlistAction` joins the complete
+  `models.slots` map to that catalogue. Both the complete catalogue and complete
+  allowlist must validate before the first selected-workflow node runs.
+  Missing, malformed, unsupported, partially valid, or catalogue-missing slot
+  input blocks run preparation; no partial allowlist is published.
 
 The orchestrator performs no filesystem, parsing, registry, state, logging, or
 provider work itself. This fixed run-preparation placement and the expansion of
@@ -318,13 +338,22 @@ explicitly accepted.
 
 ## 6. Provider/model binding and limits
 
-F0001 remains the sole owner of `.sddtoolkit.json` decoding. Its selected slot
-contributes decoded `provider`, `model`, and accepted options, but those strings
-grant no provider authority.
+F0001 remains the sole owner of `.sddtoolkit.json` decoding. The complete
+`models.slots` map defines the repository's candidate allowlist. Before any
+route binding is usable, every slot's exact case-sensitive `(provider, model)`
+tuple must resolve once in `LLMProviderRegistryService` and produce one entry in
+`ValidatedRepositoryModelAllowlist`; one missing or ambiguous tuple rejects the
+complete repository model configuration. Provider catalogue entries not
+selected by any slot are retained as configured facts but cannot be resolved
+through repository model authority. The allowlist references registry-entry
+identities rather than copying provider configuration or compiled contract
+facts. Decoded strings alone grant no provider authority.
 
 `ResolveProviderModelBindingAction` must prove:
 
-1. the selected tuple resolves to exactly one immutable registry entry;
+1. the route-selected slot resolves in `ValidatedRepositoryModelAllowlist` to
+   exactly one immutable registry-entry identity; direct provider/model tuple
+   selection bypassing the allowlist is impossible;
 2. the entry resolves to exactly one registered provider discriminator and
    compiled model contract, without storing a concrete adapter;
 3. its provider-specific configuration, target, source region, destination
@@ -680,7 +709,8 @@ never chooses `blocked`, `failed`, `cancelled`, retry, or fallback.
 | `DecodeLLMProviderConfigAction` | Decode strict JSON and the exact common container into bounded untrusted raw identities/config objects; grant no provider authority. |
 | `BuildLLMProviderRegistryAction` | Resolve discriminators, decode each closed provider config variant, and join entries to model contracts. |
 | `ValidateLLMProviderRegistryAction` | Validate the whole candidate and total resource accounting. |
-| `ResolveProviderModelBindingAction` | Resolve one selected route/provider/model tuple and effective limits. |
+| `ValidateRepositoryModelAllowlistAction` | Join the entire F0001 `models.slots` map to the validated provider catalogue and emit only immutable slot-to-entry references; reject the whole allowlist if any tuple is absent or ambiguous. |
+| `ResolveProviderModelBindingAction` | Resolve one accepted route-selected slot through `ValidatedRepositoryModelAllowlist` to its registry entry and effective limits; never accept a raw provider/model tuple as route authority. |
 | `BuildModelRequestAction` | Build one identified bounded provider-neutral request. |
 | `ValidateStaticModelRequestCapacityAction` | Prove every provider-neutral deterministic binding/control/schema/input-byte/output-reservation ceiling before attempt reservation or authorization; it does not serialize a provider wire request. |
 | `AdvanceModelAttemptAccountingAction` | Reserve one complete provider-attempt ordinal under the amended total-attempt ceiling. |
@@ -760,7 +790,7 @@ F0006 does not:
 - expose provider-native tools, agents, browsing, filesystem, or commands;
 - define credentials inside either project configuration file;
 - permit project-defined provider implementations or dynamic libraries;
-- decide the final `models.slots` to built-in route mapping; or
+- decide the final built-in route-to-`models.slots` assignment; or
 - select an AWS SDK, HTTP/TLS/signing library, linking mode, credential policy,
   or platform matrix.
 
@@ -786,10 +816,13 @@ F0006 does not:
    model-provider capability, file probing/loading is unreachable; otherwise
    the entire exact file must validate before selected-workflow execution.
 7. One invalid or unsupported sibling publishes no partial registry.
-8. The selected `.sddtoolkit.json` tuple and options resolve exactly to one
+8. Every `.sddtoolkit.json` slot tuple and its options resolve exactly to one
    registry entry, compiled model contract, and exhaustive provider
-   discriminator, while no adapter/client is stored in registry or pipeline
-   data.
+   discriminator. Slots may reference some or all catalogue entries, never an
+   absent entry; an unreferenced catalogue entry is not repository-authorized.
+   The one validated allowlist stores slot-to-entry identities without copying
+   provider configuration or contract facts. No adapter/client is stored in
+   registry or pipeline data.
 9. Project configuration contains no secret, executable behavior, arbitrary
    endpoint, retry policy, header, wire parameter, or capability claim.
 10. Effective canonical, serialized request, header, encoded/decoded response,
@@ -845,11 +878,14 @@ Implementation evidence must cover:
   collections; duplicate keys/identities; unknown provider/config/field;
   malformed UTF-8/JSON; unimplemented OpenAI entries; invalid sibling with no
   partial registry; exact ownership and cleanup.
-- **Binding/limits:** exact and missing tuples, unsupported options, target and
-  data-policy rejection, route/model/engine limit intersection, byte and token
-  boundaries, request URI/JSON/schema amplification, request/body/header and
-  encoded/decoded response caps, checked context equality/overflow, response
-  wire/content separation, and structured-schema incompatibility.
+- **Binding/limits:** all-catalogue and strict-subset slot selections, one slot
+  tuple absent from the catalogue rejecting the complete binding set,
+  unreferenced catalogue entries remaining unauthorized, exact and ambiguous
+  tuples, unsupported options, target and data-policy rejection,
+  route/model/engine limit intersection, byte and token boundaries, request
+  URI/JSON/schema amplification, request/body/header and encoded/decoded
+  response caps, checked context equality/overflow, response wire/content
+  separation, and structured-schema incompatibility.
 - **Operation accounting:** distinct count/inference IDs and operation records
   beneath one attempt record, lifecycle CAS, provider-neutral static-preflight
   ordering, operation-scoped wire-cap rejection that consumes the reserved
