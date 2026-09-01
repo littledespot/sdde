@@ -8,13 +8,15 @@ flowchart TD
     READ --> SCHEMACFG[DecodeSDDToolKitConfigAction<br/>parse directly to the closed reader-facing shape and supported version;<br/>immutable config value; no generic JSON tree or domain-policy compilation]
     SCHEMACFG -- Invalid JSON, version or shape --> PARSEFAIL[ENGINE_CONFIG_PARSE_ERROR<br/>terminal failed outcome and nonzero exit;<br/>no workflow/model/log/write starts]
     LOCATE --> HOST[DetectWorkspaceFilesystemPolicyAction]
-    SCHEMACFG --> BASES[For each required paths key exactly once:<br/>specs, references, specsArchive, workflows, toolchainPreset,<br/>principles and templates]
+    SCHEMACFG --> BASES[For each required directory key exactly once:<br/>specs, references, specsArchive, workflows, toolchainPreset,<br/>principles and templates]
+    SCHEMACFG --> PROVIDERPATH[Validate and resolve paths.providers exactly once;<br/>project-relative file with basename .sddproviders.json;<br/>reserve only, do not read]
     HOST --> BASES
     BASES --> RESOLVEBASE[ResolveConfiguredBaseRootAction<br/>join one configured relative base to the exact project root]
     RESOLVEBASE --> VALIDBASE[ValidateConfiguredBaseRootAction<br/>containment, normalization, access and portability capability]
+    PROVIDERPATH --> ROOTID
     VALIDBASE --> ROOTID[BuildBootstrapRootRegistryIdAction<br/>self-validating canonical project-root and contract-version tuple;<br/>consume no state ledger and inspect no content]
     ROOTID --> BUILDROOTS[BuildBootstrapRootRegistryAction<br/>identity, exact config/project descriptors plus complete configured-root capabilities]
-    BUILDROOTS --> VALIDROOTS{ValidateBootstrapRootRegistryAction<br/>all seven directory roots exactly once; no escape, alias, duplicate or illegal overlap;<br/>only specsArchive may nest beneath specs}
+    BUILDROOTS --> VALIDROOTS{ValidateBootstrapRootRegistryAction<br/>all seven directory roots plus provider file exactly once; no escape, alias, duplicate or illegal overlap;<br/>only specsArchive may nest beneath specs}
     VALIDROOTS -- Invalid --> FAIL[Bootstrap fails with typed diagnostic<br/>no model call and no partial registry or compiled policy]
     VALIDROOTS -- Valid --> WLAYOUT[BuildWorkflowAuthorityLayoutAction then<br/>ValidateWorkflowAuthorityLayoutAction;<br/>include features/ and transactions/ root entries for ownership accounting<br/>but exclude every descendant in both reserved subtrees]
     WLAYOUT --> WINVENTORY[Enumerate and normalize every in-scope entry;<br/>validate the complete portability collision set, sort by Unicode-scalar path,<br/>then bind contiguous one-based inventory ordinals]

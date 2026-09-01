@@ -71,6 +71,11 @@ fn validCandidate() bootstrap_roots.BootstrapRootRegistryCandidate {
             .no_follow_file_identity = .{ .filesystem_id = 1, .file_id = 1 },
         },
         .configured_roots = roots,
+        .llm_provider_config_path = .{
+            .relative_path = ".sddproviders.json",
+            .canonical_project_root = "/project",
+            .canonical_path = "/project/.sddproviders.json",
+        },
     };
 }
 
@@ -109,6 +114,7 @@ test "publishes each configured root through one concrete typed accessor" {
             try std.testing.expect(capability != previous);
         }
     }
+    try std.testing.expect(registry.llmProviderConfig() == registry.llmProviderConfig());
 }
 
 test "rejects duplicate missing relabelled and case-fold-equivalent capabilities" {
@@ -185,4 +191,56 @@ test "rejects a canonical path that does not match its normalized relative path"
         error.BootstrapRootRegistryInvalid,
         (Action{}).execute(std.testing.allocator, mismatched),
     );
+}
+
+test "rejects provider document collision nesting and wrong basename" {
+    var nested = validCandidate();
+    nested.llm_provider_config_path = .{
+        .relative_path = ".sdd/workflows/.sddproviders.json",
+        .canonical_project_root = "/project",
+        .canonical_path = "/project/.sdd/workflows/.sddproviders.json",
+    };
+    try std.testing.expectError(
+        error.BootstrapRootRegistryInvalid,
+        (Action{}).execute(std.testing.allocator, nested),
+    );
+
+    var wrong_basename = validCandidate();
+    wrong_basename.llm_provider_config_path = .{
+        .relative_path = "providers.json",
+        .canonical_project_root = "/project",
+        .canonical_path = "/project/providers.json",
+    };
+    try std.testing.expectError(
+        error.BootstrapRootRegistryInvalid,
+        (Action{}).execute(std.testing.allocator, wrong_basename),
+    );
+
+    var beneath_engine_config = validCandidate();
+    beneath_engine_config.llm_provider_config_path = .{
+        .relative_path = ".sddtoolkit.json/.sddproviders.json",
+        .canonical_project_root = "/project",
+        .canonical_path = "/project/.sddtoolkit.json/.sddproviders.json",
+    };
+    try std.testing.expectError(
+        error.BootstrapRootRegistryInvalid,
+        (Action{}).execute(std.testing.allocator, beneath_engine_config),
+    );
+}
+
+test "rejects provider document nesting beneath every configured directory role" {
+    for (0..bootstrap_roots.PathKey.count) |index| {
+        var candidate = validCandidate();
+        candidate.configured_roots[index].configured_relative_path = "reserved";
+        candidate.configured_roots[index].canonical_path = "/project/reserved";
+        candidate.llm_provider_config_path = .{
+            .relative_path = "reserved/.sddproviders.json",
+            .canonical_project_root = "/project",
+            .canonical_path = "/project/reserved/.sddproviders.json",
+        };
+        try std.testing.expectError(
+            error.BootstrapRootRegistryInvalid,
+            (Action{}).execute(std.testing.allocator, candidate),
+        );
+    }
 }

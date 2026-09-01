@@ -1338,6 +1338,14 @@ ConfiguredBaseRootCapability {
   // readers and every action in the initial SDD workflow suite.
 }
 
+LLMProviderConfigCapability {
+  projectRoot: canonicalProjectRoot,
+  configuredRelativePath,              // basename exactly `.sddproviders.json`
+  canonicalPath,
+  accessClass: engine_only
+  // Opaque F0004 capability. Only F0008's filesystem adapter may consume it.
+}
+
 BootstrapRootRegistryId {
   canonicalProjectRoot,
   bootstrapRootContractVersion
@@ -1602,9 +1610,10 @@ ValidatedTransactionStorageCapability =
 BootstrapRootRegistry {
   bootstrapRootRegistryId: BootstrapRootRegistryId,
   configLocation: ExactEngineConfigLocation,
-  configuredRoots: ConfiguredBaseRootCapability[7]
+  configuredRoots: ConfiguredBaseRootCapability[7],
+  llmProviderConfig: LLMProviderConfigCapability
   // Closed keys: specs, references, specsArchive, workflows, toolchainPreset,
-  // principles, and templates exactly once. The only configurable peer-root
+  // principles, templates, and providers exactly once. The only configurable
   // nesting exception is specsArchive beneath specs.
   // This pre-preset authority contains no generated/discovered project roots.
 }
@@ -9117,13 +9126,14 @@ instance. Neither is a runtime fallback. The larger document below illustrates
 a proposed future engine-policy extension; only its `logs` member is kept
 identical to the accepted `LogsConfig`. F0001 does not accept its other extra
 top-level members, infer missing fields, or provide a compatibility reader. A
-missing exact filename blocks invocation. Every base directory
-is supplied by the decoded seven-key `paths` object and must then be validated
-by the path-policy owner. The configured
+missing exact filename blocks invocation. Every configured location is
+supplied by the decoded eight-key `paths` object and must then be validated by
+the path-policy owner. The configured
 `specs`, `references`, `specsArchive`, `workflows`, `toolchainPreset`,
-`principles`, and `templates` roots are distinct authorities; only
-`specsArchive` may be nested beneath `specs`. No action may substitute a
-different root, `.specify/`, source-tree, or example path.
+`principles`, and `templates` directory roots plus the `providers`
+`.sddproviders.json` file are distinct authorities; only `specsArchive` may be
+nested beneath `specs`. No action may substitute a different root, fixed
+provider filename, `.specify/`, source-tree, or example path.
 
 `paths.workflows` is the workflow-authority root. It contains an arbitrary
 bounded number of closed declarative workflow definitions plus the exact
@@ -9148,6 +9158,7 @@ sources and receive no automatic placeholder expansion.
 ```text
 <projectRoot>/
 ├── .sddtoolkit.json
+├── .sddproviders.json                   # paths.providers in this example
 ├── specs/                              # paths.specs in this example
 │   └── _archive/                       # paths.specsArchive; sole nesting exception
 ├── references/                         # paths.references
@@ -9184,7 +9195,8 @@ F0001 input contract:
     "workflows": ".sddtoolkit/workflows",
     "toolchainPreset": ".sddtoolkit/toolchainPreset",
     "principles": ".sddtoolkit/principles",
-    "templates": ".sddtoolkit/templates"
+    "templates": ".sddtoolkit/templates",
+    "providers": ".sddproviders.json"
   },
   "environments": [
     {
@@ -9460,7 +9472,8 @@ projectDiscovery:
 ```
 
 The compiler injects engine-reserved discovery exclusions from all seven exact
-`BootstrapRootRegistry` capabilities before merging these preset-owned rules.
+directory capabilities plus the exact provider-document file capability in the
+`BootstrapRootRegistry` before merging these preset-owned rules.
 The locked rules use the resolved configured paths rather than assuming a
 literal `.sddtoolkit` directory. The `specsArchive` rule remains explicit even
 when its authorized nesting beneath `specs` makes it physically redundant.
@@ -9710,8 +9723,9 @@ generatedPaths:
 
 `forbiddenPaths` above is only the preset-owned portion. The compiler always
 injects a higher-precedence `ReservedEngineRootPathPolicy` from the seven exact
-`BootstrapRootRegistry` capabilities plus the engine-derived `features/` and
-`transactions/` children beneath `paths.workflows`. Presets cannot override
+directory capabilities, the exact provider-document file capability, and the
+engine-derived `features/` and `transactions/` children beneath
+`paths.workflows`. Presets cannot override
 that policy, and neither a model nor a preset supplies its path text.
 
 ---
@@ -10018,8 +10032,9 @@ ENGINE_CONFIG_READ_ERROR without searching an ancestor or descendant
   -> read that exact no-follow file under the internal 1 MiB guard
   -> directly decode it, with any JSON/version/shape failure returning
      ENGINE_CONFIG_PARSE_ERROR, into one immutable SDDToolKitConfig
-  -> resolve/validate all seven required paths bases against that project root
-  -> prove peer-root separation, allowing only paths.specsArchive beneath paths.specs
+  -> resolve/validate seven directory roots and paths.providers against that project root
+  -> prove configured-location separation, allowing only paths.specsArchive beneath paths.specs
+     and requiring providers to name a distinct `.sddproviders.json` file
   -> build/validate BootstrapRootRegistry before any engine-derived child exists
   -> derive/validate the paths.workflows authority layout and reserve its exact
      engine-owned features/ and transactions/ children; inventory their root

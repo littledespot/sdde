@@ -500,5 +500,10 @@ fn createRootOwner(allocator: std.mem.Allocator, workflow_identity: bootstrap_ro
         .id = .{ .canonical_project_root = "/project", .contract_version = bootstrap_roots.bootstrap_root_contract_version },
         .config_location = .{ .canonical_project_root = "/project", .canonical_config_path = "/project/.sddtoolkit.json", .no_follow_file_identity = .{ .filesystem_id = 9, .file_id = 9 } },
         .configured_roots = roots,
+        .llm_provider_config_path = .{
+            .relative_path = ".sddproviders.json",
+            .canonical_project_root = "/project",
+            .canonical_path = "/project/.sddproviders.json",
+        },
     });
 }

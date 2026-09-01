@@ -60,7 +60,8 @@
         "workflows",
         "toolchainPreset",
         "principles",
-        "templates"
+        "templates",
+        "providers"
       ],
       "properties": {
         "specs": { "type": "string" },
@@ -69,7 +70,8 @@
         "workflows": { "type": "string" },
         "toolchainPreset": { "type": "string" },
         "principles": { "type": "string" },
-        "templates": { "type": "string" }
+        "templates": { "type": "string" },
+        "providers": { "type": "string" }
       }
     }
   }

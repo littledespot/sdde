@@ -2,11 +2,15 @@
 
 **Status:** Proposed feature design
 
+**Accepted amendment:** Explicit user direction on 2026-09-02 establishes the
+`paths.providers` provider-document path; this does not change the status of
+unrelated F0004 design.
+
 **Implementation readiness:** Ready for the bounded configured-root
 capability increment. It begins with F0001's immutable configuration and exact
 project-root descriptor and ends with one service exposing the validated
 immutable `BootstrapRootRegistry`. It does not inventory or read workflow
-definitions.
+definitions or the provider document.
 
 **Classification:** Core, read-only bootstrap path authority
 
@@ -24,15 +28,16 @@ SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); and the
 
 `BootstrapRootRegistryService` has one responsibility: expose the current
 invocation's immutable validated `BootstrapRootRegistry`. The value is built
-from the exact seven decoded configuration path strings and bound to the
-canonical invocation project root.
+from the seven decoded directory-root paths and the provider-document path and
+is bound to the canonical invocation project root.
 
 This shared boundary owns normalization, containment, active-filesystem
-representability, root-role assignment, and configured-root separation. A
+representability, role assignment, and configured-location separation. A
 workflow loader consumes its `workflow_authority` capability; it never resolves
 `config.paths.workflows` itself. Preset, principle, reference, artifact, and
 template consumers use the same registry rather than introducing
-caller-specific path resolution.
+caller-specific path resolution. F0008 likewise consumes only the opaque
+provider-document capability.
 
 The service is a read-only owner, not a path resolver or general filesystem
 authority. Its construction actions own path validation; after validation its
@@ -48,11 +53,11 @@ actions through runner-owned bindings:
 | Action | Sole responsibility |
 | --- | --- |
 | `ValidateEnginePathPolicyAction` | Validate one required path or overlap relation under the compiler-locked project-root and portability rules. |
-| `ResolveConfiguredBaseRootAction` | Join one decoded relative configured base to the canonical project root without following an alias or deriving a child path. |
+| `ResolveConfiguredBaseRootAction` | Join one decoded relative configured directory or provider-document path to the canonical project root without following an alias or deriving a child path. |
 | `ValidateConfiguredBaseRootAction` | Convert that one candidate into its typed root-role capability after normalization, containment, representability, no-follow, and existence/type checks. |
 | `BuildBootstrapRootRegistryIdAction` | Construct only the self-validating `(canonical project root, bootstrap-root contract version)` identity. |
-| `BuildBootstrapRootRegistryAction` | Assemble the seven validated capabilities exactly once under that identity. |
-| `ValidateBootstrapRootRegistryAction` | Prove exact key/role coverage and the complete configured-root collision and nesting policy. |
+| `BuildBootstrapRootRegistryAction` | Assemble the seven validated directory capabilities and one provider-document capability exactly once under that identity. |
+| `ValidateBootstrapRootRegistryAction` | Prove exact key/role coverage and the complete configured-location collision and nesting policy. |
 
 No action calls another action. The startup orchestrator coordinates only the
 runner-owned bindings, the runner alone validates and applies node deltas, and
@@ -72,7 +77,7 @@ F0004 consumes:
 - the compiler-locked mapping from each configuration key to exactly one
   `ConfiguredRootRole`, access class, and existence policy.
 
-The seven mappings are closed:
+The seven directory mappings are closed:
 
 | Configuration key | Root role |
 | --- | --- |
@@ -84,9 +89,15 @@ The seven mappings are closed:
 | `principles` | `project_principles` |
 | `templates` | `initialization_templates` |
 
+The required `providers` member maps separately to the opaque
+`llm_provider_config` read-only file capability. Its normalized basename is
+exactly `.sddproviders.json`; it is not a directory-root role and does not
+increase the configured-root cardinality.
+
 The result is exactly one `BootstrapRootRegistryService` owning one immutable
 `BootstrapRootRegistry` containing its tuple identity, exact config location,
-and seven typed capabilities. Its concrete accessor is:
+seven typed directory capabilities, and the provider-document capability. Its
+concrete accessor is:
 
 ```zig
 pub fn registry(
@@ -109,21 +120,25 @@ second configuration value.
 
 ## 4. Path and existence contract
 
-Each configured value is parsed as one normalized project-relative directory
-path. Validation rejects an empty or absolute path, drive/UNC form, NUL or
+Each configured value is parsed as one normalized project-relative path. The
+seven directory entries require directory form; `providers` requires file form
+and the exact `.sddproviders.json` basename. Validation rejects an empty or
+absolute path, drive/UNC form, NUL or
 control scalar, traversal, ambiguous separator or segment, path-policy length
-violation, project-root escape, and an alias through any existing component.
-The normalized candidate must be representable under the active workspace
-policy. Existing components are inspected without following links, and the
-typed capability remains bound to the exact canonical project root and root
-role.
+violation or project-root escape. The normalized candidate must be
+representable under the active workspace policy. Existing directory-root
+components are inspected without following links. The provider-document
+capability reserves only its structural location; F0008 performs the no-follow
+ancestor/file and physical-identity checks before publishing bytes. Every typed
+capability remains bound to the exact canonical project root and role.
 
-All seven normalized locations participate in one collision set even when a
+All eight normalized locations participate in one collision set even when a
 leaf does not yet exist. They must be distinct and non-nested, with exactly one
-exception: `specsArchive` may be a proper descendant of `specs`. Equality is
-never permitted. Duplicate, normalization-equivalent, case-fold-equivalent,
+exception: `specsArchive` may be a proper descendant of `specs`. The provider
+document must also differ from `.sddtoolkit.json`. Equality is never permitted.
+Duplicate, normalization-equivalent, case-fold-equivalent,
 portable-name-equivalent, aliased, or otherwise overlapping peers fail before
-any configured root is inventoried.
+any configured root is inventoried or the provider document is read.
 
 For the preselection startup increment:
 
@@ -134,7 +149,10 @@ For the preselection startup increment:
 - if any optional-at-preselection root exists, it must already be a no-follow
   directory. Absence does not grant creation authority, and every later
   operation revalidates the exact capability and its operation policy before
-  use.
+  use; and
+- the provider-document location is reserved without probing the leaf. F0008
+  opens and reads it only if F0006's selected-workflow branch requires model
+  capability.
 
 This allows a non-SDD workflow to omit unrelated reference, preset, principle,
 template, and feature-artifact contents without weakening their eventual
@@ -168,6 +186,7 @@ The handoff is one-way:
 F0001 immutable PathsConfig + exact project root
   -> F0004 validated BootstrapRootRegistryService
   -> F0005 consumes only workflow_authority capability
+  -> F0008 consumes only llm_provider_config capability when F0006 requests it
 ```
 
 ## 6. Failure and cleanup contract
@@ -178,7 +197,7 @@ common terminal `failed` outcome with one of these closed diagnostic codes:
 | Code | Meaning |
 | --- | --- |
 | `BOOTSTRAP_ROOT_RESOLUTION_ERROR` | A configured path cannot be safely parsed, joined, represented, or inspected under its declared root policy. |
-| `BOOTSTRAP_ROOT_REGISTRY_INVALID` | Exact seven-key coverage, key-to-role binding, uniqueness, or the complete overlap policy does not validate. |
+| `BOOTSTRAP_ROOT_REGISTRY_INVALID` | Exact configured-key coverage, key-to-role binding, uniqueness, or the complete overlap policy does not validate. |
 
 The diagnostic may carry bounded engine-owned evidence naming the configuration
 key and failed rule. It never exposes an unrestricted canonical absolute path
@@ -200,12 +219,16 @@ publishes no service.
 2. Every configured path is resolved by the shared path-policy boundary, never
    by a workflow-, preset-, principle-, reference-, or artifact-specific
    implementation.
-3. Each of the seven required configuration keys maps to exactly one fixed root
-   role and appears exactly once in the immutable registry.
-4. All candidates are normalized, project-contained, representable, and
-   no-follow validated before becoming typed capabilities.
-5. The complete seven-root collision set is checked before content ingestion;
-   only proper `specs/specsArchive` nesting is legal.
+3. Each of the seven required directory keys maps to exactly one fixed root
+   role; `providers` maps to exactly one provider-document file role; all
+   appear exactly once in the immutable registry.
+4. All candidates are normalized, project-contained, and representable before
+   becoming typed capabilities. Directory roots are no-follow validated at
+   bootstrap; F0008 no-follow validates the reserved provider path before read.
+5. The complete eight-location collision set is checked before content
+   ingestion; only proper `specs/specsArchive` nesting is legal, and the
+   provider path cannot collide with `.sddtoolkit.json`; F0008 also rejects a
+   physical file-identity alias at open time.
 6. `workflows` is an existing readable no-follow directory at preselection.
    An existing peer is also a directory; an absent peer grants no operation.
 7. The runner constructs exactly one service only after complete validation;
@@ -213,7 +236,8 @@ publishes no service.
    validation, allocation, or mutation.
 8. No raw path string, untyped absolute path buffer, adapter handle, mutable
    map, copied projection, or partial registry is published. Consumers receive
-   only the borrowed registry and its typed opaque root capabilities.
+   only the borrowed registry and its typed opaque directory/file
+   capabilities.
 9. The fixed startup graph is nonselectable and not project-extensible, uses
    only runner-owned bindings, and acquires no project/feature transaction
    lock.
@@ -233,7 +257,8 @@ Implementation evidence must cover:
   total-length rejection;
 - existing, absent, wrong-kind, linked, replaced, and aliased root components,
   including a `workflows` leaf that is missing or unreadable;
-- exact seven-key/role coverage, duplicate/missing/extra capabilities, and a
+- exact seven-directory-role plus provider-file-role coverage,
+  duplicate/missing/extra capabilities, and a
   capability whose source key and role disagree;
 - direct equality, proper nesting, reverse nesting, unrelated nesting,
   normalization, case-fold, portable-name, and physical-alias collisions,
@@ -256,4 +281,5 @@ Implementation evidence must cover:
 | Configured-root identity, containment, and separation | Design Sections 9 and 11; `design/paths.md` |
 | No-follow filesystem safety | Design Sections 25-26 |
 | Workflow handoff and reserved descendants | F0005; Design Sections 9.1 and 13.1 |
+| Provider-document handoff | F0008; F0006 Sections 3-5 |
 | Testing and native packaging | Design Sections 28 and 30-31 |

@@ -11,7 +11,7 @@ pub const Action = struct {
         .id = "validate-engine-path-policy@1",
         .kind = .action,
         .requires = &.{.engine_config},
-        .produces = &.{.configured_root_path_policy_set},
+        .produces = &.{ .configured_root_path_policy_set, .llm_provider_config_path_policy },
         .side_effect = .none,
     };
 
@@ -21,40 +21,68 @@ pub const Action = struct {
         path_key: bootstrap_roots.PathKey,
         raw_path: []const u8,
     ) Error!bootstrap_roots.NormalizedConfiguredPath {
-        if (raw_path.len == 0 or raw_path.len > self.policy.max_relative_path_bytes) {
-            return error.BootstrapRootResolutionError;
-        }
-        if (!std.unicode.utf8ValidateSlice(raw_path)) {
-            return error.BootstrapRootResolutionError;
-        }
-        if (isAbsoluteOrDrivePath(raw_path)) {
-            return error.BootstrapRootResolutionError;
-        }
-
-        const normalized_length = if (raw_path[raw_path.len - 1] == '/')
-            raw_path.len - 1
-        else
-            raw_path.len;
-        if (normalized_length == 0) return error.BootstrapRootResolutionError;
-        const normalized = raw_path[0..normalized_length];
-
-        var iterator = std.mem.splitScalar(u8, normalized, '/');
-        while (iterator.next()) |component| {
-            try validateComponent(self.policy, component);
-        }
-        if (hasEncodedDotOrSeparator(normalized)) {
-            return error.BootstrapRootResolutionError;
-        }
-
+        const normalized = try normalize(self.policy, allocator, raw_path, true);
         return .{
             .path_key = path_key,
             .root_role = path_key.role(),
-            .relative_path = allocator.dupe(u8, normalized) catch {
-                return error.BootstrapRootResolutionError;
-            },
+            .relative_path = normalized,
         };
     }
+
+    pub fn executeLLMProviderConfig(
+        self: Action,
+        allocator: std.mem.Allocator,
+        raw_path: []const u8,
+    ) Error!bootstrap_roots.NormalizedLLMProviderConfigPath {
+        const normalized = try normalize(self.policy, allocator, raw_path, false);
+        errdefer allocator.free(normalized);
+        if (!std.mem.eql(
+            u8,
+            std.fs.path.basename(normalized),
+            bootstrap_roots.llm_provider_config_basename,
+        )) {
+            return error.BootstrapRootResolutionError;
+        }
+        return .{ .relative_path = normalized };
+    }
 };
+
+fn normalize(
+    policy: bootstrap_roots.WorkspacePathPolicy,
+    allocator: std.mem.Allocator,
+    raw_path: []const u8,
+    allow_trailing_separator: bool,
+) Error![]u8 {
+    if (raw_path.len == 0 or raw_path.len > policy.max_relative_path_bytes) {
+        return error.BootstrapRootResolutionError;
+    }
+    if (!std.unicode.utf8ValidateSlice(raw_path)) {
+        return error.BootstrapRootResolutionError;
+    }
+    if (isAbsoluteOrDrivePath(raw_path)) {
+        return error.BootstrapRootResolutionError;
+    }
+
+    if (!allow_trailing_separator and raw_path[raw_path.len - 1] == '/') {
+        return error.BootstrapRootResolutionError;
+    }
+    const normalized_length = if (raw_path[raw_path.len - 1] == '/')
+        raw_path.len - 1
+    else
+        raw_path.len;
+    if (normalized_length == 0) return error.BootstrapRootResolutionError;
+    const normalized = raw_path[0..normalized_length];
+
+    var iterator = std.mem.splitScalar(u8, normalized, '/');
+    while (iterator.next()) |component| {
+        try validateComponent(policy, component);
+    }
+    if (hasEncodedDotOrSeparator(normalized)) {
+        return error.BootstrapRootResolutionError;
+    }
+
+    return allocator.dupe(u8, normalized) catch error.BootstrapRootResolutionError;
+}
 
 fn isAbsoluteOrDrivePath(path: []const u8) bool {
     if (path[0] == '/' or path[0] == '\\') return true;
@@ -198,4 +226,34 @@ test "accepts exact component and relative limits and rejects one byte over" {
             "aaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbb/cccccccccccccccc/dddddddddddddddd",
         ),
     );
+}
+
+test "provider config path requires the exact basename without a directory suffix" {
+    const allocator = std.testing.allocator;
+    const action: Action = .{ .policy = .{
+        .max_component_bytes = 32,
+        .max_relative_path_bytes = 128,
+        .max_absolute_path_bytes = 256,
+    } };
+    const exact = try action.executeLLMProviderConfig(
+        allocator,
+        "configuration/.sddproviders.json",
+    );
+    defer allocator.free(exact.relative_path);
+    try std.testing.expectEqualStrings(
+        "configuration/.sddproviders.json",
+        exact.relative_path,
+    );
+
+    const invalid = [_][]const u8{
+        "configuration/providers.json",
+        "configuration/.sddproviders.json/",
+        "configuration/.SDDPROVIDERS.JSON",
+    };
+    for (invalid) |path| {
+        try std.testing.expectError(
+            error.BootstrapRootResolutionError,
+            action.executeLLMProviderConfig(allocator, path),
+        );
+    }
 }

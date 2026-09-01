@@ -20,6 +20,7 @@
     "workflows": ".sddtoolkit/workflows",
     "toolchainPreset": ".sddtoolkit/toolchainPreset",
     "principles": ".sddtoolkit/principles",
-    "templates": ".sddtoolkit/templates"
+    "templates": ".sddtoolkit/templates",
+    "providers": ".sddproviders.json"
   }
 }

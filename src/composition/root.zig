@@ -51,6 +51,11 @@ const feature_log_runtime = @import("../domain/feature_log_runtime.zig");
 const feature_log_sink = @import("../adapters/filesystem/feature_log_sink.zig");
 const active_feature_log_runtime = @import("active_feature_log_runtime.zig");
 const stabilizer_port = @import("../ports/transaction_stabilizer.zig");
+const llm_provider_config_source = @import("../adapters/filesystem/llm_provider_config_source.zig");
+const locate_llm_provider_config = @import("../actions/provider/locate_llm_provider_config.zig");
+const read_llm_provider_config = @import("../actions/provider/read_llm_provider_config.zig");
+const llm_provider_config_runner = @import("../application/llm_provider_config_runner.zig");
+const llm_provider_config_orchestrator = @import("../application/llm_provider_config_orchestrator.zig");
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) run_outcome.Outcome {
     return runInvocationInProject(io, allocator, .cwd(), arguments);
@@ -148,6 +153,25 @@ fn runInProjectWithRuntime(
     return bootstrap_orchestrator.run(runner.bindings());
 }
 
+fn loadLLMProviderConfigInProject(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    project_root: std.Io.Dir,
+    capability: *const @import("../domain/bootstrap_root_registry.zig").LLMProviderConfigCapability,
+    runtime: pipeline.NodeRuntime,
+) llm_provider_config_orchestrator.Outcome {
+    var source_adapter = llm_provider_config_source.Adapter.init(io, project_root);
+    var runner = llm_provider_config_runner.Runner.init(
+        allocator,
+        runtime,
+        capability,
+        locate_llm_provider_config.Action{ .locator = source_adapter.locator() },
+        read_llm_provider_config.Action{},
+    );
+    defer runner.deinit();
+    return llm_provider_config_orchestrator.run(runner.childBindings());
+}
+
 const policy_registry: toolchain.PolicyRegistry = .{ .contracts = &.{
     .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true },
     .{ .id = "project.zig@1", .project_selectable = true, .locked_required = false },
@@ -161,7 +185,8 @@ const valid_config =
     \\    "specs": "specs", "references": "references",
     \\    "specsArchive": "specs/archive", "workflows": ".sdd/workflows",
     \\    "toolchainPreset": ".sdd/presets",
-    \\    "principles": ".sdd/principles", "templates": ".sdd/templates"
+    \\    "principles": ".sdd/principles", "templates": ".sdd/templates",
+    \\    "providers": ".sddproviders.json"
     \\  }
     \\}
 ;
@@ -194,6 +219,95 @@ test "publishes config and the validated root registry together" {
     try std.testing.expect(
         outcome.ready.roots.registry() == outcome.ready.roots.registry(),
     );
+}
+
+test "loads provider bytes only from the configured F0008 path" {
+    const io = std.testing.io;
+    var project_root = std.testing.tmpDir(.{});
+    defer project_root.cleanup();
+    const config_with_nested_provider =
+        \\{
+        \\  "logs": { "level": "debug", "console": false, "promptCapture": [] },
+        \\  "models": { "slots": {} },
+        \\  "paths": {
+        \\    "specs": "specs", "references": "references",
+        \\    "specsArchive": "specs/archive", "workflows": ".sdd/workflows",
+        \\    "toolchainPreset": ".sdd/presets",
+        \\    "principles": ".sdd/principles", "templates": ".sdd/templates",
+        \\    "providers": "configuration/.sddproviders.json"
+        \\  }
+        \\}
+    ;
+    try project_root.dir.writeFile(io, .{
+        .sub_path = ".sddtoolkit.json",
+        .data = config_with_nested_provider,
+    });
+    try project_root.dir.createDirPath(io, ".sdd/workflows");
+    try project_root.dir.createDirPath(io, "configuration");
+    try project_root.dir.writeFile(io, .{
+        .sub_path = ".sddproviders.json",
+        .data = "fixed-location fallback",
+    });
+    try project_root.dir.writeFile(io, .{
+        .sub_path = "configuration/.sddproviders.json",
+        .data = "{\"providers\":[]}",
+    });
+    try writeValidToolchain(io, project_root.dir);
+
+    var boot = runInProject(io, std.testing.allocator, project_root.dir);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+
+    var outcome = loadLLMProviderConfigInProject(
+        io,
+        std.testing.allocator,
+        project_root.dir,
+        boot.ready.roots.registry().llmProviderConfig(),
+        .{},
+    );
+    defer outcome.deinit();
+    try std.testing.expect(outcome == .ready);
+    try std.testing.expectEqualStrings("{\"providers\":[]}", outcome.ready.bytes());
+
+    var control: RuntimeAfterObservations = .{
+        .active_observations_remaining = 3,
+        .terminal = .cancelled,
+    };
+    var cancelled = loadLLMProviderConfigInProject(
+        io,
+        std.testing.allocator,
+        project_root.dir,
+        boot.ready.roots.registry().llmProviderConfig(),
+        control.runtime(),
+    );
+    defer cancelled.deinit();
+    try std.testing.expect(cancelled == .cancelled);
+}
+
+test "ordinary bootstrap does not probe a missing provider document" {
+    const io = std.testing.io;
+    var project_root = std.testing.tmpDir(.{});
+    defer project_root.cleanup();
+    try project_root.dir.writeFile(io, .{
+        .sub_path = ".sddtoolkit.json",
+        .data = valid_config,
+    });
+    try project_root.dir.createDirPath(io, ".sdd/workflows");
+    try writeValidToolchain(io, project_root.dir);
+
+    var boot = runInProject(io, std.testing.allocator, project_root.dir);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+
+    var outcome = loadLLMProviderConfigInProject(
+        io,
+        std.testing.allocator,
+        project_root.dir,
+        boot.ready.roots.registry().llmProviderConfig(),
+        .{},
+    );
+    defer outcome.deinit();
+    try std.testing.expect(outcome == .failed);
 }
 
 test "loads exact preset inheritance and publishes the safety-valid toolchain" {
@@ -707,7 +821,8 @@ test "a complete root collision fails as a registry error" {
         \\    "specs": "specs", "references": "SPECS",
         \\    "specsArchive": "specs/archive", "workflows": ".sdd/workflows",
         \\    "toolchainPreset": ".sdd/presets",
-        \\    "principles": ".sdd/principles", "templates": ".sdd/templates"
+        \\    "principles": ".sdd/principles", "templates": ".sdd/templates",
+        \\    "providers": ".sddproviders.json"
         \\  }
         \\}
     ;
@@ -737,7 +852,8 @@ test "normalization-equivalent absent roots fail as a registry error" {
         \\    "specs": "shared", "references": "shared/",
         \\    "specsArchive": "shared/archive", "workflows": ".sdd/workflows",
         \\    "toolchainPreset": ".sdd/presets",
-        \\    "principles": ".sdd/principles", "templates": ".sdd/templates"
+        \\    "principles": ".sdd/principles", "templates": ".sdd/templates",
+        \\    "providers": ".sddproviders.json"
         \\  }
         \\}
     ;

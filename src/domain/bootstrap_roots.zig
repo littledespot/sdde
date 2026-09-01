@@ -1,7 +1,8 @@
 const std = @import("std");
 const filesystem_identity = @import("filesystem_identity.zig");
 
-pub const bootstrap_root_contract_version = "bootstrap-roots/v1";
+pub const bootstrap_root_contract_version = "bootstrap-roots/v2";
+pub const llm_provider_config_basename = ".sddproviders.json";
 
 pub const PathKey = enum {
     specs,
@@ -84,6 +85,10 @@ pub const NormalizedConfiguredPath = struct {
     relative_path: []const u8,
 };
 
+pub const NormalizedLLMProviderConfigPath = struct {
+    relative_path: []const u8,
+};
+
 pub const ConfiguredRootCandidate = struct {
     path: NormalizedConfiguredPath,
     canonical_project_root: []const u8,
@@ -97,6 +102,23 @@ pub const ConfiguredRootCandidate = struct {
                 self.canonical_project_root,
                 self.canonical_path,
                 self.path.relative_path,
+            );
+    }
+};
+
+pub const LLMProviderConfigPathCandidate = struct {
+    relative_path: []const u8,
+    canonical_project_root: []const u8,
+    canonical_path: []const u8,
+
+    pub fn isStructurallyValid(self: LLMProviderConfigPathCandidate) bool {
+        return normalizedRelativePathShape(self.relative_path) and
+            std.mem.eql(u8, std.fs.path.basename(self.relative_path), llm_provider_config_basename) and
+            std.fs.path.isAbsolute(self.canonical_project_root) and
+            matchesResolvedPath(
+                self.canonical_project_root,
+                self.canonical_path,
+                self.relative_path,
             );
     }
 };
@@ -135,6 +157,7 @@ pub const BootstrapRootRegistryCandidate = struct {
     id: BootstrapRootRegistryId,
     config_location: ExactEngineConfigLocation,
     configured_roots: [PathKey.count]ValidatedConfiguredRoot,
+    llm_provider_config_path: LLMProviderConfigPathCandidate,
 };
 
 pub fn matchesResolvedPath(root: []const u8, child: []const u8, relative: []const u8) bool {
@@ -202,4 +225,22 @@ test "configured-root candidates retain an exact normalized contained join" {
     var ambiguous = valid;
     ambiguous.path.relative_path = ".sdd//workflows";
     try std.testing.expect(!ambiguous.isStructurallyValid());
+}
+
+test "provider config path is a distinct exact-basename file candidate" {
+    const valid: LLMProviderConfigPathCandidate = .{
+        .relative_path = "config/.sddproviders.json",
+        .canonical_project_root = "/project",
+        .canonical_path = "/project/config/.sddproviders.json",
+    };
+    try std.testing.expect(valid.isStructurallyValid());
+
+    var wrong_basename = valid;
+    wrong_basename.relative_path = "config/providers.json";
+    wrong_basename.canonical_path = "/project/config/providers.json";
+    try std.testing.expect(!wrong_basename.isStructurallyValid());
+
+    var escaped = valid;
+    escaped.canonical_path = "/other/config/.sddproviders.json";
+    try std.testing.expect(!escaped.isStructurallyValid());
 }

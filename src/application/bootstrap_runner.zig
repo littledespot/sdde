@@ -129,8 +129,10 @@ pub const Runner = struct {
     validated_root_owner: ?*bootstrap_root_registry.Owner = null,
     normalized_paths: [bootstrap_roots.PathKey.count]?bootstrap_roots.NormalizedConfiguredPath =
         [_]?bootstrap_roots.NormalizedConfiguredPath{null} ** bootstrap_roots.PathKey.count,
+    normalized_llm_provider_config_path: ?bootstrap_roots.NormalizedLLMProviderConfigPath = null,
     root_candidates: [bootstrap_roots.PathKey.count]?bootstrap_roots.ConfiguredRootCandidate =
         [_]?bootstrap_roots.ConfiguredRootCandidate{null} ** bootstrap_roots.PathKey.count,
+    llm_provider_config_path_candidate: ?bootstrap_roots.LLMProviderConfigPathCandidate = null,
     root_capabilities: [bootstrap_roots.PathKey.count]?bootstrap_roots.ValidatedConfiguredRoot =
         [_]?bootstrap_roots.ValidatedConfiguredRoot{null} ** bootstrap_roots.PathKey.count,
     registry_id: ?bootstrap_roots.BootstrapRootRegistryId = null,
@@ -352,6 +354,11 @@ pub const Runner = struct {
                 configuredPath(paths, key),
             ) catch return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
         }
+        std.debug.assert(self.normalized_llm_provider_config_path == null);
+        self.normalized_llm_provider_config_path = self.validate_path_policy_action.executeLLMProviderConfig(
+            allocator,
+            paths.providers,
+        ) catch return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
         return self.finishNode(
             validate_path_policy.Action.contract,
             .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
@@ -376,6 +383,13 @@ pub const Runner = struct {
                 self.normalized_paths[index].?,
             ) catch return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
         }
+        std.debug.assert(self.normalized_llm_provider_config_path != null);
+        std.debug.assert(self.llm_provider_config_path_candidate == null);
+        self.llm_provider_config_path_candidate = self.resolve_root_action.executeLLMProviderConfig(
+            allocator,
+            self.exact_config_file.?.canonical_project_root,
+            self.normalized_llm_provider_config_path.?,
+        ) catch return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
         return self.finishNode(
             resolve_root.Action.contract,
             .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
@@ -431,6 +445,7 @@ pub const Runner = struct {
         std.debug.assert(self.registry_id != null);
         std.debug.assert(self.registry_candidate == null);
         std.debug.assert(self.exact_config_file != null);
+        std.debug.assert(self.llm_provider_config_path_candidate != null);
 
         var capabilities: [bootstrap_roots.PathKey.count]bootstrap_roots.ValidatedConfiguredRoot = undefined;
         for (&capabilities, 0..) |*capability, index| {
@@ -443,6 +458,7 @@ pub const Runner = struct {
             self.exact_config_file.?.canonical_config_path,
             self.exact_config_file.?.no_follow_file_identity,
             capabilities,
+            self.llm_provider_config_path_candidate.?,
         ) catch return .{ .failed = .BOOTSTRAP_ROOT_REGISTRY_INVALID };
         return self.finishNode(
             build_registry.Action.contract,

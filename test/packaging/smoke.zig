@@ -14,7 +14,8 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\    "specs": "specs", "references": "references",
         \\    "specsArchive": "specs/_archive", "workflows": ".sddtoolkit/workflows",
         \\    "toolchainPreset": ".sddtoolkit/toolchainPreset",
-        \\    "principles": ".sddtoolkit/principles", "templates": ".sddtoolkit/templates"
+        \\    "principles": ".sddtoolkit/principles", "templates": ".sddtoolkit/templates",
+        \\    "providers": ".sddproviders.json"
         \\  }
         \\}
     );

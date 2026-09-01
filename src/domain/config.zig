@@ -34,6 +34,7 @@ pub const PathsConfig = struct {
     toolchainPreset: []const u8,
     principles: []const u8,
     templates: []const u8,
+    providers: []const u8,
 };
 
 pub const SDDToolKitConfig = struct {

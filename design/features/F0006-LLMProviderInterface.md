@@ -2,11 +2,10 @@
 
 **Status:** Proposed feature design
 
-**Implementation readiness:** Blocked on the governing amendments in Section
-2. The provider-neutral port, provider-file shape, immutable registry, and
-fake-provider contract are specified here, but this document does not silently
-change the accepted configuration, path, model-route, or operation-accounting
-authority.
+**Implementation readiness:** The configured provider-document path and
+read-only byte service are accepted and implemented by F0001/F0004/F0008.
+The provider-neutral port, decoding/registry, routing, and provider-operation
+work remain blocked on the unresolved governing amendments in Section 2.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -23,11 +22,13 @@ project-content change.
 3-6, 9, 12-13.4, 15, 21-22, and 26-31; [ADR 0001 — Zig native
 engine](../decisions/0001-zig-engine.md); [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); [F0002 —
-LogService](F0002-LogService.md); the [path contract](../paths.md); and
+LogService](F0002-LogService.md); [F0008 —
+LLMProviderConfigService](F0008-LLMProviderConfigService.md); the [path
+contract](../paths.md); and
 `design/code.md` Sections 21-24. The
 [`.sddproviders.json`](../examples/.sddproviders.json) file is source material
-for the requested collection pattern. Until the Section 2 amendments are
-accepted, it is not runtime authority, a schema, a default, or a fallback.
+for the requested collection pattern. It is not runtime authority, a schema,
+a default, or a fallback.
 
 ---
 
@@ -46,9 +47,9 @@ authority, interpret model content, or validate an SDDE candidate.
 
 The F0006 feature also defines the separate bootstrap path that makes the port
 usable. When the exactly selected compiled workflow requires model capability,
-the engine loads the engine-reserved, project-owned
-`<projectRoot>/.sddproviders.json` read-only input, decodes its one closed
-shape, joins every entry to compiler-registered provider/model contracts, and
+the engine consumes F0008's immutable bytes from the project-owned location
+selected by `.sddtoolkit.json` `paths.providers`, decodes its one closed shape,
+joins every entry to compiler-registered provider/model contracts, and
 constructs one immutable `LLMProviderRegistryService`. Providers receive only
 validated typed bindings; they never locate, read, parse, or reinterpret the
 file.
@@ -61,20 +62,21 @@ executable code, dynamically load a provider, or create a capability.
 
 ## 2. Authority conflict and required amendment
 
-Current authority defines only the exact project-root `.sddtoolkit.json`, one
-immutable `SDDToolKitConfig`, and the two public F0001 configuration failures
-`ENGINE_CONFIG_READ_ERROR` and `ENGINE_CONFIG_PARSE_ERROR`. It defines no
-second configuration source, provider registry, provider-file loader, active
-run change rule, or externally counted provider operation.
+Current authority now defines the exact project-root `.sddtoolkit.json`, its
+required `paths.providers` member, F0004's opaque provider-document path
+capability, and F0008's bounded read-only byte service. It still defines no
+provider registry, active-run change rule, or externally counted provider
+operation.
 
-Implementation requires an accepted governing amendment that:
+Remaining implementation requires the governing amendments below; item 1
+records the accepted prerequisite already delivered by F0008:
 
-1. reserves exactly `<projectRoot>/.sddproviders.json` unconditionally in the
-   bootstrap reserved-root registry as an engine-reserved, project-owned
-   read-only input; adds its path capability; and includes it in the complete
-   host/target normalization, case-equivalence, alias, ancestor/descendant, and
-   role-collision proof against `.sddtoolkit.json` and every configured or
-   derived root;
+1. **Accepted by F0001/F0004/F0008:** require `paths.providers`, validate its
+   normalized project-relative path and exact `.sddproviders.json` basename,
+   reserve its opaque read-only capability unconditionally, and include it in
+   the complete collision proof against `.sddtoolkit.json` and every configured
+   root. F0008 alone locates and captures the file when the F0006 branch requests
+   it;
 2. adds a fixed engine-owned, capability-free
    `ModelProviderBootstrapOrchestrator` after selected-workflow compilation and
    before selected-workflow execution. It coordinates runner-owned bindings for
@@ -130,11 +132,13 @@ same `ValidatedProviderModelBinding` before any provider operation.
 
 ## 3. Exact `.sddproviders.json` contract
 
-The runtime source is exactly `<projectRoot>/.sddproviders.json`, where
-`projectRoot` is the same canonical invocation root established for F0001.
-The engine never searches a parent, child, home directory, environment-selected
-path, source tree, or packaged asset. The repository example is never opened at
-runtime.
+The runtime source is exactly `<projectRoot>/<paths.providers>`, where
+`projectRoot` is the same canonical invocation root established for F0001 and
+the normalized configured path has the exact `.sddproviders.json` basename.
+F0006 receives only F0008's bounded immutable bytes; it does not resolve or
+read the path. The engine never searches a parent, child, home directory,
+environment-selected path, source tree, or packaged asset. The repository
+example is never opened at runtime.
 
 The transport is strict UTF-8 JSON without a BOM, comments, duplicate keys,
 non-integer numeric tokens, or trailing content. The root has exactly one
@@ -276,7 +280,7 @@ validated fact-only binding can reach the composition-injected common port.
 
 ## 5. Conditional bootstrap and change handling
 
-The bootstrap root registry always reserves the exact provider path and its
+The bootstrap root registry always reserves the exact configured provider path and its
 access class before any project operation. The complete bootstrap root
 validator proves that file role distinct from `.sddtoolkit.json` and every
 configured/derived root under all active host/target normalization, case,
@@ -296,8 +300,9 @@ outcome through runner-owned child bindings:
   model-provider capability, file existence probing, opening, reading,
   decoding, and registry construction are unreachable. A missing or malformed
   file is not observed and has no effect on that run.
-- If it contains model-provider capability, the exact provider file is
-  required and the complete document must build and validate before the first
+- If it contains model-provider capability, F0008 must successfully capture
+  the exact configured provider file, and the complete document must build and
+  validate before the first
   selected-workflow node runs. Missing, malformed, unsupported, or partially
   valid input blocks run preparation.
 
@@ -669,8 +674,9 @@ never chooses `blocked`, `failed`, `cancelled`, retry, or fallback.
 | Owner | Sole responsibility |
 | --- | --- |
 | `DeriveProviderRequirementAction` | Determine whether the selected compiled graph requires model capability. |
-| `LocateExactLLMProviderConfigAction` | Resolve only the exact safe project-root file. |
-| `ReadLLMProviderConfigAction` | Capture that file completely under its fixed bound. |
+| `LocateLLMProviderConfigAction` (F0008) | Open only the exact F0004-authorized no-follow regular file. |
+| `ReadLLMProviderConfigAction` (F0008) | Capture that already-opened file completely under its fixed bound. |
+| `LLMProviderConfigService` (F0008) | Own the complete capture and expose immutable untrusted bytes without I/O or parsing. |
 | `DecodeLLMProviderConfigAction` | Decode strict JSON and the exact common container into bounded untrusted raw identities/config objects; grant no provider authority. |
 | `BuildLLMProviderRegistryAction` | Resolve discriminators, decode each closed provider config variant, and join entries to model contracts. |
 | `ValidateLLMProviderRegistryAction` | Validate the whole candidate and total resource accounting. |
@@ -762,9 +768,10 @@ F0006 does not:
 
 1. Accepted authority names `LLMProviderInterface` as the sole
    provider-neutral model port; no `ModelGateway` alias remains.
-2. The bootstrap root registry reserves the exact project-root provider path
-   unconditionally; the fixed run-preparation orchestrator conditionally probes
-   and loads only `.sddproviders.json`, and no provider reads it independently.
+2. The bootstrap root registry reserves the exact `paths.providers` path
+   unconditionally; the fixed run-preparation orchestrator conditionally asks
+   F0008 to load only that `.sddproviders.json` file, and no provider reads it
+   independently.
    Full host/target collision proof keeps that file role distinct from engine
    config and every configured/derived root even when loading is skipped.
 3. The document has exactly the bounded
@@ -827,8 +834,8 @@ F0006 does not:
 
 Implementation evidence must cover:
 
-- **File boundary:** unconditional reserved-path registration; exact
-  project-root lookup; no-model-provider-capability graph bypass;
+- **File boundary:** unconditional configured-path registration; exact
+  F0004-capability lookup; no-model-provider-capability graph bypass;
   missing, parent/child/example fallback, wrong kind, symlink, permissions,
   short read, file growth/shrink, exact/over size, collision with engine config
   and every configured/derived root by exact/case/normalization/alias/

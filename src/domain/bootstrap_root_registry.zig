@@ -21,6 +21,8 @@ pub const ConfiguredBaseRootCapability = opaque {
     }
 };
 
+pub const LLMProviderConfigCapability = opaque {};
+
 pub const BootstrapRootRegistry = opaque {
     pub fn specsArtifacts(
         self: *const BootstrapRootRegistry,
@@ -62,6 +64,12 @@ pub const BootstrapRootRegistry = opaque {
         self: *const BootstrapRootRegistry,
     ) *const ConfiguredBaseRootCapability {
         return capabilityFor(self, .templates);
+    }
+
+    pub fn llmProviderConfig(
+        self: *const BootstrapRootRegistry,
+    ) *const LLMProviderConfigCapability {
+        return @ptrCast(&registryStorage(self).llm_provider_config_path);
     }
 };
 
@@ -139,6 +147,27 @@ pub fn bindSpecsArtifactRegistry(
     };
 }
 
+pub const LLMProviderConfigAdapterBinding = struct {
+    project_relative_path: []const u8,
+    engine_config_identity: roots.NoFollowFileIdentity,
+};
+
+/// Internal handoff restricted to the LLM-provider config filesystem adapter.
+pub fn bindLLMProviderConfigSource(
+    capability: *const LLMProviderConfigCapability,
+) ?LLMProviderConfigAdapterBinding {
+    const stored: *const LLMProviderConfigStorage = @ptrCast(@alignCast(capability));
+    if (!std.mem.eql(
+        u8,
+        std.fs.path.basename(stored.configured_relative_path),
+        roots.llm_provider_config_basename,
+    )) return null;
+    return .{
+        .project_relative_path = stored.configured_relative_path,
+        .engine_config_identity = stored.engine_config_identity,
+    };
+}
+
 pub const Owner = opaque {};
 
 const CapabilityStorage = struct {
@@ -152,10 +181,18 @@ const CapabilityStorage = struct {
     observation: roots.RootObservation,
 };
 
+const LLMProviderConfigStorage = struct {
+    canonical_project_root: []const u8,
+    configured_relative_path: []const u8,
+    canonical_path: []const u8,
+    engine_config_identity: roots.NoFollowFileIdentity,
+};
+
 const RegistryStorage = struct {
     id: roots.BootstrapRootRegistryId,
     config_location: roots.ExactEngineConfigLocation,
     configured_roots: [roots.PathKey.count]CapabilityStorage,
+    llm_provider_config_path: LLMProviderConfigStorage,
 };
 
 const OwnerStorage = struct {
@@ -170,7 +207,11 @@ pub fn createValidated(
 ) Error!*Owner {
     try validateIdentityAndLocation(candidate);
     try validateCapabilities(candidate);
-    try validateCollisions(candidate.configured_roots);
+    try validateProviderConfigPath(candidate);
+    try validateCollisions(
+        candidate.configured_roots,
+        candidate.llm_provider_config_path.relative_path,
+    );
 
     const owned = backing_allocator.create(OwnerStorage) catch {
         return error.BootstrapRootRegistryInvalid;
@@ -221,6 +262,18 @@ pub fn createValidated(
             .no_follow_file_identity = candidate.config_location.no_follow_file_identity,
         },
         .configured_roots = configured_roots,
+        .llm_provider_config_path = .{
+            .canonical_project_root = project_root,
+            .configured_relative_path = allocator.dupe(
+                u8,
+                candidate.llm_provider_config_path.relative_path,
+            ) catch return error.BootstrapRootRegistryInvalid,
+            .canonical_path = allocator.dupe(
+                u8,
+                candidate.llm_provider_config_path.canonical_path,
+            ) catch return error.BootstrapRootRegistryInvalid,
+            .engine_config_identity = candidate.config_location.no_follow_file_identity,
+        },
     };
     return @ptrCast(owned);
 }
@@ -292,10 +345,42 @@ fn validateCapabilities(candidate: roots.BootstrapRootRegistryCandidate) Error!v
     }
 }
 
+fn validateProviderConfigPath(candidate: roots.BootstrapRootRegistryCandidate) Error!void {
+    const provider_path = candidate.llm_provider_config_path;
+    if (!provider_path.isStructurallyValid() or
+        !std.mem.eql(
+            u8,
+            provider_path.canonical_project_root,
+            candidate.id.canonical_project_root,
+        ) or
+        portableEqual(
+            provider_path.canonical_path,
+            candidate.config_location.canonical_config_path,
+        ) or
+        portableDescendant(
+            provider_path.canonical_path,
+            candidate.config_location.canonical_config_path,
+        ) or
+        portableDescendant(
+            candidate.config_location.canonical_config_path,
+            provider_path.canonical_path,
+        ))
+    {
+        return error.BootstrapRootRegistryInvalid;
+    }
+}
+
 fn validateCollisions(
     capabilities: [roots.PathKey.count]roots.ValidatedConfiguredRoot,
+    provider_config_relative_path: []const u8,
 ) Error!void {
     for (capabilities, 0..) |left, left_index| {
+        if (portableEqual(left.configured_relative_path, provider_config_relative_path) or
+            portableDescendant(provider_config_relative_path, left.configured_relative_path) or
+            portableDescendant(left.configured_relative_path, provider_config_relative_path))
+        {
+            return error.BootstrapRootRegistryInvalid;
+        }
         for (capabilities[left_index + 1 ..]) |right| {
             if (portableEqual(left.configured_relative_path, right.configured_relative_path)) {
                 return error.BootstrapRootRegistryInvalid;

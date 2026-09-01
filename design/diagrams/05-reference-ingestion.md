@@ -4,7 +4,7 @@ flowchart TD
     RUNNER --> ENGINE[WorkflowEngineOrchestrator<br/>no workflow-name branch;<br/>coordinate only through runner-owned ChildNodeBinding values]
     ENGINE -. bootstrap child binding .-> RUNNER
     RUNNER --> BOOT[Invoke the fixed startup BootstrapOrchestrator through its runner-owned binding;<br/>diagram 08 loads and compiles the variable-size workflow registry without selecting a workflow<br/>and returns without acquiring a project or feature transaction lock]
-    BOOT --> CONFIG[Engine startup only: use the invocation working directory as project root;<br/>read/directly decode only its exact .sddtoolkit.json or fail the invocation if missing;<br/>validate all seven configured directory roots and every discovered workflow definition;<br/>do not inventory presets/toolchain.yaml/principles yet]
+    BOOT --> CONFIG[Engine startup only: use the invocation working directory as project root;<br/>read/directly decode only its exact .sddtoolkit.json or fail the invocation if missing;<br/>validate seven configured directory roots plus paths.providers and every discovered workflow definition;<br/>do not read provider config or inventory presets/toolchain.yaml/principles yet]
     CONFIG --> WSELECT[Runner invokes ParseWorkflowSelectionAction then ValidateWorkflowIdAction;<br/>extract exactly WorkflowId specify and preserve the remaining arguments]
     WSELECT --> WRESOLVE[Runner invokes ResolveSelectedWorkflowAction;<br/>exactly one match in the validated registry; no default or filename inference]
     WRESOLVE --> CLI[Registered specify invocation-contract node;<br/>runner invokes its ParseSpecifyInvocationAction child]

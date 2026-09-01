@@ -77,7 +77,8 @@ PathsConfig {
   workflows: string,
   toolchainPreset: string,
   principles: string,
-  templates: string
+  templates: string,
+  providers: string
 }
 ```
 
@@ -116,7 +117,8 @@ Semantic ownership remains outside F0001:
 | --- | --- |
 | Logging-policy compiler | Canonicalize `config.logs.level` once, validate console/prompt choices, inject every F0002 operational constant, and produce the persisted logging-policy fragment. |
 | Model-route compiler | Validate `config.models` and resolve registered providers, models, and routes. |
-| [F0004 bootstrap-root path-policy boundary](F0004-BootstrapRootRegistryService.md) | Validate `config.paths` against the project root and construct the typed `BootstrapRootRegistry`; F0001 does not resolve a path itself. |
+| [F0004 bootstrap-root path-policy boundary](F0004-BootstrapRootRegistryService.md) | Validate the seven configured directory roots plus `config.paths.providers`, reserve their distinct typed roles, and construct the `BootstrapRootRegistry`; F0001 does not resolve a path itself. |
+| [F0008 provider-config reader](F0008-LLMProviderConfigService.md) | Consume only F0004's opaque provider-document capability and capture its bytes; it does not reread F0001 or resolve the raw string. |
 
 Consumers may read the immutable configuration but cannot mutate it, trigger a
 reread, obtain raw bytes, or gain filesystem access. The runner releases the

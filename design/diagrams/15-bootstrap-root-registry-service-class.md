@@ -9,7 +9,7 @@ classDiagram
 
     class BuildBootstrapRootRegistryAction {
         <<action>>
-        +execute(id, config_location, configured_roots) BootstrapRootRegistryCandidate
+        +execute(id, config_location, configured_roots, provider_path) BootstrapRootRegistryCandidate
     }
 
     class ValidateBootstrapRootRegistryAction {
@@ -26,6 +26,7 @@ classDiagram
         +BootstrapRootRegistryId id
         +ExactEngineConfigLocation config_location
         +ValidatedConfiguredRoot set configured_roots
+        +NormalizedLLMProviderConfigPath llm_provider_config_path
     }
 
     class ValidatedConfiguredRoot {
@@ -69,6 +70,7 @@ classDiagram
         +toolchainPresetRegistry() ConfiguredBaseRootCapability
         +projectPrinciples() ConfiguredBaseRootCapability
         +initializationTemplates() ConfiguredBaseRootCapability
+        +llmProviderConfig() LLMProviderConfigCapability
     }
 
     class ConfiguredBaseRootCapability {
@@ -76,6 +78,10 @@ classDiagram
         +pathKey() PathKey
         +role() ConfiguredRootRole
         +isPresent() bool
+    }
+
+    class LLMProviderConfigCapability {
+        <<opaque capability>>
     }
 
     class PathKey {
@@ -105,6 +111,7 @@ classDiagram
     BuildBootstrapRootRegistryAction ..> BootstrapRootRegistryCandidate : creates
     BootstrapRootRegistryCandidate *-- BootstrapRootRegistryId
     BootstrapRootRegistryCandidate *-- "7" ValidatedConfiguredRoot : exact configured set
+    BootstrapRootRegistryCandidate *-- "1" NormalizedLLMProviderConfigPath : configured file
     ValidateBootstrapRootRegistryAction ..> BootstrapRootRegistryCandidate : validates
     ValidateBootstrapRootRegistryAction ..> BootstrapRootRegistryOwner : creates
     BootstrapRunner ..> BootstrapRootRegistryService : transfers validated owner
@@ -113,6 +120,7 @@ classDiagram
     BootstrapRootRegistryOwner *-- BootstrapRootRegistry : stores
     BootstrapRootRegistryService ..> BootstrapRootRegistry : returns borrowed const
     BootstrapRootRegistry *-- "7" ConfiguredBaseRootCapability : exposes exact capabilities
+    BootstrapRootRegistry *-- "1" LLMProviderConfigCapability : exposes configured file
     ConfiguredBaseRootCapability --> PathKey
     ConfiguredBaseRootCapability --> ConfiguredRootRole
 

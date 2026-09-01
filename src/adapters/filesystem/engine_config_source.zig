@@ -6,6 +6,7 @@
 const std = @import("std");
 const config = @import("../../domain/config.zig");
 const engine_config_source = @import("../../ports/engine_config_source.zig");
+const bounded_file_capture = @import("bounded_file_capture.zig");
 const file_identity = @import("file_identity.zig");
 
 const Allocator = std.mem.Allocator;
@@ -123,37 +124,12 @@ fn read(
     };
 
     var file_reader = open_engine_config_file.file.reader(open_engine_config_file.io, &.{});
-    return captureExactObservedBytes(
+    const bytes = bounded_file_capture.capture(
         allocator,
         &file_reader.interface,
         file_stat.size,
         max_bytes,
-    );
-}
-
-fn captureExactObservedBytes(
-    allocator: Allocator,
-    reader: *Io.Reader,
-    observed_size: u64,
-    max_bytes: usize,
-) engine_config_source.Error!engine_config_source.RawEngineConfig {
-    if (max_bytes == 0 or max_bytes == std.math.maxInt(usize) or
-        observed_size > max_bytes)
-    {
-        return error.EngineConfigReadFailure;
-    }
-
-    const bytes = reader.allocRemaining(
-        allocator,
-        .limited(max_bytes + 1),
     ) catch return error.EngineConfigReadFailure;
-
-    const expected_size: usize = @intCast(observed_size);
-    if (bytes.len != expected_size) {
-        allocator.free(bytes);
-        return error.EngineConfigReadFailure;
-    }
-
     return .{ .bytes = bytes };
 }
 
@@ -309,21 +285,5 @@ test "read accepts exactly the compiler byte limit and rejects one byte more" {
     try std.testing.expectError(
         error.EngineConfigReadFailure,
         oversized.read(allocator, config.max_engine_config_bytes),
-    );
-}
-
-test "read rejects shrink and growth after the observed size" {
-    const allocator = std.testing.allocator;
-
-    var shrunk_reader: Io.Reader = .fixed("ab");
-    try std.testing.expectError(
-        error.EngineConfigReadFailure,
-        captureExactObservedBytes(allocator, &shrunk_reader, 3, 4),
-    );
-
-    var grown_reader: Io.Reader = .fixed("abc");
-    try std.testing.expectError(
-        error.EngineConfigReadFailure,
-        captureExactObservedBytes(allocator, &grown_reader, 2, 4),
     );
 }

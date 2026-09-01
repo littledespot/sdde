@@ -57,7 +57,8 @@ const valid_config =
     \\    "specs": "specs/", "references": "references/",
     \\    "specsArchive": "specs/_archive/", "workflows": ".sddtoolkit/workflows",
     \\    "toolchainPreset": ".sddtoolkit/toolchainPreset",
-    \\    "principles": ".sddtoolkit/principles", "templates": ".sddtoolkit/templates"
+    \\    "principles": ".sddtoolkit/principles", "templates": ".sddtoolkit/templates",
+    \\    "providers": ".sddproviders.json"
     \\  }
     \\}
 ;
@@ -86,35 +87,37 @@ test "rejects malformed unknown missing duplicate and wrong-kind input" {
     const invalid = [_][]const u8{
         "{",
         valid_config ++ "\ntrue",
-        \\{"version":"legacy","logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"version":"legacy","logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"extra":true,"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"extra":true,"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
         \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"logs":{"level":"info","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"logs":{"level":"info","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":"no","promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":"no","promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[],"extra":true},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[],"extra":true},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{},"extra":true},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{},"extra":true},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":[]},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":[]},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{"implementation":{"provider":"openai"}}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{"implementation":{"provider":"openai"}}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","extra":"x"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json","extra":"x"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":1,"references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":1,"references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":["unknown"]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":["unknown"]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":["request","request"]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false,"promptCapture":["request","request"]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        ,
+        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
         ,
     };
 
@@ -128,7 +131,7 @@ test "rejects malformed unknown missing duplicate and wrong-kind input" {
 
 test "accepts JSON member reordering" {
     const reordered =
-        \\{"paths":{"templates":"x","principles":"p","toolchainPreset":"t","workflows":"w","specsArchive":"s/a","references":"r","specs":"s"},"models":{"slots":{}},"logs":{"promptCapture":[],"console":false,"level":"INFO"}}
+        \\{"paths":{"providers":".sddproviders.json","templates":"x","principles":"p","toolchainPreset":"t","workflows":"w","specsArchive":"s/a","references":"r","specs":"s"},"models":{"slots":{}},"logs":{"promptCapture":[],"console":false,"level":"INFO"}}
     ;
     var decoded = try (Action{}).execute(std.testing.allocator, reordered);
     defer decoded.deinit();

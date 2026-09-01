@@ -26,7 +26,8 @@ smoke test, or project-content mutation.
 3-6, 9, 12-13.4, 21-22, and 26-31; [ADR 0001 — Zig native
 engine](../decisions/0001-zig-engine.md); [F0006 —
 LLMProviderInterface](F0006-LLMProviderInterface.md); [F0001 —
-SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); and [F0002 —
+SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); [F0008 —
+LLMProviderConfigService](F0008-LLMProviderConfigService.md); and [F0002 —
 LogService](F0002-LogService.md). External protocol references are the AWS
 documentation for [Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html),
 [CountTokens](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CountTokens.html),
@@ -122,9 +123,9 @@ port.
 
 ## 3. Exact Bedrock provider-file variant
 
-F0006 owns discovery and generic decoding of the exact project-root
-`.sddproviders.json`. The Bedrock portion intentionally matches the current
-example's lean shape:
+F0008 owns the bounded read of the exact `paths.providers`
+`.sddproviders.json`; F0006 owns generic decoding of those untrusted bytes.
+The Bedrock portion intentionally matches the current example's lean shape:
 
 ```json
 {

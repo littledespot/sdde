@@ -8,7 +8,7 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "build-bootstrap-root-registry@1",
         .kind = .action,
-        .requires = &.{ .bootstrap_root_registry_id, .configured_root_capability_set },
+        .requires = &.{ .bootstrap_root_registry_id, .configured_root_capability_set, .llm_provider_config_path_candidate },
         .produces = &.{.bootstrap_root_registry},
         .side_effect = .none,
     };
@@ -20,6 +20,7 @@ pub const Action = struct {
         canonical_config_path: []const u8,
         config_file_identity: bootstrap_roots.NoFollowFileIdentity,
         configured_roots: [bootstrap_roots.PathKey.count]bootstrap_roots.ValidatedConfiguredRoot,
+        llm_provider_config_path: bootstrap_roots.LLMProviderConfigPathCandidate,
     ) Error!bootstrap_roots.BootstrapRootRegistryCandidate {
         const owned_config_path = allocator.dupe(u8, canonical_config_path) catch {
             return error.BootstrapRootRegistryInvalid;
@@ -33,6 +34,13 @@ pub const Action = struct {
             }
             capability.canonical_project_root = id.canonical_project_root;
         }
+        if (!std.mem.eql(
+            u8,
+            llm_provider_config_path.canonical_project_root,
+            id.canonical_project_root,
+        )) {
+            return error.BootstrapRootRegistryInvalid;
+        }
 
         return .{
             .id = id,
@@ -42,6 +50,11 @@ pub const Action = struct {
                 .no_follow_file_identity = config_file_identity,
             },
             .configured_roots = owned_roots,
+            .llm_provider_config_path = .{
+                .relative_path = llm_provider_config_path.relative_path,
+                .canonical_project_root = id.canonical_project_root,
+                .canonical_path = llm_provider_config_path.canonical_path,
+            },
         };
     }
 };
@@ -71,6 +84,11 @@ test "assembles one candidate without relabelling configured roots" {
         "/project/.sddtoolkit.json",
         .{ .filesystem_id = 1, .file_id = 1 },
         roots,
+        .{
+            .relative_path = ".sddproviders.json",
+            .canonical_project_root = "/project",
+            .canonical_path = "/project/.sddproviders.json",
+        },
     );
     defer allocator.free(candidate.config_location.canonical_config_path);
 
@@ -82,4 +100,8 @@ test "assembles one candidate without relabelling configured roots" {
         try std.testing.expectEqual(@as(bootstrap_roots.PathKey, @enumFromInt(index)), capability.path_key);
         try std.testing.expectEqualStrings("/project", capability.canonical_project_root);
     }
+    try std.testing.expectEqualStrings(
+        ".sddproviders.json",
+        candidate.llm_provider_config_path.relative_path,
+    );
 }

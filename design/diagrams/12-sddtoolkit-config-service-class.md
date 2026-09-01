@@ -74,6 +74,7 @@ classDiagram
         +string toolchainPreset
         +string principles
         +string templates
+        +string providers
     }
 
     BootstrapRunner ..> DecodeSDDToolKitConfigAction : executes once

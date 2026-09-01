@@ -53,6 +53,10 @@ test "validated bootstrap registry authority is opaque" {
         .@"opaque" => {},
         else => return error.RootCapabilityMustBeOpaque,
     }
+    switch (@typeInfo(bootstrap_root_registry.LLMProviderConfigCapability)) {
+        .@"opaque" => {},
+        else => return error.ProviderConfigCapabilityMustBeOpaque,
+    }
 
     const service_source = @embedFile("application/bootstrap_root_registry_service.zig");
     try expectAbsent(service_source, "bootstrap_roots");
@@ -66,6 +70,17 @@ test "validated bootstrap registry authority is opaque" {
     )).@"fn";
     try std.testing.expectEqual(@as(usize, 1), init_type.params.len);
     try std.testing.expect(init_type.params[0].type.? == *bootstrap_root_registry.Owner);
+
+    const provider_service = @embedFile("application/llm_provider_config_service.zig");
+    try expectAbsent(provider_service, "std.Io");
+    try expectAbsent(provider_service, "std.json");
+    const root_domain = @embedFile("domain/bootstrap_root_registry.zig");
+    const provider_adapter = @embedFile("adapters/filesystem/llm_provider_config_source.zig");
+    try std.testing.expect(std.mem.indexOf(u8, root_domain, "bindLLMProviderConfigSource") != null);
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(
+        provider_adapter,
+        "bindLLMProviderConfigSource",
+    ));
 }
 
 test "configuration domain ownership is independent of the JSON parser" {
@@ -73,6 +88,23 @@ test "configuration domain ownership is independent of the JSON parser" {
     try expectAbsent(source, "std.json.Parsed");
     try expectAbsent(source, "PublicError");
     try expectAbsent(source, "Registry");
+}
+
+test "provider config orchestration is capability free and runner owned" {
+    const orchestrator = @embedFile("application/llm_provider_config_orchestrator.zig");
+    try expectAbsent(orchestrator, "/actions/");
+    try expectAbsent(orchestrator, "/adapters/");
+    try expectAbsent(orchestrator, "/ports/");
+    try expectAbsent(orchestrator, "std.Io");
+
+    const runner = @embedFile("application/llm_provider_config_runner.zig");
+    try expectAbsent(runner, "/adapters/");
+    try expectAbsent(runner, "std.Io");
+    try std.testing.expect(std.mem.indexOf(u8, runner, "envelope.apply") != null);
+
+    const composition = @embedFile("composition/root.zig");
+    try std.testing.expect(std.mem.indexOf(u8, composition, "llm_provider_config_source.Adapter.init") != null);
+    try std.testing.expect(std.mem.indexOf(u8, composition, "llm_provider_config_runner.Runner.init") != null);
 }
 
 test "workflow compiler and service preserve their authority boundaries" {
