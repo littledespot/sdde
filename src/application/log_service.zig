@@ -58,12 +58,14 @@ pub const LogService = struct {
 
     pub fn retainHistorical(
         self: *LogService,
-        sink: sink_port.Sink,
+        acquirer: sink_port.LockAcquirer,
+        pruner: sink_port.SegmentPruner,
+        releaser: sink_port.LockReleaser,
         historical: *const runtime.ValidatedFeatureLogBinding,
         authorization: *runtime.RetentionAuthorizationOwner,
         shortcode: telemetry.WorkflowShortcode,
     ) retention.Outcome {
-        return self.lifecycle.retainHistorical(sink, historical, authorization, shortcode);
+        return self.lifecycle.retainHistorical(acquirer, pruner, releaser, historical, authorization, shortcode);
     }
 
     pub fn deinit(self: *LogService) void {

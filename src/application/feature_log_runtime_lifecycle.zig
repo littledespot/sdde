@@ -65,13 +65,15 @@ pub const Lifecycle = struct {
 
     pub fn retainHistorical(
         self: *Lifecycle,
-        sink: sink_port.Sink,
+        acquirer: sink_port.LockAcquirer,
+        pruner: sink_port.SegmentPruner,
+        releaser: sink_port.LockReleaser,
         historical: *const runtime.ValidatedFeatureLogBinding,
         authorization: *runtime.RetentionAuthorizationOwner,
         shortcode: telemetry.WorkflowShortcode,
     ) retention.Outcome {
         const current = self.active orelse return .{ .blocked = .LOG_SINK_FAILURE };
-        return switch (retention.run(sink, current.binding, historical, authorization)) {
+        return switch (retention.run(acquirer, pruner, releaser, current.binding, historical, authorization)) {
             .ok => .ok,
             .blocked => |failure| .{ .blocked = current.reportFailure(shortcode, failure) },
         };

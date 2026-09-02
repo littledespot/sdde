@@ -4,7 +4,7 @@ const sink_port = @import("../../ports/feature_log_sink.zig");
 
 pub const Error = error{ LogSinkFailure, LogFlushFailure };
 pub const Action = struct {
-    sink: sink_port.Sink,
+    sink: sink_port.RecordAppender,
     pub const contract: pipeline.NodeContract = .{
         .id = "append-feature-log-record@1",
         .kind = .action,

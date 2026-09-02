@@ -3,7 +3,7 @@ const sink_port = @import("../../ports/feature_log_sink.zig");
 
 pub const Error = error{LogReleaseFailure};
 pub const Action = struct {
-    sink: sink_port.Sink,
+    sink: sink_port.LockReleaser,
     pub const contract: pipeline.NodeContract = .{
         .id = "release-feature-log-stream-lock@1",
         .kind = .action,

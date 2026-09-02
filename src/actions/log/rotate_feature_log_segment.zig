@@ -4,7 +4,7 @@ const sink_port = @import("../../ports/feature_log_sink.zig");
 
 pub const Error = error{LogSinkFailure};
 pub const Action = struct {
-    sink: sink_port.Sink,
+    sink: sink_port.SegmentRotator,
     pub const contract: pipeline.NodeContract = .{
         .id = "rotate-feature-log-segment@1",
         .kind = .action,

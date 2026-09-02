@@ -11,8 +11,10 @@ const read = @import("../actions/config/read_engine_config.zig");
 const decode = @import("../actions/config/decode_sddtoolkit_config.zig");
 const canonicalize_log_level = @import("../actions/log/canonicalize_log_level.zig");
 const validate_logging_policy = @import("../actions/log/validate_logging_policy.zig");
-const validate_path_policy = @import("../actions/bootstrap/validate_engine_path_policy.zig");
+const validate_path_policy = @import("../actions/bootstrap/validate_configured_root_path_policy.zig");
+const validate_provider_path_policy = @import("../actions/bootstrap/validate_llm_provider_config_path_policy.zig");
 const resolve_root = @import("../actions/bootstrap/resolve_configured_base_root.zig");
+const resolve_provider_path = @import("../actions/bootstrap/resolve_llm_provider_config_path.zig");
 const validate_root = @import("../actions/bootstrap/validate_configured_base_root.zig");
 const build_registry_id = @import("../actions/bootstrap/build_bootstrap_root_registry_id.zig");
 const build_registry = @import("../actions/bootstrap/build_bootstrap_root_registry.zig");
@@ -27,7 +29,11 @@ const workflow_compilation = @import("../domain/workflow_compilation.zig");
 const workflow_inventory = @import("../domain/workflow_inventory.zig");
 const workflow_registry = @import("../domain/workflow_registry.zig");
 const build_workflow_layout = @import("../actions/workflow/build_workflow_authority_layout.zig");
-const inventory_workflows = @import("../actions/workflow/inventory_workflow_authority.zig");
+const enumerate_workflow_resources = @import("../actions/workflow/enumerate_workflow_authority_resources.zig");
+const normalize_workflow_entries = @import("../actions/workflow/normalize_workflow_authority_entries.zig");
+const build_workflow_accounts = @import("../actions/workflow/build_workflow_authority_entry_accounts.zig");
+const build_workflow_inventory = @import("../actions/workflow/build_workflow_authority_inventory.zig");
+const validate_workflow_inventory = @import("../actions/workflow/validate_workflow_authority_inventory.zig");
 const capture_workflows = @import("../actions/workflow/capture_workflow_definitions.zig");
 const parse_workflows = @import("../actions/workflow/parse_workflow_definitions.zig");
 const validate_workflow_schema = @import("../actions/workflow/validate_workflow_definition_schema.zig");
@@ -60,13 +66,19 @@ comptime {
             canonicalize_log_level.Action.contract,
             validate_logging_policy.Action.contract,
             validate_path_policy.Action.contract,
+            validate_provider_path_policy.Action.contract,
             resolve_root.Action.contract,
+            resolve_provider_path.Action.contract,
             validate_root.Action.contract,
             build_registry_id.Action.contract,
             build_registry.Action.contract,
             validate_registry.Action.contract,
             build_workflow_layout.Action.contract,
-            inventory_workflows.Action.contract,
+            enumerate_workflow_resources.Action.contract,
+            normalize_workflow_entries.Action.contract,
+            build_workflow_accounts.Action.contract,
+            build_workflow_inventory.Action.contract,
+            validate_workflow_inventory.Action.contract,
             capture_workflows.Action.contract,
             parse_workflows.Action.contract,
             validate_workflow_schema.Action.contract,
@@ -97,13 +109,19 @@ pub const Runner = struct {
     canonicalize_log_level_action: canonicalize_log_level.Action,
     validate_logging_policy_action: validate_logging_policy.Action,
     validate_path_policy_action: validate_path_policy.Action,
+    validate_provider_path_policy_action: validate_provider_path_policy.Action,
     resolve_root_action: resolve_root.Action,
+    resolve_provider_path_action: resolve_provider_path.Action,
     validate_root_action: validate_root.Action,
     build_registry_id_action: build_registry_id.Action,
     build_registry_action: build_registry.Action,
     validate_registry_action: validate_registry.Action,
     build_workflow_layout_action: build_workflow_layout.Action,
-    inventory_workflows_action: inventory_workflows.Action,
+    enumerate_workflow_resources_action: enumerate_workflow_resources.Action,
+    normalize_workflow_entries_action: normalize_workflow_entries.Action,
+    build_workflow_accounts_action: build_workflow_accounts.Action,
+    build_workflow_inventory_action: build_workflow_inventory.Action,
+    validate_workflow_inventory_action: validate_workflow_inventory.Action,
     capture_workflows_action: capture_workflows.Action,
     parse_workflows_action: parse_workflows.Action,
     validate_workflow_schema_action: validate_workflow_schema.Action,
@@ -139,6 +157,10 @@ pub const Runner = struct {
     registry_candidate: ?bootstrap_roots.BootstrapRootRegistryCandidate = null,
     workflow_scratch: std.heap.ArenaAllocator,
     workflow_layout: ?workflow_inventory.Layout = null,
+    raw_workflow_entries: ?[]workflow_inventory.InventoryDescriptor = null,
+    normalized_workflow_entries: ?[]workflow_inventory.InventoryDescriptor = null,
+    workflow_entry_accounts: ?workflow_inventory.AccountSet = null,
+    workflow_inventory_candidate: ?workflow_inventory.Inventory = null,
     workflow_inventory: ?workflow_inventory.Inventory = null,
     workflow_captures: ?[]const workflow_inventory.Capture = null,
     raw_workflow_definitions: ?[]const workflow_definition.RawDefinition = null,
@@ -166,13 +188,19 @@ pub const Runner = struct {
         canonicalize_log_level_action: canonicalize_log_level.Action,
         validate_logging_policy_action: validate_logging_policy.Action,
         validate_path_policy_action: validate_path_policy.Action,
+        validate_provider_path_policy_action: validate_provider_path_policy.Action,
         resolve_root_action: resolve_root.Action,
+        resolve_provider_path_action: resolve_provider_path.Action,
         validate_root_action: validate_root.Action,
         build_registry_id_action: build_registry_id.Action,
         build_registry_action: build_registry.Action,
         validate_registry_action: validate_registry.Action,
         build_workflow_layout_action: build_workflow_layout.Action,
-        inventory_workflows_action: inventory_workflows.Action,
+        enumerate_workflow_resources_action: enumerate_workflow_resources.Action,
+        normalize_workflow_entries_action: normalize_workflow_entries.Action,
+        build_workflow_accounts_action: build_workflow_accounts.Action,
+        build_workflow_inventory_action: build_workflow_inventory.Action,
+        validate_workflow_inventory_action: validate_workflow_inventory.Action,
         capture_workflows_action: capture_workflows.Action,
         parse_workflows_action: parse_workflows.Action,
         validate_workflow_schema_action: validate_workflow_schema.Action,
@@ -201,13 +229,19 @@ pub const Runner = struct {
             .canonicalize_log_level_action = canonicalize_log_level_action,
             .validate_logging_policy_action = validate_logging_policy_action,
             .validate_path_policy_action = validate_path_policy_action,
+            .validate_provider_path_policy_action = validate_provider_path_policy_action,
             .resolve_root_action = resolve_root_action,
+            .resolve_provider_path_action = resolve_provider_path_action,
             .validate_root_action = validate_root_action,
             .build_registry_id_action = build_registry_id_action,
             .build_registry_action = build_registry_action,
             .validate_registry_action = validate_registry_action,
             .build_workflow_layout_action = build_workflow_layout_action,
-            .inventory_workflows_action = inventory_workflows_action,
+            .enumerate_workflow_resources_action = enumerate_workflow_resources_action,
+            .normalize_workflow_entries_action = normalize_workflow_entries_action,
+            .build_workflow_accounts_action = build_workflow_accounts_action,
+            .build_workflow_inventory_action = build_workflow_inventory_action,
+            .validate_workflow_inventory_action = validate_workflow_inventory_action,
             .capture_workflows_action = capture_workflows_action,
             .parse_workflows_action = parse_workflows_action,
             .validate_workflow_schema_action = validate_workflow_schema_action,
@@ -354,13 +388,27 @@ pub const Runner = struct {
                 configuredPath(paths, key),
             ) catch return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
         }
-        std.debug.assert(self.normalized_llm_provider_config_path == null);
-        self.normalized_llm_provider_config_path = self.validate_path_policy_action.executeLLMProviderConfig(
-            allocator,
-            paths.providers,
-        ) catch return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
         return self.finishNode(
             validate_path_policy.Action.contract,
+            .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
+        );
+    }
+
+    fn invokeValidateProviderPath(context: *anyopaque) child_bindings.StepOutcome {
+        const self: *Runner = @ptrCast(@alignCast(context));
+        if (self.beginNode(
+            validate_provider_path_policy.Action.contract,
+            .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
+        )) |outcome| return outcome;
+        std.debug.assert(self.decoded_config != null);
+        std.debug.assert(self.normalized_llm_provider_config_path == null);
+        const allocator = self.root_scratch.allocator();
+        self.normalized_llm_provider_config_path = self.validate_provider_path_policy_action.execute(
+            allocator,
+            self.decoded_config.?.value().paths.providers,
+        ) catch return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
+        return self.finishNode(
+            validate_provider_path_policy.Action.contract,
             .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
         );
     }
@@ -383,15 +431,29 @@ pub const Runner = struct {
                 self.normalized_paths[index].?,
             ) catch return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
         }
+        return self.finishNode(
+            resolve_root.Action.contract,
+            .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
+        );
+    }
+
+    fn invokeResolveProviderPath(context: *anyopaque) child_bindings.StepOutcome {
+        const self: *Runner = @ptrCast(@alignCast(context));
+        if (self.beginNode(
+            resolve_provider_path.Action.contract,
+            .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
+        )) |outcome| return outcome;
+        std.debug.assert(self.exact_config_file != null);
         std.debug.assert(self.normalized_llm_provider_config_path != null);
         std.debug.assert(self.llm_provider_config_path_candidate == null);
-        self.llm_provider_config_path_candidate = self.resolve_root_action.executeLLMProviderConfig(
+        const allocator = self.root_scratch.allocator();
+        self.llm_provider_config_path_candidate = self.resolve_provider_path_action.execute(
             allocator,
             self.exact_config_file.?.canonical_project_root,
             self.normalized_llm_provider_config_path.?,
         ) catch return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
         return self.finishNode(
-            resolve_root.Action.contract,
+            resolve_provider_path.Action.contract,
             .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
         );
     }
@@ -494,10 +556,10 @@ pub const Runner = struct {
         return self.finishNode(build_workflow_layout.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID);
     }
 
-    fn invokeInventoryWorkflows(context: *anyopaque) child_bindings.StepOutcome {
+    fn invokeEnumerateWorkflowResources(context: *anyopaque) child_bindings.StepOutcome {
         const self: *Runner = @ptrCast(@alignCast(context));
-        if (self.beginNode(inventory_workflows.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID)) |outcome| return outcome;
-        self.workflow_inventory = self.inventory_workflows_action.execute(
+        if (self.beginNode(enumerate_workflow_resources.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID)) |outcome| return outcome;
+        self.raw_workflow_entries = self.enumerate_workflow_resources_action.execute(
             self.workflow_scratch.allocator(),
             self.workflow_layout.?,
             self.runtime,
@@ -505,7 +567,46 @@ pub const Runner = struct {
             error.Cancelled => .cancelled,
             error.WorkflowAuthorityInventoryInvalid => .{ .failed = .WORKFLOW_AUTHORITY_INVENTORY_INVALID },
         };
-        return self.finishNode(inventory_workflows.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID);
+        return self.finishNode(enumerate_workflow_resources.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID);
+    }
+
+    fn invokeNormalizeWorkflowEntries(context: *anyopaque) child_bindings.StepOutcome {
+        const self: *Runner = @ptrCast(@alignCast(context));
+        if (self.beginNode(normalize_workflow_entries.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID)) |outcome| return outcome;
+        self.normalized_workflow_entries = self.normalize_workflow_entries_action.execute(
+            self.raw_workflow_entries.?,
+        ) catch return .{ .failed = .WORKFLOW_AUTHORITY_INVENTORY_INVALID };
+        return self.finishNode(normalize_workflow_entries.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID);
+    }
+
+    fn invokeBuildWorkflowAccounts(context: *anyopaque) child_bindings.StepOutcome {
+        const self: *Runner = @ptrCast(@alignCast(context));
+        if (self.beginNode(build_workflow_accounts.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID)) |outcome| return outcome;
+        self.workflow_entry_accounts = self.build_workflow_accounts_action.execute(
+            self.workflow_scratch.allocator(),
+            self.normalized_workflow_entries.?,
+        ) catch return .{ .failed = .WORKFLOW_AUTHORITY_INVENTORY_INVALID };
+        return self.finishNode(build_workflow_accounts.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID);
+    }
+
+    fn invokeBuildWorkflowInventory(context: *anyopaque) child_bindings.StepOutcome {
+        const self: *Runner = @ptrCast(@alignCast(context));
+        if (self.beginNode(build_workflow_inventory.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID)) |outcome| return outcome;
+        self.workflow_inventory_candidate = self.build_workflow_inventory_action.execute(
+            self.workflow_layout.?,
+            self.normalized_workflow_entries.?,
+            self.workflow_entry_accounts.?,
+        );
+        return self.finishNode(build_workflow_inventory.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID);
+    }
+
+    fn invokeValidateWorkflowInventory(context: *anyopaque) child_bindings.StepOutcome {
+        const self: *Runner = @ptrCast(@alignCast(context));
+        if (self.beginNode(validate_workflow_inventory.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID)) |outcome| return outcome;
+        self.workflow_inventory = self.validate_workflow_inventory_action.execute(
+            self.workflow_inventory_candidate.?,
+        ) catch return .{ .failed = .WORKFLOW_AUTHORITY_INVENTORY_INVALID };
+        return self.finishNode(validate_workflow_inventory.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID);
     }
 
     fn invokeCaptureWorkflows(context: *anyopaque) child_bindings.StepOutcome {
@@ -758,13 +859,19 @@ const bindings_vtable: child_bindings.ChildBindings.VTable = .{
     .canonicalize_log_level = Runner.invokeCanonicalizeLogLevel,
     .validate_logging_policy = Runner.invokeValidateLoggingPolicy,
     .validate_root_paths = Runner.invokeValidateRootPaths,
+    .validate_provider_path = Runner.invokeValidateProviderPath,
     .resolve_roots = Runner.invokeResolveRoots,
+    .resolve_provider_path = Runner.invokeResolveProviderPath,
     .validate_roots = Runner.invokeValidateRoots,
     .build_registry_id = Runner.invokeBuildRegistryId,
     .build_registry = Runner.invokeBuildRegistry,
     .validate_registry = Runner.invokeValidateRegistry,
     .build_workflow_layout = Runner.invokeBuildWorkflowLayout,
-    .inventory_workflows = Runner.invokeInventoryWorkflows,
+    .enumerate_workflow_resources = Runner.invokeEnumerateWorkflowResources,
+    .normalize_workflow_entries = Runner.invokeNormalizeWorkflowEntries,
+    .build_workflow_accounts = Runner.invokeBuildWorkflowAccounts,
+    .build_workflow_inventory = Runner.invokeBuildWorkflowInventory,
+    .validate_workflow_inventory = Runner.invokeValidateWorkflowInventory,
     .capture_workflows = Runner.invokeCaptureWorkflows,
     .parse_workflows = Runner.invokeParseWorkflows,
     .validate_workflow_schema = Runner.invokeValidateWorkflowSchema,

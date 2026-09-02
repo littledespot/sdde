@@ -12,14 +12,20 @@ const read = @import("../actions/config/read_engine_config.zig");
 const decode = @import("../actions/config/decode_sddtoolkit_config.zig");
 const canonicalize_log_level = @import("../actions/log/canonicalize_log_level.zig");
 const validate_logging_policy = @import("../actions/log/validate_logging_policy.zig");
-const validate_path_policy = @import("../actions/bootstrap/validate_engine_path_policy.zig");
+const validate_path_policy = @import("../actions/bootstrap/validate_configured_root_path_policy.zig");
+const validate_provider_path_policy = @import("../actions/bootstrap/validate_llm_provider_config_path_policy.zig");
 const resolve_root = @import("../actions/bootstrap/resolve_configured_base_root.zig");
+const resolve_provider_path = @import("../actions/bootstrap/resolve_llm_provider_config_path.zig");
 const validate_root = @import("../actions/bootstrap/validate_configured_base_root.zig");
 const build_registry_id = @import("../actions/bootstrap/build_bootstrap_root_registry_id.zig");
 const build_registry = @import("../actions/bootstrap/build_bootstrap_root_registry.zig");
 const validate_registry = @import("../actions/bootstrap/validate_bootstrap_root_registry.zig");
 const build_workflow_layout = @import("../actions/workflow/build_workflow_authority_layout.zig");
-const inventory_workflows = @import("../actions/workflow/inventory_workflow_authority.zig");
+const enumerate_workflow_resources = @import("../actions/workflow/enumerate_workflow_authority_resources.zig");
+const normalize_workflow_entries = @import("../actions/workflow/normalize_workflow_authority_entries.zig");
+const build_workflow_accounts = @import("../actions/workflow/build_workflow_authority_entry_accounts.zig");
+const build_workflow_inventory = @import("../actions/workflow/build_workflow_authority_inventory.zig");
+const validate_workflow_inventory = @import("../actions/workflow/validate_workflow_authority_inventory.zig");
 const capture_workflows = @import("../actions/workflow/capture_workflow_definitions.zig");
 const parse_workflows = @import("../actions/workflow/parse_workflow_definitions.zig");
 const validate_workflow_schema = @import("../actions/workflow/validate_workflow_definition_schema.zig");
@@ -41,10 +47,7 @@ const compose_toolchain = @import("../actions/toolchain/compose_toolchain.zig");
 const validate_toolchain_safety = @import("../actions/toolchain/validate_toolchain_safety.zig");
 const toolchain = @import("../domain/toolchain.zig");
 const run_outcome = @import("../domain/run_outcome.zig");
-const parse_invocation = @import("../actions/workflow/parse_workflow_invocation.zig");
-const select_workflow = @import("../actions/workflow/select_compiled_workflow.zig");
-const workflow_pipeline_runner = @import("../application/workflow_pipeline_runner.zig");
-const workflow_engine = @import("../application/workflow_engine_orchestrator.zig");
+const engine_invocation_runner = @import("../application/engine_invocation_runner.zig");
 const core_workflow_nodes = @import("core_workflow_nodes.zig");
 const workflow_artifacts = @import("../domain/workflow_artifact_registry.zig");
 const feature_log_runtime = @import("../domain/feature_log_runtime.zig");
@@ -69,26 +72,12 @@ fn runInvocationInProject(
 ) run_outcome.Outcome {
     var boot = runInProject(io, allocator, project_root);
     defer boot.deinit();
-    switch (boot) {
-        .failed => |failure| return .{ .bootstrap_failed = failure },
-        .cancelled => return .{ .execution = .cancelled },
-        .ready => |*services| {
-            if (!core_workflow_nodes.registry.matchesCompiler(core_workflow_nodes.compiler_registry)) {
-                return .{ .execution = .failed };
-            }
-            const invocation = (parse_invocation.Action{}).execute(arguments) catch return .invocation_invalid;
-            const selected = (select_workflow.Action{ .registry = services.workflows.registry() }).execute(invocation) catch {
-                return .invocation_invalid;
-            };
-            var runner: workflow_pipeline_runner.Runner = .{
-                .selected = selected,
-                .implementations = core_workflow_nodes.registry,
-                .barrier = services.logs.barrier(),
-                .runtime = .{},
-            };
-            return .{ .execution = workflow_engine.run(selected.graph, runner.bindings()) };
-        },
-    }
+    return engine_invocation_runner.run(
+        &boot,
+        arguments,
+        core_workflow_nodes.registry,
+        core_workflow_nodes.compiler_registry,
+    );
 }
 
 fn runInProject(
@@ -123,23 +112,29 @@ fn runInProjectWithRuntime(
         canonicalize_log_level.Action{},
         validate_logging_policy.Action{},
         validate_path_policy.Action{ .policy = active_path_policy },
+        validate_provider_path_policy.Action{ .policy = active_path_policy },
         resolve_root.Action{ .policy = active_path_policy },
+        resolve_provider_path.Action{ .policy = active_path_policy },
         validate_root.Action{ .inspector = root_adapter.inspector() },
         build_registry_id.Action{},
         build_registry.Action{},
         validate_registry.Action{},
         build_workflow_layout.Action{},
-        inventory_workflows.Action{ .source = workflow_source_adapter.source() },
-        capture_workflows.Action{ .source = workflow_source_adapter.source() },
+        enumerate_workflow_resources.Action{ .source = workflow_source_adapter.enumerator() },
+        normalize_workflow_entries.Action{},
+        build_workflow_accounts.Action{},
+        build_workflow_inventory.Action{},
+        validate_workflow_inventory.Action{},
+        capture_workflows.Action{ .source = workflow_source_adapter.capturer() },
         parse_workflows.Action{ .parser = workflow_parser_adapter.parser() },
         validate_workflow_schema.Action{},
         compile_workflows.Action{ .registry = &core_workflow_nodes.compiler_registry },
         validate_workflow_graphs.Action{},
         build_workflow_registry.Action{},
         validate_workflow_registry.Action{},
-        capture_project_toolchain.Action{ .source = toolchain_source_adapter.source() },
-        inventory_toolchain_presets.Action{ .source = toolchain_source_adapter.source() },
-        capture_toolchain_presets.Action{ .source = toolchain_source_adapter.source() },
+        capture_project_toolchain.Action{ .source = toolchain_source_adapter.projectCapturer() },
+        inventory_toolchain_presets.Action{ .source = toolchain_source_adapter.presetEnumerator() },
+        capture_toolchain_presets.Action{ .source = toolchain_source_adapter.presetCapturer() },
         parse_toolchain_documents.Action{ .parser = toolchain_parser_adapter.parser() },
         validate_project_toolchain_schema.Action{},
         validate_toolchain_preset_registry.Action{},

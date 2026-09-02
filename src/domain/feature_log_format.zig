@@ -1,6 +1,7 @@
 const std = @import("std");
 const logging = @import("logging.zig");
 const telemetry = @import("telemetry.zig");
+const runtime = @import("feature_log_runtime.zig");
 
 pub const event_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n";
 pub const prompt_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted\n";
@@ -31,7 +32,7 @@ pub const PromptRecord = struct {
     monotonic_offset: u64,
     run_id: telemetry.Identifier,
     feature_id: telemetry.Identifier,
-    fragment: @import("feature_log_runtime.zig").SanitizedPromptFragment,
+    fragment: runtime.SanitizedPromptFragment,
 };
 
 pub const ControlKind = enum { segment_header, segment_trailer };
@@ -51,7 +52,7 @@ pub fn serializeEventControl(
     record: EventControlRecord,
 ) Error![]u8 {
     if (record.segment_ordinal == 0 or !validUtcTimestamp(record.occurred_at_utc) or
-        (record.kind == .segment_header and record.final_sequence != null))
+        !validControlSequence(record.kind, record.final_sequence))
     {
         return error.InvalidFeatureLogRecord;
     }
@@ -84,7 +85,7 @@ pub fn serializeEventControl(
 
 pub fn serializePromptControl(allocator: std.mem.Allocator, record: EventControlRecord) Error![]u8 {
     if (record.segment_ordinal == 0 or !validUtcTimestamp(record.occurred_at_utc) or
-        (record.kind == .segment_header and record.final_sequence != null)) return error.InvalidFeatureLogRecord;
+        !validControlSequence(record.kind, record.final_sequence)) return error.InvalidFeatureLogRecord;
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(allocator);
     var first = true;
@@ -115,10 +116,8 @@ pub fn serializePromptControl(allocator: std.mem.Allocator, record: EventControl
 pub fn serializePrompt(allocator: std.mem.Allocator, record: PromptRecord) Error![]u8 {
     const fragment = record.fragment;
     if (record.segment_ordinal == 0 or record.sequence == 0 or
-        !validUtcTimestamp(record.occurred_at_utc) or fragment.attempt == 0 or
-        fragment.content.len != fragment.retained_bytes or
-        fragment.content.len > logging.max_prompt_content_bytes or
-        !std.unicode.utf8ValidateSlice(fragment.content)) return error.InvalidFeatureLogRecord;
+        !validUtcTimestamp(record.occurred_at_utc)) return error.InvalidFeatureLogRecord;
+    runtime.validateSanitizedPromptFragment(fragment) catch return error.InvalidFeatureLogRecord;
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(allocator);
     var first = true;
@@ -249,6 +248,77 @@ pub fn validateEncodedRow(
     if (escaped or cells != expected_cells) return error.InvalidFeatureLogRecord;
 }
 
+pub fn validatePersistedIdentityRow(
+    line: []const u8,
+    binding: *const runtime.ValidatedFeatureLogBinding,
+    ordinal: u16,
+    stream: runtime.Stream,
+) Error!void {
+    if (!std.mem.eql(u8, cellAt(line, 1) orelse return error.InvalidFeatureLogRecord, logging.schema_version) or
+        !std.mem.eql(u8, cellAt(line, 2) orelse return error.InvalidFeatureLogRecord, @tagName(stream)) or
+        !std.mem.eql(u8, cellAt(line, 3) orelse return error.InvalidFeatureLogRecord, if (stream == .event) logging.event_column_schema_id else logging.prompt_column_schema_id) or
+        !std.mem.eql(u8, cellAt(line, 4) orelse return error.InvalidFeatureLogRecord, binding.logPolicyId().bytes) or
+        !std.mem.eql(u8, cellAt(line, 5) orelse return error.InvalidFeatureLogRecord, binding.bindingId().bytes) or
+        (std.fmt.parseInt(u16, cellAt(line, 6) orelse return error.InvalidFeatureLogRecord, 10) catch return error.InvalidFeatureLogRecord) != ordinal or
+        !std.mem.eql(u8, cellAt(line, 15) orelse return error.InvalidFeatureLogRecord, binding.runId().bytes) or
+        !std.mem.eql(u8, cellAt(line, 16) orelse return error.InvalidFeatureLogRecord, binding.featureId().bytes))
+    {
+        return error.InvalidFeatureLogRecord;
+    }
+}
+
+pub fn validatePersistedControlRow(
+    line: []const u8,
+    kind: ControlKind,
+    stream: runtime.Stream,
+    final_sequence: ?u64,
+) Error!void {
+    if (!std.mem.eql(u8, cellAt(line, 0) orelse return error.InvalidFeatureLogRecord, @tagName(kind)) or
+        parseUtcMs(cellAt(line, 10) orelse return error.InvalidFeatureLogRecord) == null) return error.InvalidFeatureLogRecord;
+    const event_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37 };
+    const prompt_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29 };
+    const null_columns: []const usize = if (stream == .event) &event_nulls else &prompt_nulls;
+    for (null_columns) |column| {
+        if (!std.mem.eql(u8, cellAt(line, column) orelse return error.InvalidFeatureLogRecord, "\\N")) {
+            return error.InvalidFeatureLogRecord;
+        }
+    }
+    const sequence = cellAt(line, 9) orelse return error.InvalidFeatureLogRecord;
+    if (final_sequence) |expected| {
+        const actual = std.fmt.parseInt(u64, sequence, 10) catch return error.InvalidFeatureLogRecord;
+        if (actual != expected) return error.InvalidFeatureLogRecord;
+    } else if (!std.mem.eql(u8, sequence, "\\N")) return error.InvalidFeatureLogRecord;
+}
+
+pub fn cellAt(line: []const u8, expected: usize) ?[]const u8 {
+    var cell: usize = 0;
+    var start: usize = 0;
+    var escaped = false;
+    for (line, 0..) |byte, index| {
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (byte == '\\') {
+            escaped = true;
+        } else if (byte == '|') {
+            if (cell == expected) return line[start..index];
+            cell += 1;
+            start = index + 1;
+        }
+    }
+    return if (cell == expected) line[start..] else null;
+}
+
+pub fn trailerUnixMs(bytes: []const u8) ?u64 {
+    if (bytes.len == 0 or bytes[bytes.len - 1] != '\n') return null;
+    const without_lf = bytes[0 .. bytes.len - 1];
+    const start = (std.mem.lastIndexOfScalar(u8, without_lf, '\n') orelse return null) + 1;
+    const line = without_lf[start..];
+    if (!std.mem.eql(u8, cellAt(line, 0) orelse return null, "segment_trailer")) return null;
+    return parseUtcMs(cellAt(line, 10) orelse return null);
+}
+
 fn appendCell(
     allocator: std.mem.Allocator,
     row: *std.ArrayList(u8),
@@ -326,8 +396,42 @@ fn appendOptionalSigned(
 }
 
 fn validUtcTimestamp(value: []const u8) bool {
-    return value.len == 20 and value[4] == '-' and value[7] == '-' and
-        value[10] == 'T' and value[13] == ':' and value[16] == ':' and value[19] == 'Z';
+    return parseUtcMs(value) != null;
+}
+
+fn validControlSequence(kind: ControlKind, final_sequence: ?u64) bool {
+    return switch (kind) {
+        .segment_header => final_sequence == null,
+        .segment_trailer => final_sequence != null,
+    };
+}
+
+fn parseUtcMs(value: []const u8) ?u64 {
+    if (value.len != 20 or value[4] != '-' or value[7] != '-' or value[10] != 'T' or
+        value[13] != ':' or value[16] != ':' or value[19] != 'Z') return null;
+    const year = std.fmt.parseInt(u16, value[0..4], 10) catch return null;
+    const month = std.fmt.parseInt(u8, value[5..7], 10) catch return null;
+    const day = std.fmt.parseInt(u8, value[8..10], 10) catch return null;
+    const hour = std.fmt.parseInt(u8, value[11..13], 10) catch return null;
+    const minute = std.fmt.parseInt(u8, value[14..16], 10) catch return null;
+    const second = std.fmt.parseInt(u8, value[17..19], 10) catch return null;
+    if (year < 1970 or month == 0 or month > 12 or day == 0 or hour > 23 or minute > 59 or second > 59) return null;
+    var days: u64 = 0;
+    var current_year: u16 = 1970;
+    while (current_year < year) : (current_year += 1) days += if (isLeapYear(current_year)) 366 else 365;
+    const month_days = [_]u8{ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    var current_month: u8 = 1;
+    while (current_month < month) : (current_month += 1) {
+        days += month_days[current_month - 1] + @as(u8, if (current_month == 2 and isLeapYear(year)) 1 else 0);
+    }
+    const max_day = month_days[month - 1] + @as(u8, if (month == 2 and isLeapYear(year)) 1 else 0);
+    if (day > max_day) return null;
+    days += day - 1;
+    return (((days * 24 + hour) * 60 + minute) * 60 + second) * 1000;
+}
+
+fn isLeapYear(year: u16) bool {
+    return (year % 4 == 0 and year % 100 != 0) or year % 400 == 0;
 }
 
 fn stageText(value: telemetry.Stage) []const u8 {
@@ -339,6 +443,11 @@ test "built-in headings are byte stable and have exact widths" {
     try std.testing.expectEqual(@as(usize, 30), std.mem.countScalar(u8, prompt_heading, '|') + 1);
     try std.testing.expect(std.mem.endsWith(u8, event_heading, "|count\n"));
     try std.testing.expect(std.mem.endsWith(u8, prompt_heading, "|redacted\n"));
+}
+
+test "UTC timestamps reject impossible calendar dates" {
+    try std.testing.expect(validUtcTimestamp("2024-02-29T12:30:05Z"));
+    try std.testing.expect(!validUtcTimestamp("2023-02-29T12:30:05Z"));
 }
 
 test "event rows use fixed columns escaping and reserved nulls" {
@@ -385,6 +494,16 @@ test "event control rows use the same exact heading width" {
     defer allocator.free(row);
     try validateEncodedRow(allocator, row, 38);
     try std.testing.expect(std.mem.startsWith(u8, row, "segment_header|feature-log/v2|event|"));
+
+    try std.testing.expectError(error.InvalidFeatureLogRecord, serializeEventControl(allocator, .{
+        .kind = .segment_trailer,
+        .log_policy_id = telemetry.Identifier.validate("LOGPOL-1").?,
+        .binding_id = telemetry.Identifier.validate("LOGBIND-1").?,
+        .segment_ordinal = 1,
+        .occurred_at_utc = "2026-08-30T10:15:30Z",
+        .run_id = telemetry.Identifier.validate("RUN-1").?,
+        .feature_id = telemetry.Identifier.validate("F0002").?,
+    }));
 }
 
 test "prompt rows are scalar bounded and use the exact prompt schema" {

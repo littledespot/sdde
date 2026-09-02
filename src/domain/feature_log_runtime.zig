@@ -148,6 +148,14 @@ pub const SanitizedPromptFragment = struct {
     redacted: bool,
 };
 
+pub const PromptFragmentError = error{InvalidSanitizedPromptFragment};
+
+pub fn validateSanitizedPromptFragment(fragment: SanitizedPromptFragment) PromptFragmentError!void {
+    if (fragment.attempt == 0 or fragment.content.len != fragment.retained_bytes or
+        fragment.content.len > logging.max_prompt_content_bytes or
+        !std.unicode.utf8ValidateSlice(fragment.content)) return error.InvalidSanitizedPromptFragment;
+}
+
 pub const max_prompt_fragments_per_batch: usize = 32;
 pub const PromptBatchOwner = opaque {};
 const PromptBatchOwnerStorage = struct {

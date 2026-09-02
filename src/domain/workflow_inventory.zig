@@ -18,6 +18,10 @@ pub const InventoryDescriptor = struct {
 };
 pub const Disposition = enum { directory, reserved_child, definition };
 pub const InventoryAccount = struct { ordinal: u16, path: []const u8, disposition: Disposition };
+pub const AccountSet = struct {
+    accounts: []const InventoryAccount,
+    definition_ordinals: []const u16,
+};
 pub const Layout = struct { capability: *const bootstrap_root_registry.ConfiguredBaseRootCapability };
 pub const Inventory = struct {
     capability: *const bootstrap_root_registry.ConfiguredBaseRootCapability,

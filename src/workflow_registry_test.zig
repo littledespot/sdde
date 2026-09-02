@@ -1,5 +1,9 @@
 const std = @import("std");
-const inventory_action = @import("actions/workflow/inventory_workflow_authority.zig");
+const enumerate_inventory = @import("actions/workflow/enumerate_workflow_authority_resources.zig");
+const normalize_inventory = @import("actions/workflow/normalize_workflow_authority_entries.zig");
+const build_inventory_accounts = @import("actions/workflow/build_workflow_authority_entry_accounts.zig");
+const build_inventory = @import("actions/workflow/build_workflow_authority_inventory.zig");
+const validate_inventory = @import("actions/workflow/validate_workflow_authority_inventory.zig");
 const capture_action = @import("actions/workflow/capture_workflow_definitions.zig");
 const registry_service = @import("application/workflow_definition_registry_service.zig");
 const workflow_source = @import("adapters/filesystem/workflow_authority_source.zig");
@@ -14,6 +18,19 @@ const workflow_inventory = @import("domain/workflow_inventory.zig");
 const registry = @import("domain/workflow_registry.zig");
 const source_port = @import("ports/workflow_authority_source.zig");
 
+fn runInventoryStages(
+    allocator: std.mem.Allocator,
+    source: source_port.Enumerator,
+    layout: workflow_inventory.Layout,
+    runtime: pipeline.NodeRuntime,
+) !workflow_inventory.Inventory {
+    const raw = try (enumerate_inventory.Action{ .source = source }).execute(allocator, layout, runtime);
+    const normalized = try (normalize_inventory.Action{}).execute(raw);
+    const accounts = try (build_inventory_accounts.Action{}).execute(allocator, normalized);
+    const candidate = (build_inventory.Action{}).execute(layout, normalized, accounts);
+    return (validate_inventory.Action{}).execute(candidate);
+}
+
 test "workflow inventory enforces definition and entry cardinality boundaries" {
     const root_owner = try createRootOwner(std.testing.allocator, .{ .filesystem_id = 1, .file_id = 99 });
     defer bootstrap_registry.deinitOwner(root_owner);
@@ -22,20 +39,20 @@ test "workflow inventory enforces definition and entry cardinality boundaries" {
     defer arena.deinit();
     const allocator = arena.allocator();
     var fake: FakeSource = .{ .descriptors = &.{} };
-    const empty = try (inventory_action.Action{ .source = fake.port() }).execute(allocator, .{ .capability = capability }, .{});
+    const empty = try runInventoryStages(allocator, fake.enumerator(), .{ .capability = capability }, .{});
     try std.testing.expectEqual(@as(usize, 0), empty.definition_ordinals.len);
 
     fake.descriptors = try definitionDescriptors(allocator, workflow_definition.max_definitions);
-    const exact = try (inventory_action.Action{ .source = fake.port() }).execute(allocator, .{ .capability = capability }, .{});
+    const exact = try runInventoryStages(allocator, fake.enumerator(), .{ .capability = capability }, .{});
     try std.testing.expectEqual(workflow_definition.max_definitions, exact.definition_ordinals.len);
     fake.descriptors = try definitionDescriptors(allocator, workflow_definition.max_definitions + 1);
-    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, (inventory_action.Action{ .source = fake.port() }).execute(allocator, .{ .capability = capability }, .{}));
+    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, runInventoryStages(allocator, fake.enumerator(), .{ .capability = capability }, .{}));
 
     fake.descriptors = try directoryDescriptors(allocator, workflow_inventory.max_inventory_entries);
-    const exact_entries = try (inventory_action.Action{ .source = fake.port() }).execute(allocator, .{ .capability = capability }, .{});
+    const exact_entries = try runInventoryStages(allocator, fake.enumerator(), .{ .capability = capability }, .{});
     try std.testing.expectEqual(workflow_inventory.max_inventory_entries, exact_entries.descriptors.len);
     fake.descriptors = try directoryDescriptors(allocator, workflow_inventory.max_inventory_entries + 1);
-    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, (inventory_action.Action{ .source = fake.port() }).execute(allocator, .{ .capability = capability }, .{}));
+    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, runInventoryStages(allocator, fake.enumerator(), .{ .capability = capability }, .{}));
 }
 
 test "workflow inventory sorts adapter order and preserves contiguous accounts" {
@@ -50,7 +67,7 @@ test "workflow inventory sorts adapter order and preserves contiguous accounts" 
     var fake: FakeSource = .{ .descriptors = &values };
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const inventory = try (inventory_action.Action{ .source = fake.port() }).execute(arena.allocator(), .{ .capability = capability }, .{});
+    const inventory = try runInventoryStages(arena.allocator(), fake.enumerator(), .{ .capability = capability }, .{});
     try std.testing.expectEqualStrings("a", inventory.descriptors[0].path);
     try std.testing.expectEqualStrings("m.workflow.yaml", inventory.descriptors[1].path);
     try std.testing.expectEqualStrings("z.workflow.yaml", inventory.descriptors[2].path);
@@ -68,9 +85,9 @@ test "workflow inventory preserves cancellation and maps deadline exhaustion" {
     var fake: FakeSource = .{ .descriptors = &.{} };
     var status = pipeline.RuntimeStatus.cancelled;
     const runtime: pipeline.NodeRuntime = .{ .context = &status, .status_fn = runtimeStatus };
-    try std.testing.expectError(error.Cancelled, (inventory_action.Action{ .source = fake.port() }).execute(std.testing.allocator, .{ .capability = capability }, runtime));
+    try std.testing.expectError(error.Cancelled, runInventoryStages(std.testing.allocator, fake.enumerator(), .{ .capability = capability }, runtime));
     status = .deadline_exhausted;
-    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, (inventory_action.Action{ .source = fake.port() }).execute(std.testing.allocator, .{ .capability = capability }, runtime));
+    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, runInventoryStages(std.testing.allocator, fake.enumerator(), .{ .capability = capability }, runtime));
 }
 
 test "filesystem inventory excludes exact reserved descendants and enforces depth" {
@@ -90,7 +107,7 @@ test "filesystem inventory excludes exact reserved descendants and enforces dept
     var adapter = workflow_source.Adapter.init(io, project.dir);
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const inventory = try (inventory_action.Action{ .source = adapter.source() }).execute(arena.allocator(), .{ .capability = capability }, .{});
+    const inventory = try runInventoryStages(arena.allocator(), adapter.enumerator(), .{ .capability = capability }, .{});
     try std.testing.expectEqual(@as(usize, 3), inventory.descriptors.len);
     try std.testing.expectEqual(workflow_inventory.Disposition.reserved_child, inventory.accounts[0].disposition);
     try std.testing.expectEqual(workflow_inventory.Disposition.definition, inventory.accounts[1].disposition);
@@ -104,12 +121,12 @@ test "filesystem inventory excludes exact reserved descendants and enforces dept
     try project.dir.createDirPath(io, depth_path.items);
     var exact_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer exact_arena.deinit();
-    _ = try (inventory_action.Action{ .source = adapter.source() }).execute(exact_arena.allocator(), .{ .capability = capability }, .{});
+    _ = try runInventoryStages(exact_arena.allocator(), adapter.enumerator(), .{ .capability = capability }, .{});
     try depth_path.appendSlice(std.testing.allocator, "/d");
     try project.dir.createDirPath(io, depth_path.items);
     var exceeded_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer exceeded_arena.deinit();
-    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, (inventory_action.Action{ .source = adapter.source() }).execute(exceeded_arena.allocator(), .{ .capability = capability }, .{}));
+    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, runInventoryStages(exceeded_arena.allocator(), adapter.enumerator(), .{ .capability = capability }, .{}));
 }
 
 test "filesystem workflow inventory rejects unsupported siblings and reserved aliases" {
@@ -135,7 +152,7 @@ test "filesystem workflow inventory rejects unsupported siblings and reserved al
         var adapter = workflow_source.Adapter.init(io, project.dir);
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
-        try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, (inventory_action.Action{ .source = adapter.source() }).execute(arena.allocator(), .{ .capability = capability }, .{}));
+        try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, runInventoryStages(arena.allocator(), adapter.enumerator(), .{ .capability = capability }, .{}));
     }
 }
 
@@ -148,8 +165,8 @@ test "capture budget is enforced before any definition read" {
     const descriptors = try definitionDescriptors(arena.allocator(), 17);
     for (descriptors, 0..) |*item, index| item.size = if (index < 16) workflow_definition.max_definition_bytes else 1;
     var fake: FakeSource = .{ .descriptors = descriptors };
-    const inventory = try (inventory_action.Action{ .source = fake.port() }).execute(arena.allocator(), .{ .capability = capability }, .{});
-    try std.testing.expectError(error.WorkflowDefinitionReadError, (capture_action.Action{ .source = fake.port() }).execute(arena.allocator(), inventory, .{}));
+    const inventory = try runInventoryStages(arena.allocator(), fake.enumerator(), .{ .capability = capability }, .{});
+    try std.testing.expectError(error.WorkflowDefinitionReadError, (capture_action.Action{ .source = fake.capturer() }).execute(arena.allocator(), inventory, .{}));
     try std.testing.expectEqual(@as(usize, 0), fake.capture_calls);
 }
 
@@ -161,10 +178,10 @@ test "definition capture maps incomplete reads and preserves cancellation" {
     var fake: FakeSource = .{ .descriptors = &descriptors, .capture_failure = true };
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const inventory = try (inventory_action.Action{ .source = fake.port() }).execute(arena.allocator(), .{ .capability = capability }, .{});
+    const inventory = try runInventoryStages(arena.allocator(), fake.enumerator(), .{ .capability = capability }, .{});
     try std.testing.expectError(
         error.WorkflowDefinitionReadError,
-        (capture_action.Action{ .source = fake.port() }).execute(arena.allocator(), inventory, .{}),
+        (capture_action.Action{ .source = fake.capturer() }).execute(arena.allocator(), inventory, .{}),
     );
     try std.testing.expectEqual(@as(usize, 1), fake.capture_calls);
 
@@ -173,7 +190,7 @@ test "definition capture maps incomplete reads and preserves cancellation" {
     const runtime: pipeline.NodeRuntime = .{ .context = &status, .status_fn = runtimeStatus };
     try std.testing.expectError(
         error.Cancelled,
-        (capture_action.Action{ .source = fake.port() }).execute(arena.allocator(), inventory, runtime),
+        (capture_action.Action{ .source = fake.capturer() }).execute(arena.allocator(), inventory, runtime),
     );
 }
 
@@ -194,8 +211,8 @@ test "filesystem capture accepts the exact byte limit and rejects a changed file
     var exact_adapter = workflow_source.Adapter.init(io, exact_project.dir);
     var exact_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer exact_arena.deinit();
-    const exact_inventory = try (inventory_action.Action{ .source = exact_adapter.source() }).execute(exact_arena.allocator(), .{ .capability = exact_capability }, .{});
-    const captures = try (capture_action.Action{ .source = exact_adapter.source() }).execute(exact_arena.allocator(), exact_inventory, .{});
+    const exact_inventory = try runInventoryStages(exact_arena.allocator(), exact_adapter.enumerator(), .{ .capability = exact_capability }, .{});
+    const captures = try (capture_action.Action{ .source = exact_adapter.capturer() }).execute(exact_arena.allocator(), exact_inventory, .{});
     try std.testing.expectEqual(workflow_definition.max_definition_bytes, captures[0].bytes.len);
 
     const oversized_bytes = try std.testing.allocator.alloc(u8, workflow_definition.max_definition_bytes + 1);
@@ -215,8 +232,9 @@ test "filesystem capture accepts the exact byte limit and rejects a changed file
     defer oversized_arena.deinit();
     try std.testing.expectError(
         error.WorkflowAuthorityInventoryInvalid,
-        (inventory_action.Action{ .source = oversized_adapter.source() }).execute(
+        runInventoryStages(
             oversized_arena.allocator(),
+            oversized_adapter.enumerator(),
             .{ .capability = oversized_capability },
             .{},
         ),
@@ -235,7 +253,7 @@ test "filesystem capture accepts the exact byte limit and rejects a changed file
         var adapter = workflow_source.Adapter.init(io, project.dir);
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
-        const inventory = try (inventory_action.Action{ .source = adapter.source() }).execute(arena.allocator(), .{ .capability = capability }, .{});
+        const inventory = try runInventoryStages(arena.allocator(), adapter.enumerator(), .{ .capability = capability }, .{});
         switch (mutation) {
             .grow => {
                 var file = try project.dir.openFile(io, "workflows/test.workflow.yaml", .{ .mode = .read_write });
@@ -256,7 +274,7 @@ test "filesystem capture accepts the exact byte limit and rejects a changed file
                 try project.dir.createDir(io, "workflows/test.workflow.yaml", .default_dir);
             },
         }
-        try std.testing.expectError(error.WorkflowDefinitionReadError, (capture_action.Action{ .source = adapter.source() }).execute(arena.allocator(), inventory, .{}));
+        try std.testing.expectError(error.WorkflowDefinitionReadError, (capture_action.Action{ .source = adapter.capturer() }).execute(arena.allocator(), inventory, .{}));
     }
 }
 
@@ -431,8 +449,11 @@ const FakeSource = struct {
     descriptors: []const workflow_inventory.InventoryDescriptor,
     capture_calls: usize = 0,
     capture_failure: bool = false,
-    fn port(self: *FakeSource) source_port.Source {
-        return .{ .context = self, .enumerate_fn = enumerate, .capture_fn = capture };
+    fn enumerator(self: *FakeSource) source_port.Enumerator {
+        return .{ .context = self, .enumerate_fn = enumerate };
+    }
+    fn capturer(self: *FakeSource) source_port.Capturer {
+        return .{ .context = self, .capture_fn = capture };
     }
     fn enumerate(context: *anyopaque, _: *const bootstrap_registry.ConfiguredBaseRootCapability, allocator: std.mem.Allocator, runtime: pipeline.NodeRuntime) source_port.Error![]workflow_inventory.InventoryDescriptor {
         const self: *FakeSource = @ptrCast(@alignCast(context));

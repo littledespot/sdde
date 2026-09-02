@@ -18,13 +18,19 @@ pub const ChildBindings = struct {
         canonicalize_log_level: *const fn (*anyopaque) StepOutcome,
         validate_logging_policy: *const fn (*anyopaque) StepOutcome,
         validate_root_paths: *const fn (*anyopaque) StepOutcome,
+        validate_provider_path: *const fn (*anyopaque) StepOutcome,
         resolve_roots: *const fn (*anyopaque) StepOutcome,
+        resolve_provider_path: *const fn (*anyopaque) StepOutcome,
         validate_roots: *const fn (*anyopaque) StepOutcome,
         build_registry_id: *const fn (*anyopaque) StepOutcome,
         build_registry: *const fn (*anyopaque) StepOutcome,
         validate_registry: *const fn (*anyopaque) StepOutcome,
         build_workflow_layout: *const fn (*anyopaque) StepOutcome,
-        inventory_workflows: *const fn (*anyopaque) StepOutcome,
+        enumerate_workflow_resources: *const fn (*anyopaque) StepOutcome,
+        normalize_workflow_entries: *const fn (*anyopaque) StepOutcome,
+        build_workflow_accounts: *const fn (*anyopaque) StepOutcome,
+        build_workflow_inventory: *const fn (*anyopaque) StepOutcome,
+        validate_workflow_inventory: *const fn (*anyopaque) StepOutcome,
         capture_workflows: *const fn (*anyopaque) StepOutcome,
         parse_workflows: *const fn (*anyopaque) StepOutcome,
         validate_workflow_schema: *const fn (*anyopaque) StepOutcome,
@@ -71,6 +77,12 @@ pub const ChildBindings = struct {
     pub fn invokeResolveRoots(self: ChildBindings) StepOutcome {
         return self.vtable.resolve_roots(self.context);
     }
+    pub fn invokeValidateProviderPath(self: ChildBindings) StepOutcome {
+        return self.vtable.validate_provider_path(self.context);
+    }
+    pub fn invokeResolveProviderPath(self: ChildBindings) StepOutcome {
+        return self.vtable.resolve_provider_path(self.context);
+    }
 
     pub fn invokeValidateRoots(self: ChildBindings) StepOutcome {
         return self.vtable.validate_roots(self.context);
@@ -91,8 +103,20 @@ pub const ChildBindings = struct {
     pub fn invokeBuildWorkflowLayout(self: ChildBindings) StepOutcome {
         return self.vtable.build_workflow_layout(self.context);
     }
-    pub fn invokeInventoryWorkflows(self: ChildBindings) StepOutcome {
-        return self.vtable.inventory_workflows(self.context);
+    pub fn invokeEnumerateWorkflowResources(self: ChildBindings) StepOutcome {
+        return self.vtable.enumerate_workflow_resources(self.context);
+    }
+    pub fn invokeNormalizeWorkflowEntries(self: ChildBindings) StepOutcome {
+        return self.vtable.normalize_workflow_entries(self.context);
+    }
+    pub fn invokeBuildWorkflowAccounts(self: ChildBindings) StepOutcome {
+        return self.vtable.build_workflow_accounts(self.context);
+    }
+    pub fn invokeBuildWorkflowInventory(self: ChildBindings) StepOutcome {
+        return self.vtable.build_workflow_inventory(self.context);
+    }
+    pub fn invokeValidateWorkflowInventory(self: ChildBindings) StepOutcome {
+        return self.vtable.validate_workflow_inventory(self.context);
     }
     pub fn invokeCaptureWorkflows(self: ChildBindings) StepOutcome {
         return self.vtable.capture_workflows(self.context);

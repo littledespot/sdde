@@ -10,8 +10,14 @@ pub const Adapter = struct {
     pub fn init(io: std.Io, project_root: std.Io.Dir) Adapter {
         return .{ .io = io, .project_root = project_root };
     }
-    pub fn source(self: *Adapter) source_port.Source {
-        return .{ .context = self, .capture_project_fn = captureProject, .inventory_presets_fn = inventoryPresets, .capture_preset_fn = capturePreset };
+    pub fn projectCapturer(self: *Adapter) source_port.ProjectCapturer {
+        return .{ .context = self, .capture_project_fn = captureProject };
+    }
+    pub fn presetEnumerator(self: *Adapter) source_port.PresetEnumerator {
+        return .{ .context = self, .inventory_presets_fn = inventoryPresets };
+    }
+    pub fn presetCapturer(self: *Adapter) source_port.PresetCapturer {
+        return .{ .context = self, .capture_preset_fn = capturePreset };
     }
     fn captureProject(context: *anyopaque, capability: *const roots.ConfiguredBaseRootCapability, allocator: std.mem.Allocator) source_port.Error!toolchain.Capture {
         const self = cast(context);

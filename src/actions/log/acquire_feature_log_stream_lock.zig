@@ -5,7 +5,7 @@ const sink_port = @import("../../ports/feature_log_sink.zig");
 
 pub const Error = error{LogLockTimeout};
 pub const Action = struct {
-    sink: sink_port.Sink,
+    sink: sink_port.LockAcquirer,
     pub const contract: pipeline.NodeContract = .{
         .id = "acquire-feature-log-stream-lock@1",
         .kind = .action,

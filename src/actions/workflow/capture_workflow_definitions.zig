@@ -6,7 +6,7 @@ const source_port = @import("../../ports/workflow_authority_source.zig");
 pub const Error = error{ Cancelled, WorkflowDefinitionReadError };
 
 pub const Action = struct {
-    source: source_port.Source,
+    source: source_port.Capturer,
 
     pub const contract: pipeline.NodeContract = .{
         .id = "capture-workflow-definitions@1",

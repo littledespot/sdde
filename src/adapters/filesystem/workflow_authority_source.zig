@@ -15,8 +15,11 @@ pub const Adapter = struct {
     pub fn init(io: Io, project_root: Io.Dir) Adapter {
         return .{ .io = io, .project_root = project_root };
     }
-    pub fn source(self: *Adapter) source_port.Source {
-        return .{ .context = self, .enumerate_fn = enumerate, .capture_fn = capture };
+    pub fn enumerator(self: *Adapter) source_port.Enumerator {
+        return .{ .context = self, .enumerate_fn = enumerate };
+    }
+    pub fn capturer(self: *Adapter) source_port.Capturer {
+        return .{ .context = self, .capture_fn = capture };
     }
 
     fn enumerate(
@@ -48,7 +51,6 @@ pub const Adapter = struct {
             if (descriptors.items.len == inventory.max_inventory_entries or
                 entry.depth() > inventory.max_inventory_depth) return error.InventoryInvalid;
             const path = allocator.dupe(u8, entry.path) catch return error.InventoryInvalid;
-            if (!inventory.validPath(path)) return error.InventoryInvalid;
             var descriptor: inventory.InventoryDescriptor = .{ .path = path, .kind = classify(entry.kind) };
             switch (descriptor.kind) {
                 .file => {

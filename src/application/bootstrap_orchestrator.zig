@@ -24,13 +24,19 @@ pub fn run(children: child_bindings.ChildBindings) Outcome {
     if (terminal(children.invokeCanonicalizeLogLevel())) |outcome| return outcome;
     if (terminal(children.invokeValidateLoggingPolicy())) |outcome| return outcome;
     if (terminal(children.invokeValidateRootPaths())) |outcome| return outcome;
+    if (terminal(children.invokeValidateProviderPath())) |outcome| return outcome;
     if (terminal(children.invokeResolveRoots())) |outcome| return outcome;
+    if (terminal(children.invokeResolveProviderPath())) |outcome| return outcome;
     if (terminal(children.invokeValidateRoots())) |outcome| return outcome;
     if (terminal(children.invokeBuildRegistryId())) |outcome| return outcome;
     if (terminal(children.invokeBuildRegistry())) |outcome| return outcome;
     if (terminal(children.invokeValidateRegistry())) |outcome| return outcome;
     if (terminal(children.invokeBuildWorkflowLayout())) |outcome| return outcome;
-    if (terminal(children.invokeInventoryWorkflows())) |outcome| return outcome;
+    if (terminal(children.invokeEnumerateWorkflowResources())) |outcome| return outcome;
+    if (terminal(children.invokeNormalizeWorkflowEntries())) |outcome| return outcome;
+    if (terminal(children.invokeBuildWorkflowAccounts())) |outcome| return outcome;
+    if (terminal(children.invokeBuildWorkflowInventory())) |outcome| return outcome;
+    if (terminal(children.invokeValidateWorkflowInventory())) |outcome| return outcome;
     if (terminal(children.invokeCaptureWorkflows())) |outcome| return outcome;
     if (terminal(children.invokeParseWorkflows())) |outcome| return outcome;
     if (terminal(children.invokeValidateWorkflowSchema())) |outcome| return outcome;
@@ -93,7 +99,9 @@ test "stops after a failed root binding" {
             .canonicalize_log_level,
             .validate_logging_policy,
             .validate_root_paths,
+            .validate_provider_path,
             .resolve_roots,
+            .resolve_provider_path,
             .validate_roots,
         },
         spy.calls[0..spy.call_count],
@@ -131,6 +139,7 @@ test "preserves explicit cancellation and stops later children" {
             .canonicalize_log_level,
             .validate_logging_policy,
             .validate_root_paths,
+            .validate_provider_path,
             .resolve_roots,
         },
         spy.calls[0..spy.call_count],
@@ -151,7 +160,7 @@ test "toolchain actions remain separate ordered child bindings" {
             .capture_toolchain_presets,
             .parse_toolchain_documents,
         },
-        spy.calls[20..spy.call_count],
+        spy.calls[26..spy.call_count],
     );
 }
 
@@ -171,13 +180,19 @@ const Step = enum {
     canonicalize_log_level,
     validate_logging_policy,
     validate_root_paths,
+    validate_provider_path,
     resolve_roots,
+    resolve_provider_path,
     validate_roots,
     build_registry_id,
     build_registry,
     validate_registry,
     build_workflow_layout,
-    inventory_workflows,
+    enumerate_workflow_resources,
+    normalize_workflow_entries,
+    build_workflow_accounts,
+    build_workflow_inventory,
+    validate_workflow_inventory,
     capture_workflows,
     parse_workflows,
     validate_workflow_schema,
@@ -199,7 +214,7 @@ const Step = enum {
 const SpyBindings = struct {
     fail_at: ?Step = null,
     cancel_at: ?Step = null,
-    calls: [29]Step = undefined,
+    calls: [35]Step = undefined,
     call_count: usize = 0,
 
     fn bindings(self: *SpyBindings) child_bindings.ChildBindings {
@@ -218,9 +233,20 @@ const SpyBindings = struct {
             .locate, .read => .ENGINE_CONFIG_READ_ERROR,
             .decode => .ENGINE_CONFIG_PARSE_ERROR,
             .canonicalize_log_level, .validate_logging_policy => .LOGGING_POLICY_INVALID,
-            .validate_root_paths, .resolve_roots, .validate_roots => .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
+            .validate_root_paths,
+            .validate_provider_path,
+            .resolve_roots,
+            .resolve_provider_path,
+            .validate_roots,
+            => .BOOTSTRAP_ROOT_RESOLUTION_ERROR,
             .build_registry_id, .build_registry, .validate_registry => .BOOTSTRAP_ROOT_REGISTRY_INVALID,
-            .build_workflow_layout, .inventory_workflows => .WORKFLOW_AUTHORITY_INVENTORY_INVALID,
+            .build_workflow_layout,
+            .enumerate_workflow_resources,
+            .normalize_workflow_entries,
+            .build_workflow_accounts,
+            .build_workflow_inventory,
+            .validate_workflow_inventory,
+            => .WORKFLOW_AUTHORITY_INVENTORY_INVALID,
             .capture_workflows => .WORKFLOW_DEFINITION_READ_ERROR,
             .parse_workflows => .WORKFLOW_DEFINITION_PARSE_ERROR,
             .validate_workflow_schema => .WORKFLOW_DEFINITION_SCHEMA_INVALID,
@@ -247,13 +273,19 @@ const spy_vtable: child_bindings.ChildBindings.VTable = .{
     .canonicalize_log_level = spyCanonicalizeLogLevel,
     .validate_logging_policy = spyValidateLoggingPolicy,
     .validate_root_paths = spyValidateRootPaths,
+    .validate_provider_path = spyValidateProviderPath,
     .resolve_roots = spyResolveRoots,
+    .resolve_provider_path = spyResolveProviderPath,
     .validate_roots = spyValidateRoots,
     .build_registry_id = spyBuildRegistryId,
     .build_registry = spyBuildRegistry,
     .validate_registry = spyValidateRegistry,
     .build_workflow_layout = spyBuildWorkflowLayout,
-    .inventory_workflows = spyInventoryWorkflows,
+    .enumerate_workflow_resources = spyEnumerateWorkflowResources,
+    .normalize_workflow_entries = spyNormalizeWorkflowEntries,
+    .build_workflow_accounts = spyBuildWorkflowAccounts,
+    .build_workflow_inventory = spyBuildWorkflowInventory,
+    .validate_workflow_inventory = spyValidateWorkflowInventory,
     .capture_workflows = spyCaptureWorkflows,
     .parse_workflows = spyParseWorkflows,
     .validate_workflow_schema = spyValidateWorkflowSchema,
@@ -303,9 +335,17 @@ fn spyValidateRootPaths(context: *anyopaque) child_bindings.StepOutcome {
     return spy.record(.validate_root_paths);
 }
 
+fn spyValidateProviderPath(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.validate_provider_path);
+}
+
 fn spyResolveRoots(context: *anyopaque) child_bindings.StepOutcome {
     const spy: *SpyBindings = @ptrCast(@alignCast(context));
     return spy.record(.resolve_roots);
+}
+
+fn spyResolveProviderPath(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.resolve_provider_path);
 }
 
 fn spyValidateRoots(context: *anyopaque) child_bindings.StepOutcome {
@@ -331,8 +371,20 @@ fn spyValidateRegistry(context: *anyopaque) child_bindings.StepOutcome {
 fn spyBuildWorkflowLayout(context: *anyopaque) child_bindings.StepOutcome {
     return castSpy(context).record(.build_workflow_layout);
 }
-fn spyInventoryWorkflows(context: *anyopaque) child_bindings.StepOutcome {
-    return castSpy(context).record(.inventory_workflows);
+fn spyEnumerateWorkflowResources(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.enumerate_workflow_resources);
+}
+fn spyNormalizeWorkflowEntries(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.normalize_workflow_entries);
+}
+fn spyBuildWorkflowAccounts(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.build_workflow_accounts);
+}
+fn spyBuildWorkflowInventory(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.build_workflow_inventory);
+}
+fn spyValidateWorkflowInventory(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.validate_workflow_inventory);
 }
 fn spyCaptureWorkflows(context: *anyopaque) child_bindings.StepOutcome {
     return castSpy(context).record(.capture_workflows);

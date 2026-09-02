@@ -8,9 +8,40 @@ const console_port = @import("ports/console_log_sink.zig");
 const emergency_port = @import("ports/emergency_log_sink.zig");
 const stabilizer_port = @import("ports/transaction_stabilizer.zig");
 const clock_port = @import("ports/trusted_log_clock.zig");
+const sink_port = @import("ports/feature_log_sink.zig");
 const build_retention = @import("actions/log/build_feature_log_retention_authorization.zig");
 const retention_coordinator = @import("application/feature_log_retention_coordinator.zig");
 const runtime_lifecycle = @import("application/feature_log_runtime_lifecycle.zig");
+const child_actions = @import("application/feature_log_child_actions.zig");
+const acquire_lock = @import("actions/log/acquire_feature_log_stream_lock.zig");
+const release_lock = @import("actions/log/release_feature_log_stream_lock.zig");
+const recover_stream = @import("actions/log/recover_feature_log_stream.zig");
+const create_segment = @import("actions/log/create_feature_log_segment.zig");
+const rotate_segment = @import("actions/log/rotate_feature_log_segment.zig");
+const append_record = @import("actions/log/append_feature_log_record.zig");
+const close_stream = @import("actions/log/close_feature_log_stream.zig");
+
+fn childrenFor(
+    sink: anytype,
+    clock: clock_port.Clock,
+    console: console_port.Sink,
+    emergency: emergency_port.Sink,
+    stabilizer: stabilizer_port.Stabilizer,
+) child_actions.ChildActions {
+    return .{
+        .acquire_lock = acquire_lock.Action{ .sink = sink.lockAcquirer() },
+        .release_lock = release_lock.Action{ .sink = sink.lockReleaser() },
+        .recover_stream = recover_stream.Action{ .sink = sink.streamRecoverer() },
+        .create_segment = create_segment.Action{ .sink = sink.segmentCreator() },
+        .rotate_segment = rotate_segment.Action{ .sink = sink.segmentRotator() },
+        .append_record = append_record.Action{ .sink = sink.recordAppender() },
+        .close_stream = close_stream.Action{ .sink = sink.streamCloser() },
+        .read_clock = .{ .clock = clock },
+        .write_console = .{ .sink = console },
+        .emit_emergency = .{ .sink = emergency },
+        .stabilize_failure = .{ .stabilizer = stabilizer },
+    };
+}
 
 test "runner barrier persists recovers and sequences feature events" {
     const io = std.testing.io;
@@ -33,11 +64,7 @@ test "runner barrier persists recovers and sequences feature events" {
         .allocator = std.testing.allocator,
         .policy = &policy,
         .binding = binding,
-        .sink = sink_adapter.sink(),
-        .clock = clock.port(),
-        .console = outputs.console(),
-        .emergency_sink = outputs.emergency(),
-        .stabilizer = stabilizer.port(),
+        .children = childrenFor(&sink_adapter, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()),
     };
     const attributed: telemetry.WorkflowTelemetryFact = .{
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"),
@@ -73,7 +100,7 @@ test "restart recovery truncates only an incomplete final row" {
     var outputs: FakeOutputs = .{};
     var stabilizer: FakeStabilizer = .{};
     var first_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
-    var first_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .sink = first_sink.sink(), .clock = clock.port(), .console = outputs.console(), .emergency_sink = outputs.emergency(), .stabilizer = stabilizer.port() };
+    var first_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .children = childrenFor(&first_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
     const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"), .fact = .{ .event_type = .run_started } };
     try std.testing.expect(first_runner.process(fact) == .persisted);
     var file = try directory.dir.openFile(io, "0001.log", .{ .mode = .read_write });
@@ -81,7 +108,7 @@ test "restart recovery truncates only an incomplete final row" {
     try file.writePositionalAll(io, "partial", size);
     file.close(io);
     var second_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
-    var second_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .sink = second_sink.sink(), .clock = clock.port(), .console = outputs.console(), .emergency_sink = outputs.emergency(), .stabilizer = stabilizer.port() };
+    var second_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .children = childrenFor(&second_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
     const outcome = second_runner.process(fact);
     try std.testing.expect(outcome == .persisted);
     try std.testing.expectEqual(@as(u64, 2), outcome.persisted.sequence);
@@ -105,12 +132,12 @@ test "restart recovery resumes after a durably closed tail" {
     const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .event_type = .run_started } };
 
     var first_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
-    var first_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .sink = first_sink.sink(), .clock = clock.port(), .console = outputs.console(), .emergency_sink = outputs.emergency(), .stabilizer = stabilizer.port() };
+    var first_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .children = childrenFor(&first_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
     try std.testing.expect(first_runner.process(fact) == .persisted);
     try std.testing.expect(first_runner.close(shortcode) == .dropped);
 
     var second_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
-    var second_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .sink = second_sink.sink(), .clock = clock.port(), .console = outputs.console(), .emergency_sink = outputs.emergency(), .stabilizer = stabilizer.port() };
+    var second_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .children = childrenFor(&second_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
     const outcome = second_runner.process(fact);
     try std.testing.expect(outcome == .persisted);
     try std.testing.expectEqual(@as(u64, 2), outcome.persisted.sequence);
@@ -133,14 +160,14 @@ test "restart rejects an insecure segment permission instead of trusting its byt
     var outputs: FakeOutputs = .{};
     var stabilizer: FakeStabilizer = .{};
     var first_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
-    var first_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .sink = first_sink.sink(), .clock = clock.port(), .console = outputs.console(), .emergency_sink = outputs.emergency(), .stabilizer = stabilizer.port() };
+    var first_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .children = childrenFor(&first_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
     const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"), .fact = .{ .event_type = .run_started } };
     try std.testing.expect(first_runner.process(fact) == .persisted);
     var file = try directory.dir.openFile(io, "0001.log", .{ .mode = .read_write });
     try file.setPermissions(io, std.Io.File.Permissions.fromMode(0o644));
     file.close(io);
     var second_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
-    var second_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .sink = second_sink.sink(), .clock = clock.port(), .console = outputs.console(), .emergency_sink = outputs.emergency(), .stabilizer = stabilizer.port() };
+    var second_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .children = childrenFor(&second_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
     try std.testing.expectEqual(runtime.FailureCode.LOG_SINK_FAILURE, second_runner.process(fact).blocked);
 }
 
@@ -158,7 +185,7 @@ test "stream lock acquisition rejects a symbolic link" {
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
     var stabilizer: FakeStabilizer = .{};
-    var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .sink = sink_adapter.sink(), .clock = clock.port(), .console = outputs.console(), .emergency_sink = outputs.emergency(), .stabilizer = stabilizer.port() };
+    var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .children = childrenFor(&sink_adapter, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
     const outcome = runner.process(.{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .event_type = .run_started } });
     try std.testing.expectEqual(runtime.FailureCode.LOG_LOCK_TIMEOUT, outcome.blocked);
     const target = try directory.dir.readFileAlloc(io, "lock-target", std.testing.allocator, .limited(32));
@@ -183,11 +210,7 @@ test "threshold drop performs no clock sink or identity work" {
         .allocator = std.testing.allocator,
         .policy = &policy,
         .binding = runtime.binding(binding_owner),
-        .sink = rejecting_sink.port(),
-        .clock = clock.port(),
-        .console = outputs.console(),
-        .emergency_sink = outputs.emergency(),
-        .stabilizer = stabilizer.port(),
+        .children = childrenFor(&rejecting_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()),
     };
     const result = runner.process(.{
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
@@ -219,11 +242,7 @@ test "enabled sanitized prompt fragments persist in their separate stream" {
         .allocator = std.testing.allocator,
         .policy = &policy,
         .binding = runtime.binding(owner),
-        .sink = sink_adapter.sink(),
-        .clock = clock.port(),
-        .console = outputs.console(),
-        .emergency_sink = outputs.emergency(),
-        .stabilizer = stabilizer.port(),
+        .children = childrenFor(&sink_adapter, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()),
     };
     const outcome = runner.processPrompt(.{
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("PLAN"),
@@ -260,7 +279,7 @@ test "prompt batches persist in canonical fragment id order and consume transien
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
     var stabilizer: FakeStabilizer = .{};
-    var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .sink = sink_adapter.sink(), .clock = clock.port(), .console = outputs.console(), .emergency_sink = outputs.emergency(), .stabilizer = stabilizer.port() };
+    var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .children = childrenFor(&sink_adapter, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
     const base: runtime.SanitizedPromptFragment = .{
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("PLAN"),
         .attempt = 1,
@@ -298,7 +317,7 @@ test "fault barriers distinguish lock recovery flush console rotation and retent
         var clock: FakeClock = .{};
         var outputs: FakeOutputs = .{ .console_failure = fault == .console };
         var stabilizer: FakeStabilizer = .{};
-        var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .sink = sink.port(), .clock = clock.port(), .console = outputs.console(), .emergency_sink = outputs.emergency(), .stabilizer = stabilizer.port() };
+        var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(owner), .children = childrenFor(&sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
         if (fault == .rotation) runner.event_state = .{
             .segment_ordinal = 1,
             .next_sequence = 1,
@@ -337,7 +356,9 @@ test "fault barriers distinguish lock recovery flush console rotation and retent
     defer runtime.deinitRetentionAuthorization(authorization);
     var retention_sink: FaultSink = .{ .fault = .retention };
     const retention = retention_coordinator.run(
-        retention_sink.port(),
+        retention_sink.lockAcquirer(),
+        retention_sink.segmentPruner(),
+        retention_sink.lockReleaser(),
         runtime.binding(owner),
         runtime.binding(historical_owner),
         authorization,
@@ -372,10 +393,10 @@ test "same-run policy transition closes the old binding and continues sequence a
     var stabilizer: FakeStabilizer = .{};
     var old_sink = filesystem_sink.Adapter.initForTestLayout(io, root.dir, old_directory, old_candidate);
     defer old_sink.deinit();
-    var old_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(old_owner), .sink = old_sink.sink(), .clock = clock.port(), .console = outputs.console(), .emergency_sink = outputs.emergency(), .stabilizer = stabilizer.port() };
+    var old_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(old_owner), .children = childrenFor(&old_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
     var next_sink = filesystem_sink.Adapter.initForTestLayout(io, root.dir, next_directory, next_candidate);
     defer next_sink.deinit();
-    var next_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(next_owner), .sink = next_sink.sink(), .clock = clock.port(), .console = outputs.console(), .emergency_sink = outputs.emergency(), .stabilizer = stabilizer.port() };
+    var next_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = runtime.binding(next_owner), .children = childrenFor(&next_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
     const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .event_type = .run_started } };
     var lifecycle: runtime_lifecycle.Lifecycle = .{};
     try std.testing.expect(lifecycle.barrier().process(fact) == .blocked);
@@ -406,7 +427,9 @@ test "same-run policy transition closes the old binding and continues sequence a
     defer runtime.deinitRetentionAuthorization(authorization);
     var retention_sink: FaultSink = .{ .fault = .retention };
     const retention = lifecycle.retainHistorical(
-        retention_sink.port(),
+        retention_sink.lockAcquirer(),
+        retention_sink.segmentPruner(),
+        retention_sink.lockReleaser(),
         runtime.binding(historical_owner),
         authorization,
         fact.workflow_shortcode,
@@ -492,11 +515,7 @@ test "historical finalization recovers and durably closes one active tail" {
         .allocator = std.testing.allocator,
         .policy = &policy,
         .binding = runtime.binding(owner),
-        .sink = first_sink.sink(),
-        .clock = clock.port(),
-        .console = outputs.console(),
-        .emergency_sink = outputs.emergency(),
-        .stabilizer = stabilizer.port(),
+        .children = childrenFor(&first_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()),
     };
     const shortcode = try telemetry.WorkflowShortcode.parse("SPEC");
     try std.testing.expect(first_runner.process(.{
@@ -509,11 +528,7 @@ test "historical finalization recovers and durably closes one active tail" {
         .allocator = std.testing.allocator,
         .policy = &policy,
         .binding = runtime.binding(owner),
-        .sink = recovered_sink.sink(),
-        .clock = clock.port(),
-        .console = outputs.console(),
-        .emergency_sink = outputs.emergency(),
-        .stabilizer = stabilizer.port(),
+        .children = childrenFor(&recovered_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()),
     };
     var lifecycle: runtime_lifecycle.Lifecycle = .{};
     try std.testing.expect(lifecycle.finalizeHistorical(&recovered_runner, shortcode) == .ok);
@@ -554,21 +569,13 @@ test "failed successor preparation removes the active observer" {
         .allocator = std.testing.allocator,
         .policy = &policy,
         .binding = runtime.binding(old_owner),
-        .sink = old_sink.port(),
-        .clock = clock.port(),
-        .console = outputs.console(),
-        .emergency_sink = outputs.emergency(),
-        .stabilizer = stabilizer.port(),
+        .children = childrenFor(&old_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()),
     };
     var next_runner: runner_module.Runner = .{
         .allocator = std.testing.allocator,
         .policy = &policy,
         .binding = runtime.binding(next_owner),
-        .sink = next_sink.port(),
-        .clock = clock.port(),
-        .console = outputs.console(),
-        .emergency_sink = outputs.emergency(),
-        .stabilizer = stabilizer.port(),
+        .children = childrenFor(&next_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()),
     };
     const shortcode = try telemetry.WorkflowShortcode.parse("SPEC");
     const fact: telemetry.WorkflowTelemetryFact = .{
@@ -602,11 +609,7 @@ test "failed active finalization releases the lock and removes the observer" {
         .allocator = std.testing.allocator,
         .policy = &policy,
         .binding = runtime.binding(owner),
-        .sink = sink.port(),
-        .clock = clock.port(),
-        .console = outputs.console(),
-        .emergency_sink = outputs.emergency(),
-        .stabilizer = stabilizer.port(),
+        .children = childrenFor(&sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()),
     };
     const shortcode = try telemetry.WorkflowShortcode.parse("SPEC");
     const fact: telemetry.WorkflowTelemetryFact = .{
@@ -640,11 +643,7 @@ test "sink acquisition failure stabilizes once reports once and blocks" {
         .allocator = std.testing.allocator,
         .policy = &policy,
         .binding = runtime.binding(owner),
-        .sink = rejecting_sink.port(),
-        .clock = clock.port(),
-        .console = outputs.console(),
-        .emergency_sink = outputs.emergency(),
-        .stabilizer = stabilizer.port(),
+        .children = childrenFor(&rejecting_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()),
     };
     const outcome = runner.process(.{
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
@@ -672,11 +671,7 @@ test "stabilization and emergency failures remain fail closed without retry" {
         .allocator = std.testing.allocator,
         .policy = &policy,
         .binding = runtime.binding(owner),
-        .sink = rejecting_sink.port(),
-        .clock = clock.port(),
-        .console = outputs.console(),
-        .emergency_sink = outputs.emergency(),
-        .stabilizer = stabilizer.port(),
+        .children = childrenFor(&rejecting_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()),
     };
     const outcome = runner.process(.{
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
@@ -739,19 +734,30 @@ const Fault = enum { none, lock, recovery, flush, console, rotation, retention }
 const FaultSink = struct {
     fault: Fault,
     held: bool = false,
-    fn port(self: *FaultSink) @import("ports/feature_log_sink.zig").Sink {
-        return .{ .context = self, .vtable = &fault_vtable };
+    fn lockAcquirer(self: *FaultSink) sink_port.LockAcquirer {
+        return .{ .context = self, .acquire_fn = faultAcquire };
     }
-};
-const fault_vtable: @import("ports/feature_log_sink.zig").Sink.VTable = .{
-    .acquire = faultAcquire,
-    .recover = faultRecover,
-    .create = faultCreate,
-    .rotate = faultRotate,
-    .close = faultClose,
-    .append = faultAppend,
-    .prune = faultPrune,
-    .release = faultRelease,
+    fn streamRecoverer(self: *FaultSink) sink_port.StreamRecoverer {
+        return .{ .context = self, .recover_fn = faultRecover };
+    }
+    fn segmentCreator(self: *FaultSink) sink_port.SegmentCreator {
+        return .{ .context = self, .create_fn = faultCreate };
+    }
+    fn segmentRotator(self: *FaultSink) sink_port.SegmentRotator {
+        return .{ .context = self, .rotate_fn = faultRotate };
+    }
+    fn streamCloser(self: *FaultSink) sink_port.StreamCloser {
+        return .{ .context = self, .close_fn = faultClose };
+    }
+    fn recordAppender(self: *FaultSink) sink_port.RecordAppender {
+        return .{ .context = self, .append_fn = faultAppend };
+    }
+    fn segmentPruner(self: *FaultSink) sink_port.SegmentPruner {
+        return .{ .context = self, .prune_fn = faultPrune };
+    }
+    fn lockReleaser(self: *FaultSink) sink_port.LockReleaser {
+        return .{ .context = self, .release_fn = faultRelease };
+    }
 };
 fn faultAcquire(context: *anyopaque, _: *const runtime.ValidatedFeatureLogBinding, _: runtime.Stream, _: u16) @import("ports/feature_log_sink.zig").Error!void {
     const self: *FaultSink = @ptrCast(@alignCast(context));
@@ -808,19 +814,30 @@ const FakeStabilizer = struct {
 };
 const RejectingSink = struct {
     calls: usize = 0,
-    fn port(self: *RejectingSink) @import("ports/feature_log_sink.zig").Sink {
-        return .{ .context = self, .vtable = &rejecting_vtable };
+    fn lockAcquirer(self: *RejectingSink) sink_port.LockAcquirer {
+        return .{ .context = self, .acquire_fn = rejectAcquire };
     }
-};
-const rejecting_vtable: @import("ports/feature_log_sink.zig").Sink.VTable = .{
-    .acquire = rejectAcquire,
-    .recover = rejectRecover,
-    .create = rejectCreate,
-    .rotate = rejectRotate,
-    .close = rejectClose,
-    .append = rejectAppend,
-    .prune = rejectPrune,
-    .release = rejectRelease,
+    fn streamRecoverer(self: *RejectingSink) sink_port.StreamRecoverer {
+        return .{ .context = self, .recover_fn = rejectRecover };
+    }
+    fn segmentCreator(self: *RejectingSink) sink_port.SegmentCreator {
+        return .{ .context = self, .create_fn = rejectCreate };
+    }
+    fn segmentRotator(self: *RejectingSink) sink_port.SegmentRotator {
+        return .{ .context = self, .rotate_fn = rejectRotate };
+    }
+    fn streamCloser(self: *RejectingSink) sink_port.StreamCloser {
+        return .{ .context = self, .close_fn = rejectClose };
+    }
+    fn recordAppender(self: *RejectingSink) sink_port.RecordAppender {
+        return .{ .context = self, .append_fn = rejectAppend };
+    }
+    fn segmentPruner(self: *RejectingSink) sink_port.SegmentPruner {
+        return .{ .context = self, .prune_fn = rejectPrune };
+    }
+    fn lockReleaser(self: *RejectingSink) sink_port.LockReleaser {
+        return .{ .context = self, .release_fn = rejectRelease };
+    }
 };
 fn rejectAcquire(context: *anyopaque, _: *const runtime.ValidatedFeatureLogBinding, _: runtime.Stream, _: u16) @import("ports/feature_log_sink.zig").Error!void {
     const self: *RejectingSink = @ptrCast(@alignCast(context));
