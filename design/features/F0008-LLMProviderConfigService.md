@@ -5,8 +5,9 @@
 **Decision authority:** Explicit user direction on 2026-09-02
 
 **Implementation:** Complete for the bounded read-only file-service increment.
-F0006 remains responsible for conditionally invoking this component and
-decoding its untrusted bytes.
+F0006's conditional bootstrap runner invokes this component exactly once when
+required and decodes its untrusted bytes. Ordinary invocation composition
+remains a separate increment.
 
 **Compatibility:** None. `paths.providers` is required in the single current
 configuration contract. There is no legacy fixed-location reader, alias,
@@ -107,8 +108,8 @@ The bytes remain untrusted. Only F0006's decoder may interpret them.
 ## 5. Failure and orchestration boundary
 
 F0008 returns the closed outcomes `ready`, `failed`, or `cancelled`. Every
-locate or capture rejection returns `failed`; F0006's future conditional
-model-provider bootstrap integration maps it to the already accepted
+locate or capture rejection returns `failed`; F0006's conditional
+model-provider bootstrap runner maps it to the already accepted
 `LLM_PROVIDER_CONFIG_READ_ERROR`. No partial service is published.
 
 F0008 does not decide whether a selected workflow needs model capability.
@@ -136,7 +137,8 @@ no-follow physical checks when the file is requested.
 9. All handles and owned bytes are released once on every terminal branch.
 10. Provider-document loading remains unreachable for a selected compiled
     workflow without model-provider capability; ordinary bootstrap only
-    reserves the path and never invokes the F0008 entry point.
+    reserves the path and never invokes the F0008 entry point. A required
+    provider-bootstrap branch invokes it once and never refreshes that capture.
 
 ## 7. Verification
 
@@ -145,8 +147,8 @@ the engine config and every configured root; nested configured locations;
 missing, wrong-kind, symlinked, replaced, short, growing, shrinking, exact-size,
 and over-size files; orchestrator order and terminal propagation; runner delta
 application and cleanup; immutable repeated queries; absence of parsing in the
-service; ordinary-bootstrap non-probing; and no fixed-location or
-source-example fallback.
+service; conditional single capture; ordinary-bootstrap non-probing; and no
+fixed-location or source-example fallback.
 
 ## 8. Traceability
 

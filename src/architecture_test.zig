@@ -112,6 +112,31 @@ test "provider config orchestration is capability free and runner owned" {
     try std.testing.expect(std.mem.indexOf(u8, composition, "llm_provider_config_runner.Runner.init") != null);
 }
 
+test "conditional provider bootstrap has one orchestration and capture authority" {
+    const orchestrator = @embedFile("application/model_provider_bootstrap_orchestrator.zig");
+    try expectAbsent(orchestrator, "/actions/");
+    try expectAbsent(orchestrator, "/adapters/");
+    try expectAbsent(orchestrator, "/ports/");
+    try expectAbsent(orchestrator, "std.Io");
+
+    const runner = @embedFile("application/model_provider_bootstrap_runner.zig");
+    try expectAbsent(runner, "/adapters/");
+    try expectAbsent(runner, "/ports/");
+    try expectAbsent(runner, "std.Io");
+    try expectAbsent(runner, "locate_llm_provider_config.zig");
+    try expectAbsent(runner, "read_llm_provider_config.zig");
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        countOccurrences(runner, "config_orchestrator.run("),
+    );
+    try std.testing.expect(std.mem.indexOf(u8, runner, "envelope.apply") != null);
+
+    const services = @embedFile("application/model_provider_bootstrap_services.zig");
+    try expectAbsent(services, "std.json");
+    try expectAbsent(services, "llm_provider_document");
+    try expectAbsent(services, "config.zig");
+}
+
 test "provider catalogue and repository allowlist have one immutable authority each" {
     switch (@typeInfo(llm_provider_registry.ValidatedLLMProviderRegistry)) {
         .@"opaque" => {},

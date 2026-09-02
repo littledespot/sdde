@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-02
+- **Amended:** 2026-09-03
 - **Decision authority:** Explicit user direction
 - **Amends:** ADR 0003's rule that setup beyond the startup graph appears only
   as project-graph setup nodes, solely for model-provider run preparation
@@ -40,10 +41,20 @@ by the selected policy.
 The orchestrator may branch only on that typed requirement through
 runner-owned child bindings. The `not_required` branch performs no provider
 file probe, read, decode, registry, or allowlist work. The `required` branch
-will coordinate the already separated F0008 and F0006 actions before graph
+coordinates the already separated F0008 and F0006 actions before graph
 execution. The orchestrator receives no filesystem, parser, registry-mutator,
 provider, network, credential, logger, state, transaction, or command
 capability.
+
+For a `required` branch, F0008 captures `.sddproviders.json` exactly once. That
+capture is the only provider-document read for the engine invocation. The
+validated registry and repository allowlist derived from it are the immutable
+provider authority for the remainder of the invocation; the untrusted capture
+may be destroyed after preparation. The engine does not stat, reopen, reread,
+refresh, hot-reload, or monitor the provider document during that invocation.
+A later filesystem change cannot alter the active invocation and is visible
+only to a new invocation. There is no last-known-good fallback or
+cross-invocation provider-registry cache.
 
 ## Consequences
 
@@ -51,8 +62,10 @@ capability.
   workflow authority.
 - Model-provider preparation is conditional engine-owned run preparation, not
   a project-authored graph or workflow-name special case.
-- This decision accepts the orchestration owner, placement, and requirement
-  derivation. It does not yet implement the runner bindings, provider-file
-  branch, active-run change policy, provider adapter, or model operation.
+- This decision accepts the orchestration owner, placement, requirement
+  derivation, and immutable per-invocation provider snapshot. The fixed
+  orchestrator and runner bindings implement that conditional preparation;
+  ordinary invocation composition, a production provider adapter, and model
+  operations remain separate increments.
 - Adding another engine-level conditional preparation concern requires its own
   accepted typed policy; this decision does not create a generic hook system.

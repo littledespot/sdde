@@ -7,10 +7,11 @@ read-only byte service are accepted and implemented by F0001/F0004/F0008. The
 strict common decoder, compiler-contract registry join, immutable
 `LLMProviderRegistryService`, and repository-slot allowlist are accepted and
 implemented. The fixed conditional bootstrap owner and exact
-provider-requirement derivation are accepted, and the derivation action is
-implemented. Its runner bindings, production provider contracts,
-route-to-slot assignment, provider-neutral port, and provider-operation work
-remain incomplete or blocked on the remaining amendments in Section 2.
+provider-requirement derivation, immutable per-invocation provider snapshot,
+orchestrator, and runner bindings are accepted and implemented. Ordinary
+invocation composition, production provider contracts, route-to-slot
+assignment, the provider-neutral port, and provider-operation work remain
+incomplete or blocked on the remaining amendments in Section 2.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -73,12 +74,13 @@ required `paths.providers` member, F0004's opaque provider-document path
 capability, F0008's bounded read-only byte service, the strict provider
 catalogue, its immutable registry service, and the repository model allowlist.
 It also accepts the fixed conditional run-preparation owner and exact
-selected-graph requirement derivation. Runner integration, active-run change
-rules, production provider contracts, and externally counted provider
+selected-graph requirement derivation. The runner bindings and immutable
+per-invocation provider snapshot are implemented. Ordinary invocation
+composition, production provider contracts, and externally counted provider
 operations remain undefined or incomplete.
 
-Remaining implementation requires the governing amendments below; items 1-4
-and 6 record accepted increments:
+Remaining implementation requires the governing amendments below; items 1-6
+record accepted increments:
 
 1. **Accepted by F0001/F0004/F0008:** require `paths.providers`, validate its
    normalized project-relative path and exact `.sddproviders.json` basename,
@@ -86,7 +88,7 @@ and 6 record accepted increments:
    the complete collision proof against `.sddtoolkit.json` and every configured
    root. F0008 alone locates and captures the file when the F0006 branch requests
    it;
-2. **Accepted; requirement derivation implemented:** adds a fixed engine-owned,
+2. **Accepted and implemented:** adds a fixed engine-owned,
    capability-free `ModelProviderBootstrapOrchestrator` after selected-workflow
    compilation and before selected-workflow execution. It coordinates
    runner-owned bindings for the conditional
@@ -99,8 +101,13 @@ and 6 record accepted increments:
 4. **Accepted and implemented:** extends the public diagnostic vocabulary with
    the separately owned provider-file codes in Section 10 without reusing or
    broadening F0001's two reader codes;
-5. defines bootstrap refresh and active-run change classification for the
-   provider file;
+5. **Accepted and implemented:** a required branch captures the provider file
+   exactly once. The validated registry/allowlist derived from that capture are
+   immutable for the remainder of the engine invocation; the untrusted bytes
+   may be destroyed after preparation. The engine does not stat, reopen,
+   reread, refresh, hot-reload, monitor, retain a last-known registry, or use a
+   cross-invocation provider-registry cache. A later file change is visible
+   only to a new invocation;
 6. **Accepted configuration relationship:** `.sddproviders.json` is the
    configured provider/model catalogue, while current `.sddtoolkit.json`
    `models.slots` is the repository allowlist. Every slot's exact
@@ -355,13 +362,17 @@ outcome through runner-owned child bindings:
 The orchestrator performs no filesystem, parsing, registry, state, logging, or
 provider work itself. ADR 0004 accepts this fixed run-preparation placement and
 the narrow expansion beyond the startup graph; the runner does not infer or
-sequence it by convention. Runner bindings for the branch remain a separate
-implementation increment.
+sequence it by convention. The implemented runner invokes F0008 once, then
+applies the decoder, registry builder, registry validator, and complete
+allowlist validator through their existing contracts.
 
-The accepted amendment must decide how a file identity participates in active
-run change classification. No implementation may hot-reload it, retain a
-last-known registry, or continue with stale bindings unless that behavior is
-explicitly accepted.
+F0008's owned capture is the only provider-document read for the engine
+invocation. The validated registry and allowlist derived from it remain
+authoritative until that invocation ends even if the backing filesystem entry
+later changes; the raw capture need not be retained after preparation. No
+identity comparison or refresh is performed after capture; the next invocation
+performs a new conditional capture. There is no stale fallback because no
+prior invocation's bytes, registry, or allowlist are retained.
 
 ## 6. Provider/model binding and limits
 
@@ -737,6 +748,8 @@ never chooses `blocked`, `failed`, `cancelled`, retry, or fallback.
 | `BuildLLMProviderRegistryAction` | Resolve discriminators, decode each closed provider config variant, and join entries to model contracts. |
 | `ValidateLLMProviderRegistryAction` | Validate the whole candidate and total resource accounting. |
 | `ValidateRepositoryModelAllowlistAction` | Join the entire F0001 `models.slots` map to the validated provider catalogue and emit only immutable slot-to-entry references; reject the whole allowlist if any tuple is absent or ambiguous. |
+| `ModelProviderBootstrapRunner` | Invoke the fixed child bindings, apply their pipeline deltas, own every intermediate, and map each rejected boundary to its existing provider-bootstrap diagnostic. It delegates provider-file location/read sequencing to F0008 rather than duplicating it. |
+| `ModelProviderBootstrapServices` | Keep the validated registry and repository allowlist alive as one immutable invocation-owned authority and destroy the allowlist before its referenced registry. |
 | `ResolveProviderModelBindingAction` | Resolve one accepted route-selected slot through `ValidatedRepositoryModelAllowlist` to its registry entry and effective limits; never accept a raw provider/model tuple as route authority. |
 | `BuildModelRequestAction` | Build one identified bounded provider-neutral request. |
 | `ValidateStaticModelRequestCapacityAction` | Prove every provider-neutral deterministic binding/control/schema/input-byte/output-reservation ceiling before attempt reservation or authorization; it does not serialize a provider wire request. |
@@ -841,7 +854,9 @@ F0006 does not:
    an OpenAI feature is compiled and accepted.
 6. If the selected compiled graph's effective capability set has no exact
    `model-provider` capability, file probing/loading is unreachable; otherwise
-   the entire exact file must validate before selected-workflow execution.
+   the entire exact file must validate before selected-workflow execution. A
+   required branch captures it once; no active invocation rereads or refreshes
+   that snapshot, and no prior invocation supplies a fallback.
 7. One invalid or unsupported sibling publishes no partial registry.
 8. Every `.sddtoolkit.json` slot tuple and its options resolve exactly to one
    registry entry, compiled model contract, and exhaustive provider
@@ -896,6 +911,9 @@ Implementation evidence must cover:
 
 - **File boundary:** unconditional configured-path registration; exact
   F0004-capability lookup; no-model-provider-capability graph bypass;
+  exactly one capture for a required branch; immutable registry/allowlist after
+  capture despite a later backing-source change; no active-run reread, refresh,
+  monitoring, last-known fallback, or cross-invocation cache;
   missing, parent/child/example fallback, wrong kind, symlink, permissions,
   short read, file growth/shrink, exact/over size, collision with engine config
   and every configured/derived root by exact/case/normalization/alias/

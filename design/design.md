@@ -565,7 +565,13 @@ is the sole join authority: it stores slot identity, the exact referenced
 catalogue-entry identity, and validated slot options, but does not copy provider
 configuration or model-contract facts from the catalogue. The subset invariant
 compares distinct `(provider, model)` tuples, not slot count; multiple named
-slots may reference the same catalogue entry.
+slots may reference the same catalogue entry. A model-capable engine invocation
+captures the provider document exactly once. The validated registry/allowlist
+derived from that capture are immutable until the invocation ends; the
+untrusted bytes may be destroyed after preparation. The engine does not stat,
+reopen, reread, refresh, hot-reload, monitor, retain a last-known registry, or
+use a cross-invocation registry cache. A filesystem change can affect only a
+new invocation.
 
 ### 9.1 Required configuration shape
 
@@ -598,7 +604,7 @@ bootstrap:
 | `toolchainPreset` | The direct root/registry of closed, validated preset packages from which the project toolchain layer may inherit. |
 | `principles` | Project principles: the exact mechanical `<paths.principles>/toolchain.yaml` layer and semantic Markdown principle files. |
 | `templates` | Inert `*.template.md` principle templates. The initial SDD workflows never import or copy them; only an explicit `sdd init` operation may copy them into `paths.principles`. |
-| `providers` | Engine-read-only provider catalogue document. It is a normalized project-relative file path whose basename is exactly `.sddproviders.json`; bootstrap reserves it without reading it, and F0008 reads it only when the selected compiled workflow requires model-provider capability. Catalogue membership configures an instance but does not add it to the repository's allowed `models.slots` set. |
+| `providers` | Engine-read-only provider catalogue document. It is a normalized project-relative file path whose basename is exactly `.sddproviders.json`; bootstrap reserves it without reading it, and F0008 captures it exactly once only when the selected compiled workflow requires model-provider capability. That owned snapshot and its derived registry/allowlist remain immutable for the complete invocation; there is no active-run reread/refresh or retained fallback. Catalogue membership configures an instance but does not add it to the repository's allowed `models.slots` set. |
 
 Every configured location is taken solely from the decoded `PathsConfig` in the
 exact current-working-directory project-root `.sddtoolkit.json`, then
@@ -4209,6 +4215,8 @@ Use spy child nodes; no real filesystem/model ports are available to the orchest
   parameters, configuration, and policy allowance alone cannot activate it;
   the fixed provider-bootstrap orchestrator receives only runner-owned child
   bindings and makes every provider-file child unreachable for `not_required`;
+  a required branch captures the document once and keeps its derived immutable
+  registry/allowlist authoritative without active-run reread or refresh;
 - invalid reference preflight prevents artifact creation;
 - the generic engine executes the exactly selected compiled graph without
   workflow-name branches;
@@ -4503,7 +4511,8 @@ The following implementation choices are accepted:
   selection, the fixed capability-free `ModelProviderBootstrapOrchestrator`
   branches only on a typed requirement derived from the selected graph's exact
   compiler-owned `model-provider` capability; a `not_required` graph performs
-  no provider-file operation;
+  no provider-file operation, while a required graph captures one immutable
+  provider snapshot for the complete invocation without reread or refresh;
 - [F0005](features/F0005-WorkflowDefinitionRegistryService.md): v1 workflow
   definitions are strict UTF-8 YAML 1.2 in recursively discovered,
   case-sensitive `*.workflow.yaml` regular files and conform to the closed
