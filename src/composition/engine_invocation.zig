@@ -74,6 +74,7 @@ pub const Assembly = struct {
                     .operation_registry = self.operation_registry,
                     .barrier = self.services.logs.barrier(),
                     .runtime = self.selection.runtime,
+                    .model_provider_services = self.preparedProviderServices(),
                 };
                 break :ready .ok;
             },
@@ -85,6 +86,12 @@ pub const Assembly = struct {
     fn selectedGraph(context: *const anyopaque) *const compilation.CompiledWorkflow {
         const self: *const Assembly = @ptrCast(@alignCast(context));
         return self.selection.selected().graph;
+    }
+    fn preparedProviderServices(self: *const Assembly) ?*const @import("../application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
+        const outcome = &self.provider_outcome.?;
+        if (outcome.* == .not_required) return null;
+        if (outcome.* != .ready) unreachable;
+        return &outcome.ready;
     }
     fn invokeInvocation(context: *anyopaque) execution.Applied {
         return cast(context).pipeline_runner.?.bindings().invokeInvocation();

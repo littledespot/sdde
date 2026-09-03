@@ -336,7 +336,9 @@ test "provider bootstrap assembly loads only the configured F0008 path" {
         test_provider_id,
         llm_provider_identity.ModelId.parse("model-a").?,
     ) != null);
-    try std.testing.expect(outcome.ready.allowlist().resolveSlot("implementation") != null);
+    try std.testing.expect(outcome.ready.allowlist().resolveSlot(
+        llm_provider_identity.ModelSlotId.parse("implementation").?,
+    ) != null);
 
     var control: RuntimeAfterObservations = .{
         .active_observations_remaining = 3,
@@ -601,7 +603,10 @@ const test_provider_document =
 const test_model_step: workflow_compilation.CompiledStep = .{
     .id = workflow.WorkflowStepId.parse("run").?,
     .operation_id = workflow.RegisteredRef.parse("test.model@1").?,
-    .parameters = &.{},
+    .parameters = &.{.{
+        .id = workflow.WorkflowParameterId.parse("slot").?,
+        .value = .{ .model_slot = llm_provider_identity.ModelSlotId.parse("implementation").? },
+    }},
     .requires = &.{},
     .produces = &.{},
     .replaces = &.{},

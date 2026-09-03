@@ -6,6 +6,7 @@ const workflow_registry_service = @import("application/workflow_definition_regis
 const toolchain_safety = @import("domain/toolchain_safety.zig");
 const llm_provider_registry = @import("domain/llm_provider_registry.zig");
 const repository_model_allowlist = @import("domain/repository_model_allowlist.zig");
+const model_request_identity = @import("domain/model_request_identity.zig");
 const llm_provider_registry_service = @import("application/llm_provider_registry_service.zig");
 const derive_provider_requirement = @import("actions/provider/derive_provider_requirement.zig");
 const workflow_execution = @import("domain/workflow_execution.zig");
@@ -264,7 +265,8 @@ test "provider catalogue and repository allowlist have one immutable authority e
 
     const allowlist_fields = @typeInfo(repository_model_allowlist.Entry).@"struct".fields;
     try std.testing.expectEqual(@as(usize, 3), allowlist_fields.len);
-    try std.testing.expectEqualStrings("slot_name", allowlist_fields[0].name);
+    try std.testing.expectEqualStrings("slot_id", allowlist_fields[0].name);
+    try std.testing.expect(allowlist_fields[0].type == @import("domain/llm_provider_identity.zig").ModelSlotId);
     try std.testing.expectEqualStrings("registry_entry_id", allowlist_fields[1].name);
     try std.testing.expectEqualStrings("reasoning_effort", allowlist_fields[2].name);
     try std.testing.expect(allowlist_fields[1].type == llm_provider_registry.RegistryEntryId);
@@ -274,6 +276,70 @@ test "provider catalogue and repository allowlist have one immutable authority e
     try expectAbsent(allowlist, "ProviderModelContract");
     try expectAbsent(allowlist, "/adapters/");
     try expectAbsent(allowlist, "/ports/");
+}
+
+test "model request identity has one opaque ledger and runner applied mutation boundary" {
+    switch (@typeInfo(model_request_identity.ModelRequestIdentityLedger)) {
+        .@"opaque" => {},
+        else => return error.ModelRequestIdentityLedgerMustBeOpaque,
+    }
+    switch (@typeInfo(model_request_identity.ModelRequestBindingEvidence)) {
+        .@"opaque" => {},
+        else => return error.ModelRequestBindingEvidenceMustBeOpaque,
+    }
+
+    const builder = @embedFile("actions/model/build_initial_model_request_identity_ledger.zig");
+    const assigner = @embedFile("actions/model/assign_model_request_id.zig");
+    const validator = @embedFile("actions/model/validate_model_request_binding.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(
+        builder,
+        ".produces = &.{.model_request_identity_ledger}",
+    ));
+    try expectAbsent(builder, ".replaces = &.{.model_request_identity_ledger}");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(
+        assigner,
+        ".replaces = &.{.model_request_identity_ledger}",
+    ));
+    try expectAbsent(validator, ".produces = &.{.model_request_identity_ledger}");
+    try expectAbsent(validator, ".replaces = &.{.model_request_identity_ledger}");
+
+    const runner = @embedFile("application/model_request_identity_runner.zig");
+    try expectAbsent(runner, "/adapters/");
+    try expectAbsent(runner, "/ports/");
+    try expectAbsent(runner, "std.Io");
+    try std.testing.expectEqual(@as(usize, 2), countOccurrences(runner, "envelope.apply("));
+}
+
+test "only request identity owners can produce or replace its ledger key" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var actions = try std.Io.Dir.cwd().openDir(io, "src/actions", .{ .iterate = true });
+    defer actions.close(io);
+    var walker = try actions.walk(allocator);
+    defer walker.deinit();
+
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        const source = try entry.dir.readFileAlloc(
+            io,
+            entry.basename,
+            allocator,
+            .limited(1024 * 1024),
+        );
+        defer allocator.free(source);
+        const produces = countOccurrences(source, ".produces = &.{.model_request_identity_ledger}");
+        const replaces = countOccurrences(source, ".replaces = &.{.model_request_identity_ledger}");
+        if (std.mem.eql(u8, entry.path, "model/build_initial_model_request_identity_ledger.zig")) {
+            try std.testing.expectEqual(@as(usize, 1), produces);
+        } else {
+            try std.testing.expectEqual(@as(usize, 0), produces);
+        }
+        if (std.mem.eql(u8, entry.path, "model/assign_model_request_id.zig")) {
+            try std.testing.expectEqual(@as(usize, 1), replaces);
+        } else {
+            try std.testing.expectEqual(@as(usize, 0), replaces);
+        }
+    }
 }
 
 test "provider requirement derives only from one exactly selected compiled workflow" {
@@ -630,7 +696,7 @@ test "generic workflow engine is capability free and workflow-name agnostic" {
     try expectAbsent(runner, "/adapters/");
 }
 
-test "feature service filenames and headings end in Service" {
+test "feature document filenames and headings agree" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
     var features = try std.Io.Dir.cwd().openDir(io, "design/features", .{ .iterate = true });
@@ -645,7 +711,6 @@ test "feature service filenames and headings end in Service" {
             continue;
         }
 
-        try std.testing.expect(std.mem.endsWith(u8, entry.name, "Service.md"));
         const source = try features.readFileAlloc(
             io,
             entry.name,
@@ -655,7 +720,17 @@ test "feature service filenames and headings end in Service" {
         defer allocator.free(source);
         const heading_end = std.mem.indexOfScalar(u8, source, '\n') orelse source.len;
         const heading = std.mem.trimEnd(u8, source[0..heading_end], "\r");
-        try std.testing.expect(std.mem.endsWith(u8, heading, "Service"));
+        const stem = entry.name[0 .. entry.name.len - ".md".len];
+        const separator = std.mem.indexOfScalar(u8, stem, '-') orelse {
+            return error.InvalidFeatureDocumentName;
+        };
+        try std.testing.expect(std.mem.startsWith(u8, heading, "# "));
+        const heading_body = heading[2..];
+        const heading_separator = std.mem.indexOf(u8, heading_body, " — ") orelse {
+            return error.InvalidFeatureDocumentHeading;
+        };
+        try std.testing.expectEqualStrings(stem[0..separator], heading_body[0..heading_separator]);
+        try std.testing.expectEqualStrings(stem[separator + 1 ..], heading_body[heading_separator + " — ".len ..]);
     }
 }
 

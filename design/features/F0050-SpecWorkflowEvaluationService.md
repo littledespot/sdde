@@ -1,4 +1,4 @@
-# F0101 — SpecWorkflowEvaluationService
+# F0050 — SpecWorkflowEvaluationService
 
 **Status:** Readiness finding — blocked; no implementation or governing
 decision is accepted by this document
@@ -127,10 +127,9 @@ adapters, commands, capabilities, or executable behavior.
 
 ### 3.3 Settle the fake model boundary and workflow operation bindings
 
-F0006's catalogue, repository allowlist, fixed conditional bootstrap owner, and
-selected-graph requirement derivation are accepted. Its proposed replacement
-of the design's `ModelGateway` name with `LLMProviderInterface` and the
-provider-operation boundary remain blocked on governing amendments. ADR 0005
+F0006's catalogue, repository allowlist, fixed conditional bootstrap owner,
+selected-graph requirement derivation, `LLMProviderInterface` name, and
+provider-operation boundary are accepted. ADR 0005
 removes route-to-slot mapping: each YAML model operation explicitly names its
 repository-allowed slot and workflow-owned prompt/schema resources for
 reference extraction/reconciliation, feature-brief generation,

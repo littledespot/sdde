@@ -270,7 +270,7 @@ generic context, erased service locator, or transitive re-export.
 Orchestrators receive runner-owned `ChildNodeBinding` instances resolved from
 the validated compiled graph and the composition root's registered operation
 implementations, never raw child nodes. They do not receive `FileSystem`,
-`ModelGateway`, `CommandRunner`, parser, or validator ports. This makes the rule
+`LLMProviderInterface`, `CommandRunner`, parser, or validator ports. This makes the rule
 “orchestrators organize; actions do” mechanically enforceable and prevents
 child execution from bypassing the runner.
 
@@ -1834,7 +1834,7 @@ Semantic extraction and reconciliation use the common LLM actions; there is no s
 | `BuildImmutableUnitOwnerIdAction`                              | one closed route-unit descriptor and exact current canonical input authorities                                                                                                                                  | immutable unit-owner tuple                                           | Construct only the matching reference/specification/plan/task/implementation/semantic-review owner variant; reject missing or extra owner fields and accept no model identity.                                                                                                                            |
 | `BuildInitialModelRequestIdentityLedgerAction`                 | trusted stage-run epoch and closed request-purpose registry                                                                                                                                                     | empty run-local `model.request_identity_ledger/v1` DataKey           | Initialize ordinal/accounting state once for the epoch without assigning a request; it is the sole producer of this compiler-owned key.                                                                                                                                                                   |
 | `AssignModelRequestIdAction`                                   | immutable unit owner, exact compiled model-operation identity, one closed discriminated purpose binding, and current model-request identity-ledger DataKey revision                                              | one typed model-request ID plus successor-ledger DataKey replacement | Allocate one logical request ordinal and enforce the purpose variant's required owner fields; protocol retries do not invoke this action, and runner CAS is the only mutation.                                                                                                                            |
-| `AdvanceModelRequestLifecycleAction`                           | exact request ID, expected status, typed invocation/terminal fact, and current model-request identity-ledger DataKey revision                                                                                   | successor-ledger DataKey replacement                                 | Apply one runner-enforced compare-and-swap `assigned -> invoked`, `invoked -> terminal`, or `assigned -> terminal(not_invoked_attempt_ceiling)` transition; protocol retries remain invoked and never reassign identity.                                                                                  |
+| `AdvanceModelRequestLifecycleAction`                           | exact request ID, expected status, typed invocation/terminal fact, and current model-request identity-ledger DataKey revision                                                                                   | successor-ledger DataKey replacement                                 | Apply one runner-enforced compare-and-swap `assigned -> invoked`, `invoked -> terminal`, or an approved `assigned -> terminal` not-invoked transition for attempt-ceiling or authorization failure; protocol retries remain invoked and never reassign identity.                                             |
 | `ValidateModelRequestBindingAction`                            | request ID, immutable unit, compiled workflow model-operation declaration, discriminated purpose authority, and current request ledger                                                                          | model-request binding evidence                                       | Prove epoch/unit/workflow-operation/purpose/ordinal and ledger membership, including required/forbidden purpose-owner fields.                                                                                                                                                                             |
 | `BuildModelRequestAction`                                      | validated model-request binding, guidance, and exact YAML-declared result schema                                                                                                                                 | provider-neutral identified request                                  | Serialize one request carrying only the engine-owned logical request ID.                                                                                                                                                                                                                                  |
 | `InvokeModelAction`                                            | identified provider-neutral request, binding evidence, and already-applied runner attempt transition                                                                                                            | raw provider result                                                  | Make one model call only after identity and total-attempt accounting succeed.                                                                                                                                                                                                                             |
@@ -4390,7 +4390,7 @@ Tests verify schema validity, detection ambiguity, roots, extensions, naming, pl
 
 ### 28.7 End-to-end tests
 
-In temporary repositories with a fake model gateway:
+In temporary repositories with a fake `LLMProviderInterface`:
 
 1. run a feature with the mandatory smallest valid reference corpus through all four stages;
 2. run mixed Markdown/CSS/image/PDF references and verify full accounting;
@@ -4505,7 +4505,7 @@ the source tree.
 - Complete cross-stage crash/fault/security, clarification, logging, and root/preset/principle conformance testing; telemetry here means dashboards/metrics over the mandatory logging foundation delivered in Increment 1, not deferred event logging.
 - Generate human-facing prompt/reference documentation from the authoritative workflow operation/resource definitions to avoid duplicated prompt drift.
 
-Each increment must be usable with a fake model gateway before integrating a real provider.
+Each increment must be usable with a fake `LLMProviderInterface` before integrating a real provider.
 
 ---
 
@@ -4617,16 +4617,22 @@ The following implementation choices are accepted:
   capability, and F0008 alone performs its bounded read-only capture without
   parsing, provider-registry construction, fixed-location fallback, or
   unconditional loading;
-- [F0006](features/F0006-LLMProviderInterface.md), provider-catalogue and
-  repository-allowlist increment: `.sddproviders.json` has the strict bounded
+- [F0006](features/F0006-LLMProviderInterface.md): `.sddproviders.json` has the strict bounded
   common schema in `schemas/sddproviders.schema.json`, provider-specific config
   closes through compiler-owned contracts, and `LLMProviderRegistryService`
   owns the completely validated catalogue. `.sddtoolkit.json` `models.slots` is
   validated into the separate immutable repository allowlist: every slot tuple
   must be present exactly once in the catalogue; slots may reference some or all
   catalogue models, never an additional model. Unreferenced catalogue entries
-  are not repository-authorized. No production provider contract is registered
-  until its provider feature is accepted.
+  are not repository-authorized. YAML model steps select one typed repository
+  slot, and the runner resolves that slot to one immutable provider/model
+  binding before invoking the registered operation. `LLMProviderInterface` is
+  the sole provider-neutral port. One ordinal covers the complete count and
+  inference attempt, external-operation effects use the accepted durable
+  journal lifecycle, retry selection remains explicit in compiled YAML, and
+  authorization preparation is restricted to a preloaded, non-refreshing,
+  no-I/O lease. No production provider contract is registered until its
+  provider feature is accepted.
 
 The following choices remain deferred and may be decided during implementation
 without altering the architecture:

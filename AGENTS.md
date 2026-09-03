@@ -347,7 +347,7 @@ task.
   transaction convergence.
 - Fault injection: malformed model output, parser/command/filesystem failure,
   every transaction phase, interruption, stale approval, and retry exhaustion.
-- End to end: each increment must work with a fake model gateway before using a
+- End to end: each increment must work with a fake `LLMProviderInterface` before using a
   real provider.
 - Native packaging: build and run the packaged executable from a clean
   temporary directory without the source tree, Zig toolchain, build cache, or

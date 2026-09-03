@@ -39,6 +39,11 @@ test "concise resources and native parameters compile into immutable operation a
     try std.testing.expectEqual(@as(?u32, 2), graph.authority.steps[0].loop_limit);
     try std.testing.expectEqual(@as(usize, 3), graph.authority.maximum_step_executions);
     try std.testing.expect(graph.authority.steps[0].parameters[1].value == .resource);
+    try std.testing.expect(graph.authority.steps[0].parameters[3].value == .model_slot);
+    try std.testing.expectEqualStrings(
+        "spec-generation",
+        graph.authority.steps[0].parameters[3].value.model_slot.bytes,
+    );
     try std.testing.expectEqualStrings("model-ready@1", graph.authority.steps[0].gates[0]);
     try std.testing.expectEqualStrings("model-provider", graph.authority.steps[0].capabilities[0]);
 }
@@ -265,7 +270,7 @@ const operation_entries = [_]operation_registry.Entry{
             .id = "model.generate@1",
             .kind = .step,
             .parameters = &.{
-                .{ .id = "slot", .kind = .string, .required = true, .workflow_definition_safe = true },
+                .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
                 .{ .id = "prompt", .kind = .resource, .required = true, .workflow_definition_safe = true, .resource_kind = .prompt },
                 .{ .id = "result-schema", .kind = .resource, .required = true, .workflow_definition_safe = true, .resource_kind = .result_schema },
                 .{ .id = "attempts", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 1, .integer_max = 3 },

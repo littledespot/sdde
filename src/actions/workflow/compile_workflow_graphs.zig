@@ -6,6 +6,7 @@ const compilation = @import("../../domain/workflow_compilation.zig");
 const operation = @import("../../domain/workflow_operation.zig");
 const inventory = @import("../../domain/workflow_inventory.zig");
 const operation_registry = @import("../../ports/workflow_operation_registry.zig");
+const provider_identity = @import("../../domain/llm_provider_identity.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
@@ -183,6 +184,10 @@ fn compileParameter(
             if (resource_value.kind != descriptor.resource_kind.?) return invalid();
             break :resource .{ .resource = id };
         } else invalid(),
+        .model_slot => if (value == .string and value.string.len <= descriptor.string_max_bytes)
+            .{ .model_slot = provider_identity.ModelSlotId.parse(value.string) orelse return invalid() }
+        else
+            invalid(),
     };
 }
 

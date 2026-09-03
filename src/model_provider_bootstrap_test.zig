@@ -122,7 +122,7 @@ test "conditional runner captures once and publishes one immutable run authority
         provider_id,
         identity.ModelId.parse("model-a").?,
     ).?;
-    try std.testing.expect(outcome.ready.allowlist().resolveSlot("implementation").?.registry_entry_id.eql(
+    try std.testing.expect(outcome.ready.allowlist().resolveSlot(identity.ModelSlotId.parse("implementation").?).?.registry_entry_id.eql(
         entry.id,
     ));
     try std.testing.expectEqual(@as(usize, 1), source.read_calls);
@@ -144,10 +144,14 @@ fn compileOne(
     contract_id: []const u8,
 ) !compilation.CompiledWorkflow {
     const steps = try allocator.alloc(workflow.DeclarativeStep, 1);
+    const model_parameters = [_]workflow.ParameterBinding{.{
+        .id = workflow.WorkflowParameterId.parse("slot").?,
+        .value = .{ .string = "implementation" },
+    }};
     steps[0] = .{
         .id = workflow.WorkflowStepId.parse("run").?,
         .operation_id = workflow.RegisteredRef.parse(contract_id).?,
-        .parameters = &.{},
+        .parameters = if (std.mem.eql(u8, contract_id, "test.model@1")) &model_parameters else &.{},
         .outcomes = &.{.{ .outcome = .ok, .target = .{ .terminal = .ok } }},
     };
     const definitions = try allocator.alloc(definition.Definition, 1);
@@ -347,6 +351,12 @@ const operation_registry: operations.Registry = .{
             .contract = .{
                 .id = "test.model@1",
                 .kind = .step,
+                .parameters = &.{.{
+                    .id = "slot",
+                    .kind = .model_slot,
+                    .required = true,
+                    .workflow_definition_safe = true,
+                }},
                 .outcomes = &.{.ok},
                 .side_effect = .none,
                 .capabilities = &.{requirement.capability_id},

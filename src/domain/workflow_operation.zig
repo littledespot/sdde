@@ -3,7 +3,7 @@ const pipeline = @import("pipeline.zig");
 const workflow = @import("workflow.zig");
 
 pub const Kind = enum { invocation, step };
-pub const ParameterKind = enum { boolean, integer, string, enumeration, registered_ref, resource };
+pub const ParameterKind = enum { boolean, integer, string, enumeration, registered_ref, resource, model_slot };
 pub const ResourceKind = enum { prompt, result_schema, example, data };
 
 pub const ParameterDescriptor = struct {

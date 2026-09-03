@@ -5,7 +5,7 @@ const identity = @import("llm_provider_identity.zig");
 const registry_contract = @import("llm_provider_registry.zig");
 
 pub const Entry = struct {
-    slot_name: []const u8,
+    slot_id: identity.ModelSlotId,
     registry_entry_id: registry_contract.RegistryEntryId,
     reasoning_effort: ?[]const u8,
 };
@@ -17,10 +17,10 @@ pub const ValidatedRepositoryModelAllowlist = opaque {
 
     pub fn resolveSlot(
         self: *const ValidatedRepositoryModelAllowlist,
-        slot_name: []const u8,
+        slot_id: identity.ModelSlotId,
     ) ?*const Entry {
         for (storage(self).entries) |*entry| {
-            if (std.mem.eql(u8, entry.slot_name, slot_name)) return entry;
+            if (entry.slot_id.eql(slot_id)) return entry;
         }
         return null;
     }
@@ -62,6 +62,9 @@ pub fn createValidated(
         return error.InvalidRepositoryModelAllowlist;
     };
     for (entries, keys, values) |*destination, slot_name, selected| {
+        const slot_id = identity.ModelSlotId.parse(slot_name) orelse {
+            return error.InvalidRepositoryModelAllowlist;
+        };
         const provider = identity.ProviderId.parse(selected.provider) orelse {
             return error.InvalidRepositoryModelAllowlist;
         };
@@ -77,9 +80,9 @@ pub fn createValidated(
         )) return error.InvalidRepositoryModelAllowlist;
 
         destination.* = .{
-            .slot_name = owner.arena.allocator().dupe(u8, slot_name) catch {
+            .slot_id = .{ .bytes = owner.arena.allocator().dupe(u8, slot_id.bytes) catch {
                 return error.InvalidRepositoryModelAllowlist;
-            },
+            } },
             .registry_entry_id = catalogue_entry.id,
             .reasoning_effort = if (selected.reasoningEffort) |effort|
                 owner.arena.allocator().dupe(u8, effort) catch {
@@ -106,7 +109,7 @@ pub fn deinitOwner(owner: *Owner) void {
 }
 
 fn lessThan(_: void, left: Entry, right: Entry) bool {
-    return std.mem.order(u8, left.slot_name, right.slot_name) == .lt;
+    return std.mem.order(u8, left.slot_id.bytes, right.slot_id.bytes) == .lt;
 }
 
 fn storage(value: *const ValidatedRepositoryModelAllowlist) *const AllowlistStorage {

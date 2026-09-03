@@ -157,6 +157,7 @@ fn sameParameter(left: compilation.CompiledParameter, right: workflow.ParameterB
         .enumeration => |value| right.value == .string and std.mem.eql(u8, value, right.value.string),
         .registered_ref => |value| right.value == .string and std.mem.eql(u8, value.bytes, right.value.string),
         .resource => |value| right.value == .string and std.mem.eql(u8, value.bytes, right.value.string),
+        .model_slot => |value| right.value == .string and std.mem.eql(u8, value.bytes, right.value.string),
     };
 }
 
@@ -223,6 +224,7 @@ fn cloneParameters(allocator: std.mem.Allocator, source: []const compilation.Com
             .enumeration => |*value| value.* = try allocator.dupe(u8, value.*),
             .registered_ref => |*value| value.bytes = try allocator.dupe(u8, value.bytes),
             .resource => |*value| value.bytes = try allocator.dupe(u8, value.bytes),
+            .model_slot => |*value| value.bytes = try allocator.dupe(u8, value.bytes),
             else => {},
         }
     }

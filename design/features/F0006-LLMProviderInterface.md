@@ -1,18 +1,21 @@
 # F0006 — LLMProviderInterface
 
-**Status:** Proposed feature design
+**Status:** Accepted feature design
 
 **Implementation readiness:** The configured provider-document path and
 read-only byte service are accepted and implemented by F0001/F0004/F0008. The
 strict common decoder, compiler-contract registry join, immutable
-`LLMProviderRegistryService`, and repository-slot allowlist are accepted and
-implemented. The fixed conditional bootstrap owner and exact
-provider-requirement derivation, immutable per-invocation provider snapshot,
-orchestrator, runner bindings, and ordinary post-selection invocation
-composition are accepted and implemented. Production provider contracts, the
-workflow-declared model-operation binding, the provider-neutral port, and
-provider-operation work remain incomplete or blocked on the remaining
-amendments in Section 2.
+`LLMProviderRegistryService`, repository-slot allowlist, and YAML-declared typed
+slot binding are accepted and implemented. The fixed conditional bootstrap owner
+and exact provider-requirement derivation, immutable per-invocation provider
+snapshot, orchestrator, runner bindings, and ordinary post-selection invocation
+composition are accepted and implemented. Immutable unit-owner validation,
+run-local model-request ledger initialization, purpose-bound request assignment,
+and exact binding validation are also implemented. Amendments 7-11 were accepted
+by explicit user direction on 2026-09-04, with authorization preparation
+restricted to a preloaded, non-refreshing, no-I/O lease. The provider-neutral
+operation port, invoked/terminal request lifecycle, effect journal, and
+production provider contracts remain implementation work.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -43,10 +46,8 @@ a default, or a fallback.
 
 ## 1. Responsibility
 
-`LLMProviderInterface` is the proposed definitive implementation name for the
-provider-neutral architectural port currently called `ModelGateway` in the
-governing design. They are not two ports. Implementation must wait until the
-governing name is amended; it must not retain an alias or parallel gateway.
+`LLMProviderInterface` is the definitive name for the sole provider-neutral
+architectural port. There is no alias or parallel gateway.
 
 The interface has one responsibility: execute one already selected, validated,
 identified, and accounted provider operation through an immutable
@@ -69,7 +70,7 @@ contracts, concrete adapter, exhaustive dispatch branch, composition-root
 binding, and positive and negative conformance tests. Project data cannot add
 executable code, dynamically load a provider, or create a capability.
 
-## 2. Authority conflict and required amendment
+## 2. Accepted amendments
 
 Current authority now defines the exact project-root `.sddtoolkit.json`, its
 required `paths.providers` member, F0004's opaque provider-document path
@@ -78,11 +79,13 @@ catalogue, its immutable registry service, and the repository model allowlist.
 It also accepts the fixed conditional run-preparation owner and exact
 selected-graph requirement derivation. The runner bindings and immutable
 per-invocation provider snapshot are implemented and invoked immediately after
-exact workflow selection. Production provider contracts and externally counted
-provider operations remain undefined or incomplete.
+exact workflow selection. The request-identity ledger now owns assignment and
+binding validation without provider I/O. Production provider contracts,
+attempt/operation accounting, and externally counted operations remain
+undefined or incomplete.
 
-Remaining implementation requires the governing amendments below; items 1-6
-record accepted increments:
+The following amendments are accepted. Items marked implemented already have
+runtime evidence; the remaining items define subsequent implementation work:
 
 1. **Accepted by F0001/F0004/F0008:** require `paths.providers`, validate its
    normalized project-relative path and exact `.sddproviders.json` basename,
@@ -110,7 +113,7 @@ record accepted increments:
    reread, refresh, hot-reload, monitor, retain a last-known registry, or use a
    cross-invocation provider-registry cache. A later file change is visible
    only to a new invocation;
-6. **Accepted configuration relationship:** `.sddproviders.json` is the
+6. **Accepted and implemented configuration relationship:** `.sddproviders.json` is the
    configured provider/model catalogue, while current `.sddtoolkit.json`
    `models.slots` is the repository allowlist. Every slot's exact
    `(provider, model)` tuple must resolve to exactly one validated catalogue
@@ -118,7 +121,7 @@ record accepted increments:
    model; unused catalogue entries gain no repository authority. ADR 0005
    removes built-in routes: each YAML-declared generic model operation names
    one repository slot explicitly;
-7. amends `AdvanceModelAttemptAccountingAction`, design Sections 12.1 and
+7. **Accepted:** amends `AdvanceModelAttemptAccountingAction`, design Sections 12.1 and
    13.4, and `ModelRequestLifecycle` for the Section 7 full-attempt semantics:
    reserve once before the first external provider operation; define count and
    inference operation lifecycles under that attempt; make preparation/count
@@ -129,20 +132,18 @@ record accepted increments:
    safe location, schema/version, split attempt/operation records, locking/CAS,
    write-before-send durability, terminal-observation/result-consumption
    handoff, retention/redaction, recovery scan, and cleanup;
-8. replaces the governing name `ModelGateway` with
-   `LLMProviderInterface` in design, package, and architecture-test authority,
-   without an alias; and
-9. updates packaged-executable acceptance criteria so a relocated executable
+8. **Accepted:** establishes `LLMProviderInterface` as the sole governing name
+   in design, package, and architecture-test authority, without an alias; and
+9. **Accepted:** updates packaged-executable acceptance criteria so a relocated executable
    can consume a target-owned provider file without a source-tree example; and
-10. either restricts provider authorization preparation to a preloaded,
-    non-refreshing, no-I/O lease or introduces closed identities, lifecycle,
-    budgets, and retry accounting for every permitted credential file,
-    process, metadata, STS, or refresh side effect; and
-11. exposes provider transport/auth/throttle/timeout outcomes to the compiled
+10. **Accepted choice:** provider authorization preparation is restricted to a
+    preloaded, non-refreshing, no-I/O lease. Credential file, process, metadata,
+    STS, and refresh effects are not permitted; and
+11. **Accepted:** exposes provider transport/auth/throttle/timeout outcomes to the compiled
     YAML graph, which alone may select an explicit registered retry operation;
     no provider or generation orchestrator hides that branch.
 
-Until then, the two project inputs have distinct proposed responsibilities:
+The two project inputs have distinct responsibilities:
 
 | File | Responsibility |
 | --- | --- |
@@ -234,7 +235,7 @@ configuration variant, duplicate provider, duplicate `(provider, model)` tuple,
 missing registered contract, or invalid sibling rejects the complete document.
 There is no partial registry.
 
-The proposed pre-release resource limits are:
+The accepted pre-release resource limits are:
 
 - at most 1,048,576 captured bytes and 16 JSON nesting levels;
 - at most 16 provider entries;
@@ -469,7 +470,7 @@ ProviderOperationId {
 }
 ```
 
-The proposed amendment treats one ordinal as one complete provider attempt,
+The accepted contract treats one ordinal as one complete provider attempt,
 not only one inference call. Its sequence is closed:
 
 1. validate provider/model binding, controls, schema representability,
@@ -767,6 +768,10 @@ the runner only validates/applies it and never chooses `blocked`, `failed`,
 | Provider-bootstrap composition assembly | Construct the concrete F0008 adapter and config/provider runners, then invoke the fixed orchestrator; perform no selection or branching. |
 | Engine invocation runner | Invoke provider preparation after exact selection, preserve its typed outcome, retain `ready` services through workflow execution, and make workflow execution unreachable after failure or cancellation. |
 | `ResolveProviderModelBindingAction` | Resolve one compiled workflow operation's YAML-declared slot through `ValidatedRepositoryModelAllowlist` to its registry entry and effective limits; never accept a raw provider/model tuple or hidden route as authority. |
+| `BuildImmutableUnitOwnerIdAction` | Validate one closed stage-specific unit-owner descriptor built only from canonical authority IDs; accept no model identity. |
+| `BuildInitialModelRequestIdentityLedgerAction` | Produce the sole empty immutable request ledger for one trusted stage-run epoch and closed purpose registry. |
+| `AssignModelRequestIdAction` | Allocate one purpose-bound ordinal from the current ledger revision and return an immutable successor; never mutate the current ledger or reassign a protocol retry. |
+| `ValidateModelRequestBindingAction` | Prove exact ledger membership and epoch/unit/workflow-operation/purpose/ordinal binding without changing the ledger. |
 | `BuildModelRequestAction` | Build one identified bounded provider-neutral request. |
 | `ValidateStaticModelRequestCapacityAction` | Prove every provider-neutral deterministic binding/control/schema/input-byte/output-reservation ceiling before attempt reservation or authorization; it does not serialize a provider wire request. |
 | `AdvanceModelAttemptAccountingAction` | Reserve one complete provider-attempt ordinal under the amended total-attempt ceiling. |
@@ -851,7 +856,7 @@ F0006 does not:
 ## 12. Acceptance criteria
 
 1. Accepted authority names `LLMProviderInterface` as the sole
-   provider-neutral model port; no `ModelGateway` alias remains.
+   provider-neutral model port; no alternate alias remains.
 2. The bootstrap root registry reserves the exact `paths.providers` path
    unconditionally; the fixed run-preparation orchestrator conditionally asks
    F0008 to load only that `.sddproviders.json` file, and no provider reads it
@@ -886,6 +891,9 @@ F0006 does not:
 10. Effective canonical, serialized request, header, encoded/decoded response,
     token, context, output, and provider-wire limits use the strictest
     applicable registered limits and checked arithmetic.
+    Model-request IDs are engine-assigned from one immutable run-local ledger by
+    exact revision; their unit, compiled workflow operation, purpose owner, and
+    ordinal must all validate before request construction.
 11. Count evidence is exact and bound to the same attempt, binding, and
     `ModelVisibleInputId`; unavailable evidence prevents inference.
 12. Provider-neutral static preflight precedes one reserved full-attempt
@@ -947,7 +955,11 @@ Implementation evidence must cover:
   URI/JSON/schema amplification, request/body/header and encoded/decoded
   response caps, checked context equality/overflow, response wire/content
   separation, and structured-schema incompatibility.
-- **Operation accounting:** distinct count/inference IDs and operation records
+- **Request and operation accounting:** closed request-purpose registries;
+  malformed unit owners; duplicate purpose entries; unregistered or mismatched
+  purposes; independent monotonic ordinals; stale ledger revisions; foreign or
+  altered request IDs; exact canonical binding evidence; distinct
+  count/inference IDs and operation records
   beneath one attempt record, lifecycle CAS, provider-neutral static-preflight
   ordering, operation-scoped wire-cap rejection that consumes the reserved
   attempt, count-once, count failure making inference unreachable, evidence
@@ -984,6 +996,6 @@ Implementation evidence must cover:
 | Current engine configuration ownership | Design Section 9; F0001; `design/paths.md` |
 | Request/invoke/decode separation | Design Sections 12.1-12.4 and 13.4; `design/code.md` Sections 21-24 |
 | Workflow-operation limits, retry, fallback, and repair authority | ADR 0005; Design Sections 12.5-12.7 and 21-22 |
-| Provider-operation durability and recovery amendment | Proposed Section 7 contract; Design Sections 24-25 |
+| Provider-operation durability and recovery amendment | Accepted Section 7 contract; Design Sections 24-25 |
 | Secret-safe logging | Design Sections 26.5 and 27; F0002 |
 | Fake-first testing and native packaging | Design Sections 28 and 30-31 |

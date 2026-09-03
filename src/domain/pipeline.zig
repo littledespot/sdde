@@ -39,6 +39,8 @@ pub const DataKey = enum {
     workflow_invocation,
     selected_compiled_workflow,
     model_provider_requirement,
+    validated_provider_model_binding,
+    model_request_identity_ledger,
     project_toolchain_capture,
     toolchain_preset_inventory,
     toolchain_preset_captures,

@@ -135,7 +135,7 @@ the exact principle inputs. The harness then:
    environment, and file kind;
 6. builds model guidance using the production guidance action;
 7. records the exact selected principle record IDs and source spans;
-8. invokes the fake, recorded, or live model through a narrow model gateway;
+8. invokes the fake, recorded, or live model through `LLMProviderInterface`;
 9. validates the returned candidate through the normal engine boundary; and
 10. evaluates semantic compliance only against the exact selected principles.
 
@@ -560,7 +560,7 @@ required by the project contract.
 9. Add explicit live-provider comparison only after fake and recorded suites
    pass.
 
-The harness must remain usable with a fake model gateway before any real
+The harness must remain usable with a fake `LLMProviderInterface` before any real
 provider is integrated.
 
 ## 15. Acceptance criteria

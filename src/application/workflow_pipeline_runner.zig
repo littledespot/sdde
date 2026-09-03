@@ -8,12 +8,17 @@ const operation = @import("../domain/workflow_operation.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const telemetry_barrier = @import("../ports/telemetry_barrier.zig");
 const child_bindings = @import("workflow_pipeline_child_bindings.zig");
+const provider_binding = @import("../domain/llm_provider_binding.zig");
+const provider_services = @import("model_provider_bootstrap_services.zig");
+const resolve_provider_binding = @import("../actions/provider/resolve_provider_model_binding.zig");
 
 pub const Runner = struct {
     selected: execution.SelectedWorkflow,
     operation_registry: *const operations.Registry,
     barrier: telemetry_barrier.Barrier,
     runtime: pipeline.NodeRuntime,
+    model_provider_services: ?*const provider_services.ModelProviderBootstrapServices = null,
+    resolve_provider_binding_action: resolve_provider_binding.Action = .{},
     envelope: pipeline.PipelineEnvelope = pipeline.PipelineEnvelope.init(&.{}),
     loop_counts: [definition.max_steps]u32 = [_]u32{0} ** definition.max_steps,
 
@@ -63,13 +68,47 @@ pub const Runner = struct {
             self.selected.graph.authority.resources,
             &resource_buffer,
         ) orelse return .{ .outcome = .failed };
+        var resolved_binding = self.resolveModelBinding(step.*) catch {
+            return .{ .outcome = .failed };
+        };
         const candidate = entry.invoke(.{ .step = .{
             .step = step,
             .resources = resources,
+            .model_binding = if (resolved_binding) |*value| value else null,
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
         } }) catch return .{ .outcome = .failed };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .outcome = .failed };
         return self.applyCandidate(stepPipelineContract(step.*), candidate);
+    }
+
+    fn resolveModelBinding(
+        self: *Runner,
+        step: compilation.CompiledStep,
+    ) resolve_provider_binding.Error!?provider_binding.ValidatedProviderModelBinding {
+        if (!hasModelSlot(step.parameters)) return null;
+        const services = self.model_provider_services orelse {
+            return error.ProviderModelBindingInvalid;
+        };
+        var binding_envelope = pipeline.PipelineEnvelope.init(&.{
+            .selected_compiled_workflow,
+            .llm_provider_registry,
+            .repository_model_allowlist,
+        });
+        binding_envelope.validateInvocation(resolve_provider_binding.Action.contract) catch {
+            return error.ProviderModelBindingInvalid;
+        };
+        const resolved = try self.resolve_provider_binding_action.execute(
+            self.selected.graph,
+            step.id,
+            services.registry(),
+            services.allowlist(),
+        );
+        binding_envelope = binding_envelope.apply(
+            resolve_provider_binding.Action.contract,
+            pipeline.NodeDelta.successful(resolve_provider_binding.Action.contract),
+        ) catch return error.ProviderModelBindingInvalid;
+        std.debug.assert(binding_envelope.contains(.validated_provider_model_binding));
+        return resolved;
     }
 
     fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: execution.Candidate) execution.Applied {
@@ -165,6 +204,10 @@ fn findResource(resources: []const compilation.CompiledResource, id: workflow.Wo
 }
 fn containsOutcome(outcomes: []const workflow.OutcomeTag, outcome: workflow.OutcomeTag) bool {
     for (outcomes) |allowed| if (allowed == outcome) return true;
+    return false;
+}
+fn hasModelSlot(parameters: []const compilation.CompiledParameter) bool {
+    for (parameters) |parameter| if (parameter.value == .model_slot) return true;
     return false;
 }
 fn runtimeTerminal(runtime: pipeline.NodeRuntime) ?workflow.OutcomeTag {

@@ -87,8 +87,8 @@ test "repository allowlist accepts all catalogue models" {
     defer allowlist_contract.deinitOwner(owner);
     const allowed = allowlist_contract.allowlist(owner);
     try std.testing.expectEqual(@as(usize, 2), allowed.count());
-    try std.testing.expectEqualStrings("low", allowed.resolveSlot("first").?.reasoning_effort.?);
-    try std.testing.expect(allowed.resolveSlot("second") != null);
+    try std.testing.expectEqualStrings("low", allowed.resolveSlot(identity.ModelSlotId.parse("first").?).?.reasoning_effort.?);
+    try std.testing.expect(allowed.resolveSlot(identity.ModelSlotId.parse("second").?) != null);
 }
 
 test "repository allowlist accepts a strict subset and leaves unused catalogue entries unauthorized" {
@@ -105,13 +105,13 @@ test "repository allowlist accepts a strict subset and leaves unused catalogue e
     defer allowlist_contract.deinitOwner(owner);
     const allowed = allowlist_contract.allowlist(owner);
     try std.testing.expectEqual(@as(usize, 1), allowed.count());
-    const selected = allowed.resolveSlot("first").?;
+    const selected = allowed.resolveSlot(identity.ModelSlotId.parse("first").?).?;
     const unused = fixture.service.registry().resolve(
         provider_id,
         identity.ModelId.parse("model-b").?,
     ).?;
     try std.testing.expect(!selected.registry_entry_id.eql(unused.id));
-    try std.testing.expect(allowed.resolveSlot("second") == null);
+    try std.testing.expect(allowed.resolveSlot(identity.ModelSlotId.parse("second").?) == null);
 }
 
 test "multiple slots may reference one catalogue model without duplicating authority" {
@@ -128,8 +128,8 @@ test "multiple slots may reference one catalogue model without duplicating autho
     defer allowlist_contract.deinitOwner(owner);
     const allowed = allowlist_contract.allowlist(owner);
     try std.testing.expectEqual(@as(usize, 2), allowed.count());
-    try std.testing.expect(allowed.resolveSlot("first").?.registry_entry_id.eql(
-        allowed.resolveSlot("second").?.registry_entry_id,
+    try std.testing.expect(allowed.resolveSlot(identity.ModelSlotId.parse("first").?).?.registry_entry_id.eql(
+        allowed.resolveSlot(identity.ModelSlotId.parse("second").?).?.registry_entry_id,
     ));
 }
 

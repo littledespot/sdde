@@ -2,8 +2,8 @@
 
 **Status:** Proposed feature design
 
-**Implementation readiness:** Blocked. F0006 and its governing amendments must
-be accepted first. Production implementation also requires accepted
+**Implementation readiness:** Blocked. F0006 and its governing amendments are
+accepted. Production implementation still requires accepted
 compiler-registered Bedrock model contracts, target/region/data-routing policy,
 an exact token-count mechanism for every enabled model, the credential-source
 and refresh accounting boundary, a token-accounting proof for any native
@@ -822,7 +822,7 @@ Implementation evidence must cover:
 | --- | --- |
 | Common interface, provider file, registry, and operation algebra | F0006 Sections 1-10 |
 | Provider adapter and dependency boundary | Design Sections 5-6 and 26; ADR 0001 |
-| Request/invoke/decode and operation accounting | Design Sections 12.1-12.4 and 13.4; proposed F0006 Section 7 amendment |
+| Request/invoke/decode and operation accounting | Design Sections 12.1-12.4 and 13.4; accepted F0006 Section 7 amendment |
 | Workflow-operation capacity, schema, retry, and repair | Design Sections 12.5-12.7 and 21-22; ADR 0005 |
 | Candidate trust, response limits, and secrets | Design Sections 3-4, 26.1, 26.5, and 27; F0002 |
 | Bedrock request/response/error protocol | AWS Converse, CountTokens, and structured-output references linked above |

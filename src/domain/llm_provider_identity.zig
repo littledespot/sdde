@@ -30,6 +30,19 @@ pub const ModelId = struct {
     }
 };
 
+pub const ModelSlotId = struct {
+    bytes: []const u8,
+
+    pub fn parse(raw: []const u8) ?ModelSlotId {
+        if (raw.len == 0 or !std.unicode.utf8ValidateSlice(raw)) return null;
+        return .{ .bytes = raw };
+    }
+
+    pub fn eql(left: ModelSlotId, right: ModelSlotId) bool {
+        return std.mem.eql(u8, left.bytes, right.bytes);
+    }
+};
+
 fn isLowerKebab(raw: []const u8) bool {
     if (raw.len == 0 or raw.len > max_provider_id_bytes or raw[0] == '-' or
         raw[raw.len - 1] == '-') return false;
@@ -64,4 +77,9 @@ test "provider and model identities enforce their exact lexical bounds" {
     const model_over_limit = [_]u8{'m'} ** (max_model_id_bytes + 1);
     try std.testing.expect(ModelId.parse(&model_at_limit) != null);
     try std.testing.expect(ModelId.parse(&model_over_limit) == null);
+
+    try std.testing.expect(ModelSlotId.parse("spec-generation") != null);
+    try std.testing.expect(ModelSlotId.parse("Spec Generation") != null);
+    try std.testing.expect(ModelSlotId.parse("") == null);
+    try std.testing.expect(ModelSlotId.parse(&.{0xff}) == null);
 }

@@ -4,6 +4,7 @@ const pipeline = @import("../domain/pipeline.zig");
 const workflow = @import("../domain/workflow.zig");
 const compilation = @import("../domain/workflow_compilation.zig");
 const operation = @import("../domain/workflow_operation.zig");
+const provider_binding = @import("../domain/llm_provider_binding.zig");
 
 pub const Error = error{OperationExecutionFailed};
 
@@ -14,6 +15,7 @@ pub const InvocationInput = struct {
 pub const StepInput = struct {
     step: *const compilation.CompiledStep,
     resources: []const compilation.CompiledResource,
+    model_binding: ?*const provider_binding.ValidatedProviderModelBinding,
     log: pipeline.WorkflowLog,
 };
 
@@ -101,6 +103,14 @@ fn validContract(contract: operation.Contract) bool {
             if (std.mem.eql(u8, prior.id, descriptor.id)) return false;
         }
     }
+    const model_capable = containsExactlyOnce(contract.capabilities, "model-provider");
+    var model_slot_count: usize = 0;
+    for (contract.parameters) |descriptor| {
+        if (descriptor.kind != .model_slot) continue;
+        if (!descriptor.required or descriptor.allowed_values.len != 0 or descriptor.resource_kind != null) return false;
+        model_slot_count += 1;
+    }
+    if (model_capable != (model_slot_count == 1)) return false;
     if (contract.loop_budget) |budget| {
         if (contract.kind != .step or budget.maximum == 0) return false;
         const descriptor = findParameter(contract.parameters, budget.parameter_id) orelse return false;
@@ -183,6 +193,40 @@ test "one registry rejects duplicate and structurally invalid operations" {
     };
     duplicate.operations = &.{hidden_invocation};
     try std.testing.expect(!duplicate.validate());
+
+    const model_without_slot: Entry = .{
+        .contract = .{
+            .id = "model.invalid@1",
+            .kind = .step,
+            .outcomes = &.{.ok},
+            .side_effect = .none,
+            .capabilities = &.{"model-provider"},
+        },
+        .invoke_fn = testInvoke,
+    };
+    var invalid_model_registry = valid;
+    invalid_model_registry.operations = &.{model_without_slot};
+    invalid_model_registry.capabilities = &.{"model-provider"};
+    try std.testing.expect(!invalid_model_registry.validate());
+
+    const hidden_slot: Entry = .{
+        .contract = .{
+            .id = "model.hidden-slot@1",
+            .kind = .step,
+            .parameters = &.{.{
+                .id = "slot",
+                .kind = .model_slot,
+                .required = true,
+                .workflow_definition_safe = true,
+            }},
+            .outcomes = &.{.ok},
+            .side_effect = .none,
+        },
+        .invoke_fn = testInvoke,
+    };
+    invalid_model_registry.operations = &.{hidden_slot};
+    invalid_model_registry.capabilities = &.{};
+    try std.testing.expect(!invalid_model_registry.validate());
 }
 
 fn testInvoke(_: ?*anyopaque, _: Input) Error!execution.Candidate {

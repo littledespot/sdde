@@ -814,7 +814,8 @@ ModelRequestIdentityLedger {
     modelRequestId: ModelRequestId,
     status: assigned | invoked | terminal,
     terminalReason?: accepted | needs_user | invalid_exhausted | blocked |
-                     failed | cancelled | not_invoked_attempt_ceiling
+                     failed | cancelled | not_invoked_attempt_ceiling |
+                     not_invoked_authorization_failure
   }[]
   // Run-local immutable envelope data; every assignment returns a successor.
 }

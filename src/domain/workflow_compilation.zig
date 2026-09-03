@@ -3,6 +3,7 @@ const pipeline = @import("pipeline.zig");
 const telemetry = @import("telemetry.zig");
 const workflow = @import("workflow.zig");
 const operation = @import("workflow_operation.zig");
+const provider_identity = @import("llm_provider_identity.zig");
 
 pub const CompiledParameterValue = union(enum) {
     boolean: bool,
@@ -11,6 +12,7 @@ pub const CompiledParameterValue = union(enum) {
     enumeration: []const u8,
     registered_ref: workflow.RegisteredRef,
     resource: workflow.WorkflowResourceId,
+    model_slot: provider_identity.ModelSlotId,
 };
 
 pub const CompiledParameter = struct {
