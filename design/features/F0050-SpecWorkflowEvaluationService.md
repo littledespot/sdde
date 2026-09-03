@@ -24,8 +24,9 @@ calling a live model, accepting the proposed engine or harness designs, or
 adding a production/development dependency.
 
 **Governing authority:** Accepted [ADR 0001](../decisions/0001-zig-engine.md),
-[ADR 0002](../decisions/0002-zig-version.md), and [ADR
-0003](../decisions/0003-generic-workflow-engine.md); the still-proposed [engine
+[ADR 0002](../decisions/0002-zig-version.md), [ADR
+0003](../decisions/0003-generic-workflow-engine.md), and [ADR
+0005](../decisions/0005-workflow-defined-operations.md); the still-proposed [engine
 design](../design.md), especially Sections 1, 3-7, 9-17, and 21-31; [F0003 —
 ToolChainService](F0003-ToolChainService.md); [F0005 —
 WorkflowDefinitionRegistryService](F0005-WorkflowDefinitionRegistryService.md);
@@ -42,8 +43,8 @@ blocking boundaries:
 
 1. the production engine has only generic bootstrap and no-op workflow
    execution foundations;
-2. the proposed harness contract evaluates one model route, not one complete
-   compiled workflow and its durable effects; and
+2. the proposed harness contract evaluates one YAML-declared model operation,
+   not one complete compiled workflow and its durable effects; and
 3. `test/evaluation/wf-001-hello-world/node-vitest/` does not contain, and
    should not itself become, a complete runtime project.
 
@@ -68,10 +69,11 @@ Before this feature can be called usable, an accepted harness command must:
    `paths.references` root and invoke `specify` with one contained relative
    selector;
 4. bootstrap the exact project configuration and configured authority roots;
-5. discover, compile, select, and execute the ordinary `workflowId: specify`
+5. discover, compile, select, and execute the ordinary `id: specify`
    definition through registered contracts and runner-owned bindings;
 6. use a fake production model boundary with a complete, deterministic,
-   request-identified response script for every route the workflow reaches;
+   request-identified response script for every YAML-declared model operation
+   the workflow reaches;
 7. validate reference accounting, authority reconciliation, model candidates,
    repair or clarification behavior, `SpecificationIR`, and rendered views;
 8. assert the case's accepted terminal oracle: either committed `specified` or
@@ -116,33 +118,35 @@ An implementation or golden fixture must not choose one side locally.
 ### 3.2 Define the exact registered Specify contracts
 
 F0100 intentionally contains placeholders. The exact registered invocation,
-node, outcome, parameter, gate, capability, state, and workflow-policy
+operation, outcome, parameter, gate, capability, state, and workflow-policy
 contracts do not exist. They must be defined before a concrete
 `spec.workflow.yaml` can be valid. The YAML must remain ordinary declarative
-topology; it cannot contain paths, prompts, adapters, commands, or executable
-behavior.
+topology. Under ADR 0005 it explicitly selects generic operations, model slots,
+and bounded workflow-owned resources; it cannot contain raw operational paths,
+adapters, commands, capabilities, or executable behavior.
 
-### 3.3 Settle the fake model boundary and route bindings
+### 3.3 Settle the fake model boundary and workflow operation bindings
 
 F0006's catalogue, repository allowlist, fixed conditional bootstrap owner, and
 selected-graph requirement derivation are accepted. Its proposed replacement
 of the design's `ModelGateway` name with `LLMProviderInterface` and the
-provider-operation boundary remain blocked on governing amendments. The exact
-mapping from versioned routes to configured slots also remains unsettled for
+provider-operation boundary remain blocked on governing amendments. ADR 0005
+removes route-to-slot mapping: each YAML model operation explicitly names its
+repository-allowed slot and workflow-owned prompt/schema resources for
 reference extraction/reconciliation, feature-brief generation,
 specification-unit generation, semantic review, protocol retry, and repair.
 
 The smallest decision for the offline milestone may authorize a test
 composition to inject a fake behind the one governing narrow production port,
 without a live provider or `.sddproviders.json`. That exception and the exact
-route bindings must be explicit; this finding does not create them. F0007 and
+workflow-operation bindings must be explicit; this finding does not create them. F0007 and
 live AWS activity are not prerequisites for the first offline case.
 
 ### 3.4 Add a full-workflow harness case contract
 
-`TEST_HARNESS.md` currently defines a route-centric `EvalCase`: one `routeId`,
-one request/result schema pair, and one candidate source. Its execution flow
-constructs one route unit. It does not define a workflow ID, invocation,
+`TEST_HARNESS.md` currently defines an operation-centric `EvalCase`: one
+`modelOperationId`, one request/result schema pair, and one candidate source.
+Its execution flow constructs one operation unit. It does not define a workflow ID, invocation,
 reference selector, ordered multi-request fake script, terminal workflow/state
 oracle, artifact/state oracle, allowed temporary-project mutation surface,
 resume sequence, or source-fixture immutability check.
@@ -181,7 +185,7 @@ fixture.
 | Boundary | Implemented evidence | Readiness for this goal |
 | --- | --- | --- |
 | Native build and packaging | Zig 0.16.0 pin, native executable, lint/test/smoke/verify build steps, clean temporary-directory smoke | Foundation exists. The smoke proves only a packaged generic no-op workflow. |
-| Exact configuration | Exact-CWD `.sddtoolkit.json` location/read/decode and closed `logs`, `models.slots`, and eight-path shape | Strict provider-catalogue decoding, immutable registry construction, slot subset allowlist, and exact selected-graph provider-requirement derivation are implemented; conditional bootstrap runner bindings, production provider contracts, and exact route-to-slot bindings remain missing. |
+| Exact configuration | Exact-CWD `.sddtoolkit.json` location/read/decode and closed `logs`, `models.slots`, and eight-path shape | Strict provider-catalogue decoding, immutable registry construction, slot subset allowlist, and exact selected-graph provider-requirement derivation are implemented; production provider contracts and YAML-declared model-operation binding remain missing. |
 | Bootstrap roots | Normalization, active-filesystem checks, root roles, separation, and root registry | Foundation exists. The named fixture has no runtime config or roots. |
 | Feature logging | Policy, records, sinks, rotation, retention, recovery, and composition tests | Subsystem exists, but no Specify activation/state transaction binds it to a feature run. |
 | Workflow authority | Bounded inventory/capture/YAML parse/schema validation, compiler, graph validator, and immutable ID registry | Strong generic foundation exists. The current uncommitted tests strengthen this boundary only. |
@@ -189,7 +193,7 @@ fixture.
 | Registered behavior | `core.empty-invocation@1`, `core.noop@1`, and `core.capability-free@1` | A definition named `specify` would still reject `--reference` and perform no work. |
 | Toolchain | Closed v1 project/preset package references, inheritance, policy composition, and safety validation | Narrow F0003 boundary exists. It does not provide Node/Vitest commands or environment facts. |
 | Workflow artifact registry | Validated feature-log paths and sink binding | Logging-only; no specification, reference, clarification, workflow-state, or stage-transaction paths. |
-| Specify domain | No `SpecificationIR`, reference snapshot, Specify invocation, model route, validator, renderer/parser, clarification, or commit implementation | Missing. |
+| Specify domain | No `SpecificationIR`, reference snapshot, Specify invocation, YAML model operation, validator, renderer/parser, clarification, or commit implementation | Missing. |
 | Evaluation harness | `TEST_HARNESS.md` only | No build wiring, driver, schemas, suites, reports, fake scripts, or end-to-end cases exist. |
 
 Two accepted ADR 0003 contracts remain incomplete in the shared runtime:
@@ -253,7 +257,7 @@ another encountered media type.
 
 ### 5.4 Implement model, reconciliation, and repair foundations
 
-- versioned route and response-schema registries;
+- YAML-declared model operations and captured response-schema resources;
 - deterministic request/unit identity and total attempt accounting;
 - bounded guidance/context selection and production fake-model bindings;
 - raw response capture, envelope decode, identity checks, and closed payload
@@ -382,7 +386,7 @@ governing design change.
 - exact workflow selection and no name-specific runtime branch;
 - invalid reference preflight creates no feature artifacts;
 - every reference file/block/chunk receives one terminal account;
-- fake responses bind to exact request/route/unit identities;
+- fake responses bind to exact request/workflow-operation/unit identities;
 - the chosen `specified` or `needs_user` oracle is exact;
 - Node/Vitest semantic principle selection for Specify is empty;
 - invalid candidates cannot reach artifacts or workflow-state success;

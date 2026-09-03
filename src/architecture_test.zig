@@ -32,6 +32,73 @@ test "every action imports only standard domain and port modules" {
         );
         defer allocator.free(source);
         try expectAllowedActionImports(source);
+        try expectSingleActionContract(source);
+    }
+}
+
+test "every orchestrator and coordinator is capability free" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var application = try std.Io.Dir.cwd().openDir(io, "src/application", .{ .iterate = true });
+    defer application.close(io);
+
+    var iterator = application.iterate();
+    while (try iterator.next(io)) |entry| {
+        if (entry.kind != .file or
+            (!std.mem.endsWith(u8, entry.name, "_orchestrator.zig") and
+                !std.mem.endsWith(u8, entry.name, "_coordinator.zig")))
+        {
+            continue;
+        }
+        const source = try application.readFileAlloc(
+            io,
+            entry.name,
+            allocator,
+            .limited(1024 * 1024),
+        );
+        defer allocator.free(source);
+        try expectAbsent(source, "/actions/");
+        try expectAbsent(source, "/adapters/");
+        try expectAbsent(source, "/ports/");
+        try expectAbsent(source, "std.Io");
+    }
+}
+
+test "every application runner is infrastructure independent" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var application = try std.Io.Dir.cwd().openDir(io, "src/application", .{ .iterate = true });
+    defer application.close(io);
+
+    var iterator = application.iterate();
+    while (try iterator.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, "_runner.zig")) continue;
+        const source = try application.readFileAlloc(io, entry.name, allocator, .limited(1024 * 1024));
+        defer allocator.free(source);
+        try expectAbsent(source, "/adapters/");
+        try expectAbsent(source, "std.Io");
+    }
+}
+
+test "domain and port dependency direction is enforced repository wide" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    inline for (.{ "src/domain", "src/ports" }) |directory_path| {
+        var directory = try std.Io.Dir.cwd().openDir(io, directory_path, .{ .iterate = true });
+        defer directory.close(io);
+        var walker = try directory.walk(allocator);
+        defer walker.deinit();
+        while (try walker.next(io)) |entry| {
+            if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+            const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
+            defer allocator.free(source);
+            try expectAbsent(source, "/actions/");
+            try expectAbsent(source, "/application/");
+            try expectAbsent(source, "/adapters/");
+            try expectAbsent(source, "../actions/");
+            try expectAbsent(source, "../application/");
+            try expectAbsent(source, "../adapters/");
+        }
     }
 }
 
@@ -150,16 +217,16 @@ test "conditional provider bootstrap has one orchestration and capture authority
         countOccurrences(assembly, "orchestrator.run("),
     );
 
-    const invocation_runner = @embedFile("application/engine_invocation_runner.zig");
-    try expectAbsent(invocation_runner, "/adapters/");
-    try expectAbsent(invocation_runner, "std.Io");
-    const select_index = std.mem.indexOf(u8, invocation_runner, "select_workflow.Action") orelse {
+    const workflow_engine = @embedFile("application/workflow_engine_orchestrator.zig");
+    try expectAbsent(workflow_engine, "/adapters/");
+    try expectAbsent(workflow_engine, "std.Io");
+    const select_index = std.mem.indexOf(u8, workflow_engine, "invokeSelectWorkflow()") orelse {
         return error.MissingWorkflowSelection;
     };
-    const prepare_index = std.mem.indexOf(u8, invocation_runner, "provider_bootstrap.invoke(") orelse {
+    const prepare_index = std.mem.indexOf(u8, workflow_engine, "invokePrepareWorkflow()") orelse {
         return error.MissingProviderBootstrapInvocation;
     };
-    const execute_index = std.mem.indexOf(u8, invocation_runner, "workflow_engine.run(") orelse {
+    const execute_index = std.mem.indexOf(u8, workflow_engine, "invokeInvocation()") orelse {
         return error.MissingWorkflowExecution;
     };
     try std.testing.expect(select_index < prepare_index);
@@ -381,8 +448,35 @@ test "bootstrap source ports and workflow inventory stages remain single purpose
     }
 }
 
+test "bootstrap dispatcher delegates to focused runners" {
+    const dispatcher = @embedFile("application/bootstrap_runner.zig");
+    try expectAbsent(dispatcher, "/actions/");
+    try expectAbsent(dispatcher, "/adapters/");
+    try expectAbsent(dispatcher, "std.Io");
+
+    const config_runner = @embedFile("application/bootstrap_config_runner.zig");
+    try expectAbsent(config_runner, "/actions/bootstrap/");
+    try expectAbsent(config_runner, "/actions/workflow/");
+    try expectAbsent(config_runner, "/actions/toolchain/");
+
+    const root_runner = @embedFile("application/bootstrap_root_runner.zig");
+    try expectAbsent(root_runner, "/actions/config/");
+    try expectAbsent(root_runner, "/actions/workflow/");
+    try expectAbsent(root_runner, "/actions/toolchain/");
+
+    const workflow_runner = @embedFile("application/bootstrap_workflow_runner.zig");
+    try expectAbsent(workflow_runner, "/actions/config/");
+    try expectAbsent(workflow_runner, "/actions/bootstrap/");
+    try expectAbsent(workflow_runner, "/actions/toolchain/");
+
+    const toolchain_runner = @embedFile("application/bootstrap_toolchain_runner.zig");
+    try expectAbsent(toolchain_runner, "/actions/config/");
+    try expectAbsent(toolchain_runner, "/actions/bootstrap/");
+    try expectAbsent(toolchain_runner, "/actions/workflow/");
+}
+
 test "configured path policy and resolution have distinct action owners" {
-    const runner = @embedFile("application/bootstrap_runner.zig");
+    const runner = @embedFile("application/bootstrap_root_runner.zig");
     try expectAbsent(runner, "validate_engine_path_policy.zig");
     try std.testing.expect(std.mem.indexOf(u8, runner, "validate_configured_root_path_policy.zig") != null);
     try std.testing.expect(std.mem.indexOf(u8, runner, "validate_llm_provider_config_path_policy.zig") != null);
@@ -416,8 +510,8 @@ test "feature logging lifecycle coordinates bindings without filesystem authorit
     try expectAbsent(lifecycle, "/adapters/");
     try expectAbsent(lifecycle, "std.Io");
     try expectAbsent(lifecycle, "createDir");
-    const invocation_runner = @embedFile("application/engine_invocation_runner.zig");
-    try std.testing.expect(std.mem.indexOf(u8, invocation_runner, "services.logs.barrier()") != null);
+    const invocation_assembly = @embedFile("composition/engine_invocation.zig");
+    try std.testing.expect(std.mem.indexOf(u8, invocation_assembly, "services.logs.barrier()") != null);
     const composition = @embedFile("composition/root.zig");
     try expectAbsent(composition, "feature_log_lifecycle.Lifecycle");
     try expectAbsent(composition, "unbound_telemetry_barrier");
@@ -438,7 +532,29 @@ test "feature logging policy execution and filesystem operations have focused ow
     try expectAbsent(runner, "fn terminalEvent");
     try expectAbsent(runner, "fn promptSelected");
     try expectAbsent(runner, "fn updateState");
-    try std.testing.expect(std.mem.indexOf(u8, runner, "feature_log_child_actions.zig") != null);
+    try std.testing.expect(std.mem.indexOf(u8, runner, "feature_log_child_bindings.zig") != null);
+    const orchestrator = @embedFile("application/feature_log_orchestrator.zig");
+    try expectAbsent(orchestrator, "/actions/");
+    try expectAbsent(orchestrator, "/adapters/");
+    try expectAbsent(orchestrator, "/ports/");
+    const transition = @embedFile("application/feature_log_policy_transition_coordinator.zig");
+    try expectAbsent(transition, "feature_log_runner.zig");
+    const finalization = @embedFile("application/feature_log_finalization_coordinator.zig");
+    try expectAbsent(finalization, "feature_log_runner.zig");
+    const retention = @embedFile("application/feature_log_retention_coordinator.zig");
+    try expectAbsent(retention, "feature_log_runner.zig");
+
+    const domain_modules = [_][]const u8{
+        @embedFile("domain/feature_log_binding.zig"),
+        @embedFile("domain/feature_log_stream.zig"),
+        @embedFile("domain/feature_log_retention.zig"),
+        @embedFile("domain/log_event_registry.zig"),
+        @embedFile("domain/log_policy.zig"),
+        @embedFile("domain/sanitized_prompt_log.zig"),
+    };
+    for (domain_modules) |source| {
+        try expectAbsent(source, "BarrierOutcome");
+    }
 
     const adapter = @embedFile("adapters/filesystem/feature_log_sink.zig");
     try expectAbsent(adapter, ".iterate(");
@@ -457,15 +573,17 @@ test "feature logging policy execution and filesystem operations have focused ow
     try expectAbsent(recovery, "fn parseUtc");
 }
 
-test "composition assembles execution while the application runner owns invocation" {
+test "workflow engine owns selection while composition binds focused runners" {
     const composition = @embedFile("composition/root.zig");
     try expectAbsent(composition, "parse_workflow_invocation.zig");
     try expectAbsent(composition, "select_compiled_workflow.zig");
-    try expectAbsent(composition, "workflow_engine_orchestrator.zig");
-    const runner = @embedFile("application/engine_invocation_runner.zig");
-    try std.testing.expect(std.mem.indexOf(u8, runner, "parse_workflow_invocation.zig") != null);
-    try std.testing.expect(std.mem.indexOf(u8, runner, "select_compiled_workflow.zig") != null);
-    try std.testing.expect(std.mem.indexOf(u8, runner, "workflow_engine_orchestrator.zig") != null);
+    const orchestrator = @embedFile("application/workflow_engine_orchestrator.zig");
+    try expectAbsent(orchestrator, "/actions/");
+    try std.testing.expect(std.mem.indexOf(u8, orchestrator, "invokeParseInvocation()") != null);
+    try std.testing.expect(std.mem.indexOf(u8, orchestrator, "invokeSelectWorkflow()") != null);
+    const selection_runner = @embedFile("application/workflow_selection_runner.zig");
+    try std.testing.expect(std.mem.indexOf(u8, selection_runner, "parse_workflow_invocation.zig") != null);
+    try std.testing.expect(std.mem.indexOf(u8, selection_runner, "select_compiled_workflow.zig") != null);
 }
 
 test "active feature logging concrete assembly remains in composition" {
@@ -540,6 +658,11 @@ fn expectAllowedActionImports(source: []const u8) !void {
         );
         remaining = remaining[path_end + 1 ..];
     }
+}
+
+fn expectSingleActionContract(source: []const u8) !void {
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "pub const Action = struct"));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "pub const contract: pipeline.NodeContract"));
 }
 
 fn countOccurrences(source: []const u8, needle: []const u8) usize {

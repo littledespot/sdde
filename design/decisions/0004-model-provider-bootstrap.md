@@ -32,8 +32,8 @@ only the selected validated compiled graph and returns a closed requirement:
   compiler-owned capability ID `model-provider`;
 - `not_required` otherwise.
 
-The action does not infer from workflow IDs, node IDs, parameters, policy
-allowance alone, `.sddtoolkit.json`, provider configuration, or route names.
+The action does not infer from workflow IDs, step IDs, parameter names, policy
+allowance alone, `.sddtoolkit.json`, provider configuration, or operation names.
 A project definition cannot author a capability; the workflow compiler can
 preserve only capabilities supplied by registered node contracts and allowed
 by the selected policy.

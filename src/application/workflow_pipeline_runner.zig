@@ -4,7 +4,7 @@ const workflow = @import("../domain/workflow.zig");
 const compilation = @import("../domain/workflow_compilation.zig");
 const implementations = @import("../ports/workflow_node_implementation.zig");
 const telemetry_barrier = @import("../ports/telemetry_barrier.zig");
-const child_bindings = @import("workflow_engine_child_bindings.zig");
+const child_bindings = @import("workflow_pipeline_child_bindings.zig");
 
 pub const Runner = struct {
     selected: execution.SelectedWorkflow,
@@ -60,10 +60,10 @@ pub const Runner = struct {
     fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: execution.Candidate) execution.Applied {
         const next = self.envelope.apply(contract, candidate.delta) catch return .{ .outcome = .invalid };
         self.envelope = next;
-        for (candidate.delta.addedTelemetryFacts()) |fact| switch (self.barrier.process(fact)) {
-            .dropped, .persisted => {},
-            .blocked => return .{ .outcome = .blocked },
-        };
+        for (candidate.delta.addedTelemetryFacts()) |fact| {
+            const logging_result = self.barrier.process(fact);
+            if (logging_result.outcome != .ok) return .{ .outcome = logging_result.outcome };
+        }
         return .{ .outcome = candidate.outcome };
     }
 };

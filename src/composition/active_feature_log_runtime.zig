@@ -3,8 +3,8 @@ const feature_log_sink = @import("../adapters/filesystem/feature_log_sink.zig");
 const log_output = @import("../adapters/system/log_output.zig");
 const trusted_log_clock = @import("../adapters/system/trusted_log_clock.zig");
 const feature_log_runner = @import("../application/feature_log_runner.zig");
-const runtime = @import("../domain/feature_log_runtime.zig");
-const logging = @import("../domain/logging.zig");
+const log_binding = @import("../domain/feature_log_binding.zig");
+const log_policy = @import("../domain/log_policy.zig");
 const artifacts = @import("../domain/workflow_artifact_registry.zig");
 const stabilizer_port = @import("../ports/transaction_stabilizer.zig");
 const acquire_lock = @import("../actions/log/acquire_feature_log_stream_lock.zig");
@@ -37,9 +37,9 @@ pub fn create(
     allocator: std.mem.Allocator,
     io: std.Io,
     project_root: std.Io.Dir,
-    policy: *const logging.CompiledLoggingPolicy,
+    policy: *const log_policy.CompiledLoggingPolicy,
     registry: *const artifacts.WorkflowArtifactRegistry,
-    binding: *const runtime.ValidatedFeatureLogBinding,
+    binding: *const log_binding.ValidatedFeatureLogBinding,
     stabilizer: stabilizer_port.Stabilizer,
 ) Error!*Owner {
     const owner = allocator.create(OwnerStorage) catch return error.OutOfMemory;
@@ -53,7 +53,7 @@ pub fn create(
         .allocator = allocator,
         .policy = policy,
         .binding = binding,
-        .children = .{
+        .actions = .{
             .acquire_lock = acquire_lock.Action{ .sink = owner.sink.lockAcquirer() },
             .release_lock = release_lock.Action{ .sink = owner.sink.lockReleaser() },
             .recover_stream = recover_stream.Action{ .sink = owner.sink.streamRecoverer() },

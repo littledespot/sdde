@@ -66,7 +66,7 @@ flowchart TD
     RGATE --> RNEXT{Recovered checkpoint phase}
     RNEXT -- preparation --> RPREPCTX
     RNEXT -- active --> NEXT
-    PSEL --> PFIT{Complete unranked selection fits the implementation route budget}
+    PSEL --> PFIT{Complete unranked selection fits the compiled operation budget}
     PFIT -- No --> OUTCOME
     PFIT -- Yes --> CTX[Build bounded task context<br/>approved file IDs, facts, presets and complete raw principle selection]
     CTX --> XLEDGERID[AssignTaskExecutionIdLedgerStateIdAction]
@@ -77,7 +77,7 @@ flowchart TD
     COPYREG --> PREPID[AssignTaskExecutionCheckpointIdAction and<br/>AdvanceTaskExecutionIdLedgerAction for the preparation checkpoint]
     PREPID --> PREPCKPT[BuildTaskExecutionPreparationCheckpointAction then<br/>ValidateTaskExecutionCheckpointAction and SerializeTaskExecutionCheckpointAction;<br/>include the initial task-execution ledger and complete copy-source registry,<br/>but no model-produced operation plan, attempt or operation state]
     PREPCKPT --> PREP09[Invoke diagram 09 feature-storage task_checkpoint lifecycle;<br/>persist the feature-ledger reservation, preparation checkpoint, registry and exact<br/>advanced task-execution ledger before any value is exposed to a model]
-    PREP09 --> CP[implementation.change-plan.generate]
+    PREP09 --> CP[YAML-declared change-planning operation]
     CP --> CPSCHEMA[Validate closed response and exact task identity]
     CPSCHEMA --> IPLAN[Validate every create, update, replace, copy or delete intent]
     IPLAN --> LIFE[Simulate ordered file lifecycle and prove exact task scope/completeness]
@@ -89,7 +89,7 @@ flowchart TD
     ICKPTID --> CKPT0[BuildTaskExecutionCheckpointAction and ValidateTaskExecutionCheckpointAction;<br/>invoke diagram 09 feature-storage lifecycle, reserve/fsync its transaction ID,<br/>commit the checkpoint and exact advanced ledger, then release exactly once]
 
     CKPT0 --> NEXT{Next canonical intent or successor replay entry}
-    NEXT -- Create update replace --> GEN[implementation.operation.generate]
+    NEXT -- Create update replace --> GEN[YAML-declared code-generation operation]
     NEXT -- Byte-exact copy --> COPY[Resolve immutable CopySource and build copy operation]
     NEXT -- Delete --> DELETE[Build body-free delete operation]
     NEXT -- Unchanged successor replay entry --> REPLAYOP[Resolve prior immutable replay binding and execution-owned bytes<br/>never mutate or reuse the prior authorization, savepoint or journal entry]

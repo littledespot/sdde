@@ -1,24 +1,25 @@
-const logging = @import("../domain/logging.zig");
-const feature_log_runner = @import("feature_log_runner.zig");
+const log_policy = @import("../domain/log_policy.zig");
+const feature_log_bindings = @import("feature_log_child_bindings.zig");
 const finalization = @import("feature_log_finalization_coordinator.zig");
 const lifecycle_module = @import("feature_log_runtime_lifecycle.zig");
 const transition_coordinator = @import("feature_log_policy_transition_coordinator.zig");
+const transition_bindings = @import("feature_log_policy_transition_child_bindings.zig");
 const retention = @import("feature_log_retention_coordinator.zig");
-const runtime = @import("../domain/feature_log_runtime.zig");
+const retention_bindings = @import("feature_log_retention_child_bindings.zig");
+const finalization_bindings = @import("feature_log_finalization_child_bindings.zig");
 const telemetry = @import("../domain/telemetry.zig");
 const barrier_port = @import("../ports/telemetry_barrier.zig");
-const sink_port = @import("../ports/feature_log_sink.zig");
 
 pub const LogService = struct {
-    owner: *logging.Owner,
+    owner: *log_policy.Owner,
     lifecycle: lifecycle_module.Lifecycle = .{},
 
-    pub fn init(owner: *logging.Owner) LogService {
+    pub fn init(owner: *log_policy.Owner) LogService {
         return .{ .owner = owner };
     }
 
-    pub fn policy(self: *const LogService) *const logging.CompiledLoggingPolicy {
-        return logging.policy(self.owner);
+    pub fn policy(self: *const LogService) *const log_policy.CompiledLoggingPolicy {
+        return log_policy.policy(self.owner);
     }
 
     pub fn barrier(self: *LogService) barrier_port.Barrier {
@@ -27,7 +28,7 @@ pub const LogService = struct {
 
     pub fn activate(
         self: *LogService,
-        active: *feature_log_runner.Runner,
+        active: feature_log_bindings.ChildBindings,
         shortcode: telemetry.WorkflowShortcode,
     ) transition_coordinator.Outcome {
         return self.lifecycle.activate(active, shortcode);
@@ -35,41 +36,35 @@ pub const LogService = struct {
 
     pub fn transition(
         self: *LogService,
-        next: *feature_log_runner.Runner,
-        shortcode: telemetry.WorkflowShortcode,
+        children: transition_bindings.ChildBindings,
     ) transition_coordinator.Outcome {
-        return self.lifecycle.transition(next, shortcode);
+        return self.lifecycle.transition(children);
     }
 
     pub fn finalizeActive(
         self: *LogService,
-        shortcode: telemetry.WorkflowShortcode,
+        children: finalization_bindings.ChildBindings,
     ) finalization.Outcome {
-        return self.lifecycle.finalizeActive(shortcode);
+        return self.lifecycle.finalizeActive(children);
     }
 
     pub fn finalizeHistorical(
         self: *LogService,
-        historical: *feature_log_runner.Runner,
-        shortcode: telemetry.WorkflowShortcode,
+        children: finalization_bindings.ChildBindings,
     ) finalization.Outcome {
-        return self.lifecycle.finalizeHistorical(historical, shortcode);
+        return self.lifecycle.finalizeHistorical(children);
     }
 
     pub fn retainHistorical(
         self: *LogService,
-        acquirer: sink_port.LockAcquirer,
-        pruner: sink_port.SegmentPruner,
-        releaser: sink_port.LockReleaser,
-        historical: *const runtime.ValidatedFeatureLogBinding,
-        authorization: *runtime.RetentionAuthorizationOwner,
+        children: retention_bindings.ChildBindings,
         shortcode: telemetry.WorkflowShortcode,
     ) retention.Outcome {
-        return self.lifecycle.retainHistorical(acquirer, pruner, releaser, historical, authorization, shortcode);
+        return self.lifecycle.retainHistorical(children, shortcode);
     }
 
     pub fn deinit(self: *LogService) void {
-        logging.deinitOwner(self.owner);
+        log_policy.deinitOwner(self.owner);
         self.* = undefined;
     }
 };

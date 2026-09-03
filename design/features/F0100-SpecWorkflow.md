@@ -3,10 +3,10 @@
 **Status:** Proposed feature design
 
 **Implementation readiness:** The generic YAML boundary, logical Specify flow,
-`spec.md` section hierarchy, and clarification separation are defined below. An
-executable definition still requires F0005's workflow-specific YAML parser
-limits, the exact registered Specify invocation/node/outcome/parameter/policy
-contracts, and the renderer/parser decisions called out in Section 5.6.
+`spec.md` section hierarchy, and clarification separation are defined below.
+ADR 0005 requires the concise workflow schema and workflow-owned resource
+compiler to replace the current verbose parser/compiler before an executable
+definition can be supplied.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -20,7 +20,9 @@ model capability.
 
 **Governing authority:** [Engine design](../design.md), especially Sections 1,
 3-7, 12-14, 17, and 21-25; accepted [ADR
-0003](../decisions/0003-generic-workflow-engine.md); and the closed
+0003](../decisions/0003-generic-workflow-engine.md); accepted [ADR 0005 —
+workflow-defined operations](../decisions/0005-workflow-defined-operations.md);
+and the closed
 workflow-definition field and graph shape in [F0005](F0005-WorkflowDefinitionRegistryService.md).
 F0005 owns YAML discovery, decoding, schema validation, and compilation.
 
@@ -34,11 +36,12 @@ declares the `specify` workflow's identity and graph topology using registered
 content-derived `WorkflowId` and follows its compiled typed transitions through
 runner-owned bindings; it contains no `specify` name branch.
 
-Registered nodes in the selected graph build and validate `SpecificationIR`,
+YAML-selected registered operations in the selected graph build and validate `SpecificationIR`,
 render and reparse `spec.md`, render `reference-context.md`, and commit the
 complete artifact/state transaction. The generic workflow engine performs none
-of that Specify-specific work. The YAML contains no output path, Markdown
-template, prompt body, command, adapter, capability, or executable payload.
+of that Specify-specific work. The YAML explicitly selects every operation,
+model slot, prompt/schema resource, and outcome transition. It contains no raw
+operational output path, command, adapter, capability, or executable payload.
 
 ## 2. Closed YAML shape
 
@@ -46,25 +49,27 @@ The root contains exactly:
 
 | Field | Meaning |
 | --- | --- |
-| `schemaVersion` | Closed workflow-definition schema version. |
-| `workflowId` | `specify`; identity comes from content, not the filename. |
-| `workflowVersion` | Positive workflow-definition version. |
-| `workflowShortcode` | Validated unique four-character logging shortcode. |
-| `invocationContractNodeId` | Exact registered Specify invocation contract. |
-| `workflowPolicyProfileId` | Exact registered workflow policy profile. |
-| `entryWorkflowNodeId` | Definition-local entry-node ID. |
-| `nodes` | Registered pipeline-node references with closed parameters. |
-| `transitions` | One typed target for every declared node outcome. |
+| `schema` | Closed `workflow/v1` schema identity. |
+| `id` | `specify`; identity comes from content, not the filename. |
+| `version` | Positive workflow-definition version. |
+| `shortcode` | Validated unique four-character logging shortcode. |
+| `invoke` | Exact registered Specify invocation operation. |
+| `policy` | Exact registered workflow policy profile. |
+| `start` | Definition-local entry-step ID. |
+| `resources` | Concise aliases for bounded workflow-owned prompts, schemas, and examples. |
+| `steps` | Local step map selecting registered generic operations, native scalar parameters, and outcomes. |
 
-Each node contains only `workflowNodeId`, `pipelineNodeContractId`, and
-`parameters`. A parameter is one closed `boolean`, `integer`, `enum`, or
-`registered_id` value accepted by that registered contract.
+Each step contains `use`, optional `with`, and `on`. `with` uses native YAML
+scalars whose types and allowed values come from the selected operation
+contract; it does not repeat tagged parameter wrappers. `on` explicitly maps
+every declared outcome to another local step or a matching `end.*` terminal.
 
-Each transition uses one of `ok`, `needs_user`, `invalid`, `blocked`, `failed`,
-or `cancelled`, and targets either another local node or the same terminal
-outcome. The compiler rejects missing or duplicate outcome transitions, cycles,
-unreachable nodes, invalid typed data flow, gate weakening, and capability
-escalation.
+Each YAML transition uses one of `ok`, `needs-user`, `invalid`, `blocked`,
+`failed`, or `cancelled`, and targets either another local step or the matching
+`end.*` terminal. The compiler rejects missing or duplicate outcome
+transitions, unbounded cycles, unreachable steps, invalid typed data flow, gate
+weakening, and capability escalation. A retry or repair cycle is accepted only
+when it crosses a registered monotonic budget operation with a finite ceiling.
 
 ## 3. Structural outline
 
@@ -72,32 +77,33 @@ The placeholders below are deliberate: the governing design has not yet fixed
 the exact registered Specify contract IDs or their definition-safe parameters.
 
 ```yaml
-schemaVersion: "1.0"
-workflowId: specify
-workflowVersion: <positive-u32>
-workflowShortcode: "<validated-unique-four-character-shortcode>"
-invocationContractNodeId: "<registered-ref@version>"
-workflowPolicyProfileId: "<registered-ref@version>"
-entryWorkflowNodeId: "<local-entry-node-id>"
+schema: workflow/v1
+id: specify
+version: <positive-u32>
+shortcode: "<validated-unique-four-character-shortcode>"
+invoke: "<registered-ref@version>"
+policy: "<registered-ref@version>"
+start: generate
 
-nodes:
-  - workflowNodeId: "<local-node-id>"
-    pipelineNodeContractId: "<registered-ref@version>"
-    parameters: []
+resources:
+  spec-prompt: "<workflow-resource>"
+  spec-result: "<workflow-resource>"
 
-transitions:
-  - fromWorkflowNodeId: "<local-node-id>"
-    outcomeTag: "<declared-outcome>"
-    target:
-      kind: terminal
-      outcomeTag: "<same-declared-outcome>"
+steps:
+  generate:
+    use: model.generate@1
+    with:
+      slot: spec-generation
+      prompt: spec-prompt
+      result-schema: spec-result
+    on: { ok: validate, invalid: repair, failed: end.failed, cancelled: end.cancelled }
 ```
 
 This is a shape outline, not an executable fixture. A concrete definition is
-valid only after every placeholder is replaced by a registered value and every
-registered node outcome has exactly one transition. A nonterminal transition
-uses `kind: node` and one existing `workflowNodeId` instead of the terminal
-target shown above.
+valid only after every placeholder is replaced by a registered or captured
+workflow-owned value and every selected operation outcome has exactly one
+mapping. `validate` and `repair` are illustrative local steps and must also be
+declared in a complete definition.
 
 ## 4. Required logical coverage
 
@@ -108,7 +114,7 @@ The compiled registered contracts collectively cover:
 3. ingest and reconcile the complete supported reference corpus;
 4. generate a reference-grounded feature brief and the typed units mapped in
    Section 5;
-5. route missing, unsupported, ambiguous, or conflicting specification
+5. send missing, unsupported, ambiguous, or conflicting specification
    authority to an `SNN` clarification transaction without persisting a partial
    `SpecificationIR` or `spec.md`;
 6. atomically repair only engine-authorized invalid candidate units, then rerun
@@ -120,7 +126,7 @@ The compiled registered contracts collectively cover:
 9. atomically commit the complete artifact/state set before entering
    `specified`.
 
-Exact grouping into definition-visible graph nodes follows the registered node
+Exact grouping into definition-visible steps follows the registered operation
 contracts; this feature does not invent their IDs.
 
 ## 5. `spec.md` projection contract
@@ -235,7 +241,7 @@ template is authoring metasyntax and is never emitted or accepted as authority.
 When required specification knowledge is missing, ambiguous, unsupported, or
 conflicting, the engine:
 
-1. returns the typed `clarification_needed` route;
+1. returns the typed `clarification_needed` operation outcome;
 2. allocates or reuses the engine-owned `SNN` identity;
 3. renders the controlled form only beneath `<featureDir>/clarify/SNN.md`;
 4. atomically commits the clarification registry, form, required current
@@ -287,15 +293,20 @@ YAML definition.
 
 1. `spec.workflow.yaml` is discovered, decoded, validated, compiled, selected,
    and executed through the same generic YAML workflow-definition path as every
-   other definition, and has `workflowId: specify`.
-2. Every invocation, node, parameter, policy, outcome, gate, and capability
+   other definition, and has `id: specify`.
+2. Every invocation, operation, parameter, resource, policy, outcome, gate, and capability
    reference resolves exactly through an engine registry.
-3. The graph is acyclic, fully reachable, terminal-reachable, data-compatible,
-   outcome-complete, and policy-bounded.
-4. No YAML value selects an artifact path, command, implementation, adapter,
-   capability, prompt, Markdown template, or executable payload.
-5. Registered graph nodes—not the generic workflow engine—own Specify content,
-   validation, rendering, transaction, and state work.
+3. The graph is fully reachable, terminal-reachable, data-compatible,
+   outcome-complete, and policy-bounded; every cycle has a compiler-validated
+   finite monotonic guard.
+4. YAML explicitly selects model slots and bounded prompt/schema/example
+   resources through compiled aliases. No YAML value selects a raw operational
+   artifact path, command, implementation, adapter, capability, provider, model,
+   or executable payload, and no packaged resource is substituted implicitly.
+5. YAML-selected registered operations—not the generic workflow engine or a
+   workflow-name branch—own Specify content, validation, rendering,
+   transaction, and state work; no workflow operation is inaccessible from the
+   definition.
 6. A model returns typed candidate content only; the engine owns IDs, paths,
    headings, validation, rendering, repair scope, persistence, and completion.
 7. `spec.md` renders the exact Section 5.1 hierarchy, with both mandatory parent
@@ -309,7 +320,8 @@ YAML definition.
    accounting, valid `reference-context.md`, no open `SNN`, and workflow state
    `specified`.
 11. Adding any other correctly configured workflow YAML composed only from
-   registered contracts requires no workflow-name branch or engine rebuild.
+    registered generic operations requires no workflow-name branch, hidden
+    operation, or engine rebuild.
 
 ## 8. Verification
 

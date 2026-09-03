@@ -1,5 +1,5 @@
 const std = @import("std");
-const runtime = @import("../../domain/feature_log_runtime.zig");
+const log_stream = @import("../../domain/feature_log_stream.zig");
 const clock_port = @import("../../ports/trusted_log_clock.zig");
 
 pub const Adapter = struct {
@@ -9,7 +9,7 @@ pub const Adapter = struct {
         return .{ .context = self, .now_fn = now };
     }
 
-    fn now(context: *anyopaque) clock_port.Error!runtime.ClockReading {
+    fn now(context: *anyopaque) clock_port.Error!log_stream.ClockReading {
         const self: *Adapter = @ptrCast(@alignCast(context));
         const real_ms = std.Io.Clock.now(.real, self.io).toMilliseconds();
         const monotonic_ms = std.Io.Clock.now(.boot, self.io).toMilliseconds();
@@ -19,7 +19,7 @@ pub const Adapter = struct {
         const year_day = epoch_seconds.getEpochDay().calculateYearDay();
         const month_day = year_day.calculateMonthDay();
         const day_seconds = epoch_seconds.getDaySeconds();
-        var reading: runtime.ClockReading = .{
+        var reading: log_stream.ClockReading = .{
             .occurred_at_utc = undefined,
             .unix_ms = @intCast(real_ms),
             .monotonic_ms = @intCast(monotonic_ms),

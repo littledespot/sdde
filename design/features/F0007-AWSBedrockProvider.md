@@ -28,7 +28,8 @@ engine](../decisions/0001-zig-engine.md); [F0006 —
 LLMProviderInterface](F0006-LLMProviderInterface.md); [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); [F0008 —
 LLMProviderConfigService](F0008-LLMProviderConfigService.md); and [F0002 —
-LogService](F0002-LogService.md). External protocol references are the AWS
+LogService](F0002-LogService.md); and accepted [ADR 0005 — workflow-defined
+operations](../decisions/0005-workflow-defined-operations.md). External protocol references are the AWS
 documentation for [Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html),
 [CountTokens](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CountTokens.html),
 [Converse token-count input](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseTokensRequest.html),
@@ -73,7 +74,7 @@ workflow, persistence, approval, or completion authority.
 F0007 begins with:
 
 - one immutable `ValidatedProviderModelBinding` tagged `aws_bedrock`;
-- one identified provider-neutral request with exact route, full
+- one identified provider-neutral request with exact compiled workflow model-operation identity, full
   `model-envelope/v1` schema, ordered content, controls, `ModelVisibleInputId`,
   and effective limits;
 - one assigned `ProviderOperationId` and, before network I/O, proof of its
@@ -84,7 +85,7 @@ F0007 begins with:
   same provider, operation ID, source region, service, deadline, and request.
 
 It ends with one F0006 token-count or invocation observation, or propagated
-terminal cancellation. It does not decode the SDDE envelope, validate route
+terminal cancellation. It does not decode the SDDE envelope, validate operation
 semantics, select a retry/fallback, mutate state, log raw content, or invoke a
 pipeline node.
 
@@ -232,7 +233,7 @@ The current example's `global.amazon.nova-2-lite-v1:0` is therefore useful as a
 shape example but not automatic runtime authority. AWS documents Nova 2 Lite as
 supporting global inference while not supporting CountTokens or structured
 output. Under F0006's exact-token and full-envelope rules, that entry cannot
-bind to a token-bounded SDDE route until an exact accepted tokenizer contract
+bind to a token-bounded YAML-declared model operation until an exact accepted tokenizer contract
 exists, and it must use `prompt_only`. Its global data-routing policy must also
 be explicitly accepted. No heuristic tokenizer or optimistic feature flag is
 permitted.
@@ -350,14 +351,14 @@ version. For
 `native_model_envelope_v1` it must additionally cover `outputConfig` and prove
 that CountTokens over the permitted input equals charged Converse input usage
 for that native mode. Without this proof, the affected mode cannot bind to an
-exact-token route; prompt-only guidance remains conforming only when its own
+exact-token model operation; prompt-only guidance remains conforming only when its own
 omitted-field relation is registered.
 
 Before inference, F0006 proves with checked arithmetic:
 
 ```text
-canonicalInputBytes <= effectiveRouteInputBytes
-inputTokens <= effectiveRouteInputTokens
+canonicalInputBytes <= effectiveOperationInputBytes
+inputTokens <= effectiveOperationInputTokens
 inputTokens + effectiveMaximumOutputTokens <= modelContextWindowTokens
 ```
 
@@ -452,7 +453,7 @@ Native structured output is registered per exact model and schema feature
 profile. Bedrock supports a subset of JSON Schema Draft 2020-12, so a versioned
 compiler-owned `BedrockJSONSchemaFeatureProfile` must prove representability.
 The projected schema is the entire exact `model-envelope/v1` object, including
-request, route, unit, and revision identities plus the route-specific result;
+request, compiled model-operation, unit, and revision identities plus the workflow-declared result;
 project/model output is not allowed to return only the inner result.
 
 The exact native projection is:
@@ -502,9 +503,9 @@ transport/header/body caps under the same identity-encoding rule.
 After strict response decoding, the adapter separately enforces:
 
 ```text
-modelEnvelopeContentBytes <= effectiveRouteOutputBytes
+modelEnvelopeContentBytes <= effectiveOperationOutputBytes
 reportedInputTokens == exactCountEvidence.inputTokens
-reportedOutputTokens <= effectiveRouteOutputTokens
+reportedOutputTokens <= effectiveOperationOutputTokens
 reportedTotalTokens >= reportedInputTokens
 reportedTotalTokens >= reportedOutputTokens
 ```
@@ -530,7 +531,7 @@ Stop normalization is exhaustive:
 | Bedrock stop reason | Exact F0006 observation |
 | --- | --- |
 | `end_turn` | `.completed(rawResult = .complete { content, ... })`; bounded text may proceed to envelope decoding. |
-| `stop_sequence` | `.failed(cause = response_invalid)`; no route authorizes provider stop sequences. |
+| `stop_sequence` | `.failed(cause = response_invalid)`; no workflow operation authorizes provider stop sequences. |
 | `max_tokens` | `.completed(rawResult = .stopped { reason = output_limit, ... })`; content is discarded and no candidate exists. |
 | `tool_use` | `.completed(rawResult = .stopped { reason = unsupported_tool_request, ... })`; no tool is executed. |
 | `guardrail_intervened` or `content_filtered` | `.completed(rawResult = .stopped { reason = content_filtered, ... })`; no candidate. |
@@ -610,12 +611,11 @@ interface call corresponds to zero or one signed AWS request. Provider backoff
 hints may be normalized as bounded non-authoritative facts only if accepted
 policy defines them; the adapter never sleeps or chooses another model.
 
-`ModelProtocolRetryOrchestrator` is not a provider-failure retry owner; it
-remains restricted to decoder/route-schema failures after a response. The
-accepted owning generation orchestrator, or a separately accepted
-capability-free `ProviderOperationRetryOrchestrator`, may choose a provider
-retry only from cause, retry class, delivery disposition, and policy. The
-runner reserves/applies the new attempt and lifecycle but chooses no branch.
+A protocol-retry operation is not a provider-failure retry owner; it remains
+restricted to decoder/workflow-result-schema failures after a response. Only
+the compiled YAML transition may choose a declared provider-retry operation
+from cause, retry class, delivery disposition, and policy. The runner
+reserves/applies the new attempt and lifecycle but chooses no branch.
 Exhaustion blocks or fails; it never weakens policy. Provider failure is not
 model-content `invalid` and never enters semantic repair.
 
@@ -672,7 +672,7 @@ failpoint evidence; client thread safety alone is insufficient.
 F0007 does not implement:
 
 - provider-file discovery, generic JSON decoding, registry construction, slot
-  selection, or route selection;
+  selection, or workflow-operation selection;
 - prompt/guidance semantics, envelope decoding, candidate validation, repair,
   attempt accounting, retry, or fallback;
 - streaming, `InvokeModel`, OpenAI-compatible APIs, Anthropic Messages, prompt
@@ -823,7 +823,7 @@ Implementation evidence must cover:
 | Common interface, provider file, registry, and operation algebra | F0006 Sections 1-10 |
 | Provider adapter and dependency boundary | Design Sections 5-6 and 26; ADR 0001 |
 | Request/invoke/decode and operation accounting | Design Sections 12.1-12.4 and 13.4; proposed F0006 Section 7 amendment |
-| Route capacity, schema, retry, and repair | Design Sections 12.5-12.7 and 21-22 |
+| Workflow-operation capacity, schema, retry, and repair | Design Sections 12.5-12.7 and 21-22; ADR 0005 |
 | Candidate trust, response limits, and secrets | Design Sections 3-4, 26.1, 26.5, and 27; F0002 |
 | Bedrock request/response/error protocol | AWS Converse, CountTokens, and structured-output references linked above |
 | Bedrock target, endpoint, signing, and least privilege | AWS Nova model card, endpoint, SigV4, and IAM references linked above |

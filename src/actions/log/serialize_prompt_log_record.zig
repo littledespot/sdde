@@ -7,7 +7,7 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "serialize-prompt-log-record@1",
         .kind = .action,
-        .requires = &.{.sanitized_prompt_fragment},
+        .requires = &.{.identified_prompt_log},
         .produces = &.{.serialized_log_record},
         .side_effect = .none,
     };

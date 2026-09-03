@@ -1,6 +1,6 @@
 const std = @import("std");
 const bootstrap = @import("bootstrap_root_registry.zig");
-const log_runtime = @import("feature_log_runtime.zig");
+const log_binding = @import("feature_log_binding.zig");
 
 pub const Error = error{InvalidWorkflowArtifactRegistry};
 
@@ -8,7 +8,7 @@ pub const WorkflowArtifactRegistry = opaque {};
 pub const Owner = opaque {};
 
 const Storage = struct {
-    binding: log_runtime.BindingCandidate,
+    binding: log_binding.BindingCandidate,
     specs_root_path: []const u8,
     specs_root_identity: @import("bootstrap_roots.zig").PhysicalDirectoryIdentity,
     event_run_path: []const u8,
@@ -25,7 +25,7 @@ const OwnerStorage = struct {
 pub fn createValidated(
     backing_allocator: std.mem.Allocator,
     roots: *const bootstrap.BootstrapRootRegistry,
-    binding: *const log_runtime.ValidatedFeatureLogBinding,
+    binding: *const log_binding.ValidatedFeatureLogBinding,
 ) Error!*Owner {
     const specs = bootstrap.bindSpecsArtifactRegistry(roots.specsArtifacts()) orelse {
         return error.InvalidWorkflowArtifactRegistry;
@@ -68,7 +68,7 @@ pub fn deinitOwner(owner: *Owner) void {
 }
 
 pub const FeatureLogSinkBinding = struct {
-    expected_binding: log_runtime.BindingCandidate,
+    expected_binding: log_binding.BindingCandidate,
     specs_root_path: []const u8,
     specs_root_identity: @import("bootstrap_roots.zig").PhysicalDirectoryIdentity,
     event_run_path: []const u8,
@@ -80,10 +80,10 @@ pub const FeatureLogSinkBinding = struct {
 /// The sole concrete handoff from artifact authority to the feature-log sink.
 pub fn bindFeatureLogSinkAdapter(
     value: *const WorkflowArtifactRegistry,
-    binding: *const log_runtime.ValidatedFeatureLogBinding,
+    binding: *const log_binding.ValidatedFeatureLogBinding,
 ) ?FeatureLogSinkBinding {
     const stored = registryStorage(value);
-    if (!log_runtime.sameBinding(binding, stored.binding)) return null;
+    if (!log_binding.sameBinding(binding, stored.binding)) return null;
     return .{
         .expected_binding = stored.binding,
         .specs_root_path = stored.specs_root_path,

@@ -1,6 +1,6 @@
 const std = @import("std");
 const format = @import("../../domain/feature_log_format.zig");
-const logging = @import("../../domain/logging.zig");
+const log_limits = @import("../../domain/feature_log_limits.zig");
 const sink_port = @import("../../ports/feature_log_sink.zig");
 const feature_log_file = @import("feature_log_file.zig");
 
@@ -9,7 +9,7 @@ const Io = std.Io;
 const Entry = struct { ordinal: u16, closed_at_unix_ms: u64 };
 
 pub fn prune(io: Io, directory: Io.Dir, cutoff_unix_ms: u64) sink_port.Error!void {
-    var selected: [logging.max_segments]Entry = undefined;
+    var selected: [log_limits.max_segments]Entry = undefined;
     var selected_count: usize = 0;
     var iterator = directory.iterate();
     while (iterator.next(io) catch return error.SinkFailure) |directory_entry| {
@@ -22,7 +22,7 @@ pub fn prune(io: Io, directory: Io.Dir, cutoff_unix_ms: u64) sink_port.Error!voi
         }) catch return error.SinkFailure;
         defer file.close(io);
         const stat = file.stat(io) catch return error.SinkFailure;
-        if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > logging.max_segment_bytes) {
+        if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
             return error.CorruptStream;
         }
         var reader = file.reader(io, &.{});

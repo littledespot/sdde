@@ -2,7 +2,7 @@
 flowchart TD
     RECONGAP[Validated AuthorityReconciliationOutcome clarification_required<br/>structural requirement ID earliest owner closed gap reason and current evidence] --> GNEED[BuildAuthorityGapClarificationNeedAction<br/>compiler-registered subject question why and answer schema]
     GNEED --> NEED[Validated stage-compatible clarification need]
-    MODELNEED[Validated clarification_needed route result<br/>genuine current authority gap; no model-owned ID, path or status] --> NEED[Validated stage-compatible clarification need]
+    MODELNEED[Validated clarification_needed operation result<br/>genuine current authority gap; no model-owned ID, path or status] --> NEED[Validated stage-compatible clarification need]
     RCONFLICT[Validated unresolved behavior-changing SourceConflict<br/>after complete ReferenceSnapshot validation] --> RCNEED[BuildReferenceConflictClarificationNeedAction<br/>closed engine claim-ID choices; no model or preferred answer]
     RCNEED --> NEED
     NEED --> KEY[Build deterministic ClarificationSubjectKey<br/>AuthorityRequirementId, earliest owning stage, stable unit selector,<br/>required slot, gap kind and authority IDs]
@@ -80,7 +80,7 @@ flowchart TD
     ASTAGE -- Spec --> SAUTH[Reingest the current selected directory through the complete diagram 05<br/>preactivation/canonical/extraction/reconciliation flow and validate current specification authorities;<br/>principles cannot supply missing business facts]
     ASTAGE -- Plan --> PAUTH[Load the bound current PlanInputAuthorityState; refresh normalized spec,<br/>bootstrap/reference, RepositoryFactRegistryState, baseline FileRegistryState<br/>and ResearchEvidenceRegistry; select every raw principle chunk in configured<br/>eligible filename-category hints; do not build the successor before resolution]
     ASTAGE -- Tasks --> TAUTH[Reload current PlanState/spec, presets and repository facts;<br/>select every raw principle chunk in configured eligible filename-category hints]
-    PAUTH --> PFIT{Complete category-selected raw chunks fit the authority-route budget}
+    PAUTH --> PFIT{Complete category-selected raw chunks fit the compiled operation budget}
     TAUTH --> PFIT
     PFIT -- No --> PBLOCK[Blocking principle-context budget diagnostic<br/>no ranking, summary or silent omission]
     PFIT -- Yes --> PHINT[Principle filename supplies only a category hint;<br/>resolution must cite supporting source-located free text]
@@ -90,7 +90,7 @@ flowchart TD
     PHINT --> DIRECT
     DIRECT --> COVER{Current non-conflicting authority directly covers exact subject and required slot}
     COVER -- Yes --> ARES[AssignClarificationResolutionIdAction then<br/>BuildClarificationAuthorityResolutionAction with exact current authority IDs<br/>and a self-contained validation-contract binding; no transient evidence ID]
-    COVER -- Semantic interpretation required --> CRES[clarification.resolve receives bounded current authority IDs only]
+    COVER -- Semantic interpretation required --> CRES[YAML-declared clarification-resolution operation<br/>receives bounded current authority IDs only]
     CRES --> CVALID{Deterministic validation proves cited current IDs cover exact subject without conflict}
     CVALID -- Yes --> ARES
     CVALID -- No --> STILL

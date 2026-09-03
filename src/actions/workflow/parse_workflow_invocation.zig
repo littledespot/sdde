@@ -1,7 +1,16 @@
 const execution = @import("../../domain/workflow_execution.zig");
+const pipeline = @import("../../domain/pipeline.zig");
 const workflow = @import("../../domain/workflow.zig");
 
 pub const Action = struct {
+    pub const contract: pipeline.NodeContract = .{
+        .id = "parse-workflow-invocation@1",
+        .kind = .action,
+        .requires = &.{.workflow_implementation_registry_evidence},
+        .produces = &.{.workflow_invocation},
+        .side_effect = .none,
+    };
+
     pub fn execute(_: Action, arguments: []const []const u8) execution.InvocationError!execution.Invocation {
         if (arguments.len == 0) return error.MissingWorkflowId;
         if (arguments.len > execution.max_invocation_arguments + 1) return error.TooManyArguments;

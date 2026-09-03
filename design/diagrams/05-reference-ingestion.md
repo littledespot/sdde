@@ -293,16 +293,16 @@ flowchart TD
     CRESPONSE[Committed final closed conflict-bound SNN response from the current-run resume gate]
     CRESPONSE --> CREFRUN[Run the complete current target-context bootstrap and selected-directory flow again:<br/>fresh no-follow inventory, bounded capture/decode, provisional preactivation,<br/>canonical identity reservation/materialization, extraction and reconciliation;<br/>the committed response is authority, but prior blobs/snapshot are not reused]
     CREFRUN --> POSTBOOT
-    SUCCESSOR -- No; new feature initial conflict-free ingestion --> BRIEF[Begin or regenerate the complete specification stage from its first unit<br/>spec.feature-brief.generate from durable bounded reconciled authority]
+    SUCCESSOR -- No; new feature initial conflict-free ingestion --> BRIEF[Begin or regenerate the complete specification workflow from its first YAML-declared unit<br/>the declared feature-brief operation receives durable bounded reconciled authority]
     SUCCESSOR -- Yes --> RRTX[Assemble complete ReferenceRevision inputs:<br/>successor snapshot, complete reference-conflict set transition, next clarification registry,<br/>complete clarification view set with an empty submittable projection, current actor/passive<br/>authorities, retain-current bootstrap mutation, relevant ledger successors, exact<br/>no/uncommitted/committed descendant mutation, reference view and resumed specifying workflow state]
     RRTX --> RRTWAL[Invoke diagram 09 feature-storage reference_revision lifecycle;<br/>after its transaction-ID reservation call BuildReferenceRevisionStageTransactionAction<br/>and ValidateWorkflowTransitionStageTransactionAction, commit the successor authorities,<br/>then commit the transaction ID and release the feature lock before regeneration]
     RRTWAL --> BRIEF
-    BRIEF --> BROUTE{FeatureBriefRouteResult}
+    BRIEF --> BROUTE{FeatureBriefOperationResult}
     BROUTE -- clarification_needed --> CLIFE[ClarificationLifecycleOrchestrator]
     BROUTE -- content --> BVALID[Validate title, description and goal grounding; no feature ID or path from model]
     BVALID --> REQUEST[AssignFeatureRequestIdAction then BuildFeatureRequestAction<br/>owner-local to the durable ReferenceState; build no generic FeatureRequestState yet]
     REQUEST --> SPEC[Generate bounded F0100 specification units with reference and resolved-answer citations:<br/>Primary User Story, AC, UO, EC, FR, BR, assumptions, non-goals, prohibited behaviors,<br/>and EN only after validated business-data applicability; never generate Markdown or inline clarification]
-    SPEC --> SROUTE{Each specification-unit route}
+    SPEC --> SROUTE{Each declared specification-unit operation result}
     SROUTE -- clarification_needed --> CLIFE
     SROUTE -- content --> SUNIT[Validate business boundary, IDs, structure, provenance and passive-literal use]
     SUNIT --> MORE{All specification units accepted}

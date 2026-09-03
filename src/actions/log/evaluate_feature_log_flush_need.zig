@@ -1,16 +1,25 @@
-const logging = @import("../../domain/logging.zig");
-const runtime = @import("../../domain/feature_log_runtime.zig");
+const log_policy = @import("../../domain/log_policy.zig");
+const log_stream = @import("../../domain/feature_log_stream.zig");
 const telemetry = @import("../../domain/telemetry.zig");
+const pipeline = @import("../../domain/pipeline.zig");
 
 pub const Decision = enum { flush, buffer };
 
 pub const Action = struct {
+    pub const contract: pipeline.NodeContract = .{
+        .id = "evaluate-feature-log-flush-need@1",
+        .kind = .action,
+        .requires = &.{ .logging_policy, .feature_log_stream_state, .trusted_log_clock },
+        .produces = &.{.log_flush_decision},
+        .side_effect = .none,
+    };
+
     pub fn execute(
         _: Action,
-        policy: logging.CompiledLoggingPolicy,
+        policy: log_policy.CompiledLoggingPolicy,
         level: telemetry.CanonicalLogLevel,
         event_type: telemetry.EventType,
-        state: runtime.StreamState,
+        state: log_stream.StreamState,
         monotonic_ms: u64,
     ) Decision {
         const required = level.rank() >= policy.flush_at_or_above.rank() or

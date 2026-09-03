@@ -1,13 +1,22 @@
-const logging = @import("../../domain/logging.zig");
-const runtime = @import("../../domain/feature_log_runtime.zig");
+const log_policy = @import("../../domain/log_policy.zig");
+const prompt_log = @import("../../domain/sanitized_prompt_log.zig");
+const pipeline = @import("../../domain/pipeline.zig");
 
 pub const Decision = enum { capture, drop };
 
 pub const Action = struct {
+    pub const contract: pipeline.NodeContract = .{
+        .id = "evaluate-prompt-log-capture@1",
+        .kind = .action,
+        .requires = &.{ .logging_policy, .validated_prompt_fragment },
+        .produces = &.{.prompt_capture_decision},
+        .side_effect = .none,
+    };
+
     pub fn execute(
         _: Action,
-        policy: logging.CompiledLoggingPolicy,
-        fragment: runtime.SanitizedPromptFragment,
+        policy: log_policy.CompiledLoggingPolicy,
+        fragment: prompt_log.SanitizedPromptFragment,
     ) Decision {
         var direction = false;
         var body_class = fragment.body_class == .ordinary;

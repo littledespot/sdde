@@ -43,6 +43,11 @@ const model_provider_requirement = @import("../domain/model_provider_requirement
 const llm_provider_identity = @import("../domain/llm_provider_identity.zig");
 const bootstrap_orchestrator = @import("../application/bootstrap_orchestrator.zig");
 const bootstrap_runner = @import("../application/bootstrap_runner.zig");
+const bootstrap_execution = @import("../application/bootstrap_execution.zig");
+const bootstrap_config_runner = @import("../application/bootstrap_config_runner.zig");
+const bootstrap_root_runner = @import("../application/bootstrap_root_runner.zig");
+const bootstrap_workflow_runner = @import("../application/bootstrap_workflow_runner.zig");
+const bootstrap_toolchain_runner = @import("../application/bootstrap_toolchain_runner.zig");
 const capture_project_toolchain = @import("../actions/toolchain/capture_project_toolchain.zig");
 const inventory_toolchain_presets = @import("../actions/toolchain/inventory_toolchain_presets.zig");
 const capture_toolchain_presets = @import("../actions/toolchain/capture_toolchain_presets.zig");
@@ -57,17 +62,20 @@ const llm_provider_registry = @import("../domain/llm_provider_registry.zig");
 const repository_model_allowlist = @import("../domain/repository_model_allowlist.zig");
 const toolchain = @import("../domain/toolchain.zig");
 const run_outcome = @import("../domain/run_outcome.zig");
-const engine_invocation_runner = @import("../application/engine_invocation_runner.zig");
+const workflow_engine = @import("../application/workflow_engine_orchestrator.zig");
 const model_provider_bootstrap_binding = @import("../application/model_provider_bootstrap_binding.zig");
 const model_provider_bootstrap_orchestrator = @import("../application/model_provider_bootstrap_orchestrator.zig");
 const model_provider_bootstrap_services = @import("../application/model_provider_bootstrap_services.zig");
 const llm_provider_registry_service = @import("../application/llm_provider_registry_service.zig");
 const core_workflow_nodes = @import("core_workflow_nodes.zig");
 const workflow_artifacts = @import("../domain/workflow_artifact_registry.zig");
-const feature_log_runtime = @import("../domain/feature_log_runtime.zig");
+const log_binding = @import("../domain/feature_log_binding.zig");
+const log_limits = @import("../domain/feature_log_limits.zig");
 const feature_log_sink = @import("../adapters/filesystem/feature_log_sink.zig");
 const active_feature_log_runtime = @import("active_feature_log_runtime.zig");
+const feature_log_finalization_runner = @import("../application/feature_log_finalization_runner.zig");
 const model_provider_bootstrap = @import("model_provider_bootstrap.zig");
+const engine_invocation = @import("engine_invocation.zig");
 const stabilizer_port = @import("../ports/transaction_stabilizer.zig");
 const workflow_node_implementation = @import("../ports/workflow_node_implementation.zig");
 
@@ -90,13 +98,38 @@ fn runInvocationInProject(
         .{},
         &llm_provider_contracts.Registry.empty,
     );
-    return engine_invocation_runner.run(
+    return runBootstrappedInvocation(
         &boot,
         arguments,
         core_workflow_nodes.registry,
         core_workflow_nodes.compiler_registry,
         provider_bootstrap.bind(),
     );
+}
+
+fn runBootstrappedInvocation(
+    boot: *bootstrap_orchestrator.Outcome,
+    arguments: []const []const u8,
+    implementation_registry: workflow_node_implementation.Registry,
+    compiler_registry: workflow_compilation.CompilerRegistry,
+    provider_bootstrap: model_provider_bootstrap_binding.Binding,
+) run_outcome.Outcome {
+    return switch (boot.*) {
+        .failed => |failure| .{ .bootstrap_failed = failure },
+        .cancelled => .{ .execution = .cancelled },
+        .ready => |*services| execute: {
+            var invocation = engine_invocation.Assembly.init(
+                services,
+                arguments,
+                implementation_registry,
+                compiler_registry,
+                provider_bootstrap,
+                .{},
+            );
+            defer invocation.deinit();
+            break :execute workflow_engine.run(invocation.bindings());
+        },
+    };
 }
 
 fn runInProject(
@@ -123,13 +156,21 @@ fn runInProjectWithRuntime(
     const active_path_policy = policy_resolver.resolve(allocator) catch {
         return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
     };
-    var runner = bootstrap_runner.Runner.init(
+    var execution_state: bootstrap_execution.State = .{ .runtime = runtime };
+    var config_pipeline = bootstrap_config_runner.Runner.init(
         allocator,
+        &execution_state,
         locate.Action{ .locator = source_adapter.locator() },
         read.Action{},
         decode.Action{},
         canonicalize_log_level.Action{},
         validate_logging_policy.Action{},
+    );
+    defer config_pipeline.deinit();
+    var root_pipeline = bootstrap_root_runner.Runner.init(
+        allocator,
+        &execution_state,
+        &config_pipeline,
         validate_path_policy.Action{ .policy = active_path_policy },
         validate_provider_path_policy.Action{ .policy = active_path_policy },
         resolve_root.Action{ .policy = active_path_policy },
@@ -138,6 +179,12 @@ fn runInProjectWithRuntime(
         build_registry_id.Action{},
         build_registry.Action{},
         validate_registry.Action{},
+    );
+    defer root_pipeline.deinit();
+    var workflow_pipeline = bootstrap_workflow_runner.Runner.init(
+        allocator,
+        &execution_state,
+        &root_pipeline,
         build_workflow_layout.Action{},
         enumerate_workflow_resources.Action{ .source = workflow_source_adapter.enumerator() },
         normalize_workflow_entries.Action{},
@@ -151,6 +198,12 @@ fn runInProjectWithRuntime(
         validate_workflow_graphs.Action{},
         build_workflow_registry.Action{},
         validate_workflow_registry.Action{},
+    );
+    defer workflow_pipeline.deinit();
+    var toolchain_pipeline = bootstrap_toolchain_runner.Runner.init(
+        allocator,
+        &execution_state,
+        &root_pipeline,
         capture_project_toolchain.Action{ .source = toolchain_source_adapter.projectCapturer() },
         inventory_toolchain_presets.Action{ .source = toolchain_source_adapter.presetEnumerator() },
         capture_toolchain_presets.Action{ .source = toolchain_source_adapter.presetCapturer() },
@@ -160,9 +213,15 @@ fn runInProjectWithRuntime(
         resolve_toolchain_inheritance.Action{},
         compose_toolchain.Action{},
         validate_toolchain_safety.Action{ .registry = policy_registry },
-        runtime,
     );
-    defer runner.deinit();
+    defer toolchain_pipeline.deinit();
+
+    var runner: bootstrap_runner.Runner = .{
+        .config = &config_pipeline,
+        .roots = &root_pipeline,
+        .workflows = &workflow_pipeline,
+        .toolchain = &toolchain_pipeline,
+    };
 
     return bootstrap_orchestrator.run(runner.bindings());
 }
@@ -346,7 +405,7 @@ test "invocation runner handles every provider preparation outcome before workfl
         PreparationMode.cancelled,
     }) |mode| {
         var probe: InvocationPreparationProbe = .{ .mode = mode };
-        const outcome = engine_invocation_runner.run(
+        const outcome = runBootstrappedInvocation(
             &boot,
             &.{"hello"},
             probe.implementations(),
@@ -379,7 +438,7 @@ test "invocation runner handles every provider preparation outcome before workfl
     }
 
     var invalid_probe: InvocationPreparationProbe = .{ .mode = .not_required };
-    const invalid = engine_invocation_runner.run(
+    const invalid = runBootstrappedInvocation(
         &boot,
         &.{"absent-workflow"},
         invalid_probe.implementations(),
@@ -669,25 +728,25 @@ test "feature log storage opens only an activated layout from present artifact a
     var boot = runInProject(io, std.testing.allocator, project_root.dir);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
-    const candidate: feature_log_runtime.BindingCandidate = .{
+    const candidate: log_binding.BindingCandidate = .{
         .log_policy_id = @import("../domain/telemetry.zig").Identifier.validate("LOGPOL-1").?,
         .binding_id = @import("../domain/telemetry.zig").Identifier.validate("LOGBIND-1").?,
         .run_id = @import("../domain/telemetry.zig").Identifier.validate("RUN-1").?,
         .feature_id = @import("../domain/telemetry.zig").Identifier.validate("F0002").?,
     };
-    const binding_owner = try feature_log_runtime.createValidatedBinding(std.testing.allocator, candidate);
-    defer feature_log_runtime.deinitBindingOwner(binding_owner);
+    const binding_owner = try log_binding.createValidated(std.testing.allocator, candidate);
+    defer log_binding.deinitOwner(binding_owner);
     const artifact_owner = try workflow_artifacts.createValidated(
         std.testing.allocator,
         boot.ready.roots.registry(),
-        feature_log_runtime.binding(binding_owner),
+        log_binding.binding(binding_owner),
     );
     defer workflow_artifacts.deinitOwner(artifact_owner);
     var sink = try feature_log_sink.Adapter.init(
         io,
         project_root.dir,
         workflow_artifacts.registry(artifact_owner),
-        feature_log_runtime.binding(binding_owner),
+        log_binding.binding(binding_owner),
     );
     defer sink.deinit();
     try project_root.dir.access(io, "specs/F0002/logs/events/RUN-1/LOGBIND-1", .{});
@@ -700,27 +759,32 @@ test "feature log storage opens only an activated layout from present artifact a
         project_root.dir,
         boot.ready.logs.policy(),
         workflow_artifacts.registry(artifact_owner),
-        feature_log_runtime.binding(binding_owner),
+        log_binding.binding(binding_owner),
         stabilizer.port(),
     );
     defer active_feature_log_runtime.deinit(active_runtime);
     const shortcode = try @import("../domain/telemetry.zig").WorkflowShortcode.parse("TEST");
     try std.testing.expect(boot.ready.logs.activate(
-        active_feature_log_runtime.runner(active_runtime),
+        active_feature_log_runtime.runner(active_runtime).childBindings(),
         shortcode,
     ) == .ok);
     const persisted = boot.ready.logs.barrier().process(.{
         .workflow_shortcode = shortcode,
         .fact = .{ .event_type = .run_started },
     });
-    try std.testing.expect(persisted == .persisted);
+    try std.testing.expect(persisted.outcome == .ok);
     try project_root.dir.access(io, "specs/F0002/logs/events/RUN-1/LOGBIND-1/0001.log", .{});
-    try std.testing.expect(boot.ready.logs.finalizeActive(shortcode) == .ok);
+    var finalization_execution: feature_log_finalization_runner.Runner = .{
+        .target = active_feature_log_runtime.runner(active_runtime),
+        .mode = .active,
+        .shortcode = shortcode,
+    };
+    try std.testing.expect(boot.ready.logs.finalizeActive(finalization_execution.childBindings()) == .ok);
     const bytes = try project_root.dir.readFileAlloc(
         io,
         "specs/F0002/logs/events/RUN-1/LOGBIND-1/0001.log",
         std.testing.allocator,
-        .limited(@import("../domain/logging.zig").max_segment_bytes),
+        .limited(log_limits.max_segment_bytes),
     );
     defer std.testing.allocator.free(bytes);
     try std.testing.expect(std.mem.indexOf(u8, bytes, "segment_trailer|") != null);
@@ -742,25 +806,25 @@ test "feature log sink neither creates a missing activation layout nor accepts i
         var boot = runInProject(io, std.testing.allocator, project_root.dir);
         defer boot.deinit();
         try std.testing.expect(boot == .ready);
-        const candidate: feature_log_runtime.BindingCandidate = .{
+        const candidate: log_binding.BindingCandidate = .{
             .log_policy_id = @import("../domain/telemetry.zig").Identifier.validate("LOGPOL-1").?,
             .binding_id = @import("../domain/telemetry.zig").Identifier.validate("LOGBIND-1").?,
             .run_id = @import("../domain/telemetry.zig").Identifier.validate("RUN-1").?,
             .feature_id = @import("../domain/telemetry.zig").Identifier.validate("F0002").?,
         };
-        const binding_owner = try feature_log_runtime.createValidatedBinding(std.testing.allocator, candidate);
-        defer feature_log_runtime.deinitBindingOwner(binding_owner);
+        const binding_owner = try log_binding.createValidated(std.testing.allocator, candidate);
+        defer log_binding.deinitOwner(binding_owner);
         const artifact_owner = try workflow_artifacts.createValidated(
             std.testing.allocator,
             boot.ready.roots.registry(),
-            feature_log_runtime.binding(binding_owner),
+            log_binding.binding(binding_owner),
         );
         defer workflow_artifacts.deinitOwner(artifact_owner);
         const result = feature_log_sink.Adapter.init(
             io,
             project_root.dir,
             workflow_artifacts.registry(artifact_owner),
-            feature_log_runtime.binding(binding_owner),
+            log_binding.binding(binding_owner),
         );
         if (insecure_layout) {
             try std.testing.expectError(error.InsecurePermissions, result);
@@ -781,20 +845,20 @@ test "absent optional specs root cannot mint workflow artifact authority" {
     var boot = runInProject(io, std.testing.allocator, project_root.dir);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
-    const candidate: feature_log_runtime.BindingCandidate = .{
+    const candidate: log_binding.BindingCandidate = .{
         .log_policy_id = @import("../domain/telemetry.zig").Identifier.validate("LOGPOL-1").?,
         .binding_id = @import("../domain/telemetry.zig").Identifier.validate("LOGBIND-1").?,
         .run_id = @import("../domain/telemetry.zig").Identifier.validate("RUN-1").?,
         .feature_id = @import("../domain/telemetry.zig").Identifier.validate("F0002").?,
     };
-    const binding_owner = try feature_log_runtime.createValidatedBinding(std.testing.allocator, candidate);
-    defer feature_log_runtime.deinitBindingOwner(binding_owner);
+    const binding_owner = try log_binding.createValidated(std.testing.allocator, candidate);
+    defer log_binding.deinitOwner(binding_owner);
     try std.testing.expectError(
         error.InvalidWorkflowArtifactRegistry,
         workflow_artifacts.createValidated(
             std.testing.allocator,
             boot.ready.roots.registry(),
-            feature_log_runtime.binding(binding_owner),
+            log_binding.binding(binding_owner),
         ),
     );
 }

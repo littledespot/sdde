@@ -9,9 +9,10 @@ strict common decoder, compiler-contract registry join, immutable
 implemented. The fixed conditional bootstrap owner and exact
 provider-requirement derivation, immutable per-invocation provider snapshot,
 orchestrator, runner bindings, and ordinary post-selection invocation
-composition are accepted and implemented. Production provider contracts,
-route-to-slot assignment, the provider-neutral port, and provider-operation
-work remain incomplete or blocked on the remaining amendments in Section 2.
+composition are accepted and implemented. Production provider contracts, the
+workflow-declared model-operation binding, the provider-neutral port, and
+provider-operation work remain incomplete or blocked on the remaining
+amendments in Section 2.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -30,8 +31,9 @@ engine](../decisions/0001-zig-engine.md); [ADR 0004 — conditional
 model-provider bootstrap](../decisions/0004-model-provider-bootstrap.md); [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); [F0002 —
 LogService](F0002-LogService.md); [F0008 —
-LLMProviderConfigService](F0008-LLMProviderConfigService.md); the [path
-contract](../paths.md); and
+LLMProviderConfigService](F0008-LLMProviderConfigService.md); accepted [ADR
+0005 — workflow-defined operations](../decisions/0005-workflow-defined-operations.md);
+the [path contract](../paths.md); and
 `design/code.md` Sections 21-24. The
 [`.sddproviders.json`](../examples/.sddproviders.json) file is source material
 for the requested collection pattern. It is not runtime authority, a schema,
@@ -49,7 +51,7 @@ governing name is amended; it must not retain an alias or parallel gateway.
 The interface has one responsibility: execute one already selected, validated,
 identified, and accounted provider operation through an immutable
 provider/model binding and return one bounded provider-neutral observation. It
-does not select a route or model, read configuration, acquire workflow
+does not select a workflow operation, slot, or model, read configuration, acquire workflow
 authority, interpret model content, or validate an SDDE candidate.
 
 The F0006 feature also defines the separate bootstrap path that makes the port
@@ -113,8 +115,9 @@ record accepted increments:
    `models.slots` is the repository allowlist. Every slot's exact
    `(provider, model)` tuple must resolve to exactly one validated catalogue
    entry. Slots may select some or all catalogue entries, never an additional
-   model; unused catalogue entries gain no repository authority. The exact
-   built-in route-to-slot assignment still requires acceptance;
+   model; unused catalogue entries gain no repository authority. ADR 0005
+   removes built-in routes: each YAML-declared generic model operation names
+   one repository slot explicitly;
 7. amends `AdvanceModelAttemptAccountingAction`, design Sections 12.1 and
    13.4, and `ModelRequestLifecycle` for the Section 7 full-attempt semantics:
    reserve once before the first external provider operation; define count and
@@ -135,17 +138,16 @@ record accepted increments:
     non-refreshing, no-I/O lease or introduces closed identities, lifecycle,
     budgets, and retry accounting for every permitted credential file,
     process, metadata, STS, or refresh side effect; and
-11. assigns provider transport/auth/throttle/timeout retry branching to the
-    owning generation orchestrator or a new capability-free
-    `ProviderOperationRetryOrchestrator`; it does not broaden the existing
-    decoder/schema-only `ModelProtocolRetryOrchestrator`.
+11. exposes provider transport/auth/throttle/timeout outcomes to the compiled
+    YAML graph, which alone may select an explicit registered retry operation;
+    no provider or generation orchestrator hides that branch.
 
 Until then, the two project inputs have distinct proposed responsibilities:
 
 | File | Responsibility |
 | --- | --- |
 | `.sddtoolkit.json` | Define the repository's allowed model set through named slots containing exact provider/model references and accepted options. F0001 remains its sole reader and decoder. |
-| `.sddproviders.json` | Catalogue the bounded configured provider/model instances and their closed provider-specific deployment configuration. It contains no repository allowlist, route assignment, capability claim, executable implementation, or secret. |
+| `.sddproviders.json` | Catalogue the bounded configured provider/model instances and their closed provider-specific deployment configuration. It contains no repository allowlist, workflow-operation assignment, capability claim, executable implementation, or secret. |
 
 Let `C` be the exact validated catalogue tuple set and `S` the tuple set
 projected from `models.slots`. The required relationship is `S ⊆ C`. Equality
@@ -154,8 +156,8 @@ the repository model configuration. No reverse completeness requirement exists,
 and `C - S` remains configured but unauthorized for this repository. Distinct
 slot names may reference the same member of `C`; this does not increase `S` or
 duplicate the catalogue entry. F0006 does not replace `models.slots` with a
-profiles/routes compatibility shape. The separately accepted route resolver
-must select a configured slot and produce the same
+profile or workflow-operation registry. Each YAML-declared generic model
+operation must select a configured slot and produce the same
 `ValidatedProviderModelBinding` before any provider operation.
 
 ## 3. Exact `.sddproviders.json` contract
@@ -293,7 +295,7 @@ Registry ownership is separated as follows:
 | `BuildLLMProviderRegistryAction` | Join the decoded document to the fixed provider discriminator registry and compiler-registered model contracts, producing one owned candidate registry. |
 | `ValidateLLMProviderRegistryAction` | Prove closed variants, exact joins, uniqueness, resource totals, target policy, model capability, and registered provider discriminator availability for the entire candidate. |
 | Pipeline runner | Apply the validated delta and materialize the run-owned immutable `LLMProviderRegistryService`; destroy the candidate on every rejected path. |
-| `LLMProviderRegistryService` | Expose borrowed immutable lookup by exact `(provider, model)` tuple; it does not read files, mutate entries, choose a route, or perform I/O. |
+| `LLMProviderRegistryService` | Expose borrowed immutable lookup by exact `(provider, model)` tuple; it does not read files, mutate entries, choose a workflow operation or slot, or perform I/O. |
 | `ValidateRepositoryModelAllowlistAction` | Join the complete F0001 `models.slots` map to the validated catalogue and produce immutable slot-to-entry references only when every tuple resolves exactly once. |
 | `ValidatedRepositoryModelAllowlist` | Be the sole repository model-allowlist authority. It owns slot identity, catalogue-entry identity, and validated slot options; it copies no provider configuration, contract facts, adapter, client, or capability. |
 | Composition root | Construct the fixed provider/model contract registry, concrete provider adapters, the private exhaustive dispatcher, and their narrow dependencies; inject the common port only into provider-operation actions. |
@@ -323,8 +325,9 @@ together.
 Every union variant conforms directly to `LLMProviderInterface`; dispatch
 forwards exactly one operation and introduces no second port. Adding a provider
 therefore requires a source change and architecture tests. Unused entries do
-not become callable: only an engine-selected built-in route resolved to a
-validated fact-only binding can reach the composition-injected common port.
+not become callable: only a compiled YAML model operation whose declared slot
+resolves to a validated fact-only binding can reach the composition-injected
+common port.
 
 ## 5. Conditional bootstrap and change handling
 
@@ -339,7 +342,7 @@ probe file existence or content.
 After the validated workflow registry has resolved the selected graph,
 `DeriveProviderRequirementAction` derives whether its effective capability set
 contains the exact compiler-owned `model-provider` capability. It reads no
-workflow/node name, parameter, policy allowance alone, configuration, route, or
+workflow/node name, parameter, policy allowance alone, configuration, slot, or
 provider content. A project workflow cannot manufacture that capability by
 naming a provider node or field; it can receive it only through an accepted
 registered node contract under an allowing workflow policy.
@@ -387,7 +390,7 @@ prior invocation's bytes, registry, or allowlist are retained.
 
 F0001 remains the sole owner of `.sddtoolkit.json` decoding. The complete
 `models.slots` map defines the repository's candidate allowlist. Before any
-route binding is usable, every slot's exact case-sensitive `(provider, model)`
+workflow model operation is usable, every slot's exact case-sensitive `(provider, model)`
 tuple must resolve once in `LLMProviderRegistryService` and produce one entry in
 `ValidatedRepositoryModelAllowlist`; one missing or ambiguous tuple rejects the
 complete repository model configuration. Provider catalogue entries not
@@ -398,7 +401,7 @@ facts. Decoded strings alone grant no provider authority.
 
 `ResolveProviderModelBindingAction` must prove:
 
-1. the route-selected slot resolves in `ValidatedRepositoryModelAllowlist` to
+1. the compiled workflow operation's YAML-declared slot resolves in `ValidatedRepositoryModelAllowlist` to
    exactly one immutable registry-entry identity; direct provider/model tuple
    selection bypassing the allowlist is impossible;
 2. the entry resolves to exactly one registered provider discriminator and
@@ -407,16 +410,16 @@ facts. Decoded strings alone grant no provider authority.
    policy, operation set, and exact token-count mechanism are valid;
 4. every selected option, including `reasoningEffort`, is explicitly supported
    and representable rather than silently ignored;
-5. the complete `model-envelope/v1` response schema and route result schema are
+5. the complete `model-envelope/v1` response schema and YAML-declared result schema are
    representable by the registered response mode; and
-6. effective limits are the strict minimum of engine, route, and registered
+6. effective limits are the strict minimum of engine, compiled workflow operation, and registered
    model-contract limits.
 
 The following checks use checked integer arithmetic:
 
 ```text
-canonicalInputBytes <= effectiveRouteInputBytes
-exactInputTokens <= effectiveRouteInputTokens
+canonicalInputBytes <= effectiveOperationInputBytes
+exactInputTokens <= effectiveOperationInputTokens
 exactInputTokens + effectiveMaximumOutputTokens <= modelContextWindowTokens
 ```
 
@@ -434,8 +437,8 @@ implementation choice to move the failure outside accounting.
 After a response, before envelope decoding:
 
 ```text
-canonicalModelEnvelopeBytes <= effectiveRouteOutputBytes
-reportedOutputTokens <= effectiveRouteOutputTokens
+canonicalModelEnvelopeBytes <= effectiveOperationOutputBytes
+reportedOutputTokens <= effectiveOperationOutputTokens
 reportedTotalTokens >= reportedInputTokens
 reportedTotalTokens >= reportedOutputTokens
 ```
@@ -447,10 +450,10 @@ must account for bounded header count/bytes, the fixed protocol wrapper,
 content-encoding policy, and worst-case encoding overhead; crossing any ceiling
 aborts without truncation.
 
-There is no implicit default, nearest match, first entry, provider-owned route
-selection, or silent fallback. Only an accepted capability-free orchestrator
-may choose retry or fallback from typed outcomes. The runner only validates and
-applies the resulting attempt/lifecycle/accounting deltas.
+There is no implicit default, nearest match, first entry, provider-owned
+selection, or silent fallback. Only the compiled YAML `on` mapping may choose
+an explicit retry or fallback operation from typed outcomes. The runner only
+validates and applies the resulting attempt/lifecycle/accounting deltas.
 
 ## 7. Operation identity, lifecycle, and interface
 
@@ -594,7 +597,7 @@ exact mechanism exists, inference blocks.
 ## 8. Closed request, observation, and failure algebra
 
 `IdentifiedProviderNeutralModelRequest` contains only engine-assigned request,
-route, binding, request-schema, result-schema, and `ModelVisibleInputId`;
+workflow-operation identity, binding, request-schema, result-schema, and `ModelVisibleInputId`;
 ordered bounded system/guidance and user/evidence content; the exact complete
 `model-envelope/v1` response schema; supported engine-selected controls; and
 effective limits. It contains no provider URL, arbitrary provider map,
@@ -734,16 +737,17 @@ represented by an empty-string sentinel.
 `.stopped` publishes no candidate to `DecodeModelEnvelopeAction`. A `.complete`
 result is still untrusted candidate data. Native structured output is only a
 transport optimization: the engine always decodes and validates the entire
-exact model envelope, identities, closed route result, semantic assertions,
+exact model envelope, identities, closed workflow-operation result, semantic assertions,
 and no-invention requirements.
 
 Explicit cancellation remains terminal `cancelled` and is propagated outside
 the failure union. Provider failure is never converted to the model-content
-`invalid` state because `invalid` enters schema/semantic repair. Capability-free
-retry orchestration may use `retryClass`, delivery disposition, and accepted
-policy to select a typed retry or terminal branch. Terminal-outcome actions
-construct the corresponding delta; the runner only validates/applies it and
-never chooses `blocked`, `failed`, `cancelled`, retry, or fallback.
+`invalid` state because `invalid` enters schema/semantic repair. A provider
+operation returns the closed `retryClass` and delivery disposition; the
+compiled YAML transition may pass those facts to an explicit retry operation
+allowed by policy. Terminal-outcome actions construct the corresponding delta;
+the runner only validates/applies it and never chooses `blocked`, `failed`,
+`cancelled`, retry, or fallback.
 
 ## 9. Action and orchestration ownership
 
@@ -762,7 +766,7 @@ never chooses `blocked`, `failed`, `cancelled`, retry, or fallback.
 | `ModelProviderBootstrapBinding` | Give the invocation runner one typed post-selection child boundary without exposing filesystem or provider capabilities. |
 | Provider-bootstrap composition assembly | Construct the concrete F0008 adapter and config/provider runners, then invoke the fixed orchestrator; perform no selection or branching. |
 | Engine invocation runner | Invoke provider preparation after exact selection, preserve its typed outcome, retain `ready` services through workflow execution, and make workflow execution unreachable after failure or cancellation. |
-| `ResolveProviderModelBindingAction` | Resolve one accepted route-selected slot through `ValidatedRepositoryModelAllowlist` to its registry entry and effective limits; never accept a raw provider/model tuple as route authority. |
+| `ResolveProviderModelBindingAction` | Resolve one compiled workflow operation's YAML-declared slot through `ValidatedRepositoryModelAllowlist` to its registry entry and effective limits; never accept a raw provider/model tuple or hidden route as authority. |
 | `BuildModelRequestAction` | Build one identified bounded provider-neutral request. |
 | `ValidateStaticModelRequestCapacityAction` | Prove every provider-neutral deterministic binding/control/schema/input-byte/output-reservation ceiling before attempt reservation or authorization; it does not serialize a provider wire request. |
 | `AdvanceModelAttemptAccountingAction` | Reserve one complete provider-attempt ordinal under the amended total-attempt ceiling. |
@@ -779,12 +783,10 @@ never chooses `blocked`, `failed`, `cancelled`, retry, or fallback.
 | Pipeline runner | Invoke bound children; own the private authorization-lease table and effect-journal handle; validate/apply deltas, lifecycle compare-and-swap transitions, deadlines, attempt accounting, and cleanup; choose no branch or terminal outcome. |
 
 `ModelProviderBootstrapOrchestrator` coordinates only the requirement and
-provider-file child bindings described in Section 5. The accepted owning
-generation orchestrator—or a separately accepted capability-free
-`ProviderOperationRetryOrchestrator`—coordinates operation children and may
-select retry/fallback from typed results. `ModelProtocolRetryOrchestrator`
-remains limited to decode/route-schema failures and receives no provider
-failure authority.
+provider-file child bindings described in Section 5. It is engine preparation,
+not workflow behavior. Provider retry, fallback, and protocol-retry branches
+must each be visible as YAML steps and transitions; their registered generic
+operations perform one bounded responsibility and never select a successor.
 
 No action invokes another action or selects its successor. Every orchestrator
 receives only runner-owned child bindings and typed outcomes. It has no
@@ -835,14 +837,14 @@ provider operation retains a stale successful response.
 
 F0006 does not:
 
-- define route semantics, prompts, guidance, or response payload schemas;
-- choose a slot, route, provider, model, fallback, or retry;
+- define workflow semantics, prompts, guidance, or response payload schemas;
+- choose a workflow operation, slot, provider, model, fallback, or retry;
 - decode or validate an SDDE model envelope;
 - perform semantic review, no-invention routing, or repair;
 - expose provider-native tools, agents, browsing, filesystem, or commands;
 - define credentials inside either project configuration file;
 - permit project-defined provider implementations or dynamic libraries;
-- decide the final built-in route-to-`models.slots` assignment; or
+- provide a built-in model route, hidden slot assignment, prompt, schema, or workflow branch; or
 - select an AWS SDK, HTTP/TLS/signing library, linking mode, credential policy,
   or platform matrix.
 
@@ -904,9 +906,9 @@ F0006 does not:
     Restart closes earlier records as not-sent, later open records as
     accepted-or-unknown, and an unconsumed terminal result with no durable
     successor as `terminal_result_unavailable`, all without replay.
-16. Only an accepted capability-free provider/generation retry owner may choose
-    retry, every retry uses a new ordinal, and an accepted-or-unknown delivery
-    never auto-replays.
+16. Only the compiled YAML graph may choose an explicit registered retry
+    operation, every retry uses a new ordinal, and an accepted-or-unknown
+    delivery never auto-replays.
 17. Provider failures never enter model-content repair or become `invalid`.
 18. Only `complete` bounded UTF-8 content reaches envelope decoding, where the
     full envelope remains untrusted and authoritatively validated.
@@ -941,7 +943,7 @@ Implementation evidence must cover:
   tuple absent from the catalogue rejecting the complete binding set,
   unreferenced catalogue entries remaining unauthorized, exact and ambiguous
   tuples, unsupported options, target and data-policy rejection,
-  route/model/engine limit intersection, byte and token boundaries, request
+  workflow-operation/model/engine limit intersection, byte and token boundaries, request
   URI/JSON/schema amplification, request/body/header and encoded/decoded
   response caps, checked context equality/overflow, response wire/content
   separation, and structured-schema incompatibility.
@@ -981,7 +983,7 @@ Implementation evidence must cover:
 | Common port, action, runner, and dependency direction | Design Sections 5-6 and 13.4; ADR 0001 |
 | Current engine configuration ownership | Design Section 9; F0001; `design/paths.md` |
 | Request/invoke/decode separation | Design Sections 12.1-12.4 and 13.4; `design/code.md` Sections 21-24 |
-| Route limits, retry, fallback, and repair authority | Design Sections 12.5-12.7 and 21-22 |
+| Workflow-operation limits, retry, fallback, and repair authority | ADR 0005; Design Sections 12.5-12.7 and 21-22 |
 | Provider-operation durability and recovery amendment | Proposed Section 7 contract; Design Sections 24-25 |
 | Secret-safe logging | Design Sections 26.5 and 27; F0002 |
 | Fake-first testing and native packaging | Design Sections 28 and 30-31 |

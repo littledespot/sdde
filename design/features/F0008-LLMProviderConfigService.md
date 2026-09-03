@@ -38,7 +38,7 @@ instance; it does not add that model to the repository's allowed
 
 The service does not decode JSON, validate provider definitions, construct a
 provider registry, validate the slot-to-catalogue subset relationship, select a
-route, obtain credentials, or invoke a provider. Those remain F0006/F0007
+workflow operation or model slot, obtain credentials, or invoke a provider. Those remain F0006/F0007
 responsibilities.
 
 ## 2. Path authority

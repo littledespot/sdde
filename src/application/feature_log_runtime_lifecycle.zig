@@ -1,17 +1,21 @@
-const feature_log_runner = @import("feature_log_runner.zig");
+const feature_log_bindings = @import("feature_log_child_bindings.zig");
+const feature_log_candidate = @import("feature_log_candidate.zig");
+const feature_log_orchestrator = @import("feature_log_orchestrator.zig");
 const policy_transition = @import("feature_log_policy_transition_coordinator.zig");
+const policy_transition_bindings = @import("feature_log_policy_transition_child_bindings.zig");
 const finalization = @import("feature_log_finalization_coordinator.zig");
+const finalization_bindings = @import("feature_log_finalization_child_bindings.zig");
 const retention = @import("feature_log_retention_coordinator.zig");
-const runtime = @import("../domain/feature_log_runtime.zig");
+const retention_bindings = @import("feature_log_retention_child_bindings.zig");
 const telemetry = @import("../domain/telemetry.zig");
+const execution = @import("../domain/workflow_execution.zig");
 const barrier_port = @import("../ports/telemetry_barrier.zig");
-const sink_port = @import("../ports/feature_log_sink.zig");
 
 /// Owns the one active logging-runner binding used by the common pipeline.
 /// Artifact activation constructs runners; this coordinator only installs,
 /// transitions, and uses that already-validated binding.
 pub const Lifecycle = struct {
-    active: ?*feature_log_runner.Runner = null,
+    active: ?feature_log_bindings.ChildBindings = null,
 
     pub fn barrier(self: *Lifecycle) barrier_port.Barrier {
         return .{ .context = self, .process_fn = process };
@@ -19,11 +23,11 @@ pub const Lifecycle = struct {
 
     pub fn activate(
         self: *Lifecycle,
-        next: *feature_log_runner.Runner,
+        next: feature_log_bindings.ChildBindings,
         shortcode: telemetry.WorkflowShortcode,
     ) policy_transition.Outcome {
-        if (self.active != null or next.retired) return .invalid;
-        return switch (next.prepare(shortcode)) {
+        if (self.active != null or next.retired()) return .invalid;
+        return switch (next.invokePrepare(shortcode)) {
             .dropped, .persisted => blk: {
                 self.active = next;
                 break :blk .ok;
@@ -34,54 +38,52 @@ pub const Lifecycle = struct {
 
     pub fn transition(
         self: *Lifecycle,
-        next: *feature_log_runner.Runner,
-        shortcode: telemetry.WorkflowShortcode,
+        children: policy_transition_bindings.ChildBindings,
     ) policy_transition.Outcome {
         const current = self.active orelse return .invalid;
-        if (next.retired) return .invalid;
-        const outcome = policy_transition.run(current, next, shortcode);
-        self.active = if (outcome == .ok) next else if (outcome == .invalid) current else null;
+        const participants = children.participants();
+        if (participants.current_identity != current.identity()) return .invalid;
+        const outcome = policy_transition.run(children);
+        self.active = if (outcome == .ok) participants.next else if (outcome == .invalid) current else null;
         return outcome;
     }
 
     pub fn finalizeActive(
         self: *Lifecycle,
-        shortcode: telemetry.WorkflowShortcode,
+        children: finalization_bindings.ChildBindings,
     ) finalization.Outcome {
         const current = self.active orelse return .invalid;
-        const outcome = finalization.active(current, shortcode);
+        const target = children.target();
+        if (target.mode != .active or target.identity != current.identity()) return .invalid;
+        const outcome = finalization.run(children);
         if (outcome != .invalid) self.active = null;
         return outcome;
     }
 
     pub fn finalizeHistorical(
         self: *Lifecycle,
-        historical: *feature_log_runner.Runner,
-        shortcode: telemetry.WorkflowShortcode,
+        children: finalization_bindings.ChildBindings,
     ) finalization.Outcome {
         if (self.active != null) return .invalid;
-        return finalization.historical(historical, shortcode);
+        if (children.target().mode != .historical) return .invalid;
+        return finalization.run(children);
     }
 
     pub fn retainHistorical(
         self: *Lifecycle,
-        acquirer: sink_port.LockAcquirer,
-        pruner: sink_port.SegmentPruner,
-        releaser: sink_port.LockReleaser,
-        historical: *const runtime.ValidatedFeatureLogBinding,
-        authorization: *runtime.RetentionAuthorizationOwner,
+        children: retention_bindings.ChildBindings,
         shortcode: telemetry.WorkflowShortcode,
     ) retention.Outcome {
         const current = self.active orelse return .{ .blocked = .LOG_SINK_FAILURE };
-        return switch (retention.run(acquirer, pruner, releaser, current.binding, historical, authorization)) {
+        return switch (retention.run(children)) {
             .ok => .ok,
-            .blocked => |failure| .{ .blocked = current.reportFailure(shortcode, failure) },
+            .blocked => |failure| .{ .blocked = current.invokeReportFailure(shortcode, failure) },
         };
     }
 
-    fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) runtime.BarrierOutcome {
+    fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) execution.Candidate {
         const self: *Lifecycle = @ptrCast(@alignCast(context));
-        const active = self.active orelse return .{ .blocked = .LOG_SINK_FAILURE };
-        return active.process(fact);
+        const active = self.active orelse return .{ .outcome = .blocked, .delta = .{} };
+        return feature_log_candidate.fromResult(feature_log_orchestrator.processEvent(active, fact));
     }
 };

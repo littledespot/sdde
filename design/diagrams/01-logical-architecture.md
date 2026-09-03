@@ -14,53 +14,45 @@ flowchart TB
     RUNNER --> ACTION
     RUNNER --> ORCH
 
-    subgraph STAGES[Initial SDD workflow graphs; each selected independently]
-        SO[SpecifyOrchestrator<br/>no SDD predecessor]
-        PO[PlanOrchestrator<br/>requires current specified authority]
-        TO[TasksOrchestrator<br/>requires approved current plan authority]
-        IO[ImplementOrchestrator<br/>requires approved current task authority]
-        VG[ValidatedGenerationOrchestrator]
-        AC[AuthorityReconciliationOrchestrator]
-        CL[ClarificationLifecycleOrchestrator]
-        AR[AtomicRepairOrchestrator]
-        TE[ImplementTaskOrchestrator]
+    subgraph OPS[Versioned generic operation registry; every workflow operation is YAML-addressable]
+        GATE[authority.gate@1]
+        CONTEXT[context.build@1]
+        GENERATE[model.generate@1]
+        RECONCILE[authority.reconcile@1]
+        CLARIFY[clarification.manage@1]
+        REPAIR[model.repair@1]
+        VALIDATE[candidate.validate@1]
+        COMMIT[artifact.commit@1]
     end
 
-    CROOT[Composition root<br/>adapters, registered node bindings,<br/>fixed nonselectable startup graph] --> BO
+    CROOT[Composition root<br/>adapters, registered operation bindings,<br/>fixed nonselectable startup graph] --> BO
     CROOT --> BIND
     RUNNER -. first bound child .-> BO[EngineStartupGraph / BootstrapOrchestrator<br/>not present in project workflow registry]
     BO -. runner-bound workflow authority actions .-> WLOAD[Workflow loader<br/>inventory/path accounting and definition schema contracts;<br/>capture, parse and schema validation]
-    WLOAD --> WCOMP[Workflow compiler<br/>compiler contracts and compiled graph types;<br/>registered nodes, typed transitions, gates and capability ceiling]
+    WLOAD --> WCOMP[Workflow compiler<br/>compiler contracts and compiled graph types;<br/>registered operations, typed transitions, gates and capability ceiling]
     WCOMP --> WREG[Workflow registry<br/>global validation, immutable ownership and exact lookup only;<br/>arbitrary bounded definitions with unique WorkflowId and shortcode]
     WREG --> WSELECT[Parse selector, validate WorkflowId,<br/>then exact registry resolution<br/>through separate runner-bound actions]
     WSELECT -. immutable selected graph .-> ENGINE
-    RUNNER -. selected registered invocation-contract node binding .-> INVOKE[Typed run context<br/>before graph entry]
-    INVOKE -. typed context; runner invokes selected entry .-> SO
-    INVOKE -. typed context; runner invokes selected entry .-> PO
-    INVOKE -. typed context; runner invokes selected entry .-> TO
-    INVOKE -. typed context; runner invokes selected entry .-> IO
-    SO -. nested orchestrator binding .-> VG
-    PO -. nested orchestrator binding .-> VG
-    TO -. nested orchestrator binding .-> VG
-    VG -. nested orchestrator binding .-> CL
-    VG -. nested orchestrator binding .-> AR
-    SO -. pre-generation and pre-commit binding .-> AC
-    PO -. pre-generation and pre-commit binding .-> AC
-    TO -. pre-generation and pre-commit binding .-> AC
-    IO -. gate and pre-commit binding .-> AC
-    AC -. same-stage gap binding .-> CL
-    IO -. nested orchestrator binding .-> TE
-    TE -. nested orchestrator binding .-> AR
+    RUNNER -. selected YAML-named invocation-operation binding .-> INVOKE[Typed run context<br/>before graph entry]
+    INVOKE -. typed context; runner invokes YAML start step .-> GRAPH[Selected CompiledWorkflowGraph<br/>all steps parameters resources and outcomes came from YAML]
+    GRAPH -. use .-> GATE
+    GRAPH -. use .-> CONTEXT
+    GRAPH -. use .-> GENERATE
+    GRAPH -. use .-> RECONCILE
+    GRAPH -. use .-> CLARIFY
+    GRAPH -. use .-> REPAIR
+    GRAPH -. use .-> VALIDATE
+    GRAPH -. use .-> COMMIT
 
     ACTION --> PORTS[Typed capability ports]
     PORTS --> FS[Contained filesystem and WAL adapter]
-    PORTS --> MODEL[Versioned model-route adapter]
+    PORTS --> MODEL[Versioned LLMProvider adapter]
     PORTS --> PARSER[Markdown, data, AST and source-map parsers]
     PORTS --> COMMAND[Restricted command / implementation-overlay adapter]
     PORTS --> AUTHN[Authentication and trusted-clock adapters]
 
     subgraph AUTHORITIES[Separate validated authorities]
-        WDEFS[WorkflowDefinitionRegistry<br/>any bounded number from paths.workflows;<br/>compiled registered-node graphs only]
+        WDEFS[WorkflowDefinitionRegistry<br/>any bounded number from paths.workflows;<br/>compiled registered-operation graphs only]
         REF[Reference registry<br/>feature and business authority]
         PRINCIPLES[PrincipleRegistryState<br/>free-text Markdown from paths.principles;<br/>exact toolchain.yaml is excluded]
         PRESETS[ToolchainPresetRegistryState<br/>sole runtime root paths.toolchainPreset<br/>paths, file kinds, commands and tools]
@@ -76,18 +68,16 @@ flowchart TB
     PORTS --> TLAYER
     PORTS --> STATE
     WDEFS -. exact selected graph .-> WSELECT
-    REF -. typed authority and evidence .-> AC
-    PRINCIPLES -. plan tasks implement authority only; never specification input .-> AC
-    PRESETS -. typed authority and evidence .-> AC
+    REF -. typed authority and evidence .-> RECONCILE
+    PRINCIPLES -. plan tasks implement authority only; never specification input .-> RECONCILE
+    PRESETS -. typed authority and evidence .-> RECONCILE
     PRESETS -. validated inheritance base .-> TLAYER
-    TLAYER -. typed project policy and evidence .-> AC
-    STATE -. current authority and approvals .-> AC
-    APOLICY -. exhaustive required slots and earliest owners .-> AC
+    TLAYER -. typed project policy and evidence .-> RECONCILE
+    STATE -. current authority and approvals .-> RECONCILE
+    APOLICY -. exhaustive required slots and earliest owners .-> RECONCILE
     PRINCIPLES --> SELECT[SelectApplicablePrinciplesAction]
     SELECT --> PGUIDE[Complete bounded raw-span guidance in PipelineEnvelope]
-    PGUIDE -. consumed by stage actions through typed data keys .-> PO
-    PGUIDE -. consumed by stage actions through typed data keys .-> TO
-    PGUIDE -. consumed by stage actions through typed data keys .-> IO
+    PGUIDE -. consumed only by the YAML-selected operation through typed data keys .-> GRAPH
 
     TEMPLATES[paths.templates/*.template.md<br/>inert throughout v1] -. reserved future copy contract .-> FUTUREINIT[Future sdd init template-to-principles boundary<br/>not a current v1 action or transaction; no model authority]
     FUTUREINIT -. future materialized Markdown only .-> PRINCIPLES

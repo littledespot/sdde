@@ -12,21 +12,46 @@ const select_prompt = @import("../actions/log/evaluate_prompt_log_capture.zig");
 const evaluate_flush = @import("../actions/log/evaluate_feature_log_flush_need.zig");
 const advance_state = @import("../actions/log/advance_feature_log_stream_state.zig");
 const feature_log_format = @import("../domain/feature_log_format.zig");
-const runtime = @import("../domain/feature_log_runtime.zig");
-const logging = @import("../domain/logging.zig");
+const log_binding = @import("../domain/feature_log_binding.zig");
+const log_stream = @import("../domain/feature_log_stream.zig");
+const prompt_log = @import("../domain/sanitized_prompt_log.zig");
+const log_policy = @import("../domain/log_policy.zig");
+const log_event_registry = @import("../domain/log_event_registry.zig");
 const telemetry = @import("../domain/telemetry.zig");
 const barrier_port = @import("../ports/telemetry_barrier.zig");
-const child_actions = @import("feature_log_child_actions.zig");
+const candidate = @import("feature_log_candidate.zig");
+const child_bindings = @import("feature_log_child_bindings.zig");
+const orchestrator = @import("feature_log_orchestrator.zig");
+const result = @import("feature_log_result.zig");
+const action_set = @import("feature_log_actions.zig");
 
 pub const Runner = struct {
     allocator: std.mem.Allocator,
-    policy: *const logging.CompiledLoggingPolicy,
-    binding: *const runtime.ValidatedFeatureLogBinding,
-    children: child_actions.ChildActions,
-    event_state: ?runtime.StreamState = null,
-    prompt_state: ?runtime.StreamState = null,
+    policy: *const log_policy.CompiledLoggingPolicy,
+    binding: *const log_binding.ValidatedFeatureLogBinding,
+    actions: action_set.Set,
+    event_state: ?log_stream.StreamState = null,
+    prompt_state: ?log_stream.StreamState = null,
     prepared: bool = false,
     retired: bool = false,
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        policy: *const log_policy.CompiledLoggingPolicy,
+        binding: *const log_binding.ValidatedFeatureLogBinding,
+        actions: action_set.Set,
+    ) Runner {
+        return .{
+            .allocator = allocator,
+            .policy = policy,
+            .binding = binding,
+            .actions = actions,
+        };
+    }
+
+    pub fn childBindings(self: *Runner) child_bindings.ChildBindings {
+        return .{ .context = self, .vtable = &bindings_vtable };
+    }
 
     pub fn barrier(self: *Runner) barrier_port.Barrier {
         return .{ .context = self, .process_fn = processBarrier };
@@ -35,62 +60,18 @@ pub const Runner = struct {
     pub fn process(
         self: *Runner,
         attributed: telemetry.WorkflowTelemetryFact,
-    ) runtime.BarrierOutcome {
-        if (self.retired) return self.block(attributed.workflow_shortcode, .LOG_SINK_FAILURE);
-        const definition = (validate_fact.Action{}).execute(attributed.fact) catch {
-            return self.block(attributed.workflow_shortcode, .LOG_SERIALIZATION_FAILURE);
-        };
-        if ((threshold.Action{}).execute(self.policy.*, definition.level) == .drop) return .dropped;
-
-        const reading = self.children.read_clock.execute() catch {
-            return self.block(attributed.workflow_shortcode, .LOG_SERIALIZATION_FAILURE);
-        };
-        self.children.acquire_lock.execute(self.binding, .event) catch {
-            return self.block(attributed.workflow_shortcode, .LOG_LOCK_TIMEOUT);
-        };
-        var terminal_failure: ?runtime.FailureCode = null;
-
-        const result = self.persistEvent(attributed, definition, reading) catch |failure| blk: {
-            terminal_failure = failureCode(failure);
-            break :blk null;
-        };
-        self.children.release_lock.execute() catch {
-            terminal_failure = .LOG_RELEASE_FAILURE;
-        };
-        if (terminal_failure) |failure| return self.block(attributed.workflow_shortcode, failure);
-        const evidence = result.?;
-        return .{ .persisted = evidence };
+    ) result.Outcome {
+        return orchestrator.processEvent(self.childBindings(), attributed);
     }
 
-    pub fn processPrompt(self: *Runner, fragment: runtime.SanitizedPromptFragment) runtime.BarrierOutcome {
-        if (self.retired) return self.block(fragment.workflow_shortcode, .LOG_SINK_FAILURE);
-        (validate_prompt.Action{}).execute(fragment) catch {
-            return self.block(fragment.workflow_shortcode, .LOG_SERIALIZATION_FAILURE);
-        };
-        if ((select_prompt.Action{}).execute(self.policy.*, fragment) == .drop or
-            (threshold.Action{}).execute(self.policy.*, .debug) == .drop) return .dropped;
-        const reading = self.children.read_clock.execute() catch {
-            return self.block(fragment.workflow_shortcode, .LOG_SERIALIZATION_FAILURE);
-        };
-        self.children.acquire_lock.execute(self.binding, .prompt) catch {
-            return self.block(fragment.workflow_shortcode, .LOG_LOCK_TIMEOUT);
-        };
-        var terminal_failure: ?runtime.FailureCode = null;
-        const result = self.persistPrompt(fragment, reading) catch |failure| blk: {
-            terminal_failure = failureCode(failure);
-            break :blk null;
-        };
-        self.children.release_lock.execute() catch {
-            terminal_failure = .LOG_RELEASE_FAILURE;
-        };
-        if (terminal_failure) |failure| return self.block(fragment.workflow_shortcode, failure);
-        return .{ .persisted = result.? };
+    pub fn processPrompt(self: *Runner, fragment: prompt_log.SanitizedPromptFragment) result.Outcome {
+        return orchestrator.processPrompt(self.childBindings(), fragment);
     }
 
-    pub fn processPromptBatch(self: *Runner, owner: *runtime.PromptBatchOwner) runtime.BarrierOutcome {
-        defer runtime.deinitPromptBatch(owner);
-        var last_persisted: ?runtime.PersistedEvidence = null;
-        for (runtime.promptBatch(owner)) |fragment| switch (self.processPrompt(fragment)) {
+    pub fn processPromptBatch(self: *Runner, owner: *prompt_log.BatchOwner) result.Outcome {
+        defer prompt_log.deinitBatch(owner);
+        var last_persisted: ?log_stream.PersistedEvidence = null;
+        for (prompt_log.batch(owner)) |fragment| switch (self.processPrompt(fragment)) {
             .dropped => {},
             .persisted => |evidence| last_persisted = evidence,
             .blocked => |failure| return .{ .blocked = failure },
@@ -100,10 +81,18 @@ pub const Runner = struct {
 
     /// Recovers or initializes every enabled stream before this runner can be
     /// published as the active observer.
-    pub fn prepare(self: *Runner, shortcode: telemetry.WorkflowShortcode) runtime.BarrierOutcome {
+    pub fn prepare(self: *Runner, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+        return orchestrator.prepare(self.childBindings(), shortcode);
+    }
+
+    pub fn close(self: *Runner, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+        return orchestrator.close(self.childBindings(), shortcode);
+    }
+
+    fn invokePrepare(self: *Runner, shortcode: telemetry.WorkflowShortcode) result.Outcome {
         if (self.retired) return self.block(shortcode, .LOG_SINK_FAILURE);
         if (self.prepared) return .dropped;
-        const reading = self.children.read_clock.execute() catch return self.block(shortcode, .LOG_SERIALIZATION_FAILURE);
+        const reading = self.actions.read_clock.execute() catch return self.block(shortcode, .LOG_SERIALIZATION_FAILURE);
         if (self.event_state == null) {
             if (self.prepareOne(.event, reading)) |failure| return self.block(shortcode, failure);
         }
@@ -114,9 +103,9 @@ pub const Runner = struct {
         return .dropped;
     }
 
-    pub fn close(self: *Runner, shortcode: telemetry.WorkflowShortcode) runtime.BarrierOutcome {
+    fn invokeClose(self: *Runner, shortcode: telemetry.WorkflowShortcode) result.Outcome {
         if (self.retired) return self.block(shortcode, .LOG_SINK_FAILURE);
-        const reading = self.children.read_clock.execute() catch return self.block(shortcode, .LOG_SERIALIZATION_FAILURE);
+        const reading = self.actions.read_clock.execute() catch return self.block(shortcode, .LOG_SERIALIZATION_FAILURE);
         if (self.event_state) |state| {
             if (self.closeOne(.event, state, reading)) |failure| return self.block(shortcode, failure);
             self.event_state = null;
@@ -130,9 +119,9 @@ pub const Runner = struct {
         return .dropped;
     }
 
-    fn prepareOne(self: *Runner, stream: runtime.Stream, reading: runtime.ClockReading) ?runtime.FailureCode {
-        self.children.acquire_lock.execute(self.binding, stream) catch return .LOG_LOCK_TIMEOUT;
-        var failure: ?runtime.FailureCode = null;
+    fn prepareOne(self: *Runner, stream: log_stream.Stream, reading: log_stream.ClockReading) ?log_stream.FailureCode {
+        self.actions.acquire_lock.execute(self.binding, stream) catch return .LOG_LOCK_TIMEOUT;
+        var failure: ?log_stream.FailureCode = null;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
         const state = switch (stream) {
@@ -142,7 +131,7 @@ pub const Runner = struct {
             failure = failureCode(open_failure);
             break :blk null;
         };
-        self.children.release_lock.execute() catch return .LOG_RELEASE_FAILURE;
+        self.actions.release_lock.execute() catch return .LOG_RELEASE_FAILURE;
         if (failure) |code| return code;
         switch (stream) {
             .event => self.event_state = state.?,
@@ -151,7 +140,7 @@ pub const Runner = struct {
         return null;
     }
 
-    fn closeOne(self: *Runner, stream: runtime.Stream, state: runtime.StreamState, reading: runtime.ClockReading) ?runtime.FailureCode {
+    fn closeOne(self: *Runner, stream: log_stream.Stream, state: log_stream.StreamState, reading: log_stream.ClockReading) ?log_stream.FailureCode {
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
         const allocator = scratch.allocator();
@@ -164,21 +153,21 @@ pub const Runner = struct {
             state.next_sequence - 1,
             reading.utc(),
         ) catch return .LOG_SERIALIZATION_FAILURE;
-        self.children.acquire_lock.execute(self.binding, stream) catch return .LOG_LOCK_TIMEOUT;
-        var failure: ?runtime.FailureCode = null;
-        self.children.close_stream.execute(self.binding, stream, state, trailer) catch |close_failure| {
+        self.actions.acquire_lock.execute(self.binding, stream) catch return .LOG_LOCK_TIMEOUT;
+        var failure: ?log_stream.FailureCode = null;
+        self.actions.close_stream.execute(self.binding, stream, state, trailer) catch |close_failure| {
             failure = if (close_failure == error.LogFlushFailure) .LOG_FLUSH_FAILURE else .LOG_SINK_FAILURE;
         };
-        self.children.release_lock.execute() catch return .LOG_RELEASE_FAILURE;
+        self.actions.release_lock.execute() catch return .LOG_RELEASE_FAILURE;
         return failure;
     }
 
     fn persistEvent(
         self: *Runner,
         attributed: telemetry.WorkflowTelemetryFact,
-        definition: logging.EventDefinition,
-        reading: runtime.ClockReading,
-    ) PersistError!runtime.PersistedEvidence {
+        definition: log_event_registry.EventDefinition,
+        reading: log_stream.ClockReading,
+    ) PersistError!log_stream.PersistedEvidence {
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
         const allocator = scratch.allocator();
@@ -217,7 +206,7 @@ pub const Runner = struct {
             .append => {},
             .exhausted => return error.SegmentLimitExhausted,
             .rotate => {
-                state = self.children.rotate_segment.execute(
+                state = self.actions.rotate_segment.execute(
                     self.binding,
                     .event,
                     state,
@@ -240,7 +229,7 @@ pub const Runner = struct {
             state,
             reading.monotonic_ms,
         ) == .flush;
-        const evidence = self.children.append_record.execute(
+        const evidence = self.actions.append_record.execute(
             self.binding,
             .event,
             state,
@@ -250,7 +239,7 @@ pub const Runner = struct {
             error.LogFlushFailure => error.FlushFailure,
             error.LogSinkFailure => error.AppendFailure,
         };
-        if (self.policy.console) self.children.write_console.execute(row) catch return error.ConsoleFailure;
+        if (self.policy.console) self.actions.write_console.execute(row) catch return error.ConsoleFailure;
         state = (advance_state.Action{}).execute(state, row.len, force_flush, reading.monotonic_ms);
         self.event_state = state;
         return evidence;
@@ -259,9 +248,9 @@ pub const Runner = struct {
     fn openEventStream(
         self: *Runner,
         allocator: std.mem.Allocator,
-        reading: runtime.ClockReading,
-    ) PersistError!runtime.StreamState {
-        const recovered = self.children.recover_stream.execute(
+        reading: log_stream.ClockReading,
+    ) PersistError!log_stream.StreamState {
+        const recovered = self.actions.recover_stream.execute(
             allocator,
             self.binding,
             .event,
@@ -279,7 +268,7 @@ pub const Runner = struct {
                     null,
                     reading.utc(),
                 ) catch return error.SerializationFailure;
-                break :blk self.children.create_segment.execute(
+                break :blk self.actions.create_segment.execute(
                     self.binding,
                     .event,
                     seed.next_segment_ordinal,
@@ -294,9 +283,9 @@ pub const Runner = struct {
 
     fn persistPrompt(
         self: *Runner,
-        fragment: runtime.SanitizedPromptFragment,
-        reading: runtime.ClockReading,
-    ) PersistError!runtime.PersistedEvidence {
+        fragment: prompt_log.SanitizedPromptFragment,
+        reading: log_stream.ClockReading,
+    ) PersistError!log_stream.PersistedEvidence {
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
         const allocator = scratch.allocator();
@@ -325,7 +314,7 @@ pub const Runner = struct {
             .append => {},
             .exhausted => return error.SegmentLimitExhausted,
             .rotate => {
-                state = self.children.rotate_segment.execute(
+                state = self.actions.rotate_segment.execute(
                     self.binding,
                     .prompt,
                     state,
@@ -344,7 +333,7 @@ pub const Runner = struct {
             state,
             reading.monotonic_ms,
         ) == .flush;
-        const evidence = self.children.append_record.execute(
+        const evidence = self.actions.append_record.execute(
             self.binding,
             .prompt,
             state,
@@ -354,14 +343,14 @@ pub const Runner = struct {
             error.LogFlushFailure => error.FlushFailure,
             error.LogSinkFailure => error.AppendFailure,
         };
-        if (self.policy.console) self.children.write_console.execute(row) catch return error.ConsoleFailure;
+        if (self.policy.console) self.actions.write_console.execute(row) catch return error.ConsoleFailure;
         state = (advance_state.Action{}).execute(state, row.len, force_flush, reading.monotonic_ms);
         self.prompt_state = state;
         return evidence;
     }
 
-    fn openPromptStream(self: *Runner, allocator: std.mem.Allocator, reading: runtime.ClockReading) PersistError!runtime.StreamState {
-        const recovered = self.children.recover_stream.execute(
+    fn openPromptStream(self: *Runner, allocator: std.mem.Allocator, reading: log_stream.ClockReading) PersistError!log_stream.StreamState {
+        const recovered = self.actions.recover_stream.execute(
             allocator,
             self.binding,
             .prompt,
@@ -379,7 +368,7 @@ pub const Runner = struct {
                     null,
                     reading.utc(),
                 ) catch return error.SerializationFailure;
-                break :blk self.children.create_segment.execute(
+                break :blk self.actions.create_segment.execute(
                     self.binding,
                     .prompt,
                     seed.next_segment_ordinal,
@@ -392,20 +381,147 @@ pub const Runner = struct {
         return state;
     }
 
-    pub fn reportFailure(self: *Runner, shortcode: telemetry.WorkflowShortcode, failure: runtime.FailureCode) runtime.FailureCode {
-        self.children.emit_emergency.execute(shortcode, failure);
-        self.children.stabilize_failure.execute() catch return .LOG_SINK_FAILURE;
+    pub fn reportFailure(self: *Runner, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) log_stream.FailureCode {
+        self.actions.emit_emergency.execute(shortcode, failure);
+        self.actions.stabilize_failure.execute() catch return .LOG_SINK_FAILURE;
         return failure;
     }
 
-    fn block(self: *Runner, shortcode: telemetry.WorkflowShortcode, failure: runtime.FailureCode) runtime.BarrierOutcome {
+    fn block(self: *Runner, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) result.Outcome {
         return .{ .blocked = self.reportFailure(shortcode, failure) };
     }
 };
 
-fn processBarrier(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) runtime.BarrierOutcome {
+fn retiredBinding(context: *const anyopaque) bool {
+    return castConst(context).retired;
+}
+
+fn identityBinding(context: *const anyopaque) child_bindings.RuntimeIdentity {
+    return context;
+}
+
+fn validateEventBinding(
+    context: *anyopaque,
+    attributed: telemetry.WorkflowTelemetryFact,
+) child_bindings.EventValidationOutcome {
+    _ = context;
+    const definition = (validate_fact.Action{}).execute(attributed.fact) catch {
+        return .{ .failed = .LOG_SERIALIZATION_FAILURE };
+    };
+    return .{ .valid = definition };
+}
+
+fn evaluateEventBinding(
+    context: *const anyopaque,
+    definition: log_event_registry.EventDefinition,
+) child_bindings.Decision {
+    return if ((threshold.Action{}).execute(castConst(context).policy.*, definition.level) == .emit) .emit else .drop;
+}
+
+fn validatePromptBinding(
+    context: *anyopaque,
+    fragment: prompt_log.SanitizedPromptFragment,
+) child_bindings.StepOutcome {
+    _ = context;
+    (validate_prompt.Action{}).execute(fragment) catch return .{ .failed = .LOG_SERIALIZATION_FAILURE };
+    return .ok;
+}
+
+fn evaluatePromptBinding(
+    context: *const anyopaque,
+    fragment: prompt_log.SanitizedPromptFragment,
+) child_bindings.Decision {
+    const self = castConst(context);
+    if ((select_prompt.Action{}).execute(self.policy.*, fragment) == .drop or
+        (threshold.Action{}).execute(self.policy.*, .debug) == .drop) return .drop;
+    return .emit;
+}
+
+fn readClockBinding(context: *anyopaque) child_bindings.ClockOutcome {
+    const reading = cast(context).actions.read_clock.execute() catch {
+        return .{ .failed = .LOG_SERIALIZATION_FAILURE };
+    };
+    return .{ .ready = reading };
+}
+
+fn acquireBinding(context: *anyopaque, stream: log_stream.Stream) child_bindings.StepOutcome {
+    const self = cast(context);
+    self.actions.acquire_lock.execute(self.binding, stream) catch return .{ .failed = .LOG_LOCK_TIMEOUT };
+    return .ok;
+}
+
+fn persistEventBinding(
+    context: *anyopaque,
+    attributed: telemetry.WorkflowTelemetryFact,
+    definition: log_event_registry.EventDefinition,
+    reading: log_stream.ClockReading,
+) child_bindings.PersistenceOutcome {
+    const evidence = cast(context).persistEvent(attributed, definition, reading) catch |failure| {
+        return .{ .failed = failureCode(failure) };
+    };
+    return .{ .persisted = evidence };
+}
+
+fn persistPromptBinding(
+    context: *anyopaque,
+    fragment: prompt_log.SanitizedPromptFragment,
+    reading: log_stream.ClockReading,
+) child_bindings.PersistenceOutcome {
+    const evidence = cast(context).persistPrompt(fragment, reading) catch |failure| {
+        return .{ .failed = failureCode(failure) };
+    };
+    return .{ .persisted = evidence };
+}
+
+fn releaseBinding(context: *anyopaque) child_bindings.StepOutcome {
+    cast(context).actions.release_lock.execute() catch return .{ .failed = .LOG_RELEASE_FAILURE };
+    return .ok;
+}
+
+fn prepareBinding(context: *anyopaque, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+    return cast(context).invokePrepare(shortcode);
+}
+
+fn closeBinding(context: *anyopaque, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+    return cast(context).invokeClose(shortcode);
+}
+
+fn reportFailureBinding(
+    context: *anyopaque,
+    shortcode: telemetry.WorkflowShortcode,
+    failure: log_stream.FailureCode,
+) log_stream.FailureCode {
+    return cast(context).reportFailure(shortcode, failure);
+}
+
+fn cast(context: *anyopaque) *Runner {
+    return @ptrCast(@alignCast(context));
+}
+
+fn castConst(context: *const anyopaque) *const Runner {
+    return @ptrCast(@alignCast(context));
+}
+
+const bindings_vtable: child_bindings.ChildBindings.VTable = .{
+    .identity = identityBinding,
+    .retired = retiredBinding,
+    .validate_event = validateEventBinding,
+    .evaluate_event = evaluateEventBinding,
+    .validate_prompt = validatePromptBinding,
+    .evaluate_prompt = evaluatePromptBinding,
+    .read_clock = readClockBinding,
+    .acquire = acquireBinding,
+    .persist_event = persistEventBinding,
+    .persist_prompt = persistPromptBinding,
+    .release = releaseBinding,
+    .prepare = prepareBinding,
+    .close = closeBinding,
+    .report_failure = reportFailureBinding,
+};
+
+fn processBarrier(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("../domain/workflow_execution.zig").Candidate {
     const self: *Runner = @ptrCast(@alignCast(context));
-    return self.process(fact);
+    return candidate.fromResult(self.process(fact));
 }
 
 const PersistError = error{
@@ -419,7 +535,7 @@ const PersistError = error{
     SegmentLimitExhausted,
 };
 
-fn failureCode(failure: PersistError) runtime.FailureCode {
+fn failureCode(failure: PersistError) log_stream.FailureCode {
     return switch (failure) {
         error.SerializationFailure => .LOG_SERIALIZATION_FAILURE,
         error.RecoveryFailure,

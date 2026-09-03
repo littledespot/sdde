@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const runtime = @import("../../domain/feature_log_runtime.zig");
+const log_binding = @import("../../domain/feature_log_binding.zig");
+const log_stream = @import("../../domain/feature_log_stream.zig");
 const artifacts = @import("../../domain/workflow_artifact_registry.zig");
 const sink_port = @import("../../ports/feature_log_sink.zig");
 const directory_boundary = @import("feature_log_directory.zig");
@@ -18,7 +19,7 @@ pub const Adapter = struct {
     event_directory: Io.Dir,
     prompt_run_directory: Io.Dir,
     prompt_directory: Io.Dir,
-    expected_binding: runtime.BindingCandidate,
+    expected_binding: log_binding.BindingCandidate,
     lock_file: ?Io.File = null,
     owns_directories: bool,
     scans_run_history: bool,
@@ -29,7 +30,7 @@ pub const Adapter = struct {
         io: Io,
         project_root: Io.Dir,
         registry: *const artifacts.WorkflowArtifactRegistry,
-        binding: *const runtime.ValidatedFeatureLogBinding,
+        binding: *const log_binding.ValidatedFeatureLogBinding,
     ) InitError!Adapter {
         const authority = artifacts.bindFeatureLogSinkAdapter(registry, binding) orelse return error.InvalidArtifactRegistry;
         var specs_root = project_root.openDir(io, authority.specs_root_path, .{
@@ -64,7 +65,7 @@ pub const Adapter = struct {
         };
     }
 
-    pub fn initForTest(io: Io, test_directory: Io.Dir, expected_binding: runtime.BindingCandidate) Adapter {
+    pub fn initForTest(io: Io, test_directory: Io.Dir, expected_binding: log_binding.BindingCandidate) Adapter {
         if (!builtin.is_test) @compileError("test-only feature log sink constructor");
         return .{
             .io = io,
@@ -82,7 +83,7 @@ pub const Adapter = struct {
         io: Io,
         run_directory: Io.Dir,
         binding_directory: Io.Dir,
-        expected_binding: runtime.BindingCandidate,
+        expected_binding: log_binding.BindingCandidate,
     ) Adapter {
         if (!builtin.is_test) @compileError("test-only feature log sink constructor");
         return .{
@@ -142,22 +143,22 @@ pub const Adapter = struct {
 
     fn acquire(
         context: *anyopaque,
-        binding: *const runtime.ValidatedFeatureLogBinding,
-        stream: runtime.Stream,
+        binding: *const log_binding.ValidatedFeatureLogBinding,
+        stream: log_stream.Stream,
         deadline_ms: u16,
     ) sink_port.Error!void {
         const self = cast(context);
-        if (!runtime.sameBinding(binding, self.expected_binding)) return error.InvalidBinding;
+        if (!log_binding.sameBinding(binding, self.expected_binding)) return error.InvalidBinding;
         return lock.acquire(self.io, self.runDirectory(stream), &self.lock_file, deadline_ms);
     }
 
     fn recover(
         context: *anyopaque,
-        binding: *const runtime.ValidatedFeatureLogBinding,
-        stream: runtime.Stream,
+        binding: *const log_binding.ValidatedFeatureLogBinding,
+        stream: log_stream.Stream,
         heading: []const u8,
         allocator: std.mem.Allocator,
-    ) sink_port.Error!runtime.Recovery {
+    ) sink_port.Error!log_stream.Recovery {
         const self = cast(context);
         try self.requireHeld(binding);
         return recovery.recover(self.recoverySource(stream), binding, stream, heading, allocator);
@@ -165,13 +166,13 @@ pub const Adapter = struct {
 
     fn create(
         context: *anyopaque,
-        binding: *const runtime.ValidatedFeatureLogBinding,
-        stream: runtime.Stream,
+        binding: *const log_binding.ValidatedFeatureLogBinding,
+        stream: log_stream.Stream,
         ordinal: u16,
-        seed: runtime.StreamSeed,
+        seed: log_stream.StreamSeed,
         heading: []const u8,
         header: []const u8,
-    ) sink_port.Error!runtime.StreamState {
+    ) sink_port.Error!log_stream.StreamState {
         const self = cast(context);
         try self.requireHeld(binding);
         return segment_store.create(self.io, self.directory(stream), ordinal, seed, heading, header);
@@ -179,13 +180,13 @@ pub const Adapter = struct {
 
     fn rotate(
         context: *anyopaque,
-        binding: *const runtime.ValidatedFeatureLogBinding,
-        stream: runtime.Stream,
-        state: runtime.StreamState,
+        binding: *const log_binding.ValidatedFeatureLogBinding,
+        stream: log_stream.Stream,
+        state: log_stream.StreamState,
         trailer: []const u8,
         heading: []const u8,
         header: []const u8,
-    ) sink_port.Error!runtime.StreamState {
+    ) sink_port.Error!log_stream.StreamState {
         const self = cast(context);
         try self.requireHeld(binding);
         return segment_store.rotate(self.io, self.directory(stream), state, trailer, heading, header);
@@ -193,12 +194,12 @@ pub const Adapter = struct {
 
     fn append(
         context: *anyopaque,
-        binding: *const runtime.ValidatedFeatureLogBinding,
-        stream: runtime.Stream,
-        state: runtime.StreamState,
+        binding: *const log_binding.ValidatedFeatureLogBinding,
+        stream: log_stream.Stream,
+        state: log_stream.StreamState,
         row: []const u8,
         flush: bool,
-    ) sink_port.Error!runtime.PersistedEvidence {
+    ) sink_port.Error!log_stream.PersistedEvidence {
         const self = cast(context);
         try self.requireHeld(binding);
         return segment_store.append(self.io, self.directory(stream), state, row, flush);
@@ -206,9 +207,9 @@ pub const Adapter = struct {
 
     fn close(
         context: *anyopaque,
-        binding: *const runtime.ValidatedFeatureLogBinding,
-        stream: runtime.Stream,
-        state: runtime.StreamState,
+        binding: *const log_binding.ValidatedFeatureLogBinding,
+        stream: log_stream.Stream,
+        state: log_stream.StreamState,
         trailer: []const u8,
     ) sink_port.Error!void {
         const self = cast(context);
@@ -218,8 +219,8 @@ pub const Adapter = struct {
 
     fn prune(
         context: *anyopaque,
-        binding: *const runtime.ValidatedFeatureLogBinding,
-        stream: runtime.Stream,
+        binding: *const log_binding.ValidatedFeatureLogBinding,
+        stream: log_stream.Stream,
         cutoff_unix_ms: u64,
     ) sink_port.Error!void {
         const self = cast(context);
@@ -232,19 +233,19 @@ pub const Adapter = struct {
         return lock.release(self.io, &self.lock_file);
     }
 
-    fn requireHeld(self: *Adapter, binding: *const runtime.ValidatedFeatureLogBinding) sink_port.Error!void {
-        if (self.lock_file == null or !runtime.sameBinding(binding, self.expected_binding)) return error.InvalidBinding;
+    fn requireHeld(self: *Adapter, binding: *const log_binding.ValidatedFeatureLogBinding) sink_port.Error!void {
+        if (self.lock_file == null or !log_binding.sameBinding(binding, self.expected_binding)) return error.InvalidBinding;
     }
 
-    fn directory(self: *Adapter, stream: runtime.Stream) Io.Dir {
+    fn directory(self: *Adapter, stream: log_stream.Stream) Io.Dir {
         return if (stream == .event) self.event_directory else self.prompt_directory;
     }
 
-    fn runDirectory(self: *Adapter, stream: runtime.Stream) Io.Dir {
+    fn runDirectory(self: *Adapter, stream: log_stream.Stream) Io.Dir {
         return if (stream == .event) self.event_run_directory else self.prompt_run_directory;
     }
 
-    fn recoverySource(self: *Adapter, stream: runtime.Stream) recovery.Source {
+    fn recoverySource(self: *Adapter, stream: log_stream.Stream) recovery.Source {
         return .{
             .io = self.io,
             .directory = self.directory(stream),

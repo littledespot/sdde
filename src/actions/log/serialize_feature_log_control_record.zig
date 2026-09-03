@@ -1,16 +1,26 @@
 const std = @import("std");
 const format = @import("../../domain/feature_log_format.zig");
-const runtime = @import("../../domain/feature_log_runtime.zig");
+const log_binding = @import("../../domain/feature_log_binding.zig");
+const log_stream = @import("../../domain/feature_log_stream.zig");
+const pipeline = @import("../../domain/pipeline.zig");
 
 pub const Error = error{LogSerializationFailure};
 
 pub const Action = struct {
+    pub const contract: pipeline.NodeContract = .{
+        .id = "serialize-feature-log-control-record@1",
+        .kind = .action,
+        .requires = &.{ .feature_log_binding, .feature_log_stream_state, .trusted_log_clock },
+        .produces = &.{.serialized_log_control_record},
+        .side_effect = .none,
+    };
+
     pub fn execute(
         _: Action,
         allocator: std.mem.Allocator,
-        stream: runtime.Stream,
+        stream: log_stream.Stream,
         kind: format.ControlKind,
-        binding: *const runtime.ValidatedFeatureLogBinding,
+        binding: *const log_binding.ValidatedFeatureLogBinding,
         segment_ordinal: u16,
         final_sequence: ?u64,
         occurred_at_utc: []const u8,

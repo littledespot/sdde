@@ -1,4 +1,4 @@
-const logging = @import("../../domain/logging.zig");
+const log_policy = @import("../../domain/log_policy.zig");
 const pipeline = @import("../../domain/pipeline.zig");
 const telemetry = @import("../../domain/telemetry.zig");
 
@@ -15,15 +15,15 @@ pub const Action = struct {
 
     pub fn execute(
         _: Action,
-        policy: logging.CompiledLoggingPolicy,
+        policy: log_policy.CompiledLoggingPolicy,
         level: telemetry.CanonicalLogLevel,
     ) Decision {
-        return if (logging.isEmitted(policy, level)) .emit else .drop;
+        return if (log_policy.isEmitted(policy, level)) .emit else .drop;
     }
 };
 
 test "drops before any identity or sink work" {
-    const policy: logging.CompiledLoggingPolicy = .{
+    const policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .warning, .alias_evidence = .none },
         .console = false,
         .prompt_capture = &.{},

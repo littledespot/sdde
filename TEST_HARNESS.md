@@ -17,8 +17,9 @@ workflow, and does not amend or accept the proposed engine design.
 
 ## 1. Purpose
 
-The harness evaluates untrusted LLM candidate output produced for SDDE model
-routes. It must answer two different questions without conflating them:
+The harness evaluates untrusted LLM candidate output produced for YAML-declared
+SDDE model operations. It must answer two different questions without
+conflating them:
 
 1. Does the candidate satisfy every mechanically decidable engine contract?
 2. How well does a mechanically valid candidate satisfy the supplied semantic
@@ -35,7 +36,7 @@ The harness is intended to support:
 - recorded-response regression tests;
 - fake-model end-to-end tests;
 - optional live-provider evaluation;
-- comparison of model profiles, guidance, and route versions;
+- comparison of model slots, workflow-owned guidance, and workflow versions;
 - principle-injection conformance;
 - multiple development languages, test frameworks, and mixed-language
   repositories;
@@ -55,7 +56,7 @@ The harness does not:
 - load runtime authority from `design/` examples or test fixtures;
 - become a production `sdd eval` command without a separately accepted design
   decision;
-- add language-, framework-, route-, filename-, model-, or fixture-specific
+- add language-, framework-, workflow-operation-, filename-, model-, or fixture-specific
   continuation rules to the shared harness;
 - weaken a schema, validator, stage gate, authority-reconciliation rule, or test
   to improve an evaluation score.
@@ -84,7 +85,7 @@ sdde/
     └── evaluation/              # generated reports, not canonical source
 ```
 
-Production route schemas, model-envelope decoding, request identity, principle
+Compiled workflow resource schemas, model-envelope decoding, request identity, principle
 capture and selection, diagnostics, authority reconciliation, path policy,
 command policy, and stage validators remain owned by `src/`. The harness imports
 and exercises those owners. It must not copy or reinterpret their policy under
@@ -130,7 +131,7 @@ the exact principle inputs. The harness then:
 2. excludes exact mechanical `toolchain.yaml` from semantic capture;
 3. validates and normalizes eligible Markdown principle sources;
 4. builds the canonical principle registry;
-5. selects the bounded principles applicable to the exact stage, route, project,
+5. selects the bounded principles applicable to the exact stage, compiled workflow operation, project,
    environment, and file kind;
 6. builds model guidance using the production guidance action;
 7. records the exact selected principle record IDs and source spans;
@@ -149,7 +150,7 @@ initial suite selects them for plan, tasks, implement, recovery, and
 clarification-resume boundaries. They do not enter specification generation
 and cannot invent specification requirements.
 
-An evaluation case that requests principle injection into a prohibited route is
+An evaluation case that requests principle injection into a workflow operation that forbids it is
 invalid harness input. Supporting a new stage requires an explicit governing
 design change before the harness or engine is changed.
 
@@ -243,7 +244,7 @@ reject unknown fields and unsupported versions.
 EvalSuite {
   schemaVersion,
   suiteId,
-  routeRegistryVersion,
+  compiledWorkflowAuthorityId,
   cases: EvalCase[],
   rubricRegistryVersion,
   comparisonPolicyId?,
@@ -256,7 +257,7 @@ EvalSuite {
 ```text
 EvalCase {
   caseId,
-  routeId,
+  modelOperationId,
   requestSchemaId,
   resultSchemaId,
   projectFixtureId,
@@ -281,7 +282,7 @@ supply raw operational paths or commands to a model.
 Rubric {
   schemaVersion,
   rubricId,
-  applicableRouteIds[],
+  applicableModelOperationIds[],
   criteria: RubricCriterion[]
 }
 
@@ -335,7 +336,7 @@ EvalRunReport {
   schemaVersion,
   runId,
   suiteId,
-  routeRegistryVersion,
+  compiledWorkflowAuthorityId,
   rubricRegistryVersion,
   executionPolicyId,
   observations[],
@@ -356,12 +357,12 @@ For each case, the harness performs the following closed flow:
 2. Construct the isolated synthetic project and configured roots.
 3. Capture and validate its toolchain and principle authorities.
 4. Resolve the expected environment and project exactly once.
-5. Construct the route unit through the production test composition.
+5. Construct the workflow-declared model-operation unit through the production test composition.
 6. Select context, principles, and guidance using production actions.
 7. Build the provider-neutral request and deterministic request identity.
 8. Obtain one recorded, fake, or live provider response.
 9. Decode the response envelope and apply canonical schema and identity checks.
-10. Apply route, authority, path, graph, repair, and stage validators as
+10. Apply workflow-operation, authority, path, graph, repair, and stage validators as
     applicable.
 11. Run only authorized named commands when the case and execution policy permit
     executable checks.
@@ -436,7 +437,7 @@ single model, fixture, or motivating example.
 ### 11.1 Contract tests
 
 - reject unknown fields, missing required fields, and unsupported versions;
-- reject foreign route, request, result, principle, project, and environment
+- reject foreign workflow-operation, request, result, principle, project, and environment
   identities;
 - reject invalid rubric weights, score ranges, duplicate criterion IDs, and
   incomplete citation bindings;
@@ -480,7 +481,7 @@ single model, fixture, or motivating example.
 ### 11.5 Fault injection
 
 - malformed generator and judge JSON;
-- wrong request, route, criterion, or diagnostic identity;
+- wrong request, workflow-operation, criterion, or diagnostic identity;
 - extra schema fields and out-of-range scores;
 - fabricated, stale, or out-of-unit citations;
 - prompt injection embedded in candidate prose or code;
@@ -544,8 +545,9 @@ required by the project contract.
 
 1. Accept or amend this bounded harness contract and its unresolved policy
    choices.
-2. Implement the common production model-envelope, route-registry, diagnostic,
-   principle-registry, guidance, and fake-model gateway foundations.
+2. Implement the common production model-envelope, YAML workflow-operation,
+   workflow-resource, diagnostic, principle-registry, guidance, and fake-model
+   boundary foundations.
 3. Implement closed harness schemas and offline evaluation over recorded
    candidates.
 4. Reuse the canonical deterministic validators and add hard conformance
@@ -553,7 +555,7 @@ required by the project contract.
 5. Add principle-selection and principle-matrix fixtures.
 6. Add human-labelled rubrics and scoring properties.
 7. Add optional model-assisted judging and calibration.
-8. Add suites alongside each route delivered by specify, plan, tasks, and
+8. Add suites alongside each model operation declared by specify, plan, tasks, and
    implement.
 9. Add explicit live-provider comparison only after fake and recorded suites
    pass.

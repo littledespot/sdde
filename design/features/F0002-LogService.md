@@ -8,8 +8,10 @@ validates uniqueness, and the runner-created `WorkflowLog` producer binding
 carries it. The F0001 logging shape supplies every configurable user choice,
 and all operational policy plus the two `feature-log/v2` pipe-delimited schemas
 are compiler-locked
-constants. The event registry, scalar row encodings, and operational limits in
-this document are complete for the proof of concept.
+constants. ADR 0005 replaces route/profile attribution with compiled
+workflow-operation/model-slot attribution. The event registry and both fixed
+v2 headings must be updated in place as part of the concise workflow contract;
+the current implementation still uses the superseded field names.
 
 **Compatibility:** None. This is a pre-release proof of concept with no
 deployed predecessor. `feature-log/v2` and its two column schemas are updated
@@ -27,7 +29,8 @@ SDDE against a target project.
 **Governing authority:** [Engine design](../design.md), especially Sections
 5-6, 9, 13.9, 14.9-14.10, 26.5, and 27-31; [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md);
-[ADR 0003](../decisions/0003-generic-workflow-engine.md); and the
+[ADR 0003](../decisions/0003-generic-workflow-engine.md); [ADR
+0005](../decisions/0005-workflow-defined-operations.md); and the
 [feature logging diagram](../diagrams/06-feature-logging.md).
 
 ---
@@ -363,10 +366,10 @@ registered.
 | `action.completed` | `debug` | `outcome` | `duration_ms` |
 | `action.invalid` | `warning` | `diagnostic_code`, `outcome` | — |
 | `action.failed` | `error` | `diagnostic_code`, `outcome` | `duration_ms` |
-| `model.requested` | `debug` | `model_route_id`, `model_profile_id` | — |
-| `model.completed` | `debug` | `model_route_id`, `model_profile_id`, `outcome` | `input_tokens`, `output_tokens`, `duration_ms` |
-| `model.protocol_failed` | `warning` | `model_route_id`, `model_profile_id`, `diagnostic_code`, `outcome` | — |
-| `model.schema_failed` | `warning` | `model_route_id`, `model_profile_id`, `diagnostic_code`, `outcome` | — |
+| `model.requested` | `debug` | `model_operation_id`, `model_slot_id` | — |
+| `model.completed` | `debug` | `model_operation_id`, `model_slot_id`, `outcome` | `input_tokens`, `output_tokens`, `duration_ms` |
+| `model.protocol_failed` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | — |
+| `model.schema_failed` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | — |
 | `validation.completed` | `debug` | `validator_id`, `outcome` | `count`, `duration_ms` |
 | `validation.failed` | `warning` | `validator_id`, `diagnostic_code`, `outcome` | `count` |
 | `repair.requested` | `debug` | `repair_unit_kind` | — |
@@ -389,7 +392,7 @@ registered.
 | `task.blocked` | `warning` | `task_id`, `diagnostic_code`, `outcome` | — |
 | `task.failed` | `error` | `task_id`, `diagnostic_code`, `outcome` | `duration_ms` |
 | `security.denied` | `warning` | `rule_id`, `diagnostic_code`, `outcome` | — |
-| `model.prompt_fragment` | `debug` | `attempt`, `request_id`, `route_id`, `model_profile_id`, `fragment_id`, `direction`, `body_class`, `content`, `retained_bytes`, `truncated`, `redacted` | — |
+| `model.prompt_fragment` | `debug` | `attempt`, `request_id`, `model_operation_id`, `model_slot_id`, `fragment_id`, `direction`, `body_class`, `content`, `retained_bytes`, `truncated`, `redacted` | — |
 
 `model.prompt_fragment` exists only in the optional prompt stream. Its
 `content` field is classified `sanitized_content`, never public metadata, and
@@ -414,8 +417,8 @@ or prompt rows follow; a normally closed segment ends with one
 The hard-coded headings are:
 
 ```text
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_operation_id|model_slot_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|model_operation_id|model_slot_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
 ```
 
 The first is the 38-column event heading; the second is the 30-column prompt
@@ -459,7 +462,7 @@ For example, the registered `task.started` event at `info` can produce this
 segment:
 
 ```text
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_operation_id|model_slot_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
 segment_header|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
 event|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0042|42|2026-08-28T10:15:30Z|1205|info|task.started|task.started/v1|RUN-001|F0002|implement|\N|\N|\N|\N|TASK-001|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
 ```
@@ -470,7 +473,7 @@ supplies the actual shortcode through the runner-created `WorkflowLog` binding.
 When prompt capture is explicitly enabled, one sanitized fragment is one row:
 
 ```text
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|model_operation_id|model_slot_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
 segment_header|feature-log/v2|prompt|prompt-columns/v2|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
 prompt|feature-log/v2|prompt|prompt-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0043|43|2026-08-28T10:15:31Z|1206|debug|model.prompt_fragment|model.prompt_fragment/v1|RUN-001|F0002|implement|\N|1|REQ-001|ROUTE-001|PROFILE-001|FRAG-001|request|ordinary|Create plan with [REDACTED_SECRET]|34|false|true
 ```

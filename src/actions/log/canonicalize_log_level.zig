@@ -1,4 +1,4 @@
-const logging = @import("../../domain/logging.zig");
+const log_policy = @import("../../domain/log_policy.zig");
 const pipeline = @import("../../domain/pipeline.zig");
 
 pub const Error = error{LoggingPolicyInvalid};
@@ -12,8 +12,8 @@ pub const Action = struct {
         .side_effect = .none,
     };
 
-    pub fn execute(_: Action, raw: []const u8) Error!logging.CanonicalizedLevel {
-        return logging.canonicalizeConfiguredLevel(raw) catch error.LoggingPolicyInvalid;
+    pub fn execute(_: Action, raw: []const u8) Error!log_policy.CanonicalizedLevel {
+        return log_policy.canonicalizeConfiguredLevel(raw) catch error.LoggingPolicyInvalid;
     }
 };
 

@@ -1,7 +1,8 @@
 const std = @import("std");
 const format = @import("../../domain/feature_log_format.zig");
-const logging = @import("../../domain/logging.zig");
-const runtime = @import("../../domain/feature_log_runtime.zig");
+const log_limits = @import("../../domain/feature_log_limits.zig");
+const log_binding = @import("../../domain/feature_log_binding.zig");
+const log_stream = @import("../../domain/feature_log_stream.zig");
 const sink_port = @import("../../ports/feature_log_sink.zig");
 const feature_log_file = @import("feature_log_file.zig");
 
@@ -11,17 +12,17 @@ pub const Source = struct {
     io: Io,
     directory: Io.Dir,
     run_directory: Io.Dir,
-    expected_binding: runtime.BindingCandidate,
+    expected_binding: log_binding.BindingCandidate,
     scans_run_history: bool,
 };
 
 pub fn recover(
     source: Source,
-    binding: *const runtime.ValidatedFeatureLogBinding,
-    stream: runtime.Stream,
+    binding: *const log_binding.ValidatedFeatureLogBinding,
+    stream: log_stream.Stream,
     heading: []const u8,
     allocator: std.mem.Allocator,
-) sink_port.Error!runtime.Recovery {
+) sink_port.Error!log_stream.Recovery {
     var ordinals: std.ArrayList(u16) = .empty;
     defer ordinals.deinit(allocator);
     var iterator = source.directory.iterate();
@@ -36,7 +37,7 @@ pub fn recover(
     }
     const total_segments = countRunSegments(source) catch return error.CorruptStream;
     const history_next_sequence = historicalNextSequence(source, stream, heading, allocator) catch return error.CorruptStream;
-    if (total_segments > logging.max_segments) return error.CorruptStream;
+    if (total_segments > log_limits.max_segments) return error.CorruptStream;
     if (ordinals.items.len == 0) return .{ .empty = .{
         .next_segment_ordinal = 1,
         .next_sequence = history_next_sequence,
@@ -46,7 +47,7 @@ pub fn recover(
     for (ordinals.items, 0..) |ordinal, index| {
         if (ordinal != index + 1) return error.CorruptStream;
     }
-    var active: ?runtime.StreamState = null;
+    var active: ?log_stream.StreamState = null;
     var prior_sequence: u64 = history_next_sequence - 1;
     for (ordinals.items, 0..) |ordinal, index| {
         const inspection = inspectSegment(
@@ -85,8 +86,8 @@ const Inspection = struct { closed: bool, last_sequence: u64, bytes: u64 };
 fn inspectSegment(
     source: Source,
     allocator: std.mem.Allocator,
-    binding: *const runtime.ValidatedFeatureLogBinding,
-    stream: runtime.Stream,
+    binding: *const log_binding.ValidatedFeatureLogBinding,
+    stream: log_stream.Stream,
     ordinal: u16,
     heading: []const u8,
     allow_truncate: bool,
@@ -102,7 +103,7 @@ fn inspectSegment(
     });
     defer file.close(source.io);
     var stat = try file.stat(source.io);
-    if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > logging.max_segment_bytes) {
+    if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
         return error.InvalidSegment;
     }
     var reader = file.reader(source.io, &.{});
@@ -172,13 +173,13 @@ fn countRunSegments(source: Source) !u8 {
         },
         else => return error.CorruptStream,
     };
-    if (count > logging.max_segments) return error.CorruptStream;
+    if (count > log_limits.max_segments) return error.CorruptStream;
     return @intCast(count);
 }
 
 fn historicalNextSequence(
     source: Source,
-    stream: runtime.Stream,
+    stream: log_stream.Stream,
     heading: []const u8,
     allocator: std.mem.Allocator,
 ) !u64 {
@@ -206,7 +207,7 @@ fn historicalNextSequence(
             });
             defer file.close(source.io);
             const stat = try file.stat(source.io);
-            if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > logging.max_segment_bytes) {
+            if (stat.kind != .file or !feature_log_file.hasOwnerFilePermissions(stat.permissions) or stat.size > log_limits.max_segment_bytes) {
                 return error.CorruptStream;
             }
             var reader = file.reader(source.io, &.{});

@@ -1,11 +1,11 @@
-const runtime = @import("../domain/feature_log_runtime.zig");
+const log_stream = @import("../domain/feature_log_stream.zig");
 
 pub const Error = error{ClockFailure};
 pub const Clock = struct {
     context: *anyopaque,
-    now_fn: *const fn (*anyopaque) Error!runtime.ClockReading,
+    now_fn: *const fn (*anyopaque) Error!log_stream.ClockReading,
 
-    pub fn now(self: Clock) Error!runtime.ClockReading {
+    pub fn now(self: Clock) Error!log_stream.ClockReading {
         return self.now_fn(self.context);
     }
 };

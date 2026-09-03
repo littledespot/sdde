@@ -1,7 +1,9 @@
 const std = @import("std");
-const logging = @import("../../domain/logging.zig");
+const log_policy = @import("../../domain/log_policy.zig");
 const pipeline = @import("../../domain/pipeline.zig");
-const runtime = @import("../../domain/feature_log_runtime.zig");
+const log_binding = @import("../../domain/feature_log_binding.zig");
+const log_stream = @import("../../domain/feature_log_stream.zig");
+const log_retention = @import("../../domain/feature_log_retention.zig");
 const clock_port = @import("../../ports/trusted_log_clock.zig");
 
 pub const Error = error{FeatureLogRetentionAuthorizationInvalid};
@@ -20,13 +22,13 @@ pub const Action = struct {
     pub fn execute(
         self: Action,
         allocator: std.mem.Allocator,
-        policy: *const logging.CompiledLoggingPolicy,
-        current: *const runtime.ValidatedFeatureLogBinding,
-        historical: *const runtime.ValidatedFeatureLogBinding,
-        stream: runtime.Stream,
-    ) Error!*runtime.RetentionAuthorizationOwner {
+        policy: *const log_policy.CompiledLoggingPolicy,
+        current: *const log_binding.ValidatedFeatureLogBinding,
+        historical: *const log_binding.ValidatedFeatureLogBinding,
+        stream: log_stream.Stream,
+    ) Error!*log_retention.AuthorizationOwner {
         const reading = self.clock.now() catch return error.FeatureLogRetentionAuthorizationInvalid;
-        return runtime.createRetentionAuthorization(
+        return log_retention.create(
             allocator,
             policy,
             current,

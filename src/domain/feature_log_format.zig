@@ -1,7 +1,10 @@
 const std = @import("std");
-const logging = @import("logging.zig");
+const log_event_registry = @import("log_event_registry.zig");
+const log_limits = @import("feature_log_limits.zig");
 const telemetry = @import("telemetry.zig");
-const runtime = @import("feature_log_runtime.zig");
+const log_binding = @import("feature_log_binding.zig");
+const log_stream = @import("feature_log_stream.zig");
+const prompt_log = @import("sanitized_prompt_log.zig");
 
 pub const event_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n";
 pub const prompt_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted\n";
@@ -32,7 +35,7 @@ pub const PromptRecord = struct {
     monotonic_offset: u64,
     run_id: telemetry.Identifier,
     feature_id: telemetry.Identifier,
-    fragment: runtime.SanitizedPromptFragment,
+    fragment: prompt_log.SanitizedPromptFragment,
 };
 
 pub const ControlKind = enum { segment_header, segment_trailer };
@@ -61,9 +64,9 @@ pub fn serializeEventControl(
     var first = true;
     var number_buffer: [32]u8 = undefined;
     try appendCell(allocator, &row, &first, @tagName(record.kind));
-    try appendCell(allocator, &row, &first, logging.schema_version);
+    try appendCell(allocator, &row, &first, log_limits.schema_version);
     try appendCell(allocator, &row, &first, "event");
-    try appendCell(allocator, &row, &first, logging.event_column_schema_id);
+    try appendCell(allocator, &row, &first, log_limits.event_column_schema_id);
     try appendCell(allocator, &row, &first, record.log_policy_id.bytes);
     try appendCell(allocator, &row, &first, record.binding_id.bytes);
     try appendUnsigned(allocator, &row, &first, record.segment_ordinal, &number_buffer);
@@ -91,9 +94,9 @@ pub fn serializePromptControl(allocator: std.mem.Allocator, record: EventControl
     var first = true;
     var number_buffer: [32]u8 = undefined;
     try appendCell(allocator, &row, &first, @tagName(record.kind));
-    try appendCell(allocator, &row, &first, logging.schema_version);
+    try appendCell(allocator, &row, &first, log_limits.schema_version);
     try appendCell(allocator, &row, &first, "prompt");
-    try appendCell(allocator, &row, &first, logging.prompt_column_schema_id);
+    try appendCell(allocator, &row, &first, log_limits.prompt_column_schema_id);
     try appendCell(allocator, &row, &first, record.log_policy_id.bytes);
     try appendCell(allocator, &row, &first, record.binding_id.bytes);
     try appendUnsigned(allocator, &row, &first, record.segment_ordinal, &number_buffer);
@@ -117,15 +120,15 @@ pub fn serializePrompt(allocator: std.mem.Allocator, record: PromptRecord) Error
     const fragment = record.fragment;
     if (record.segment_ordinal == 0 or record.sequence == 0 or
         !validUtcTimestamp(record.occurred_at_utc)) return error.InvalidFeatureLogRecord;
-    runtime.validateSanitizedPromptFragment(fragment) catch return error.InvalidFeatureLogRecord;
+    prompt_log.validate(fragment) catch return error.InvalidFeatureLogRecord;
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(allocator);
     var first = true;
     var number_buffer: [32]u8 = undefined;
     try appendCell(allocator, &row, &first, "prompt");
-    try appendCell(allocator, &row, &first, logging.schema_version);
+    try appendCell(allocator, &row, &first, log_limits.schema_version);
     try appendCell(allocator, &row, &first, "prompt");
-    try appendCell(allocator, &row, &first, logging.prompt_column_schema_id);
+    try appendCell(allocator, &row, &first, log_limits.prompt_column_schema_id);
     try appendCell(allocator, &row, &first, record.log_policy_id.bytes);
     try appendCell(allocator, &row, &first, record.binding_id.bytes);
     try appendUnsigned(allocator, &row, &first, record.segment_ordinal, &number_buffer);
@@ -161,7 +164,7 @@ pub fn serializeEvent(
     allocator: std.mem.Allocator,
     record: EventRecord,
 ) Error![]u8 {
-    const definition = logging.validateFact(record.fact) catch return error.InvalidFeatureLogRecord;
+    const definition = log_event_registry.validateFact(record.fact) catch return error.InvalidFeatureLogRecord;
     if (record.segment_ordinal == 0 or record.sequence == 0 or
         !validUtcTimestamp(record.occurred_at_utc)) return error.InvalidFeatureLogRecord;
 
@@ -174,9 +177,9 @@ pub fn serializeEvent(
     const fields = record.fact.fields;
 
     try appendCell(allocator, &row, &first, "event");
-    try appendCell(allocator, &row, &first, logging.schema_version);
+    try appendCell(allocator, &row, &first, log_limits.schema_version);
     try appendCell(allocator, &row, &first, "event");
-    try appendCell(allocator, &row, &first, logging.event_column_schema_id);
+    try appendCell(allocator, &row, &first, log_limits.event_column_schema_id);
     try appendCell(allocator, &row, &first, record.log_policy_id.bytes);
     try appendCell(allocator, &row, &first, record.binding_id.bytes);
     try appendUnsigned(allocator, &row, &first, record.segment_ordinal, &number_buffer);
@@ -212,7 +215,7 @@ pub fn serializeEvent(
     try appendOptional(allocator, &row, &first, if (fields.outcome) |value| @tagName(value) else null);
     try appendOptionalUnsigned(allocator, &row, &first, fields.count, &number_buffer);
     row.append(allocator, '\n') catch return error.OutOfMemory;
-    if (row.items.len > logging.max_record_bytes) return error.InvalidFeatureLogRecord;
+    if (row.items.len > log_limits.max_record_bytes) return error.InvalidFeatureLogRecord;
     return row.toOwnedSlice(allocator) catch return error.OutOfMemory;
 }
 
@@ -222,7 +225,7 @@ pub fn validateEncodedRow(
     expected_cells: usize,
 ) Error!void {
     if (encoded.len == 0 or encoded[encoded.len - 1] != '\n' or
-        encoded.len > logging.max_record_bytes) return error.InvalidFeatureLogRecord;
+        encoded.len > log_limits.max_record_bytes) return error.InvalidFeatureLogRecord;
     var cells: usize = 1;
     var escaped = false;
     var index: usize = 0;
@@ -250,13 +253,13 @@ pub fn validateEncodedRow(
 
 pub fn validatePersistedIdentityRow(
     line: []const u8,
-    binding: *const runtime.ValidatedFeatureLogBinding,
+    binding: *const log_binding.ValidatedFeatureLogBinding,
     ordinal: u16,
-    stream: runtime.Stream,
+    stream: log_stream.Stream,
 ) Error!void {
-    if (!std.mem.eql(u8, cellAt(line, 1) orelse return error.InvalidFeatureLogRecord, logging.schema_version) or
+    if (!std.mem.eql(u8, cellAt(line, 1) orelse return error.InvalidFeatureLogRecord, log_limits.schema_version) or
         !std.mem.eql(u8, cellAt(line, 2) orelse return error.InvalidFeatureLogRecord, @tagName(stream)) or
-        !std.mem.eql(u8, cellAt(line, 3) orelse return error.InvalidFeatureLogRecord, if (stream == .event) logging.event_column_schema_id else logging.prompt_column_schema_id) or
+        !std.mem.eql(u8, cellAt(line, 3) orelse return error.InvalidFeatureLogRecord, if (stream == .event) log_limits.event_column_schema_id else log_limits.prompt_column_schema_id) or
         !std.mem.eql(u8, cellAt(line, 4) orelse return error.InvalidFeatureLogRecord, binding.logPolicyId().bytes) or
         !std.mem.eql(u8, cellAt(line, 5) orelse return error.InvalidFeatureLogRecord, binding.bindingId().bytes) or
         (std.fmt.parseInt(u16, cellAt(line, 6) orelse return error.InvalidFeatureLogRecord, 10) catch return error.InvalidFeatureLogRecord) != ordinal or
@@ -270,7 +273,7 @@ pub fn validatePersistedIdentityRow(
 pub fn validatePersistedControlRow(
     line: []const u8,
     kind: ControlKind,
-    stream: runtime.Stream,
+    stream: log_stream.Stream,
     final_sequence: ?u64,
 ) Error!void {
     if (!std.mem.eql(u8, cellAt(line, 0) orelse return error.InvalidFeatureLogRecord, @tagName(kind)) or

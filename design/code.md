@@ -465,7 +465,6 @@ PipelineEnvelope {
   },
   policy: {
     configVersion,
-    routeRegistryVersion,
     rendererContractVersion,
     compiledPresetIds,
     validationProfile
@@ -536,12 +535,12 @@ TelemetryFact =
   | ActionCompletedFact { outcome, durationMs? }
   | ActionInvalidFact { diagnosticCode, outcome }
   | ActionFailedFact { diagnosticCode, outcome, durationMs? }
-  | ModelRequestedFact { modelRouteId, modelProfileId }
-  | ModelCompletedFact { modelRouteId, modelProfileId, outcome,
+  | ModelRequestedFact { modelOperationId, modelSlotId }
+  | ModelCompletedFact { modelOperationId, modelSlotId, outcome,
                          inputTokens?, outputTokens?, durationMs? }
-  | ModelProtocolFailedFact { modelRouteId, modelProfileId,
+  | ModelProtocolFailedFact { modelOperationId, modelSlotId,
                               diagnosticCode, outcome }
-  | ModelSchemaFailedFact { modelRouteId, modelProfileId,
+  | ModelSchemaFailedFact { modelOperationId, modelSlotId,
                             diagnosticCode, outcome }
   | ValidationCompletedFact { validatorId, outcome, count?, durationMs? }
   | ValidationFailedFact { validatorId, diagnosticCode, outcome, count? }
@@ -765,14 +764,14 @@ ModelRequestId =
   | InitialGenerationModelRequestId {
       stageRunEpochId,
       immutableUnitOwnerId: ImmutableUnitOwnerId,
-      routeId,
+      modelOperationId,
       purpose: initial_generation,
       requestOrdinal: PositiveInteger
     }
   | AtomicRepairModelRequestId {
       stageRunEpochId,
       immutableUnitOwnerId: ImmutableUnitOwnerId,
-      routeId,
+      modelOperationId,
       purpose: atomic_repair,
       repairAuthorizationId,
       requestOrdinal: PositiveInteger
@@ -780,7 +779,7 @@ ModelRequestId =
   | SemanticReviewModelRequestId {
       stageRunEpochId,
       immutableUnitOwnerId: SemanticReviewOwner,
-      routeId,
+      modelOperationId,
       purpose: semantic_review,
       semanticReviewSlotId,
       requestOrdinal: PositiveInteger
@@ -788,7 +787,7 @@ ModelRequestId =
   | ClarificationResolutionModelRequestId {
       stageRunEpochId,
       immutableUnitOwnerId: ImmutableUnitOwnerId,
-      routeId,
+      modelOperationId,
       purpose: clarification_resolution,
       clarificationStateId,
       clarificationStateRevision,
@@ -798,7 +797,7 @@ ModelRequestId =
   | ContextFollowupModelRequestId {
       stageRunEpochId,
       immutableUnitOwnerId: ImmutableUnitOwnerId,
-      routeId,
+      modelOperationId,
       purpose: context_followup,
       parentModelRequestId,
       validatedContextRequestOrdinal,
@@ -810,7 +809,7 @@ ModelRequestId =
 ModelRequestIdentityLedger {
   stageRunEpochId,
   revision,
-  nextOrdinalByUnitRoutePurpose,
+  nextOrdinalByUnitOperationPurpose,
   records: {
     modelRequestId: ModelRequestId,
     status: assigned | invoked | terminal,
@@ -1354,29 +1353,17 @@ BootstrapRootRegistryId {
 
 WorkflowId = opaque validated project-authored lower-kebab identifier,
              1..64 ASCII bytes
-WorkflowNodeId = opaque validated definition-local lower-kebab identifier,
+WorkflowStepId = opaque validated definition-local lower-kebab identifier,
                  1..64 ASCII bytes
 WorkflowParameterId = opaque validated definition-local lower-kebab identifier,
                       1..64 ASCII bytes
-WorkflowEnumToken = opaque validated lower-kebab token, 1..64 ASCII bytes
+WorkflowResourceId = opaque validated definition-local lower-kebab identifier,
+                     1..64 ASCII bytes
 WorkflowRegisteredRef = opaque validated exact registered reference,
                         `[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*@[1-9][0-9]*`,
                         at most 128 ASCII bytes
-WorkflowDefinitionSchemaVersion = "1.0"
+WorkflowDefinitionSchemaVersion = "workflow/v1"
 WorkflowVersion = opaque validated integer in 1..4294967295
-
-ValidatedWorkflowParameterValue =
-  | { kind: boolean, value: boolean }
-  | { kind: integer, value: i64 }
-  | { kind: enum, value: WorkflowEnumToken }
-  | { kind: registered_id, value: WorkflowRegisteredRef }
-
-WorkflowParameterBinding {
-  parameterId: WorkflowParameterId,
-  value: ValidatedWorkflowParameterValue
-  // The referenced node contract supplies the exact definition-safe
-  // required/optional IDs, kinds, bounds/enums, and registered-ID namespace.
-}
 
 WorkflowReservedChildName = features | transactions
 
@@ -1432,12 +1419,23 @@ WorkflowDefinitionCapture {
   completeRead: true
 }
 
+WorkflowResourceCapture {
+  sourceInventoryOrdinal: PositiveInteger,
+  noFollowFileIdentity,
+  immutableBytesHandle,
+  byteLength,
+  completeRead: true
+}
+
 WorkflowAuthorityEntryDisposition =
   | { kind: directory_accounted }
   | { kind: reserved_child_accounted,
       reservedChildName: WorkflowReservedChildName }
   | { kind: captured_definition,
       workflowId: WorkflowId }
+  | { kind: captured_workflow_resource,
+      bindings: { workflowId: WorkflowId,
+                  resourceId: WorkflowResourceId }[] }
   | { kind: blocking, diagnosticId }
 
 WorkflowAuthorityEntryAccount {
@@ -1448,43 +1446,48 @@ WorkflowAuthorityEntryAccount {
 WorkflowAuthorityInventory {
   layout: WorkflowAuthorityLayout,
   entries: WorkflowAuthorityInventoryEntry[],
-  captures: WorkflowDefinitionCapture[],
+  definitionCaptures: WorkflowDefinitionCapture[],
+  resourceCaptures: WorkflowResourceCapture[],
   accounts: WorkflowAuthorityEntryAccount[]
   // Every encountered entry has exactly one terminal account. Any encountered
   // reserved root child uses reserved_child_accounted, and descendants of both
-  // reserved children are outside the inventory scope.
+  // reserved children are outside the inventory scope. Every other regular
+  // file is either a definition or an explicitly declared resource.
 }
 
-DeclarativeWorkflowNode {
-  workflowNodeId: WorkflowNodeId,
-  pipelineNodeContractId: WorkflowRegisteredRef,
-  parameters: WorkflowParameterBinding[]
-  // The contract ID resolves only through the compiler-registered PipelineNode
-  // registry. No adapter, implementation symbol, path, command, or capability
-  // is representable here.
+WorkflowResourceBinding {
+  sourceInventoryOrdinal: PositiveInteger,
+  resourceId: WorkflowResourceId,
+  normalizedWorkflowRootRelativeSource,
+  immutableBytesHandle
 }
 
-DeclarativeWorkflowTransition {
-  fromWorkflowNodeId: WorkflowNodeId,
-  outcomeTag: PipelineOutcomeStatus,
-  target:
-    | { kind: node, workflowNodeId: WorkflowNodeId }
-    | { kind: terminal, outcomeTag: PipelineOutcomeStatus }
+DeclarativeWorkflowStep {
+  workflowStepId: WorkflowStepId,
+  operationContractId: WorkflowRegisteredRef,
+  parameters: Map<WorkflowParameterId, boolean | signed_integer | bounded_string>,
+  outcomes: Map<PipelineOutcomeStatus,
+    WorkflowStepId | MatchingTerminalOutcome>
+  // YAML uses `use`, `with`, and `on`. The compiler supplies parameter types
+  // from the registered generic operation contract and resolves resource
+  // aliases before execution. No tagged parameter wrapper, adapter,
+  // implementation symbol, raw operational path/command, or capability is
+  // representable here.
 }
 
 DeclarativeWorkflowDefinition {
   sourceInventoryOrdinal: PositiveInteger,
   workflowId: WorkflowId,
-  schemaVersion: WorkflowDefinitionSchemaVersion,
+  schema: WorkflowDefinitionSchemaVersion,
   workflowVersion: WorkflowVersion,
   workflowShortcode: WorkflowShortcode,
-  invocationContractNodeId: WorkflowRegisteredRef,
-  // Resolves to one registered capability-free PipelineNode contract. The
+  invocationOperationRef: WorkflowRegisteredRef,
+  // Resolves to one registered capability-free invocation operation. The
   // runner invokes it before graph entry to produce validated typed run context.
-  workflowPolicyProfileId: WorkflowRegisteredRef,
-  entryWorkflowNodeId: WorkflowNodeId,
-  nodes: DeclarativeWorkflowNode[],
-  transitions: DeclarativeWorkflowTransition[]
+  workflowPolicyProfileRef: WorkflowRegisteredRef,
+  entryStepId: WorkflowStepId,
+  resources: WorkflowResourceBinding[],
+  steps: DeclarativeWorkflowStep[]
   // Closed declarative graph data only. Executable code, infrastructure
   // adapters, raw paths/commands, capability grants, and runner controls are
   // absent. The compiler resolves and validates every referenced contract.
@@ -1492,14 +1495,15 @@ DeclarativeWorkflowDefinition {
 
 CompiledWorkflowSemanticAuthority {
   workflowId,
-  schemaVersion,
+  schema,
   workflowVersion,
   workflowShortcode,
-  resolvedInvocationContractNodeIdAndVersion,
+  resolvedInvocationOperationIdAndVersion,
   workflowPolicyProfileId,
-  entryWorkflowNodeId,
-  resolvedNodeContractsParametersAndVersions,
-  resolvedTransitions,
+  entryStepId,
+  resolvedOperationContractsParametersAndVersions,
+  resolvedWorkflowResources,
+  resolvedOutcomeTransitions,
   validatedGateSet,
   effectiveCapabilities
   // Canonical typed value used for bound-workflow change classification.
@@ -1508,15 +1512,15 @@ CompiledWorkflowSemanticAuthority {
 
 CompiledWorkflowGraph {
   definition: DeclarativeWorkflowDefinition,
-  resolvedInvocationContractNode, // registered runner-invoked PipelineNode
-  resolvedNodes: CompiledWorkflowNode[],
+  resolvedInvocationOperation, // registered runner-invoked PipelineNode binding
+  resolvedOperations: CompiledWorkflowOperation[],
   resolvedTransitions: CompiledWorkflowTransition[],
   validatedGateSet,
   effectiveCapabilities,
   semanticAuthority: CompiledWorkflowSemanticAuthority,
   graphEvidence
   // Immutable and executable only through PipelineRunner. Effective
-  // capabilities are derived from registered node contracts and must remain
+  // capabilities are derived from registered operation contracts and must remain
   // within the selected workflow policy; the definition cannot add them.
   // sourceInventoryOrdinal and graphEvidence remain provenance and never make
   // an otherwise unchanged bound semantic graph appear changed.
@@ -1526,8 +1530,7 @@ WorkflowDefinitionRegistryState {
   workflowDefinitionRegistryId: BootstrapComponentId,
   workflowAuthorityInventory: WorkflowAuthorityInventory,
   workflowsById: Map<WorkflowId, CompiledWorkflowGraph>,
-  pipelineNodeRegistryVersion,
-  invocationContractNodeRegistryVersion,
+  operationRegistryVersion,
   workflowPolicyRegistryVersion,
   gateRegistryVersion,
   capabilityRegistryVersion
@@ -1947,7 +1950,6 @@ CompiledEnginePolicy {
   environmentPolicyIds[],
   portabilityPolicySetId,
   rootAccessRegistryId,
-  routeRegistryVersion,
   rendererContractVersion,
   readerDescriptorIds[],
   parserAndQueryDescriptorIds[],
@@ -2051,7 +2053,6 @@ IdentityFreeCompiledEnginePolicyPayload {
     GenericBootstrapCandidateComponentReference[],
   portabilityPolicyReference: BootstrapCandidateDependencyReference,
   rootAccessRegistryReference: BootstrapCandidateDependencyReference,
-  routeRegistryVersion,
   rendererContractVersion,
   readerDescriptorIds[],
   parserAndQueryDescriptorIds[],
@@ -2139,7 +2140,6 @@ ValidatedBootstrapOperationalCandidate {
   principleRegistryCandidate: PrincipleRegistryState,
   readerDescriptorCandidates[],
   parserAndQueryDescriptorCandidates[],
-  routeRegistryVersion,
   rendererContractVersion,
   commandDescriptorCandidates[],
   validatedLimitProfile,
@@ -2298,7 +2298,7 @@ BootstrapAuthorityState =
     }
 
 BootstrapComponentImpact =
-  logging_threshold | logging_retention | model_profile_capacity |
+  logging_threshold | logging_retention | model_slot_capacity |
   reference_ingestion | specification_contract | principle |
   technical_planning | administrative_migration
 
@@ -2330,7 +2330,7 @@ BootstrapAuthorityChangePlan =
       earliestOwner: runtime_only,
       obligations: BootstrapChangeObligations,
       allowedImpacts:
-        (logging_threshold | logging_retention | model_profile_capacity)[]
+        (logging_threshold | logging_retention | model_slot_capacity)[]
     }
   | SpecificationOwningBootstrapChangePlan {
       assignments: BootstrapComponentImpactAssignment[],
@@ -2519,16 +2519,19 @@ FactTransitionRuleRegistry {
   )[]
 }
 
-RouteDescriptor {
-  registryVersion,
-  routeId,
+CompiledWorkflowModelOperation {
+  workflowId,
+  workflowVersion,
+  workflowStepId,
+  genericOperationId,
+  modelSlotId,
   unitTypeId,
   unitPartitionContractId?,
-  requestSchemaId,
-  resultSchemaId,
-  contextRequestSchemaId?,
-  guidanceContractId,
-  minimalExampleContractId,
+  requestSchemaResourceId,
+  resultSchemaResourceId,
+  contextRequestSchemaResourceId?,
+  guidanceResourceId,
+  minimalExampleResourceId,
   inputCeiling: { bytes, tokens },
   outputCeiling: { bytes, tokens },
   repairAuthorizationSchemaId?
@@ -2629,7 +2632,7 @@ FeatureBriefProposal {
   // No feature ID, path, filename, reference selector, or canonical state ID.
 }
 
-FeatureBriefRouteResult =
+FeatureBriefOperationResult =
   | { kind: content, proposal: FeatureBriefProposal }
   | { kind: clarification_needed, proposal: ClarificationNeedProposal }
 
@@ -2834,11 +2837,11 @@ FeatureLogColumnSchema =
         message_template_id, run_id, feature_id, stage, node_id,
         parent_event_id, correlation_id, attempt, task_id, duration_ms,
         diagnostic_code, validator_id, transaction_id, rule_id,
-        model_route_id, model_profile_id, input_tokens, output_tokens,
+        model_operation_id, model_slot_id, input_tokens, output_tokens,
         repair_unit_kind, command_id, exit_code,
         evidence_status, outcome, count
       ],
-      headerUtf8: "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n"
+      headerUtf8: "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_operation_id|model_slot_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n"
     }
   | BuiltInPromptColumnsV2 {
       columnSchemaId: prompt-columns/v2,
@@ -2849,10 +2852,10 @@ FeatureLogColumnSchema =
         feature_log_binding_id, segment_ordinal, workflow_shortcode, event_id,
         sequence, occurred_at_utc, monotonic_offset, level, event_type,
         message_template_id, run_id, feature_id, stage, node_id, attempt,
-        request_id, route_id, model_profile_id, fragment_id, direction,
+        request_id, model_operation_id, model_slot_id, fragment_id, direction,
         body_class, content, retained_bytes, truncated, redacted
       ],
-      headerUtf8: "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted\n"
+      headerUtf8: "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|model_operation_id|model_slot_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted\n"
     }
   // These are compiler constants in the F0002 implementation, not data loaded
   // from config or an event registry. Event/prompt rows require
@@ -3243,8 +3246,8 @@ ValidatedSafeLogRecord =
       columnSchemaId: prompt-columns/v2,
       event: LogEvent,
       requestId,
-      routeId,
-      modelProfileId,
+      modelOperationId,
+      modelSlotId,
       fragment: SanitizedPromptFragmentLogRecord,
       serializedByteLength,
       safetyEvidenceIds[]
@@ -3405,8 +3408,8 @@ PromptBodyFragment {
 
 PromptBodyFragmentManifest {
   requestId,
-  routeId,
-  routeSchemaId,
+  modelOperationId,
+  resultSchemaResourceId,
   fragments: PromptBodyFragment[],
   coveredTypedFieldPointers[],
   completeCoverage: true
@@ -3415,8 +3418,8 @@ PromptBodyFragmentManifest {
 
 PromptExchangeLogCandidate {
   requestId,
-  routeId,
-  modelProfileId,
+  modelOperationId,
+  modelSlotId,
   requestMetadataFields: LogField[],
   responseMetadataFields: LogField[],
   selectedFragments: PromptBodyFragment[]
@@ -3424,8 +3427,8 @@ PromptExchangeLogCandidate {
 
 SanitizedPromptExchangeLogRecord {
   requestId,
-  routeId,
-  modelProfileId,
+  modelOperationId,
+  modelSlotId,
   fragments: SanitizedPromptFragmentLogRecord[],
   // Sorted by promptBodyFragmentId. Metadata uses ordinary event records;
   // evidence IDs remain internal and are never serialized to the prompt stream.
@@ -3646,10 +3649,10 @@ ReferenceSnapshot {
   parentReferenceStateId?,
   passiveLiteralRegistryStateId,
   extractionContract: {
-    routeRegistryVersion,
-    routeId: reference.extract,
-    requestSchemaId,
-    resultSchemaId,
+    compiledWorkflowAuthorityId,
+    modelOperationId,
+    requestSchemaResourceId,
+    resultSchemaResourceId,
     unitPartitionContractId
   },
   idLedger: ReferenceIdLedger,
@@ -3726,7 +3729,7 @@ PreservedTokenClaimCandidate {
 }
 
 SourceCitationProposal {
-  sourceId,                 // must be in this route unit's allowlist
+  sourceId,                 // must be in this workflow operation unit's allowlist
   blockId,                  // must equal the supplied chunk's block
   location: line-range | page-region | cell-range | node-path,
   verbatim?: RawSourceScalarProposal
@@ -3814,7 +3817,7 @@ ReferenceReconciliationSummary {
   }[]
 }
 
-ReferenceReconciliationRouteResult =
+ReferenceReconciliationOperationResult =
   | { kind: partition_summary,
       proposal: ReferenceReconciliationSummaryProposal }
   | { kind: global_reconciliation,
@@ -3823,7 +3826,7 @@ ReferenceReconciliationRouteResult =
 HierarchicalReferenceReconciliationState {
   reconciliationStateId,
   referenceStateId,
-  routeRegistryVersion,
+  compiledWorkflowAuthorityId,
   partitionContractId,
   partitions: ReferenceReconciliationPartition[],
   summaries: ReferenceReconciliationSummary[],
@@ -5472,10 +5475,10 @@ ClarificationAuthorityResolution {
   validationBinding:
     | { mode: deterministic_exact, validatorRuleIds[] }
     | { mode: semantic_authority_interpretation,
-        routeRegistryVersion,
-        routeId: clarification.resolve,
-        requestSchemaId,
-        resultSchemaId,
+        compiledWorkflowAuthorityId,
+        modelOperationId,
+        requestSchemaResourceId,
+        resultSchemaResourceId,
         validatorRuleIds[] },
   resolvedAt
 }
@@ -5876,7 +5879,7 @@ SpecificationUnitProposal =
   | { kind: entities, values: SpecificationContentProposal.entities }
   | { kind: open_questions, values: SpecificationContentProposal.openQuestions }
 
-SpecificationUnitRouteResult =
+SpecificationUnitOperationResult =
   | { kind: content, proposal: SpecificationUnitProposal }
   | { kind: clarification_needed, proposal: ClarificationNeedProposal }
 
@@ -5989,7 +5992,7 @@ PlanUnitProposal =
   | { kind: task_generation, approach: SemanticText,
       complexityDeviations: { ruleId, justification: SemanticText }[] }
 
-PlanUnitRouteResult =
+PlanUnitOperationResult =
   | { kind: content, proposal: PlanUnitProposal }
   | { kind: clarification_needed, proposal: ClarificationNeedProposal }
 
@@ -6446,7 +6449,7 @@ TaskDefinitionProposal {
   dependsOnInternalKeys[]
 }
 
-TaskClusterRouteResult =
+TaskClusterOperationResult =
   | { kind: content, proposals: TaskDefinitionProposal[] }
   | { kind: clarification_needed, proposal: ClarificationNeedProposal }
 
@@ -9043,11 +9046,11 @@ SemanticFindingProposal {
   finding: SemanticText,
   citations: SemanticAuthorityCitationProposal[],
   reportedConfidence?
-  // No finding ID, evidence class, state revision, model/profile metadata,
+  // No finding ID, evidence class, state revision, model-operation/slot metadata,
   // disposition, repair class, severity, or canonical unit pointer.
 }
 
-SemanticReviewRouteResult {
+SemanticReviewOperationResult {
   kind: findings,
   findings: SemanticFindingProposal[]
 }
@@ -9071,11 +9074,11 @@ SemanticFinding {
     sourceSpan?
   }[],
   modelExchange: {
-    routeRegistryVersion,
-    routeId: semantic.review,
+    compiledWorkflowAuthorityId,
+    modelOperationId,
     requestId,
-    resultSchemaId,
-    modelProfileId
+    resultSchemaResourceId,
+    modelSlotId
   },
   confidencePolicyId,
   reportedConfidence?,
@@ -9189,7 +9192,6 @@ and every referenced tuple must exist in the separately configured
 
 ```json
 {
-  "routeRegistryVersion": "routes/v1",
   "rendererContractVersion": "renderer/v1",
   "paths": {
     "specs": "specs/",
@@ -9809,7 +9811,7 @@ MechanicalGuidance =
       }[],                       // configured targets plus active host
       inaccessibleRoots: PathPattern[],
       generatedReadOnlyRoots: PathPattern[],
-      completeWithinRouteBudget: true
+      completeWithinOperationBudget: true
     }
   | PassiveLiteralGuidance {
       fieldPointers[],
@@ -9864,11 +9866,19 @@ MechanicalGuidance =
       "planStateId": "state:feature:plan:7",
       "obligationClusterId": "cluster-4"
     },
-    "routeId": "tasks.dependencies.reconcile",
+    "modelOperationId": {
+      "workflowId": "tasks",
+      "workflowVersion": 1,
+      "workflowStepId": "reconcile-dependencies"
+    },
     "requestOrdinal": 3
   },
   "stage": "tasks",
-  "routeId": "tasks.dependencies.reconcile",
+  "modelOperationId": {
+    "workflowId": "tasks",
+    "workflowVersion": 1,
+    "workflowStepId": "reconcile-dependencies"
+  },
   "unit": {
     "type": "task-edge-candidate/v1",
     "id": "edge-unit-7"
@@ -9931,14 +9941,14 @@ PipelineRunner
 │   ├── ParseWorkflowSelectionAction and ValidateWorkflowIdAction through runner-owned child bindings
 │   ├── ResolveSelectedWorkflowAction through a runner-owned child binding
 │   └── Selected CompiledWorkflowGraph
-│       ├── registered invocation-contract node through a runner-owned binding
+│       ├── YAML-named invocation operation through a runner-owned binding
 │       │   └── parser/validator child bindings when that contract composes them
 │       ├── selected-graph target-context setup binding when required
 │       │   ├── project-WAL/feature-ownership recovery and lock lifecycle
 │       │   ├── toolchain-preset registry/compilation actions
 │       │   ├── free-text principles ingestion/indexing actions
 │       │   └── repository discovery actions
-│       └── follow typed transitions; each registered node uses a runner-owned binding
+│       └── follow typed transitions; each YAML-selected operation uses a runner-owned binding
 └── FeatureLoggingOrchestrator (runner observer; instrumentation-internal)
     ├── severity/field projection actions
     ├── threshold/redaction/safety actions
@@ -9952,56 +9962,23 @@ PipelineRunner
         │   └── VerifyCommittedTransactionEntryAction per committed entry, forward order
         └── fail-closed runner-control action
 
-Initial registered SDD workflow graphs (each selected independently)
+Project workflow graphs are not registered in source. The compiler constructs
+each graph solely from one validated workflow YAML definition:
 
-WorkflowId specify -> SpecifyOrchestrator
-│   ├── SpecifyPreflightOrchestrator
-│   ├── ReferenceIngestionOrchestrator (mandatory)
-│   │   └── ReferenceDocumentOrchestrator (one per file)
-│   ├── ReferenceFeedbackOrchestrator (targeted correction/re-extraction)
-│   ├── ValidatedGenerationOrchestrator (one semantic unit at a time)
-│   │   ├── ModelProtocolRetryOrchestrator (when no IR exists)
-│   │   └── AtomicRepairOrchestrator (on Invalid)
-│   └── ArtifactCommitOrchestrator
+CompiledWorkflowGraph (one selected project definition)
+├── invocation contract named by `invoke`
+├── workflow policy named by `policy`
+├── immutable resources explicitly named by `resources`
+└── steps beginning at `start`
+    └── each step calls the registered generic operation named by `use`
+        ├── closed parameters from `with`
+        └── every typed outcome transition from `on`
 
-WorkflowId plan -> PlanOrchestrator
-│   ├── StageGateOrchestrator
-│   ├── RepositoryAnalysisOrchestrator
-│   ├── ValidatedGenerationOrchestrator (one plan unit at a time)
-│   │   ├── ModelProtocolRetryOrchestrator
-│   │   └── AtomicRepairOrchestrator
-│   ├── ArtifactCommitOrchestrator
-│   └── UserReviewOrchestrator (approve or targeted rejection feedback)
-
-WorkflowId tasks -> TasksOrchestrator
-│   ├── StageGateOrchestrator
-│   ├── ObligationIndexOrchestrator
-│   ├── ValidatedGenerationOrchestrator (one obligation cluster at a time)
-│   │   ├── ModelProtocolRetryOrchestrator
-│   │   └── AtomicRepairOrchestrator
-│   ├── TaskGraphOrchestrator
-│   ├── ArtifactCommitOrchestrator
-│   └── UserReviewOrchestrator (approve or targeted rejection feedback)
-
-WorkflowId implement -> ImplementOrchestrator
-    ├── StageGateOrchestrator
-    ├── derive/acquire/validate feature-execution process lease actions
-    │   └── rejected acquired-observation cleanup/validation branch
-    ├── acquire/validate exclusive feature-execution lock actions
-    │   ├── validated contention-with-no-capability branch
-    │   └── rejected acquired-observation cleanup/validation branch
-    ├── TaskSchedulingOrchestrator
-    │   └── ImplementTaskOrchestrator (one ready task)
-    │       ├── TaskExecutionAdapterBoundaryRecoveryOrchestrator (on recovered checkpoint)
-    │       ├── TaskChangePlanningOrchestrator
-    │       ├── ValidatedGenerationOrchestrator (one file operation)
-    │       │   ├── ModelProtocolRetryOrchestrator
-    │       │   └── AtomicRepairOrchestrator
-    │       ├── TaskValidationOrchestrator
-    │       └── TaskCommitOrchestrator
-    ├── FinalValidationOrchestrator
-    ├── release/validate feature-execution lock and build closed terminal evidence
-    └── release/validate feature-execution process lease actions
+The runner follows only this compiled graph. No workflow name selects a hidden
+orchestrator, route, prompt, schema, model slot, repair path, or completion rule.
+Engine-kernel loading, validation, capability enforcement, delta application,
+cancellation, cleanup, and security remain fixed and cannot be called or
+bypassed by YAML.
 ```
 
 ---
@@ -10029,7 +10006,7 @@ ENGINE_CONFIG_READ_ERROR without searching an ancestor or descendant
   -> classify every entry -> capture/parse/validate definition candidates ->
      build and validate exactly one terminal account for every inventory ordinal
   -> compile every definition from a registered invocation-contract PipelineNode,
-     graph-node, outcome, gate, and workflow-policy contracts
+     generic operation, outcome, gate, and workflow-policy contracts
   -> prove arbitrary bounded definition cardinality, unique WorkflowIds,
      logging shortcodes, and source ordinals, plus graph/transition closure
   -> prove definitions contain no executable payload or infrastructure selector,
@@ -10042,7 +10019,7 @@ ENGINE_CONFIG_READ_ERROR without searching an ancestor or descendant
      ParseWorkflowSelectionAction, ValidateWorkflowIdAction and
      ResolveSelectedWorkflowAction run outside bootstrap
   -> only when the selected graph references the registered target-context
-     setup, invoke that portion after its invocation-contract node produces
+     setup, invoke that portion after its invocation operation produces
      validated workflow context; unrelated workflows do not inherit this branch
   -> for the initial SDD graphs, resolve the fixed project transaction
      collection, acquire its lock, recover the project WAL/ID ledger, resolve
@@ -10275,7 +10252,7 @@ RepairAuthorization =
       candidateRevision,
       immutableUnitOwnerId: ImmutableUnitOwnerId,
       targetPointer,
-      expectedRouteResultKind: content,
+      expectedOperationResultKind: content,
       replacementSchema: {
         schemaId,
         requiredKind: clarification_needed,
@@ -10698,7 +10675,7 @@ sdde/
 │   │   ├── node.zig               # common contract/outcome/envelope
 │   │   ├── runner.zig             # sole delta application/invocation owner
 │   │   ├── workflow_engine.zig     # select, run invocation contract, execute graph
-│   │   ├── workflow_compiler.zig   # validated project definition -> registered-node graph
+│   │   ├── workflow_compiler.zig   # validated project definition -> registered-operation graph
 │   │   ├── workflow_registry.zig   # unique WorkflowId -> compiled graph
 │   │   ├── composition_root.zig    # adapters, node bindings, fixed startup graph
 │   │   ├── actions/

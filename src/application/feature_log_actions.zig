@@ -10,7 +10,9 @@ const write_console = @import("../actions/log/write_console_log_record.zig");
 const emit_emergency = @import("../actions/log/emit_emergency_log_failure_record.zig");
 const stabilize_failure = @import("../actions/log/stabilize_log_failure.zig");
 
-pub const ChildActions = struct {
+/// Closed runner dependencies for the feature-log graph. This is constructed
+/// only by composition and is never exposed to an orchestrator.
+pub const Set = struct {
     acquire_lock: acquire_lock.Action,
     release_lock: release_lock.Action,
     recover_stream: recover_stream.Action,

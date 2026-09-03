@@ -1,12 +1,12 @@
 const std = @import("std");
-const logging = @import("../../domain/logging.zig");
+const log_limits = @import("../../domain/feature_log_limits.zig");
 const sink_port = @import("../../ports/feature_log_sink.zig");
 const feature_log_file = @import("feature_log_file.zig");
 
 const Io = std.Io;
 
 pub fn acquire(io: Io, run_directory: Io.Dir, held: *?Io.File, deadline_ms: u16) sink_port.Error!void {
-    if (held.* != null or deadline_ms != logging.stream_lock_deadline_ms) return error.InvalidBinding;
+    if (held.* != null or deadline_ms != log_limits.stream_lock_deadline_ms) return error.InvalidBinding;
     var file = run_directory.openFile(io, feature_log_file.lock_name, .{
         .mode = .read_write,
         .allow_directory = false,
