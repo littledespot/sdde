@@ -23,6 +23,7 @@ pub const Action = struct {
             return error.WorkflowAuthorityInventoryInvalid;
         };
         var definition_ordinals: std.ArrayList(u16) = .empty;
+        var resource_ordinals: std.ArrayList(u16) = .empty;
         for (descriptors, 0..) |descriptor, index| {
             const disposition = inventory.classifyInventoryDescriptor(descriptor) orelse {
                 return error.WorkflowAuthorityInventoryInvalid;
@@ -36,11 +37,18 @@ pub const Action = struct {
                 definition_ordinals.append(allocator, ordinal) catch {
                     return error.WorkflowAuthorityInventoryInvalid;
                 };
+            } else if (disposition == .resource) {
+                resource_ordinals.append(allocator, ordinal) catch {
+                    return error.WorkflowAuthorityInventoryInvalid;
+                };
             }
         }
         return .{
             .accounts = accounts,
             .definition_ordinals = definition_ordinals.toOwnedSlice(allocator) catch {
+                return error.WorkflowAuthorityInventoryInvalid;
+            },
+            .resource_ordinals = resource_ordinals.toOwnedSlice(allocator) catch {
                 return error.WorkflowAuthorityInventoryInvalid;
             },
         };

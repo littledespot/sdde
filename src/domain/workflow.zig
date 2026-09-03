@@ -8,10 +8,10 @@ pub const WorkflowId = struct {
     }
 };
 
-pub const WorkflowNodeId = struct {
+pub const WorkflowStepId = struct {
     bytes: []const u8,
 
-    pub fn parse(bytes: []const u8) ?WorkflowNodeId {
+    pub fn parse(bytes: []const u8) ?WorkflowStepId {
         return if (validLocalId(bytes)) .{ .bytes = bytes } else null;
     }
 };
@@ -20,6 +20,14 @@ pub const WorkflowParameterId = struct {
     bytes: []const u8,
 
     pub fn parse(bytes: []const u8) ?WorkflowParameterId {
+        return if (validLocalId(bytes)) .{ .bytes = bytes } else null;
+    }
+};
+
+pub const WorkflowResourceId = struct {
+    bytes: []const u8,
+
+    pub fn parse(bytes: []const u8) ?WorkflowResourceId {
         return if (validLocalId(bytes)) .{ .bytes = bytes } else null;
     }
 };
@@ -56,29 +64,51 @@ fn validLocalId(bytes: []const u8) bool {
 }
 
 pub const OutcomeTag = enum { ok, needs_user, invalid, blocked, failed, cancelled };
-pub const ParameterKind = enum { boolean, integer, @"enum", registered_id };
-pub const ParameterValue = union(ParameterKind) {
+
+pub const ParameterValue = union(enum) {
     boolean: bool,
     integer: i64,
-    @"enum": WorkflowNodeId,
-    registered_id: RegisteredRef,
+    string: []const u8,
 };
-pub const ParameterBinding = struct { id: WorkflowParameterId, value: ParameterValue };
-pub const DeclarativeNode = struct {
-    id: WorkflowNodeId,
-    contract_id: RegisteredRef,
-    parameters: []const ParameterBinding,
+
+pub const ParameterBinding = struct {
+    id: WorkflowParameterId,
+    value: ParameterValue,
 };
-pub const TransitionTarget = union(enum) { node: WorkflowNodeId, terminal: OutcomeTag };
-pub const Transition = struct {
-    from: WorkflowNodeId,
+
+pub const ResourceDeclaration = struct {
+    id: WorkflowResourceId,
+    name: []const u8,
+};
+
+pub const TransitionTarget = union(enum) {
+    step: WorkflowStepId,
+    terminal: OutcomeTag,
+};
+
+pub const OutcomeTransition = struct {
     outcome: OutcomeTag,
     target: TransitionTarget,
 };
-test "workflow and registered identifiers are exact" {
+
+pub const DeclarativeStep = struct {
+    id: WorkflowStepId,
+    operation_id: RegisteredRef,
+    parameters: []const ParameterBinding,
+    outcomes: []const OutcomeTransition,
+};
+
+pub const Transition = struct {
+    from: WorkflowStepId,
+    outcome: OutcomeTag,
+    target: TransitionTarget,
+};
+
+test "workflow identifiers and operation references are exact" {
     try std.testing.expect(WorkflowId.parse("custom-flow") != null);
+    try std.testing.expect(WorkflowStepId.parse("generate") != null);
+    try std.testing.expect(WorkflowResourceId.parse("result-schema") != null);
     try std.testing.expect(WorkflowId.parse("Custom") == null);
-    try std.testing.expect(RegisteredRef.parse("core.noop@1") != null);
-    try std.testing.expect(RegisteredRef.parse("core.noop@01") == null);
-    try std.testing.expect(RegisteredRef.parse("core.noop@999999999999999999999999999999") != null);
+    try std.testing.expect(RegisteredRef.parse("model.generate@1") != null);
+    try std.testing.expect(RegisteredRef.parse("model.generate@01") == null);
 }

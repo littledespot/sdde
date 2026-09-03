@@ -13,6 +13,9 @@ const validate_inventory = @import("../actions/workflow/validate_workflow_author
 const capture_definitions = @import("../actions/workflow/capture_workflow_definitions.zig");
 const parse_definitions = @import("../actions/workflow/parse_workflow_definitions.zig");
 const validate_schema = @import("../actions/workflow/validate_workflow_definition_schema.zig");
+const resolve_resources = @import("../actions/workflow/resolve_workflow_resources.zig");
+const capture_resources = @import("../actions/workflow/capture_workflow_resources.zig");
+const validate_operations = @import("../actions/workflow/validate_workflow_operation_registry.zig");
 const compile_graphs = @import("../actions/workflow/compile_workflow_graphs.zig");
 const validate_graphs = @import("../actions/workflow/validate_compiled_workflow_graphs.zig");
 const build_registry = @import("../actions/workflow/build_workflow_definition_registry.zig");
@@ -23,7 +26,7 @@ const execution = @import("bootstrap_execution.zig");
 
 comptime {
     pipeline.validateLinear(
-        &.{.bootstrap_root_registry},
+        &.{ .bootstrap_root_registry, .workflow_operation_registry },
         &.{
             build_layout.Action.contract,
             enumerate_resources.Action.contract,
@@ -34,6 +37,9 @@ comptime {
             capture_definitions.Action.contract,
             parse_definitions.Action.contract,
             validate_schema.Action.contract,
+            resolve_resources.Action.contract,
+            capture_resources.Action.contract,
+            validate_operations.Action.contract,
             compile_graphs.Action.contract,
             validate_graphs.Action.contract,
             build_registry.Action.contract,
@@ -55,6 +61,9 @@ pub const Runner = struct {
     capture_definitions_action: capture_definitions.Action,
     parse_definitions_action: parse_definitions.Action,
     validate_schema_action: validate_schema.Action,
+    resolve_resources_action: resolve_resources.Action,
+    capture_resources_action: capture_resources.Action,
+    validate_operations_action: validate_operations.Action,
     compile_graphs_action: compile_graphs.Action,
     validate_graphs_action: validate_graphs.Action,
     build_registry_action: build_registry.Action,
@@ -69,6 +78,8 @@ pub const Runner = struct {
     captures: ?[]const workflow_inventory.Capture = null,
     raw_definitions: ?[]const workflow_definition.RawDefinition = null,
     definitions: ?[]const workflow_definition.Definition = null,
+    resource_manifest: ?workflow_inventory.ResourceManifest = null,
+    resource_captures: ?[]const workflow_inventory.Capture = null,
     compiled_graphs: ?[]const workflow_compilation.CompiledWorkflow = null,
     validated_graphs: ?workflow_compilation.ValidatedGraphs = null,
     registry_candidate: ?workflow_registry.RegistryCandidate = null,
@@ -87,6 +98,9 @@ pub const Runner = struct {
         capture_definitions_action: capture_definitions.Action,
         parse_definitions_action: parse_definitions.Action,
         validate_schema_action: validate_schema.Action,
+        resolve_resources_action: resolve_resources.Action,
+        capture_resources_action: capture_resources.Action,
+        validate_operations_action: validate_operations.Action,
         compile_graphs_action: compile_graphs.Action,
         validate_graphs_action: validate_graphs.Action,
         build_registry_action: build_registry.Action,
@@ -105,6 +119,9 @@ pub const Runner = struct {
             .capture_definitions_action = capture_definitions_action,
             .parse_definitions_action = parse_definitions_action,
             .validate_schema_action = validate_schema_action,
+            .resolve_resources_action = resolve_resources_action,
+            .capture_resources_action = capture_resources_action,
+            .validate_operations_action = validate_operations_action,
             .compile_graphs_action = compile_graphs_action,
             .validate_graphs_action = validate_graphs_action,
             .build_registry_action = build_registry_action,
@@ -201,8 +218,43 @@ pub const Runner = struct {
         self.compiled_graphs = self.compile_graphs_action.execute(
             self.scratch.allocator(),
             self.definitions.?,
+            self.inventory.?,
+            self.resource_manifest.?,
+            self.resource_captures.?,
         ) catch return .{ .failed = .WORKFLOW_GRAPH_COMPILE_INVALID };
         return self.execution.finish(compile_graphs.Action.contract, .WORKFLOW_GRAPH_COMPILE_INVALID);
+    }
+
+    pub fn invokeResolveResources(self: *Runner) child_bindings.StepOutcome {
+        if (self.execution.begin(resolve_resources.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID)) |outcome| return outcome;
+        self.resource_manifest = self.resolve_resources_action.execute(
+            self.scratch.allocator(),
+            self.inventory.?,
+            self.definitions.?,
+        ) catch return .{ .failed = .WORKFLOW_AUTHORITY_INVENTORY_INVALID };
+        return self.execution.finish(resolve_resources.Action.contract, .WORKFLOW_AUTHORITY_INVENTORY_INVALID);
+    }
+
+    pub fn invokeCaptureResources(self: *Runner) child_bindings.StepOutcome {
+        if (self.execution.begin(capture_resources.Action.contract, .WORKFLOW_DEFINITION_READ_ERROR)) |outcome| return outcome;
+        self.resource_captures = self.capture_resources_action.execute(
+            self.scratch.allocator(),
+            self.inventory.?,
+            self.resource_manifest.?,
+            self.execution.runtime,
+        ) catch |failure| return switch (failure) {
+            error.Cancelled => .cancelled,
+            error.WorkflowResourceReadError => .{ .failed = .WORKFLOW_DEFINITION_READ_ERROR },
+        };
+        return self.execution.finish(capture_resources.Action.contract, .WORKFLOW_DEFINITION_READ_ERROR);
+    }
+
+    pub fn invokeValidateOperations(self: *Runner) child_bindings.StepOutcome {
+        if (self.execution.begin(validate_operations.Action.contract, .WORKFLOW_GRAPH_COMPILE_INVALID)) |outcome| return outcome;
+        self.validate_operations_action.execute(self.compile_graphs_action.registry) catch {
+            return .{ .failed = .WORKFLOW_GRAPH_COMPILE_INVALID };
+        };
+        return self.execution.finish(validate_operations.Action.contract, .WORKFLOW_GRAPH_COMPILE_INVALID);
     }
 
     pub fn invokeValidateGraphs(self: *Runner) child_bindings.StepOutcome {
@@ -220,6 +272,8 @@ pub const Runner = struct {
             self.scratch.allocator(),
             self.inventory.?,
             self.captures.?,
+            self.resource_manifest.?,
+            self.resource_captures.?,
             self.definitions.?,
             self.validated_graphs.?,
         ) catch return .{ .failed = .WORKFLOW_REGISTRY_INVALID };

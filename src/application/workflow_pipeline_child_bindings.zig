@@ -7,14 +7,14 @@ pub const ChildBindings = struct {
 
     pub const VTable = struct {
         invoke_invocation: *const fn (*anyopaque) execution.Applied,
-        invoke_node: *const fn (*anyopaque, workflow.WorkflowNodeId) execution.Applied,
+        invoke_step: *const fn (*anyopaque, workflow.WorkflowStepId) execution.Applied,
     };
 
     pub fn invokeInvocation(self: ChildBindings) execution.Applied {
         return self.vtable.invoke_invocation(self.context);
     }
 
-    pub fn invokeNode(self: ChildBindings, id: workflow.WorkflowNodeId) execution.Applied {
-        return self.vtable.invoke_node(self.context, id);
+    pub fn invokeStep(self: ChildBindings, id: workflow.WorkflowStepId) execution.Applied {
+        return self.vtable.invoke_step(self.context, id);
     }
 };

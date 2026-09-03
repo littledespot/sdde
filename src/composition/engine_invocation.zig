@@ -9,12 +9,12 @@ const workflow_selection_runner = @import("../application/workflow_selection_run
 const compilation = @import("../domain/workflow_compilation.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const workflow = @import("../domain/workflow.zig");
-const implementations = @import("../ports/workflow_node_implementation.zig");
+const operations = @import("../ports/workflow_operation_registry.zig");
 
 pub const Assembly = struct {
     services: *bootstrap_services.BootstrapServices,
     provider_bootstrap: model_provider_binding.Binding,
-    implementations: implementations.Registry,
+    operation_registry: *const operations.Registry,
     selection: workflow_selection_runner.Runner,
     provider_outcome: ?model_provider_orchestrator.Outcome = null,
     pipeline_runner: ?workflow_pipeline_runner.Runner = null,
@@ -22,21 +22,19 @@ pub const Assembly = struct {
     pub fn init(
         services: *bootstrap_services.BootstrapServices,
         arguments: []const []const u8,
-        implementation_registry: implementations.Registry,
-        compiler_registry: compilation.CompilerRegistry,
+        operation_registry: *const operations.Registry,
         provider_bootstrap: model_provider_binding.Binding,
         runtime: pipeline.NodeRuntime,
     ) Assembly {
         return .{
             .services = services,
             .provider_bootstrap = provider_bootstrap,
-            .implementations = implementation_registry,
+            .operation_registry = operation_registry,
             .selection = workflow_selection_runner.Runner.init(
                 runtime,
                 arguments,
                 services.workflows.registry(),
-                implementation_registry,
-                compiler_registry,
+                operation_registry,
             ),
         };
     }
@@ -50,8 +48,8 @@ pub const Assembly = struct {
         return .{ .context = self, .vtable = &vtable };
     }
 
-    fn invokeValidateImplementationRegistry(context: *anyopaque) workflow_bindings.SelectionStepOutcome {
-        return cast(context).selection.invokeValidateImplementationRegistry();
+    fn invokeValidateOperationRegistry(context: *anyopaque) workflow_bindings.SelectionStepOutcome {
+        return cast(context).selection.invokeValidateOperationRegistry();
     }
     fn invokeParseInvocation(context: *anyopaque) workflow_bindings.SelectionStepOutcome {
         return cast(context).selection.invokeParseInvocation();
@@ -73,7 +71,7 @@ pub const Assembly = struct {
             .not_required, .ready => ready: {
                 self.pipeline_runner = .{
                     .selected = selected.*,
-                    .implementations = self.implementations,
+                    .operation_registry = self.operation_registry,
                     .barrier = self.services.logs.barrier(),
                     .runtime = self.selection.runtime,
                 };
@@ -91,8 +89,8 @@ pub const Assembly = struct {
     fn invokeInvocation(context: *anyopaque) execution.Applied {
         return cast(context).pipeline_runner.?.bindings().invokeInvocation();
     }
-    fn invokeNode(context: *anyopaque, id: workflow.WorkflowNodeId) execution.Applied {
-        return cast(context).pipeline_runner.?.bindings().invokeNode(id);
+    fn invokeStep(context: *anyopaque, id: workflow.WorkflowStepId) execution.Applied {
+        return cast(context).pipeline_runner.?.bindings().invokeStep(id);
     }
     fn cast(context: *anyopaque) *Assembly {
         return @ptrCast(@alignCast(context));
@@ -100,11 +98,11 @@ pub const Assembly = struct {
 };
 
 const vtable: workflow_bindings.ChildBindings.VTable = .{
-    .validate_implementation_registry = Assembly.invokeValidateImplementationRegistry,
+    .validate_operation_registry = Assembly.invokeValidateOperationRegistry,
     .parse_invocation = Assembly.invokeParseInvocation,
     .select_workflow = Assembly.invokeSelectWorkflow,
     .prepare_workflow = Assembly.invokePrepareWorkflow,
     .selected_graph = Assembly.selectedGraph,
     .invoke_invocation = Assembly.invokeInvocation,
-    .invoke_node = Assembly.invokeNode,
+    .invoke_step = Assembly.invokeStep,
 };

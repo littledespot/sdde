@@ -3,14 +3,16 @@
 SDDE is being developed as a deterministic native Zig executable and generic
 declarative workflow engine. Its accepted runtime direction is to load any
 bounded set of validated workflow definitions from the configured
-`paths.workflows` root, compile graphs only from registered pipeline-node
-contracts, and execute one selected workflow. `specify`, `plan`, `tasks`, and
-`implement` are the initial workflow suite, not a fixed engine registry.
+`paths.workflows` root, capture only their declared resources, compile graphs
+through one registry of generic operations, and execute one selected workflow
+by its compiled transitions. `specify`, `plan`, `tasks`, and `implement` are
+the initial workflow suite, not a fixed engine registry.
 
-The current increment only loads the exact `.sddtoolkit.json` in the invocation
-working directory. A missing or unreadable file exits with
-`ENGINE_CONFIG_READ_ERROR`; malformed or structurally invalid v2 content exits
-with `ENGINE_CONFIG_PARSE_ERROR` before workflow work begins.
+Bootstrap loads the exact `.sddtoolkit.json` in the invocation working
+directory, validates configured roots, compiles all concise `workflow/v1`
+definitions, and publishes the immutable workflow registry before selection.
+Provider configuration is read only after selection when the compiled graph
+requires model capability.
 
 ## Requirements
 
@@ -34,5 +36,5 @@ temporary directory, clears its environment, and verifies its exact standard
 output. The temporary package directory is removed by the Zig build runner
 after a successful build.
 
-The workflow engine described in `design/design.md` is not implemented by this
-initial scaffold.
+Concrete domain operations and the full initial SDD workflow suite remain
+incremental work under `design/design.md` and their feature contracts.

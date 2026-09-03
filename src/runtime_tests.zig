@@ -2,6 +2,7 @@ test {
     _ = @import("feature_log_runtime_test.zig");
     _ = @import("workflow_registry_test.zig");
     _ = @import("workflow_execution_test.zig");
+    _ = @import("workflow_definition_test.zig");
     _ = @import("application/feature_log_policy_transition_coordinator.zig");
     _ = @import("application/feature_log_policy_transition_runner.zig");
     _ = @import("application/feature_log_retention_coordinator.zig");

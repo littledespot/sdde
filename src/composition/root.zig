@@ -31,6 +31,9 @@ const validate_workflow_inventory = @import("../actions/workflow/validate_workfl
 const capture_workflows = @import("../actions/workflow/capture_workflow_definitions.zig");
 const parse_workflows = @import("../actions/workflow/parse_workflow_definitions.zig");
 const validate_workflow_schema = @import("../actions/workflow/validate_workflow_definition_schema.zig");
+const resolve_workflow_resources = @import("../actions/workflow/resolve_workflow_resources.zig");
+const capture_workflow_resources = @import("../actions/workflow/capture_workflow_resources.zig");
+const validate_workflow_operations = @import("../actions/workflow/validate_workflow_operation_registry.zig");
 const compile_workflows = @import("../actions/workflow/compile_workflow_graphs.zig");
 const validate_workflow_graphs = @import("../actions/workflow/validate_compiled_workflow_graphs.zig");
 const build_workflow_registry = @import("../actions/workflow/build_workflow_definition_registry.zig");
@@ -67,7 +70,7 @@ const model_provider_bootstrap_binding = @import("../application/model_provider_
 const model_provider_bootstrap_orchestrator = @import("../application/model_provider_bootstrap_orchestrator.zig");
 const model_provider_bootstrap_services = @import("../application/model_provider_bootstrap_services.zig");
 const llm_provider_registry_service = @import("../application/llm_provider_registry_service.zig");
-const core_workflow_nodes = @import("core_workflow_nodes.zig");
+const core_workflow_operations = @import("core_workflow_operations.zig");
 const workflow_artifacts = @import("../domain/workflow_artifact_registry.zig");
 const log_binding = @import("../domain/feature_log_binding.zig");
 const log_limits = @import("../domain/feature_log_limits.zig");
@@ -77,7 +80,7 @@ const feature_log_finalization_runner = @import("../application/feature_log_fina
 const model_provider_bootstrap = @import("model_provider_bootstrap.zig");
 const engine_invocation = @import("engine_invocation.zig");
 const stabilizer_port = @import("../ports/transaction_stabilizer.zig");
-const workflow_node_implementation = @import("../ports/workflow_node_implementation.zig");
+const workflow_operation_registry = @import("../ports/workflow_operation_registry.zig");
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) run_outcome.Outcome {
     return runInvocationInProject(io, allocator, .cwd(), arguments);
@@ -101,8 +104,7 @@ fn runInvocationInProject(
     return runBootstrappedInvocation(
         &boot,
         arguments,
-        core_workflow_nodes.registry,
-        core_workflow_nodes.compiler_registry,
+        &core_workflow_operations.registry,
         provider_bootstrap.bind(),
     );
 }
@@ -110,8 +112,7 @@ fn runInvocationInProject(
 fn runBootstrappedInvocation(
     boot: *bootstrap_orchestrator.Outcome,
     arguments: []const []const u8,
-    implementation_registry: workflow_node_implementation.Registry,
-    compiler_registry: workflow_compilation.CompilerRegistry,
+    operation_registry: *const workflow_operation_registry.Registry,
     provider_bootstrap: model_provider_bootstrap_binding.Binding,
 ) run_outcome.Outcome {
     return switch (boot.*) {
@@ -121,8 +122,7 @@ fn runBootstrappedInvocation(
             var invocation = engine_invocation.Assembly.init(
                 services,
                 arguments,
-                implementation_registry,
-                compiler_registry,
+                operation_registry,
                 provider_bootstrap,
                 .{},
             );
@@ -194,7 +194,10 @@ fn runInProjectWithRuntime(
         capture_workflows.Action{ .source = workflow_source_adapter.capturer() },
         parse_workflows.Action{ .parser = workflow_parser_adapter.parser() },
         validate_workflow_schema.Action{},
-        compile_workflows.Action{ .registry = &core_workflow_nodes.compiler_registry },
+        resolve_workflow_resources.Action{},
+        capture_workflow_resources.Action{ .source = workflow_source_adapter.capturer() },
+        validate_workflow_operations.Action{},
+        compile_workflows.Action{ .registry = &core_workflow_operations.registry },
         validate_workflow_graphs.Action{},
         build_workflow_registry.Action{},
         validate_workflow_registry.Action{},
@@ -408,8 +411,7 @@ test "invocation runner handles every provider preparation outcome before workfl
         const outcome = runBootstrappedInvocation(
             &boot,
             &.{"hello"},
-            probe.implementations(),
-            core_workflow_nodes.compiler_registry,
+            probe.registry(),
             probe.providerBinding(),
         );
 
@@ -419,7 +421,7 @@ test "invocation runner handles every provider preparation outcome before workfl
             .not_required, .ready => {
                 try std.testing.expectEqual(workflow_execution.Outcome.ok, outcome.execution);
                 try std.testing.expectEqual(@as(usize, 1), probe.invocation_calls);
-                try std.testing.expectEqual(@as(usize, 1), probe.node_calls);
+                try std.testing.expectEqual(@as(usize, 1), probe.step_calls);
             },
             .failed => {
                 try std.testing.expectEqual(
@@ -427,12 +429,12 @@ test "invocation runner handles every provider preparation outcome before workfl
                     outcome.bootstrap_failed,
                 );
                 try std.testing.expectEqual(@as(usize, 0), probe.invocation_calls);
-                try std.testing.expectEqual(@as(usize, 0), probe.node_calls);
+                try std.testing.expectEqual(@as(usize, 0), probe.step_calls);
             },
             .cancelled => {
                 try std.testing.expectEqual(workflow_execution.Outcome.cancelled, outcome.execution);
                 try std.testing.expectEqual(@as(usize, 0), probe.invocation_calls);
-                try std.testing.expectEqual(@as(usize, 0), probe.node_calls);
+                try std.testing.expectEqual(@as(usize, 0), probe.step_calls);
             },
         }
     }
@@ -441,8 +443,7 @@ test "invocation runner handles every provider preparation outcome before workfl
     const invalid = runBootstrappedInvocation(
         &boot,
         &.{"absent-workflow"},
-        invalid_probe.implementations(),
-        core_workflow_nodes.compiler_registry,
+        invalid_probe.registry(),
         invalid_probe.providerBinding(),
     );
     try std.testing.expect(invalid == .invocation_invalid);
@@ -561,42 +562,30 @@ test "toolchain loading rejects a linked exact project document" {
 }
 
 const valid_workflow =
-    \\schemaVersion: "1.0"
-    \\workflowId: hello
-    \\workflowVersion: 1
-    \\workflowShortcode: HELO
-    \\invocationContractNodeId: core.empty-invocation@1
-    \\workflowPolicyProfileId: core.capability-free@1
-    \\entryWorkflowNodeId: run
-    \\nodes:
-    \\  - workflowNodeId: run
-    \\    pipelineNodeContractId: core.noop@1
-    \\    parameters: []
-    \\transitions:
-    \\  - fromWorkflowNodeId: run
-    \\    outcomeTag: ok
-    \\    target:
-    \\      kind: terminal
-    \\      outcomeTag: ok
+    \\schema: workflow/v1
+    \\id: hello
+    \\version: 1
+    \\shortcode: HELO
+    \\invoke: core.empty-invocation@1
+    \\policy: core.capability-free@1
+    \\start: run
+    \\steps:
+    \\  run:
+    \\    use: core.noop@1
+    \\    on: { ok: end.ok }
 ;
 const second_workflow_same_shortcode =
-    \\schemaVersion: "1.0"
-    \\workflowId: goodbye
-    \\workflowVersion: 1
-    \\workflowShortcode: HELO
-    \\invocationContractNodeId: core.empty-invocation@1
-    \\workflowPolicyProfileId: core.capability-free@1
-    \\entryWorkflowNodeId: run
-    \\nodes:
-    \\  - workflowNodeId: run
-    \\    pipelineNodeContractId: core.noop@1
-    \\    parameters: []
-    \\transitions:
-    \\  - fromWorkflowNodeId: run
-    \\    outcomeTag: ok
-    \\    target:
-    \\      kind: terminal
-    \\      outcomeTag: ok
+    \\schema: workflow/v1
+    \\id: goodbye
+    \\version: 1
+    \\shortcode: HELO
+    \\invoke: core.empty-invocation@1
+    \\policy: core.capability-free@1
+    \\start: run
+    \\steps:
+    \\  run:
+    \\    use: core.noop@1
+    \\    on: { ok: end.ok }
 ;
 
 const test_provider_id = llm_provider_identity.ProviderId.parse("compiled-provider").?;
@@ -609,9 +598,9 @@ const test_provider_contracts: llm_provider_contracts.Registry = .{ .entries = &
 const test_provider_document =
     \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{}}]}]}
 ;
-const test_model_node: workflow_compilation.CompiledNode = .{
-    .id = workflow.WorkflowNodeId.parse("run").?,
-    .contract_id = workflow.RegisteredRef.parse("test.model@1").?,
+const test_model_step: workflow_compilation.CompiledStep = .{
+    .id = workflow.WorkflowStepId.parse("run").?,
+    .operation_id = workflow.RegisteredRef.parse("test.model@1").?,
     .parameters = &.{},
     .requires = &.{},
     .produces = &.{},
@@ -621,9 +610,10 @@ const test_model_node: workflow_compilation.CompiledNode = .{
     .side_effect = .none,
     .gates = &.{},
     .capabilities = &.{model_provider_requirement.capability_id},
+    .loop_limit = null,
 };
 const test_model_transition: workflow.Transition = .{
-    .from = test_model_node.id,
+    .from = test_model_step.id,
     .outcome = .ok,
     .target = .{ .terminal = .ok },
 };
@@ -633,12 +623,14 @@ const test_model_graph: workflow_compilation.CompiledWorkflow = .{
     .authority = .{
         .workflow_id = workflow.WorkflowId.parse("model-flow").?,
         .workflow_version = 1,
-        .invocation_contract_id = workflow.RegisteredRef.parse("test.empty@1").?,
+        .invocation_operation_id = workflow.RegisteredRef.parse("test.empty@1").?,
         .policy_profile_id = workflow.RegisteredRef.parse("test.safe@1").?,
-        .entry_node_id = test_model_node.id,
+        .start_step_id = test_model_step.id,
         .invocation_outputs = &.{},
-        .nodes = &.{test_model_node},
+        .resources = &.{},
+        .steps = &.{test_model_step},
         .transitions = &.{test_model_transition},
+        .maximum_step_executions = 1,
     },
 };
 
@@ -697,7 +689,7 @@ test "loads and resolves a generic workflow definition from the configured root"
     try std.testing.expectEqual(@as(usize, 1), registry.count());
     const graph = registry.resolve(workflow.WorkflowId.parse("hello").?);
     try std.testing.expect(graph != null);
-    try std.testing.expectEqualStrings("core.noop@1", graph.?.authority.nodes[0].contract_id.bytes);
+    try std.testing.expectEqualStrings("core.noop@1", graph.?.authority.steps[0].operation_id.bytes);
 }
 
 test "duplicate workflow shortcodes reject the complete registry" {
@@ -938,31 +930,44 @@ const InvocationPreparationProbe = struct {
     mode: PreparationMode,
     prepare_calls: usize = 0,
     invocation_calls: usize = 0,
-    node_calls: usize = 0,
+    step_calls: usize = 0,
     selected_workflow_id: ?[]const u8 = null,
     prepared_registry: ?*const llm_provider_registry.ValidatedLLMProviderRegistry = null,
-    invocation_implementations: [1]workflow_node_implementation.InvocationImplementation = undefined,
-    node_implementations: [1]workflow_node_implementation.NodeImplementation = undefined,
+    operation_entries: [2]workflow_operation_registry.Entry = undefined,
+    operation_registry: workflow_operation_registry.Registry = undefined,
 
     fn providerBinding(self: *InvocationPreparationProbe) model_provider_bootstrap_binding.Binding {
         return .{ .context = self, .invoke_fn = prepareProvider };
     }
 
-    fn implementations(self: *InvocationPreparationProbe) workflow_node_implementation.Registry {
-        self.invocation_implementations[0] = .{
-            .contract_id = "core.empty-invocation@1",
+    fn registry(self: *InvocationPreparationProbe) *const workflow_operation_registry.Registry {
+        self.operation_entries[0] = .{
+            .contract = .{
+                .id = "core.empty-invocation@1",
+                .kind = .invocation,
+                .outcomes = &.{.ok},
+                .side_effect = .none,
+            },
             .context = self,
-            .invoke_fn = invokeWorkflow,
+            .invoke_fn = invokeOperation,
         };
-        self.node_implementations[0] = .{
-            .contract_id = "core.noop@1",
+        self.operation_entries[1] = .{
+            .contract = .{
+                .id = "core.noop@1",
+                .kind = .step,
+                .outcomes = &.{.ok},
+                .side_effect = .none,
+            },
             .context = self,
-            .invoke_fn = invokeNode,
+            .invoke_fn = invokeOperation,
         };
-        return .{
-            .invocations = &self.invocation_implementations,
-            .nodes = &self.node_implementations,
+        self.operation_registry = .{
+            .operations = &self.operation_entries,
+            .policies = core_workflow_operations.registry.policies,
+            .gates = &.{},
+            .capabilities = &.{},
         };
+        return &self.operation_registry;
     }
 
     fn prepareProvider(
@@ -1003,25 +1008,21 @@ const InvocationPreparationProbe = struct {
         };
     }
 
-    fn invokeWorkflow(
+    fn invokeOperation(
         context: ?*anyopaque,
-        _: workflow_node_implementation.InvocationInput,
-    ) workflow_node_implementation.Error!workflow_execution.Candidate {
+        input: workflow_operation_registry.Input,
+    ) workflow_operation_registry.Error!workflow_execution.Candidate {
         const self: *InvocationPreparationProbe = @ptrCast(@alignCast(context.?));
-        self.invocation_calls += 1;
-        return .{ .outcome = .ok, .delta = .{} };
-    }
-
-    fn invokeNode(
-        context: ?*anyopaque,
-        _: workflow_node_implementation.NodeInput,
-    ) workflow_node_implementation.Error!workflow_execution.Candidate {
-        const self: *InvocationPreparationProbe = @ptrCast(@alignCast(context.?));
-        self.node_calls += 1;
-        if (self.mode == .ready and
-            (self.prepared_registry == null or self.prepared_registry.?.count() != 0))
-        {
-            return error.NodeExecutionFailed;
+        switch (input) {
+            .invocation => self.invocation_calls += 1,
+            .step => {
+                self.step_calls += 1;
+                if (self.mode == .ready and
+                    (self.prepared_registry == null or self.prepared_registry.?.count() != 0))
+                {
+                    return error.OperationExecutionFailed;
+                }
+            },
         }
         return .{ .outcome = .ok, .delta = .{} };
     }

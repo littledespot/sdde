@@ -40,6 +40,9 @@ pub fn run(children: child_bindings.ChildBindings) Outcome {
     if (terminal(children.invokeCaptureWorkflows())) |outcome| return outcome;
     if (terminal(children.invokeParseWorkflows())) |outcome| return outcome;
     if (terminal(children.invokeValidateWorkflowSchema())) |outcome| return outcome;
+    if (terminal(children.invokeResolveWorkflowResources())) |outcome| return outcome;
+    if (terminal(children.invokeCaptureWorkflowResources())) |outcome| return outcome;
+    if (terminal(children.invokeValidateWorkflowOperations())) |outcome| return outcome;
     if (terminal(children.invokeCompileWorkflows())) |outcome| return outcome;
     if (terminal(children.invokeValidateWorkflowGraphs())) |outcome| return outcome;
     if (terminal(children.invokeBuildWorkflowRegistry())) |outcome| return outcome;
@@ -160,7 +163,7 @@ test "toolchain actions remain separate ordered child bindings" {
             .capture_toolchain_presets,
             .parse_toolchain_documents,
         },
-        spy.calls[26..spy.call_count],
+        spy.calls[29..spy.call_count],
     );
 }
 
@@ -196,6 +199,9 @@ const Step = enum {
     capture_workflows,
     parse_workflows,
     validate_workflow_schema,
+    resolve_workflow_resources,
+    capture_workflow_resources,
+    validate_workflow_operations,
     compile_workflows,
     validate_workflow_graphs,
     build_workflow_registry,
@@ -214,7 +220,7 @@ const Step = enum {
 const SpyBindings = struct {
     fail_at: ?Step = null,
     cancel_at: ?Step = null,
-    calls: [35]Step = undefined,
+    calls: [38]Step = undefined,
     call_count: usize = 0,
 
     fn bindings(self: *SpyBindings) child_bindings.ChildBindings {
@@ -246,11 +252,12 @@ const SpyBindings = struct {
             .build_workflow_accounts,
             .build_workflow_inventory,
             .validate_workflow_inventory,
+            .resolve_workflow_resources,
             => .WORKFLOW_AUTHORITY_INVENTORY_INVALID,
-            .capture_workflows => .WORKFLOW_DEFINITION_READ_ERROR,
+            .capture_workflows, .capture_workflow_resources => .WORKFLOW_DEFINITION_READ_ERROR,
             .parse_workflows => .WORKFLOW_DEFINITION_PARSE_ERROR,
             .validate_workflow_schema => .WORKFLOW_DEFINITION_SCHEMA_INVALID,
-            .compile_workflows, .validate_workflow_graphs => .WORKFLOW_GRAPH_COMPILE_INVALID,
+            .validate_workflow_operations, .compile_workflows, .validate_workflow_graphs => .WORKFLOW_GRAPH_COMPILE_INVALID,
             .build_workflow_registry, .validate_workflow_registry => .WORKFLOW_REGISTRY_INVALID,
             .capture_project_toolchain,
             .inventory_toolchain_presets,
@@ -289,6 +296,9 @@ const spy_vtable: child_bindings.ChildBindings.VTable = .{
     .capture_workflows = spyCaptureWorkflows,
     .parse_workflows = spyParseWorkflows,
     .validate_workflow_schema = spyValidateWorkflowSchema,
+    .resolve_workflow_resources = spyResolveWorkflowResources,
+    .capture_workflow_resources = spyCaptureWorkflowResources,
+    .validate_workflow_operations = spyValidateWorkflowOperations,
     .compile_workflows = spyCompileWorkflows,
     .validate_workflow_graphs = spyValidateWorkflowGraphs,
     .build_workflow_registry = spyBuildWorkflowRegistry,
@@ -394,6 +404,15 @@ fn spyParseWorkflows(context: *anyopaque) child_bindings.StepOutcome {
 }
 fn spyValidateWorkflowSchema(context: *anyopaque) child_bindings.StepOutcome {
     return castSpy(context).record(.validate_workflow_schema);
+}
+fn spyResolveWorkflowResources(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.resolve_workflow_resources);
+}
+fn spyCaptureWorkflowResources(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.capture_workflow_resources);
+}
+fn spyValidateWorkflowOperations(context: *anyopaque) child_bindings.StepOutcome {
+    return castSpy(context).record(.validate_workflow_operations);
 }
 fn spyCompileWorkflows(context: *anyopaque) child_bindings.StepOutcome {
     return castSpy(context).record(.compile_workflows);

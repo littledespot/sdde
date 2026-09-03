@@ -16,17 +16,17 @@ pub const ChildBindings = struct {
     vtable: *const VTable,
 
     pub const VTable = struct {
-        validate_implementation_registry: *const fn (*anyopaque) SelectionStepOutcome,
+        validate_operation_registry: *const fn (*anyopaque) SelectionStepOutcome,
         parse_invocation: *const fn (*anyopaque) SelectionStepOutcome,
         select_workflow: *const fn (*anyopaque) SelectionStepOutcome,
         prepare_workflow: *const fn (*anyopaque) PreparationOutcome,
         selected_graph: *const fn (*const anyopaque) *const compilation.CompiledWorkflow,
         invoke_invocation: *const fn (*anyopaque) execution.Applied,
-        invoke_node: *const fn (*anyopaque, workflow.WorkflowNodeId) execution.Applied,
+        invoke_step: *const fn (*anyopaque, workflow.WorkflowStepId) execution.Applied,
     };
 
-    pub fn invokeValidateImplementationRegistry(self: ChildBindings) SelectionStepOutcome {
-        return self.vtable.validate_implementation_registry(self.context);
+    pub fn invokeValidateOperationRegistry(self: ChildBindings) SelectionStepOutcome {
+        return self.vtable.validate_operation_registry(self.context);
     }
     pub fn invokeParseInvocation(self: ChildBindings) SelectionStepOutcome {
         return self.vtable.parse_invocation(self.context);
@@ -43,7 +43,7 @@ pub const ChildBindings = struct {
     pub fn invokeInvocation(self: ChildBindings) execution.Applied {
         return self.vtable.invoke_invocation(self.context);
     }
-    pub fn invokeNode(self: ChildBindings, id: workflow.WorkflowNodeId) execution.Applied {
-        return self.vtable.invoke_node(self.context, id);
+    pub fn invokeStep(self: ChildBindings, id: workflow.WorkflowStepId) execution.Applied {
+        return self.vtable.invoke_step(self.context, id);
     }
 };

@@ -19,8 +19,8 @@ pub const Action = struct {
         _: Action,
         selected: *const execution.SelectedWorkflow,
     ) requirement.Requirement {
-        for (selected.graph.authority.nodes) |node| {
-            for (node.capabilities) |capability| {
+        for (selected.graph.authority.steps) |step| {
+            for (step.capabilities) |capability| {
                 if (std.mem.eql(u8, capability, requirement.capability_id)) {
                     return .required;
                 }
@@ -50,9 +50,9 @@ test "derives only the exact compiler-owned model-provider capability" {
 }
 
 fn deriveFor(workflow_id: []const u8, capabilities: []const []const u8) requirement.Requirement {
-    const node: compilation.CompiledNode = .{
-        .id = workflow.WorkflowNodeId.parse("run").?,
-        .contract_id = workflow.RegisteredRef.parse("test.node@1").?,
+    const step: compilation.CompiledStep = .{
+        .id = workflow.WorkflowStepId.parse("run").?,
+        .operation_id = workflow.RegisteredRef.parse("test.operation@1").?,
         .parameters = &.{},
         .requires = &.{},
         .produces = &.{},
@@ -62,9 +62,10 @@ fn deriveFor(workflow_id: []const u8, capabilities: []const []const u8) requirem
         .side_effect = .none,
         .gates = &.{},
         .capabilities = capabilities,
+        .loop_limit = null,
     };
     const transition: workflow.Transition = .{
-        .from = node.id,
+        .from = step.id,
         .outcome = .ok,
         .target = .{ .terminal = .ok },
     };
@@ -74,12 +75,14 @@ fn deriveFor(workflow_id: []const u8, capabilities: []const []const u8) requirem
         .authority = .{
             .workflow_id = workflow.WorkflowId.parse(workflow_id).?,
             .workflow_version = 1,
-            .invocation_contract_id = workflow.RegisteredRef.parse("test.empty@1").?,
+            .invocation_operation_id = workflow.RegisteredRef.parse("test.empty@1").?,
             .policy_profile_id = workflow.RegisteredRef.parse("test.safe@1").?,
-            .entry_node_id = node.id,
+            .start_step_id = step.id,
             .invocation_outputs = &.{},
-            .nodes = &.{node},
+            .resources = &.{},
+            .steps = &.{step},
             .transitions = &.{transition},
+            .maximum_step_executions = 1,
         },
     };
     const selected: execution.SelectedWorkflow = .{

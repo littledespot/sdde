@@ -6,7 +6,7 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "parse-workflow-invocation@1",
         .kind = .action,
-        .requires = &.{.workflow_implementation_registry_evidence},
+        .requires = &.{.workflow_operation_registry_evidence},
         .produces = &.{.workflow_invocation},
         .side_effect = .none,
     };

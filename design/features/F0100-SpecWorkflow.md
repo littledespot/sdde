@@ -2,11 +2,11 @@
 
 **Status:** Proposed feature design
 
-**Implementation readiness:** The generic YAML boundary, logical Specify flow,
-`spec.md` section hierarchy, and clarification separation are defined below.
-ADR 0005 requires the concise workflow schema and workflow-owned resource
-compiler to replace the current verbose parser/compiler before an executable
-definition can be supplied.
+**Implementation readiness:** The generic concise YAML, declared-resource,
+compiler, registry, and transition-runner boundaries are implemented by F0005
+and ADR 0005. The logical Specify flow, `spec.md` section hierarchy, and
+clarification separation are defined below; its exact registered operations
+and executable definition remain to be supplied by this feature.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media

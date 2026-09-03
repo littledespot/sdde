@@ -1,15 +1,16 @@
 const std = @import("std");
 const pipeline = @import("pipeline.zig");
-const telemetry = @import("telemetry.zig");
 const workflow = @import("workflow.zig");
-const workflow_definition = @import("workflow_definition.zig");
+const definition = @import("workflow_definition.zig");
 const compilation = @import("workflow_compilation.zig");
 const inventory = @import("workflow_inventory.zig");
 
 pub const RegistryCandidate = struct {
     inventory: inventory.Inventory,
-    captures: []const inventory.Capture,
-    definitions: []const workflow_definition.Definition,
+    definition_captures: []const inventory.Capture,
+    resource_manifest: inventory.ResourceManifest,
+    resource_captures: []const inventory.Capture,
+    definitions: []const definition.Definition,
     graphs: []const compilation.CompiledWorkflow,
 };
 
@@ -66,122 +67,133 @@ pub fn deinitOwner(owner: *Owner) void {
 }
 
 fn validateCandidate(candidate: RegistryCandidate) Error!void {
-    inventory.validate(candidate.inventory) catch return error.InvalidWorkflowRegistry;
-    inventory.validateCaptureBudget(candidate.inventory) catch return error.InvalidWorkflowRegistry;
-    if (candidate.graphs.len > workflow_definition.max_definitions or candidate.graphs.len != candidate.definitions.len or
-        candidate.graphs.len != candidate.captures.len or
-        candidate.graphs.len != candidate.inventory.definition_ordinals.len)
-    {
-        return error.InvalidWorkflowRegistry;
-    }
-    try validateCaptureDefinitionJoins(
-        candidate.inventory.descriptors,
-        candidate.inventory.definition_ordinals,
-        candidate.captures,
-        candidate.definitions,
-    );
-    for (candidate.inventory.accounts, 0..) |account, index| {
-        if (account.ordinal != index + 1 or !std.mem.eql(u8, account.path, candidate.inventory.descriptors[index].path)) {
-            return error.InvalidWorkflowRegistry;
-        }
-    }
+    inventory.validate(candidate.inventory) catch return invalid();
+    inventory.validateCaptureBudget(candidate.inventory) catch return invalid();
+    inventory.validateResourceCaptureBudget(candidate.inventory, candidate.resource_manifest) catch return invalid();
+    if (candidate.graphs.len > definition.max_definitions or
+        candidate.graphs.len != candidate.definitions.len or
+        candidate.graphs.len != candidate.definition_captures.len or
+        candidate.graphs.len != candidate.inventory.definition_ordinals.len or
+        candidate.resource_captures.len != candidate.resource_manifest.resource_ordinals.len) return invalid();
+    try validateDefinitionCaptures(candidate);
+    try validateResourceCaptures(candidate);
     for (candidate.graphs, 0..) |graph, index| {
-        const definition = findDefinition(candidate.definitions, graph.source_ordinal) orelse return error.InvalidWorkflowRegistry;
-        if (!graphProjectsDefinition(graph, definition) or
-            !containsOrdinal(candidate.inventory.definition_ordinals, graph.source_ordinal)) return error.InvalidWorkflowRegistry;
-        for (candidate.graphs[0..index]) |previous| {
-            if (std.mem.eql(u8, graph.authority.workflow_id.bytes, previous.authority.workflow_id.bytes) or
-                std.mem.eql(u8, &graph.shortcode.bytes, &previous.shortcode.bytes) or
-                graph.source_ordinal == previous.source_ordinal) return error.InvalidWorkflowRegistry;
+        const declared = findDefinition(candidate.definitions, graph.source_ordinal) orelse return invalid();
+        if (!graphProjectsDefinition(candidate, graph, declared) or
+            !containsOrdinal(candidate.inventory.definition_ordinals, graph.source_ordinal)) return invalid();
+        for (candidate.graphs[0..index]) |prior| {
+            if (std.mem.eql(u8, graph.authority.workflow_id.bytes, prior.authority.workflow_id.bytes) or
+                std.mem.eql(u8, &graph.shortcode.bytes, &prior.shortcode.bytes) or
+                graph.source_ordinal == prior.source_ordinal) return invalid();
         }
-        if (index > 0 and std.mem.order(
-            u8,
-            candidate.graphs[index - 1].authority.workflow_id.bytes,
-            graph.authority.workflow_id.bytes,
-        ) != .lt) return error.InvalidWorkflowRegistry;
+        if (index > 0 and std.mem.order(u8, candidate.graphs[index - 1].authority.workflow_id.bytes, graph.authority.workflow_id.bytes) != .lt) {
+            return invalid();
+        }
     }
 }
 
-fn graphProjectsDefinition(graph: compilation.CompiledWorkflow, definition: workflow_definition.Definition) bool {
-    if (graph.source_ordinal != definition.source_ordinal or
-        !std.mem.eql(u8, graph.authority.workflow_id.bytes, definition.workflow_id.bytes) or
-        graph.authority.workflow_version != definition.workflow_version or
-        !std.mem.eql(u8, &graph.shortcode.bytes, &definition.shortcode.bytes) or
-        !std.mem.eql(u8, graph.authority.invocation_contract_id.bytes, definition.invocation_contract_id.bytes) or
-        !std.mem.eql(u8, graph.authority.policy_profile_id.bytes, definition.policy_profile_id.bytes) or
-        !std.mem.eql(u8, graph.authority.entry_node_id.bytes, definition.entry_node_id.bytes) or
-        graph.authority.nodes.len != definition.nodes.len or
-        graph.authority.transitions.len != definition.transitions.len) return false;
-    for (graph.authority.nodes, definition.nodes) |compiled, declared| {
-        if (!std.mem.eql(u8, compiled.id.bytes, declared.id.bytes) or
-            !std.mem.eql(u8, compiled.contract_id.bytes, declared.contract_id.bytes) or
-            compiled.parameters.len != declared.parameters.len) return false;
-        for (compiled.parameters, declared.parameters) |compiled_parameter, declared_parameter| {
-            if (!sameParameter(compiled_parameter, declared_parameter)) return false;
-        }
+fn validateDefinitionCaptures(candidate: RegistryCandidate) Error!void {
+    for (candidate.definition_captures, candidate.definitions, candidate.inventory.definition_ordinals) |capture, declared, ordinal| {
+        if (ordinal == 0 or ordinal > candidate.inventory.descriptors.len) return invalid();
+        const descriptor = candidate.inventory.descriptors[ordinal - 1];
+        if (descriptor.size == null or capture.ordinal != ordinal or capture.bytes.len != descriptor.size.? or
+            declared.source_ordinal != ordinal) return invalid();
     }
-    for (graph.authority.transitions, definition.transitions) |compiled, declared| {
-        if (!sameTransition(compiled, declared)) return false;
-    }
-    return true;
 }
 
-fn sameParameter(left: workflow.ParameterBinding, right: workflow.ParameterBinding) bool {
-    if (!std.mem.eql(u8, left.id.bytes, right.id.bytes) or
-        std.meta.activeTag(left.value) != std.meta.activeTag(right.value)) return false;
+fn validateResourceCaptures(candidate: RegistryCandidate) Error!void {
+    for (candidate.resource_captures, candidate.resource_manifest.resource_ordinals) |capture, ordinal| {
+        if (ordinal == 0 or ordinal > candidate.inventory.descriptors.len) return invalid();
+        const descriptor = candidate.inventory.descriptors[ordinal - 1];
+        if (descriptor.size == null or capture.ordinal != ordinal or capture.bytes.len != descriptor.size.? or
+            candidate.inventory.accounts[ordinal - 1].disposition != .resource) return invalid();
+    }
+}
+
+fn graphProjectsDefinition(
+    candidate: RegistryCandidate,
+    graph: compilation.CompiledWorkflow,
+    declared: definition.Definition,
+) bool {
+    if (graph.source_ordinal != declared.source_ordinal or
+        !std.mem.eql(u8, graph.authority.workflow_id.bytes, declared.workflow_id.bytes) or
+        graph.authority.workflow_version != declared.workflow_version or
+        !std.mem.eql(u8, &graph.shortcode.bytes, &declared.shortcode.bytes) or
+        !std.mem.eql(u8, graph.authority.invocation_operation_id.bytes, declared.invocation_operation_id.bytes) or
+        !std.mem.eql(u8, graph.authority.policy_profile_id.bytes, declared.policy_profile_id.bytes) or
+        !std.mem.eql(u8, graph.authority.start_step_id.bytes, declared.start_step_id.bytes) or
+        graph.authority.resources.len != declared.resources.len or
+        graph.authority.steps.len != declared.steps.len) return false;
+
+    for (graph.authority.resources, declared.resources) |compiled, resource| {
+        const binding = findBinding(candidate.resource_manifest.bindings, declared.source_ordinal, resource.id) orelse return false;
+        const capture = findCapture(candidate.resource_captures, binding.resource_ordinal) orelse return false;
+        if (!std.mem.eql(u8, compiled.id.bytes, resource.id.bytes) or
+            !std.mem.eql(u8, compiled.bytes, capture.bytes)) return false;
+    }
+    var transition_count: usize = 0;
+    for (graph.authority.steps, declared.steps) |compiled, step| {
+        if (!std.mem.eql(u8, compiled.id.bytes, step.id.bytes) or
+            !std.mem.eql(u8, compiled.operation_id.bytes, step.operation_id.bytes) or
+            compiled.parameters.len != step.parameters.len or compiled.outcomes.len != step.outcomes.len) return false;
+        for (compiled.parameters, step.parameters) |compiled_parameter, parameter| {
+            if (!sameParameter(compiled_parameter, parameter)) return false;
+        }
+        transition_count += step.outcomes.len;
+        for (step.outcomes) |outcome| {
+            const transition = findTransition(graph.authority.transitions, step.id, outcome.outcome) orelse return false;
+            if (!sameTarget(transition.target, outcome.target)) return false;
+        }
+    }
+    return graph.authority.transitions.len == transition_count;
+}
+
+fn sameParameter(left: compilation.CompiledParameter, right: workflow.ParameterBinding) bool {
+    if (!std.mem.eql(u8, left.id.bytes, right.id.bytes)) return false;
     return switch (left.value) {
-        .boolean => |value| value == right.value.boolean,
-        .integer => |value| value == right.value.integer,
-        .@"enum" => |value| std.mem.eql(u8, value.bytes, right.value.@"enum".bytes),
-        .registered_id => |value| std.mem.eql(u8, value.bytes, right.value.registered_id.bytes),
+        .boolean => |value| right.value == .boolean and value == right.value.boolean,
+        .integer => |value| right.value == .integer and value == right.value.integer,
+        .string => |value| right.value == .string and std.mem.eql(u8, value, right.value.string),
+        .enumeration => |value| right.value == .string and std.mem.eql(u8, value, right.value.string),
+        .registered_ref => |value| right.value == .string and std.mem.eql(u8, value.bytes, right.value.string),
+        .resource => |value| right.value == .string and std.mem.eql(u8, value.bytes, right.value.string),
     };
 }
 
-fn sameTransition(left: workflow.Transition, right: workflow.Transition) bool {
-    if (!std.mem.eql(u8, left.from.bytes, right.from.bytes) or left.outcome != right.outcome or
-        std.meta.activeTag(left.target) != std.meta.activeTag(right.target)) return false;
-    return switch (left.target) {
-        .node => |value| std.mem.eql(u8, value.bytes, right.target.node.bytes),
-        .terminal => |value| value == right.target.terminal,
+fn sameTarget(left: workflow.TransitionTarget, right: workflow.TransitionTarget) bool {
+    if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
+    return switch (left) {
+        .step => |value| std.mem.eql(u8, value.bytes, right.step.bytes),
+        .terminal => |value| value == right.terminal,
     };
-}
-
-fn validateCaptureDefinitionJoins(
-    descriptors: []const inventory.InventoryDescriptor,
-    definition_ordinals: []const u16,
-    captures: []const inventory.Capture,
-    definitions: []const workflow_definition.Definition,
-) Error!void {
-    if (captures.len != definition_ordinals.len or definitions.len != captures.len) return error.InvalidWorkflowRegistry;
-    for (captures, definitions, definition_ordinals) |capture, definition, ordinal| {
-        if (ordinal == 0 or ordinal > descriptors.len) return error.InvalidWorkflowRegistry;
-        const expected_size = descriptors[ordinal - 1].size orelse return error.InvalidWorkflowRegistry;
-        if (capture.ordinal != ordinal or capture.bytes.len != expected_size or definition.source_ordinal != ordinal) {
-            return error.InvalidWorkflowRegistry;
-        }
-    }
 }
 
 fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow) !compilation.CompiledWorkflow {
-    const nodes = try allocator.alloc(compilation.CompiledNode, source.authority.nodes.len);
-    for (nodes, source.authority.nodes) |*destination, node| {
-        destination.* = node;
-        destination.id.bytes = try allocator.dupe(u8, node.id.bytes);
-        destination.contract_id.bytes = try allocator.dupe(u8, node.contract_id.bytes);
-        destination.parameters = try cloneParameters(allocator, node.parameters);
-        destination.requires = try allocator.dupe(pipeline.DataKey, node.requires);
-        destination.produces = try allocator.dupe(pipeline.DataKey, node.produces);
-        destination.replaces = try allocator.dupe(pipeline.DataKey, node.replaces);
-        destination.invalidates = try allocator.dupe(pipeline.DataKey, node.invalidates);
-        destination.outcomes = try allocator.dupe(workflow.OutcomeTag, node.outcomes);
-        destination.gates = try cloneStrings(allocator, node.gates);
-        destination.capabilities = try cloneStrings(allocator, node.capabilities);
+    const resources = try allocator.alloc(compilation.CompiledResource, source.authority.resources.len);
+    for (resources, source.authority.resources) |*destination, item| {
+        destination.* = item;
+        destination.id.bytes = try allocator.dupe(u8, item.id.bytes);
+        destination.bytes = try allocator.dupe(u8, item.bytes);
+    }
+    const steps = try allocator.alloc(compilation.CompiledStep, source.authority.steps.len);
+    for (steps, source.authority.steps) |*destination, step| {
+        destination.* = step;
+        destination.id.bytes = try allocator.dupe(u8, step.id.bytes);
+        destination.operation_id.bytes = try allocator.dupe(u8, step.operation_id.bytes);
+        destination.parameters = try cloneParameters(allocator, step.parameters);
+        destination.requires = try allocator.dupe(pipeline.DataKey, step.requires);
+        destination.produces = try allocator.dupe(pipeline.DataKey, step.produces);
+        destination.replaces = try allocator.dupe(pipeline.DataKey, step.replaces);
+        destination.invalidates = try allocator.dupe(pipeline.DataKey, step.invalidates);
+        destination.outcomes = try allocator.dupe(workflow.OutcomeTag, step.outcomes);
+        destination.gates = try cloneStrings(allocator, step.gates);
+        destination.capabilities = try cloneStrings(allocator, step.capabilities);
     }
     const transitions = try allocator.alloc(workflow.Transition, source.authority.transitions.len);
     for (transitions, source.authority.transitions) |*destination, transition| {
         destination.* = transition;
         destination.from.bytes = try allocator.dupe(u8, transition.from.bytes);
-        if (transition.target == .node) destination.target.node.bytes = try allocator.dupe(u8, transition.target.node.bytes);
+        if (transition.target == .step) destination.target.step.bytes = try allocator.dupe(u8, transition.target.step.bytes);
     }
     return .{
         .source_ordinal = source.source_ordinal,
@@ -189,24 +201,28 @@ fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow
         .authority = .{
             .workflow_id = .{ .bytes = try allocator.dupe(u8, source.authority.workflow_id.bytes) },
             .workflow_version = source.authority.workflow_version,
-            .invocation_contract_id = .{ .bytes = try allocator.dupe(u8, source.authority.invocation_contract_id.bytes) },
+            .invocation_operation_id = .{ .bytes = try allocator.dupe(u8, source.authority.invocation_operation_id.bytes) },
             .policy_profile_id = .{ .bytes = try allocator.dupe(u8, source.authority.policy_profile_id.bytes) },
-            .entry_node_id = .{ .bytes = try allocator.dupe(u8, source.authority.entry_node_id.bytes) },
+            .start_step_id = .{ .bytes = try allocator.dupe(u8, source.authority.start_step_id.bytes) },
             .invocation_outputs = try allocator.dupe(pipeline.DataKey, source.authority.invocation_outputs),
-            .nodes = nodes,
+            .resources = resources,
+            .steps = steps,
             .transitions = transitions,
+            .maximum_step_executions = source.authority.maximum_step_executions,
         },
     };
 }
 
-fn cloneParameters(allocator: std.mem.Allocator, source: []const workflow.ParameterBinding) ![]const workflow.ParameterBinding {
-    const values = try allocator.alloc(workflow.ParameterBinding, source.len);
+fn cloneParameters(allocator: std.mem.Allocator, source: []const compilation.CompiledParameter) ![]const compilation.CompiledParameter {
+    const values = try allocator.alloc(compilation.CompiledParameter, source.len);
     for (values, source) |*destination, parameter| {
         destination.* = parameter;
         destination.id.bytes = try allocator.dupe(u8, parameter.id.bytes);
         switch (destination.value) {
-            .@"enum" => |*item| item.bytes = try allocator.dupe(u8, item.bytes),
-            .registered_id => |*item| item.bytes = try allocator.dupe(u8, item.bytes),
+            .string => |*value| value.* = try allocator.dupe(u8, value.*),
+            .enumeration => |*value| value.* = try allocator.dupe(u8, value.*),
+            .registered_ref => |*value| value.bytes = try allocator.dupe(u8, value.bytes),
+            .resource => |*value| value.bytes = try allocator.dupe(u8, value.bytes),
             else => {},
         }
     }
@@ -219,85 +235,35 @@ fn cloneStrings(allocator: std.mem.Allocator, source: []const []const u8) ![]con
     return values;
 }
 
-fn findDefinition(values: []const workflow_definition.Definition, ordinal: u16) ?workflow_definition.Definition {
+fn findDefinition(values: []const definition.Definition, ordinal: u16) ?definition.Definition {
     for (values) |value| if (value.source_ordinal == ordinal) return value;
     return null;
 }
-
+fn findBinding(values: []const inventory.ResourceBinding, ordinal: u16, id: workflow.WorkflowResourceId) ?inventory.ResourceBinding {
+    for (values) |value| if (value.definition_ordinal == ordinal and std.mem.eql(u8, value.resource_id.bytes, id.bytes)) return value;
+    return null;
+}
+fn findCapture(values: []const inventory.Capture, ordinal: u16) ?inventory.Capture {
+    for (values) |value| if (value.ordinal == ordinal) return value;
+    return null;
+}
+fn findTransition(values: []const workflow.Transition, step: workflow.WorkflowStepId, outcome: workflow.OutcomeTag) ?workflow.Transition {
+    for (values) |value| if (value.outcome == outcome and std.mem.eql(u8, value.from.bytes, step.bytes)) return value;
+    return null;
+}
 fn containsOrdinal(values: []const u16, expected: u16) bool {
     for (values) |value| if (value == expected) return true;
     return false;
 }
-
+fn invalid() Error {
+    return error.InvalidWorkflowRegistry;
+}
 fn registryStorage(value: *const ValidatedWorkflowDefinitionRegistry) *const RegistryStorage {
     return @ptrCast(@alignCast(value));
 }
-
 fn ownerStorage(owner: *Owner) *OwnerStorage {
     return @ptrCast(@alignCast(owner));
 }
-
 fn ownerStorageConst(owner: *const Owner) *const OwnerStorage {
     return @ptrCast(@alignCast(owner));
-}
-
-test "definition captures and graphs join exact registry evidence" {
-    const descriptor = [_]inventory.InventoryDescriptor{.{ .path = "hello.workflow.yaml", .kind = .file, .size = 3 }};
-    const ordinals = [_]u16{1};
-    const captures = [_]inventory.Capture{.{ .ordinal = 1, .bytes = "abc" }};
-    const definition = workflow_definition.Definition{
-        .source_ordinal = 1,
-        .workflow_id = workflow.WorkflowId.parse("hello").?,
-        .workflow_version = 1,
-        .shortcode = telemetry.WorkflowShortcode.parse("HELO") catch unreachable,
-        .invocation_contract_id = workflow.RegisteredRef.parse("core.empty@1").?,
-        .policy_profile_id = workflow.RegisteredRef.parse("core.safe@1").?,
-        .entry_node_id = workflow.WorkflowNodeId.parse("run").?,
-        .nodes = &.{},
-        .transitions = &.{},
-    };
-    try validateCaptureDefinitionJoins(&descriptor, &ordinals, &captures, &.{definition});
-    const wrong_size = [_]inventory.Capture{.{ .ordinal = 1, .bytes = "ab" }};
-    try std.testing.expectError(error.InvalidWorkflowRegistry, validateCaptureDefinitionJoins(&descriptor, &ordinals, &wrong_size, &.{definition}));
-
-    const declared_node: workflow.DeclarativeNode = .{
-        .id = workflow.WorkflowNodeId.parse("run").?,
-        .contract_id = workflow.RegisteredRef.parse("core.noop@1").?,
-        .parameters = &.{},
-    };
-    const transition: workflow.Transition = .{ .from = declared_node.id, .outcome = .ok, .target = .{ .terminal = .ok } };
-    var projected_definition = definition;
-    projected_definition.entry_node_id = declared_node.id;
-    projected_definition.nodes = &.{declared_node};
-    projected_definition.transitions = &.{transition};
-    const compiled_node: compilation.CompiledNode = .{
-        .id = declared_node.id,
-        .contract_id = declared_node.contract_id,
-        .parameters = &.{},
-        .requires = &.{},
-        .produces = &.{},
-        .replaces = &.{},
-        .invalidates = &.{},
-        .outcomes = &.{.ok},
-        .side_effect = .none,
-        .gates = &.{},
-        .capabilities = &.{},
-    };
-    var graph: compilation.CompiledWorkflow = .{
-        .source_ordinal = 1,
-        .shortcode = projected_definition.shortcode,
-        .authority = .{
-            .workflow_id = projected_definition.workflow_id,
-            .workflow_version = 1,
-            .invocation_contract_id = projected_definition.invocation_contract_id,
-            .policy_profile_id = projected_definition.policy_profile_id,
-            .entry_node_id = declared_node.id,
-            .invocation_outputs = &.{},
-            .nodes = &.{compiled_node},
-            .transitions = &.{transition},
-        },
-    };
-    try std.testing.expect(graphProjectsDefinition(graph, projected_definition));
-    graph.authority.workflow_version = 2;
-    try std.testing.expect(!graphProjectsDefinition(graph, projected_definition));
 }

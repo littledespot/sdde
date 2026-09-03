@@ -14,6 +14,8 @@ pub const Action = struct {
         .requires = &.{
             .workflow_authority_inventory,
             .workflow_definition_captures,
+            .workflow_resource_manifest,
+            .workflow_resource_captures,
             .declarative_workflow_definitions,
             .validated_workflow_graphs,
         },
@@ -26,6 +28,8 @@ pub const Action = struct {
         allocator: std.mem.Allocator,
         inventory_value: inventory.Inventory,
         captures: []const inventory.Capture,
+        resource_manifest: inventory.ResourceManifest,
+        resource_captures: []const inventory.Capture,
         definitions: []const definition.Definition,
         validated: compilation.ValidatedGraphs,
     ) Error!registry.RegistryCandidate {
@@ -33,7 +37,14 @@ pub const Action = struct {
             return error.WorkflowRegistryInvalid;
         };
         std.mem.sort(compilation.CompiledWorkflow, graphs, {}, lessThan);
-        return .{ .inventory = inventory_value, .captures = captures, .definitions = definitions, .graphs = graphs };
+        return .{
+            .inventory = inventory_value,
+            .definition_captures = captures,
+            .resource_manifest = resource_manifest,
+            .resource_captures = resource_captures,
+            .definitions = definitions,
+            .graphs = graphs,
+        };
     }
 };
 

@@ -2,51 +2,32 @@ const std = @import("std");
 const pipeline = @import("pipeline.zig");
 const telemetry = @import("telemetry.zig");
 const workflow = @import("workflow.zig");
+const operation = @import("workflow_operation.zig");
 
-pub const ParameterDescriptor = struct {
-    id: []const u8,
-    kind: workflow.ParameterKind,
-    required: bool,
-    workflow_definition_safe: bool,
-    integer_min: i64 = std.math.minInt(i64),
-    integer_max: i64 = std.math.maxInt(i64),
-    enum_members: []const []const u8 = &.{},
-    registered_values: []const []const u8 = &.{},
-};
-pub const InvocationContract = struct {
-    id: []const u8,
-    capability_free: bool,
-    produces: []const pipeline.DataKey,
-};
-pub const NodeContract = struct {
-    id: []const u8,
-    parameters: []const ParameterDescriptor,
-    requires: []const pipeline.DataKey,
-    produces: []const pipeline.DataKey,
-    replaces: []const pipeline.DataKey = &.{},
-    invalidates: []const pipeline.DataKey = &.{},
-    outcomes: []const workflow.OutcomeTag,
-    side_effect: pipeline.SideEffect,
-    gates: []const []const u8 = &.{},
-    capabilities: []const []const u8 = &.{},
-};
-pub const PolicyProfile = struct {
-    id: []const u8,
-    allowed_capabilities: []const []const u8,
-    allowed_terminal_outcomes: []const workflow.OutcomeTag,
-};
-pub const CompilerRegistry = struct {
-    invocations: []const InvocationContract,
-    nodes: []const NodeContract,
-    policies: []const PolicyProfile,
-    gates: []const []const u8,
-    capabilities: []const []const u8,
+pub const CompiledParameterValue = union(enum) {
+    boolean: bool,
+    integer: i64,
+    string: []const u8,
+    enumeration: []const u8,
+    registered_ref: workflow.RegisteredRef,
+    resource: workflow.WorkflowResourceId,
 };
 
-pub const CompiledNode = struct {
-    id: workflow.WorkflowNodeId,
-    contract_id: workflow.RegisteredRef,
-    parameters: []const workflow.ParameterBinding,
+pub const CompiledParameter = struct {
+    id: workflow.WorkflowParameterId,
+    value: CompiledParameterValue,
+};
+
+pub const CompiledResource = struct {
+    id: workflow.WorkflowResourceId,
+    kind: operation.ResourceKind,
+    bytes: []const u8,
+};
+
+pub const CompiledStep = struct {
+    id: workflow.WorkflowStepId,
+    operation_id: workflow.RegisteredRef,
+    parameters: []const CompiledParameter,
     requires: []const pipeline.DataKey,
     produces: []const pipeline.DataKey,
     replaces: []const pipeline.DataKey,
@@ -55,20 +36,38 @@ pub const CompiledNode = struct {
     side_effect: pipeline.SideEffect,
     gates: []const []const u8,
     capabilities: []const []const u8,
+    loop_limit: ?u32,
 };
+
 pub const SemanticAuthority = struct {
     workflow_id: workflow.WorkflowId,
     workflow_version: u32,
-    invocation_contract_id: workflow.RegisteredRef,
+    invocation_operation_id: workflow.RegisteredRef,
     policy_profile_id: workflow.RegisteredRef,
-    entry_node_id: workflow.WorkflowNodeId,
+    start_step_id: workflow.WorkflowStepId,
     invocation_outputs: []const pipeline.DataKey,
-    nodes: []const CompiledNode,
+    resources: []const CompiledResource,
+    steps: []const CompiledStep,
     transitions: []const workflow.Transition,
+    maximum_step_executions: usize,
 };
+
 pub const CompiledWorkflow = struct {
     source_ordinal: u16,
     shortcode: telemetry.WorkflowShortcode,
     authority: SemanticAuthority,
 };
+
 pub const ValidatedGraphs = struct { values: []const CompiledWorkflow };
+
+pub fn calculateExecutionLimit(steps: []const CompiledStep) ?usize {
+    if (steps.len == 0) return null;
+    var total_loop_limit: usize = 0;
+    for (steps) |step| {
+        if (step.loop_limit) |limit| {
+            total_loop_limit = std.math.add(usize, total_loop_limit, limit) catch return null;
+        }
+    }
+    const rounds = std.math.add(usize, total_loop_limit, 1) catch return null;
+    return std.math.mul(usize, steps.len, rounds) catch return null;
+}

@@ -1,17 +1,21 @@
+const std = @import("std");
 const pipeline = @import("../domain/pipeline.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const workflow = @import("../domain/workflow.zig");
+const definition = @import("../domain/workflow_definition.zig");
 const compilation = @import("../domain/workflow_compilation.zig");
-const implementations = @import("../ports/workflow_node_implementation.zig");
+const operation = @import("../domain/workflow_operation.zig");
+const operations = @import("../ports/workflow_operation_registry.zig");
 const telemetry_barrier = @import("../ports/telemetry_barrier.zig");
 const child_bindings = @import("workflow_pipeline_child_bindings.zig");
 
 pub const Runner = struct {
     selected: execution.SelectedWorkflow,
-    implementations: implementations.Registry,
+    operation_registry: *const operations.Registry,
     barrier: telemetry_barrier.Barrier,
     runtime: pipeline.NodeRuntime,
     envelope: pipeline.PipelineEnvelope = pipeline.PipelineEnvelope.init(&.{}),
+    loop_counts: [definition.max_steps]u32 = [_]u32{0} ** definition.max_steps,
 
     pub fn bindings(self: *Runner) child_bindings.ChildBindings {
         return .{ .context = self, .vtable = &vtable };
@@ -20,14 +24,20 @@ pub const Runner = struct {
     fn invokeInvocation(self: *Runner) execution.Applied {
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .outcome = outcome };
         const authority = self.selected.graph.authority;
-        const implementation = self.implementations.resolveInvocation(authority.invocation_contract_id) orelse {
+        const entry = self.operation_registry.resolveOperation(authority.invocation_operation_id) orelse {
             return .{ .outcome = .failed };
         };
-        const candidate = implementation.invoke(.{ .arguments = self.selected.invocation.arguments }) catch {
+        if (entry.contract.kind != .invocation or
+            !std.mem.eql(pipeline.DataKey, entry.contract.produces, authority.invocation_outputs))
+        {
+            return .{ .outcome = .failed };
+        }
+        const candidate = entry.invoke(.{ .invocation = .{ .arguments = self.selected.invocation.arguments } }) catch {
             return .{ .outcome = .failed };
         };
+        if (!containsOutcome(entry.contract.outcomes, candidate.outcome)) return .{ .outcome = .failed };
         const contract: pipeline.NodeContract = .{
-            .id = authority.invocation_contract_id.bytes,
+            .id = authority.invocation_operation_id.bytes,
             .kind = .action,
             .requires = &.{},
             .produces = authority.invocation_outputs,
@@ -36,25 +46,30 @@ pub const Runner = struct {
         return self.applyCandidate(contract, candidate);
     }
 
-    fn invokeNode(self: *Runner, id: workflow.WorkflowNodeId) execution.Applied {
+    fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .outcome = outcome };
-        const node = findNode(self.selected.graph.authority.nodes, id) orelse return .{ .outcome = .failed };
-        const implementation = self.implementations.resolveNode(node.contract_id) orelse return .{ .outcome = .failed };
-        const candidate = implementation.invoke(.{
-            .node = node,
+        const index = findStepIndex(self.selected.graph.authority.steps, id) orelse return .{ .outcome = .failed };
+        if (index >= self.loop_counts.len) return .{ .outcome = .failed };
+        const step = &self.selected.graph.authority.steps[index];
+        if (step.loop_limit) |limit| {
+            if (self.loop_counts[index] >= limit) return .{ .outcome = .failed };
+            self.loop_counts[index] += 1;
+        }
+        const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .outcome = .failed };
+        if (!contractMatchesStep(entry.contract, step.*)) return .{ .outcome = .failed };
+        var resource_buffer: [definition.max_parameters]compilation.CompiledResource = undefined;
+        const resources = bindStepResources(
+            step.parameters,
+            self.selected.graph.authority.resources,
+            &resource_buffer,
+        ) orelse return .{ .outcome = .failed };
+        const candidate = entry.invoke(.{ .step = .{
+            .step = step,
+            .resources = resources,
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
-        }) catch return .{ .outcome = .failed };
-        if (!containsOutcome(node.outcomes, candidate.outcome)) return .{ .outcome = .failed };
-        const contract: pipeline.NodeContract = .{
-            .id = node.contract_id.bytes,
-            .kind = .action,
-            .requires = node.requires,
-            .produces = node.produces,
-            .replaces = node.replaces,
-            .invalidates = node.invalidates,
-            .side_effect = node.side_effect,
-        };
-        return self.applyCandidate(contract, candidate);
+        } }) catch return .{ .outcome = .failed };
+        if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .outcome = .failed };
+        return self.applyCandidate(stepPipelineContract(step.*), candidate);
     }
 
     fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: execution.Candidate) execution.Applied {
@@ -68,22 +83,84 @@ pub const Runner = struct {
     }
 };
 
+fn stepPipelineContract(step: compilation.CompiledStep) pipeline.NodeContract {
+    return .{
+        .id = step.operation_id.bytes,
+        .kind = .action,
+        .requires = step.requires,
+        .produces = step.produces,
+        .replaces = step.replaces,
+        .invalidates = step.invalidates,
+        .side_effect = step.side_effect,
+    };
+}
+fn contractMatchesStep(
+    contract: operation.Contract,
+    step: compilation.CompiledStep,
+) bool {
+    return contract.kind == .step and
+        std.mem.eql(pipeline.DataKey, contract.requires, step.requires) and
+        std.mem.eql(pipeline.DataKey, contract.produces, step.produces) and
+        std.mem.eql(pipeline.DataKey, contract.replaces, step.replaces) and
+        std.mem.eql(pipeline.DataKey, contract.invalidates, step.invalidates) and
+        std.mem.eql(workflow.OutcomeTag, contract.outcomes, step.outcomes) and
+        contract.side_effect == step.side_effect and
+        equalStrings(contract.gates, step.gates) and
+        equalStrings(contract.capabilities, step.capabilities);
+}
+fn equalStrings(left: []const []const u8, right: []const []const u8) bool {
+    if (left.len != right.len) return false;
+    for (left, right) |left_value, right_value| {
+        if (!std.mem.eql(u8, left_value, right_value)) return false;
+    }
+    return true;
+}
 fn invokeInvocation(context: *anyopaque) execution.Applied {
     return cast(context).invokeInvocation();
 }
-fn invokeNode(context: *anyopaque, id: workflow.WorkflowNodeId) execution.Applied {
-    return cast(context).invokeNode(id);
+fn invokeStep(context: *anyopaque, id: workflow.WorkflowStepId) execution.Applied {
+    return cast(context).invokeStep(id);
 }
 fn cast(context: *anyopaque) *Runner {
     return @ptrCast(@alignCast(context));
 }
 const vtable: child_bindings.ChildBindings.VTable = .{
     .invoke_invocation = invokeInvocation,
-    .invoke_node = invokeNode,
+    .invoke_step = invokeStep,
 };
 
-fn findNode(nodes: []const compilation.CompiledNode, id: workflow.WorkflowNodeId) ?*const compilation.CompiledNode {
-    for (nodes) |*node| if (@import("std").mem.eql(u8, node.id.bytes, id.bytes)) return node;
+fn findStepIndex(steps: []const compilation.CompiledStep, id: workflow.WorkflowStepId) ?usize {
+    for (steps, 0..) |step, index| if (std.mem.eql(u8, step.id.bytes, id.bytes)) return index;
+    return null;
+}
+fn bindStepResources(
+    parameters: []const compilation.CompiledParameter,
+    resources: []const compilation.CompiledResource,
+    buffer: *[definition.max_parameters]compilation.CompiledResource,
+) ?[]const compilation.CompiledResource {
+    var count: usize = 0;
+    for (parameters) |parameter| {
+        if (parameter.value != .resource) continue;
+        const id = parameter.value.resource;
+        var duplicate = false;
+        for (buffer[0..count]) |bound| {
+            if (std.mem.eql(u8, bound.id.bytes, id.bytes)) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) continue;
+        const resource = findResource(resources, id) orelse return null;
+        if (count == buffer.len) return null;
+        buffer[count] = resource;
+        count += 1;
+    }
+    return buffer[0..count];
+}
+fn findResource(resources: []const compilation.CompiledResource, id: workflow.WorkflowResourceId) ?compilation.CompiledResource {
+    for (resources) |resource| {
+        if (std.mem.eql(u8, resource.id.bytes, id.bytes)) return resource;
+    }
     return null;
 }
 fn containsOutcome(outcomes: []const workflow.OutcomeTag, outcome: workflow.OutcomeTag) bool {

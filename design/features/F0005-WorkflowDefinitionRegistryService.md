@@ -2,11 +2,13 @@
 
 **Status:** Proposed feature design
 
-**Implementation readiness:** ADR 0005 supersedes the implemented verbose v1
-field and tagged-parameter transport. The concise closed schema, workflow-
-resource boundary, graph compilation, and registry construction contract are
-defined below; the schema/parser/compiler/runtime implementation must be
-replaced as one increment with no legacy reader.
+**Implementation:** Complete for the generic workflow-definition increment.
+F0005 accepts only the concise closed schema, captures declared workflow
+resources, compiles through the single generic operation registry, and
+publishes an immutable graph registry. ADR 0003's generic runner now executes
+only those compiled transitions. No legacy reader or split invocation/step
+registry remains. Concrete domain operations and initial workflow definitions
+remain separately governed increments.
 
 **Compatibility:** None. This pre-release increment accepts only the exact
 concise v1 YAML contract. It has no verbose tagged-parameter form, JSON or
@@ -95,8 +97,9 @@ The workflow-authority media boundary:
 - uses the YAML contract for workflow fixtures, parser tests, runtime tests,
   and clean-package smoke inputs.
 
-The existing loader/compiler/registry responsibilities, registered contract
-inputs, runner bindings, and fixed startup coordination remain unchanged.
+The loader/compiler/registry responsibility split and fixed startup
+coordination remain unchanged. Their transport, registered input, and runner
+bindings use the concise definition and single operation registry exclusively.
 
 It begins with:
 
@@ -238,7 +241,9 @@ under the authorized workflow root. An operation parameter that expects a
 prompt, schema, or example accepts only a declared alias of that expected kind.
 Two workflows may bind the same captured resource, but one workflow cannot
 declare two aliases for the same source. There is no engine-packaged resource
-fallback or undeclared file lookup.
+fallback or undeclared file lookup. At execution, the runner exposes only the
+immutable resources referenced by the active step's compiled resource
+parameters, never unrelated workflow resources or source paths.
 
 `on` maps every outcome declared by the selected operation contract exactly
 once to either another local step ID or one of `end.ok`, `end.needs-user`,
@@ -458,7 +463,7 @@ families:
 | Code | Owning boundary |
 | --- | --- |
 | `WORKFLOW_AUTHORITY_INVENTORY_INVALID` | Layout, enumeration, normalization, collision, media classification, limits, or total accounting failed. |
-| `WORKFLOW_DEFINITION_READ_ERROR` | A definition could not be captured completely and stably through its descriptor. |
+| `WORKFLOW_DEFINITION_READ_ERROR` | A definition or declared resource could not be captured completely and stably through its descriptor. |
 | `WORKFLOW_DEFINITION_PARSE_ERROR` | Bytes violate the exact supported UTF-8 YAML 1.2 document contract. |
 | `WORKFLOW_DEFINITION_SCHEMA_INVALID` | The raw value violates the closed v1 structural, typed-value, or definition-local identity rules. |
 | `WORKFLOW_GRAPH_COMPILE_INVALID` | Registered-reference, parameter, topology, data-flow, transition, gate, or capability validation failed. |

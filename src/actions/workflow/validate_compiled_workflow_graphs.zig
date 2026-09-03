@@ -29,285 +29,219 @@ const key_count = @typeInfo(pipeline.DataKey).@"enum".fields.len;
 const KeyState = [key_count]bool;
 
 fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkflow) Error!void {
-    const nodes = graph.authority.nodes;
-    if (nodes.len == 0 or nodes.len > definition.max_nodes) return invalid();
-    const entry = nodeIndex(nodes, graph.authority.entry_node_id.bytes) orelse return invalid();
-    const colors = allocator.alloc(u2, nodes.len) catch return invalid();
+    const steps = graph.authority.steps;
+    if (steps.len == 0 or steps.len > definition.max_steps or
+        graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return invalid())) return invalid();
+    const start = stepIndex(steps, graph.authority.start_step_id.bytes) orelse return invalid();
+    try validateReachability(allocator, steps, graph.authority.transitions, start);
+    try validateTerminalReachability(allocator, steps, graph.authority.transitions);
+    try validateBoundedCycles(allocator, steps, graph.authority.transitions);
+    try validateDataFlow(allocator, graph, start);
+}
+
+fn validateReachability(
+    allocator: std.mem.Allocator,
+    steps: []const compilation.CompiledStep,
+    transitions: []const workflow.Transition,
+    start: usize,
+) Error!void {
+    const reached = allocator.alloc(bool, steps.len) catch return invalid();
+    @memset(reached, false);
+    var queue: std.ArrayList(usize) = .empty;
+    queue.append(allocator, start) catch return invalid();
+    reached[start] = true;
+    var cursor: usize = 0;
+    while (cursor < queue.items.len) : (cursor += 1) {
+        const index = queue.items[cursor];
+        for (transitions) |transition| {
+            if (!std.mem.eql(u8, transition.from.bytes, steps[index].id.bytes)) continue;
+            if (transition.target == .step) {
+                const target = stepIndex(steps, transition.target.step.bytes) orelse return invalid();
+                if (!reached[target]) {
+                    reached[target] = true;
+                    queue.append(allocator, target) catch return invalid();
+                }
+            }
+        }
+    }
+    for (reached) |value| if (!value) return invalid();
+}
+
+fn validateTerminalReachability(
+    allocator: std.mem.Allocator,
+    steps: []const compilation.CompiledStep,
+    transitions: []const workflow.Transition,
+) Error!void {
+    const reaches_terminal = allocator.alloc(bool, steps.len) catch return invalid();
+    @memset(reaches_terminal, false);
+    for (steps, 0..) |step, index| {
+        for (transitions) |transition| {
+            if (std.mem.eql(u8, transition.from.bytes, step.id.bytes) and transition.target == .terminal) {
+                reaches_terminal[index] = true;
+                break;
+            }
+        }
+    }
+    var changed = true;
+    while (changed) {
+        changed = false;
+        for (steps, 0..) |step, index| {
+            if (reaches_terminal[index]) continue;
+            for (transitions) |transition| {
+                if (!std.mem.eql(u8, transition.from.bytes, step.id.bytes) or transition.target != .step) continue;
+                const target = stepIndex(steps, transition.target.step.bytes) orelse return invalid();
+                if (reaches_terminal[target]) {
+                    reaches_terminal[index] = true;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+    for (reaches_terminal) |value| if (!value) return invalid();
+}
+
+fn validateBoundedCycles(
+    allocator: std.mem.Allocator,
+    steps: []const compilation.CompiledStep,
+    transitions: []const workflow.Transition,
+) Error!void {
+    const colors = allocator.alloc(u2, steps.len) catch return invalid();
     @memset(colors, 0);
-    var order: std.ArrayList(usize) = .empty;
-    try visit(nodes, graph.authority.transitions, entry, colors, &order, allocator);
-    if (order.items.len != nodes.len) return invalid();
-    std.mem.reverse(usize, order.items);
+    for (steps, 0..) |step, index| {
+        if (step.loop_limit != null or colors[index] != 0) continue;
+        try visitUnguarded(steps, transitions, index, colors);
+    }
+}
 
-    const terminal_memo = allocator.alloc(u2, nodes.len) catch return invalid();
-    @memset(terminal_memo, 0);
-    for (0..nodes.len) |index| if (!try reachesTerminal(nodes, graph.authority.transitions, index, terminal_memo)) return invalid();
+fn visitUnguarded(
+    steps: []const compilation.CompiledStep,
+    transitions: []const workflow.Transition,
+    index: usize,
+    colors: []u2,
+) Error!void {
+    if (colors[index] == 1) return invalid();
+    if (colors[index] == 2 or steps[index].loop_limit != null) return;
+    colors[index] = 1;
+    for (transitions) |transition| {
+        if (!std.mem.eql(u8, transition.from.bytes, steps[index].id.bytes) or transition.target != .step) continue;
+        const target = stepIndex(steps, transition.target.step.bytes) orelse return invalid();
+        if (steps[target].loop_limit == null) try visitUnguarded(steps, transitions, target, colors);
+    }
+    colors[index] = 2;
+}
 
-    const inputs = allocator.alloc(?KeyState, nodes.len) catch return invalid();
+fn validateDataFlow(allocator: std.mem.Allocator, graph: compilation.CompiledWorkflow, start: usize) Error!void {
+    const steps = graph.authority.steps;
+    const inputs = allocator.alloc(?KeyState, steps.len) catch return invalid();
     @memset(inputs, null);
     var initial = [_]bool{false} ** key_count;
     for (graph.authority.invocation_outputs) |key| {
         if (initial[@intFromEnum(key)]) return invalid();
         initial[@intFromEnum(key)] = true;
     }
-    inputs[entry] = initial;
-    for (order.items) |index| {
-        const input = inputs[index] orelse return invalid();
-        const output = try applyDataContract(input, nodes[index]);
+    inputs[start] = initial;
+    var queue: std.ArrayList(usize) = .empty;
+    queue.append(allocator, start) catch return invalid();
+    var cursor: usize = 0;
+    while (cursor < queue.items.len) : (cursor += 1) {
+        const index = queue.items[cursor];
+        const output = try applyDataContract(inputs[index].?, steps[index]);
         for (graph.authority.transitions) |transition| {
-            if (!std.mem.eql(u8, transition.from.bytes, nodes[index].id.bytes)) continue;
-            switch (transition.target) {
-                .terminal => {},
-                .node => |target| {
-                    const target_index = nodeIndex(nodes, target.bytes) orelse return invalid();
-                    if (inputs[target_index]) |existing| {
-                        if (!std.mem.eql(bool, &existing, &output)) return invalid();
-                    } else inputs[target_index] = output;
-                },
+            if (!std.mem.eql(u8, transition.from.bytes, steps[index].id.bytes) or transition.target != .step) continue;
+            const target = stepIndex(steps, transition.target.step.bytes) orelse return invalid();
+            if (inputs[target]) |existing| {
+                if (!std.mem.eql(bool, &existing, &output)) return invalid();
+            } else {
+                inputs[target] = output;
+                queue.append(allocator, target) catch return invalid();
             }
         }
     }
 }
 
-fn visit(
-    nodes: []const compilation.CompiledNode,
-    transitions: []const workflow.Transition,
-    index: usize,
-    colors: []u2,
-    order: *std.ArrayList(usize),
-    allocator: std.mem.Allocator,
-) Error!void {
-    if (colors[index] == 1) return invalid();
-    if (colors[index] == 2) return;
-    colors[index] = 1;
-    for (transitions) |transition| {
-        if (!std.mem.eql(u8, transition.from.bytes, nodes[index].id.bytes)) continue;
-        switch (transition.target) {
-            .terminal => {},
-            .node => |target| try visit(
-                nodes,
-                transitions,
-                nodeIndex(nodes, target.bytes) orelse return invalid(),
-                colors,
-                order,
-                allocator,
-            ),
-        }
-    }
-    colors[index] = 2;
-    order.append(allocator, index) catch return invalid();
-}
-
-fn reachesTerminal(
-    nodes: []const compilation.CompiledNode,
-    transitions: []const workflow.Transition,
-    index: usize,
-    memo: []u2,
-) Error!bool {
-    if (memo[index] == 2) return true;
-    if (memo[index] == 3) return false;
-    if (memo[index] == 1) return invalid();
-    memo[index] = 1;
-    var result = false;
-    for (transitions) |transition| {
-        if (!std.mem.eql(u8, transition.from.bytes, nodes[index].id.bytes)) continue;
-        result = result or switch (transition.target) {
-            .terminal => true,
-            .node => |target| try reachesTerminal(
-                nodes,
-                transitions,
-                nodeIndex(nodes, target.bytes) orelse return invalid(),
-                memo,
-            ),
-        };
-    }
-    memo[index] = if (result) 2 else 3;
-    return result;
-}
-
-fn applyDataContract(input: KeyState, node: compilation.CompiledNode) Error!KeyState {
+fn applyDataContract(input: KeyState, step: compilation.CompiledStep) Error!KeyState {
     var result = input;
-    for (node.requires) |key| if (!input[@intFromEnum(key)]) return invalid();
-    for (node.produces) |key| {
+    for (step.requires) |key| if (!input[@intFromEnum(key)]) return invalid();
+    for (step.produces) |key| {
         if (result[@intFromEnum(key)]) return invalid();
         result[@intFromEnum(key)] = true;
     }
-    for (node.replaces) |key| if (!result[@intFromEnum(key)]) return invalid();
-    for (node.invalidates) |key| {
+    for (step.replaces) |key| if (!result[@intFromEnum(key)]) return invalid();
+    for (step.invalidates) |key| {
         if (!result[@intFromEnum(key)]) return invalid();
         result[@intFromEnum(key)] = false;
     }
     return result;
 }
 
-fn nodeIndex(nodes: []const compilation.CompiledNode, expected: []const u8) ?usize {
-    for (nodes, 0..) |node, index| if (std.mem.eql(u8, node.id.bytes, expected)) return index;
+fn stepIndex(steps: []const compilation.CompiledStep, expected: []const u8) ?usize {
+    for (steps, 0..) |step, index| if (std.mem.eql(u8, step.id.bytes, expected)) return index;
     return null;
 }
 fn invalid() Error {
     return error.WorkflowGraphCompileInvalid;
 }
 
-test "graph validator rejects cycles and unreachable registered nodes" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const nodes = [_]compilation.CompiledNode{
-        .{ .id = workflow.WorkflowNodeId.parse("one").?, .contract_id = workflow.RegisteredRef.parse("core.one@1").?, .parameters = &.{}, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{.ok}, .side_effect = .none, .gates = &.{}, .capabilities = &.{} },
-        .{ .id = workflow.WorkflowNodeId.parse("two").?, .contract_id = workflow.RegisteredRef.parse("core.two@1").?, .parameters = &.{}, .requires = &.{}, .produces = &.{}, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{.ok}, .side_effect = .none, .gates = &.{}, .capabilities = &.{} },
-    };
-    const cyclic = [_]workflow.Transition{
-        .{ .from = nodes[0].id, .outcome = .ok, .target = .{ .node = nodes[1].id } },
-        .{ .from = nodes[1].id, .outcome = .ok, .target = .{ .node = nodes[0].id } },
-    };
-    const graph: compilation.CompiledWorkflow = .{
-        .source_ordinal = 1,
-        .shortcode = @import("../../domain/telemetry.zig").WorkflowShortcode.parse("TEST") catch unreachable,
-        .authority = .{
-            .workflow_id = workflow.WorkflowId.parse("graph-test").?,
-            .workflow_version = 1,
-            .invocation_contract_id = workflow.RegisteredRef.parse("core.empty@1").?,
-            .policy_profile_id = workflow.RegisteredRef.parse("core.safe@1").?,
-            .entry_node_id = nodes[0].id,
-            .invocation_outputs = &.{},
-            .nodes = &nodes,
-            .transitions = &cyclic,
-        },
-    };
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
-
-    const terminal = [_]workflow.Transition{.{ .from = nodes[0].id, .outcome = .ok, .target = .{ .terminal = .ok } }};
-    var disconnected = graph;
-    disconnected.authority.transitions = &terminal;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{disconnected}));
-}
-
-test "graph validator enforces the variable-size node boundary" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const nodes = try arena.allocator().alloc(compilation.CompiledNode, definition.max_nodes + 1);
-    const node: compilation.CompiledNode = .{
-        .id = workflow.WorkflowNodeId.parse("node").?,
-        .contract_id = workflow.RegisteredRef.parse("core.noop@1").?,
+fn testStep(id: []const u8, loop_limit: ?u32) compilation.CompiledStep {
+    return .{
+        .id = workflow.WorkflowStepId.parse(id).?,
+        .operation_id = workflow.RegisteredRef.parse("core.noop@1").?,
         .parameters = &.{},
         .requires = &.{},
         .produces = &.{},
         .replaces = &.{},
         .invalidates = &.{},
-        .outcomes = &.{.ok},
+        .outcomes = &.{ .ok, .failed },
         .side_effect = .none,
         .gates = &.{},
         .capabilities = &.{},
+        .loop_limit = loop_limit,
     };
-    @memset(nodes, node);
-    const graph: compilation.CompiledWorkflow = .{
+}
+
+fn testGraph(steps: []const compilation.CompiledStep, transitions: []const workflow.Transition) compilation.CompiledWorkflow {
+    return .{
         .source_ordinal = 1,
-        .shortcode = @import("../../domain/telemetry.zig").WorkflowShortcode.parse("SIZE") catch unreachable,
+        .shortcode = @import("../../domain/telemetry.zig").WorkflowShortcode.parse("TEST") catch unreachable,
         .authority = .{
-            .workflow_id = workflow.WorkflowId.parse("size-boundary").?,
+            .workflow_id = workflow.WorkflowId.parse("graph-test").?,
             .workflow_version = 1,
-            .invocation_contract_id = workflow.RegisteredRef.parse("core.empty@1").?,
+            .invocation_operation_id = workflow.RegisteredRef.parse("core.empty@1").?,
             .policy_profile_id = workflow.RegisteredRef.parse("core.safe@1").?,
-            .entry_node_id = node.id,
+            .start_step_id = steps[0].id,
             .invocation_outputs = &.{},
-            .nodes = nodes,
-            .transitions = &.{},
-        },
-    };
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
-}
-
-test "graph validator enforces typed production replacement and invalidation flow" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const entry = compiledNode("entry", &.{}, &.{.engine_config}, &.{}, &.{}, &.{.ok});
-    const consume = compiledNode("consume", &.{.engine_config}, &.{}, &.{}, &.{}, &.{.ok});
-    const transitions = [_]workflow.Transition{
-        .{ .from = entry.id, .outcome = .ok, .target = .{ .node = consume.id } },
-        .{ .from = consume.id, .outcome = .ok, .target = .{ .terminal = .ok } },
-    };
-    var graph = testGraph(&.{ entry, consume }, &transitions, entry.id, &.{});
-    _ = try (Action{}).execute(arena.allocator(), &.{graph});
-
-    const missing = compiledNode("entry", &.{.engine_config}, &.{}, &.{}, &.{}, &.{.ok});
-    const missing_transition = [_]workflow.Transition{.{ .from = missing.id, .outcome = .ok, .target = .{ .terminal = .ok } }};
-    graph = testGraph(&.{missing}, &missing_transition, missing.id, &.{});
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
-
-    const duplicate = compiledNode("entry", &.{}, &.{.engine_config}, &.{}, &.{}, &.{.ok});
-    const duplicate_transition = [_]workflow.Transition{.{ .from = duplicate.id, .outcome = .ok, .target = .{ .terminal = .ok } }};
-    graph = testGraph(&.{duplicate}, &duplicate_transition, duplicate.id, &.{.engine_config});
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
-
-    const replace = compiledNode("entry", &.{}, &.{}, &.{.engine_config}, &.{}, &.{.ok});
-    const replace_transition = [_]workflow.Transition{.{ .from = replace.id, .outcome = .ok, .target = .{ .terminal = .ok } }};
-    graph = testGraph(&.{replace}, &replace_transition, replace.id, &.{});
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
-
-    const invalidate = compiledNode("entry", &.{}, &.{}, &.{}, &.{.engine_config}, &.{.ok});
-    const invalidate_transition = [_]workflow.Transition{.{ .from = invalidate.id, .outcome = .ok, .target = .{ .terminal = .ok } }};
-    graph = testGraph(&.{invalidate}, &invalidate_transition, invalidate.id, &.{});
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
-}
-
-test "graph validator rejects branches that merge different typed contexts" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const entry = compiledNode("entry", &.{}, &.{}, &.{}, &.{}, &.{ .ok, .failed });
-    const producer = compiledNode("producer", &.{}, &.{.engine_config}, &.{}, &.{}, &.{.ok});
-    const empty = compiledNode("empty", &.{}, &.{}, &.{}, &.{}, &.{.ok});
-    const merge = compiledNode("merge", &.{}, &.{}, &.{}, &.{}, &.{.ok});
-    const transitions = [_]workflow.Transition{
-        .{ .from = entry.id, .outcome = .ok, .target = .{ .node = producer.id } },
-        .{ .from = entry.id, .outcome = .failed, .target = .{ .node = empty.id } },
-        .{ .from = producer.id, .outcome = .ok, .target = .{ .node = merge.id } },
-        .{ .from = empty.id, .outcome = .ok, .target = .{ .node = merge.id } },
-        .{ .from = merge.id, .outcome = .ok, .target = .{ .terminal = .ok } },
-    };
-    const graph = testGraph(&.{ entry, producer, empty, merge }, &transitions, entry.id, &.{});
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{graph}));
-}
-
-fn compiledNode(
-    id: []const u8,
-    requires: []const pipeline.DataKey,
-    produces: []const pipeline.DataKey,
-    replaces: []const pipeline.DataKey,
-    invalidates: []const pipeline.DataKey,
-    outcomes: []const workflow.OutcomeTag,
-) compilation.CompiledNode {
-    return .{
-        .id = workflow.WorkflowNodeId.parse(id).?,
-        .contract_id = workflow.RegisteredRef.parse("core.noop@1").?,
-        .parameters = &.{},
-        .requires = requires,
-        .produces = produces,
-        .replaces = replaces,
-        .invalidates = invalidates,
-        .outcomes = outcomes,
-        .side_effect = .none,
-        .gates = &.{},
-        .capabilities = &.{},
-    };
-}
-
-fn testGraph(
-    nodes: []const compilation.CompiledNode,
-    transitions: []const workflow.Transition,
-    entry: workflow.WorkflowNodeId,
-    invocation_outputs: []const pipeline.DataKey,
-) compilation.CompiledWorkflow {
-    return .{
-        .source_ordinal = 1,
-        .shortcode = @import("../../domain/telemetry.zig").WorkflowShortcode.parse("FLOW") catch unreachable,
-        .authority = .{
-            .workflow_id = workflow.WorkflowId.parse("flow").?,
-            .workflow_version = 1,
-            .invocation_contract_id = workflow.RegisteredRef.parse("core.empty@1").?,
-            .policy_profile_id = workflow.RegisteredRef.parse("core.safe@1").?,
-            .entry_node_id = entry,
-            .invocation_outputs = invocation_outputs,
-            .nodes = nodes,
+            .resources = &.{},
+            .steps = steps,
             .transitions = transitions,
+            .maximum_step_executions = steps.len * 3,
         },
     };
+}
+
+test "accepts a guarded cycle and rejects the same unguarded cycle" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const guarded_steps = [_]compilation.CompiledStep{ testStep("guard", 2), testStep("work", null) };
+    const transitions = [_]workflow.Transition{
+        .{ .from = guarded_steps[0].id, .outcome = .ok, .target = .{ .step = guarded_steps[1].id } },
+        .{ .from = guarded_steps[0].id, .outcome = .failed, .target = .{ .terminal = .failed } },
+        .{ .from = guarded_steps[1].id, .outcome = .ok, .target = .{ .step = guarded_steps[0].id } },
+        .{ .from = guarded_steps[1].id, .outcome = .failed, .target = .{ .terminal = .failed } },
+    };
+    _ = try (Action{}).execute(arena.allocator(), &.{testGraph(&guarded_steps, &transitions)});
+
+    var wrong_bound = testGraph(&guarded_steps, &transitions);
+    wrong_bound.authority.maximum_step_executions -= 1;
+    try std.testing.expectError(
+        error.WorkflowGraphCompileInvalid,
+        (Action{}).execute(arena.allocator(), &.{wrong_bound}),
+    );
+
+    var unguarded_steps = guarded_steps;
+    unguarded_steps[0].loop_limit = null;
+    try std.testing.expectError(
+        error.WorkflowGraphCompileInvalid,
+        (Action{}).execute(arena.allocator(), &.{testGraph(&unguarded_steps, &transitions)}),
+    );
 }

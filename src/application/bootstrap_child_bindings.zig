@@ -34,6 +34,9 @@ pub const ChildBindings = struct {
         capture_workflows: *const fn (*anyopaque) StepOutcome,
         parse_workflows: *const fn (*anyopaque) StepOutcome,
         validate_workflow_schema: *const fn (*anyopaque) StepOutcome,
+        resolve_workflow_resources: *const fn (*anyopaque) StepOutcome,
+        capture_workflow_resources: *const fn (*anyopaque) StepOutcome,
+        validate_workflow_operations: *const fn (*anyopaque) StepOutcome,
         compile_workflows: *const fn (*anyopaque) StepOutcome,
         validate_workflow_graphs: *const fn (*anyopaque) StepOutcome,
         build_workflow_registry: *const fn (*anyopaque) StepOutcome,
@@ -126,6 +129,15 @@ pub const ChildBindings = struct {
     }
     pub fn invokeValidateWorkflowSchema(self: ChildBindings) StepOutcome {
         return self.vtable.validate_workflow_schema(self.context);
+    }
+    pub fn invokeResolveWorkflowResources(self: ChildBindings) StepOutcome {
+        return self.vtable.resolve_workflow_resources(self.context);
+    }
+    pub fn invokeCaptureWorkflowResources(self: ChildBindings) StepOutcome {
+        return self.vtable.capture_workflow_resources(self.context);
+    }
+    pub fn invokeValidateWorkflowOperations(self: ChildBindings) StepOutcome {
+        return self.vtable.validate_workflow_operations(self.context);
     }
     pub fn invokeCompileWorkflows(self: ChildBindings) StepOutcome {
         return self.vtable.compile_workflows(self.context);

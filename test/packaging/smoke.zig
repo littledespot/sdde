@@ -21,23 +21,17 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     );
     _ = package_directory.add(".sddtoolkit/workflows/features/.keep", "");
     _ = package_directory.add(".sddtoolkit/workflows/hello.workflow.yaml",
-        \\schemaVersion: "1.0"
-        \\workflowId: hello
-        \\workflowVersion: 1
-        \\workflowShortcode: HELO
-        \\invocationContractNodeId: core.empty-invocation@1
-        \\workflowPolicyProfileId: core.capability-free@1
-        \\entryWorkflowNodeId: run
-        \\nodes:
-        \\  - workflowNodeId: run
-        \\    pipelineNodeContractId: core.noop@1
-        \\    parameters: []
-        \\transitions:
-        \\  - fromWorkflowNodeId: run
-        \\    outcomeTag: ok
-        \\    target:
-        \\      kind: terminal
-        \\      outcomeTag: ok
+        \\schema: workflow/v1
+        \\id: hello
+        \\version: 1
+        \\shortcode: HELO
+        \\invoke: core.empty-invocation@1
+        \\policy: core.capability-free@1
+        \\start: run
+        \\steps:
+        \\  run:
+        \\    use: core.noop@1
+        \\    on: { ok: end.ok }
     );
     _ = package_directory.add(".sddtoolkit/toolchainPreset/core.toolchain-preset.yaml",
         \\schema: toolchain-preset/v1

@@ -1530,9 +1530,7 @@ WorkflowDefinitionRegistryState {
   workflowDefinitionRegistryId: BootstrapComponentId,
   workflowAuthorityInventory: WorkflowAuthorityInventory,
   workflowsById: Map<WorkflowId, CompiledWorkflowGraph>,
-  operationRegistryVersion,
-  workflowPolicyRegistryVersion,
-  gateRegistryVersion,
+  workflowOperationRegistryVersion,
   capabilityRegistryVersion
   // The BootstrapComponentId is the registry's only canonical identity.
   // The bounded map has no fixed cardinality. Workflow IDs, shortcodes, and
@@ -9142,10 +9140,11 @@ provider filename, `.specify/`, source-tree, or example path.
 bounded number of closed declarative workflow definitions plus the exact
 reserved engine-owned children `features/` and `transactions/`. Each definition
 has a unique validated `WorkflowId` and logging shortcode and describes graph
-topology only through registered `PipelineNode` contract IDs, closed parameters,
-and typed transitions. It cannot contain executable code, select
-infrastructure, provide raw paths/commands, grant a capability, weaken a
-registered gate, bypass runner validation, or collide with a reserved child.
+topology only through the single registry's generic operation IDs, closed
+parameters, declared resources, and typed transitions. It cannot contain
+executable code, select infrastructure, provide raw paths/commands, grant a
+capability, weaken a registered gate, bypass runner validation, or collide with
+a reserved child.
 The initial `specify`, `plan`, `tasks`, and `implement` definitions preserve
 their order through their own predecessor gates; the generic engine does not
 hard-code that sequence. Toolchain presets load directly from

@@ -1,19 +1,18 @@
 const std = @import("std");
-const compilation = @import("../domain/workflow_compilation.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const pipeline = @import("../domain/pipeline.zig");
 const registry = @import("../domain/workflow_registry.zig");
-const implementations = @import("../ports/workflow_node_implementation.zig");
+const operations = @import("../ports/workflow_operation_registry.zig");
 const parse_invocation = @import("../actions/workflow/parse_workflow_invocation.zig");
 const select_workflow = @import("../actions/workflow/select_compiled_workflow.zig");
-const validate_implementations = @import("../actions/workflow/validate_workflow_implementation_registry.zig");
+const validate_operations = @import("../actions/workflow/validate_workflow_operation_registry.zig");
 const bindings = @import("workflow_engine_child_bindings.zig");
 
 comptime {
     pipeline.validateLinear(
-        &.{ .workflow_definition_registry, .workflow_implementation_registry, .workflow_compiler_registry },
+        &.{ .workflow_definition_registry, .workflow_operation_registry },
         &.{
-            validate_implementations.Action.contract,
+            validate_operations.Action.contract,
             parse_invocation.Action.contract,
             select_workflow.Action.contract,
         },
@@ -23,12 +22,11 @@ comptime {
 pub const Runner = struct {
     runtime: pipeline.NodeRuntime,
     arguments: []const []const u8,
-    implementation_registry: implementations.Registry,
-    compiler_registry: compilation.CompilerRegistry,
+    operation_registry: *const operations.Registry,
     parse_action: parse_invocation.Action = .{},
     select_action: select_workflow.Action,
-    validate_action: validate_implementations.Action = .{},
-    envelope: pipeline.PipelineEnvelope = .init(&.{ .workflow_definition_registry, .workflow_implementation_registry, .workflow_compiler_registry }),
+    validate_action: validate_operations.Action = .{},
+    envelope: pipeline.PipelineEnvelope = .init(&.{ .workflow_definition_registry, .workflow_operation_registry }),
     invocation: ?execution.Invocation = null,
     selected_workflow: ?execution.SelectedWorkflow = null,
 
@@ -36,23 +34,21 @@ pub const Runner = struct {
         runtime: pipeline.NodeRuntime,
         arguments: []const []const u8,
         workflow_registry: *const registry.ValidatedWorkflowDefinitionRegistry,
-        implementation_registry: implementations.Registry,
-        compiler_registry: compilation.CompilerRegistry,
+        operation_registry: *const operations.Registry,
     ) Runner {
         return .{
             .runtime = runtime,
             .arguments = arguments,
-            .implementation_registry = implementation_registry,
-            .compiler_registry = compiler_registry,
+            .operation_registry = operation_registry,
             .select_action = .{ .registry = workflow_registry },
         };
     }
 
-    pub fn invokeValidateImplementationRegistry(self: *Runner) bindings.SelectionStepOutcome {
+    pub fn invokeValidateOperationRegistry(self: *Runner) bindings.SelectionStepOutcome {
         if (self.runtimeTerminal()) |outcome| return outcome;
-        self.envelope.validateInvocation(validate_implementations.Action.contract) catch return .failed;
-        self.validate_action.execute(self.implementation_registry, self.compiler_registry) catch return .failed;
-        return self.finish(validate_implementations.Action.contract);
+        self.envelope.validateInvocation(validate_operations.Action.contract) catch return .failed;
+        self.validate_action.execute(self.operation_registry) catch return .failed;
+        return self.finish(validate_operations.Action.contract);
     }
 
     pub fn invokeParseInvocation(self: *Runner) bindings.SelectionStepOutcome {

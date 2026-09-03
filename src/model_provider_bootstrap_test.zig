@@ -21,18 +21,20 @@ const compilation = @import("domain/workflow_compilation.zig");
 const definition = @import("domain/workflow_definition.zig");
 const execution = @import("domain/workflow_execution.zig");
 const provider_source = @import("ports/llm_provider_config_source.zig");
+const operations = @import("ports/workflow_operation_registry.zig");
+const workflow_inventory = @import("domain/workflow_inventory.zig");
 
 test "compiler-owned model-provider capability alone activates the requirement" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const capable = try compileOne(arena.allocator(), &compiler_registry, "test.model@1");
+    const capable = try compileOne(arena.allocator(), &operation_registry, "test.model@1");
     try std.testing.expectEqual(requirement.Requirement.required, deriveGraph(&capable));
 
-    const capability_free = try compileOne(arena.allocator(), &compiler_registry, "test.noop@1");
+    const capability_free = try compileOne(arena.allocator(), &operation_registry, "test.noop@1");
     try std.testing.expectEqual(requirement.Requirement.not_required, deriveGraph(&capability_free));
 
-    var denied = compiler_registry;
+    var denied = operation_registry;
     denied.policies = &.{.{
         .id = "test.safe@1",
         .allowed_capabilities = &.{},
@@ -47,7 +49,7 @@ test "compiler-owned model-provider capability alone activates the requirement" 
 test "conditional runner skips F0008 for a capability-free selected workflow" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const graph = try compileOne(arena.allocator(), &compiler_registry, "test.noop@1");
+    const graph = try compileOne(arena.allocator(), &operation_registry, "test.noop@1");
     const selected = selectedWorkflow(&graph);
 
     var toolkit = try decodeToolkit(model_config);
@@ -83,7 +85,7 @@ test "conditional runner skips F0008 for a capability-free selected workflow" {
 test "conditional runner captures once and publishes one immutable run authority" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const graph = try compileOne(arena.allocator(), &compiler_registry, "test.model@1");
+    const graph = try compileOne(arena.allocator(), &operation_registry, "test.model@1");
     const selected = selectedWorkflow(&graph);
 
     var toolkit = try decodeToolkit(model_config);
@@ -138,20 +140,15 @@ test "conditional runner maps each provider preparation boundary exactly" {
 
 fn compileOne(
     allocator: std.mem.Allocator,
-    registry: *const compilation.CompilerRegistry,
+    registry: *const operations.Registry,
     contract_id: []const u8,
 ) !compilation.CompiledWorkflow {
-    const nodes = try allocator.alloc(workflow.DeclarativeNode, 1);
-    nodes[0] = .{
-        .id = workflow.WorkflowNodeId.parse("run").?,
-        .contract_id = workflow.RegisteredRef.parse(contract_id).?,
+    const steps = try allocator.alloc(workflow.DeclarativeStep, 1);
+    steps[0] = .{
+        .id = workflow.WorkflowStepId.parse("run").?,
+        .operation_id = workflow.RegisteredRef.parse(contract_id).?,
         .parameters = &.{},
-    };
-    const transitions = try allocator.alloc(workflow.Transition, 1);
-    transitions[0] = .{
-        .from = nodes[0].id,
-        .outcome = .ok,
-        .target = .{ .terminal = .ok },
+        .outcomes = &.{.{ .outcome = .ok, .target = .{ .terminal = .ok } }},
     };
     const definitions = try allocator.alloc(definition.Definition, 1);
     definitions[0] = .{
@@ -159,13 +156,26 @@ fn compileOne(
         .workflow_id = workflow.WorkflowId.parse("model-provider").?,
         .workflow_version = 1,
         .shortcode = telemetry.WorkflowShortcode.parse("TEST") catch unreachable,
-        .invocation_contract_id = workflow.RegisteredRef.parse("test.empty@1").?,
+        .invocation_operation_id = workflow.RegisteredRef.parse("test.empty@1").?,
         .policy_profile_id = workflow.RegisteredRef.parse("test.safe@1").?,
-        .entry_node_id = nodes[0].id,
-        .nodes = nodes,
-        .transitions = transitions,
+        .start_step_id = steps[0].id,
+        .resources = &.{},
+        .steps = steps,
     };
-    const graphs = try (compile.Action{ .registry = registry }).execute(allocator, definitions);
+    const empty_inventory: workflow_inventory.Inventory = .{
+        .capability = undefined,
+        .descriptors = &.{},
+        .accounts = &.{},
+        .definition_ordinals = &.{},
+        .resource_ordinals = &.{},
+    };
+    const graphs = try (compile.Action{ .registry = registry }).execute(
+        allocator,
+        definitions,
+        empty_inventory,
+        .{ .bindings = &.{}, .resource_ordinals = &.{} },
+        &.{},
+    );
     return graphs[0];
 }
 
@@ -188,7 +198,7 @@ fn expectPreparationFailure(
 ) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const graph = try compileOne(arena.allocator(), &compiler_registry, "test.model@1");
+    const graph = try compileOne(arena.allocator(), &operation_registry, "test.model@1");
     const selected = selectedWorkflow(&graph);
     var toolkit = try decodeToolkit(toolkit_bytes);
     defer toolkit.deinit();
@@ -322,29 +332,35 @@ fn testRootRegistry(allocator: std.mem.Allocator) !*bootstrap_root_registry.Owne
     });
 }
 
-const compiler_registry: compilation.CompilerRegistry = .{
-    .invocations = &.{.{
-        .id = "test.empty@1",
-        .capability_free = true,
-        .produces = &.{},
-    }},
-    .nodes = &.{
+const operation_registry: operations.Registry = .{
+    .operations = &.{
         .{
-            .id = "test.model@1",
-            .parameters = &.{},
-            .requires = &.{},
-            .produces = &.{},
-            .outcomes = &.{.ok},
-            .side_effect = pipeline.SideEffect.none,
-            .capabilities = &.{requirement.capability_id},
+            .contract = .{
+                .id = "test.empty@1",
+                .kind = .invocation,
+                .outcomes = &.{.ok},
+                .side_effect = .none,
+            },
+            .invoke_fn = unusedOperation,
         },
         .{
-            .id = "test.noop@1",
-            .parameters = &.{},
-            .requires = &.{},
-            .produces = &.{},
-            .outcomes = &.{.ok},
-            .side_effect = pipeline.SideEffect.none,
+            .contract = .{
+                .id = "test.model@1",
+                .kind = .step,
+                .outcomes = &.{.ok},
+                .side_effect = .none,
+                .capabilities = &.{requirement.capability_id},
+            },
+            .invoke_fn = unusedOperation,
+        },
+        .{
+            .contract = .{
+                .id = "test.noop@1",
+                .kind = .step,
+                .outcomes = &.{.ok},
+                .side_effect = .none,
+            },
+            .invoke_fn = unusedOperation,
         },
     },
     .policies = &.{.{
@@ -355,6 +371,10 @@ const compiler_registry: compilation.CompilerRegistry = .{
     .gates = &.{},
     .capabilities = &.{requirement.capability_id},
 };
+
+fn unusedOperation(_: ?*anyopaque, _: operations.Input) operations.Error!execution.Candidate {
+    return error.OperationExecutionFailed;
+}
 
 const provider_id = identity.ProviderId.parse("compiled-provider").?;
 const compiled_provider_contracts: contracts.Registry = .{ .entries = &.{.{

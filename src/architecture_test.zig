@@ -310,6 +310,28 @@ test "workflow compiler and service preserve their authority boundaries" {
     try expectAbsent(compiler, "adapters/");
     try expectAbsent(compiler, "filesystem");
     try expectAbsent(compiler, "std.Io");
+    try std.testing.expect(std.mem.indexOf(u8, compiler, "resolveOperation") != null);
+    try expectAbsent(compiler, "spec.section.generate");
+    try expectAbsent(compiler, "implementation.operation.generate");
+
+    const operation_port = @embedFile("ports/workflow_operation_registry.zig");
+    try std.testing.expect(std.mem.indexOf(u8, operation_port, "operations: []const Entry") != null);
+    try std.testing.expect(std.mem.indexOf(u8, operation_port, "contract.kind == .invocation") != null);
+    try std.testing.expect(std.mem.indexOf(u8, operation_port, "contract.kind != .step") != null);
+    try expectAbsent(operation_port, "CompilerRegistry");
+    try expectAbsent(operation_port, "NodeImplementation");
+
+    const operation_bindings = @embedFile("composition/core_workflow_operations.zig");
+    try expectAbsent(operation_bindings, "specify");
+    try expectAbsent(operation_bindings, "plan");
+    try expectAbsent(operation_bindings, "tasks");
+    try expectAbsent(operation_bindings, "implement");
+
+    const workflow_runner = @embedFile("application/workflow_pipeline_runner.zig");
+    try std.testing.expectEqual(@as(usize, 2), countOccurrences(workflow_runner, "resolveOperation"));
+    try expectAbsent(workflow_runner, "resolveInvocation");
+    try expectAbsent(workflow_runner, "resolveNode");
+    try expectAbsent(workflow_runner, "workflow_node_implementation");
 
     const service = @embedFile("application/workflow_definition_registry_service.zig");
     try expectAbsent(service, "Inventory");

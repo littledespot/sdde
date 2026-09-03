@@ -21,6 +21,7 @@ pub const Action = struct {
             .descriptors = descriptors,
             .accounts = accounts.accounts,
             .definition_ordinals = accounts.definition_ordinals,
+            .resource_ordinals = accounts.resource_ordinals,
         };
     }
 };

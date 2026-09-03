@@ -16,11 +16,12 @@ pub const InventoryDescriptor = struct {
     identity: ?filesystem_identity.FileIdentity = null,
     size: ?u64 = null,
 };
-pub const Disposition = enum { directory, reserved_child, definition };
+pub const Disposition = enum { directory, reserved_child, definition, resource };
 pub const InventoryAccount = struct { ordinal: u16, path: []const u8, disposition: Disposition };
 pub const AccountSet = struct {
     accounts: []const InventoryAccount,
     definition_ordinals: []const u16,
+    resource_ordinals: []const u16,
 };
 pub const Layout = struct { capability: *const bootstrap_root_registry.ConfiguredBaseRootCapability };
 pub const Inventory = struct {
@@ -28,8 +29,18 @@ pub const Inventory = struct {
     descriptors: []const InventoryDescriptor,
     accounts: []const InventoryAccount,
     definition_ordinals: []const u16,
+    resource_ordinals: []const u16,
 };
 pub const Capture = struct { ordinal: u16, bytes: []const u8 };
+pub const ResourceBinding = struct {
+    definition_ordinal: u16,
+    resource_id: @import("workflow.zig").WorkflowResourceId,
+    resource_ordinal: u16,
+};
+pub const ResourceManifest = struct {
+    bindings: []const ResourceBinding,
+    resource_ordinals: []const u16,
+};
 pub const Error = error{InvalidWorkflowInventory};
 
 pub fn classifyInventoryDescriptor(descriptor: InventoryDescriptor) ?Disposition {
@@ -43,9 +54,12 @@ pub fn classifyInventoryDescriptor(descriptor: InventoryDescriptor) ?Disposition
     }
     return switch (descriptor.kind) {
         .directory => if (descriptor.identity != null) .directory else null,
-        .file => if (definitionPath(descriptor.path) and descriptor.identity != null and
-            descriptor.size != null and descriptor.size.? <= definition.max_definition_bytes)
-            .definition
+        .file => if (descriptor.identity == null or descriptor.size == null)
+            null
+        else if (definitionPath(descriptor.path))
+            if (descriptor.size.? <= definition.max_definition_bytes) .definition else null
+        else if (descriptor.size.? <= definition.max_resource_bytes)
+            .resource
         else
             null,
         .symlink, .special => null,
@@ -53,7 +67,22 @@ pub fn classifyInventoryDescriptor(descriptor: InventoryDescriptor) ?Disposition
 }
 
 pub fn validate(inventory: Inventory) Error!void {
-    try validateEntries(inventory.descriptors, inventory.accounts, inventory.definition_ordinals);
+    try validateEntries(inventory.descriptors, inventory.accounts, inventory.definition_ordinals, inventory.resource_ordinals);
+}
+
+pub fn validateResourceCaptureBudget(inventory: Inventory, manifest: ResourceManifest) Error!void {
+    if (manifest.resource_ordinals.len != inventory.resource_ordinals.len) return error.InvalidWorkflowInventory;
+    var total: u64 = 0;
+    for (manifest.resource_ordinals, inventory.resource_ordinals) |ordinal, expected| {
+        if (ordinal != expected or ordinal == 0 or ordinal > inventory.descriptors.len) return error.InvalidWorkflowInventory;
+        const descriptor = inventory.descriptors[ordinal - 1];
+        const size = descriptor.size orelse return error.InvalidWorkflowInventory;
+        if (inventory.accounts[ordinal - 1].disposition != .resource or size > definition.max_resource_bytes) {
+            return error.InvalidWorkflowInventory;
+        }
+        total = std.math.add(u64, total, size) catch return error.InvalidWorkflowInventory;
+        if (total > definition.max_total_resource_bytes) return error.InvalidWorkflowInventory;
+    }
 }
 
 pub fn validateCaptureBudget(inventory: Inventory) Error!void {
@@ -107,10 +136,12 @@ fn validateEntries(
     descriptors: []const InventoryDescriptor,
     accounts: []const InventoryAccount,
     definition_ordinals: []const u16,
+    resource_ordinals: []const u16,
 ) Error!void {
     if (descriptors.len > max_inventory_entries or accounts.len != descriptors.len or
         definition_ordinals.len > definition.max_definitions) return error.InvalidWorkflowInventory;
     var definition_index: usize = 0;
+    var resource_index: usize = 0;
     for (descriptors, accounts, 0..) |descriptor, account, index| {
         if (!validPath(descriptor.path) or reservedAlias(descriptor.path) or reservedDescendant(descriptor.path) or
             account.ordinal != index + 1 or !std.mem.eql(u8, account.path, descriptor.path) or
@@ -127,9 +158,16 @@ fn validateEntries(
                 return error.InvalidWorkflowInventory;
             }
             definition_index += 1;
+        } else if (account.disposition == .resource) {
+            if (resource_index == resource_ordinals.len or resource_ordinals[resource_index] != account.ordinal) {
+                return error.InvalidWorkflowInventory;
+            }
+            resource_index += 1;
         }
     }
-    if (definition_index != definition_ordinals.len) return error.InvalidWorkflowInventory;
+    if (definition_index != definition_ordinals.len or resource_index != resource_ordinals.len) {
+        return error.InvalidWorkflowInventory;
+    }
 }
 
 fn definitionPath(path: []const u8) bool {
@@ -188,11 +226,11 @@ test "inventory validation owns collision and accounting joins" {
         .{ .ordinal = 3, .path = descriptors[2].path, .disposition = .definition },
     };
     const definition_ordinals = [_]u16{ 1, 3 };
-    try validateEntries(&descriptors, &accounts, &definition_ordinals);
+    try validateEntries(&descriptors, &accounts, &definition_ordinals, &.{});
 
     var wrong_account = accounts;
     wrong_account[1].disposition = .reserved_child;
-    try std.testing.expectError(error.InvalidWorkflowInventory, validateEntries(&descriptors, &wrong_account, &definition_ordinals));
+    try std.testing.expectError(error.InvalidWorkflowInventory, validateEntries(&descriptors, &wrong_account, &definition_ordinals, &.{}));
 
     const case_collision = [_]InventoryDescriptor{
         .{ .path = "Alpha", .kind = .directory, .identity = identities[0] },
@@ -202,11 +240,11 @@ test "inventory validation owns collision and accounting joins" {
         .{ .ordinal = 1, .path = "Alpha", .disposition = .directory },
         .{ .ordinal = 2, .path = "alpha", .disposition = .directory },
     };
-    try std.testing.expectError(error.InvalidWorkflowInventory, validateEntries(&case_collision, &case_accounts, &.{}));
+    try std.testing.expectError(error.InvalidWorkflowInventory, validateEntries(&case_collision, &case_accounts, &.{}, &.{}));
 
     var physical_alias = descriptors;
     physical_alias[2].identity = identities[0];
-    try std.testing.expectError(error.InvalidWorkflowInventory, validateEntries(&physical_alias, &accounts, &definition_ordinals));
+    try std.testing.expectError(error.InvalidWorkflowInventory, validateEntries(&physical_alias, &accounts, &definition_ordinals, &.{}));
 }
 
 test "aggregate capture bytes are bounded before reads" {
@@ -223,16 +261,16 @@ test "aggregate capture bytes are bounded before reads" {
 test "workflow media paths are exact portable ASCII" {
     const identity: filesystem_identity.FileIdentity = .{ .filesystem_id = 1, .file_id = 1 };
     try std.testing.expect(classifyInventoryDescriptor(.{ .path = "nested/hello.workflow.yaml", .kind = .file, .identity = identity, .size = 1 }) == .definition);
+    const resources = [_][]const u8{ "hello.workflow.json", "hello.workflow.yml", "hello.WORKFLOW.YAML", ".workflow.yaml" };
+    for (resources) |path| {
+        try std.testing.expect(classifyInventoryDescriptor(.{ .path = path, .kind = .file, .identity = identity, .size = 1 }) == .resource);
+    }
     const invalid = [_][]const u8{
-        "hello.workflow.json",
-        "hello.workflow.yml",
-        "hello.WORKFLOW.YAML",
-        ".workflow.yaml",
         "caf\xc3\xa9.workflow.yaml",
         "con.workflow.yaml",
         "nested/%2e%2e/hello.workflow.yaml",
     };
     for (invalid) |path| {
-        try std.testing.expect(!validPath(path) or classifyInventoryDescriptor(.{ .path = path, .kind = .file, .identity = identity, .size = 1 }) == null);
+        try std.testing.expect(!validPath(path));
     }
 }

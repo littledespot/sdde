@@ -130,10 +130,11 @@ state-binding, and recovery rules as a graph change.
 - Workflow definitions stay compact through mappings, native scalars, local
   resource aliases, and reuse. Large prompts and schemas are not copied into
   each step.
-- The current workflow-definition schema/parser/compiler and route-oriented
-  design samples do not yet implement this decision. They must be replaced as
-  one contract change with no legacy syntax, built-in route fallback, or dual
-  authority.
+- The concise workflow-definition schema/parser/compiler, declared-resource
+  boundary, single operation registry, and generic transition runner implement
+  this decision. Concrete domain and model operations remain separate reviewed
+  increments; no legacy syntax, built-in route fallback, or dual authority is
+  retained.
 - This decision does not make project YAML executable code, allow dynamic
   plugins, or weaken validation, path, provider, command, transaction, or
   capability boundaries.

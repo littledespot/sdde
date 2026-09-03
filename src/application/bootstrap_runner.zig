@@ -89,6 +89,15 @@ pub const Runner = struct {
     fn validateWorkflowSchema(context: *anyopaque) child_bindings.StepOutcome {
         return cast(context).workflows.invokeValidateSchema();
     }
+    fn resolveWorkflowResources(context: *anyopaque) child_bindings.StepOutcome {
+        return cast(context).workflows.invokeResolveResources();
+    }
+    fn captureWorkflowResources(context: *anyopaque) child_bindings.StepOutcome {
+        return cast(context).workflows.invokeCaptureResources();
+    }
+    fn validateWorkflowOperations(context: *anyopaque) child_bindings.StepOutcome {
+        return cast(context).workflows.invokeValidateOperations();
+    }
     fn compileWorkflows(context: *anyopaque) child_bindings.StepOutcome {
         return cast(context).workflows.invokeCompileGraphs();
     }
@@ -164,6 +173,9 @@ const vtable: child_bindings.ChildBindings.VTable = .{
     .capture_workflows = Runner.captureWorkflows,
     .parse_workflows = Runner.parseWorkflows,
     .validate_workflow_schema = Runner.validateWorkflowSchema,
+    .resolve_workflow_resources = Runner.resolveWorkflowResources,
+    .capture_workflow_resources = Runner.captureWorkflowResources,
+    .validate_workflow_operations = Runner.validateWorkflowOperations,
     .compile_workflows = Runner.compileWorkflows,
     .validate_workflow_graphs = Runner.validateWorkflowGraphs,
     .build_workflow_registry = Runner.buildWorkflowRegistry,

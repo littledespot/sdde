@@ -81,15 +81,14 @@ test "parses strict YAML into a workflow-owned raw value" {
     const captures = [_]inventory.Capture{.{
         .ordinal = 1,
         .bytes =
-        \\schemaVersion: "1.0"
-        \\workflowId: hello
-        \\workflowVersion: 1
-        \\workflowShortcode: HELO
-        \\invocationContractNodeId: core.empty@1
-        \\workflowPolicyProfileId: core.safe@1
-        \\entryWorkflowNodeId: run
-        \\nodes: []
-        \\transitions: []
+        \\schema: workflow/v1
+        \\id: hello
+        \\version: 1
+        \\shortcode: HELO
+        \\invoke: core.empty@1
+        \\policy: core.safe@1
+        \\start: run
+        \\steps: {}
         ,
     }};
     const definitions = try adapter.parser().parse(arena.allocator(), &captures);
@@ -148,17 +147,16 @@ test "rejects duplicate keys aliases custom tags multiple documents and scalar o
 test "comments and equivalent block and flow YAML have identical raw authority" {
     const block =
         \\# comment has no authority
-        \\schemaVersion: "1.0"
-        \\workflowId: hello
-        \\workflowVersion: 1
-        \\workflowShortcode: HELO
-        \\invocationContractNodeId: core.empty@1
-        \\workflowPolicyProfileId: core.safe@1
-        \\entryWorkflowNodeId: run
-        \\nodes: []
-        \\transitions: []
+        \\schema: workflow/v1
+        \\id: hello
+        \\version: 1
+        \\shortcode: HELO
+        \\invoke: core.empty@1
+        \\policy: core.safe@1
+        \\start: run
+        \\steps: {}
     ;
-    const flow = "{schemaVersion: '1.0', workflowId: hello, workflowVersion: 1, workflowShortcode: HELO, invocationContractNodeId: core.empty@1, workflowPolicyProfileId: core.safe@1, entryWorkflowNodeId: run, nodes: [], transitions: []}\n";
+    const flow = "{schema: workflow/v1, id: hello, version: 1, shortcode: HELO, invoke: core.empty@1, policy: core.safe@1, start: run, steps: {}}\n";
     var block_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer block_arena.deinit();
     var flow_arena = std.heap.ArenaAllocator.init(std.testing.allocator);

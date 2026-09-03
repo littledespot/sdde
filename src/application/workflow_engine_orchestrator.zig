@@ -3,7 +3,7 @@ const workflow = @import("../domain/workflow.zig");
 const bindings = @import("workflow_engine_child_bindings.zig");
 
 pub fn run(children: bindings.ChildBindings) run_outcome.Outcome {
-    if (selectionTerminal(children.invokeValidateImplementationRegistry())) |outcome| return outcome;
+    if (selectionTerminal(children.invokeValidateOperationRegistry())) |outcome| return outcome;
     if (selectionTerminal(children.invokeParseInvocation())) |outcome| return outcome;
     if (selectionTerminal(children.invokeSelectWorkflow())) |outcome| return outcome;
     switch (children.invokePrepareWorkflow()) {
@@ -16,16 +16,16 @@ pub fn run(children: bindings.ChildBindings) run_outcome.Outcome {
     const invocation = children.invokeInvocation();
     if (invocation.outcome != .ok) return .{ .execution = invocation.outcome };
 
-    var current = graph.authority.entry_node_id;
+    var current = graph.authority.start_step_id;
     var visited: usize = 0;
-    while (visited < graph.authority.nodes.len) : (visited += 1) {
-        const applied = children.invokeNode(current);
+    while (visited < graph.authority.maximum_step_executions) : (visited += 1) {
+        const applied = children.invokeStep(current);
         const target = resolveTransition(graph.authority.transitions, current, applied.outcome) orelse {
             return .{ .execution = if (applied.outcome == .ok) .failed else applied.outcome };
         };
         switch (target) {
             .terminal => |outcome| return .{ .execution = outcome },
-            .node => |next| current = next,
+            .step => |next| current = next,
         }
     }
     return .{ .execution = .failed };
@@ -42,11 +42,11 @@ fn selectionTerminal(step: bindings.SelectionStepOutcome) ?run_outcome.Outcome {
 
 fn resolveTransition(
     transitions: []const workflow.Transition,
-    node_id: workflow.WorkflowNodeId,
+    step_id: workflow.WorkflowStepId,
     outcome: workflow.OutcomeTag,
 ) ?workflow.TransitionTarget {
     for (transitions) |transition| {
-        if (@import("std").mem.eql(u8, transition.from.bytes, node_id.bytes) and transition.outcome == outcome) {
+        if (@import("std").mem.eql(u8, transition.from.bytes, step_id.bytes) and transition.outcome == outcome) {
             return transition.target;
         }
     }

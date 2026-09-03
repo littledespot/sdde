@@ -4,7 +4,7 @@ const child_bindings = @import("bootstrap_child_bindings.zig");
 
 pub const State = struct {
     runtime: pipeline.NodeRuntime,
-    envelope: pipeline.PipelineEnvelope = .init(&.{.invocation_working_directory}),
+    envelope: pipeline.PipelineEnvelope = .init(&.{ .invocation_working_directory, .workflow_operation_registry }),
 
     pub fn begin(
         self: *State,
