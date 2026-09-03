@@ -8,10 +8,10 @@ strict common decoder, compiler-contract registry join, immutable
 `LLMProviderRegistryService`, and repository-slot allowlist are accepted and
 implemented. The fixed conditional bootstrap owner and exact
 provider-requirement derivation, immutable per-invocation provider snapshot,
-orchestrator, and runner bindings are accepted and implemented. Ordinary
-invocation composition, production provider contracts, route-to-slot
-assignment, the provider-neutral port, and provider-operation work remain
-incomplete or blocked on the remaining amendments in Section 2.
+orchestrator, runner bindings, and ordinary post-selection invocation
+composition are accepted and implemented. Production provider contracts,
+route-to-slot assignment, the provider-neutral port, and provider-operation
+work remain incomplete or blocked on the remaining amendments in Section 2.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -75,9 +75,9 @@ capability, F0008's bounded read-only byte service, the strict provider
 catalogue, its immutable registry service, and the repository model allowlist.
 It also accepts the fixed conditional run-preparation owner and exact
 selected-graph requirement derivation. The runner bindings and immutable
-per-invocation provider snapshot are implemented. Ordinary invocation
-composition, production provider contracts, and externally counted provider
-operations remain undefined or incomplete.
+per-invocation provider snapshot are implemented and invoked immediately after
+exact workflow selection. Production provider contracts and externally counted
+provider operations remain undefined or incomplete.
 
 Remaining implementation requires the governing amendments below; items 1-6
 record accepted increments:
@@ -365,6 +365,15 @@ the narrow expansion beyond the startup graph; the runner does not infer or
 sequence it by convention. The implemented runner invokes F0008 once, then
 applies the decoder, registry builder, registry validator, and complete
 allowlist validator through their existing contracts.
+
+The engine invocation runner invokes one composition-supplied
+`ModelProviderBootstrapBinding` immediately after exact workflow selection and
+before constructing the selected-workflow runner. `not_required` and `ready`
+continue to workflow execution; `failed` returns the exact provider-bootstrap
+diagnostic; `cancelled` returns cancellation. A `ready` result remains owned
+until selected-workflow execution returns. The binding exposes no filesystem
+port; the composition assembly alone constructs the F0008 adapter and both
+runners.
 
 F0008's owned capture is the only provider-document read for the engine
 invocation. The validated registry and allowlist derived from it remain
@@ -750,6 +759,9 @@ never chooses `blocked`, `failed`, `cancelled`, retry, or fallback.
 | `ValidateRepositoryModelAllowlistAction` | Join the entire F0001 `models.slots` map to the validated provider catalogue and emit only immutable slot-to-entry references; reject the whole allowlist if any tuple is absent or ambiguous. |
 | `ModelProviderBootstrapRunner` | Invoke the fixed child bindings, apply their pipeline deltas, own every intermediate, and map each rejected boundary to its existing provider-bootstrap diagnostic. It delegates provider-file location/read sequencing to F0008 rather than duplicating it. |
 | `ModelProviderBootstrapServices` | Keep the validated registry and repository allowlist alive as one immutable invocation-owned authority and destroy the allowlist before its referenced registry. |
+| `ModelProviderBootstrapBinding` | Give the invocation runner one typed post-selection child boundary without exposing filesystem or provider capabilities. |
+| Provider-bootstrap composition assembly | Construct the concrete F0008 adapter and config/provider runners, then invoke the fixed orchestrator; perform no selection or branching. |
+| Engine invocation runner | Invoke provider preparation after exact selection, preserve its typed outcome, retain `ready` services through workflow execution, and make workflow execution unreachable after failure or cancellation. |
 | `ResolveProviderModelBindingAction` | Resolve one accepted route-selected slot through `ValidatedRepositoryModelAllowlist` to its registry entry and effective limits; never accept a raw provider/model tuple as route authority. |
 | `BuildModelRequestAction` | Build one identified bounded provider-neutral request. |
 | `ValidateStaticModelRequestCapacityAction` | Prove every provider-neutral deterministic binding/control/schema/input-byte/output-reservation ceiling before attempt reservation or authorization; it does not serialize a provider wire request. |
@@ -856,7 +868,9 @@ F0006 does not:
    `model-provider` capability, file probing/loading is unreachable; otherwise
    the entire exact file must validate before selected-workflow execution. A
    required branch captures it once; no active invocation rereads or refreshes
-   that snapshot, and no prior invocation supplies a fallback.
+   that snapshot, and no prior invocation supplies a fallback. Provider
+   failure or cancellation makes every selected-workflow child unreachable;
+   prepared authority remains alive until workflow execution returns.
 7. One invalid or unsupported sibling publishes no partial registry.
 8. Every `.sddtoolkit.json` slot tuple and its options resolve exactly to one
    registry entry, compiled model contract, and exhaustive provider

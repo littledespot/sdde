@@ -1,5 +1,7 @@
 const std = @import("std");
 const pipeline = @import("../domain/pipeline.zig");
+const config = @import("../domain/config.zig");
+const bootstrap_root_registry = @import("../domain/bootstrap_root_registry.zig");
 const engine_config_source = @import("../adapters/filesystem/engine_config_source.zig");
 const bootstrap_root_inspector = @import("../adapters/filesystem/bootstrap_root_inspector.zig");
 const workflow_authority_source = @import("../adapters/filesystem/workflow_authority_source.zig");
@@ -34,6 +36,11 @@ const validate_workflow_graphs = @import("../actions/workflow/validate_compiled_
 const build_workflow_registry = @import("../actions/workflow/build_workflow_definition_registry.zig");
 const validate_workflow_registry = @import("../actions/workflow/validate_workflow_definition_registry.zig");
 const workflow = @import("../domain/workflow.zig");
+const workflow_compilation = @import("../domain/workflow_compilation.zig");
+const workflow_execution = @import("../domain/workflow_execution.zig");
+const telemetry = @import("../domain/telemetry.zig");
+const model_provider_requirement = @import("../domain/model_provider_requirement.zig");
+const llm_provider_identity = @import("../domain/llm_provider_identity.zig");
 const bootstrap_orchestrator = @import("../application/bootstrap_orchestrator.zig");
 const bootstrap_runner = @import("../application/bootstrap_runner.zig");
 const capture_project_toolchain = @import("../actions/toolchain/capture_project_toolchain.zig");
@@ -45,20 +52,24 @@ const validate_toolchain_preset_registry = @import("../actions/toolchain/validat
 const resolve_toolchain_inheritance = @import("../actions/toolchain/resolve_toolchain_inheritance.zig");
 const compose_toolchain = @import("../actions/toolchain/compose_toolchain.zig");
 const validate_toolchain_safety = @import("../actions/toolchain/validate_toolchain_safety.zig");
+const llm_provider_contracts = @import("../domain/llm_provider_contracts.zig");
+const llm_provider_registry = @import("../domain/llm_provider_registry.zig");
+const repository_model_allowlist = @import("../domain/repository_model_allowlist.zig");
 const toolchain = @import("../domain/toolchain.zig");
 const run_outcome = @import("../domain/run_outcome.zig");
 const engine_invocation_runner = @import("../application/engine_invocation_runner.zig");
+const model_provider_bootstrap_binding = @import("../application/model_provider_bootstrap_binding.zig");
+const model_provider_bootstrap_orchestrator = @import("../application/model_provider_bootstrap_orchestrator.zig");
+const model_provider_bootstrap_services = @import("../application/model_provider_bootstrap_services.zig");
+const llm_provider_registry_service = @import("../application/llm_provider_registry_service.zig");
 const core_workflow_nodes = @import("core_workflow_nodes.zig");
 const workflow_artifacts = @import("../domain/workflow_artifact_registry.zig");
 const feature_log_runtime = @import("../domain/feature_log_runtime.zig");
 const feature_log_sink = @import("../adapters/filesystem/feature_log_sink.zig");
 const active_feature_log_runtime = @import("active_feature_log_runtime.zig");
+const model_provider_bootstrap = @import("model_provider_bootstrap.zig");
 const stabilizer_port = @import("../ports/transaction_stabilizer.zig");
-const llm_provider_config_source = @import("../adapters/filesystem/llm_provider_config_source.zig");
-const locate_llm_provider_config = @import("../actions/provider/locate_llm_provider_config.zig");
-const read_llm_provider_config = @import("../actions/provider/read_llm_provider_config.zig");
-const llm_provider_config_runner = @import("../application/llm_provider_config_runner.zig");
-const llm_provider_config_orchestrator = @import("../application/llm_provider_config_orchestrator.zig");
+const workflow_node_implementation = @import("../ports/workflow_node_implementation.zig");
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) run_outcome.Outcome {
     return runInvocationInProject(io, allocator, .cwd(), arguments);
@@ -72,11 +83,19 @@ fn runInvocationInProject(
 ) run_outcome.Outcome {
     var boot = runInProject(io, allocator, project_root);
     defer boot.deinit();
+    var provider_bootstrap = model_provider_bootstrap.Assembly.init(
+        io,
+        allocator,
+        project_root,
+        .{},
+        &llm_provider_contracts.Registry.empty,
+    );
     return engine_invocation_runner.run(
         &boot,
         arguments,
         core_workflow_nodes.registry,
         core_workflow_nodes.compiler_registry,
+        provider_bootstrap.bind(),
     );
 }
 
@@ -148,25 +167,6 @@ fn runInProjectWithRuntime(
     return bootstrap_orchestrator.run(runner.bindings());
 }
 
-fn loadLLMProviderConfigInProject(
-    io: std.Io,
-    allocator: std.mem.Allocator,
-    project_root: std.Io.Dir,
-    capability: *const @import("../domain/bootstrap_root_registry.zig").LLMProviderConfigCapability,
-    runtime: pipeline.NodeRuntime,
-) llm_provider_config_orchestrator.Outcome {
-    var source_adapter = llm_provider_config_source.Adapter.init(io, project_root);
-    var runner = llm_provider_config_runner.Runner.init(
-        allocator,
-        runtime,
-        capability,
-        locate_llm_provider_config.Action{ .locator = source_adapter.locator() },
-        read_llm_provider_config.Action{},
-    );
-    defer runner.deinit();
-    return llm_provider_config_orchestrator.run(runner.childBindings());
-}
-
 const policy_registry: toolchain.PolicyRegistry = .{ .contracts = &.{
     .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true },
     .{ .id = "project.zig@1", .project_selectable = true, .locked_required = false },
@@ -216,14 +216,16 @@ test "publishes config and the validated root registry together" {
     );
 }
 
-test "loads provider bytes only from the configured F0008 path" {
+test "provider bootstrap assembly loads only the configured F0008 path" {
     const io = std.testing.io;
     var project_root = std.testing.tmpDir(.{});
     defer project_root.cleanup();
     const config_with_nested_provider =
         \\{
         \\  "logs": { "level": "debug", "console": false, "promptCapture": [] },
-        \\  "models": { "slots": {} },
+        \\  "models": { "slots": {
+        \\    "implementation": { "provider": "compiled-provider", "model": "model-a" }
+        \\  } },
         \\  "paths": {
         \\    "specs": "specs", "references": "references",
         \\    "specsArchive": "specs/archive", "workflows": ".sdd/workflows",
@@ -245,7 +247,7 @@ test "loads provider bytes only from the configured F0008 path" {
     });
     try project_root.dir.writeFile(io, .{
         .sub_path = "configuration/.sddproviders.json",
-        .data = "{\"providers\":[]}",
+        .data = test_provider_document,
     });
     try writeValidToolchain(io, project_root.dir);
 
@@ -253,33 +255,48 @@ test "loads provider bytes only from the configured F0008 path" {
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
 
-    var outcome = loadLLMProviderConfigInProject(
+    var assembly = model_provider_bootstrap.Assembly.init(
         io,
         std.testing.allocator,
         project_root.dir,
-        boot.ready.roots.registry().llmProviderConfig(),
         .{},
+        &test_provider_contracts,
+    );
+    const selected = testModelSelectedWorkflow();
+    var outcome = assembly.bind().invoke(
+        &selected,
+        &boot.ready.config.config().models,
+        boot.ready.roots.registry().llmProviderConfig(),
     );
     defer outcome.deinit();
     try std.testing.expect(outcome == .ready);
-    try std.testing.expectEqualStrings("{\"providers\":[]}", outcome.ready.bytes());
+    try std.testing.expect(outcome.ready.registry().resolve(
+        test_provider_id,
+        llm_provider_identity.ModelId.parse("model-a").?,
+    ) != null);
+    try std.testing.expect(outcome.ready.allowlist().resolveSlot("implementation") != null);
 
     var control: RuntimeAfterObservations = .{
         .active_observations_remaining = 3,
         .terminal = .cancelled,
     };
-    var cancelled = loadLLMProviderConfigInProject(
+    var cancelled_assembly = model_provider_bootstrap.Assembly.init(
         io,
         std.testing.allocator,
         project_root.dir,
-        boot.ready.roots.registry().llmProviderConfig(),
         control.runtime(),
+        &test_provider_contracts,
+    );
+    var cancelled = cancelled_assembly.bind().invoke(
+        &selected,
+        &boot.ready.config.config().models,
+        boot.ready.roots.registry().llmProviderConfig(),
     );
     defer cancelled.deinit();
     try std.testing.expect(cancelled == .cancelled);
 }
 
-test "ordinary bootstrap does not probe a missing provider document" {
+test "capability-free invocation does not probe a missing provider document" {
     const io = std.testing.io;
     var project_root = std.testing.tmpDir(.{});
     defer project_root.cleanup();
@@ -288,21 +305,89 @@ test "ordinary bootstrap does not probe a missing provider document" {
         .data = valid_config,
     });
     try project_root.dir.createDirPath(io, ".sdd/workflows");
+    try project_root.dir.writeFile(io, .{
+        .sub_path = ".sdd/workflows/hello.workflow.yaml",
+        .data = valid_workflow,
+    });
+    try writeValidToolchain(io, project_root.dir);
+
+    const outcome = runInvocationInProject(
+        io,
+        std.testing.allocator,
+        project_root.dir,
+        &.{"hello"},
+    );
+    try std.testing.expectEqual(workflow_execution.Outcome.ok, outcome.execution);
+}
+
+test "invocation runner handles every provider preparation outcome before workflow execution" {
+    const io = std.testing.io;
+    var project_root = std.testing.tmpDir(.{});
+    defer project_root.cleanup();
+    try project_root.dir.writeFile(io, .{
+        .sub_path = ".sddtoolkit.json",
+        .data = valid_config,
+    });
+    try project_root.dir.createDirPath(io, ".sdd/workflows");
+    try project_root.dir.writeFile(io, .{
+        .sub_path = ".sdd/workflows/hello.workflow.yaml",
+        .data = valid_workflow,
+    });
     try writeValidToolchain(io, project_root.dir);
 
     var boot = runInProject(io, std.testing.allocator, project_root.dir);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
 
-    var outcome = loadLLMProviderConfigInProject(
-        io,
-        std.testing.allocator,
-        project_root.dir,
-        boot.ready.roots.registry().llmProviderConfig(),
-        .{},
+    inline for (.{
+        PreparationMode.not_required,
+        PreparationMode.ready,
+        PreparationMode.failed,
+        PreparationMode.cancelled,
+    }) |mode| {
+        var probe: InvocationPreparationProbe = .{ .mode = mode };
+        const outcome = engine_invocation_runner.run(
+            &boot,
+            &.{"hello"},
+            probe.implementations(),
+            core_workflow_nodes.compiler_registry,
+            probe.providerBinding(),
+        );
+
+        try std.testing.expectEqual(@as(usize, 1), probe.prepare_calls);
+        try std.testing.expectEqualStrings("hello", probe.selected_workflow_id.?);
+        switch (mode) {
+            .not_required, .ready => {
+                try std.testing.expectEqual(workflow_execution.Outcome.ok, outcome.execution);
+                try std.testing.expectEqual(@as(usize, 1), probe.invocation_calls);
+                try std.testing.expectEqual(@as(usize, 1), probe.node_calls);
+            },
+            .failed => {
+                try std.testing.expectEqual(
+                    @import("../domain/bootstrap_error.zig").PublicError.LLM_PROVIDER_CONFIG_PARSE_ERROR,
+                    outcome.bootstrap_failed,
+                );
+                try std.testing.expectEqual(@as(usize, 0), probe.invocation_calls);
+                try std.testing.expectEqual(@as(usize, 0), probe.node_calls);
+            },
+            .cancelled => {
+                try std.testing.expectEqual(workflow_execution.Outcome.cancelled, outcome.execution);
+                try std.testing.expectEqual(@as(usize, 0), probe.invocation_calls);
+                try std.testing.expectEqual(@as(usize, 0), probe.node_calls);
+            },
+        }
+    }
+
+    var invalid_probe: InvocationPreparationProbe = .{ .mode = .not_required };
+    const invalid = engine_invocation_runner.run(
+        &boot,
+        &.{"absent-workflow"},
+        invalid_probe.implementations(),
+        core_workflow_nodes.compiler_registry,
+        invalid_probe.providerBinding(),
     );
-    defer outcome.deinit();
-    try std.testing.expect(outcome == .failed);
+    try std.testing.expect(invalid == .invocation_invalid);
+    try std.testing.expectEqual(@as(usize, 0), invalid_probe.prepare_calls);
 }
 
 test "loads exact preset inheritance and publishes the safety-valid toolchain" {
@@ -454,6 +539,59 @@ const second_workflow_same_shortcode =
     \\      kind: terminal
     \\      outcomeTag: ok
 ;
+
+const test_provider_id = llm_provider_identity.ProviderId.parse("compiled-provider").?;
+const test_provider_contracts: llm_provider_contracts.Registry = .{ .entries = &.{.{
+    .provider = test_provider_id,
+    .model = llm_provider_identity.ModelId.parse("model-a").?,
+    .implementation_id = llm_provider_contracts.RegisteredProviderImplementationId.init(1).?,
+    .config_schema = .empty_object,
+}} };
+const test_provider_document =
+    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{}}]}]}
+;
+const test_model_node: workflow_compilation.CompiledNode = .{
+    .id = workflow.WorkflowNodeId.parse("run").?,
+    .contract_id = workflow.RegisteredRef.parse("test.model@1").?,
+    .parameters = &.{},
+    .requires = &.{},
+    .produces = &.{},
+    .replaces = &.{},
+    .invalidates = &.{},
+    .outcomes = &.{.ok},
+    .side_effect = .none,
+    .gates = &.{},
+    .capabilities = &.{model_provider_requirement.capability_id},
+};
+const test_model_transition: workflow.Transition = .{
+    .from = test_model_node.id,
+    .outcome = .ok,
+    .target = .{ .terminal = .ok },
+};
+const test_model_graph: workflow_compilation.CompiledWorkflow = .{
+    .source_ordinal = 1,
+    .shortcode = telemetry.WorkflowShortcode.parse("TEST") catch unreachable,
+    .authority = .{
+        .workflow_id = workflow.WorkflowId.parse("model-flow").?,
+        .workflow_version = 1,
+        .invocation_contract_id = workflow.RegisteredRef.parse("test.empty@1").?,
+        .policy_profile_id = workflow.RegisteredRef.parse("test.safe@1").?,
+        .entry_node_id = test_model_node.id,
+        .invocation_outputs = &.{},
+        .nodes = &.{test_model_node},
+        .transitions = &.{test_model_transition},
+    },
+};
+
+fn testModelSelectedWorkflow() workflow_execution.SelectedWorkflow {
+    return .{
+        .invocation = .{
+            .workflow_id = test_model_graph.authority.workflow_id,
+            .arguments = &.{},
+        },
+        .graph = &test_model_graph,
+    };
+}
 
 fn writeValidToolchain(io: std.Io, project_root: std.Io.Dir) !void {
     try project_root.createDirPath(io, ".sdd/principles");
@@ -729,6 +867,101 @@ test "cancellation after config capture releases intermediates without publishin
     defer outcome.deinit();
     try std.testing.expect(outcome == .cancelled);
 }
+
+const PreparationMode = enum { not_required, ready, failed, cancelled };
+
+const InvocationPreparationProbe = struct {
+    mode: PreparationMode,
+    prepare_calls: usize = 0,
+    invocation_calls: usize = 0,
+    node_calls: usize = 0,
+    selected_workflow_id: ?[]const u8 = null,
+    prepared_registry: ?*const llm_provider_registry.ValidatedLLMProviderRegistry = null,
+    invocation_implementations: [1]workflow_node_implementation.InvocationImplementation = undefined,
+    node_implementations: [1]workflow_node_implementation.NodeImplementation = undefined,
+
+    fn providerBinding(self: *InvocationPreparationProbe) model_provider_bootstrap_binding.Binding {
+        return .{ .context = self, .invoke_fn = prepareProvider };
+    }
+
+    fn implementations(self: *InvocationPreparationProbe) workflow_node_implementation.Registry {
+        self.invocation_implementations[0] = .{
+            .contract_id = "core.empty-invocation@1",
+            .context = self,
+            .invoke_fn = invokeWorkflow,
+        };
+        self.node_implementations[0] = .{
+            .contract_id = "core.noop@1",
+            .context = self,
+            .invoke_fn = invokeNode,
+        };
+        return .{
+            .invocations = &self.invocation_implementations,
+            .nodes = &self.node_implementations,
+        };
+    }
+
+    fn prepareProvider(
+        context: *anyopaque,
+        selected: *const workflow_execution.SelectedWorkflow,
+        models: *const config.ModelsConfig,
+        _: *const bootstrap_root_registry.LLMProviderConfigCapability,
+    ) model_provider_bootstrap_orchestrator.Outcome {
+        const self: *InvocationPreparationProbe = @ptrCast(@alignCast(context));
+        self.prepare_calls += 1;
+        self.selected_workflow_id = selected.graph.authority.workflow_id.bytes;
+        return switch (self.mode) {
+            .not_required => .not_required,
+            .failed => .{ .failed = .LLM_PROVIDER_CONFIG_PARSE_ERROR },
+            .cancelled => .cancelled,
+            .ready => ready: {
+                var candidate = llm_provider_registry.Candidate.init(std.testing.allocator, 0) catch unreachable;
+                defer candidate.deinit();
+                const registry_owner = llm_provider_registry.createValidated(
+                    std.testing.allocator,
+                    candidate,
+                    llm_provider_contracts.Registry.empty,
+                ) catch unreachable;
+                const allowlist_owner = repository_model_allowlist.createValidated(
+                    std.testing.allocator,
+                    models,
+                    llm_provider_registry.registry(registry_owner),
+                ) catch {
+                    llm_provider_registry.deinitOwner(registry_owner);
+                    unreachable;
+                };
+                self.prepared_registry = llm_provider_registry.registry(registry_owner);
+                break :ready .{ .ready = model_provider_bootstrap_services.ModelProviderBootstrapServices.init(
+                    llm_provider_registry_service.LLMProviderRegistryService.init(registry_owner),
+                    allowlist_owner,
+                ) };
+            },
+        };
+    }
+
+    fn invokeWorkflow(
+        context: ?*anyopaque,
+        _: workflow_node_implementation.InvocationInput,
+    ) workflow_node_implementation.Error!workflow_execution.Candidate {
+        const self: *InvocationPreparationProbe = @ptrCast(@alignCast(context.?));
+        self.invocation_calls += 1;
+        return .{ .outcome = .ok, .delta = .{} };
+    }
+
+    fn invokeNode(
+        context: ?*anyopaque,
+        _: workflow_node_implementation.NodeInput,
+    ) workflow_node_implementation.Error!workflow_execution.Candidate {
+        const self: *InvocationPreparationProbe = @ptrCast(@alignCast(context.?));
+        self.node_calls += 1;
+        if (self.mode == .ready and
+            (self.prepared_registry == null or self.prepared_registry.?.count() != 0))
+        {
+            return error.NodeExecutionFailed;
+        }
+        return .{ .outcome = .ok, .delta = .{} };
+    }
+};
 
 const RuntimeAfterObservations = struct {
     active_observations_remaining: usize,

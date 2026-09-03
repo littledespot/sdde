@@ -107,7 +107,7 @@ test "provider config orchestration is capability free and runner owned" {
     try expectAbsent(runner, "std.Io");
     try std.testing.expect(std.mem.indexOf(u8, runner, "envelope.apply") != null);
 
-    const composition = @embedFile("composition/root.zig");
+    const composition = @embedFile("composition/model_provider_bootstrap.zig");
     try std.testing.expect(std.mem.indexOf(u8, composition, "llm_provider_config_source.Adapter.init") != null);
     try std.testing.expect(std.mem.indexOf(u8, composition, "llm_provider_config_runner.Runner.init") != null);
 }
@@ -135,6 +135,39 @@ test "conditional provider bootstrap has one orchestration and capture authority
     try expectAbsent(services, "std.json");
     try expectAbsent(services, "llm_provider_document");
     try expectAbsent(services, "config.zig");
+
+    const binding = @embedFile("application/model_provider_bootstrap_binding.zig");
+    try expectAbsent(binding, "/adapters/");
+    try expectAbsent(binding, "std.Io");
+
+    const assembly = @embedFile("composition/model_provider_bootstrap.zig");
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        countOccurrences(assembly, "llm_provider_config_source.Adapter.init("),
+    );
+    try std.testing.expectEqual(
+        @as(usize, 1),
+        countOccurrences(assembly, "orchestrator.run("),
+    );
+
+    const invocation_runner = @embedFile("application/engine_invocation_runner.zig");
+    try expectAbsent(invocation_runner, "/adapters/");
+    try expectAbsent(invocation_runner, "std.Io");
+    const select_index = std.mem.indexOf(u8, invocation_runner, "select_workflow.Action") orelse {
+        return error.MissingWorkflowSelection;
+    };
+    const prepare_index = std.mem.indexOf(u8, invocation_runner, "provider_bootstrap.invoke(") orelse {
+        return error.MissingProviderBootstrapInvocation;
+    };
+    const execute_index = std.mem.indexOf(u8, invocation_runner, "workflow_engine.run(") orelse {
+        return error.MissingWorkflowExecution;
+    };
+    try std.testing.expect(select_index < prepare_index);
+    try std.testing.expect(prepare_index < execute_index);
+
+    const root = @embedFile("composition/root.zig");
+    try expectAbsent(root, "loadLLMProviderConfigInProject");
+    try expectAbsent(root, "llm_provider_config_orchestrator.zig");
 }
 
 test "provider catalogue and repository allowlist have one immutable authority each" {

@@ -64,8 +64,8 @@ cross-invocation provider-registry cache.
   a project-authored graph or workflow-name special case.
 - This decision accepts the orchestration owner, placement, requirement
   derivation, and immutable per-invocation provider snapshot. The fixed
-  orchestrator and runner bindings implement that conditional preparation;
-  ordinary invocation composition, a production provider adapter, and model
-  operations remain separate increments.
+  orchestrator, runner bindings, and post-selection invocation composition
+  implement that conditional preparation. A production provider adapter and
+  model operations remain separate increments.
 - Adding another engine-level conditional preparation concern requires its own
   accepted typed policy; this decision does not create a generic hook system.

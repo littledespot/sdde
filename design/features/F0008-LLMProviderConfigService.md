@@ -6,8 +6,8 @@
 
 **Implementation:** Complete for the bounded read-only file-service increment.
 F0006's conditional bootstrap runner invokes this component exactly once when
-required and decodes its untrusted bytes. Ordinary invocation composition
-remains a separate increment.
+required and decodes its untrusted bytes. The ordinary invocation path now
+invokes that runner after exact workflow selection.
 
 **Compatibility:** None. `paths.providers` is required in the single current
 configuration contract. There is no legacy fixed-location reader, alias,
