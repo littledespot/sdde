@@ -65,6 +65,15 @@ classDiagram
         <<proposed infrastructure adapter>>
     }
 
+    class AWSBedrockEnvironmentAPIKeySource {
+        <<proposed narrow environment adapter>>
+        +readOnce(AWS_BEARER_TOKEN_BEDROCK) APIKeySnapshot
+    }
+
+    class APIKeySnapshot {
+        <<invocation-owned secret>>
+    }
+
     class ProviderAuthorizationLeaseTable {
         <<runner-private owner>>
     }
@@ -117,7 +126,7 @@ classDiagram
     CompositionRoot ..> LLMProviderDispatch : constructs
     CompositionRoot ..> AWSBedrockProvider : binds narrow dependencies
     AWSBedrockProvider ..> ProviderAuthorizationLeasePort : one-use CAS consume
-    AWSBedrockProvider ..> AWSBedrockRuntimePort : zero or one signed request
+    AWSBedrockProvider ..> AWSBedrockRuntimePort : zero or one bearer-authorized request
     AWSBedrockProvider ..> TrustedEndpointResolver : resolves trusted HTTPS origin
     AWSBedrockProvider ..> ValidatedProviderModelBinding : receives
     AWSBedrockProvider ..> IdentifiedProviderNeutralModelRequest : receives
@@ -131,9 +140,13 @@ classDiagram
     AWSBedrockModelContract *-- RegisteredBedrockDestinationScope
     PrepareProviderOperationAuthorizationAction ..> ProviderOperationAuthorizationPort : uses
     AWSBedrockOperationAuthorizationAdapter ..|> ProviderOperationAuthorizationPort : implements
+    CompositionRoot ..> AWSBedrockEnvironmentAPIKeySource : constructs
+    AWSBedrockEnvironmentAPIKeySource ..> APIKeySnapshot : creates once when required
+    AWSBedrockOperationAuthorizationAdapter ..> APIKeySnapshot : consumes preloaded source
     AWSBedrockOperationAuthorizationAdapter ..> ProviderAuthorizationLeaseTable : deposits move-only capability
     ProviderAuthorizationLeasePort ..> ProviderAuthorizationLeaseTable : consumes runner-private capability
 
-    note for AWSBedrockProvider "PROPOSED ONLY: no src implementation exists; F0006 is blocked on the governing amendments in its Section 2"
+    note for AWSBedrockProvider "PROPOSED ONLY: no src implementation exists; the environment-only API-key source is accepted"
+    note for AWSBedrockEnvironmentAPIKeySource "Reads only AWS_BEARER_TOKEN_BEDROCK; no hardcoded key, fallback, reread, or refresh"
     note for AWSBedrockRuntimePort "No SDK, HTTP library, client fields, or concrete method signature has been selected"
 ```

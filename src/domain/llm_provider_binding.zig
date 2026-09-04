@@ -21,9 +21,46 @@ pub const WorkflowModelOperationId = struct {
     }
 };
 
+pub const ProviderModelBindingId = struct {
+    operation_id: WorkflowModelOperationId,
+    slot_id: identity.ModelSlotId,
+    registry_entry_id: provider_registry.RegistryEntryId,
+    reasoning_effort: ?[]const u8,
+
+    pub fn eql(left: ProviderModelBindingId, right: ProviderModelBindingId) bool {
+        return left.operation_id.eql(right.operation_id) and
+            left.slot_id.eql(right.slot_id) and
+            left.registry_entry_id.eql(right.registry_entry_id) and
+            optionalStringEql(left.reasoning_effort, right.reasoning_effort);
+    }
+
+    pub fn isValid(self: ProviderModelBindingId) bool {
+        return self.operation_id.isValid() and
+            identity.ModelSlotId.parse(self.slot_id.bytes) != null and
+            self.registry_entry_id.ordinal != 0 and
+            (self.reasoning_effort == null or
+                (self.reasoning_effort.?.len > 0 and
+                    std.unicode.utf8ValidateSlice(self.reasoning_effort.?)));
+    }
+};
+
 pub const ValidatedProviderModelBinding = struct {
     operation_id: WorkflowModelOperationId,
     slot_id: identity.ModelSlotId,
     registry_entry: *const provider_registry.Entry,
     reasoning_effort: ?[]const u8,
+
+    pub fn bindingId(self: ValidatedProviderModelBinding) ProviderModelBindingId {
+        return .{
+            .operation_id = self.operation_id,
+            .slot_id = self.slot_id,
+            .registry_entry_id = self.registry_entry.id,
+            .reasoning_effort = self.reasoning_effort,
+        };
+    }
 };
+
+fn optionalStringEql(left: ?[]const u8, right: ?[]const u8) bool {
+    if (left == null or right == null) return left == null and right == null;
+    return std.mem.eql(u8, left.?, right.?);
+}

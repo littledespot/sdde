@@ -1,3 +1,5 @@
+const repair_accounting = @import("runner_repair_accounting.zig");
+
 pub const DataKey = enum {
     invocation_working_directory,
     exact_engine_config_file,
@@ -81,6 +83,11 @@ pub const SideEffect = enum {
     filesystem_write,
 };
 
+pub const RunnerAccountingCapability = enum {
+    none,
+    increment_model_attempt,
+};
+
 pub const NodeKind = enum {
     action,
     orchestrator,
@@ -94,6 +101,7 @@ pub const NodeContract = struct {
     replaces: []const DataKey = &.{},
     invalidates: []const DataKey = &.{},
     side_effect: SideEffect,
+    runner_accounting: RunnerAccountingCapability = .none,
 };
 
 pub const RuntimeStatus = enum {
@@ -117,6 +125,7 @@ pub const NodeDelta = struct {
     data_invalidations: []const DataKey = &.{},
     telemetry_facts: [telemetry.max_facts_per_delta]telemetry.WorkflowTelemetryFact = undefined,
     telemetry_fact_count: u8 = 0,
+    runner_accounting_transition: ?repair_accounting.Transition = null,
 
     pub fn successful(contract: NodeContract) NodeDelta {
         return .{
@@ -170,6 +179,8 @@ pub const DeltaError = error{
     UndeclaredInvalidation,
     MissingDeclaredInvalidation,
     DuplicateInvalidation,
+    UndeclaredRunnerAccountingTransition,
+    MissingRunnerAccountingTransition,
 };
 
 pub const PipelineEnvelope = struct {
@@ -219,6 +230,7 @@ pub const PipelineEnvelope = struct {
             error.MissingDeclaredInvalidation,
             error.DuplicateInvalidation,
         );
+        try validateRunnerAccountingTransition(contract, delta.runner_accounting_transition);
 
         for (delta.data_writes) |key| {
             if (self.contains(key)) return error.DataAlreadyPresent;
@@ -237,6 +249,21 @@ pub const PipelineEnvelope = struct {
         return next;
     }
 };
+
+fn validateRunnerAccountingTransition(
+    contract: NodeContract,
+    transition: ?repair_accounting.Transition,
+) DeltaError!void {
+    switch (contract.runner_accounting) {
+        .none => if (transition != null) return error.UndeclaredRunnerAccountingTransition,
+        .increment_model_attempt => {
+            const value = transition orelse return error.MissingRunnerAccountingTransition;
+            switch (value) {
+                .increment_model_attempt => {},
+            }
+        },
+    }
+}
 
 pub fn validateLinear(
     comptime initial: []const DataKey,

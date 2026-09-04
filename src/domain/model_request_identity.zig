@@ -1,7 +1,18 @@
 const std = @import("std");
 const provider_binding = @import("llm_provider_binding.zig");
 
-pub const StageRunEpochId = struct { bytes: []const u8 };
+pub const StageRunEpochId = struct {
+    bytes: []const u8,
+
+    pub fn isValid(self: StageRunEpochId) bool {
+        validateAuthorityId(self.bytes, error.InvalidStageRunEpochId) catch return false;
+        return true;
+    }
+
+    pub fn eql(left: StageRunEpochId, right: StageRunEpochId) bool {
+        return authorityIdEql(left.bytes, right.bytes);
+    }
+};
 pub const ReferenceStateId = struct { bytes: []const u8 };
 pub const ReferenceChunkId = struct { bytes: []const u8 };
 pub const UnitSlotId = struct { bytes: []const u8 };
@@ -179,6 +190,11 @@ pub const TerminalReason = enum {
     not_invoked_authorization_failure,
 };
 
+pub const LifecycleTransition = union(enum) {
+    invoked,
+    terminal: TerminalReason,
+};
+
 pub const Record = struct {
     model_request_id: ModelRequestId,
     status: RequestStatus,
@@ -212,6 +228,21 @@ pub const ModelRequestIdentityLedger = opaque {
     pub fn containsRequest(self: *const ModelRequestIdentityLedger, request_id: *const ModelRequestId) bool {
         return resolveRequest(ledgerStorage(self), request_id) != null;
     }
+
+    pub fn record(
+        self: *const ModelRequestIdentityLedger,
+        request_id: *const ModelRequestId,
+    ) ?*const Record {
+        const node = resolveRecord(ledgerStorage(self), request_id) orelse return null;
+        return &node.record;
+    }
+
+    pub fn canonicalRequestId(
+        self: *const ModelRequestIdentityLedger,
+        request_id: *const ModelRequestId,
+    ) ?*const ModelRequestId {
+        return resolveRequest(ledgerStorage(self), request_id);
+    }
 };
 
 pub const Owner = opaque {};
@@ -233,6 +264,9 @@ pub const ValidationError = error{
     ModelRequestOrdinalExhausted,
     ModelRequestOwnerReferenceExhausted,
     ModelRequestBindingInvalid,
+    ModelRequestNotFound,
+    ModelRequestStatusConflict,
+    InvalidModelRequestLifecycleTransition,
 };
 
 pub const Error = std.mem.Allocator.Error || ValidationError;
@@ -240,6 +274,7 @@ pub const Error = std.mem.Allocator.Error || ValidationError;
 const RecordNode = struct {
     previous: ?*const RecordNode,
     record: Record,
+    canonical_model_request_id: *const ModelRequestId,
 };
 
 const LedgerStorage = struct {
@@ -264,7 +299,7 @@ pub fn createInitial(
     stage_run_epoch_id: StageRunEpochId,
     purpose_registry: RequestPurposeRegistry,
 ) Error!*Owner {
-    try validateAuthorityId(stage_run_epoch_id.bytes, error.InvalidStageRunEpochId);
+    if (!stage_run_epoch_id.isValid()) return error.InvalidStageRunEpochId;
     if (!purpose_registry.hasAny()) return error.InvalidRequestPurposeRegistry;
 
     const value = try allocator.create(OwnerStorage);
@@ -325,19 +360,22 @@ pub fn createSuccessor(
     errdefer value.arena.deinit();
 
     const allocator = value.arena.allocator();
+    const canonical_model_request_id = try allocator.create(ModelRequestId);
+    canonical_model_request_id.* = .{
+        .stage_run_epoch_id = current_storage.stage_run_epoch_id,
+        .immutable_unit_owner_id = try cloneUnitOwner(allocator, unit_owner_id),
+        .model_operation_id = try cloneModelOperation(allocator, model_operation_id),
+        .purpose = try clonePurpose(allocator, current_storage, purpose),
+        .request_ordinal = request_ordinal,
+    };
     const node = try allocator.create(RecordNode);
     node.* = .{
         .previous = current_storage.latest_record,
         .record = .{
-            .model_request_id = .{
-                .stage_run_epoch_id = current_storage.stage_run_epoch_id,
-                .immutable_unit_owner_id = try cloneUnitOwner(allocator, unit_owner_id),
-                .model_operation_id = try cloneModelOperation(allocator, model_operation_id),
-                .purpose = try clonePurpose(allocator, current_storage, purpose),
-                .request_ordinal = request_ordinal,
-            },
+            .model_request_id = canonical_model_request_id.*,
             .status = .assigned,
         },
+        .canonical_model_request_id = canonical_model_request_id,
     };
     try retainOwner(previous_owner);
     value.previous_owner = previous_owner;
@@ -350,7 +388,60 @@ pub fn createSuccessor(
         .record_count = next_record_count,
         .latest_record = node,
     };
-    return .{ .owner = owner, .model_request_id = &node.record.model_request_id };
+    return .{ .owner = owner, .model_request_id = canonical_model_request_id };
+}
+
+pub fn createLifecycleSuccessor(
+    current: *const ModelRequestIdentityLedger,
+    expected_revision: LedgerRevision,
+    request_id: *const ModelRequestId,
+    expected_status: RequestStatus,
+    transition: LifecycleTransition,
+) Error!*Owner {
+    const current_storage = ledgerStorage(current);
+    if (!current_storage.revision.eql(expected_revision)) return error.ModelRequestRevisionConflict;
+    const current_node = resolveRecord(current_storage, request_id) orelse {
+        return error.ModelRequestNotFound;
+    };
+    const current_record = &current_node.record;
+    if (current_record.status != expected_status) return error.ModelRequestStatusConflict;
+
+    const next_record = try transitionRecord(current_record.*, transition);
+    const next_revision_value = std.math.add(u64, current_storage.revision.value, 1) catch {
+        return error.ModelRequestRevisionExhausted;
+    };
+
+    const previous_owner = current_storage.owner;
+    const previous_storage = ownerStorage(previous_owner);
+    const value = try previous_storage.backing_allocator.create(OwnerStorage);
+    errdefer previous_storage.backing_allocator.destroy(value);
+    value.* = .{
+        .backing_allocator = previous_storage.backing_allocator,
+        .reference_count = 1,
+        .previous_owner = null,
+        .arena = .init(previous_storage.backing_allocator),
+        .ledger = undefined,
+    };
+    errdefer value.arena.deinit();
+
+    const node = try value.arena.allocator().create(RecordNode);
+    node.* = .{
+        .previous = current_storage.latest_record,
+        .record = next_record,
+        .canonical_model_request_id = current_node.canonical_model_request_id,
+    };
+    try retainOwner(previous_owner);
+    value.previous_owner = previous_owner;
+    const owner: *Owner = @ptrCast(value);
+    value.ledger = .{
+        .owner = owner,
+        .stage_run_epoch_id = current_storage.stage_run_epoch_id,
+        .purpose_registry = current_storage.purpose_registry,
+        .revision = .{ .value = next_revision_value },
+        .record_count = current_storage.record_count,
+        .latest_record = node,
+    };
+    return owner;
 }
 
 pub fn ledger(owner: *const Owner) *const ModelRequestIdentityLedger {
@@ -470,6 +561,7 @@ fn nextOrdinal(
     model_operation_id: provider_binding.WorkflowModelOperationId,
     purpose: RequestPurposeBinding,
 ) ValidationError!PositiveOrdinal {
+    var greatest: u32 = 0;
     var node = current.latest_record;
     while (node) |entry| : (node = entry.previous) {
         const id = entry.record.model_request_id;
@@ -477,24 +569,66 @@ fn nextOrdinal(
             id.model_operation_id.eql(model_operation_id) and
             purposeEqlBounded(id.purpose, purpose, current.record_count + 1))
         {
-            const value = std.math.add(u32, id.request_ordinal.value, 1) catch {
-                return error.ModelRequestOrdinalExhausted;
-            };
-            return .{ .value = value };
+            greatest = @max(greatest, id.request_ordinal.value);
         }
     }
-    return .{ .value = 1 };
+    return .{ .value = std.math.add(u32, greatest, 1) catch {
+        return error.ModelRequestOrdinalExhausted;
+    } };
 }
 
 fn resolveRequest(current: *const LedgerStorage, expected: *const ModelRequestId) ?*const ModelRequestId {
+    const node = resolveRecord(current, expected) orelse return null;
+    return node.canonical_model_request_id;
+}
+
+fn resolveRecord(current: *const LedgerStorage, expected: *const ModelRequestId) ?*const RecordNode {
     var node = current.latest_record;
     while (node) |entry| : (node = entry.previous) {
-        const candidate = &entry.record.model_request_id;
+        const candidate = entry.canonical_model_request_id;
         if (candidate == expected or modelRequestIdEql(candidate, expected, current.record_count + 1)) {
-            return candidate;
+            return entry;
         }
     }
     return null;
+}
+
+fn transitionRecord(current: Record, transition: LifecycleTransition) ValidationError!Record {
+    return switch (transition) {
+        .invoked => if (current.status == .assigned and current.terminal_reason == null)
+            .{
+                .model_request_id = current.model_request_id,
+                .status = .invoked,
+            }
+        else
+            error.InvalidModelRequestLifecycleTransition,
+        .terminal => |reason| switch (current.status) {
+            .assigned => if (current.terminal_reason == null and isNotInvokedReason(reason))
+                .{
+                    .model_request_id = current.model_request_id,
+                    .status = .terminal,
+                    .terminal_reason = reason,
+                }
+            else
+                error.InvalidModelRequestLifecycleTransition,
+            .invoked => if (current.terminal_reason == null and !isNotInvokedReason(reason))
+                .{
+                    .model_request_id = current.model_request_id,
+                    .status = .terminal,
+                    .terminal_reason = reason,
+                }
+            else
+                error.InvalidModelRequestLifecycleTransition,
+            .terminal => error.InvalidModelRequestLifecycleTransition,
+        },
+    };
+}
+
+fn isNotInvokedReason(reason: TerminalReason) bool {
+    return switch (reason) {
+        .not_invoked_attempt_ceiling, .not_invoked_authorization_failure => true,
+        .accepted, .needs_user, .invalid_exhausted, .blocked, .failed, .cancelled => false,
+    };
 }
 
 fn validateContentOwner(owner: ContentUnitOwnerId) ValidationError!void {

@@ -4633,6 +4633,13 @@ The following implementation choices are accepted:
   authorization preparation is restricted to a preloaded, non-refreshing,
   no-I/O lease. No production provider contract is registered until its
   provider feature is accepted.
+- [F0007](features/F0007-AWSBedrockProvider.md) has one accepted credential
+  choice while the feature remains proposed: a narrow infrastructure source
+  reads only `AWS_BEARER_TOKEN_BEDROCK` into an invocation-owned snapshot before
+  no-I/O lease preparation. No key value may be hardcoded or supplied through
+  repository configuration, workflow YAML, prompts, arguments, source,
+  examples, fixtures, or binaries; no fallback credential source or refresh is
+  permitted.
 
 The following choices remain deferred and may be decided during implementation
 without altering the architecture:

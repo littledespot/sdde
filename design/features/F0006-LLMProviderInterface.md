@@ -13,9 +13,12 @@ composition are accepted and implemented. Immutable unit-owner validation,
 run-local model-request ledger initialization, purpose-bound request assignment,
 and exact binding validation are also implemented. Amendments 7-11 were accepted
 by explicit user direction on 2026-09-04, with authorization preparation
-restricted to a preloaded, non-refreshing, no-I/O lease. The provider-neutral
-operation port, invoked/terminal request lifecycle, effect journal, and
-production provider contracts remain implementation work.
+restricted to a preloaded, non-refreshing, no-I/O lease. The closed
+provider-operation values, sole provider-neutral operation port, deterministic
+fake provider, immutable model-request lifecycle advancement, and bounded
+runner-owned model-attempt accounting are implemented. Provider-operation
+lifecycle actions, authorization storage, effect journaling, and production
+provider contracts remain implementation work.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -121,8 +124,9 @@ runtime evidence; the remaining items define subsequent implementation work:
    model; unused catalogue entries gain no repository authority. ADR 0005
    removes built-in routes: each YAML-declared generic model operation names
    one repository slot explicitly;
-7. **Accepted:** amends `AdvanceModelAttemptAccountingAction`, design Sections 12.1 and
-   13.4, and `ModelRequestLifecycle` for the Section 7 full-attempt semantics:
+7. **Accepted, partially implemented:** amends
+   `AdvanceModelAttemptAccountingAction`, design Sections 12.1 and 13.4, and
+   `ModelRequestLifecycle` for the Section 7 full-attempt semantics:
    reserve once before the first external provider operation; define count and
    inference operation lifecycles under that attempt; make preparation/count
    failure terminal and attempt-consuming; relate request `assigned`,
@@ -137,8 +141,11 @@ runtime evidence; the remaining items define subsequent implementation work:
 9. **Accepted:** updates packaged-executable acceptance criteria so a relocated executable
    can consume a target-owned provider file without a source-tree example; and
 10. **Accepted choice:** provider authorization preparation is restricted to a
-    preloaded, non-refreshing, no-I/O lease. Credential file, process, metadata,
-    STS, and refresh effects are not permitted; and
+    preloaded, non-refreshing, no-I/O lease. A provider feature may define one
+    narrow environment-only preloader outside authorization preparation. F0007
+    fixes the Bedrock source to `AWS_BEARER_TOKEN_BEDROCK`; no repository input
+    can name or contain the key. Credential file, process, metadata, STS, and
+    refresh effects are not permitted; and
 11. **Accepted:** exposes provider transport/auth/throttle/timeout outcomes to the compiled
     YAML graph, which alone may select an explicit registered retry operation;
     no provider or generation orchestrator hides that branch.

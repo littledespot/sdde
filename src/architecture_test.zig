@@ -7,6 +7,9 @@ const toolchain_safety = @import("domain/toolchain_safety.zig");
 const llm_provider_registry = @import("domain/llm_provider_registry.zig");
 const repository_model_allowlist = @import("domain/repository_model_allowlist.zig");
 const model_request_identity = @import("domain/model_request_identity.zig");
+const runner_repair_accounting = @import("domain/runner_repair_accounting.zig");
+const llm_provider_operation = @import("domain/llm_provider_operation.zig");
+const llm_provider_interface = @import("ports/llm_provider_interface.zig");
 const llm_provider_registry_service = @import("application/llm_provider_registry_service.zig");
 const derive_provider_requirement = @import("actions/provider/derive_provider_requirement.zig");
 const workflow_execution = @import("domain/workflow_execution.zig");
@@ -290,6 +293,7 @@ test "model request identity has one opaque ledger and runner applied mutation b
 
     const builder = @embedFile("actions/model/build_initial_model_request_identity_ledger.zig");
     const assigner = @embedFile("actions/model/assign_model_request_id.zig");
+    const lifecycle = @embedFile("actions/model/advance_model_request_lifecycle.zig");
     const validator = @embedFile("actions/model/validate_model_request_binding.zig");
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(
         builder,
@@ -300,6 +304,12 @@ test "model request identity has one opaque ledger and runner applied mutation b
         assigner,
         ".replaces = &.{.model_request_identity_ledger}",
     ));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(
+        lifecycle,
+        ".replaces = &.{.model_request_identity_ledger}",
+    ));
+    try expectAbsent(lifecycle, "/ports/");
+    try expectAbsent(lifecycle, "/adapters/");
     try expectAbsent(validator, ".produces = &.{.model_request_identity_ledger}");
     try expectAbsent(validator, ".replaces = &.{.model_request_identity_ledger}");
 
@@ -307,7 +317,93 @@ test "model request identity has one opaque ledger and runner applied mutation b
     try expectAbsent(runner, "/adapters/");
     try expectAbsent(runner, "/ports/");
     try expectAbsent(runner, "std.Io");
-    try std.testing.expectEqual(@as(usize, 2), countOccurrences(runner, "envelope.apply("));
+    try std.testing.expectEqual(@as(usize, 3), countOccurrences(runner, "envelope.apply("));
+}
+
+test "provider operation boundary has one capability-limited interface" {
+    switch (@typeInfo(llm_provider_interface.Context)) {
+        .@"opaque" => {},
+        else => return error.LLMProviderContextMustBeOpaque,
+    }
+    try std.testing.expectEqual(
+        @as(usize, 2),
+        @typeInfo(llm_provider_interface.LLMProviderInterface.VTable).@"struct".fields.len,
+    );
+    try std.testing.expectEqual(
+        @as(usize, 12),
+        std.enums.values(llm_provider_operation.ProviderFailureCause).len,
+    );
+    try std.testing.expectEqual(
+        @as(usize, 3),
+        std.enums.values(llm_provider_operation.ProviderDeliveryDisposition).len,
+    );
+    try std.testing.expectEqual(
+        @as(usize, 2),
+        std.enums.values(llm_provider_operation.ProviderRetryClass).len,
+    );
+
+    const port = @embedFile("ports/llm_provider_interface.zig");
+    try expectAbsent(port, "anyopaque");
+    try expectAbsent(port, "/adapters/");
+    try expectAbsent(port, "std.Io");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(port, "pub const LLMProviderInterface"));
+
+    const contract = @embedFile("domain/llm_provider_operation.zig");
+    try expectAbsent(contract, "/adapters/");
+    try expectAbsent(contract, "/ports/");
+    try expectAbsent(contract, "std.Io");
+
+    const fake = @embedFile("adapters/provider/fake_llm_provider.zig");
+    try expectAbsent(fake, "std.Io");
+    try expectAbsent(fake, "filesystem");
+    try expectAbsent(fake, "process");
+    try expectAbsent(fake, "environment");
+    const composition = @embedFile("composition/root.zig");
+    try expectAbsent(composition, "fake_llm_provider");
+}
+
+test "model attempt accounting has one runner-applied transition authority" {
+    switch (@typeInfo(runner_repair_accounting.RunnerRepairAccounting)) {
+        .@"opaque" => {},
+        else => return error.RunnerRepairAccountingMustBeOpaque,
+    }
+
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var actions = try std.Io.Dir.cwd().openDir(io, "src/actions", .{ .iterate = true });
+    defer actions.close(io);
+    var walker = try actions.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
+        defer allocator.free(source);
+        const declarations = countOccurrences(source, ".runner_accounting = .increment_model_attempt");
+        if (std.mem.eql(u8, entry.path, "model/advance_model_attempt_accounting.zig")) {
+            try std.testing.expectEqual(@as(usize, 1), declarations);
+        } else {
+            try std.testing.expectEqual(@as(usize, 0), declarations);
+        }
+    }
+
+    const action = @embedFile("actions/model/advance_model_attempt_accounting.zig");
+    try expectAbsent(action, "/ports/");
+    try expectAbsent(action, "/adapters/");
+    try expectAbsent(action, "std.Io");
+    const accounting = @embedFile("domain/runner_repair_accounting.zig");
+    try expectAbsent(accounting, "/ports/");
+    try expectAbsent(accounting, "/adapters/");
+    try expectAbsent(accounting, "std.Io");
+
+    const runner = @embedFile("application/model_attempt_accounting_runner.zig");
+    try expectAbsent(runner, "/ports/");
+    try expectAbsent(runner, "/adapters/");
+    try expectAbsent(runner, "std.Io");
+    const validate_index = std.mem.indexOf(u8, runner, "envelope.apply(").?;
+    const apply_index = std.mem.indexOf(u8, runner, "accounting.apply(").?;
+    const replace_index = std.mem.indexOf(u8, runner, "self.current_owner = successor").?;
+    try std.testing.expect(validate_index < apply_index);
+    try std.testing.expect(apply_index < replace_index);
 }
 
 test "only request identity owners can produce or replace its ledger key" {
@@ -334,7 +430,9 @@ test "only request identity owners can produce or replace its ledger key" {
         } else {
             try std.testing.expectEqual(@as(usize, 0), produces);
         }
-        if (std.mem.eql(u8, entry.path, "model/assign_model_request_id.zig")) {
+        if (std.mem.eql(u8, entry.path, "model/assign_model_request_id.zig") or
+            std.mem.eql(u8, entry.path, "model/advance_model_request_lifecycle.zig"))
+        {
             try std.testing.expectEqual(@as(usize, 1), replaces);
         } else {
             try std.testing.expectEqual(@as(usize, 0), replaces);

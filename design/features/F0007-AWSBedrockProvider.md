@@ -5,16 +5,18 @@
 **Implementation readiness:** Blocked. F0006 and its governing amendments are
 accepted. Production implementation still requires accepted
 compiler-registered Bedrock model contracts, target/region/data-routing policy,
-an exact token-count mechanism for every enabled model, the credential-source
-and refresh accounting boundary, a token-accounting proof for any native
-structured-output mode, and approval of the concrete AWS transport/signing
-dependency. No dependency or live AWS activity is authorized here.
+an exact token-count mechanism for every enabled model, a token-accounting
+proof for any native structured-output mode, and approval of the concrete AWS
+transport dependency. The environment-only API-key source is accepted: the
+engine reads `AWS_BEARER_TOKEN_BEDROCK` and never accepts a hardcoded key. No
+dependency or live AWS activity is authorized here.
 
 **Compatibility:** None. The first implementation supports only provider ID
 `aws-bedrock`, registered targets, synchronous Bedrock Runtime operations, and
-the closed configuration below. It has no alternate provider name, endpoint
-override, automatic retry, streaming path, auth document, unregistered model
-target, or arbitrary model-specific request map.
+the closed configuration below. Authentication uses only a preloaded snapshot
+of `AWS_BEARER_TOKEN_BEDROCK`. It has no alternate provider name, endpoint
+override, inline key, automatic retry, streaming path, auth document,
+unregistered model target, or arbitrary model-specific request map.
 
 **Classification:** Infrastructure LLM-provider adapter
 
@@ -36,7 +38,8 @@ documentation for [Converse](https://docs.aws.amazon.com/bedrock/latest/APIRefer
 [structured output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html),
 [inference-profile region support](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html),
 [Bedrock endpoints](https://docs.aws.amazon.com/bedrock/latest/userguide/endpoints.html),
-[AWS Signature Version 4](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv.html),
+[Bedrock API-key use](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-use.html),
+[Bedrock API-key reference](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-reference.html),
 [Bedrock IAM policy practices](https://docs.aws.amazon.com/bedrock/latest/userguide/security_iam_id-based-policy-examples.html),
 and the [Amazon Nova 2 Lite model
 card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-2-lite.html).
@@ -60,8 +63,8 @@ The first transport subset is:
 - synchronous `Converse` for inference;
 - `CountTokens` only for registered models for which AWS supports that
   operation;
-- AWS Signature Version 4 through a separately prepared narrow signing
-  capability; and
+- bearer authentication through a separately preloaded, single-use API-key
+  capability sourced only from `AWS_BEARER_TOKEN_BEDROCK`; and
 - ordered text-only system and message input, with either registered
   prompt-only response guidance or registered native structured output.
 
@@ -94,12 +97,12 @@ Responsibilities remain narrow:
 | Owner | Sole responsibility |
 | --- | --- |
 | `PrepareProviderOperationAuthorizationAction` | Call only F0006's provider-neutral preparation port with closed F0006 values and a runner-private lease slot; return only validated opaque reference evidence and import no AWS type. |
-| `AWSBedrockOperationAuthorizationAdapter` | Implement that preparation port behind infrastructure and deposit already loaded operation-bound signing material into the runner-private slot. |
+| `AWSBedrockEnvironmentAPIKeySource` | Read only `AWS_BEARER_TOKEN_BEDROCK` once when the selected invocation requires Bedrock, validate it under the secret-byte bound, and return an invocation-owned secret snapshot. |
+| `AWSBedrockOperationAuthorizationAdapter` | Implement the preparation port behind infrastructure and deposit an already loaded, operation-bound API-key capability into the runner-private slot without reading the environment. |
 | `AWSBedrockProvider` | Translate one typed operation and normalize one bounded provider observation. |
-| `AWSBedrockRuntimePort` | Send and receive at most one already constructed and signed Bedrock Runtime request under its deadline, cancellation, and wire budget. |
+| `AWSBedrockRuntimePort` | Send and receive at most one already authorized Bedrock Runtime request under its deadline, cancellation, and wire budget. |
 | Trusted endpoint resolver | Resolve one registered partition/region and fixed `bedrock-runtime` service to one trusted HTTPS origin. |
-| Accepted credential/signing adapter | In the minimum v1 path, expose already loaded non-refreshing signing material and sign only the exact operation to which the capability is bound. |
-| Composition root | Construct the fixed Bedrock model contracts, endpoint policy, provider adapter, and narrow infrastructure implementations. |
+| Composition root | Construct the fixed Bedrock model contracts, endpoint policy, provider adapter, environment source, and narrow infrastructure implementations; it does not read or retain the key itself. |
 | Pipeline runner | Own the single-use authorization table and effect-journal handle, apply lifecycle transitions, expose only opaque lease references, and finalize every slot on every path. |
 
 `AWSBedrockProvider` exhaustively matches the already validated
@@ -112,10 +115,10 @@ moves that operation directly to terminal without a provider request. After the
 private slot is filled, the runner applies and durably journals
 `assigned -> invoked`; only then may the provider compare-and-swap consume the
 lease and send one request. The envelope-visible reference cannot serialize,
-log, rebind, reuse, or reveal the backing capability. A credential source with
-filesystem, process, metadata, STS, or refresh effects is not part of this
-action; it requires the separate accounting decision in F0006 Section 2 before
-it can be enabled.
+log, rebind, reuse, or reveal the backing capability. Authorization preparation
+does not read the environment: it consumes the invocation-owned snapshot
+created by `AWSBedrockEnvironmentAPIKeySource`. Filesystem, credential-process,
+metadata, STS, generation, exchange, and refresh sources are prohibited.
 
 No owner above receives project filesystem, command, workflow-state,
 transaction, log-sink, completion, child-binding, or unrestricted tool
@@ -156,7 +159,7 @@ For `provider: "aws-bedrock"`, each model object contains exactly `model` and
 
 Unknown fields reject the complete provider registry. In particular, the file
 cannot contain an endpoint URL, hostname, partition override, FIPS/dual-stack
-switch, API/access/secret/session key, profile, role ARN, external ID,
+switch, API/access/secret/session key or bearer token, profile, role ARN, external ID,
 credential source, environment-variable name, metadata endpoint, credential
 process, retry count, proxy, CA bundle, header, guardrail, tool, request
 metadata, token limit, context window, structured-output flag, tokenizer, or
@@ -253,56 +256,69 @@ including a same-origin redirect.
 The concrete client treats the host environment as hostile input. It must not
 silently inherit `AWS_ENDPOINT_URL` or equivalent endpoint overrides, proxy
 settings, custom CA-bundle overrides, retry settings, region variables,
-profiles, request headers, or arbitrary SDK configuration. Every allowed
-deployment input must be named by the accepted credential/transport decision;
-all others are disabled or ignored before construction. Negative tests use
-canary environment values to prove they cannot redirect or alter a request.
+profiles, request headers, AWS access-key variables, or arbitrary SDK
+configuration. The sole accepted environment input is
+`AWS_BEARER_TOKEN_BEDROCK`; it supplies authentication only and cannot alter
+the endpoint, region, model, request, policy, or retry behavior. All other
+environment inputs are disabled or ignored before client construction.
+Negative tests use canary values to prove they cannot redirect or alter a
+request.
 
 For inference profiles, `config.region` selects the source endpoint only. The
 registered target contract and accepted policy own the destination scope and
-data-residency consequences. Binding fails before credential access when
+data-residency consequences. Binding fails before API-key environment access when
 source, partition, target, model availability, geographic destination set or
 worldwide scope, or policy does not match exactly.
 
-## 5. Credential and signing boundary
+## 5. API-key and authorization boundary
 
-Requests use AWS SigV4 for the exact `bedrock-runtime` service, source region,
-method, path, headers, payload digest, and deadline. The project provider file
-contains no authentication choice or secret.
+Amazon Bedrock Runtime requests use bearer authentication. The API key comes
+only from the process environment variable `AWS_BEARER_TOKEN_BEDROCK`. The
+variable name is fixed by the engine and cannot be configured by a repository,
+workflow, CLI argument, provider file, prompt, or model response. The provider
+file contains no authentication choice or secret.
 
-The exact credential-source chain is a required decision. A generic AWS
-"default chain" is not accepted implicitly because an implementation may read
-shared files, execute a credential process, contact container or instance
-metadata, assume a role, or refresh through another network request. The
-accepted decision must enumerate every enabled source, precedence, filesystem,
-process and network effect, timeout, refresh rule, caching lifetime, and target
-deployment environment.
+No key value may be hardcoded in source, generated code, binaries, examples,
+fixtures, tests, configuration, workflow YAML, prompts, command arguments, or
+headers stored outside the transient request adapter. Tests create synthetic
+canary values at runtime and never contain a usable key. Direct key parameters,
+fallback variables, AWS access-key variables, profiles, shared files,
+credential processes, container or instance metadata, role assumption, STS,
+and a generic AWS default credential chain are not permitted.
 
-The minimum conforming v1 choice is a preloaded, non-refreshing credential lease
-whose validity extends beyond the operation deadline. Preparing authorization
-from that lease is in-memory and no-I/O. If any accepted deployment instead
-permits credential-file access, a credential process, metadata, STS, or refresh,
-each effect requires a separate closed credential-operation identity,
-lifecycle, deadline, attempt/retry ceiling, delivery disposition, recovery
-rule, and terminal observation before use. None may be charged to an assigned
-CountTokens or Converse operation or hidden in a client callback.
+`AWSBedrockEnvironmentAPIKeySource` is the sole key reader. It reads the exact
+variable once per engine invocation, only after the selected compiled workflow
+and validated model binding establish that Bedrock authorization is required.
+It rejects a missing, empty, or over-limit value without trimming or
+fallback, copies the bytes into one invocation-owned nonserializable secret
+snapshot, and never rereads the environment. The snapshot is non-refreshing and
+is destroyed when the invocation ends. API-key creation, exchange, expiry
+extension, rotation, caching across invocations, and automatic refresh are out
+of scope.
+
+That snapshot is F0006's preloaded authorization source. Preparing an
+operation-bound lease from it is in-memory and no-I/O. The environment reader
+has no model-operation, network, filesystem, process-launch, state, logging, or
+workflow capability. The authorization adapter has no environment port.
 
 `AWSBedrockOperationAuthorizationAdapter` is the infrastructure implementation
 of F0006's provider-neutral preparation port. The common application action
 imports no AWS type. The adapter deposits one move-only capability, already
-bound to an operation and signing scope, into the supplied runner-private slot;
-only its opaque validated reference enters the pipeline. At invocation,
+bound to an operation, provider, region, endpoint, and deadline, into the
+supplied runner-private slot; only its opaque validated reference enters the
+pipeline. At invocation,
 `AWSBedrockProvider` compare-and-swap consumes that lease through the narrow
-runner-owned lease port and may use it to sign one request. It cannot refresh
-it, select another source, make STS or metadata calls, expose raw credentials,
-or retry signing with a different identity. A missing, expired, mismatched, or
-already consumed lease terminates before send.
+runner-owned lease port and may use it to construct one transient
+`Authorization: Bearer` header. It cannot refresh the key, select another
+source, make STS or metadata calls, expose the token, or retry with a different
+identity. A missing, expired, mismatched, or already consumed lease terminates
+before send.
 
-Credential bytes, signatures, canonical requests, authorization headers, and
-refresh responses never enter provider-neutral requests, pipeline state,
-diagnostics, logs, or serialized operation evidence. Deployment IAM authority
-should permit only the registered operations and targets. F0007 does not
-create, edit, or validate IAM policies and does not enable a model.
+API-key bytes and authorization headers never enter provider-neutral requests,
+pipeline state, diagnostics, logs, prompt capture, or serialized operation
+evidence. Deployment authority should permit only the registered operations
+and targets. F0007 does not create, edit, rotate, or validate API keys or IAM
+policies and does not enable a model.
 
 ## 6. Exact token-count operation
 
@@ -334,7 +350,8 @@ prompt-only schema guidance is included before counting.
 
 Canonical serialization is bounded by `maxCountTokensRequestBytes`, including
 the fixed wrapper and worst-case JSON/URI escaping. Header count and bytes are
-bounded separately. These checks complete before signing or network I/O; an
+bounded separately. These checks complete before authorization-header
+construction or network I/O; an
 over-limit body is `request_limit_exceeded`/`not_sent`, consumes the already
 reserved full model attempt, and consumes no AWS request.
 
@@ -424,17 +441,18 @@ Optional members are present only under the stated registered condition; no
 empty placeholder or `null` form is accepted.
 
 The adapter uses one canonical JSON serializer. URI escaping, JSON escaping,
-content length, host selection, payload hashing, and SigV4 canonicalization are
-mechanical adapter transformations with golden tests. Unsupported content or a
-control such as the current unregistered `reasoningEffort` fails before I/O;
-no field is silently dropped.
+content length, host selection, and bearer-header construction are mechanical
+adapter transformations with golden tests. Unsupported content or a control
+such as the current unregistered `reasoningEffort` fails before I/O; no field
+is silently dropped.
 
 Serialization enforces `maxConverseRequestBytes` plus separate header
-count/byte ceilings before signing or network I/O. The proof includes the fixed
-wrapper, URI/JSON escaping, and, in native mode, the schema's second encoding as
-a JSON string. `canonicalInputBytes` is not substituted for this bound. An
-over-limit request is `request_limit_exceeded`/`not_sent`, consumes the already
-reserved attempt, and is never partially transmitted.
+count/byte ceilings before authorization-header construction or network I/O.
+The proof includes the fixed wrapper, URI/JSON escaping, and, in native mode,
+the schema's second encoding as a JSON string. `canonicalInputBytes` is not
+substituted for this bound. An over-limit request is
+`request_limit_exceeded`/`not_sent`, consumes the already reserved attempt, and
+is never partially transmitted.
 
 The first implementation sends none of:
 
@@ -550,7 +568,7 @@ discriminator, not HTTP status alone:
 
 | AWS/transport outcome | F0006 cause | Retry class |
 | --- | --- | --- |
-| No usable prepared credential or rejected signing identity | `authentication_failed` | `never` |
+| Missing, expired, or rejected API key | `authentication_failed` | `never` |
 | `AccessDeniedException` | `authorization_denied` | `never` |
 | `ValidationException` | `request_rejected` | `never` |
 | `ResourceNotFoundException` | `model_unavailable` | `never` |
@@ -577,7 +595,7 @@ closed public rule code—never AWS error text or raw data.
 
 Delivery disposition is classified independently:
 
-- local binding/serialization/signing rejection before any request byte is
+- local binding/serialization/authorization rejection before any request byte is
   `not_sent`;
 - a completely decoded AWS success or exception response is
   `response_received`; and
@@ -606,10 +624,11 @@ duplicate-effect/spend policy may authorize a new attempt, never reuse of the
 old operation.
 
 All AWS SDK/client automatic retries, adaptive retries, redirect retries, and
-credential-refresh retries inside the provider call are disabled. One F0006
-interface call corresponds to zero or one signed AWS request. Provider backoff
-hints may be normalized as bounded non-authoritative facts only if accepted
-policy defines them; the adapter never sleeps or chooses another model.
+API-key refresh retries inside the provider call are disabled. One F0006
+interface call corresponds to zero or one bearer-authorized AWS request.
+Provider backoff hints may be normalized as bounded non-authoritative facts
+only if accepted policy defines them; the adapter never sleeps or chooses
+another model.
 
 A protocol-retry operation is not a provider-failure retry owner; it remains
 restricted to decoder/workflow-result-schema failures after a response. Only
@@ -627,39 +646,39 @@ response.
 
 ## 10. Ownership, cleanup, and concurrency
 
-Every endpoint value, request body, canonical-signing buffer, lease slot/ref,
-signing capability, effect-journal handle, transport handle, raw response
-buffer, decoded AWS value, and normalized observation has one owner and
-deterministic destruction on success, rejection, cancellation, timeout,
-recovery, and operational failure.
+Every endpoint value, environment API-key snapshot, transient authorization
+header, request body, lease slot/ref, authorization capability, effect-journal
+handle, transport handle, raw response buffer, decoded AWS value, and normalized
+observation has one owner and deterministic destruction on success, rejection,
+cancellation, timeout, recovery, and operational failure.
 
 Before consume, the runner-private table exclusively owns each move-only,
 nonserializable, nonloggable authorization capability. A successful one-use CAS
 moves ownership to `AWSBedrockProvider`, which destroys it after the call. If no
 consume occurs, the table finalizes it. The envelope contains only the opaque
 reference, never the capability. Journal records persist no reference backing
-or credential and cannot reconstruct one after restart. Raw bodies remain
+or API key and cannot reconstruct one after restart. Raw bodies remain
 adapter-private until `.complete` text is moved into the bounded F0006 result;
 all output for `.stopped` is discarded and all AWS storage is destroyed.
 
 The initial engine executes provider work sequentially. F0007 introduces no
 concurrent calls. Later concurrency requires accepted overlay, operation-ID,
-client, signing-capability, quota, cancellation, resource-conflict, and
+client, authorization-capability, quota, cancellation, resource-conflict, and
 failpoint evidence; client thread safety alone is insufficient.
 
 ## 11. Security and observability
 
-- Only authorized infrastructure modules import AWS, HTTP/TLS, signing, or
-  credential APIs; application/domain code imports only F0006 types.
+- Only authorized infrastructure modules import AWS, HTTP/TLS, environment, or
+  API-key handling APIs; application/domain code imports only F0006 types.
 - Project input cannot choose an origin, redirect, proxy, CA override,
   credential source, header, request field, provider tool, target tag, or
   destination region set.
 - `AWSBedrockProvider` has no filesystem/process authority; the common
   authorization action has only the provider-neutral preparation port, and its
   AWS infrastructure implementation has no model-operation port.
-- Credentials, signatures, canonical requests, headers, environment values,
-  raw bodies, endpoints, and AWS error details never enter canonical state,
-  diagnostics, the provider-operation effect journal, or metadata logs.
+- The API key, authorization header, environment snapshot, raw bodies,
+  endpoints, and AWS error details never enter canonical state, diagnostics,
+  the provider-operation effect journal, prompt capture, or metadata logs.
 - F0002 prompt capture uses only pre-serialization typed fragments with
   opt-in selectors, redaction, and limits. A Bedrock wire body is never captured
   opaquely.
@@ -678,12 +697,12 @@ F0007 does not implement:
 - streaming, `InvokeModel`, OpenAI-compatible APIs, Anthropic Messages, prompt
   management, tools, guardrails, S3 content, agents, knowledge bases, browsing,
   stored sessions, or asynchronous inference;
-- implicit region discovery, custom endpoints, API-key authentication, or an
-  unreviewed default credential chain;
+- implicit region discovery, custom endpoints, SigV4 credentials, direct API-key
+  parameters, API-key generation/refresh, or any default credential chain;
 - IAM/model enablement, quota management, billing policy, or AWS account
   administration;
 - an exact tokenizer for Nova 2 Lite; or
-- selection of an AWS SDK, C ABI, HTTP/TLS/signing library, linking strategy,
+- selection of an AWS SDK, C ABI, HTTP/TLS library, linking strategy,
   or supported platform matrix.
 
 ## 13. Acceptance criteria
@@ -706,12 +725,14 @@ F0007 does not implement:
 6. Global inference requires acceptance of worldwide routing including future
    commercial Regions and is prohibited under geographic residency constraints;
    the example's source region is not its only processing region.
-7. Host endpoint, proxy, CA, retry, region, profile, and header overrides cannot
-   alter the constructed client.
-8. The common authorization action imports no AWS type. Minimum v1 preparation
-   is in-memory from a preloaded non-refreshing lease; every allowed credential
-   acquisition/refresh effect otherwise has separate accepted operation
-   accounting. The move-only capability stays in a runner-private single-use
+7. Host endpoint, proxy, CA, retry, region, profile, access-key, and header
+   overrides cannot alter the constructed client. Only
+   `AWS_BEARER_TOKEN_BEDROCK` is read, and it can affect authentication only.
+8. The common authorization action imports no AWS type. A narrow infrastructure
+   source reads `AWS_BEARER_TOKEN_BEDROCK` once per Bedrock-requiring invocation
+   into an owned, bounded, non-refreshing snapshot; missing, empty, or
+   over-limit input fails before send. Lease preparation is then in-memory
+   and no-I/O. The move-only capability stays in a runner-private single-use
    table; only its validated opaque reference enters the pipeline.
 9. CountTokens is called only for a registered supported model and exactly once
    per reserved attempt; unavailable exact count makes inference unreachable.
@@ -749,12 +770,14 @@ F0007 does not implement:
     the runner only validates/applies its accounting.
 21. No adapter retry, sleep, fallback, repair, state mutation, or workflow
     transition is possible.
-22. Secrets, signatures, headers, bodies, environment values, endpoints, and
-    AWS-native metadata never enter state or ordinary logs.
-23. All owned AWS, transport, credential, request, and response resources are
+22. The API key, authorization header, environment snapshot, bodies, endpoints,
+    and AWS-native metadata never enter state, diagnostics, prompt capture, or
+    ordinary logs; no real or placeholder key is hardcoded in source, examples,
+    fixtures, workflow YAML, configuration, prompts, binaries, or arguments.
+23. All owned AWS, transport, API-key, request, and response resources are
     destroyed exactly once on every terminal branch.
 24. Deterministic CI uses the F0006 fake provider. Any live test is explicit,
-    credential-gated, non-default, separately authorized, and excluded from
+    API-key-gated, non-default, separately authorized, and excluded from
     deterministic CI.
 25. The packaged native executable requires no repository example, AWS CLI,
     Node.js, Zig toolchain, source tree, or development cache.
@@ -770,15 +793,17 @@ Implementation evidence must cover:
   worldwide/future-region acceptance and residency denial; unsupported
   operation/control/schema mode.
 - **Environment/endpoint:** trusted region and DNS resolution, HTTPS-only,
-  every 3xx rejection, canary endpoint/proxy/CA/retry/region environment
-  overrides, and no project-created origin.
-- **Credentials/signing:** provider-neutral action/import boundary; preloaded
-  lease expiry/deadline; proof of no hidden I/O; separately identified and
-  accounted fixtures for every later accepted source/refresh effect;
-  private lease-slot fill, envelope-visible opaque ref only, stale/mismatched/
-  reused ref rejection, capability operation binding and one-time CAS move;
-  exact SigV4
-  region/service/path/body; secret canaries; cleanup before/after invocation.
+  every 3xx rejection, canary endpoint/proxy/CA/retry/region/access-key
+  environment overrides, exact sole recognition of
+  `AWS_BEARER_TOKEN_BEDROCK`, and no project-created origin.
+- **API key/authorization:** provider-neutral action/import boundary; missing,
+  empty, and over-limit environment values; exact one-read snapshot;
+  no reread, fallback, generation, refresh, default chain, file, process,
+  metadata, STS, or hardcoded-key path; preloaded lease expiry/deadline; private
+  lease-slot fill, envelope-visible opaque ref only, stale/mismatched/reused ref
+  rejection, capability operation binding and one-time CAS move; exact transient
+  bearer header; runtime-created secret canaries; cleanup before and after
+  invocation.
 - **Token count:** registered support and Nova unsupported case; exact request
   content/order; zero/boundary/overflow counts; missing/malformed count;
   AccessDenied, throttle, timeout, service failure, cancellation, wire cap;
@@ -806,15 +831,17 @@ Implementation evidence must cover:
   idempotently joined durable successor and `terminal_result_unavailable`
   without replay, plus no raw-error leakage, disabled retries, and a new
   runner-owned attempt before any second call.
-- **Architecture/security:** AWS imports confined to adapters; common
+- **Architecture/security:** AWS and environment imports confined to their
+  narrow adapters; common
   authorization action depends only on the provider-neutral port; AWS
   authorization adapter lacks model-operation authority; pipeline values
   contain only lease refs and the private table is runner-owned; provider lacks
   filesystem/process/state/log/transaction/tool capability; no provider port in
   orchestrators or `NodeRuntime`; F0002 fragment-only capture.
 - **Packaging:** fake-provider clean native smoke tests without AWS tooling or
-  credentials. A separately authorized live smoke test uses a dedicated
-  least-privilege non-production identity and is never deterministic CI.
+  API keys. A separately authorized live smoke test receives its dedicated
+  least-privilege non-production key only through
+  `AWS_BEARER_TOKEN_BEDROCK` and is never deterministic CI.
 
 ## 15. Traceability
 
@@ -826,5 +853,5 @@ Implementation evidence must cover:
 | Workflow-operation capacity, schema, retry, and repair | Design Sections 12.5-12.7 and 21-22; ADR 0005 |
 | Candidate trust, response limits, and secrets | Design Sections 3-4, 26.1, 26.5, and 27; F0002 |
 | Bedrock request/response/error protocol | AWS Converse, CountTokens, and structured-output references linked above |
-| Bedrock target, endpoint, signing, and least privilege | AWS Nova model card, endpoint, SigV4, and IAM references linked above |
+| Bedrock target, endpoint, API-key authorization, and least privilege | AWS Nova model card, endpoint, API-key, and IAM references linked above |
 | Fake-first testing and native packaging | Design Sections 28 and 30-31; F0006 Sections 12-13 |

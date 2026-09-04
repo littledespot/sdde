@@ -1,4 +1,5 @@
 const std = @import("std");
+const advance_lifecycle = @import("../actions/model/advance_model_request_lifecycle.zig");
 const assign_request = @import("../actions/model/assign_model_request_id.zig");
 const build_ledger = @import("../actions/model/build_initial_model_request_identity_ledger.zig");
 const validate_binding = @import("../actions/model/validate_model_request_binding.zig");
@@ -12,6 +13,7 @@ pub const Runner = struct {
     current_owner: ?*identity.Owner = null,
     build_action: build_ledger.Action = .{},
     assign_action: assign_request.Action = .{},
+    advance_action: advance_lifecycle.Action = .{},
     validate_action: validate_binding.Action = .{},
 
     pub fn init(allocator: std.mem.Allocator) Runner {
@@ -92,6 +94,33 @@ pub const Runner = struct {
             model_operation_id,
             purpose,
         );
+    }
+
+    pub fn advance(
+        self: *Runner,
+        expected_revision: identity.LedgerRevision,
+        request_id: *const identity.ModelRequestId,
+        expected_status: identity.RequestStatus,
+        transition: identity.LifecycleTransition,
+    ) identity.Error!void {
+        const current_owner = self.current_owner orelse return error.ModelRequestBindingInvalid;
+        self.envelope.validateInvocation(advance_lifecycle.Action.contract) catch {
+            return error.ModelRequestBindingInvalid;
+        };
+        const successor = try self.advance_action.execute(
+            identity.ledger(current_owner),
+            expected_revision,
+            request_id,
+            expected_status,
+            transition,
+        );
+        errdefer identity.deinitOwner(successor);
+        self.envelope = self.envelope.apply(
+            advance_lifecycle.Action.contract,
+            pipeline.NodeDelta.successful(advance_lifecycle.Action.contract),
+        ) catch return error.ModelRequestBindingInvalid;
+        self.current_owner = successor;
+        identity.deinitOwner(current_owner);
     }
 
     pub fn ledger(self: *const Runner) ?*const identity.ModelRequestIdentityLedger {

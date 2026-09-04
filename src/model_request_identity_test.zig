@@ -1,4 +1,5 @@
 const std = @import("std");
+const advance_lifecycle = @import("actions/model/advance_model_request_lifecycle.zig");
 const assign_request = @import("actions/model/assign_model_request_id.zig");
 const build_ledger = @import("actions/model/build_initial_model_request_identity_ledger.zig");
 const build_owner = @import("actions/model/build_immutable_unit_owner_id.zig");
@@ -274,6 +275,167 @@ test "binding validation requires exact ledger membership and every bound field"
     );
 }
 
+test "runner advances one request through the closed lifecycle" {
+    var runner = runner_module.Runner.init(std.testing.allocator);
+    defer runner.deinit();
+    try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    const request = try runner.assign(
+        .initial,
+        unitOwner("cluster-1"),
+        modelOperation("generate"),
+        .initial_generation,
+    );
+
+    try runner.advance(.{ .value = 1 }, request, .assigned, .invoked);
+    const invoked = runner.ledger().?.record(request).?;
+    try std.testing.expectEqual(identity.RequestStatus.invoked, invoked.status);
+    try std.testing.expect(invoked.terminal_reason == null);
+    try std.testing.expectEqual(@as(u64, 2), runner.ledger().?.revision().value);
+    try std.testing.expectEqual(@as(usize, 1), runner.ledger().?.recordCount());
+
+    try runner.advance(.{ .value = 2 }, request, .invoked, .{ .terminal = .accepted });
+    const terminal = runner.ledger().?.record(request).?;
+    try std.testing.expectEqual(identity.RequestStatus.terminal, terminal.status);
+    try std.testing.expectEqual(identity.TerminalReason.accepted, terminal.terminal_reason.?);
+    try std.testing.expectEqual(@as(u64, 3), runner.ledger().?.revision().value);
+    try std.testing.expectEqual(@as(usize, 1), runner.ledger().?.recordCount());
+}
+
+test "terminal reason legality is exhaustive for assigned and invoked requests" {
+    for (std.enums.values(identity.TerminalReason)) |reason| {
+        {
+            var runner = runner_module.Runner.init(std.testing.allocator);
+            defer runner.deinit();
+            try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+            const request = try runner.assign(
+                .initial,
+                unitOwner("cluster-1"),
+                modelOperation("generate"),
+                .initial_generation,
+            );
+            if (isNotInvokedReason(reason)) {
+                try runner.advance(.{ .value = 1 }, request, .assigned, .{ .terminal = reason });
+                try std.testing.expectEqual(reason, runner.ledger().?.record(request).?.terminal_reason.?);
+            } else {
+                try std.testing.expectError(
+                    error.InvalidModelRequestLifecycleTransition,
+                    runner.advance(.{ .value = 1 }, request, .assigned, .{ .terminal = reason }),
+                );
+            }
+        }
+        {
+            var runner = runner_module.Runner.init(std.testing.allocator);
+            defer runner.deinit();
+            try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+            const request = try runner.assign(
+                .initial,
+                unitOwner("cluster-1"),
+                modelOperation("generate"),
+                .initial_generation,
+            );
+            try runner.advance(.{ .value = 1 }, request, .assigned, .invoked);
+            if (isNotInvokedReason(reason)) {
+                try std.testing.expectError(
+                    error.InvalidModelRequestLifecycleTransition,
+                    runner.advance(.{ .value = 2 }, request, .invoked, .{ .terminal = reason }),
+                );
+            } else {
+                try runner.advance(.{ .value = 2 }, request, .invoked, .{ .terminal = reason });
+                try std.testing.expectEqual(reason, runner.ledger().?.record(request).?.terminal_reason.?);
+            }
+        }
+    }
+}
+
+test "lifecycle CAS rejects stale illegal duplicate and foreign transitions atomically" {
+    var runner = runner_module.Runner.init(std.testing.allocator);
+    defer runner.deinit();
+    try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    const request = try runner.assign(
+        .initial,
+        unitOwner("cluster-1"),
+        modelOperation("generate"),
+        .initial_generation,
+    );
+
+    try std.testing.expectError(
+        error.ModelRequestRevisionConflict,
+        runner.advance(.initial, request, .assigned, .invoked),
+    );
+    try std.testing.expectError(
+        error.ModelRequestStatusConflict,
+        runner.advance(.{ .value = 1 }, request, .invoked, .{ .terminal = .accepted }),
+    );
+    try std.testing.expectError(
+        error.InvalidModelRequestLifecycleTransition,
+        runner.advance(.{ .value = 1 }, request, .assigned, .{ .terminal = .accepted }),
+    );
+    try std.testing.expectEqual(@as(u64, 1), runner.ledger().?.revision().value);
+    try std.testing.expectEqual(identity.RequestStatus.assigned, runner.ledger().?.record(request).?.status);
+
+    try runner.advance(.{ .value = 1 }, request, .assigned, .invoked);
+    try std.testing.expectError(
+        error.InvalidModelRequestLifecycleTransition,
+        runner.advance(.{ .value = 2 }, request, .invoked, .invoked),
+    );
+    try std.testing.expectError(
+        error.InvalidModelRequestLifecycleTransition,
+        runner.advance(
+            .{ .value = 2 },
+            request,
+            .invoked,
+            .{ .terminal = .not_invoked_authorization_failure },
+        ),
+    );
+    try runner.advance(.{ .value = 2 }, request, .invoked, .{ .terminal = .failed });
+    try std.testing.expectError(
+        error.InvalidModelRequestLifecycleTransition,
+        runner.advance(.{ .value = 3 }, request, .terminal, .invoked),
+    );
+
+    var foreign_runner = runner_module.Runner.init(std.testing.allocator);
+    defer foreign_runner.deinit();
+    try foreign_runner.initialize(.{ .bytes = "epoch-2" }, identity.RequestPurposeRegistry.all());
+    const foreign = try foreign_runner.assign(
+        .initial,
+        unitOwner("cluster-1"),
+        modelOperation("generate"),
+        .initial_generation,
+    );
+    try std.testing.expectError(
+        error.ModelRequestNotFound,
+        runner.advance(.{ .value = 3 }, foreign, .assigned, .invoked),
+    );
+    try std.testing.expectEqual(@as(u64, 3), runner.ledger().?.revision().value);
+    try std.testing.expectEqual(identity.RequestStatus.terminal, runner.ledger().?.record(request).?.status);
+}
+
+test "lifecycle history cannot reuse a lower request ordinal" {
+    var runner = runner_module.Runner.init(std.testing.allocator);
+    defer runner.deinit();
+    try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    const owner = unitOwner("cluster-1");
+    const model_operation = modelOperation("generate");
+    const first = try runner.assign(.initial, owner, model_operation, .initial_generation);
+    const second = try runner.assign(
+        .{ .value = 1 },
+        owner,
+        model_operation,
+        .initial_generation,
+    );
+    try std.testing.expectEqual(@as(u32, 2), second.request_ordinal.value);
+
+    try runner.advance(.{ .value = 2 }, first, .assigned, .invoked);
+    const third = try runner.assign(
+        .{ .value = 3 },
+        owner,
+        model_operation,
+        .initial_generation,
+    );
+    try std.testing.expectEqual(@as(u32, 3), third.request_ordinal.value);
+    try std.testing.expectEqual(@as(usize, 3), runner.ledger().?.recordCount());
+}
+
 test "request identity actions declare the sole ledger production and replacement" {
     try std.testing.expectEqualSlices(
         pipeline.DataKey,
@@ -289,6 +451,16 @@ test "request identity actions declare the sole ledger production and replacemen
         pipeline.DataKey,
         &.{.model_request_identity_ledger},
         assign_request.Action.contract.replaces,
+    );
+    try std.testing.expectEqualSlices(
+        pipeline.DataKey,
+        &.{.model_request_identity_ledger},
+        advance_lifecycle.Action.contract.requires,
+    );
+    try std.testing.expectEqualSlices(
+        pipeline.DataKey,
+        &.{.model_request_identity_ledger},
+        advance_lifecycle.Action.contract.replaces,
     );
     try std.testing.expectEqualSlices(
         pipeline.DataKey,
@@ -309,5 +481,12 @@ fn modelOperation(step_id: []const u8) binding.WorkflowModelOperationId {
         .workflow_id = workflow.WorkflowId.parse("arbitrary-flow").?,
         .workflow_version = 1,
         .workflow_step_id = workflow.WorkflowStepId.parse(step_id).?,
+    };
+}
+
+fn isNotInvokedReason(reason: identity.TerminalReason) bool {
+    return switch (reason) {
+        .not_invoked_attempt_ceiling, .not_invoked_authorization_failure => true,
+        .accepted, .needs_user, .invalid_exhausted, .blocked, .failed, .cancelled => false,
     };
 }
