@@ -16,15 +16,15 @@ test "generic engine preserves every YAML-compiled terminal outcome" {
         var barrier: FakeBarrier = .{};
         var graph = try testGraph();
         var registry = testRegistry(&control);
-        var runner: runner_module.Runner = .{
-            .selected = .{
-                .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} },
-                .graph = &graph,
-            },
-            .operation_registry = &registry,
-            .barrier = barrier.port(),
-            .runtime = .{},
-        };
+        var runner = runner_module.Runner.init(
+            std.testing.allocator,
+            selected(&graph),
+            &registry,
+            barrier.port(),
+            .{},
+            null,
+        );
+        defer runner.deinit();
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
         try std.testing.expectEqual(expected, engine.run(children.bindings()).execution);
         try std.testing.expectEqual(@as(usize, 1), barrier.calls);
@@ -36,15 +36,8 @@ test "runner applies an operation delta before the telemetry barrier" {
     var barrier: FakeBarrier = .{ .block = true };
     var graph = try testGraph();
     var registry = testRegistry(&control);
-    var runner: runner_module.Runner = .{
-        .selected = .{
-            .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} },
-            .graph = &graph,
-        },
-        .operation_registry = &registry,
-        .barrier = barrier.port(),
-        .runtime = .{},
-    };
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     try std.testing.expectEqual(workflow.OutcomeTag.blocked, engine.run(children.bindings()).execution);
     try std.testing.expectEqual(@as(usize, 1), barrier.calls);
@@ -63,7 +56,12 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
         .side_effect = .none,
         .gates = &.{},
         .capabilities = &.{},
-        .loop_limit = 2,
+        .retry_authority = .{
+            .workflow_id = .{ .bytes = "arbitrary-workflow" },
+            .workflow_version = 1,
+            .operation_instance_id = .{ .bytes = "run" },
+            .limit = .{ .value = 2 },
+        },
     }};
     const loop_transitions = [_]workflow.Transition{
         .{ .from = .{ .bytes = "run" }, .outcome = .ok, .target = .{ .terminal = .ok } },
@@ -78,15 +76,9 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     complete_graph.authority.maximum_step_executions = 3;
     var complete_registry = testRegistry(&completes);
     completes.entries[1].contract.outcomes = &.{ .ok, .invalid };
-    var complete_runner: runner_module.Runner = .{
-        .selected = .{
-            .invocation = .{ .workflow_id = complete_graph.authority.workflow_id, .arguments = &.{} },
-            .graph = &complete_graph,
-        },
-        .operation_registry = &complete_registry,
-        .barrier = complete_barrier.port(),
-        .runtime = .{},
-    };
+    completes.entries[1].contract.retry_limit = .{ .maximum = 2 };
+    var complete_runner = runner_module.Runner.init(std.testing.allocator, selected(&complete_graph), &complete_registry, complete_barrier.port(), .{}, null);
+    defer complete_runner.deinit();
     var complete_children: TestEngineBindings = .{ .graph = &complete_graph, .runner = &complete_runner };
     try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(complete_children.bindings()).execution);
     try std.testing.expectEqual(@as(usize, 2), completes.calls);
@@ -97,19 +89,46 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     var exhausted_graph = complete_graph;
     var exhausted_registry = testRegistry(&exhausts);
     exhausts.entries[1].contract.outcomes = &.{ .ok, .invalid };
-    var exhausted_runner: runner_module.Runner = .{
-        .selected = .{
-            .invocation = .{ .workflow_id = exhausted_graph.authority.workflow_id, .arguments = &.{} },
-            .graph = &exhausted_graph,
-        },
-        .operation_registry = &exhausted_registry,
-        .barrier = exhausted_barrier.port(),
-        .runtime = .{},
-    };
+    exhausts.entries[1].contract.retry_limit = .{ .maximum = 2 };
+    var exhausted_runner = runner_module.Runner.init(std.testing.allocator, selected(&exhausted_graph), &exhausted_registry, exhausted_barrier.port(), .{}, null);
+    defer exhausted_runner.deinit();
     var exhausted_children: TestEngineBindings = .{ .graph = &exhausted_graph, .runner = &exhausted_runner };
     try std.testing.expectEqual(workflow.OutcomeTag.failed, engine.run(exhausted_children.bindings()).execution);
-    try std.testing.expectEqual(@as(usize, 2), exhausts.calls);
-    try std.testing.expectEqual(@as(usize, 2), exhausted_barrier.calls);
+    try std.testing.expectEqual(@as(usize, 3), exhausts.calls);
+    try std.testing.expectEqual(@as(usize, 3), exhausted_barrier.calls);
+
+    var zero_steps = loop_steps;
+    zero_steps[0].retry_authority.?.limit = .{ .value = 0 };
+    var zero_graph = try testGraph();
+    zero_graph.authority.steps = &zero_steps;
+    zero_graph.authority.transitions = &loop_transitions;
+    zero_graph.authority.maximum_step_executions = 1;
+    var zero_control: OperationControl = .{ .outcome = .ok };
+    var zero_barrier: FakeBarrier = .{};
+    var zero_registry = testRegistry(&zero_control);
+    zero_control.entries[1].contract.outcomes = &.{ .ok, .invalid };
+    zero_control.entries[1].contract.retry_limit = .{ .maximum = 2 };
+    var zero_runner = runner_module.Runner.init(std.testing.allocator, selected(&zero_graph), &zero_registry, zero_barrier.port(), .{}, null);
+    defer zero_runner.deinit();
+    var zero_children: TestEngineBindings = .{ .graph = &zero_graph, .runner = &zero_runner };
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(zero_children.bindings()).execution);
+    try std.testing.expectEqual(@as(usize, 1), zero_control.calls);
+}
+
+test "each workflow runner owns a fresh token ledger" {
+    var control: OperationControl = .{ .outcome = .ok };
+    var barrier: FakeBarrier = .{};
+    var graph = try testGraph();
+    var registry = testRegistry(&control);
+    var first = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer first.deinit();
+    var second = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer second.deinit();
+
+    try std.testing.expect(first.tokenLedger() != second.tokenLedger());
+    try std.testing.expectEqual(@as(u64, 1000), first.tokenLedger().totalTokenBudget().value);
+    try std.testing.expectEqual(@as(u64, 0), first.tokenLedger().revision().value);
+    try std.testing.expectEqual(@as(u64, 0), second.tokenLedger().revision().value);
 }
 
 test "runner exposes only resources referenced by the active compiled step" {
@@ -129,15 +148,8 @@ test "runner exposes only resources referenced by the active compiled step" {
     var control: OperationControl = .{ .outcome = .ok, .expected_resource_id = "prompt" };
     var barrier: FakeBarrier = .{};
     var registry = testRegistry(&control);
-    var runner: runner_module.Runner = .{
-        .selected = .{
-            .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} },
-            .graph = &graph,
-        },
-        .operation_registry = &registry,
-        .barrier = barrier.port(),
-        .runtime = .{},
-    };
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).execution);
     try std.testing.expectEqual(@as(usize, 1), control.calls);
@@ -149,15 +161,8 @@ test "runner rejects an operation binding that differs from compiled authority" 
     var graph = try testGraph();
     var registry = testRegistry(&control);
     control.entries[1].contract.outcomes = &.{.ok};
-    var runner: runner_module.Runner = .{
-        .selected = .{
-            .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} },
-            .graph = &graph,
-        },
-        .operation_registry = &registry,
-        .barrier = barrier.port(),
-        .runtime = .{},
-    };
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     try std.testing.expectEqual(workflow.OutcomeTag.failed, engine.run(children.bindings()).execution);
     try std.testing.expectEqual(@as(usize, 0), control.calls);
@@ -190,6 +195,13 @@ const TestEngineBindings = struct {
         return self.runner.bindings().invokeStep(id);
     }
 };
+
+fn selected(graph: *const compilation.CompiledWorkflow) execution.SelectedWorkflow {
+    return .{
+        .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} },
+        .graph = graph,
+    };
+}
 
 const test_engine_vtable: engine_bindings.ChildBindings.VTable = .{
     .validate_operation_registry = TestEngineBindings.selectionOk,
@@ -248,7 +260,7 @@ fn testRegistry(control: *OperationControl) operations.Registry {
     };
     return .{
         .operations = &control.entries,
-        .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = test_outcomes }},
+        .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = test_outcomes, .total_model_token_budget = .{ .value = 1000 } }},
         .gates = &.{},
         .capabilities = &.{},
     };
@@ -287,6 +299,7 @@ fn testGraph() !compilation.CompiledWorkflow {
             .workflow_version = 1,
             .invocation_operation_id = .{ .bytes = "test.empty@1" },
             .policy_profile_id = .{ .bytes = "test.safe@1" },
+            .total_model_token_budget = .{ .value = 1000 },
             .start_step_id = .{ .bytes = "run" },
             .invocation_outputs = &.{},
             .resources = &.{},
@@ -310,7 +323,7 @@ const test_steps = [_]compilation.CompiledStep{.{
     .side_effect = .none,
     .gates = &.{},
     .capabilities = &.{},
-    .loop_limit = null,
+    .retry_authority = null,
 }};
 const test_transitions = [_]workflow.Transition{
     .{ .from = .{ .bytes = "run" }, .outcome = .ok, .target = .{ .terminal = .ok } },

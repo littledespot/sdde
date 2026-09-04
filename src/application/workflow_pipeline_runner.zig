@@ -11,6 +11,7 @@ const child_bindings = @import("workflow_pipeline_child_bindings.zig");
 const provider_binding = @import("../domain/llm_provider_binding.zig");
 const provider_services = @import("model_provider_bootstrap_services.zig");
 const resolve_provider_binding = @import("../actions/provider/resolve_provider_model_binding.zig");
+const workflow_token_runner = @import("workflow_token_accounting_runner.zig");
 
 pub const Runner = struct {
     selected: execution.SelectedWorkflow,
@@ -20,7 +21,34 @@ pub const Runner = struct {
     model_provider_services: ?*const provider_services.ModelProviderBootstrapServices = null,
     resolve_provider_binding_action: resolve_provider_binding.Action = .{},
     envelope: pipeline.PipelineEnvelope = pipeline.PipelineEnvelope.init(&.{}),
-    loop_counts: [definition.max_steps]u32 = [_]u32{0} ** definition.max_steps,
+    token_accounting: workflow_token_runner.Runner,
+    retry_execution_counts: [definition.max_steps]u64 = [_]u64{0} ** definition.max_steps,
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        selected: execution.SelectedWorkflow,
+        operation_registry: *const operations.Registry,
+        barrier: telemetry_barrier.Barrier,
+        runtime: pipeline.NodeRuntime,
+        model_provider_services: ?*const provider_services.ModelProviderBootstrapServices,
+    ) Runner {
+        return .{
+            .selected = selected,
+            .operation_registry = operation_registry,
+            .barrier = barrier,
+            .runtime = runtime,
+            .model_provider_services = model_provider_services,
+            .token_accounting = workflow_token_runner.Runner.init(
+                allocator,
+                selected.graph.authority.total_model_token_budget,
+            ),
+        };
+    }
+
+    pub fn deinit(self: *Runner) void {
+        self.token_accounting.deinit();
+        self.* = undefined;
+    }
 
     pub fn bindings(self: *Runner) child_bindings.ChildBindings {
         return .{ .context = self, .vtable = &vtable };
@@ -54,11 +82,13 @@ pub const Runner = struct {
     fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .outcome = outcome };
         const index = findStepIndex(self.selected.graph.authority.steps, id) orelse return .{ .outcome = .failed };
-        if (index >= self.loop_counts.len) return .{ .outcome = .failed };
+        if (index >= self.retry_execution_counts.len) return .{ .outcome = .failed };
         const step = &self.selected.graph.authority.steps[index];
-        if (step.loop_limit) |limit| {
-            if (self.loop_counts[index] >= limit) return .{ .outcome = .failed };
-            self.loop_counts[index] += 1;
+        if (step.retry_authority) |authority| {
+            if (self.retry_execution_counts[index] > @as(u64, authority.limit.value)) return .{ .outcome = .failed };
+            self.retry_execution_counts[index] = std.math.add(u64, self.retry_execution_counts[index], 1) catch {
+                return .{ .outcome = .failed };
+            };
         }
         const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .outcome = .failed };
         if (!contractMatchesStep(entry.contract, step.*)) return .{ .outcome = .failed };
@@ -79,6 +109,10 @@ pub const Runner = struct {
         } }) catch return .{ .outcome = .failed };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .outcome = .failed };
         return self.applyCandidate(stepPipelineContract(step.*), candidate);
+    }
+
+    pub fn tokenLedger(self: *const Runner) *const @import("../domain/workflow_token_accounting.zig").Ledger {
+        return self.token_accounting.current();
     }
 
     fn resolveModelBinding(
@@ -145,7 +179,14 @@ fn contractMatchesStep(
         std.mem.eql(workflow.OutcomeTag, contract.outcomes, step.outcomes) and
         contract.side_effect == step.side_effect and
         equalStrings(contract.gates, step.gates) and
-        equalStrings(contract.capabilities, step.capabilities);
+        equalStrings(contract.capabilities, step.capabilities) and
+        retryContractMatches(contract, step);
+}
+fn retryContractMatches(contract: operation.Contract, step: compilation.CompiledStep) bool {
+    if (contract.retry_limit == null or step.retry_authority == null) {
+        return contract.retry_limit == null and step.retry_authority == null;
+    }
+    return step.retry_authority.?.limit.within(contract.retry_limit.?.maximum);
 }
 fn equalStrings(left: []const []const u8, right: []const []const u8) bool {
     if (left.len != right.len) return false;

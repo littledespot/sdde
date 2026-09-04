@@ -19,20 +19,23 @@ flowchart TD
     MLEDGER --> MID
     MID --> MBIND[ValidateModelRequestBindingAction<br/>prove epoch, unit, compiled operation, purpose, ordinal and ledger membership]
     MBIND --> REQ[BuildModelRequestAction<br/>versioned request carrying only the validated engine-owned request identity]
-    REQ --> MADV{AdvanceModelAttemptAccountingAction<br/>reserve the initial call against maxModelAttemptsPerUnit}
-    MADV -- Exhausted; invoke nothing --> MNOTINVOKED[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to terminal with not_invoked_attempt_ceiling]
-    MNOTINVOKED --> STOP
-    MADV -- Reserved --> MINVOKED[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to invoked exactly once]
-    MINVOKED --> CALL[InvokeModelAction]
+    REQ --> MADV[AdvanceModelAttemptAccountingAction<br/>reserve initial attempt ordinal; no global attempt ceiling]
+    MADV --> MINVOKED[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to invoked exactly once]
+    MINVOKED --> MTOKEN{ReserveWorkflowTokenBudgetAction<br/>exact input plus maximum output against this execution's total token budget}
+    MTOKEN -- Insufficient --> MTTERM[Compiled YAML terminal outcome; invoke nothing]
+    MTTERM --> STOP
+    MTOKEN -- Reserved --> CALL[InvokeModelAction]
     CALL --> DECODE[Decode model envelope action]
 
     DECODE -- No typed result --> PROTO[YAML-declared protocol-retry operation]
     PROTO --> PG[Build protocol-only retry guidance action]
     PG --> PREQ[ValidateModelRequestBindingAction then BuildModelRequestAction<br/>protocol-only retry retaining the same exact logical request ID;<br/>do not allocate or repeat assigned-to-invoked]
-    PREQ --> PMADV{AdvanceModelAttemptAccountingAction<br/>reserve this retry against the same total call ceiling}
-    PMADV -- Exhausted; invoke nothing --> PTERM[AdvanceModelRequestLifecycleAction<br/>compare-and-swap invoked to terminal with invalid_exhausted<br/>for the protocol-attempt ceiling]
+    PREQ --> PMADV{AdvanceModelAttemptAccountingAction<br/>reserve this retry against the YAML operation instance's explicit retry-limit}
+    PMADV -- Explicit retry limit exhausted; invoke nothing --> PTERM[AdvanceModelRequestLifecycleAction<br/>compare-and-swap invoked to terminal with invalid_exhausted]
     PTERM --> STOP
-    PMADV -- Reserved --> PCALL[InvokeModelAction]
+    PMADV -- Reserved --> PTOKEN{ReserveWorkflowTokenBudgetAction<br/>against the same workflow-execution ledger}
+    PTOKEN -- Insufficient --> PTERM
+    PTOKEN -- Reserved --> PCALL[InvokeModelAction]
     PCALL --> DECODE
 
     DECODE -- Typed result --> IDENT[Validate request identity and workflow-declared result schema actions]
@@ -40,7 +43,7 @@ flowchart TD
     IDENT -- Valid --> ROUTE{Closed operation-result discriminator}
 
     ROUTE -- clarification_needed --> NEED[ValidateClarificationNeedProposalAction]
-    NEED -- Valid genuine current authority gap; no repair budget consumed --> NACCEPT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with needs_user]
+    NEED -- Valid genuine current authority gap; no operation retry consumed --> NACCEPT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with needs_user]
     NACCEPT --> CL[ClarificationLifecycleOrchestrator]
     CL --> USER[NeedsUser; commit the complete stage-specific pause authority set,<br/>forms and pending workflow state; persist no partial stage IR]
     NEED -- Repairable invalid need proposal --> CREJECT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with failed<br/>before allocating a distinct repair request]
@@ -77,25 +80,24 @@ flowchart TD
     ORDER --> ONE[Select exactly one diagnostic action]
     ONE --> PURPOSE{ClassifyRepairAuthorizationPurposeAction<br/>selected diagnostic, embedded validated SemanticFinding if present,<br/>operation-result kind and closed purpose table}
     PURPOSE -- Ordinary atomic repair --> OAUTH[CreateRepairAuthorizationAction<br/>one candidate ID, pointer, operation and revision]
-    OAUTH --> OADV{AdvanceAtomicRepairAttemptAccountingAction<br/>compare-and-swap ordinary repair counter before invocation}
-    OADV -- Exhausted; emit no transition --> STOP
+    OAUTH --> OADV{AdvanceAtomicRepairAttemptAccountingAction<br/>compare-and-swap the YAML repair operation instance's explicit retry counter}
+    OADV -- Explicit retry limit exhausted; emit no transition --> STOP
     OADV -- Advanced --> RGUIDE[Build preset-specific atomic repair guidance action]
     PURPOSE -- unsupported_behavior SemanticFinding on content --> NAUTH[CreateNoInventionClarificationReplacementAuthorizationAction<br/>unit-local one-shot; authorize only whole operation-result replacement<br/>from content to schema-valid clarification_needed]
     NAUTH --> RGUIDE
     PURPOSE -- Nonrepairable evidence --> STOP
     RGUIDE --> RIDENT[AssignModelRequestIdAction<br/>allocate a distinct purpose-bound repair request ID from the current run-local ledger;<br/>reuse the same immutable unit owner but never the generation request ID]
     RIDENT --> RBIND[ValidateModelRequestBindingAction<br/>prove the exact repair authorization is the purpose owner]
-    RBIND --> RREQ[BuildModelRequestAction for the YAML-selected repair operation;<br/>the new repair request ID has its own bounded model-attempt counter<br/>and remains subject to the unit/stage repair authorization cap]
-    RREQ --> RMADV{AdvanceModelAttemptAccountingAction<br/>reserve every initial or retry call for this repair request ID}
-    RMADV -- Exhausted; invoke nothing --> RCEIL{Current repair-request lifecycle status}
-    RCEIL -- assigned --> RNOTINVOKED[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to terminal with not_invoked_attempt_ceiling]
-    RCEIL -- invoked --> RABORT[AdvanceModelRequestLifecycleAction<br/>compare-and-swap invoked to terminal with invalid_exhausted<br/>for the protocol-attempt ceiling]
-    RNOTINVOKED --> STOP
+    RBIND --> RREQ[BuildModelRequestAction for the YAML-selected repair operation;<br/>the new repair request ID has its own ordinal sequence;<br/>any retry uses that operation instance's explicit retry-limit]
+    RREQ --> RMADV{AdvanceModelAttemptAccountingAction<br/>reserve the initial attempt or an explicitly bounded retry for this repair request ID}
+    RMADV -- Explicit retry limit exhausted on an invoked retry; invoke nothing --> RABORT[AdvanceModelRequestLifecycleAction<br/>compare-and-swap invoked to terminal with invalid_exhausted]
     RABORT --> STOP
     RMADV -- Reserved --> RINVOKED{Repair request lifecycle status}
     RINVOKED -- assigned; first call --> RSTART[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to invoked]
-    RSTART --> RCALL[InvokeModelAction]
-    RINVOKED -- already invoked; protocol retry --> RCALL
+    RSTART --> RTOKEN{ReserveWorkflowTokenBudgetAction<br/>against the same workflow-execution ledger}
+    RINVOKED -- already invoked; protocol retry --> RTOKEN
+    RTOKEN -- Insufficient --> RABORT
+    RTOKEN -- Reserved --> RCALL[InvokeModelAction]
     RCALL --> RDECODE[Decode repair envelope]
     RDECODE -- No typed repair --> RPROTO[YAML-declared protocol-retry operation]
     RPROTO --> RPG[Build repair-protocol retry guidance]
@@ -105,7 +107,7 @@ flowchart TD
     RSCOPE -- Invalid --> RPROTO
     RSCOPE -- Valid --> MERGE[MergeAtomicRepairAction]
     MERGE --> IMPACT[Run producing and dependent validators]
-    IMPACT -- Invalid within ordinary field-repair budget --> CREJECT
+    IMPACT -- Invalid within the repair operation's explicit retry limit --> CREJECT
     IMPACT -- Invalid after the one operation-result replacement repair --> CFAIL
     IMPACT -- Exhausted or non-repairable --> CFAIL
     IMPACT -- Valid --> RROUTE{Repaired candidate result}

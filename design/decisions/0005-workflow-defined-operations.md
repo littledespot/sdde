@@ -80,6 +80,7 @@ steps:
       slot: spec-generation
       prompt: spec-prompt
       result-schema: spec-result
+      retry-limit: 2
     on: { ok: validate, invalid: repair, failed: end.failed, cancelled: end.cancelled }
 ```
 
@@ -106,11 +107,19 @@ A generic model operation declares in YAML:
   by that operation; and
 - every outcome transition, including repair, failure, and cancellation.
 
+The selected workflow policy supplies the one workflow-global consumption
+limit: a positive total model-token budget initialized separately for each
+workflow execution. It supplies no retry count. Any operation instance that
+can take a retry transition must declare its own `retry-limit` in `with`; the
+registered operation contract bounds that value and the compiler rejects a
+missing limit or an unbounded retry cycle. An operation with no retry path does
+not acquire a hidden retry.
+
 The workflow never names a provider or model directly. The selected slot must
 resolve through `ValidatedRepositoryModelAllowlist` to the immutable provider
-registry entry prepared for that invocation. Provider contracts and engine
-policy may impose stricter limits, but cannot silently replace the YAML's slot,
-resources, control flow, or requested operation semantics.
+registry entry prepared for that invocation. Per-request provider capacity and
+authorization constraints may be stricter, but cannot silently replace the
+YAML's slot, resources, control flow, or requested operation semantics.
 
 The stable model-operation identity is derived from the compiled workflow ID,
 workflow version, and step ID. Logging, request identity, persistence, and
@@ -127,6 +136,10 @@ state-binding, and recovery rules as a graph change.
 - `.sddtoolkit.json` remains the repository model allowlist and
   `.sddproviders.json` remains the provider catalogue. Workflow YAML selects an
   allowed slot; neither configuration file defines workflow control flow.
+- The selected workflow policy owns only the per-execution total model-token
+  budget. Retry limits are explicit per retry-capable operation instance and
+  are never inherited from configuration, provider policy, or a global retry
+  default.
 - Workflow definitions stay compact through mappings, native scalars, local
   resource aliases, and reuse. Large prompts and schemas are not copied into
   each step.

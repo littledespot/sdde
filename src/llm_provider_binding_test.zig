@@ -90,27 +90,32 @@ test "generic runner exposes a binding only to the active model operation" {
     var control: OperationControl = .{};
     var registry = control.registry();
     var barrier: FakeBarrier = .{};
-    var runner: workflow_runner.Runner = .{
-        .selected = .{
+    var runner = workflow_runner.Runner.init(
+        std.testing.allocator,
+        .{
             .invocation = .{ .workflow_id = model_graph.authority.workflow_id, .arguments = &.{} },
             .graph = &model_graph,
         },
-        .operation_registry = &registry,
-        .barrier = barrier.port(),
-        .runtime = .{},
-        .model_provider_services = &fixture.services,
-    };
+        &registry,
+        barrier.port(),
+        .{},
+        &fixture.services,
+    );
+    defer runner.deinit();
 
     try std.testing.expectEqual(workflow.OutcomeTag.ok, runner.bindings().invokeStep(model_step.id).outcome);
     try std.testing.expectEqual(@as(usize, 1), control.calls);
     try std.testing.expectEqualStrings("spec-generation", control.observed_slot.?);
 
-    var runner_without_authority: workflow_runner.Runner = .{
-        .selected = runner.selected,
-        .operation_registry = &registry,
-        .barrier = barrier.port(),
-        .runtime = .{},
-    };
+    var runner_without_authority = workflow_runner.Runner.init(
+        std.testing.allocator,
+        runner.selected,
+        &registry,
+        barrier.port(),
+        .{},
+        null,
+    );
+    defer runner_without_authority.deinit();
     try std.testing.expectEqual(
         workflow.OutcomeTag.failed,
         runner_without_authority.bindings().invokeStep(model_step.id).outcome,
@@ -174,7 +179,7 @@ const model_step: compilation.CompiledStep = .{
     .side_effect = .none,
     .gates = &.{},
     .capabilities = &.{"model-provider"},
-    .loop_limit = null,
+    .retry_authority = null,
 };
 const model_graph: compilation.CompiledWorkflow = .{
     .source_ordinal = 1,
@@ -184,6 +189,7 @@ const model_graph: compilation.CompiledWorkflow = .{
         .workflow_version = 1,
         .invocation_operation_id = .{ .bytes = "test.empty@1" },
         .policy_profile_id = .{ .bytes = "test.model-policy@1" },
+        .total_model_token_budget = .{ .value = 1000 },
         .start_step_id = model_step.id,
         .invocation_outputs = &.{},
         .resources = &.{},
@@ -222,6 +228,7 @@ const OperationControl = struct {
                 .id = "test.model-policy@1",
                 .allowed_capabilities = &.{"model-provider"},
                 .allowed_terminal_outcomes = &.{.ok},
+                .total_model_token_budget = .{ .value = 1000 },
             }},
             .gates = &.{},
             .capabilities = &.{"model-provider"},

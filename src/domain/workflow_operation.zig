@@ -1,6 +1,7 @@
 const std = @import("std");
 const pipeline = @import("pipeline.zig");
 const workflow = @import("workflow.zig");
+const workflow_token_budget = @import("workflow_token_budget.zig");
 
 pub const Kind = enum { invocation, step };
 pub const ParameterKind = enum { boolean, integer, string, enumeration, registered_ref, resource, model_slot };
@@ -18,8 +19,7 @@ pub const ParameterDescriptor = struct {
     resource_kind: ?ResourceKind = null,
 };
 
-pub const LoopBudgetDescriptor = struct {
-    parameter_id: []const u8,
+pub const RetryLimitDescriptor = struct {
     maximum: u32,
 };
 
@@ -35,11 +35,12 @@ pub const Contract = struct {
     side_effect: pipeline.SideEffect,
     gates: []const []const u8 = &.{},
     capabilities: []const []const u8 = &.{},
-    loop_budget: ?LoopBudgetDescriptor = null,
+    retry_limit: ?RetryLimitDescriptor = null,
 };
 
 pub const PolicyProfile = struct {
     id: []const u8,
     allowed_capabilities: []const []const u8,
     allowed_terminal_outcomes: []const workflow.OutcomeTag,
+    total_model_token_budget: workflow_token_budget.TotalTokenBudget,
 };

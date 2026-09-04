@@ -1,4 +1,4 @@
-const repair_accounting = @import("runner_repair_accounting.zig");
+const runner_accounting = @import("runner_accounting.zig");
 
 pub const DataKey = enum {
     invocation_working_directory,
@@ -86,6 +86,8 @@ pub const SideEffect = enum {
 pub const RunnerAccountingCapability = enum {
     none,
     increment_model_attempt,
+    reserve_workflow_tokens,
+    reconcile_workflow_tokens,
 };
 
 pub const NodeKind = enum {
@@ -125,7 +127,7 @@ pub const NodeDelta = struct {
     data_invalidations: []const DataKey = &.{},
     telemetry_facts: [telemetry.max_facts_per_delta]telemetry.WorkflowTelemetryFact = undefined,
     telemetry_fact_count: u8 = 0,
-    runner_accounting_transition: ?repair_accounting.Transition = null,
+    runner_accounting_transition: ?runner_accounting.Transition = null,
 
     pub fn successful(contract: NodeContract) NodeDelta {
         return .{
@@ -252,7 +254,7 @@ pub const PipelineEnvelope = struct {
 
 fn validateRunnerAccountingTransition(
     contract: NodeContract,
-    transition: ?repair_accounting.Transition,
+    transition: ?runner_accounting.Transition,
 ) DeltaError!void {
     switch (contract.runner_accounting) {
         .none => if (transition != null) return error.UndeclaredRunnerAccountingTransition,
@@ -260,6 +262,21 @@ fn validateRunnerAccountingTransition(
             const value = transition orelse return error.MissingRunnerAccountingTransition;
             switch (value) {
                 .increment_model_attempt => {},
+                else => return error.UndeclaredRunnerAccountingTransition,
+            }
+        },
+        .reserve_workflow_tokens => {
+            const value = transition orelse return error.MissingRunnerAccountingTransition;
+            switch (value) {
+                .reserve_workflow_tokens => {},
+                else => return error.UndeclaredRunnerAccountingTransition,
+            }
+        },
+        .reconcile_workflow_tokens => {
+            const value = transition orelse return error.MissingRunnerAccountingTransition;
+            switch (value) {
+                .reconcile_workflow_tokens => {},
+                else => return error.UndeclaredRunnerAccountingTransition,
             }
         },
     }

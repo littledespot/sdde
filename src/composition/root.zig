@@ -102,6 +102,7 @@ fn runInvocationInProject(
         &llm_provider_contracts.Registry.empty,
     );
     return runBootstrappedInvocation(
+        allocator,
         &boot,
         arguments,
         &core_workflow_operations.registry,
@@ -110,6 +111,7 @@ fn runInvocationInProject(
 }
 
 fn runBootstrappedInvocation(
+    allocator: std.mem.Allocator,
     boot: *bootstrap_orchestrator.Outcome,
     arguments: []const []const u8,
     operation_registry: *const workflow_operation_registry.Registry,
@@ -120,6 +122,7 @@ fn runBootstrappedInvocation(
         .cancelled => .{ .execution = .cancelled },
         .ready => |*services| execute: {
             var invocation = engine_invocation.Assembly.init(
+                allocator,
                 services,
                 arguments,
                 operation_registry,
@@ -411,6 +414,7 @@ test "invocation runner handles every provider preparation outcome before workfl
     }) |mode| {
         var probe: InvocationPreparationProbe = .{ .mode = mode };
         const outcome = runBootstrappedInvocation(
+            std.testing.allocator,
             &boot,
             &.{"hello"},
             probe.registry(),
@@ -443,6 +447,7 @@ test "invocation runner handles every provider preparation outcome before workfl
 
     var invalid_probe: InvocationPreparationProbe = .{ .mode = .not_required };
     const invalid = runBootstrappedInvocation(
+        std.testing.allocator,
         &boot,
         &.{"absent-workflow"},
         invalid_probe.registry(),
@@ -615,7 +620,7 @@ const test_model_step: workflow_compilation.CompiledStep = .{
     .side_effect = .none,
     .gates = &.{},
     .capabilities = &.{model_provider_requirement.capability_id},
-    .loop_limit = null,
+    .retry_authority = null,
 };
 const test_model_transition: workflow.Transition = .{
     .from = test_model_step.id,
@@ -630,6 +635,7 @@ const test_model_graph: workflow_compilation.CompiledWorkflow = .{
         .workflow_version = 1,
         .invocation_operation_id = workflow.RegisteredRef.parse("test.empty@1").?,
         .policy_profile_id = workflow.RegisteredRef.parse("test.safe@1").?,
+        .total_model_token_budget = .{ .value = 1000 },
         .start_step_id = test_model_step.id,
         .invocation_outputs = &.{},
         .resources = &.{},

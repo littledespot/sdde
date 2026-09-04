@@ -34,6 +34,7 @@ pub const registry: operations.Registry = .{
         .id = capability_free_policy_id,
         .allowed_capabilities = &.{},
         .allowed_terminal_outcomes = &.{ .ok, .needs_user, .invalid, .blocked, .failed, .cancelled },
+        .total_model_token_budget = .{ .value = 100_000 },
     }},
     .gates = &.{},
     .capabilities = &.{},

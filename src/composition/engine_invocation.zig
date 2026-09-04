@@ -12,6 +12,7 @@ const workflow = @import("../domain/workflow.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 
 pub const Assembly = struct {
+    allocator: std.mem.Allocator,
     services: *bootstrap_services.BootstrapServices,
     provider_bootstrap: model_provider_binding.Binding,
     operation_registry: *const operations.Registry,
@@ -20,6 +21,7 @@ pub const Assembly = struct {
     pipeline_runner: ?workflow_pipeline_runner.Runner = null,
 
     pub fn init(
+        allocator: std.mem.Allocator,
         services: *bootstrap_services.BootstrapServices,
         arguments: []const []const u8,
         operation_registry: *const operations.Registry,
@@ -27,6 +29,7 @@ pub const Assembly = struct {
         runtime: pipeline.NodeRuntime,
     ) Assembly {
         return .{
+            .allocator = allocator,
             .services = services,
             .provider_bootstrap = provider_bootstrap,
             .operation_registry = operation_registry,
@@ -40,6 +43,7 @@ pub const Assembly = struct {
     }
 
     pub fn deinit(self: *Assembly) void {
+        if (self.pipeline_runner) |*runner| runner.deinit();
         if (self.provider_outcome) |*outcome| outcome.deinit();
         self.* = undefined;
     }
@@ -69,13 +73,14 @@ pub const Assembly = struct {
         );
         return switch (self.provider_outcome.?) {
             .not_required, .ready => ready: {
-                self.pipeline_runner = .{
-                    .selected = selected.*,
-                    .operation_registry = self.operation_registry,
-                    .barrier = self.services.logs.barrier(),
-                    .runtime = self.selection.runtime,
-                    .model_provider_services = self.preparedProviderServices(),
-                };
+                self.pipeline_runner = workflow_pipeline_runner.Runner.init(
+                    self.allocator,
+                    selected.*,
+                    self.operation_registry,
+                    self.services.logs.barrier(),
+                    self.selection.runtime,
+                    self.preparedProviderServices(),
+                );
                 break :ready .ok;
             },
             .failed => |failure| .{ .failed = failure },

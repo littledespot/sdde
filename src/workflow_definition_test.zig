@@ -36,7 +36,8 @@ test "concise resources and native parameters compile into immutable operation a
     try std.testing.expectEqualStrings("custom-generation", graph.authority.workflow_id.bytes);
     try std.testing.expectEqual(@as(usize, 2), graph.authority.resources.len);
     try std.testing.expectEqualStrings("Generate one result.", graph.authority.resources[0].bytes);
-    try std.testing.expectEqual(@as(?u32, 2), graph.authority.steps[0].loop_limit);
+    try std.testing.expectEqual(@as(u32, 2), graph.authority.steps[0].retry_authority.?.limit.value);
+    try std.testing.expectEqual(@as(u64, 1000), graph.authority.total_model_token_budget.value);
     try std.testing.expectEqual(@as(usize, 3), graph.authority.maximum_step_executions);
     try std.testing.expect(graph.authority.steps[0].parameters[1].value == .resource);
     try std.testing.expect(graph.authority.steps[0].parameters[3].value == .model_slot);
@@ -93,7 +94,13 @@ test "compiler rejects parameter outcome gate and capability violations" {
         .{ .ordinal = 5, .bytes = "{\"type\":\"object\"}" },
     };
 
-    inline for (.{ wrong_parameter_workflow, missing_outcome_workflow }) |yaml| {
+    inline for (.{
+        wrong_parameter_workflow,
+        missing_retry_limit_workflow,
+        negative_retry_limit_workflow,
+        excessive_retry_limit_workflow,
+        missing_outcome_workflow,
+    }) |yaml| {
         const raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(
             arena.allocator(),
             &.{.{ .ordinal = 1, .bytes = yaml }},
@@ -120,7 +127,12 @@ test "compiler rejects parameter outcome gate and capability violations" {
     const accepted_manifest = try (resolve_resources.Action{}).execute(arena.allocator(), inventory_value, accepted);
     const restrictive: operation_registry.Registry = .{
         .operations = &operation_entries,
-        .policies = &.{.{ .id = "test.model-policy@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled } }},
+        .policies = &.{.{
+            .id = "test.model-policy@1",
+            .allowed_capabilities = &.{},
+            .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
+            .total_model_token_budget = .{ .value = 1000 },
+        }},
         .gates = &.{"model-ready@1"},
         .capabilities = &.{"model-provider"},
     };
@@ -146,6 +158,22 @@ test "compiler rejects parameter outcome gate and capability violations" {
             &resource_captures,
         ),
     );
+
+    const hidden_raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(
+        arena.allocator(),
+        &.{.{ .ordinal = 1, .bytes = hidden_retry_limit_workflow }},
+    );
+    const hidden = try (validate_schema.Action{}).execute(arena.allocator(), hidden_raw);
+    try std.testing.expectError(
+        error.WorkflowGraphCompileInvalid,
+        (compile.Action{ .registry = &operations }).execute(
+            arena.allocator(),
+            hidden,
+            emptyInventory(),
+            .{ .bindings = &.{}, .resource_ordinals = &.{} },
+            &.{},
+        ),
+    );
 }
 
 const resource_workflow =
@@ -162,7 +190,7 @@ const resource_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, attempts: 2 }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2 }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -192,7 +220,55 @@ const wrong_parameter_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, attempts: two }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: two }
+    \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
+;
+
+const missing_retry_limit_workflow =
+    \\schema: workflow/v1
+    \\id: custom-generation
+    \\version: 1
+    \\shortcode: CSTM
+    \\invoke: test.empty@1
+    \\policy: test.model-policy@1
+    \\start: generate
+    \\resources: { prompt: prompts/generate.md, result-schema: schemas/result.json }
+    \\steps:
+    \\  generate:
+    \\    use: model.generate@1
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema }
+    \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
+;
+
+const negative_retry_limit_workflow =
+    \\schema: workflow/v1
+    \\id: custom-generation
+    \\version: 1
+    \\shortcode: CSTM
+    \\invoke: test.empty@1
+    \\policy: test.model-policy@1
+    \\start: generate
+    \\resources: { prompt: prompts/generate.md, result-schema: schemas/result.json }
+    \\steps:
+    \\  generate:
+    \\    use: model.generate@1
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: -1 }
+    \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
+;
+
+const excessive_retry_limit_workflow =
+    \\schema: workflow/v1
+    \\id: custom-generation
+    \\version: 1
+    \\shortcode: CSTM
+    \\invoke: test.empty@1
+    \\policy: test.model-policy@1
+    \\start: generate
+    \\resources: { prompt: prompts/generate.md, result-schema: schemas/result.json }
+    \\steps:
+    \\  generate:
+    \\    use: model.generate@1
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 4 }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -208,7 +284,7 @@ const missing_outcome_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, attempts: 2 }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2 }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed }
 ;
 
@@ -223,6 +299,21 @@ const unguarded_cycle_workflow =
     \\steps:
     \\  run:
     \\    use: test.retry@1
+    \\    on: { ok: end.ok, invalid: run }
+;
+
+const hidden_retry_limit_workflow =
+    \\schema: workflow/v1
+    \\id: hidden-retry
+    \\version: 1
+    \\shortcode: HIDN
+    \\invoke: test.empty@1
+    \\policy: test.safe@1
+    \\start: run
+    \\steps:
+    \\  run:
+    \\    use: test.retry@1
+    \\    with: { retry-limit: 1 }
     \\    on: { ok: end.ok, invalid: run }
 ;
 
@@ -273,13 +364,13 @@ const operation_entries = [_]operation_registry.Entry{
                 .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
                 .{ .id = "prompt", .kind = .resource, .required = true, .workflow_definition_safe = true, .resource_kind = .prompt },
                 .{ .id = "result-schema", .kind = .resource, .required = true, .workflow_definition_safe = true, .resource_kind = .result_schema },
-                .{ .id = "attempts", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 1, .integer_max = 3 },
+                .{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 3 },
             },
             .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
             .side_effect = .none,
             .gates = &.{"model-ready@1"},
             .capabilities = &.{"model-provider"},
-            .loop_budget = .{ .parameter_id = "attempts", .maximum = 3 },
+            .retry_limit = .{ .maximum = 3 },
         },
         .invoke_fn = unusedOperation,
     },
@@ -292,8 +383,8 @@ const operation_entries = [_]operation_registry.Entry{
 const operations: operation_registry.Registry = .{
     .operations = &operation_entries,
     .policies = &.{
-        .{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok} },
-        .{ .id = "test.model-policy@1", .allowed_capabilities = &.{"model-provider"}, .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled } },
+        .{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok}, .total_model_token_budget = .{ .value = 1000 } },
+        .{ .id = "test.model-policy@1", .allowed_capabilities = &.{"model-provider"}, .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled }, .total_model_token_budget = .{ .value = 1000 } },
     },
     .gates = &.{"model-ready@1"},
     .capabilities = &.{"model-provider"},

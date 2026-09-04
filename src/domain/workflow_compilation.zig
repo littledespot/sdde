@@ -4,6 +4,8 @@ const telemetry = @import("telemetry.zig");
 const workflow = @import("workflow.zig");
 const operation = @import("workflow_operation.zig");
 const provider_identity = @import("llm_provider_identity.zig");
+const workflow_retry = @import("workflow_retry.zig");
+const workflow_token_budget = @import("workflow_token_budget.zig");
 
 pub const CompiledParameterValue = union(enum) {
     boolean: bool,
@@ -38,7 +40,7 @@ pub const CompiledStep = struct {
     side_effect: pipeline.SideEffect,
     gates: []const []const u8,
     capabilities: []const []const u8,
-    loop_limit: ?u32,
+    retry_authority: ?workflow_retry.CompiledAuthority,
 };
 
 pub const SemanticAuthority = struct {
@@ -46,6 +48,7 @@ pub const SemanticAuthority = struct {
     workflow_version: u32,
     invocation_operation_id: workflow.RegisteredRef,
     policy_profile_id: workflow.RegisteredRef,
+    total_model_token_budget: workflow_token_budget.TotalTokenBudget,
     start_step_id: workflow.WorkflowStepId,
     invocation_outputs: []const pipeline.DataKey,
     resources: []const CompiledResource,
@@ -64,12 +67,12 @@ pub const ValidatedGraphs = struct { values: []const CompiledWorkflow };
 
 pub fn calculateExecutionLimit(steps: []const CompiledStep) ?usize {
     if (steps.len == 0) return null;
-    var total_loop_limit: usize = 0;
+    var total_retry_limit: usize = 0;
     for (steps) |step| {
-        if (step.loop_limit) |limit| {
-            total_loop_limit = std.math.add(usize, total_loop_limit, limit) catch return null;
+        if (step.retry_authority) |authority| {
+            total_retry_limit = std.math.add(usize, total_retry_limit, authority.limit.value) catch return null;
         }
     }
-    const rounds = std.math.add(usize, total_loop_limit, 1) catch return null;
+    const rounds = std.math.add(usize, total_retry_limit, 1) catch return null;
     return std.math.mul(usize, steps.len, rounds) catch return null;
 }

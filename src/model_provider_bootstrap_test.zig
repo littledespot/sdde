@@ -39,6 +39,7 @@ test "compiler-owned model-provider capability alone activates the requirement" 
         .id = "test.safe@1",
         .allowed_capabilities = &.{},
         .allowed_terminal_outcomes = &.{.ok},
+        .total_model_token_budget = .{ .value = 1000 },
     }};
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
@@ -377,6 +378,7 @@ const operation_registry: operations.Registry = .{
         .id = "test.safe@1",
         .allowed_capabilities = &.{requirement.capability_id},
         .allowed_terminal_outcomes = &.{.ok},
+        .total_model_token_budget = .{ .value = 1000 },
     }},
     .gates = &.{},
     .capabilities = &.{requirement.capability_id},

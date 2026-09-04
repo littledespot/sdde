@@ -486,7 +486,7 @@ fn modelOperation(step_id: []const u8) binding.WorkflowModelOperationId {
 
 fn isNotInvokedReason(reason: identity.TerminalReason) bool {
     return switch (reason) {
-        .not_invoked_attempt_ceiling, .not_invoked_authorization_failure => true,
+        .not_invoked_authorization_failure => true,
         .accepted, .needs_user, .invalid_exhausted, .blocked, .failed, .cancelled => false,
     };
 }

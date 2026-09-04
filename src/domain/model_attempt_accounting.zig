@@ -1,6 +1,7 @@
 const std = @import("std");
 const operation = @import("llm_provider_operation.zig");
 const request_identity = @import("model_request_identity.zig");
+const workflow_retry = @import("workflow_retry.zig");
 
 pub const Revision = struct {
     value: u64,
@@ -12,48 +13,35 @@ pub const Revision = struct {
     }
 };
 
-pub const MaximumAttempts = struct {
-    configured: u32,
-    hard: u32,
-
-    pub fn init(configured: u32, hard: u32) ?MaximumAttempts {
-        if (configured == 0 or hard == 0) return null;
-        return .{ .configured = configured, .hard = hard };
-    }
-
-    pub fn effective(self: MaximumAttempts) u32 {
-        return @min(self.configured, self.hard);
-    }
+pub const Attempt = union(enum) {
+    initial,
+    retry: workflow_retry.CompiledAuthority,
 };
 
-pub const ModelAttemptTransition = struct {
+pub const Transition = struct {
     stage_run_epoch_id: request_identity.StageRunEpochId,
     model_request_id: *const request_identity.ModelRequestId,
     expected_revision: Revision,
     expected_request_value: u32,
     next_request_value: u32,
-    maximum: MaximumAttempts,
+    attempt: Attempt,
 
-    pub fn ordinal(self: ModelAttemptTransition) operation.ModelAttemptOrdinal {
+    pub fn ordinal(self: Transition) operation.ModelAttemptOrdinal {
         return operation.ModelAttemptOrdinal.init(self.next_request_value).?;
     }
 };
 
-pub const Transition = union(enum) {
-    increment_model_attempt: ModelAttemptTransition,
-};
-
-pub const RunnerRepairAccounting = opaque {
-    pub fn stageRunEpochId(self: *const RunnerRepairAccounting) request_identity.StageRunEpochId {
+pub const RunnerModelAttemptAccounting = opaque {
+    pub fn stageRunEpochId(self: *const RunnerModelAttemptAccounting) request_identity.StageRunEpochId {
         return storage(self).stage_run_epoch_id;
     }
 
-    pub fn revision(self: *const RunnerRepairAccounting) Revision {
+    pub fn revision(self: *const RunnerModelAttemptAccounting) Revision {
         return storage(self).revision;
     }
 
     pub fn attemptsReserved(
-        self: *const RunnerRepairAccounting,
+        self: *const RunnerModelAttemptAccounting,
         request_id: *const request_identity.ModelRequestId,
     ) u32 {
         const record = resolveRecord(storage(self), request_id) orelse return 0;
@@ -86,20 +74,20 @@ const OwnerStorage = struct {
 
 pub const ValidationError = error{
     InvalidStageRunEpochId,
-    InvalidMaximumAttempts,
-    RepairAccountingRevisionConflict,
+    InvalidAttemptClassification,
+    ModelAttemptAccountingRevisionConflict,
     ModelAttemptValueConflict,
-    ModelAttemptCeilingExhausted,
+    ModelRetryLimitExhausted,
     ModelAttemptOrdinalExhausted,
-    RepairAccountingRevisionExhausted,
-    RepairAccountingOwnerReferenceExhausted,
-    RepairAccountingEpochConflict,
+    ModelAttemptAccountingRevisionExhausted,
+    ModelAttemptAccountingOwnerReferenceExhausted,
+    ModelAttemptAccountingEpochConflict,
 };
 
 pub const ProposalError = error{
-    InvalidMaximumAttempts,
-    RepairAccountingRevisionConflict,
-    ModelAttemptCeilingExhausted,
+    InvalidAttemptClassification,
+    ModelAttemptAccountingRevisionConflict,
+    ModelRetryLimitExhausted,
     ModelAttemptOrdinalExhausted,
 };
 
@@ -131,24 +119,21 @@ pub fn createInitial(
     return owner;
 }
 
-pub fn proposeModelAttempt(
-    current: *const RunnerRepairAccounting,
+pub fn propose(
+    current: *const RunnerModelAttemptAccounting,
     expected_revision: Revision,
     model_request_id: *const request_identity.ModelRequestId,
-    maximum: MaximumAttempts,
-) ProposalError!ModelAttemptTransition {
+    attempt: Attempt,
+) ProposalError!Transition {
     const current_storage = storage(current);
     if (!current_storage.revision.eql(expected_revision)) {
-        return error.RepairAccountingRevisionConflict;
-    }
-    if (MaximumAttempts.init(maximum.configured, maximum.hard) == null) {
-        return error.InvalidMaximumAttempts;
+        return error.ModelAttemptAccountingRevisionConflict;
     }
     const reserved = if (resolveRecord(current_storage, model_request_id)) |record|
         record.attempts_reserved
     else
         0;
-    if (reserved >= maximum.effective()) return error.ModelAttemptCeilingExhausted;
+    try validateAttempt(model_request_id, attempt, reserved);
     const next = std.math.add(u32, reserved, 1) catch {
         return error.ModelAttemptOrdinalExhausted;
     };
@@ -158,36 +143,33 @@ pub fn proposeModelAttempt(
         .expected_revision = expected_revision,
         .expected_request_value = reserved,
         .next_request_value = next,
-        .maximum = maximum,
+        .attempt = attempt,
     };
 }
 
 pub fn apply(
-    current: *const RunnerRepairAccounting,
-    transition: ModelAttemptTransition,
+    current: *const RunnerModelAttemptAccounting,
+    transition: Transition,
 ) Error!*Owner {
     const current_storage = storage(current);
     if (!current_storage.revision.eql(transition.expected_revision)) {
-        return error.RepairAccountingRevisionConflict;
+        return error.ModelAttemptAccountingRevisionConflict;
     }
     if (!current_storage.stage_run_epoch_id.eql(transition.stage_run_epoch_id)) {
-        return error.RepairAccountingEpochConflict;
-    }
-    if (MaximumAttempts.init(transition.maximum.configured, transition.maximum.hard) == null) {
-        return error.InvalidMaximumAttempts;
+        return error.ModelAttemptAccountingEpochConflict;
     }
     const reserved = if (resolveRecord(current_storage, transition.model_request_id)) |record|
         record.attempts_reserved
     else
         0;
     if (reserved != transition.expected_request_value) return error.ModelAttemptValueConflict;
-    if (reserved >= transition.maximum.effective()) return error.ModelAttemptCeilingExhausted;
+    try validateAttempt(transition.model_request_id, transition.attempt, reserved);
     const expected_next = std.math.add(u32, reserved, 1) catch {
         return error.ModelAttemptOrdinalExhausted;
     };
     if (transition.next_request_value != expected_next) return error.ModelAttemptValueConflict;
     const next_revision = std.math.add(u64, current_storage.revision.value, 1) catch {
-        return error.RepairAccountingRevisionExhausted;
+        return error.ModelAttemptAccountingRevisionExhausted;
     };
 
     const previous_owner = current_storage.owner;
@@ -220,7 +202,7 @@ pub fn apply(
     return owner;
 }
 
-pub fn accounting(owner: *const Owner) *const RunnerRepairAccounting {
+pub fn accounting(owner: *const Owner) *const RunnerModelAttemptAccounting {
     return @ptrCast(&ownerStorageConst(owner).accounting);
 }
 
@@ -239,6 +221,27 @@ pub fn deinitOwner(owner: *Owner) void {
     }
 }
 
+fn validateAttempt(
+    model_request_id: *const request_identity.ModelRequestId,
+    attempt: Attempt,
+    reserved: u32,
+) ProposalError!void {
+    switch (attempt) {
+        .initial => if (reserved != 0) return error.InvalidAttemptClassification,
+        .retry => |authority| {
+            if (reserved == 0 or !authority.isValid() or
+                !std.mem.eql(u8, authority.workflow_id.bytes, model_request_id.model_operation_id.workflow_id.bytes) or
+                authority.workflow_version != model_request_id.model_operation_id.workflow_version or
+                !std.mem.eql(u8, authority.operation_instance_id.bytes, model_request_id.model_operation_id.workflow_step_id.bytes))
+            {
+                return error.InvalidAttemptClassification;
+            }
+            const retries_used = reserved - 1;
+            if (retries_used >= authority.limit.value) return error.ModelRetryLimitExhausted;
+        },
+    }
+}
+
 fn resolveRecord(
     current: *const Storage,
     model_request_id: *const request_identity.ModelRequestId,
@@ -254,11 +257,11 @@ fn retainOwner(owner: *Owner) ValidationError!void {
     const value = ownerStorage(owner);
     std.debug.assert(value.reference_count > 0);
     value.reference_count = std.math.add(usize, value.reference_count, 1) catch {
-        return error.RepairAccountingOwnerReferenceExhausted;
+        return error.ModelAttemptAccountingOwnerReferenceExhausted;
     };
 }
 
-fn storage(value: *const RunnerRepairAccounting) *const Storage {
+fn storage(value: *const RunnerModelAttemptAccounting) *const Storage {
     return @ptrCast(@alignCast(value));
 }
 

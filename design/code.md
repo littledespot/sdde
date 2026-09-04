@@ -388,14 +388,18 @@ NodeContract {
     | { kind: emit_exactly_one,
         transitionKind: increment_model_attempt |
                         increment_atomic_repair_attempt |
+                        reserve_workflow_tokens |
+                        reconcile_workflow_tokens |
                         consume_no_invention_replacement },
-  retryPolicyId?,
+  retryLimitContract?: { parameterId, operationLocalMaximum },
   orderingBarriers[]
 }
 
 Runner accounting capability registry:
   AdvanceModelAttemptAccountingAction -> increment_model_attempt
   AdvanceAtomicRepairAttemptAccountingAction -> increment_atomic_repair_attempt
+  ReserveWorkflowTokenBudgetAction -> reserve_workflow_tokens
+  ReconcileWorkflowTokenUsageAction -> reconcile_workflow_tokens
   ValidateRepairScopeAction -> consume_no_invention_replacement only when its
     authorization purpose is no_invention_to_clarification
   every other action/orchestrator -> none
@@ -446,12 +450,18 @@ PipelineEnvelope {
     stage,
     nodeId,
     attempt,
-    repairAccounting: {
+    operationAccounting: {
       stageRunEpochId,
-      modelAttemptsByRequestId: Map<ModelRequestId, NonnegativeInteger>,
-      atomicRepairAttemptsByUnitId: Map<ImmutableUnitOwnerId, NonnegativeInteger>,
-      ordinaryRepairsUsedInStage,
+      modelAttemptOrdinalsByRequestId: Map<ModelRequestId, NonnegativeInteger>,
+      retriesUsedByOperationInstanceId:
+        Map<CompiledWorkflowOperationInstanceId, NonnegativeInteger>,
       noInventionReplacementUsedByUnitId: Set<ImmutableUnitOwnerId>
+    },
+    workflowTokenAccounting: {
+      totalModelTokenBudget,
+      committedTokens,
+      reservedTokens,
+      reservationsByProviderOperationId
     }
   },
   workspace: {
@@ -502,12 +512,24 @@ NodeDelta {
 
 RepairAccountingTransition =
   | IncrementModelAttempt {
-      stageRunEpochId, modelRequestId, expectedUnitValue, nextUnitValue
+      stageRunEpochId, modelRequestId, expectedOrdinal, nextOrdinal,
+      initialOrRetry,
+      retryOperationInstanceId?, expectedRetryValue?, nextRetryValue?,
+      explicitRetryLimit?
     }
   | IncrementAtomicRepairAttempt {
-      stageRunEpochId, immutableUnitOwnerId,
-      expectedUnitValue, nextUnitValue,
-      expectedStageValue, nextStageValue
+      stageRunEpochId, retryOperationInstanceId,
+      expectedRetryValue, nextRetryValue, explicitRetryLimit
+    }
+  | ReserveWorkflowTokens {
+      workflowExecutionId, providerOperationId,
+      expectedLedgerRevision, exactInputTokens, maximumOutputTokens,
+      reservedTotal
+    }
+  | ReconcileWorkflowTokens {
+      workflowExecutionId, providerOperationId,
+      expectedLedgerRevision,
+      commitExactUsage | releaseNotSent | retainFullReservation
     }
   | ConsumeNoInventionReplacement {
       stageRunEpochId,
@@ -814,8 +836,7 @@ ModelRequestIdentityLedger {
     modelRequestId: ModelRequestId,
     status: assigned | invoked | terminal,
     terminalReason?: accepted | needs_user | invalid_exhausted | blocked |
-                     failed | cancelled | not_invoked_attempt_ceiling |
-                     not_invoked_authorization_failure
+                     failed | cancelled | not_invoked_authorization_failure
   }[]
   // Run-local immutable envelope data; every assignment returns a successor.
 }
@@ -1501,6 +1522,7 @@ CompiledWorkflowSemanticAuthority {
   workflowShortcode,
   resolvedInvocationOperationIdAndVersion,
   workflowPolicyProfileId,
+  totalModelTokenBudget,
   entryStepId,
   resolvedOperationContractsParametersAndVersions,
   resolvedWorkflowResources,
@@ -1509,6 +1531,15 @@ CompiledWorkflowSemanticAuthority {
   effectiveCapabilities
   // Canonical typed value used for bound-workflow change classification.
   // Source path/order, registry identity, and validation evidence are excluded.
+}
+
+WorkflowPolicyProfile {
+  id,
+  allowedCapabilities,
+  allowedTerminalOutcomes,
+  totalModelTokenBudget: PositiveInteger
+  // Initialized as a new runner-owned ledger for each workflow execution.
+  // A policy profile supplies no retry, attempt, or repair count.
 }
 
 CompiledWorkflowGraph {
@@ -9271,9 +9302,6 @@ and every referenced tuple must exist in the separately configured
     "requireOrderedStages": true,
     "standaloneStageRequiresFeatureId": true,
     "maxContextRequestsPerCall": 1,
-    "maxModelAttemptsPerUnit": 3,
-    "maxRepairAttemptsPerUnit": 2,
-    "maxRepairsPerStage": 20,
     "defaultTaskConcurrency": 1,
     "featureIdMaxLength": 64,
     "allowRawPathFallback": false
@@ -10210,8 +10238,9 @@ RepairAuthorizationBase {
   immutableSiblingPointers[],
   impactedValidatorIds[],
   purpose: mechanical_atomic | semantic_atomic,
-  attempt,
-  maxAttempts
+  retryOperationInstanceId,
+  retryOrdinal,
+  explicitRetryLimit
 }
 
 RepairAuthorization =

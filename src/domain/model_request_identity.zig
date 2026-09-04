@@ -186,7 +186,6 @@ pub const TerminalReason = enum {
     blocked,
     failed,
     cancelled,
-    not_invoked_attempt_ceiling,
     not_invoked_authorization_failure,
 };
 
@@ -626,7 +625,7 @@ fn transitionRecord(current: Record, transition: LifecycleTransition) Validation
 
 fn isNotInvokedReason(reason: TerminalReason) bool {
     return switch (reason) {
-        .not_invoked_attempt_ceiling, .not_invoked_authorization_failure => true,
+        .not_invoked_authorization_failure => true,
         .accepted, .needs_user, .invalid_exhausted, .blocked, .failed, .cancelled => false,
     };
 }

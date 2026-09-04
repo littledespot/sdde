@@ -1,4 +1,4 @@
-const accounting = @import("../../domain/runner_repair_accounting.zig");
+const accounting = @import("../../domain/model_attempt_accounting.zig");
 const identity = @import("../../domain/model_request_identity.zig");
 const pipeline = @import("../../domain/pipeline.zig");
 
@@ -19,12 +19,12 @@ pub const Action = struct {
 
     pub fn execute(
         _: Action,
-        current_accounting: *const accounting.RunnerRepairAccounting,
+        current_accounting: *const accounting.RunnerModelAttemptAccounting,
         expected_accounting_revision: accounting.Revision,
         current_requests: *const identity.ModelRequestIdentityLedger,
         expected_request_revision: identity.LedgerRevision,
         request_id: *const identity.ModelRequestId,
-        maximum: accounting.MaximumAttempts,
+        attempt: accounting.Attempt,
     ) Error!pipeline.NodeDelta {
         if (!current_requests.revision().eql(expected_request_revision)) {
             return error.ModelRequestLedgerRevisionConflict;
@@ -40,11 +40,11 @@ pub const Action = struct {
         const canonical_request_id = current_requests.canonicalRequestId(request_id) orelse {
             return error.ModelRequestUnavailableForAttempt;
         };
-        const transition = try accounting.proposeModelAttempt(
+        const transition = try accounting.propose(
             current_accounting,
             expected_accounting_revision,
             canonical_request_id,
-            maximum,
+            attempt,
         );
         var delta = pipeline.NodeDelta.successful(contract);
         delta.runner_accounting_transition = .{ .increment_model_attempt = transition };

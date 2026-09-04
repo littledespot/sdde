@@ -7,6 +7,7 @@ const operation = @import("../../domain/workflow_operation.zig");
 const inventory = @import("../../domain/workflow_inventory.zig");
 const operation_registry = @import("../../ports/workflow_operation_registry.zig");
 const provider_identity = @import("../../domain/llm_provider_identity.zig");
+const workflow_retry = @import("../../domain/workflow_retry.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
@@ -47,7 +48,7 @@ pub const Action = struct {
                     if (!containsString(policy.allowed_capabilities, capability)) return invalid();
                 }
                 const parameters = try compileParameters(allocator, entry.contract, declared.parameters, resources);
-                const loop_limit = try resolveLoopLimit(entry.contract, parameters);
+                const retry_authority = try resolveRetryAuthority(item, declared.id, entry.contract, parameters);
                 transition_count = std.math.add(usize, transition_count, declared.outcomes.len) catch return invalid();
                 try validateDeclaredOutcomes(entry.contract.outcomes, declared.outcomes, item.steps, policy.*);
                 compiled.* = .{
@@ -62,7 +63,7 @@ pub const Action = struct {
                     .side_effect = entry.contract.side_effect,
                     .gates = entry.contract.gates,
                     .capabilities = entry.contract.capabilities,
-                    .loop_limit = loop_limit,
+                    .retry_authority = retry_authority,
                 };
             }
 
@@ -81,6 +82,7 @@ pub const Action = struct {
                     .workflow_version = item.workflow_version,
                     .invocation_operation_id = item.invocation_operation_id,
                     .policy_profile_id = item.policy_profile_id,
+                    .total_model_token_budget = policy.total_model_token_budget,
                     .start_step_id = item.start_step_id,
                     .invocation_outputs = invocation.contract.produces,
                     .resources = resources,
@@ -191,14 +193,21 @@ fn compileParameter(
     };
 }
 
-fn resolveLoopLimit(
+fn resolveRetryAuthority(
+    item: definition.Definition,
+    operation_instance_id: workflow.WorkflowStepId,
     contract: operation.Contract,
     parameters: []const compilation.CompiledParameter,
-) Error!?u32 {
-    const budget = contract.loop_budget orelse return null;
-    const parameter = findCompiledParameter(parameters, budget.parameter_id) orelse return invalid();
-    if (parameter.value != .integer or parameter.value.integer < 1 or parameter.value.integer > budget.maximum) return invalid();
-    return @intCast(parameter.value.integer);
+) Error!?workflow_retry.CompiledAuthority {
+    const descriptor = contract.retry_limit orelse return null;
+    const parameter = findCompiledParameter(parameters, workflow_retry.parameter_id) orelse return invalid();
+    if (parameter.value != .integer or parameter.value.integer < 0 or parameter.value.integer > descriptor.maximum) return invalid();
+    return .{
+        .workflow_id = item.workflow_id,
+        .workflow_version = item.workflow_version,
+        .operation_instance_id = operation_instance_id,
+        .limit = .{ .value = @intCast(parameter.value.integer) },
+    };
 }
 
 fn validateDeclaredOutcomes(

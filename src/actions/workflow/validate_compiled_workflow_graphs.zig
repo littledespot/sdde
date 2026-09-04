@@ -3,6 +3,7 @@ const pipeline = @import("../../domain/pipeline.zig");
 const workflow = @import("../../domain/workflow.zig");
 const definition = @import("../../domain/workflow_definition.zig");
 const compilation = @import("../../domain/workflow_compilation.zig");
+const workflow_retry = @import("../../domain/workflow_retry.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
@@ -31,7 +32,25 @@ const KeyState = [key_count]bool;
 fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkflow) Error!void {
     const steps = graph.authority.steps;
     if (steps.len == 0 or steps.len > definition.max_steps or
+        !graph.authority.total_model_token_budget.isValid() or
         graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return invalid())) return invalid();
+    for (steps) |step| {
+        const retry_parameter = findParameter(step.parameters, workflow_retry.parameter_id);
+        if (step.retry_authority) |authority| {
+            if (!authority.isValid() or
+                !std.mem.eql(u8, authority.workflow_id.bytes, graph.authority.workflow_id.bytes) or
+                authority.workflow_version != graph.authority.workflow_version or
+                !std.mem.eql(u8, authority.operation_instance_id.bytes, step.id.bytes) or
+                retry_parameter == null or retry_parameter.?.value != .integer or
+                retry_parameter.?.value.integer < 0 or
+                authority.limit.value != retry_parameter.?.value.integer)
+            {
+                return invalid();
+            }
+        } else if (retry_parameter != null) {
+            return invalid();
+        }
+    }
     const start = stepIndex(steps, graph.authority.start_step_id.bytes) orelse return invalid();
     try validateReachability(allocator, steps, graph.authority.transitions, start);
     try validateTerminalReachability(allocator, steps, graph.authority.transitions);
@@ -109,7 +128,7 @@ fn validateBoundedCycles(
     const colors = allocator.alloc(u2, steps.len) catch return invalid();
     @memset(colors, 0);
     for (steps, 0..) |step, index| {
-        if (step.loop_limit != null or colors[index] != 0) continue;
+        if (step.retry_authority != null or colors[index] != 0) continue;
         try visitUnguarded(steps, transitions, index, colors);
     }
 }
@@ -121,12 +140,12 @@ fn visitUnguarded(
     colors: []u2,
 ) Error!void {
     if (colors[index] == 1) return invalid();
-    if (colors[index] == 2 or steps[index].loop_limit != null) return;
+    if (colors[index] == 2 or steps[index].retry_authority != null) return;
     colors[index] = 1;
     for (transitions) |transition| {
         if (!std.mem.eql(u8, transition.from.bytes, steps[index].id.bytes) or transition.target != .step) continue;
         const target = stepIndex(steps, transition.target.step.bytes) orelse return invalid();
-        if (steps[target].loop_limit == null) try visitUnguarded(steps, transitions, target, colors);
+        if (steps[target].retry_authority == null) try visitUnguarded(steps, transitions, target, colors);
     }
     colors[index] = 2;
 }
@@ -179,15 +198,19 @@ fn stepIndex(steps: []const compilation.CompiledStep, expected: []const u8) ?usi
     for (steps, 0..) |step, index| if (std.mem.eql(u8, step.id.bytes, expected)) return index;
     return null;
 }
+fn findParameter(parameters: []const compilation.CompiledParameter, id: []const u8) ?compilation.CompiledParameter {
+    for (parameters) |parameter| if (std.mem.eql(u8, parameter.id.bytes, id)) return parameter;
+    return null;
+}
 fn invalid() Error {
     return error.WorkflowGraphCompileInvalid;
 }
 
-fn testStep(id: []const u8, loop_limit: ?u32) compilation.CompiledStep {
+fn testStep(id: []const u8, retry_limit: ?u32) compilation.CompiledStep {
     return .{
         .id = workflow.WorkflowStepId.parse(id).?,
         .operation_id = workflow.RegisteredRef.parse("core.noop@1").?,
-        .parameters = &.{},
+        .parameters = if (retry_limit == null) &.{} else &test_retry_parameters,
         .requires = &.{},
         .produces = &.{},
         .replaces = &.{},
@@ -196,9 +219,19 @@ fn testStep(id: []const u8, loop_limit: ?u32) compilation.CompiledStep {
         .side_effect = .none,
         .gates = &.{},
         .capabilities = &.{},
-        .loop_limit = loop_limit,
+        .retry_authority = if (retry_limit) |limit| .{
+            .workflow_id = workflow.WorkflowId.parse("graph-test").?,
+            .workflow_version = 1,
+            .operation_instance_id = workflow.WorkflowStepId.parse(id).?,
+            .limit = .{ .value = limit },
+        } else null,
     };
 }
+
+const test_retry_parameters = [_]compilation.CompiledParameter{.{
+    .id = workflow.WorkflowParameterId.parse(workflow_retry.parameter_id).?,
+    .value = .{ .integer = 2 },
+}};
 
 fn testGraph(steps: []const compilation.CompiledStep, transitions: []const workflow.Transition) compilation.CompiledWorkflow {
     return .{
@@ -209,6 +242,7 @@ fn testGraph(steps: []const compilation.CompiledStep, transitions: []const workf
             .workflow_version = 1,
             .invocation_operation_id = workflow.RegisteredRef.parse("core.empty@1").?,
             .policy_profile_id = workflow.RegisteredRef.parse("core.safe@1").?,
+            .total_model_token_budget = .{ .value = 1 },
             .start_step_id = steps[0].id,
             .invocation_outputs = &.{},
             .resources = &.{},
@@ -238,10 +272,36 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
         (Action{}).execute(arena.allocator(), &.{wrong_bound}),
     );
 
-    var unguarded_steps = guarded_steps;
-    unguarded_steps[0].loop_limit = null;
+    var zero_budget = testGraph(&guarded_steps, &transitions);
+    zero_budget.authority.total_model_token_budget = .{ .value = 0 };
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        (Action{}).execute(arena.allocator(), &.{testGraph(&unguarded_steps, &transitions)}),
+        (Action{}).execute(arena.allocator(), &.{zero_budget}),
+    );
+
+    var wrong_retry_steps = guarded_steps;
+    wrong_retry_steps[0].retry_authority.?.operation_instance_id = workflow.WorkflowStepId.parse("work").?;
+    try std.testing.expectError(
+        error.WorkflowGraphCompileInvalid,
+        (Action{}).execute(arena.allocator(), &.{testGraph(&wrong_retry_steps, &transitions)}),
+    );
+
+    var mismatched_retry_steps = guarded_steps;
+    mismatched_retry_steps[0].retry_authority.?.limit = .{ .value = 1 };
+    var mismatched_retry_graph = testGraph(&mismatched_retry_steps, &transitions);
+    mismatched_retry_graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(&mismatched_retry_steps).?;
+    try std.testing.expectError(
+        error.WorkflowGraphCompileInvalid,
+        (Action{}).execute(arena.allocator(), &.{mismatched_retry_graph}),
+    );
+
+    var unguarded_steps = guarded_steps;
+    unguarded_steps[0].retry_authority = null;
+    unguarded_steps[0].parameters = &.{};
+    var unguarded_graph = testGraph(&unguarded_steps, &transitions);
+    unguarded_graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(&unguarded_steps).?;
+    try std.testing.expectError(
+        error.WorkflowGraphCompileInvalid,
+        (Action{}).execute(arena.allocator(), &.{unguarded_graph}),
     );
 }

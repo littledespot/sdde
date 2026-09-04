@@ -62,7 +62,7 @@ fn deriveFor(workflow_id: []const u8, capabilities: []const []const u8) requirem
         .side_effect = .none,
         .gates = &.{},
         .capabilities = capabilities,
-        .loop_limit = null,
+        .retry_authority = null,
     };
     const transition: workflow.Transition = .{
         .from = step.id,
@@ -77,6 +77,7 @@ fn deriveFor(workflow_id: []const u8, capabilities: []const []const u8) requirem
             .workflow_version = 1,
             .invocation_operation_id = workflow.RegisteredRef.parse("test.empty@1").?,
             .policy_profile_id = workflow.RegisteredRef.parse("test.safe@1").?,
+            .total_model_token_budget = .{ .value = 1000 },
             .start_step_id = step.id,
             .invocation_outputs = &.{},
             .resources = &.{},

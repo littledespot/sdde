@@ -6,9 +6,12 @@
 F0005 accepts only the concise closed schema, captures declared workflow
 resources, compiles through the single generic operation registry, and
 publishes an immutable graph registry. ADR 0003's generic runner now executes
-only those compiled transitions. No legacy reader or split invocation/step
-registry remains. Concrete domain operations and initial workflow definitions
-remain separately governed increments.
+only those compiled transitions. The selected policy's positive total-token
+budget and each retry-capable operation instance's explicit `retry-limit` are
+compiled into that immutable authority; initial execution is separate from the
+declared retry count. No legacy reader, generic loop budget, or split
+invocation/step registry remains. Concrete domain operations and initial
+workflow definitions remain separately governed increments.
 
 **Compatibility:** None. This pre-release increment accepts only the exact
 concise v1 YAML contract. It has no verbose tagged-parameter form, JSON or
@@ -182,7 +185,7 @@ Every definition contains these exact concise fields:
 | `version` | Positive unsigned 32-bit integer. It is part of semantic authority; v1 performs no migration or range selection. |
 | `shortcode` | Exactly four case-sensitive ASCII alphanumeric bytes. F0002's canonical parser owns the same syntax. |
 | `invoke` | Exact versioned reference to one registered capability-free invocation operation. |
-| `policy` | Exact versioned reference to one registered workflow policy profile. |
+| `policy` | Exact versioned reference to one registered workflow policy profile containing the positive total model-token budget applied to each execution; it supplies no retry count. |
 | `start` | Definition-local ID of the graph entry step. |
 | `resources` | Optional map of concise local aliases to bounded workflow-root-relative resource names. |
 | `steps` | One to 256 local step IDs mapped to closed operation declarations and outcome maps. |
@@ -234,6 +237,13 @@ each parameter is definition-safe. The compiler rejects null, float, sequence,
 nested parameter mapping, free unbounded text, raw operational path/command,
 unknown, missing, wrong-kind, out-of-range, disallowed, or unresolved values.
 There is no repeated `{ parameterId, value: { kind, value } }` wrapper.
+
+`retry-limit` has no global or implicit meaning. A registered retry-capable
+operation contract must declare it as a required nonnegative integer parameter
+with a finite operation-local maximum. The compiler binds it to that exact step
+instance and its monotonic retry transition. A retry edge without the required
+parameter, or a `retry-limit` supplied to a contract that does not declare it,
+is invalid.
 
 `resources` prevents large prompt, example, or schema content from being
 repeated in steps. Each alias resolves to exactly one bounded captured resource
@@ -394,10 +404,10 @@ invokes no node.
   contract and its output typed run context/data keys satisfy graph entry;
 - schema evidence proves unique local step and parameter IDs; the entry resolves
   exactly once, and every step is reachable from entry and can reach a terminal;
-- every cycle crosses a registered monotonic attempt/iteration-budget operation
-  whose finite ceiling is supplied by the selected workflow policy or an
-  explicitly validated scalar parameter, so a YAML retry/repair loop cannot be
-  unbounded;
+- every retry cycle crosses a registered monotonic attempt/iteration-budget
+  operation whose finite `retry-limit` is an explicitly supplied and validated
+  scalar parameter on that retry-capable operation instance; the selected
+  workflow policy cannot supply or default it;
 - every step's `use` reference resolves to one registered operation contract/version and every
   parameter satisfies that contract's closed definition-safe descriptor;
 - every declared resource is captured exactly once, has one compatible typed
@@ -412,7 +422,10 @@ invokes no node.
 - referenced gates remain intact, including the predecessor and approval gates
   owned by the initial SDD operations selected in their YAML definitions; and
 - effective capabilities are derived only from registered contracts and are a
-  subset of the selected workflow policy profile.
+  subset of the selected workflow policy profile; and
+- the selected policy contributes exactly one positive total model-token
+  budget to immutable compiled workflow authority, initialized as a fresh
+  accounting ledger for each execution rather than shared across executions.
 
 Unknown or mismatched contracts, outcomes, gates, policies, or versions;
 dangling, unreachable, unbounded-cycle, duplicate transition-key, or unhandled graph
@@ -559,6 +572,11 @@ Those concerns remain with their accepted owners or later increments.
 20. Explicit cancellation remains `cancelled`; deterministic rejection,
     adapter failure, and deadline exhaustion return `failed`. Neither publishes
     a service or partial registry.
+21. The selected policy supplies exactly one positive total model-token budget,
+    which is applied to a fresh ledger for each workflow execution and supplies
+    no retry count. Every retry-capable operation instance declares its own
+    bounded `retry-limit`; missing limits, policy-supplied retry defaults, and
+    retry parameters on non-retry contracts fail compilation.
 
 ## 12. Verification
 
@@ -591,7 +609,9 @@ Implementation tests must cover the owning boundaries:
   entry/run-context mismatch; missing entry or target; dangling, unreachable,
   nonterminal, cyclic, missing/duplicate-key/undeclared transition;
   invalid terminal mapping; data-key/version/producer/effect/barrier failure;
-  gate weakening; capability escalation; and runner bypass.
+  gate weakening; capability escalation; missing, negative, excessive, or
+  policy-supplied retry limits; retry limits on non-retry contracts; a missing
+  or nonpositive policy token budget; and runner bypass.
 - **Registry:** arbitrary non-SDD IDs; zero definitions; duplicate workflow ID,
   shortcode, or ordinal; missing/extra graph; mismatched map key;
   capture/account/evidence mismatch; reserved ordinal indexed; and proof that
@@ -600,7 +620,9 @@ Implementation tests must cover the owning boundaries:
   and handles every declared outcome; adding/removing an unrelated definition
   or inserting an earlier-sorting source cannot change another workflow's
   `CompiledWorkflowSemanticAuthority`; initial SDD predecessor/approval gates
-  cannot be weakened by any accepted parameter combination.
+  cannot be weakened by any accepted parameter combination; and two executions
+  of one compiled workflow initialize independent total-token ledgers without
+  changing its immutable semantic authority.
 - **Architecture and startup:** actions cannot call nodes; the compiler imports
   no filesystem/provider implementation; the workflow parse action depends
   only on its narrow parser port; the YAML library and syntax-node types remain

@@ -5,6 +5,7 @@ const workflow = @import("../domain/workflow.zig");
 const compilation = @import("../domain/workflow_compilation.zig");
 const operation = @import("../domain/workflow_operation.zig");
 const provider_binding = @import("../domain/llm_provider_binding.zig");
+const workflow_retry = @import("../domain/workflow_retry.zig");
 
 pub const Error = error{OperationExecutionFailed};
 
@@ -74,7 +75,8 @@ pub const Registry = struct {
         for (self.policies, 0..) |profile, index| {
             if (workflow.RegisteredRef.parse(profile.id) == null or
                 !uniqueStrings(profile.allowed_capabilities) or
-                !uniqueOutcomes(profile.allowed_terminal_outcomes)) return false;
+                !uniqueOutcomes(profile.allowed_terminal_outcomes) or
+                !profile.total_model_token_budget.isValid()) return false;
             for (self.policies[0..index]) |prior| {
                 if (std.mem.eql(u8, prior.id, profile.id)) return false;
             }
@@ -91,7 +93,7 @@ fn validContract(contract: operation.Contract) bool {
     if (contract.kind == .invocation and
         (contract.parameters.len != 0 or contract.requires.len != 0 or contract.replaces.len != 0 or
             contract.invalidates.len != 0 or contract.side_effect != .none or contract.gates.len != 0 or
-            contract.capabilities.len != 0 or contract.loop_budget != null or
+            contract.capabilities.len != 0 or contract.retry_limit != null or
             contract.outcomes.len != 1 or contract.outcomes[0] != .ok)) return false;
     for (contract.parameters, 0..) |descriptor, index| {
         if (workflow.WorkflowParameterId.parse(descriptor.id) == null or
@@ -111,11 +113,13 @@ fn validContract(contract: operation.Contract) bool {
         model_slot_count += 1;
     }
     if (model_capable != (model_slot_count == 1)) return false;
-    if (contract.loop_budget) |budget| {
-        if (contract.kind != .step or budget.maximum == 0) return false;
-        const descriptor = findParameter(contract.parameters, budget.parameter_id) orelse return false;
-        if (descriptor.kind != .integer or !descriptor.required or descriptor.integer_min < 1 or
-            descriptor.integer_max > budget.maximum) return false;
+    if (contract.retry_limit) |limit| {
+        if (contract.kind != .step or limit.maximum == 0) return false;
+        const descriptor = findParameter(contract.parameters, workflow_retry.parameter_id) orelse return false;
+        if (descriptor.kind != .integer or !descriptor.required or descriptor.integer_min != 0 or
+            descriptor.integer_max > limit.maximum) return false;
+    } else if (findParameter(contract.parameters, workflow_retry.parameter_id) != null) {
+        return false;
     }
     return true;
 }
@@ -172,13 +176,20 @@ fn containsExactlyOnce(values: []const []const u8, expected: []const u8) bool {
 }
 
 test "one registry rejects duplicate and structurally invalid operations" {
+    try std.testing.expect(!@hasField(operation.PolicyProfile, "retry_limit"));
+    try std.testing.expect(!@hasField(operation.PolicyProfile, "attempts"));
     const noop: Entry = .{
         .contract = .{ .id = "core.noop@1", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none },
         .invoke_fn = testInvoke,
     };
     const valid: Registry = .{
         .operations = &.{noop},
-        .policies = &.{.{ .id = "core.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok} }},
+        .policies = &.{.{
+            .id = "core.safe@1",
+            .allowed_capabilities = &.{},
+            .allowed_terminal_outcomes = &.{.ok},
+            .total_model_token_budget = .{ .value = 1 },
+        }},
         .gates = &.{},
         .capabilities = &.{},
     };
@@ -227,6 +238,55 @@ test "one registry rejects duplicate and structurally invalid operations" {
     invalid_model_registry.operations = &.{hidden_slot};
     invalid_model_registry.capabilities = &.{};
     try std.testing.expect(!invalid_model_registry.validate());
+
+    var zero_budget = valid;
+    zero_budget.policies = &.{.{
+        .id = "core.safe@1",
+        .allowed_capabilities = &.{},
+        .allowed_terminal_outcomes = &.{.ok},
+        .total_model_token_budget = .{ .value = 0 },
+    }};
+    try std.testing.expect(!zero_budget.validate());
+
+    const hidden_retry: Entry = .{
+        .contract = .{
+            .id = "core.hidden-retry@1",
+            .kind = .step,
+            .parameters = &.{.{
+                .id = "retry-limit",
+                .kind = .integer,
+                .required = true,
+                .workflow_definition_safe = true,
+                .integer_min = 0,
+                .integer_max = 2,
+            }},
+            .outcomes = &.{.ok},
+            .side_effect = .none,
+        },
+        .invoke_fn = testInvoke,
+    };
+    var invalid_retry_registry = valid;
+    invalid_retry_registry.operations = &.{hidden_retry};
+    try std.testing.expect(!invalid_retry_registry.validate());
+
+    var declared_retry = hidden_retry;
+    declared_retry.contract.retry_limit = .{ .maximum = 2 };
+    try std.testing.expect((Registry{
+        .operations = &.{declared_retry},
+        .policies = valid.policies,
+        .gates = &.{},
+        .capabilities = &.{},
+    }).validate());
+    declared_retry.contract.parameters = &.{.{
+        .id = "retry-limit",
+        .kind = .integer,
+        .required = true,
+        .workflow_definition_safe = true,
+        .integer_min = 0,
+        .integer_max = 3,
+    }};
+    invalid_retry_registry.operations = &.{declared_retry};
+    try std.testing.expect(!invalid_retry_registry.validate());
 }
 
 fn testInvoke(_: ?*anyopaque, _: Input) Error!execution.Candidate {

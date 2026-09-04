@@ -7,7 +7,7 @@ const toolchain_safety = @import("domain/toolchain_safety.zig");
 const llm_provider_registry = @import("domain/llm_provider_registry.zig");
 const repository_model_allowlist = @import("domain/repository_model_allowlist.zig");
 const model_request_identity = @import("domain/model_request_identity.zig");
-const runner_repair_accounting = @import("domain/runner_repair_accounting.zig");
+const model_attempt_accounting = @import("domain/model_attempt_accounting.zig");
 const llm_provider_operation = @import("domain/llm_provider_operation.zig");
 const llm_provider_interface = @import("ports/llm_provider_interface.zig");
 const llm_provider_registry_service = @import("application/llm_provider_registry_service.zig");
@@ -363,9 +363,9 @@ test "provider operation boundary has one capability-limited interface" {
 }
 
 test "model attempt accounting has one runner-applied transition authority" {
-    switch (@typeInfo(runner_repair_accounting.RunnerRepairAccounting)) {
+    switch (@typeInfo(model_attempt_accounting.RunnerModelAttemptAccounting)) {
         .@"opaque" => {},
-        else => return error.RunnerRepairAccountingMustBeOpaque,
+        else => return error.RunnerModelAttemptAccountingMustBeOpaque,
     }
 
     const io = std.testing.io;
@@ -390,10 +390,20 @@ test "model attempt accounting has one runner-applied transition authority" {
     try expectAbsent(action, "/ports/");
     try expectAbsent(action, "/adapters/");
     try expectAbsent(action, "std.Io");
-    const accounting = @embedFile("domain/runner_repair_accounting.zig");
+    const accounting = @embedFile("domain/model_attempt_accounting.zig");
     try expectAbsent(accounting, "/ports/");
     try expectAbsent(accounting, "/adapters/");
     try expectAbsent(accounting, "std.Io");
+    try expectAbsent(accounting, "MaximumAttempts");
+    try expectAbsent(accounting, "configured");
+    try expectAbsent(accounting, "hard");
+
+    const request_identity = @embedFile("domain/model_request_identity.zig");
+    try expectAbsent(request_identity, "not_invoked_attempt_ceiling");
+
+    const workflow_operation = @embedFile("domain/workflow_operation.zig");
+    try expectAbsent(workflow_operation, "loop_budget");
+    try expectAbsent(workflow_operation, "retry_count");
 
     const runner = @embedFile("application/model_attempt_accounting_runner.zig");
     try expectAbsent(runner, "/ports/");
@@ -404,6 +414,40 @@ test "model attempt accounting has one runner-applied transition authority" {
     const replace_index = std.mem.indexOf(u8, runner, "self.current_owner = successor").?;
     try std.testing.expect(validate_index < apply_index);
     try std.testing.expect(apply_index < replace_index);
+}
+
+test "workflow token accounting has only its two runner-applied action authorities" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var actions = try std.Io.Dir.cwd().openDir(io, "src/actions", .{ .iterate = true });
+    defer actions.close(io);
+    var walker = try actions.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
+        defer allocator.free(source);
+        const reserves = countOccurrences(source, ".runner_accounting = .reserve_workflow_tokens");
+        const reconciles = countOccurrences(source, ".runner_accounting = .reconcile_workflow_tokens");
+        try std.testing.expectEqual(
+            @as(usize, if (std.mem.eql(u8, entry.path, "model/reserve_workflow_token_budget.zig")) 1 else 0),
+            reserves,
+        );
+        try std.testing.expectEqual(
+            @as(usize, if (std.mem.eql(u8, entry.path, "model/reconcile_workflow_token_usage.zig")) 1 else 0),
+            reconciles,
+        );
+    }
+
+    inline for (.{
+        "actions/model/reserve_workflow_token_budget.zig",
+        "actions/model/reconcile_workflow_token_usage.zig",
+    }) |path| {
+        const source = @embedFile(path);
+        try expectAbsent(source, "/ports/");
+        try expectAbsent(source, "/adapters/");
+        try expectAbsent(source, "std.Io");
+    }
 }
 
 test "only request identity owners can produce or replace its ledger key" {

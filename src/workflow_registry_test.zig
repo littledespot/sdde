@@ -119,15 +119,59 @@ test "validated workflow registry accepts zero definitions and owns its graph re
 
     var scratch = std.heap.ArenaAllocator.init(std.testing.allocator);
     const workflow_id = try scratch.allocator().dupe(u8, "hello");
+    const step_id_bytes = try scratch.allocator().dupe(u8, "run");
     const resource_name = try scratch.allocator().dupe(u8, "prompt.md");
     const resource_bytes = try scratch.allocator().dupe(u8, "immutable prompt");
     const resource_id = workflow.WorkflowResourceId.parse("prompt").?;
     const declared_resources = [_]workflow.ResourceDeclaration{.{ .id = resource_id, .name = resource_name }};
+    const retry_parameters = [_]workflow.ParameterBinding{.{
+        .id = workflow.WorkflowParameterId.parse("retry-limit").?,
+        .value = .{ .integer = 2 },
+    }};
+    const local_declared_steps = [_]workflow.DeclarativeStep{.{
+        .id = workflow.WorkflowStepId.parse(step_id_bytes).?,
+        .operation_id = workflow.RegisteredRef.parse("core.noop@1").?,
+        .parameters = &retry_parameters,
+        .outcomes = &.{.{ .outcome = .ok, .target = .{ .terminal = .ok } }},
+    }};
     var declared = validDefinition(workflow_id, "HELO", 1);
     declared.resources = &declared_resources;
+    declared.start_step_id = local_declared_steps[0].id;
+    declared.steps = &local_declared_steps;
     const compiled_resources = [_]compilation.CompiledResource{.{ .id = resource_id, .kind = .prompt, .bytes = resource_bytes }};
+    const compiled_parameters = [_]compilation.CompiledParameter{.{
+        .id = retry_parameters[0].id,
+        .value = .{ .integer = 2 },
+    }};
+    const local_compiled_steps = [_]compilation.CompiledStep{.{
+        .id = local_declared_steps[0].id,
+        .operation_id = local_declared_steps[0].operation_id,
+        .parameters = &compiled_parameters,
+        .requires = &.{},
+        .produces = &.{},
+        .replaces = &.{},
+        .invalidates = &.{},
+        .outcomes = &.{.ok},
+        .side_effect = .none,
+        .gates = &.{},
+        .capabilities = &.{},
+        .retry_authority = .{
+            .workflow_id = declared.workflow_id,
+            .workflow_version = declared.workflow_version,
+            .operation_instance_id = local_declared_steps[0].id,
+            .limit = .{ .value = 2 },
+        },
+    }};
+    const local_transitions = [_]workflow.Transition{.{
+        .from = local_declared_steps[0].id,
+        .outcome = .ok,
+        .target = .{ .terminal = .ok },
+    }};
     var graph = validGraph(declared);
     graph.authority.resources = &compiled_resources;
+    graph.authority.steps = &local_compiled_steps;
+    graph.authority.transitions = &local_transitions;
+    graph.authority.maximum_step_executions = 3;
     const descriptors = [_]inventory.InventoryDescriptor{
         descriptor("arbitrary.workflow.yaml", .file, 1, 3),
         descriptor(resource_name, .file, 2, resource_bytes.len),
@@ -163,6 +207,11 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     const resolved = service.registry().resolve(workflow.WorkflowId.parse("hello").?).?;
     try std.testing.expectEqualStrings("core.noop@1", resolved.authority.steps[0].operation_id.bytes);
     try std.testing.expectEqualStrings("immutable prompt", resolved.authority.resources[0].bytes);
+    try std.testing.expectEqual(@as(u64, 1000), resolved.authority.total_model_token_budget.value);
+    const retry_authority = resolved.authority.steps[0].retry_authority.?;
+    try std.testing.expectEqualStrings("hello", retry_authority.workflow_id.bytes);
+    try std.testing.expectEqualStrings("run", retry_authority.operation_instance_id.bytes);
+    try std.testing.expectEqual(@as(u32, 2), retry_authority.limit.value);
 }
 
 test "registry rejects a partially valid duplicate identity set" {
@@ -217,7 +266,7 @@ const compiled_steps = [_]compilation.CompiledStep{.{
     .side_effect = .none,
     .gates = &.{},
     .capabilities = &.{},
-    .loop_limit = null,
+    .retry_authority = null,
 }};
 const transitions = [_]workflow.Transition{.{
     .from = declared_steps[0].id,
@@ -248,6 +297,7 @@ fn validGraph(declared: definition.Definition) compilation.CompiledWorkflow {
             .workflow_version = declared.workflow_version,
             .invocation_operation_id = declared.invocation_operation_id,
             .policy_profile_id = declared.policy_profile_id,
+            .total_model_token_budget = .{ .value = 1000 },
             .start_step_id = declared.start_step_id,
             .invocation_outputs = &.{},
             .resources = &.{},

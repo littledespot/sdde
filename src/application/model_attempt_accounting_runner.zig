@@ -1,6 +1,6 @@
 const std = @import("std");
 const advance_attempt = @import("../actions/model/advance_model_attempt_accounting.zig");
-const accounting = @import("../domain/runner_repair_accounting.zig");
+const accounting = @import("../domain/model_attempt_accounting.zig");
 const identity = @import("../domain/model_request_identity.zig");
 const operation = @import("../domain/llm_provider_operation.zig");
 const pipeline = @import("../domain/pipeline.zig");
@@ -27,7 +27,7 @@ pub const Runner = struct {
         current_requests: *const identity.ModelRequestIdentityLedger,
         expected_request_revision: identity.LedgerRevision,
         request_id: *const identity.ModelRequestId,
-        maximum: accounting.MaximumAttempts,
+        attempt: accounting.Attempt,
     ) (advance_attempt.Error || accounting.Error)!operation.ModelAttemptOrdinal {
         var envelope = pipeline.PipelineEnvelope.init(&.{.model_request_identity_ledger});
         envelope.validateInvocation(advance_attempt.Action.contract) catch {
@@ -39,7 +39,7 @@ pub const Runner = struct {
             current_requests,
             expected_request_revision,
             request_id,
-            maximum,
+            attempt,
         );
         envelope = envelope.apply(
             advance_attempt.Action.contract,
@@ -47,6 +47,7 @@ pub const Runner = struct {
         ) catch return error.ModelRequestUnavailableForAttempt;
         const transition = switch (delta.runner_accounting_transition.?) {
             .increment_model_attempt => |value| value,
+            else => unreachable,
         };
         const successor = try accounting.apply(accounting.accounting(self.current_owner), transition);
         errdefer accounting.deinitOwner(successor);
@@ -57,7 +58,7 @@ pub const Runner = struct {
         return transition.ordinal();
     }
 
-    pub fn current(self: *const Runner) *const accounting.RunnerRepairAccounting {
+    pub fn current(self: *const Runner) *const accounting.RunnerModelAttemptAccounting {
         return accounting.accounting(self.current_owner);
     }
 };

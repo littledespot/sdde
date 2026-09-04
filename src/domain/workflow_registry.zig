@@ -4,6 +4,7 @@ const workflow = @import("workflow.zig");
 const definition = @import("workflow_definition.zig");
 const compilation = @import("workflow_compilation.zig");
 const inventory = @import("workflow_inventory.zig");
+const workflow_retry = @import("workflow_retry.zig");
 
 pub const RegistryCandidate = struct {
     inventory: inventory.Inventory,
@@ -122,6 +123,7 @@ fn graphProjectsDefinition(
         !std.mem.eql(u8, graph.authority.invocation_operation_id.bytes, declared.invocation_operation_id.bytes) or
         !std.mem.eql(u8, graph.authority.policy_profile_id.bytes, declared.policy_profile_id.bytes) or
         !std.mem.eql(u8, graph.authority.start_step_id.bytes, declared.start_step_id.bytes) or
+        !graph.authority.total_model_token_budget.isValid() or
         graph.authority.resources.len != declared.resources.len or
         graph.authority.steps.len != declared.steps.len) return false;
 
@@ -136,6 +138,21 @@ fn graphProjectsDefinition(
         if (!std.mem.eql(u8, compiled.id.bytes, step.id.bytes) or
             !std.mem.eql(u8, compiled.operation_id.bytes, step.operation_id.bytes) or
             compiled.parameters.len != step.parameters.len or compiled.outcomes.len != step.outcomes.len) return false;
+        const retry_parameter = findCompiledParameter(compiled.parameters, workflow_retry.parameter_id);
+        if (compiled.retry_authority) |authority| {
+            if (!authority.isValid() or
+                !std.mem.eql(u8, authority.workflow_id.bytes, graph.authority.workflow_id.bytes) or
+                authority.workflow_version != graph.authority.workflow_version or
+                !std.mem.eql(u8, authority.operation_instance_id.bytes, compiled.id.bytes) or
+                retry_parameter == null or retry_parameter.?.value != .integer or
+                retry_parameter.?.value.integer < 0 or
+                authority.limit.value != retry_parameter.?.value.integer)
+            {
+                return false;
+            }
+        } else if (retry_parameter != null) {
+            return false;
+        }
         for (compiled.parameters, step.parameters) |compiled_parameter, parameter| {
             if (!sameParameter(compiled_parameter, parameter)) return false;
         }
@@ -189,6 +206,11 @@ fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow
         destination.outcomes = try allocator.dupe(workflow.OutcomeTag, step.outcomes);
         destination.gates = try cloneStrings(allocator, step.gates);
         destination.capabilities = try cloneStrings(allocator, step.capabilities);
+        if (step.retry_authority) |authority| {
+            destination.retry_authority = authority;
+            destination.retry_authority.?.workflow_id.bytes = try allocator.dupe(u8, authority.workflow_id.bytes);
+            destination.retry_authority.?.operation_instance_id.bytes = try allocator.dupe(u8, authority.operation_instance_id.bytes);
+        }
     }
     const transitions = try allocator.alloc(workflow.Transition, source.authority.transitions.len);
     for (transitions, source.authority.transitions) |*destination, transition| {
@@ -204,6 +226,7 @@ fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow
             .workflow_version = source.authority.workflow_version,
             .invocation_operation_id = .{ .bytes = try allocator.dupe(u8, source.authority.invocation_operation_id.bytes) },
             .policy_profile_id = .{ .bytes = try allocator.dupe(u8, source.authority.policy_profile_id.bytes) },
+            .total_model_token_budget = source.authority.total_model_token_budget,
             .start_step_id = .{ .bytes = try allocator.dupe(u8, source.authority.start_step_id.bytes) },
             .invocation_outputs = try allocator.dupe(pipeline.DataKey, source.authority.invocation_outputs),
             .resources = resources,
@@ -229,6 +252,11 @@ fn cloneParameters(allocator: std.mem.Allocator, source: []const compilation.Com
         }
     }
     return values;
+}
+
+fn findCompiledParameter(values: []const compilation.CompiledParameter, id: []const u8) ?compilation.CompiledParameter {
+    for (values) |value| if (std.mem.eql(u8, value.id.bytes, id)) return value;
+    return null;
 }
 
 fn cloneStrings(allocator: std.mem.Allocator, source: []const []const u8) ![]const []const u8 {
