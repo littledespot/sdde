@@ -1,6 +1,7 @@
 const std = @import("std");
 const binding = @import("llm_provider_binding.zig");
 const request_identity = @import("model_request_identity.zig");
+const execution_reference = @import("execution_reference.zig");
 
 pub const ProviderOperationKind = enum {
     input_token_count,
@@ -232,43 +233,10 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     }
 };
 
-pub const ProviderAuthorizationLeaseId = struct {
-    value: u64,
-
-    pub fn init(value: u64) ?ProviderAuthorizationLeaseId {
-        return if (value == 0) null else .{ .value = value };
-    }
-};
-
+// A nonserializable identity, not a capability. Only its execution-owned table
+// can resolve it; never dereference an unrecognized or foreign reference.
 pub const ValidatedProviderAuthorizationLeaseRef = struct {
-    id: ProviderAuthorizationLeaseId,
-    operation_id: ProviderOperationId,
-    binding_id: binding.ProviderModelBindingId,
-    model_visible_input_id: ModelVisibleInputId,
-    deadline_monotonic_ms: u64,
-
-    pub fn init(value: ValidatedProviderAuthorizationLeaseRef) ?ValidatedProviderAuthorizationLeaseRef {
-        if (value.id.value == 0 or value.operation_id.model_attempt_ordinal.value == 0 or
-            ModelVisibleInputId.parse(value.model_visible_input_id.bytes) == null or
-            value.deadline_monotonic_ms == 0)
-        {
-            return null;
-        }
-        return value;
-    }
-
-    pub fn matches(
-        self: ValidatedProviderAuthorizationLeaseRef,
-        operation: InvokedProviderOperation,
-        expected_binding: binding.ProviderModelBindingId,
-        expected_input: ModelVisibleInputId,
-    ) bool {
-        return self.id.value != 0 and self.deadline_monotonic_ms != 0 and
-            operation.isValid() and self.operation_id.eql(operation.id) and
-            self.binding_id.eql(expected_binding) and
-            self.model_visible_input_id.eql(expected_input) and
-            self.deadline_monotonic_ms == operation.deadline_monotonic_ms;
-    }
+    identity: execution_reference.Ref,
 };
 
 pub const ProviderFailureCause = enum {
@@ -457,7 +425,6 @@ pub const ProviderInvocationObservation = union(enum) {
 pub fn validateCountInvocation(
     provider_binding: *const binding.ValidatedProviderModelBinding,
     request: *const IdentifiedProviderNeutralModelRequest,
-    authorization: *const ValidatedProviderAuthorizationLeaseRef,
     operation: *const InvokedProviderOperation,
 ) bool {
     request.validate() catch return false;
@@ -465,15 +432,13 @@ pub fn validateCountInvocation(
     return operation.id.kind == .input_token_count and
         operation.isValid() and
         operation.id.model_request_id == request.model_request_id and
-        request.binding_id.eql(binding_id) and
-        authorization.matches(operation.*, binding_id, request.model_visible_input_id);
+        request.binding_id.eql(binding_id);
 }
 
 pub fn validateInferenceInvocation(
     provider_binding: *const binding.ValidatedProviderModelBinding,
     request: *const IdentifiedProviderNeutralModelRequest,
     count_evidence: *const ExactInputTokenCountEvidence,
-    authorization: *const ValidatedProviderAuthorizationLeaseRef,
     operation: *const InvokedProviderOperation,
 ) bool {
     request.validate() catch return false;
@@ -482,8 +447,7 @@ pub fn validateInferenceInvocation(
         operation.isValid() and
         operation.id.model_request_id == request.model_request_id and
         operation.id.sameAttempt(count_evidence.count_operation_id) and
-        count_evidence.isValidFor(request.*, binding_id) and
-        authorization.matches(operation.*, binding_id, request.model_visible_input_id);
+        count_evidence.isValidFor(request.*, binding_id);
 }
 
 pub const Error = error{

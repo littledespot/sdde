@@ -2,7 +2,6 @@ const validate_finalization = @import("../actions/log/validate_feature_log_final
 const log_stream = @import("../domain/feature_log_stream.zig");
 const telemetry = @import("../domain/telemetry.zig");
 const bindings = @import("feature_log_finalization_child_bindings.zig");
-const feature_log_result = @import("feature_log_result.zig");
 const feature_log_runner = @import("feature_log_runner.zig");
 
 pub const Runner = struct {
@@ -32,12 +31,12 @@ pub const Runner = struct {
         return .valid;
     }
 
-    fn invokePrepare(context: *anyopaque) feature_log_result.Outcome {
+    fn invokePrepare(context: *anyopaque) log_stream.Outcome {
         const self = cast(context);
         return self.target.prepare(self.shortcode);
     }
 
-    fn invokeClose(context: *anyopaque) feature_log_result.Outcome {
+    fn invokeClose(context: *anyopaque) log_stream.Outcome {
         const self = cast(context);
         return self.target.close(self.shortcode);
     }

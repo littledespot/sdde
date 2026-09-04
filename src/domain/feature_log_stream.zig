@@ -48,3 +48,9 @@ pub const PersistedEvidence = struct {
     bytes_written: usize,
     flushed: bool,
 };
+
+pub const Outcome = union(enum) {
+    dropped,
+    persisted: PersistedEvidence,
+    blocked: FailureCode,
+};

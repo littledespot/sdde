@@ -26,7 +26,7 @@ pub const Runner = struct {
         count_evidence: operation.ExactInputTokenCountEvidence,
         effective_maximum_output_tokens: u64,
     ) (reserve_action.Error || accounting.Error)!void {
-        var envelope = pipeline.PipelineEnvelope.init(&.{});
+        var envelope = pipeline.DataShape.init(&.{});
         const delta = try self.reserve_action.execute(
             &self.ledger,
             expected_revision,
@@ -34,7 +34,7 @@ pub const Runner = struct {
             count_evidence,
             effective_maximum_output_tokens,
         );
-        envelope = envelope.apply(reserve_action.Action.contract, delta) catch {
+        envelope = envelope.applyDelta(reserve_action.Action.contract, &delta) catch {
             return error.InvalidTokenReservation;
         };
         const transition = switch (delta.runner_accounting_transition.?) {
@@ -50,14 +50,14 @@ pub const Runner = struct {
         inference_operation_id: operation.ProviderOperationId,
         resolution: accounting.Reconciliation,
     ) (reconcile_action.Error || accounting.Error)!void {
-        var envelope = pipeline.PipelineEnvelope.init(&.{});
+        var envelope = pipeline.DataShape.init(&.{});
         const delta = try self.reconcile_action.execute(
             &self.ledger,
             expected_revision,
             inference_operation_id,
             resolution,
         );
-        envelope = envelope.apply(reconcile_action.Action.contract, delta) catch {
+        envelope = envelope.applyDelta(reconcile_action.Action.contract, &delta) catch {
             return error.InvalidProviderTokenUsage;
         };
         const transition = switch (delta.runner_accounting_transition.?) {

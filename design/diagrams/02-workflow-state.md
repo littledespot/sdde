@@ -35,7 +35,8 @@ stateDiagram-v2
     tasks_review_pending --> tasking: commit rejection and clear approval; ordinary regenerated tasking may later pause for a TNN
     tasks_review_pending --> tasked: approve exact current taskDefinitionStateId
 
-    tasked --> implementing: implement gate requires current approvals and no open SNN PNN or TNN
+    tasked --> implementing: implement gate requires current approvals and no outstanding spec, plan or tasks clarification
+    tasked --> blocked: any SNN, PNN or TNN is outstanding; execute no implementation model, command, overlay or project change
     implementing --> implemented: every task transaction and passing ImplementationCompletionStageTransaction committed
     implementing --> final_validation_failed: first commit FinalValidationFailedStageTransaction; failed evidence appended, validation bytes discarded, task runtime unchanged
     final_validation_failed --> implementing: separate LocalizedTaskRemediationStageTransaction retires stale evidence and moves only the owning task to remediation_pending

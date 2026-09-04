@@ -2,6 +2,11 @@
 
 This companion contains the sample contracts, schemas, configuration, flow notation, and package layout referenced by [the engine design](design.md). The design document is normative; these samples illustrate its contracts and must evolve with it.
 
+Clarification identity is independent of execution identity. Its complete
+registry, forms, and responses persist across successive workflows and are
+consumed after current applicability checks. `implement` cannot execute while
+any specification, planning, or tasks clarification remains outstanding.
+
 The `text` blocks use language-neutral SDDE contract notation; they are not
 TypeScript or JavaScript source. In the Zig implementation, closed `A | B`
 variants map to `union(enum)`, exhaustive branches map to `switch`, optional
@@ -5401,6 +5406,7 @@ ClarificationSubjectDescriptor =
 
 ClarificationSubjectKey =
   | ReferenceConflictClarificationSubjectKey {
+      targetId,
       stage: spec,
       authorityRequirementId: AuthorityRequirementId,
       stableUnitSelector: ReferenceConflictSubjectCoordinate,
@@ -5410,14 +5416,17 @@ ClarificationSubjectKey =
       // Snapshot-local conflict/claim/citation IDs are deliberately excluded.
     }
   | AuthorityBoundClarificationSubjectKey {
+      targetId,
       stage: ClarificationStage,
       authorityRequirementId: AuthorityRequirementId,
       stableUnitSelector,
-      requiredSlotId,             // required field/decision/task-field ID
-      authorityGapKind,
-      canonicalSubjectAuthorityIds[]
+      requiredSlotId              // required field/decision/task-field ID
     }
-  // Engine-built structural tuple; never a digest and never model-authored.
+  // Engine-built stable subject coordinate; never a digest or model-authored.
+  // Requirement identity and unit selector come from registered stable
+  // semantics, not a regenerated candidate/state ID. Execution IDs, authority
+  // revisions, evidence IDs and transient gap classifications are excluded.
+  // Their current values belong to the descriptor/applicability binding.
 
 ClarificationNeedProposal {
   subject: ClarificationSubjectDescriptor,
@@ -5448,6 +5457,11 @@ ClarificationRecord {
   subjectKey: ClarificationSubjectKey,
   subject: ClarificationSubjectDescriptor,
   referenceConflictBinding?: ReferenceConflictClarificationBinding,
+  currentApplicabilityBinding: {
+    canonicalSubjectAuthorityIds[],
+    authorityGapKind,
+    validatedCurrentSubjectCorrespondence
+  },
   question: BusinessText,
   whyRequired: BusinessText,
   origins: ClarificationNeedOrigin[],
@@ -5623,6 +5637,11 @@ ClarificationRegistryState {
   records: ClarificationRecord[],
   responses: ClarificationResponse[],
   authorityResolutions: ClarificationAuthorityResolution[]
+  // The full registry survives successful replacement and abandoned executions.
+  // Lookup includes open and closed records before allocating any new ID.
+  // A still-applicable answer is reused; changed applicability refreshes or
+  // reopens this same record. Ambiguous correspondence blocks rather than
+  // allocating a duplicate. Reruns never rebuild the ID ledger from zero.
 }
 
 ClarificationView =
@@ -10614,7 +10633,10 @@ tasks_review_pending
   -- reject current task units --> tasking
   -- approve current taskDefinitionStateId --> tasked
 
-tasked -> implementing
+tasked
+  -- current approvals and no outstanding S/P/T clarification --> implementing
+  -- any outstanding S/P/T clarification --> blocked
+     (report exact IDs; no task, model, command, or project mutation executes)
 implementing -- final checks pass --> implemented
 
 implementing

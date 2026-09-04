@@ -8,6 +8,7 @@ const inventory = @import("../../domain/workflow_inventory.zig");
 const operation_registry = @import("../../ports/workflow_operation_registry.zig");
 const provider_identity = @import("../../domain/llm_provider_identity.zig");
 const workflow_retry = @import("../../domain/workflow_retry.zig");
+const data = @import("../../domain/pipeline_data.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
@@ -56,6 +57,7 @@ pub const Action = struct {
                     .operation_id = declared.operation_id,
                     .parameters = parameters,
                     .requires = entry.contract.requires,
+                    .optional = entry.contract.optional,
                     .produces = entry.contract.produces,
                     .replaces = entry.contract.replaces,
                     .invalidates = entry.contract.invalidates,
@@ -78,6 +80,7 @@ pub const Action = struct {
                 .source_ordinal = item.source_ordinal,
                 .shortcode = item.shortcode,
                 .authority = .{
+                    .data_schemas = try compileDataSchemas(allocator, self.registry.data_schemas, invocation.contract.produces, steps),
                     .workflow_id = item.workflow_id,
                     .workflow_version = item.workflow_version,
                     .invocation_operation_id = item.invocation_operation_id,
@@ -95,6 +98,33 @@ pub const Action = struct {
         return graphs;
     }
 };
+
+fn compileDataSchemas(
+    allocator: std.mem.Allocator,
+    schemas: []const data.Schema,
+    invocation_outputs: []const pipeline.DataKey,
+    steps: []const compilation.CompiledStep,
+) Error![]const data.Schema {
+    var used = [_]bool{false} ** data.key_count;
+    for (invocation_outputs) |key| used[@intFromEnum(key)] = true;
+    for (steps) |step| {
+        inline for (.{ step.requires, step.optional, step.produces, step.replaces, step.invalidates }) |keys| {
+            for (keys) |key| used[@intFromEnum(key)] = true;
+        }
+    }
+    var count: usize = 0;
+    for (used) |present| if (present) {
+        count += 1;
+    };
+    const result = allocator.alloc(data.Schema, count) catch return invalid();
+    var index: usize = 0;
+    for (used, 0..) |present, key_index| {
+        if (!present) continue;
+        result[index] = data.find(schemas, @enumFromInt(key_index)) orelse return invalid();
+        index += 1;
+    }
+    return result;
+}
 
 fn compileResources(
     allocator: std.mem.Allocator,

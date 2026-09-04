@@ -5,8 +5,8 @@ flowchart TD
     MODELNEED[Validated clarification_needed operation result<br/>genuine current authority gap; no model-owned ID, path or status] --> NEED[Validated stage-compatible clarification need]
     RCONFLICT[Validated unresolved behavior-changing SourceConflict<br/>after complete ReferenceSnapshot validation] --> RCNEED[BuildReferenceConflictClarificationNeedAction<br/>closed engine claim-ID choices; no model or preferred answer]
     RCNEED --> NEED
-    NEED --> KEY[Build deterministic ClarificationSubjectKey<br/>AuthorityRequirementId, earliest owning stage, stable unit selector,<br/>required slot, gap kind and authority IDs]
-    KEY --> LOOKUP[Lookup exact subject key in current ClarificationRegistryState]
+    NEED --> KEY[Build deterministic ClarificationSubjectKey<br/>stable target, earliest owning stage, structural subject selector and required slot;<br/>exclude run IDs, authority revisions, gap kind and question wording]
+    KEY --> LOOKUP[Lookup exact subject key across open and resolved clarification history]
     LOOKUP --> FOUND{Record already exists}
     FOUND -- Yes --> REUSE[Reuse the same record, stage prefix, ordinal and engine path]
     FOUND -- No --> PREFIX[Select fixed prefix by stage<br/>spec S, plan P, tasks T]
@@ -48,8 +48,9 @@ flowchart TD
     PPEND --> RERUN
     TPEND --> RERUN
     WAIT --> RERUN
-    RERUN --> LOAD[Load and validate current registry, all forms, workflow state and passive-literal revision]
-    LOAD --> ORDER[Visit open records in stage-rank then ordinal order]
+    RERUN --> LOAD[Load and validate current registry, all forms, workflow state and passive-literal revision;<br/>retain prior clarification records and answers rather than duplicating them]
+    LOAD --> ANSWERS[Revalidate relevant resolved answers against current authority;<br/>consume supported answers and reopen the same ID when current evidence requires it]
+    ANSWERS --> ORDER[Visit open records in stage-rank then ordinal order]
     ORDER --> FORM[ParseClarificationViewAction only for a registered open_submission view;<br/>project its two editable fields and immutable form content against the last commit;<br/>closed_audit views have no submission route]
     FORM --> PRESENT{Current editable submission present}
     PRESENT -- Yes --> STATIC[ValidateClarificationViewStaticProjectionAction<br/>filename, IDs, revisions and immutable content equal the current record]

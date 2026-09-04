@@ -2,9 +2,8 @@ const bindings = @import("feature_log_child_bindings.zig");
 const log_stream = @import("../domain/feature_log_stream.zig");
 const prompt_log = @import("../domain/sanitized_prompt_log.zig");
 const telemetry = @import("../domain/telemetry.zig");
-const result = @import("feature_log_result.zig");
 
-pub fn processEvent(children: bindings.ChildBindings, fact: telemetry.WorkflowTelemetryFact) result.Outcome {
+pub fn processEvent(children: bindings.ChildBindings, fact: telemetry.WorkflowTelemetryFact) log_stream.Outcome {
     if (children.retired()) return block(children, fact.workflow_shortcode, .LOG_SINK_FAILURE);
     const definition = switch (children.invokeValidateEvent(fact)) {
         .valid => |value| value,
@@ -35,7 +34,7 @@ pub fn processEvent(children: bindings.ChildBindings, fact: telemetry.WorkflowTe
     return .{ .persisted = evidence.? };
 }
 
-pub fn processPrompt(children: bindings.ChildBindings, fragment: prompt_log.SanitizedPromptFragment) result.Outcome {
+pub fn processPrompt(children: bindings.ChildBindings, fragment: prompt_log.SanitizedPromptFragment) log_stream.Outcome {
     if (children.retired()) return block(children, fragment.workflow_shortcode, .LOG_SINK_FAILURE);
     switch (children.invokeValidatePrompt(fragment)) {
         .ok => {},
@@ -66,14 +65,14 @@ pub fn processPrompt(children: bindings.ChildBindings, fragment: prompt_log.Sani
     return .{ .persisted = evidence.? };
 }
 
-pub fn prepare(children: bindings.ChildBindings, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+pub fn prepare(children: bindings.ChildBindings, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {
     return children.invokePrepare(shortcode);
 }
 
-pub fn close(children: bindings.ChildBindings, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+pub fn close(children: bindings.ChildBindings, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {
     return children.invokeClose(shortcode);
 }
 
-fn block(children: bindings.ChildBindings, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) result.Outcome {
+fn block(children: bindings.ChildBindings, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) log_stream.Outcome {
     return .{ .blocked = children.invokeReportFailure(shortcode, failure) };
 }

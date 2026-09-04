@@ -4,7 +4,7 @@ const child_bindings = @import("bootstrap_child_bindings.zig");
 
 pub const State = struct {
     runtime: pipeline.NodeRuntime,
-    envelope: pipeline.PipelineEnvelope = .init(&.{ .invocation_working_directory, .workflow_operation_registry }),
+    envelope: pipeline.DataShape = .init(&.{ .invocation_working_directory, .workflow_operation_registry }),
 
     pub fn begin(
         self: *State,
@@ -24,7 +24,7 @@ pub const State = struct {
         if (self.terminal(failure)) |outcome| return outcome;
         self.envelope = self.envelope.apply(
             contract,
-            pipeline.NodeDelta.successful(contract),
+            pipeline.DataEffects.fromContract(contract),
         ) catch return .{ .failed = failure };
         return .ok;
     }

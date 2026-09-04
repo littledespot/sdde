@@ -2,7 +2,6 @@ const event_registry = @import("../domain/log_event_registry.zig");
 const log_stream = @import("../domain/feature_log_stream.zig");
 const prompt_log = @import("../domain/sanitized_prompt_log.zig");
 const telemetry = @import("../domain/telemetry.zig");
-const result = @import("feature_log_result.zig");
 
 pub const StepOutcome = union(enum) { ok, failed: log_stream.FailureCode };
 pub const EventValidationOutcome = union(enum) {
@@ -36,8 +35,8 @@ pub const ChildBindings = struct {
         persist_event: *const fn (*anyopaque, telemetry.WorkflowTelemetryFact, event_registry.EventDefinition, log_stream.ClockReading) PersistenceOutcome,
         persist_prompt: *const fn (*anyopaque, prompt_log.SanitizedPromptFragment, log_stream.ClockReading) PersistenceOutcome,
         release: *const fn (*anyopaque) StepOutcome,
-        prepare: *const fn (*anyopaque, telemetry.WorkflowShortcode) result.Outcome,
-        close: *const fn (*anyopaque, telemetry.WorkflowShortcode) result.Outcome,
+        prepare: *const fn (*anyopaque, telemetry.WorkflowShortcode) log_stream.Outcome,
+        close: *const fn (*anyopaque, telemetry.WorkflowShortcode) log_stream.Outcome,
         report_failure: *const fn (*anyopaque, telemetry.WorkflowShortcode, log_stream.FailureCode) log_stream.FailureCode,
     };
 
@@ -74,10 +73,10 @@ pub const ChildBindings = struct {
     pub fn invokeRelease(self: ChildBindings) StepOutcome {
         return self.vtable.release(self.context);
     }
-    pub fn invokePrepare(self: ChildBindings, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+    pub fn invokePrepare(self: ChildBindings, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {
         return self.vtable.prepare(self.context, shortcode);
     }
-    pub fn invokeClose(self: ChildBindings, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+    pub fn invokeClose(self: ChildBindings, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {
         return self.vtable.close(self.context, shortcode);
     }
     pub fn invokeReportFailure(self: ChildBindings, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) log_stream.FailureCode {

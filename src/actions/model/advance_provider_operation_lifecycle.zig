@@ -22,7 +22,7 @@ pub const Action = struct {
         command: lifecycle.Command,
     ) lifecycle.ValidationError!pipeline.NodeDelta {
         const transition = try lifecycle.propose(current, authority, expected_revision, operation_id, expected_operation_revision, command);
-        var delta = pipeline.NodeDelta.successful(contract);
+        var delta: pipeline.NodeDelta = .{};
         delta.runner_accounting_transition = .{ .advance_provider_operation = transition };
         return delta;
     }

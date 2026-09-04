@@ -47,8 +47,8 @@ pub const Runner = struct {
     build_registry_action: build_registry.Action,
     validate_registry_action: validate_registry.Action,
     validate_allowlist_action: validate_allowlist.Action,
-    requirement_envelope: pipeline.PipelineEnvelope = .init(&.{.selected_compiled_workflow}),
-    provider_envelope: ?pipeline.PipelineEnvelope = null,
+    requirement_envelope: pipeline.DataShape = .init(&.{.selected_compiled_workflow}),
+    provider_envelope: ?pipeline.DataShape = null,
     derived_requirement: ?requirement.Requirement = null,
     provider_config_service: ?config_service.LLMProviderConfigService = null,
     decoded: ?document.Owned = null,
@@ -221,7 +221,7 @@ pub const Runner = struct {
         if (self.runtimeOutcome(.LLM_PROVIDER_REGISTRY_INVALID)) |outcome| return outcome;
         self.requirement_envelope = self.requirement_envelope.apply(
             derive_requirement.Action.contract,
-            pipeline.NodeDelta.successful(derive_requirement.Action.contract),
+            pipeline.DataEffects.fromContract(derive_requirement.Action.contract),
         ) catch return .{ .failed = .LLM_PROVIDER_REGISTRY_INVALID };
         return .ok;
     }
@@ -234,7 +234,7 @@ pub const Runner = struct {
         if (self.runtimeOutcome(failure)) |outcome| return outcome;
         self.provider_envelope = self.provider_envelope.?.apply(
             contract,
-            pipeline.NodeDelta.successful(contract),
+            pipeline.DataEffects.fromContract(contract),
         ) catch return .{ .failed = failure };
         return .ok;
     }

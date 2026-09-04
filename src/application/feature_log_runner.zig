@@ -19,10 +19,8 @@ const log_policy = @import("../domain/log_policy.zig");
 const log_event_registry = @import("../domain/log_event_registry.zig");
 const telemetry = @import("../domain/telemetry.zig");
 const barrier_port = @import("../ports/telemetry_barrier.zig");
-const candidate = @import("feature_log_candidate.zig");
 const child_bindings = @import("feature_log_child_bindings.zig");
 const orchestrator = @import("feature_log_orchestrator.zig");
-const result = @import("feature_log_result.zig");
 const action_set = @import("feature_log_actions.zig");
 
 pub const Runner = struct {
@@ -60,15 +58,15 @@ pub const Runner = struct {
     pub fn process(
         self: *Runner,
         attributed: telemetry.WorkflowTelemetryFact,
-    ) result.Outcome {
+    ) log_stream.Outcome {
         return orchestrator.processEvent(self.childBindings(), attributed);
     }
 
-    pub fn processPrompt(self: *Runner, fragment: prompt_log.SanitizedPromptFragment) result.Outcome {
+    pub fn processPrompt(self: *Runner, fragment: prompt_log.SanitizedPromptFragment) log_stream.Outcome {
         return orchestrator.processPrompt(self.childBindings(), fragment);
     }
 
-    pub fn processPromptBatch(self: *Runner, owner: *prompt_log.BatchOwner) result.Outcome {
+    pub fn processPromptBatch(self: *Runner, owner: *prompt_log.BatchOwner) log_stream.Outcome {
         defer prompt_log.deinitBatch(owner);
         var last_persisted: ?log_stream.PersistedEvidence = null;
         for (prompt_log.batch(owner)) |fragment| switch (self.processPrompt(fragment)) {
@@ -81,15 +79,15 @@ pub const Runner = struct {
 
     /// Recovers or initializes every enabled stream before this runner can be
     /// published as the active observer.
-    pub fn prepare(self: *Runner, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+    pub fn prepare(self: *Runner, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {
         return orchestrator.prepare(self.childBindings(), shortcode);
     }
 
-    pub fn close(self: *Runner, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+    pub fn close(self: *Runner, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {
         return orchestrator.close(self.childBindings(), shortcode);
     }
 
-    fn invokePrepare(self: *Runner, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+    fn invokePrepare(self: *Runner, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {
         if (self.retired) return self.block(shortcode, .LOG_SINK_FAILURE);
         if (self.prepared) return .dropped;
         const reading = self.actions.read_clock.execute() catch return self.block(shortcode, .LOG_SERIALIZATION_FAILURE);
@@ -103,7 +101,7 @@ pub const Runner = struct {
         return .dropped;
     }
 
-    fn invokeClose(self: *Runner, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+    fn invokeClose(self: *Runner, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {
         if (self.retired) return self.block(shortcode, .LOG_SINK_FAILURE);
         const reading = self.actions.read_clock.execute() catch return self.block(shortcode, .LOG_SERIALIZATION_FAILURE);
         if (self.event_state) |state| {
@@ -387,7 +385,7 @@ pub const Runner = struct {
         return failure;
     }
 
-    fn block(self: *Runner, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) result.Outcome {
+    fn block(self: *Runner, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) log_stream.Outcome {
         return .{ .blocked = self.reportFailure(shortcode, failure) };
     }
 };
@@ -478,11 +476,11 @@ fn releaseBinding(context: *anyopaque) child_bindings.StepOutcome {
     return .ok;
 }
 
-fn prepareBinding(context: *anyopaque, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+fn prepareBinding(context: *anyopaque, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {
     return cast(context).invokePrepare(shortcode);
 }
 
-fn closeBinding(context: *anyopaque, shortcode: telemetry.WorkflowShortcode) result.Outcome {
+fn closeBinding(context: *anyopaque, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {
     return cast(context).invokeClose(shortcode);
 }
 
@@ -519,9 +517,9 @@ const bindings_vtable: child_bindings.ChildBindings.VTable = .{
     .report_failure = reportFailureBinding,
 };
 
-fn processBarrier(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("../domain/workflow_execution.zig").Candidate {
+fn processBarrier(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) log_stream.Outcome {
     const self: *Runner = @ptrCast(@alignCast(context));
-    return candidate.fromResult(self.process(fact));
+    return self.process(fact);
 }
 
 const PersistError = error{

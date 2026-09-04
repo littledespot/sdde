@@ -27,7 +27,7 @@ pub const Action = struct {
             inference_operation_id,
             reconciliation,
         );
-        var delta = pipeline.NodeDelta.successful(contract);
+        var delta: pipeline.NodeDelta = .{};
         delta.runner_accounting_transition = .{ .reconcile_workflow_tokens = transition };
         return delta;
     }

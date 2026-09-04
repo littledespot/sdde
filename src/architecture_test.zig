@@ -362,6 +362,50 @@ test "provider operation boundary has one capability-limited interface" {
     try expectAbsent(composition, "fake_llm_provider");
 }
 
+test "provider authorization exposes only non-operational references and narrow single-use ports" {
+    const preparation = @import("ports/provider_operation_authorization.zig");
+    const lease = @import("ports/provider_authorization_lease.zig");
+    const reference = @import("domain/execution_reference.zig");
+    const ref_fields = @typeInfo(llm_provider_operation.ValidatedProviderAuthorizationLeaseRef).@"struct".fields;
+    try std.testing.expectEqual(@as(usize, 1), ref_fields.len);
+    try std.testing.expect(ref_fields[0].type == reference.Ref);
+    try std.testing.expect(!@hasDecl(llm_provider_operation.ValidatedProviderAuthorizationLeaseRef, "init"));
+    try std.testing.expect(!@hasDecl(llm_provider_operation.ValidatedProviderAuthorizationLeaseRef, "matches"));
+    try std.testing.expect(!@hasField(preparation.Slot, "publish_fn"));
+    try std.testing.expect(!@hasField(preparation.Slot, "consume_fn"));
+    try std.testing.expect(@hasField(preparation.AllocatedSlot, "publish_fn"));
+    try std.testing.expect(!@hasField(lease.Port, "deposit_fn"));
+
+    inline for (.{
+        "ports/provider_operation_authorization.zig",
+        "ports/provider_authorization_lease.zig",
+        "actions/model/prepare_provider_operation_authorization.zig",
+        "application/provider_authorization_lease_table.zig",
+        "application/provider_authorization_runner.zig",
+        "adapters/provider/fake_provider_authorization.zig",
+    }) |path| {
+        const source = @embedFile(path);
+        try expectAbsent(source, "std.Io");
+        try expectAbsent(source, "std.http");
+        try expectAbsent(source, "std.process");
+        try expectAbsent(source, "anyopaque");
+        try expectAbsent(source, "@constCast");
+    }
+    const fake = @embedFile("adapters/provider/fake_llm_provider.zig");
+    try std.testing.expectEqual(@as(usize, 2), countOccurrences(fake, "authorization_leases.consume("));
+    try expectAbsent(fake, "/application/");
+    const preloader = @embedFile("adapters/provider/fake_provider_authorization.zig");
+    try expectAbsent(preloader, "/application/");
+    try expectAbsent(preloader, "getEnv");
+    const runner = @embedFile("application/provider_operation_lifecycle_runner.zig");
+    try std.testing.expect(std.mem.indexOf(u8, runner, "authorization_leases.deinit()").? < std.mem.indexOf(u8, runner, "lifecycle.deinitOwner(").?);
+    try std.testing.expect(std.mem.indexOf(u8, runner, "self.ledger = try lifecycle.apply(").? < std.mem.indexOf(u8, runner, "authorization_leases.update(").?);
+    const prepare_action = @embedFile("actions/model/prepare_provider_operation_authorization.zig");
+    try expectAbsent(prepare_action, "llm_provider_interface");
+    try expectAbsent(prepare_action, "lifecycle.apply");
+    try std.testing.expect(std.mem.indexOf(u8, prepare_action, "delta.data_writes[") != null);
+}
+
 test "model attempt accounting has one runner-applied transition authority" {
     switch (@typeInfo(model_attempt_accounting.RunnerModelAttemptAccounting)) {
         .@"opaque" => {},
@@ -409,7 +453,7 @@ test "model attempt accounting has one runner-applied transition authority" {
     try expectAbsent(runner, "/ports/");
     try expectAbsent(runner, "/adapters/");
     try expectAbsent(runner, "std.Io");
-    const validate_index = std.mem.indexOf(u8, runner, "envelope.apply(").?;
+    const validate_index = std.mem.indexOf(u8, runner, "envelope.applyDelta(").?;
     const apply_index = std.mem.indexOf(u8, runner, "accounting.apply(").?;
     const replace_index = std.mem.indexOf(u8, runner, "self.current_owner = successor").?;
     try std.testing.expect(validate_index < apply_index);
@@ -487,7 +531,7 @@ test "provider lifecycle has one pure action and runner-owned immutable ledger" 
     const action_source = @embedFile("actions/model/advance_provider_operation_lifecycle.zig");
     try expectAbsent(action_source, "lifecycle.apply(");
     const runner = @embedFile("application/provider_operation_lifecycle_runner.zig");
-    try std.testing.expect(std.mem.indexOf(u8, runner, "envelope.apply(").? < std.mem.indexOf(u8, runner, "lifecycle.apply(").?);
+    try std.testing.expect(std.mem.indexOf(u8, runner, "envelope.applyDelta(").? < std.mem.indexOf(u8, runner, "lifecycle.apply(").?);
     const request_runner = @embedFile("application/model_request_identity_runner.zig");
     try std.testing.expect(std.mem.indexOf(u8, request_runner, "operations.deinit()").? < std.mem.indexOf(u8, request_runner, "identity.deinitOwner(owner)").?);
 }
@@ -878,6 +922,21 @@ test "generic workflow engine is capability free and workflow-name agnostic" {
     try expectAbsent(runner, "\"specify\"");
     try expectAbsent(runner, "\"implement\"");
     try expectAbsent(runner, "/adapters/");
+}
+
+test "workflow values have one runner-owned store and no key-only candidate API" {
+    const pipeline = @import("domain/pipeline.zig");
+    const data = @import("domain/pipeline_data.zig");
+    try std.testing.expect(!@hasDecl(pipeline.NodeDelta, "successful"));
+    try std.testing.expect(@FieldType(pipeline.NodeDelta, "data_writes") == data.Slots);
+    try std.testing.expect(@FieldType(pipeline.NodeDelta, "data_replacements") == data.Slots);
+    const runner = @embedFile("application/workflow_pipeline_runner.zig");
+    try std.testing.expect(std.mem.indexOf(u8, runner, "self.envelope.view(") != null);
+    try std.testing.expectEqual(@as(usize, 2), countOccurrences(runner, "defer self.envelope.discard(&candidate.delta)"));
+    const envelope = @embedFile("application/pipeline_envelope.zig");
+    try expectAbsent(envelope, "@ptrCast");
+    try expectAbsent(envelope, "/adapters/");
+    try expectAbsent(@embedFile("domain/pipeline_data.zig"), "@ptrCast");
 }
 
 test "feature document filenames and headings agree" {

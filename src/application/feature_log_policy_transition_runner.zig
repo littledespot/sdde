@@ -1,7 +1,7 @@
 const validate_transition = @import("../actions/log/validate_feature_log_policy_transition.zig");
 const telemetry = @import("../domain/telemetry.zig");
 const bindings = @import("feature_log_policy_transition_child_bindings.zig");
-const feature_log_result = @import("feature_log_result.zig");
+const log_stream = @import("../domain/feature_log_stream.zig");
 const feature_log_runner = @import("feature_log_runner.zig");
 
 pub const Runner = struct {
@@ -34,12 +34,12 @@ pub const Runner = struct {
         return .valid;
     }
 
-    fn invokeCloseCurrent(context: *anyopaque) feature_log_result.Outcome {
+    fn invokeCloseCurrent(context: *anyopaque) log_stream.Outcome {
         const self = cast(context);
         return self.current.close(self.shortcode);
     }
 
-    fn invokePrepareNext(context: *anyopaque) feature_log_result.Outcome {
+    fn invokePrepareNext(context: *anyopaque) log_stream.Outcome {
         const self = cast(context);
         return self.next.prepare(self.shortcode);
     }

@@ -49,7 +49,7 @@ pub const Action = struct {
             canonical_request_id,
             attempt,
         );
-        var delta = pipeline.NodeDelta.successful(contract);
+        var delta: pipeline.NodeDelta = .{};
         delta.runner_accounting_transition = .{ .increment_model_attempt = transition };
         return delta;
     }

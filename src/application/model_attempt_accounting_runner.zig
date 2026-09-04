@@ -31,7 +31,7 @@ pub const Runner = struct {
         request_id: *const identity.ModelRequestId,
         attempt: accounting.Attempt,
     ) (advance_attempt.Error || accounting.Error)!operation.ModelAttemptOrdinal {
-        var envelope = pipeline.PipelineEnvelope.init(&.{.model_request_identity_ledger});
+        var envelope = pipeline.DataShape.init(&.{.model_request_identity_ledger});
         envelope.validateInvocation(advance_attempt.Action.contract) catch {
             return error.ModelRequestUnavailableForAttempt;
         };
@@ -44,9 +44,9 @@ pub const Runner = struct {
             request_id,
             attempt,
         );
-        envelope = envelope.apply(
+        envelope = envelope.applyDelta(
             advance_attempt.Action.contract,
-            delta,
+            &delta,
         ) catch return error.ModelRequestUnavailableForAttempt;
         const transition = switch (delta.runner_accounting_transition.?) {
             .increment_model_attempt => |value| value,

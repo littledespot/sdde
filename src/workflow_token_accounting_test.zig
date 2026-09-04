@@ -111,8 +111,8 @@ test "token actions only propose their declared runner transitions" {
         20,
     );
     try std.testing.expectEqual(@as(u64, 0), ledger.revision().value);
-    const empty = pipeline.PipelineEnvelope.init(&.{});
-    _ = try empty.apply(reserve_action.Action.contract, reserve_delta);
+    const empty = pipeline.DataShape.init(&.{});
+    _ = try empty.applyDelta(reserve_action.Action.contract, &reserve_delta);
     const reservation = switch (reserve_delta.runner_accounting_transition.?) {
         .reserve_workflow_tokens => |value| value,
         else => unreachable,
@@ -125,7 +125,7 @@ test "token actions only propose their declared runner transitions" {
         inference,
         .not_sent,
     );
-    _ = try empty.apply(reconcile_action.Action.contract, reconcile_delta);
+    _ = try empty.applyDelta(reconcile_action.Action.contract, &reconcile_delta);
     try std.testing.expectEqual(@as(u64, 1), ledger.revision().value);
 }
 

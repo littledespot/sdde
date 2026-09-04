@@ -31,6 +31,7 @@ const KeyState = [key_count]bool;
 
 fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkflow) Error!void {
     const steps = graph.authority.steps;
+    try validateDataSchemas(graph.authority);
     if (steps.len == 0 or steps.len > definition.max_steps or
         !graph.authority.total_model_token_budget.isValid() or
         graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return invalid())) return invalid();
@@ -56,6 +57,23 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
     try validateTerminalReachability(allocator, steps, graph.authority.transitions);
     try validateBoundedCycles(allocator, steps, graph.authority.transitions);
     try validateDataFlow(allocator, graph, start);
+}
+
+fn validateDataSchemas(authority: compilation.SemanticAuthority) Error!void {
+    var required: KeyState = @splat(false);
+    for (authority.invocation_outputs) |key| required[@intFromEnum(key)] = true;
+    for (authority.steps) |step| {
+        inline for (.{ step.requires, step.optional, step.produces, step.replaces, step.invalidates }) |keys| {
+            for (keys) |key| required[@intFromEnum(key)] = true;
+        }
+    }
+    var seen: KeyState = @splat(false);
+    for (authority.data_schemas) |schema| {
+        const index = @intFromEnum(schema.key);
+        if (!schema.valid() or seen[index] or !required[index]) return invalid();
+        seen[index] = true;
+    }
+    if (!std.mem.eql(bool, &required, &seen)) return invalid();
 }
 
 fn validateReachability(

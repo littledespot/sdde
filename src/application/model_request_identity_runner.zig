@@ -11,7 +11,7 @@ const provider_runner = @import("provider_operation_lifecycle_runner.zig");
 
 pub const Runner = struct {
     allocator: std.mem.Allocator,
-    envelope: pipeline.PipelineEnvelope = pipeline.PipelineEnvelope.init(&.{}),
+    envelope: pipeline.DataShape = pipeline.DataShape.init(&.{}),
     current_owner: ?*identity.Owner = null,
     provider_operations: ?provider_runner.Runner = null,
     build_action: build_ledger.Action = .{},
@@ -47,7 +47,7 @@ pub const Runner = struct {
         errdefer operations.deinit();
         self.envelope = self.envelope.apply(
             build_ledger.Action.contract,
-            pipeline.NodeDelta.successful(build_ledger.Action.contract),
+            pipeline.DataEffects.fromContract(build_ledger.Action.contract),
         ) catch return error.ModelRequestBindingInvalid;
         self.current_owner = owner;
         self.provider_operations = operations;
@@ -74,7 +74,7 @@ pub const Runner = struct {
         errdefer identity.deinitOwner(assignment.owner);
         self.envelope = self.envelope.apply(
             assign_request.Action.contract,
-            pipeline.NodeDelta.successful(assign_request.Action.contract),
+            pipeline.DataEffects.fromContract(assign_request.Action.contract),
         ) catch return error.ModelRequestBindingInvalid;
         self.current_owner = assignment.owner;
         identity.deinitOwner(current_owner);
@@ -125,7 +125,7 @@ pub const Runner = struct {
         errdefer identity.deinitOwner(successor);
         self.envelope = self.envelope.apply(
             advance_lifecycle.Action.contract,
-            pipeline.NodeDelta.successful(advance_lifecycle.Action.contract),
+            pipeline.DataEffects.fromContract(advance_lifecycle.Action.contract),
         ) catch return error.ModelRequestBindingInvalid;
         self.current_owner = successor;
         identity.deinitOwner(current_owner);

@@ -188,19 +188,24 @@ fixture.
 | Bootstrap roots | Normalization, active-filesystem checks, root roles, separation, and root registry | Foundation exists. The named fixture has no runtime config or roots. |
 | Feature logging | Policy, records, sinks, rotation, retention, recovery, and composition tests | Subsystem exists, but no Specify activation/state transaction binds it to a feature run. |
 | Workflow authority | Bounded inventory/capture/YAML parse/schema validation, compiler, graph validator, and immutable ID registry | Strong generic foundation exists. The current uncommitted tests strengthen this boundary only. |
-| Generic execution | Exact workflow-selector parsing, graph selection, invocation call, node-transition loop, terminal-outcome preservation, and runner-owned delta application | Skeleton only. It cannot carry a typed run context or workflow values. |
+| Generic execution | Exact workflow selection, compiled transitions, owned typed invocation/value flow, declared-input views, and schema-checked delta application | Value-flow foundation exists; concrete Specify operations remain missing. |
 | Registered behavior | `core.empty-invocation@1`, `core.noop@1`, and `core.capability-free@1` | A definition named `specify` would still reject `--reference` and perform no work. |
 | Toolchain | Closed v1 project/preset package references, inheritance, policy composition, and safety validation | Narrow F0003 boundary exists. It does not provide Node/Vitest commands or environment facts. |
 | Workflow artifact registry | Validated feature-log paths and sink binding | Logging-only; no specification, reference, clarification, workflow-state, or stage-transaction paths. |
 | Specify domain | No `SpecificationIR`, reference snapshot, Specify invocation, YAML model operation, validator, renderer/parser, clarification, or commit implementation | Missing. |
 | Evaluation harness | `TEST_HARNESS.md` only | No build wiring, driver, schemas, suites, reports, fake scripts, or end-to-end cases exist. |
 
-Two accepted ADR 0003 contracts remain incomplete in the shared runtime:
+The generic runner now retains owned, versioned native values from invocation
+through subsequent steps. Its immutable views expose only declared required or
+optional inputs. One shared effect validator checks writes, replacements, and
+invalidations before the runner transfers ownership; malformed, cancelled, and
+unapplied candidates are destroyed. Native schemas remain in the operation
+registry, not project YAML. Fixed kernel bindings still have their existing
+concrete typed owners and structural `DataShape` checks; this increment does
+not claim that every kernel binding has migrated to the owned-value envelope.
 
-- `PipelineEnvelope` stores only `DataKey` presence bits. `NodeDelta` carries
-  key lists rather than owned typed values, and a workflow node receives only
-  compiled-node metadata plus a log binding. The invocation result therefore
-  cannot supply validated typed run context to graph nodes.
+An accepted ADR 0003 setup contract remains incomplete:
+
 - the fixed startup orchestrator currently loads the project toolchain before
   workflow selection. ADR 0003 requires project/feature/toolchain setup beyond
   minimal startup to run only when the selected workflow graph references its
@@ -211,12 +216,11 @@ Two accepted ADR 0003 contracts remain incomplete in the shared runtime:
 
 ### 5.1 Complete the shared pipeline runtime
 
-- replace presence-only workflow data with an owned, schema-versioned typed
-  registry behind immutable envelope views;
-- make invocation output produce and retain validated typed run context;
-- pass only each node's declared bounded inputs and narrow action ports;
-- validate and apply owned deltas, replacements, invalidations, cleanup, and
-  terminal/error paths in the runner;
+Owned workflow value flow is implemented, with regression coverage in
+`src/pipeline_data_test.zig` and `src/workflow_value_flow_test.zig` for unrelated
+YAML workflows, branch merges, schema drift, restricted inputs, replacement,
+invalidation, cancellation, and allocation-failure cleanup. Remaining work:
+
 - execute/validate registered gates and effective capability ceilings; and
 - move selected target/toolchain/principle setup out of fixed startup and into
   reusable registered setup nodes selected by compiled topology.

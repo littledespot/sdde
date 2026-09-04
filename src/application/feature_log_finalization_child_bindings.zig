@@ -1,4 +1,3 @@
-const feature_log_result = @import("feature_log_result.zig");
 const feature_log_bindings = @import("feature_log_child_bindings.zig");
 const log_stream = @import("../domain/feature_log_stream.zig");
 
@@ -16,8 +15,8 @@ pub const ChildBindings = struct {
     pub const VTable = struct {
         target: *const fn (*anyopaque) Target,
         validate: *const fn (*anyopaque) ValidationOutcome,
-        prepare: *const fn (*anyopaque) feature_log_result.Outcome,
-        close: *const fn (*anyopaque) feature_log_result.Outcome,
+        prepare: *const fn (*anyopaque) log_stream.Outcome,
+        close: *const fn (*anyopaque) log_stream.Outcome,
     };
 
     pub fn target(self: ChildBindings) Target {
@@ -28,11 +27,11 @@ pub const ChildBindings = struct {
         return self.vtable.validate(self.context);
     }
 
-    pub fn invokePrepare(self: ChildBindings) feature_log_result.Outcome {
+    pub fn invokePrepare(self: ChildBindings) log_stream.Outcome {
         return self.vtable.prepare(self.context);
     }
 
-    pub fn invokeClose(self: ChildBindings) feature_log_result.Outcome {
+    pub fn invokeClose(self: ChildBindings) log_stream.Outcome {
         return self.vtable.close(self.context);
     }
 };

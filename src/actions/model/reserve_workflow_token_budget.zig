@@ -29,7 +29,7 @@ pub const Action = struct {
             count_evidence,
             effective_maximum_output_tokens,
         );
-        var delta = pipeline.NodeDelta.successful(contract);
+        var delta: pipeline.NodeDelta = .{};
         delta.runner_accounting_transition = .{ .reserve_workflow_tokens = transition };
         return delta;
     }

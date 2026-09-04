@@ -1,4 +1,6 @@
 test {
+    _ = @import("pipeline_data_test.zig");
+    _ = @import("workflow_value_flow_test.zig");
     _ = @import("feature_log_runtime_test.zig");
     _ = @import("workflow_registry_test.zig");
     _ = @import("workflow_execution_test.zig");

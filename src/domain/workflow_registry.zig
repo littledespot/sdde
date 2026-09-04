@@ -165,6 +165,12 @@ fn graphProjectsDefinition(
     return graph.authority.transitions.len == transition_count;
 }
 
+fn cloneDataSchemas(allocator: std.mem.Allocator, schemas: []const @import("pipeline_data.zig").Schema) std.mem.Allocator.Error![]const @import("pipeline_data.zig").Schema {
+    const result = try allocator.dupe(@import("pipeline_data.zig").Schema, schemas);
+    for (result) |*schema| schema.type_name = try allocator.dupe(u8, schema.type_name);
+    return result;
+}
+
 fn sameParameter(left: compilation.CompiledParameter, right: workflow.ParameterBinding) bool {
     if (!std.mem.eql(u8, left.id.bytes, right.id.bytes)) return false;
     return switch (left.value) {
@@ -200,6 +206,7 @@ fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow
         destination.operation_id.bytes = try allocator.dupe(u8, step.operation_id.bytes);
         destination.parameters = try cloneParameters(allocator, step.parameters);
         destination.requires = try allocator.dupe(pipeline.DataKey, step.requires);
+        destination.optional = try allocator.dupe(pipeline.DataKey, step.optional);
         destination.produces = try allocator.dupe(pipeline.DataKey, step.produces);
         destination.replaces = try allocator.dupe(pipeline.DataKey, step.replaces);
         destination.invalidates = try allocator.dupe(pipeline.DataKey, step.invalidates);
@@ -222,6 +229,7 @@ fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow
         .source_ordinal = source.source_ordinal,
         .shortcode = source.shortcode,
         .authority = .{
+            .data_schemas = try cloneDataSchemas(allocator, source.authority.data_schemas),
             .workflow_id = .{ .bytes = try allocator.dupe(u8, source.authority.workflow_id.bytes) },
             .workflow_version = source.authority.workflow_version,
             .invocation_operation_id = .{ .bytes = try allocator.dupe(u8, source.authority.invocation_operation_id.bytes) },

@@ -6,6 +6,7 @@ const compilation = @import("../domain/workflow_compilation.zig");
 const operation = @import("../domain/workflow_operation.zig");
 const provider_binding = @import("../domain/llm_provider_binding.zig");
 const workflow_retry = @import("../domain/workflow_retry.zig");
+const data = @import("../domain/pipeline_data.zig");
 
 pub const Error = error{OperationExecutionFailed};
 
@@ -14,6 +15,7 @@ pub const InvocationInput = struct {
 };
 
 pub const StepInput = struct {
+    data: data.View,
     step: *const compilation.CompiledStep,
     resources: []const compilation.CompiledResource,
     model_binding: ?*const provider_binding.ValidatedProviderModelBinding,
@@ -37,6 +39,7 @@ pub const Entry = struct {
 
 pub const Registry = struct {
     operations: []const Entry,
+    data_schemas: []const data.Schema = &.{},
     policies: []const operation.PolicyProfile,
     gates: []const []const u8,
     capabilities: []const []const u8,
@@ -63,9 +66,16 @@ pub const Registry = struct {
 
     pub fn validate(self: *const Registry) bool {
         if (!uniqueStrings(self.gates) or !uniqueStrings(self.capabilities)) return false;
+        for (self.data_schemas, 0..) |schema, index| {
+            if (!schema.valid()) return false;
+            for (self.data_schemas[0..index]) |prior| if (schema.key == prior.key) return false;
+        }
         for (self.operations, 0..) |entry, index| {
             if (workflow.RegisteredRef.parse(entry.contract.id) == null or
                 !validContract(entry.contract)) return false;
+            inline for (.{ entry.contract.requires, entry.contract.optional, entry.contract.produces, entry.contract.replaces, entry.contract.invalidates }) |keys| {
+                for (keys) |key| if (data.find(self.data_schemas, key) == null) return false;
+            }
             for (self.operations[0..index]) |prior| {
                 if (std.mem.eql(u8, prior.contract.id, entry.contract.id)) return false;
             }
@@ -91,7 +101,7 @@ fn validContract(contract: operation.Contract) bool {
         !uniqueStrings(contract.gates) or !uniqueStrings(contract.capabilities) or
         !validDataContract(contract)) return false;
     if (contract.kind == .invocation and
-        (contract.parameters.len != 0 or contract.requires.len != 0 or contract.replaces.len != 0 or
+        (contract.parameters.len != 0 or contract.requires.len != 0 or contract.optional.len != 0 or contract.replaces.len != 0 or
             contract.invalidates.len != 0 or contract.side_effect != .none or contract.gates.len != 0 or
             contract.capabilities.len != 0 or contract.retry_limit != null or
             contract.outcomes.len != 1 or contract.outcomes[0] != .ok)) return false;
@@ -125,8 +135,9 @@ fn validContract(contract: operation.Contract) bool {
 }
 
 fn validDataContract(contract: operation.Contract) bool {
-    if (!uniqueKeys(contract.requires) or !uniqueKeys(contract.produces) or
+    if (!uniqueKeys(contract.requires) or !uniqueKeys(contract.optional) or !uniqueKeys(contract.produces) or
         !uniqueKeys(contract.replaces) or !uniqueKeys(contract.invalidates)) return false;
+    for (contract.optional) |key| if (containsKey(contract.requires, key)) return false;
     for (contract.produces) |key| {
         if (containsKey(contract.requires, key) or containsKey(contract.replaces, key) or
             containsKey(contract.invalidates, key)) return false;

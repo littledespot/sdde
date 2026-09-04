@@ -131,8 +131,8 @@ test "attempt action proposes one runner-applied transition" {
         .initial,
     );
 
-    const envelope = pipeline.PipelineEnvelope.init(&.{.model_request_identity_ledger});
-    _ = try envelope.apply(advance_attempt.Action.contract, delta);
+    const envelope = pipeline.DataShape.init(&.{.model_request_identity_ledger});
+    _ = try envelope.applyDelta(advance_attempt.Action.contract, &delta);
     const transition = switch (delta.runner_accounting_transition.?) {
         .increment_model_attempt => |value| value,
         else => unreachable,

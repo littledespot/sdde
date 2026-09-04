@@ -83,12 +83,9 @@ test "runner barrier persists recovers and sequences feature events" {
         },
     };
     const first = runner.barrier().process(attributed);
-    try std.testing.expectEqual(@import("domain/workflow.zig").OutcomeTag.ok, first.outcome);
-    try std.testing.expectEqualSlices(
-        @import("domain/pipeline.zig").DataKey,
-        &.{.feature_log_append_evidence},
-        first.delta.data_writes,
-    );
+    try std.testing.expect(first == .persisted);
+    try std.testing.expectEqual(@as(u64, 1), first.persisted.sequence);
+    try std.testing.expect(first.persisted.bytes_written > 0);
     try std.testing.expectEqual(@as(u64, 2), runner.event_state.?.next_sequence);
     const second = runner.process(attributed);
     try std.testing.expect(second == .persisted);
@@ -413,10 +410,10 @@ test "same-run policy transition closes the old binding and continues sequence a
     var next_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(next_owner), .actions = childrenFor(&next_sink, clock.port(), outputs.console(), outputs.emergency(), stabilizer.port()) };
     const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .event_type = .run_started } };
     var lifecycle: runtime_lifecycle.Lifecycle = .{};
-    try std.testing.expect(lifecycle.barrier().process(fact).outcome == .blocked);
+    try std.testing.expect(lifecycle.barrier().process(fact) == .blocked);
     try std.testing.expect(lifecycle.activate(old_runner.childBindings(), fact.workflow_shortcode) == .ok);
     try std.testing.expect(lifecycle.activate(next_runner.childBindings(), fact.workflow_shortcode) == .invalid);
-    try std.testing.expect(lifecycle.barrier().process(fact).outcome == .ok);
+    try std.testing.expect(lifecycle.barrier().process(fact) == .persisted);
     try std.testing.expectEqual(@as(u64, 2), old_runner.event_state.?.next_sequence);
     var transition_execution: transition_runner.Runner = .{
         .current = &old_runner,
@@ -425,7 +422,7 @@ test "same-run policy transition closes the old binding and continues sequence a
     };
     try std.testing.expect(lifecycle.transition(transition_execution.childBindings()) == .ok);
     const outcome = lifecycle.barrier().process(fact);
-    try std.testing.expect(outcome.outcome == .ok);
+    try std.testing.expect(outcome == .persisted);
     try std.testing.expectEqual(@as(u64, 3), next_runner.event_state.?.next_sequence);
     try std.testing.expectEqual(@as(u8, 2), next_runner.event_state.?.total_segment_count);
 
@@ -466,7 +463,7 @@ test "same-run policy transition closes the old binding and continues sequence a
     };
     try std.testing.expect(lifecycle.finalizeActive(finalization_execution.childBindings()) == .ok);
     try std.testing.expect(next_runner.retired);
-    try std.testing.expect(lifecycle.barrier().process(fact).outcome == .blocked);
+    try std.testing.expect(lifecycle.barrier().process(fact) == .blocked);
 }
 
 test "retention authorization derives its single-use cutoff from trusted policy and time" {
@@ -624,7 +621,7 @@ test "failed successor preparation removes the active observer" {
     try std.testing.expect(lifecycle.transition(transition_execution.childBindings()) == .blocked);
     try std.testing.expect(old_runner.retired);
     try std.testing.expect(!next_sink.held);
-    try std.testing.expect(lifecycle.barrier().process(fact).outcome == .blocked);
+    try std.testing.expect(lifecycle.barrier().process(fact) == .blocked);
     try std.testing.expectEqual(@as(usize, 1), outputs.emergency_count);
     try std.testing.expectEqual(@as(usize, 1), stabilizer.calls);
 }
@@ -663,7 +660,7 @@ test "failed active finalization releases the lock and removes the observer" {
     const outcome = lifecycle.finalizeActive(finalization_execution.childBindings());
     try std.testing.expectEqual(log_stream.FailureCode.LOG_FLUSH_FAILURE, outcome.blocked);
     try std.testing.expect(!sink.held);
-    try std.testing.expect(lifecycle.barrier().process(fact).outcome == .blocked);
+    try std.testing.expect(lifecycle.barrier().process(fact) == .blocked);
     try std.testing.expectEqual(@as(usize, 1), outputs.emergency_count);
     try std.testing.expectEqual(@as(usize, 1), stabilizer.calls);
 }

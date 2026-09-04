@@ -226,11 +226,11 @@ const FakeBarrier = struct {
     fn port(self: *FakeBarrier) barrier_port.Barrier {
         return .{ .context = self, .process_fn = process };
     }
-    fn process(context: *anyopaque, _: telemetry.WorkflowTelemetryFact) execution.Candidate {
+    fn process(context: *anyopaque, _: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
         const self: *FakeBarrier = @ptrCast(@alignCast(context));
         self.calls += 1;
-        if (self.block) return .{ .outcome = .blocked, .delta = .{} };
-        return .{ .outcome = .ok, .delta = .{ .data_writes = &.{.feature_log_append_evidence} } };
+        if (self.block) return .{ .blocked = .LOG_SINK_FAILURE };
+        return .{ .persisted = .{ .segment_ordinal = 1, .sequence = self.calls, .bytes_written = 1, .flushed = true } };
     }
 };
 

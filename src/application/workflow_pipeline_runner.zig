@@ -12,6 +12,8 @@ const provider_binding = @import("../domain/llm_provider_binding.zig");
 const provider_services = @import("model_provider_bootstrap_services.zig");
 const resolve_provider_binding = @import("../actions/provider/resolve_provider_model_binding.zig");
 const workflow_token_runner = @import("workflow_token_accounting_runner.zig");
+const envelope_module = @import("pipeline_envelope.zig");
+const data = @import("../domain/pipeline_data.zig");
 
 pub const Runner = struct {
     selected: execution.SelectedWorkflow,
@@ -20,7 +22,7 @@ pub const Runner = struct {
     runtime: pipeline.NodeRuntime,
     model_provider_services: ?*const provider_services.ModelProviderBootstrapServices = null,
     resolve_provider_binding_action: resolve_provider_binding.Action = .{},
-    envelope: pipeline.PipelineEnvelope = pipeline.PipelineEnvelope.init(&.{}),
+    envelope: envelope_module.PipelineEnvelope,
     token_accounting: workflow_token_runner.Runner,
     retry_execution_counts: [definition.max_steps]u64 = [_]u64{0} ** definition.max_steps,
 
@@ -38,6 +40,7 @@ pub const Runner = struct {
             .barrier = barrier,
             .runtime = runtime,
             .model_provider_services = model_provider_services,
+            .envelope = .init(selected.graph.authority.data_schemas),
             .token_accounting = workflow_token_runner.Runner.init(
                 allocator,
                 selected.graph.authority.total_model_token_budget,
@@ -46,6 +49,7 @@ pub const Runner = struct {
     }
 
     pub fn deinit(self: *Runner) void {
+        self.envelope.deinit();
         self.token_accounting.deinit();
         self.* = undefined;
     }
@@ -56,6 +60,7 @@ pub const Runner = struct {
 
     fn invokeInvocation(self: *Runner) execution.Applied {
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .outcome = outcome };
+        if (!self.schemasMatch()) return .{ .outcome = .failed };
         const authority = self.selected.graph.authority;
         const entry = self.operation_registry.resolveOperation(authority.invocation_operation_id) orelse {
             return .{ .outcome = .failed };
@@ -65,9 +70,11 @@ pub const Runner = struct {
         {
             return .{ .outcome = .failed };
         }
-        const candidate = entry.invoke(.{ .invocation = .{ .arguments = self.selected.invocation.arguments } }) catch {
+        var candidate = entry.invoke(.{ .invocation = .{ .arguments = self.selected.invocation.arguments } }) catch {
             return .{ .outcome = .failed };
         };
+        defer self.envelope.discard(&candidate.delta);
+        if (runtimeTerminal(self.runtime)) |outcome| return .{ .outcome = outcome };
         if (!containsOutcome(entry.contract.outcomes, candidate.outcome)) return .{ .outcome = .failed };
         const contract: pipeline.NodeContract = .{
             .id = authority.invocation_operation_id.bytes,
@@ -76,11 +83,12 @@ pub const Runner = struct {
             .produces = authority.invocation_outputs,
             .side_effect = .none,
         };
-        return self.applyCandidate(contract, candidate);
+        return self.applyCandidate(contract, &candidate);
     }
 
     fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .outcome = outcome };
+        if (!self.schemasMatch()) return .{ .outcome = .failed };
         const index = findStepIndex(self.selected.graph.authority.steps, id) orelse return .{ .outcome = .failed };
         if (index >= self.retry_execution_counts.len) return .{ .outcome = .failed };
         const step = &self.selected.graph.authority.steps[index];
@@ -92,6 +100,7 @@ pub const Runner = struct {
         }
         const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .outcome = .failed };
         if (!contractMatchesStep(entry.contract, step.*)) return .{ .outcome = .failed };
+        const input_data = self.envelope.view(stepPipelineContract(step.*)) catch return .{ .outcome = .invalid };
         var resource_buffer: [definition.max_parameters]compilation.CompiledResource = undefined;
         const resources = bindStepResources(
             step.parameters,
@@ -101,14 +110,17 @@ pub const Runner = struct {
         var resolved_binding = self.resolveModelBinding(step.*) catch {
             return .{ .outcome = .failed };
         };
-        const candidate = entry.invoke(.{ .step = .{
+        var candidate = entry.invoke(.{ .step = .{
+            .data = input_data,
             .step = step,
             .resources = resources,
             .model_binding = if (resolved_binding) |*value| value else null,
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
         } }) catch return .{ .outcome = .failed };
+        defer self.envelope.discard(&candidate.delta);
+        if (runtimeTerminal(self.runtime)) |outcome| return .{ .outcome = outcome };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .outcome = .failed };
-        return self.applyCandidate(stepPipelineContract(step.*), candidate);
+        return self.applyCandidate(stepPipelineContract(step.*), &candidate);
     }
 
     pub fn tokenLedger(self: *const Runner) *const @import("../domain/workflow_token_accounting.zig").Ledger {
@@ -123,7 +135,7 @@ pub const Runner = struct {
         const services = self.model_provider_services orelse {
             return error.ProviderModelBindingInvalid;
         };
-        var binding_envelope = pipeline.PipelineEnvelope.init(&.{
+        var binding_envelope = pipeline.DataShape.init(&.{
             .selected_compiled_workflow,
             .llm_provider_registry,
             .repository_model_allowlist,
@@ -139,18 +151,25 @@ pub const Runner = struct {
         );
         binding_envelope = binding_envelope.apply(
             resolve_provider_binding.Action.contract,
-            pipeline.NodeDelta.successful(resolve_provider_binding.Action.contract),
+            pipeline.DataEffects.fromContract(resolve_provider_binding.Action.contract),
         ) catch return error.ProviderModelBindingInvalid;
         std.debug.assert(binding_envelope.contains(.validated_provider_model_binding));
         return resolved;
     }
 
-    fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: execution.Candidate) execution.Applied {
-        const next = self.envelope.apply(contract, candidate.delta) catch return .{ .outcome = .invalid };
-        self.envelope = next;
+    fn schemasMatch(self: *const Runner) bool {
+        for (self.selected.graph.authority.data_schemas) |schema| {
+            const current = data.find(self.operation_registry.data_schemas, schema.key) orelse return false;
+            if (!schema.eql(current)) return false;
+        }
+        return true;
+    }
+
+    fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: *execution.Candidate) execution.Applied {
+        self.envelope.apply(contract, &candidate.delta) catch return .{ .outcome = .invalid };
         for (candidate.delta.addedTelemetryFacts()) |fact| {
             const logging_result = self.barrier.process(fact);
-            if (logging_result.outcome != .ok) return .{ .outcome = logging_result.outcome };
+            if (logging_result == .blocked) return .{ .outcome = .blocked };
         }
         return .{ .outcome = candidate.outcome };
     }
@@ -161,6 +180,7 @@ fn stepPipelineContract(step: compilation.CompiledStep) pipeline.NodeContract {
         .id = step.operation_id.bytes,
         .kind = .action,
         .requires = step.requires,
+        .optional = step.optional,
         .produces = step.produces,
         .replaces = step.replaces,
         .invalidates = step.invalidates,
@@ -173,6 +193,7 @@ fn contractMatchesStep(
 ) bool {
     return contract.kind == .step and
         std.mem.eql(pipeline.DataKey, contract.requires, step.requires) and
+        std.mem.eql(pipeline.DataKey, contract.optional, step.optional) and
         std.mem.eql(pipeline.DataKey, contract.produces, step.produces) and
         std.mem.eql(pipeline.DataKey, contract.replaces, step.replaces) and
         std.mem.eql(pipeline.DataKey, contract.invalidates, step.invalidates) and

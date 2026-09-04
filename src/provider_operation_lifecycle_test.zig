@@ -8,51 +8,34 @@ const requests_module = @import("application/model_request_identity_runner.zig")
 const attempts_module = @import("application/model_attempt_accounting_runner.zig");
 const lifecycle_runner = @import("application/provider_operation_lifecycle_runner.zig");
 const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
-const binding = @import("domain/llm_provider_binding.zig");
-const registry = @import("domain/llm_provider_registry.zig");
+const AuthorizationFixture = @import("provider_authorization_test_fixture.zig").Fixture;
 
 test "fake provider executes only after applied count and inference lifecycle transitions" {
-    var fixture = try Fixture.init(std.testing.allocator);
+    var fixture: AuthorizationFixture = undefined;
+    try fixture.init(std.testing.allocator);
     defer fixture.deinit();
     var fake: fake_provider.FakeLLMProvider = .{
         .allocator = std.testing.allocator,
+        .authorization_leases = fixture.leasePort(),
         .count_plan = .{ .counted = 10 },
         .invocation_plan = .{ .complete = .{ .content = "{}", .output_tokens = 5 } },
     };
-    const provider_binding: binding.ValidatedProviderModelBinding = .{
-        .operation_id = facts().binding_id.operation_id,
-        .slot_id = facts().binding_id.slot_id,
-        .registry_entry = &fake_entry,
-        .reasoning_effort = null,
-    };
-    const request = try provider.IdentifiedProviderNeutralModelRequest.init(.{
-        .model_request_id = fixture.request,
-        .model_operation_id = fixture.request.model_operation_id,
-        .binding_id = provider_binding.bindingId(),
-        .request_schema_id = .{ .bytes = "request/v1" },
-        .result_schema_id = .{ .bytes = "result/v1" },
-        .model_visible_input_id = facts().model_visible_input_id,
-        .content = &.{.{ .user = "Return a bounded candidate." }},
-        .response_schema = "{}",
-        .response_guidance_mode = .prompt_only,
-        .controls = .{},
-        .limits = provider.EffectiveModelLimits.init(256, 32, 50, 20, 100).?,
-    });
     try std.testing.expectError(error.ProviderOperationNotFound, fixture.ledger().requireInvoked(fixture.id(.input_token_count)));
     try std.testing.expectEqual(@as(usize, 0), fake.count_call_count);
-    try fixture.startCount();
+    try fixture.assignCount();
+    const count_lease = try fixture.prepare(.input_token_count);
+    _ = try fixture.invoke(.input_token_count);
     const count_operation = try fixture.ledger().requireInvoked(fixture.id(.input_token_count));
-    const count_lease = lease(count_operation.*);
-    const observation = try fake.interface().countInputTokens(&provider_binding, &request, &count_lease, count_operation);
-    const evidence = try provider.ExactInputTokenCountEvidence.fromObservation(observation, request, provider_binding);
+    const observation = try fake.interface().countInputTokens(&fixture.provider_binding, &fixture.request, count_lease, count_operation);
+    const evidence = try provider.ExactInputTokenCountEvidence.fromObservation(observation, fixture.request, fixture.provider_binding);
     _ = try fixture.change(.input_token_count, .{ .terminate = .{ .counted = evidence } });
     _ = try fixture.change(.inference, .{ .assign_inference = evidence });
     try std.testing.expectError(error.ProviderOperationNotInvoked, fixture.ledger().requireInvoked(fixture.id(.inference)));
     try std.testing.expectEqual(@as(usize, 0), fake.invocation_call_count);
-    _ = try fixture.change(.inference, .{ .invoke = invocation });
+    const inference_lease = try fixture.prepare(.inference);
+    _ = try fixture.invoke(.inference);
     const inference_operation = try fixture.ledger().requireInvoked(fixture.id(.inference));
-    const inference_lease = lease(inference_operation.*);
-    var result = try fake.interface().invoke(&provider_binding, &request, &evidence, &inference_lease, inference_operation);
+    var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, &evidence, inference_lease, inference_operation);
     defer result.deinit();
     try std.testing.expect(result == .completed);
     try std.testing.expect(result.completed.operation_id.eql(fixture.id(.inference)));
@@ -60,25 +43,7 @@ test "fake provider executes only after applied count and inference lifecycle tr
     _ = try fixture.change(.inference, .{ .terminate = .completed });
     try std.testing.expectEqual(@as(usize, 1), fake.count_call_count);
     try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
-}
-
-const fake_entry: registry.Entry = .{
-    .id = .{ .ordinal = 1 },
-    .provider = .{ .bytes = "fake-provider" },
-    .model = .{ .bytes = "fake-model" },
-    .implementation_id = .{ .ordinal = 1 },
-    .config = .empty_object,
-    .supported_reasoning_efforts = &.{},
-};
-
-fn lease(operation: provider.InvokedProviderOperation) provider.ValidatedProviderAuthorizationLeaseRef {
-    return .{
-        .id = .{ .value = 1 },
-        .operation_id = operation.id,
-        .binding_id = facts().binding_id,
-        .model_visible_input_id = facts().model_visible_input_id,
-        .deadline_monotonic_ms = operation.deadline_monotonic_ms,
-    };
+    try std.testing.expectEqual(@as(usize, 2), fixture.preloader.destroyed_count);
 }
 
 test "count and inference share one attempt and preserve immutable lifecycle snapshots" {
@@ -258,12 +223,12 @@ test "lifecycle rejects stale ledger operation request and attempt revisions wit
     const empty = fixture.ledger();
     const proposal = try (action.Action{}).execute(empty, fixture.authority(), .initial, fixture.id(.input_token_count), null, .{ .assign_count = facts() });
     const transition = proposal.runner_accounting_transition.?.advance_provider_operation;
-    const envelope = pipeline.PipelineEnvelope.init(&.{.model_request_identity_ledger});
-    _ = try envelope.apply(action.Action.contract, proposal);
+    const envelope = pipeline.DataShape.init(&.{.model_request_identity_ledger});
+    _ = try envelope.applyDelta(action.Action.contract, &proposal);
     var forbidden = action.Action.contract;
     forbidden.runner_accounting = .none;
-    try std.testing.expectError(error.UndeclaredRunnerAccountingTransition, envelope.apply(forbidden, proposal));
-    try std.testing.expectError(error.MissingRunnerAccountingTransition, envelope.apply(action.Action.contract, pipeline.NodeDelta.successful(action.Action.contract)));
+    try std.testing.expectError(error.UndeclaredRunnerAccountingTransition, envelope.applyDelta(forbidden, &proposal));
+    try std.testing.expectError(error.MissingRunnerAccountingTransition, envelope.apply(action.Action.contract, pipeline.DataEffects.fromContract(action.Action.contract)));
     try std.testing.expect(empty.record(fixture.id(.input_token_count)) == null);
     const effect = try transition.effect(fixture.authority());
     try std.testing.expect(effect.phase == .assigned);

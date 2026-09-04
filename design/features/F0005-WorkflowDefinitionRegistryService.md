@@ -13,6 +13,14 @@ declared retry count. No legacy reader, generic loop budget, or split
 invocation/step registry remains. Concrete domain operations and initial
 workflow definitions remain separately governed increments.
 
+The operation registry also owns versioned native data schemas. Compilation
+captures only schemas used by the selected graph; the runner retains owned
+invocation values, exposes only declared required/optional inputs, and validates
+complete deltas before applying writes, replacements, or invalidations. Rejected
+and cancelled candidates are released. This adds no YAML fields or executable
+project-supplied schemas. Fixed kernel bindings retain their concrete typed
+owners; `DataShape` is dependency/effect metadata, not a workflow value store.
+
 **Compatibility:** None. This pre-release increment accepts only the exact
 concise v1 YAML contract. It has no verbose tagged-parameter form, JSON or
 `.yml` reader, migration, YAML alias, legacy filename, dual reader, implicit

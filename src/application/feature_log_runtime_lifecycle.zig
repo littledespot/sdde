@@ -1,5 +1,4 @@
 const feature_log_bindings = @import("feature_log_child_bindings.zig");
-const feature_log_candidate = @import("feature_log_candidate.zig");
 const feature_log_orchestrator = @import("feature_log_orchestrator.zig");
 const policy_transition = @import("feature_log_policy_transition_coordinator.zig");
 const policy_transition_bindings = @import("feature_log_policy_transition_child_bindings.zig");
@@ -8,7 +7,7 @@ const finalization_bindings = @import("feature_log_finalization_child_bindings.z
 const retention = @import("feature_log_retention_coordinator.zig");
 const retention_bindings = @import("feature_log_retention_child_bindings.zig");
 const telemetry = @import("../domain/telemetry.zig");
-const execution = @import("../domain/workflow_execution.zig");
+const log_stream = @import("../domain/feature_log_stream.zig");
 const barrier_port = @import("../ports/telemetry_barrier.zig");
 
 /// Owns the one active logging-runner binding used by the common pipeline.
@@ -81,9 +80,9 @@ pub const Lifecycle = struct {
         };
     }
 
-    fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) execution.Candidate {
+    fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) log_stream.Outcome {
         const self: *Lifecycle = @ptrCast(@alignCast(context));
-        const active = self.active orelse return .{ .outcome = .blocked, .delta = .{} };
-        return feature_log_candidate.fromResult(feature_log_orchestrator.processEvent(active, fact));
+        const active = self.active orelse return .{ .blocked = .LOG_SINK_FAILURE };
+        return feature_log_orchestrator.processEvent(active, fact);
     }
 };

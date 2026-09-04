@@ -21,7 +21,7 @@ pub const Runner = struct {
     capability: *const bootstrap_root_registry.LLMProviderConfigCapability,
     locate_action: locate.Action,
     read_action: read.Action,
-    envelope: pipeline.PipelineEnvelope = .init(&.{.bootstrap_root_registry_evidence}),
+    envelope: pipeline.DataShape = .init(&.{.bootstrap_root_registry_evidence}),
     exact_file: ?source.ExactFile = null,
     raw: ?llm_provider_config.Raw = null,
 
@@ -98,7 +98,7 @@ pub const Runner = struct {
         if (self.runtimeOutcome()) |outcome| return outcome;
         self.envelope = self.envelope.apply(
             contract,
-            pipeline.NodeDelta.successful(contract),
+            pipeline.DataEffects.fromContract(contract),
         ) catch return .failed;
         return .ok;
     }

@@ -24,8 +24,13 @@ the graph, and each execution owns a fresh reservation/reconciliation ledger.
 `AdvanceProviderOperationLifecycleAction`, its immutable execution-owned ledger,
 runner application, and non-content journal intents are implemented. Request
 finalization and attempt advancement reject unfinished provider operations.
-Durable effect-journal integration, authorization storage, provider-call actions,
-and production provider contracts remain implementation work.
+`PrepareProviderOperationAuthorizationAction`, its deposit-only preparation
+port, runner-private single-use lease table and fake-provider consumption are
+implemented. The action publishes only an opaque identity reference through a
+typed `NodeDelta`; shared execution-reference ownership preserves identity
+without copying capabilities. Durable effect-journal integration, production
+provider-call actions/composition and production provider contracts remain
+implementation work.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -597,6 +602,19 @@ A stale, mismatched, reused, or already-finalized reference fails before send.
 The table is one-purpose and operation-keyed, not a service locator or generic
 capability store. Provider-specific credential and signing types remain wholly
 inside infrastructure.
+
+The implementation separates the adapter's deposit-only slot from the action's
+slot-bound reference publication. The runner validates/applies that reference's
+normal `NodeDelta`; the backing capability never enters a pipeline value.
+Reference tokens contain no payload, retain identity through immutable value
+copies, and remain distinct while any owner retains them. Consumption joins the
+current invoked ledger record, exact binding/input/provider and deadline, then
+transfers ownership once. Preparation failure, expiration, cancellation and
+operation terminalization release unused backing; consumed backing is destroyed
+by the adapter. The lifecycle runner destroys its table before its ledger and
+canonical request identities. This in-memory lease is not durable send proof
+and does not enable a production provider or bypass the outstanding recovery
+contract.
 
 The minimum v1 authorization path uses already loaded, non-refreshing material
 and performs no filesystem, process, metadata, STS, or refresh I/O. If an

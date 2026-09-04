@@ -1,4 +1,5 @@
 const runner_accounting = @import("runner_accounting.zig");
+const data = @import("pipeline_data.zig");
 
 pub const DataKey = enum {
     invocation_working_directory,
@@ -42,6 +43,7 @@ pub const DataKey = enum {
     selected_compiled_workflow,
     model_provider_requirement,
     validated_provider_model_binding,
+    validated_provider_authorization,
     model_request_identity_ledger,
     project_toolchain_capture,
     toolchain_preset_inventory,
@@ -100,6 +102,7 @@ pub const NodeContract = struct {
     id: []const u8,
     kind: NodeKind,
     requires: []const DataKey,
+    optional: []const DataKey = &.{},
     produces: []const DataKey,
     replaces: []const DataKey = &.{},
     invalidates: []const DataKey = &.{},
@@ -123,23 +126,67 @@ pub const NodeRuntime = struct {
 };
 
 pub const NodeDelta = struct {
-    data_writes: []const DataKey = &.{},
-    data_replacements: []const DataKey = &.{},
-    data_invalidations: []const DataKey = &.{},
+    data_writes: data.Slots = data.empty_slots,
+    data_replacements: data.Slots = data.empty_slots,
+    data_invalidations: std.enums.EnumSet(DataKey) = .initEmpty(),
     telemetry_facts: [telemetry.max_facts_per_delta]telemetry.WorkflowTelemetryFact = undefined,
     telemetry_fact_count: u8 = 0,
     runner_accounting_transition: ?runner_accounting.Transition = null,
 
-    pub fn successful(contract: NodeContract) NodeDelta {
+    pub fn addedTelemetryFacts(self: *const NodeDelta) []const telemetry.WorkflowTelemetryFact {
+        return self.telemetry_facts[0..self.telemetry_fact_count];
+    }
+
+    pub fn effects(self: *const NodeDelta, keys: *EffectKeys) DataEffects {
+        var writes: usize = 0;
+        var replacements: usize = 0;
+        var invalidations: usize = 0;
+        for (self.data_writes, 0..) |value, index| {
+            if (value != null) {
+                keys.writes[writes] = @enumFromInt(index);
+                writes += 1;
+            }
+        }
+        for (self.data_replacements, 0..) |value, index| {
+            if (value != null) {
+                keys.replacements[replacements] = @enumFromInt(index);
+                replacements += 1;
+            }
+        }
+        var iterator = self.data_invalidations.iterator();
+        while (iterator.next()) |key| {
+            keys.invalidations[invalidations] = key;
+            invalidations += 1;
+        }
+        return .{
+            .data_writes = keys.writes[0..writes],
+            .data_replacements = keys.replacements[0..replacements],
+            .data_invalidations = keys.invalidations[0..invalidations],
+            .runner_accounting_transition = self.runner_accounting_transition,
+        };
+    }
+};
+
+pub const EffectKeys = struct {
+    writes: [data.key_count]DataKey = undefined,
+    replacements: [data.key_count]DataKey = undefined,
+    invalidations: [data.key_count]DataKey = undefined,
+};
+
+/// Structural effects used by compilation and fixed, concretely typed kernel
+/// bindings. This is not a value delta and cannot be returned by an operation.
+pub const DataEffects = struct {
+    data_writes: []const DataKey = &.{},
+    data_replacements: []const DataKey = &.{},
+    data_invalidations: []const DataKey = &.{},
+    runner_accounting_transition: ?runner_accounting.Transition = null,
+
+    pub fn fromContract(contract: NodeContract) DataEffects {
         return .{
             .data_writes = contract.produces,
             .data_replacements = contract.replaces,
             .data_invalidations = contract.invalidates,
         };
-    }
-
-    pub fn addedTelemetryFacts(self: *const NodeDelta) []const telemetry.WorkflowTelemetryFact {
-        return self.telemetry_facts[0..self.telemetry_fact_count];
     }
 };
 
@@ -157,7 +204,7 @@ pub const WorkflowLog = struct {
         delta: *NodeDelta,
         fact: telemetry.TelemetryFact,
     ) Error!void {
-        if (delta.telemetry_fact_count == telemetry.max_facts_per_delta) {
+        if (delta.telemetry_fact_count >= telemetry.max_facts_per_delta) {
             return error.TelemetryFactLimitExceeded;
         }
         delta.telemetry_facts[delta.telemetry_fact_count] = .{
@@ -184,21 +231,30 @@ pub const DeltaError = error{
     DuplicateInvalidation,
     UndeclaredRunnerAccountingTransition,
     MissingRunnerAccountingTransition,
+    ConflictingDataEffects,
+    InvalidTelemetryCount,
 };
 
-pub const PipelineEnvelope = struct {
+/// Dependency/effect validation only; actual workflow data lives in the runner-owned envelope.
+pub const DataShape = struct {
     available: [data_key_count]bool,
 
-    pub fn init(initial: []const DataKey) PipelineEnvelope {
+    pub fn init(initial: []const DataKey) DataShape {
         return .{ .available = keySetRuntime(initial) };
     }
 
-    pub fn contains(self: PipelineEnvelope, key: DataKey) bool {
+    pub fn applyDelta(self: DataShape, contract: NodeContract, delta: *const NodeDelta) DeltaError!DataShape {
+        if (delta.telemetry_fact_count > telemetry.max_facts_per_delta) return error.InvalidTelemetryCount;
+        var keys: EffectKeys = .{};
+        return self.apply(contract, delta.effects(&keys));
+    }
+
+    pub fn contains(self: DataShape, key: DataKey) bool {
         return self.available[@intFromEnum(key)];
     }
 
     pub fn validateInvocation(
-        self: PipelineEnvelope,
+        self: DataShape,
         contract: NodeContract,
     ) DeltaError!void {
         for (contract.requires) |required| {
@@ -207,10 +263,10 @@ pub const PipelineEnvelope = struct {
     }
 
     pub fn apply(
-        self: PipelineEnvelope,
+        self: DataShape,
         contract: NodeContract,
-        delta: NodeDelta,
-    ) DeltaError!PipelineEnvelope {
+        delta: DataEffects,
+    ) DeltaError!DataShape {
         try self.validateInvocation(contract);
         try validateExactKeys(
             contract.produces,
@@ -234,6 +290,13 @@ pub const PipelineEnvelope = struct {
             error.DuplicateInvalidation,
         );
         try validateRunnerAccountingTransition(contract, delta.runner_accounting_transition);
+
+        for (delta.data_writes) |key| {
+            if (containsKey(delta.data_replacements, key) or containsKey(delta.data_invalidations, key)) return error.ConflictingDataEffects;
+        }
+        for (delta.data_replacements) |key| {
+            if (containsKey(delta.data_invalidations, key)) return error.ConflictingDataEffects;
+        }
 
         for (delta.data_writes) |key| {
             if (self.contains(key)) return error.DataAlreadyPresent;
@@ -378,7 +441,7 @@ test "workflow log adds attributed facts to a candidate delta without I/O" {
     );
 }
 
-test "runner envelope applies only the exact declared delta" {
+test "data shape applies only the exact declared effects" {
     const contract: NodeContract = .{
         .id = "test@1",
         .kind = .action,
@@ -386,13 +449,13 @@ test "runner envelope applies only the exact declared delta" {
         .produces = &.{.configured_root_path_policy_set},
         .side_effect = .none,
     };
-    const initial = PipelineEnvelope.init(&.{.engine_config});
-    const next = try initial.apply(contract, NodeDelta.successful(contract));
+    const initial = DataShape.init(&.{.engine_config});
+    const next = try initial.apply(contract, DataEffects.fromContract(contract));
     try std.testing.expect(next.contains(.configured_root_path_policy_set));
     try std.testing.expect(!initial.contains(.configured_root_path_policy_set));
 }
 
-test "runner envelope rejects missing undeclared and duplicate writes" {
+test "data shape rejects missing undeclared and duplicate writes" {
     const contract: NodeContract = .{
         .id = "test@1",
         .kind = .action,
@@ -400,7 +463,7 @@ test "runner envelope rejects missing undeclared and duplicate writes" {
         .produces = &.{.configured_root_path_policy_set},
         .side_effect = .none,
     };
-    const envelope = PipelineEnvelope.init(&.{.engine_config});
+    const envelope = DataShape.init(&.{.engine_config});
     try std.testing.expectError(
         error.MissingDeclaredWrite,
         envelope.apply(contract, .{}),
@@ -418,10 +481,10 @@ test "runner envelope rejects missing undeclared and duplicate writes" {
             },
         }),
     );
-    const applied = try envelope.apply(contract, NodeDelta.successful(contract));
+    const applied = try envelope.apply(contract, DataEffects.fromContract(contract));
     try std.testing.expectError(
         error.DataAlreadyPresent,
-        applied.apply(contract, NodeDelta.successful(contract)),
+        applied.apply(contract, DataEffects.fromContract(contract)),
     );
 }
 const std = @import("std");

@@ -253,8 +253,8 @@ const FakeBarrier = struct {
         return .{ .context = self, .process_fn = process };
     }
 
-    fn process(_: *anyopaque, _: telemetry.WorkflowTelemetryFact) execution.Candidate {
-        return .{ .outcome = .ok, .delta = .{} };
+    fn process(_: *anyopaque, _: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
+        return .dropped;
     }
 };
 

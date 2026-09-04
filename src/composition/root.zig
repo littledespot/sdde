@@ -775,7 +775,7 @@ test "feature log storage opens only an activated layout from present artifact a
         .workflow_shortcode = shortcode,
         .fact = .{ .event_type = .run_started },
     });
-    try std.testing.expect(persisted.outcome == .ok);
+    try std.testing.expect(persisted == .persisted);
     try project_root.dir.access(io, "specs/F0002/logs/events/RUN-1/LOGBIND-1/0001.log", .{});
     var finalization_execution: feature_log_finalization_runner.Runner = .{
         .target = active_feature_log_runtime.runner(active_runtime),

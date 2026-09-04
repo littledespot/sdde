@@ -28,6 +28,7 @@ pub const Contract = struct {
     kind: Kind,
     parameters: []const ParameterDescriptor = &.{},
     requires: []const pipeline.DataKey = &.{},
+    optional: []const pipeline.DataKey = &.{},
     produces: []const pipeline.DataKey = &.{},
     replaces: []const pipeline.DataKey = &.{},
     invalidates: []const pipeline.DataKey = &.{},

@@ -26,7 +26,7 @@ pub const Runner = struct {
     parse_action: parse_invocation.Action = .{},
     select_action: select_workflow.Action,
     validate_action: validate_operations.Action = .{},
-    envelope: pipeline.PipelineEnvelope = .init(&.{ .workflow_definition_registry, .workflow_operation_registry }),
+    envelope: pipeline.DataShape = .init(&.{ .workflow_definition_registry, .workflow_operation_registry }),
     invocation: ?execution.Invocation = null,
     selected_workflow: ?execution.SelectedWorkflow = null,
 
@@ -74,7 +74,7 @@ pub const Runner = struct {
 
     fn finish(self: *Runner, contract: pipeline.NodeContract) bindings.SelectionStepOutcome {
         if (self.runtimeTerminal()) |outcome| return outcome;
-        self.envelope = self.envelope.apply(contract, pipeline.NodeDelta.successful(contract)) catch return .failed;
+        self.envelope = self.envelope.apply(contract, pipeline.DataEffects.fromContract(contract)) catch return .failed;
         return .ok;
     }
 

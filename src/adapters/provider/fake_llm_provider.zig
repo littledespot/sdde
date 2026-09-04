@@ -2,6 +2,7 @@ const std = @import("std");
 const binding = @import("../../domain/llm_provider_binding.zig");
 const operation = @import("../../domain/llm_provider_operation.zig");
 const provider_interface = @import("../../ports/llm_provider_interface.zig");
+const lease = @import("../../ports/provider_authorization_lease.zig");
 
 pub const FailurePlan = struct {
     cause: operation.ProviderFailureCause,
@@ -36,10 +37,12 @@ pub const InvocationPlan = union(enum) {
 
 pub const FakeLLMProvider = struct {
     allocator: std.mem.Allocator,
+    authorization_leases: lease.Port,
     count_plan: CountPlan,
     invocation_plan: InvocationPlan,
     count_call_count: usize = 0,
     invocation_call_count: usize = 0,
+    effect_count: usize = 0,
 
     pub fn interface(self: *FakeLLMProvider) provider_interface.LLMProviderInterface {
         return .{
@@ -57,12 +60,17 @@ pub const FakeLLMProvider = struct {
     ) provider_interface.Error!operation.ProviderTokenCountObservation {
         const self = cast(context);
         self.count_call_count += 1;
+        var capability = self.authorization_leases.consume(authorization, provider_binding, request, invoked_operation) catch |err| {
+            if (err == error.Cancelled) return error.Cancelled;
+            return .{ .failed = authorizationFailure(invoked_operation.id, err) };
+        };
+        defer capability.deinit();
         if (!operation.validateCountInvocation(
             provider_binding,
             request,
-            authorization,
             invoked_operation,
         )) return invalidCall(invoked_operation.id);
+        self.effect_count += 1;
 
         return switch (self.count_plan) {
             .counted => |input_tokens| .{ .counted = .{
@@ -86,13 +94,18 @@ pub const FakeLLMProvider = struct {
     ) provider_interface.Error!operation.ProviderInvocationObservation {
         const self = cast(context);
         self.invocation_call_count += 1;
+        var capability = self.authorization_leases.consume(authorization, provider_binding, request, invoked_operation) catch |err| {
+            if (err == error.Cancelled) return error.Cancelled;
+            return .{ .failed = authorizationFailure(invoked_operation.id, err) };
+        };
+        defer capability.deinit();
         if (!operation.validateInferenceInvocation(
             provider_binding,
             request,
             count_evidence,
-            authorization,
             invoked_operation,
         )) return invalidInvocationCall(invoked_operation.id);
+        self.effect_count += 1;
 
         return switch (self.invocation_plan) {
             .complete => |plan| self.complete(
@@ -214,6 +227,14 @@ fn invalidCall(operation_id: operation.ProviderOperationId) operation.ProviderTo
         .retry_class = .never,
         .delivery = .not_sent,
     }) };
+}
+
+fn authorizationFailure(operation_id: operation.ProviderOperationId, err: lease.Error) operation.ProviderFailure {
+    return failure(operation_id, .{
+        .cause = if (err == error.AuthorizationExpired) .timeout else .authorization_denied,
+        .retry_class = .never,
+        .delivery = .not_sent,
+    });
 }
 
 fn invalidInvocationCall(operation_id: operation.ProviderOperationId) operation.ProviderInvocationObservation {

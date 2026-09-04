@@ -206,6 +206,10 @@ The new engine adopts the following unambiguous rules:
     workflow-owned resource aliases. Large prompts and schemas are declared
     once and referenced; they are never hidden packaged defaults or repeatedly
     copied into nodes.
+30. Clarification records and answers survive output replacement and abandoned
+    executions. One stable target/owner/subject/slot has one clarification ID;
+    new execution, authority revision, question wording or gap reason cannot
+    mint a duplicate. Relevant validated answers are input to each rerun.
 
 ---
 
@@ -1927,7 +1931,7 @@ Semantic extraction and reconciliation use the common LLM actions; there is no s
 | `ValidateSpecificationUnitProposalAction`                             | one operation-result-valid specification-unit proposal and unit descriptor                                                                                                                                                                               | unit evidence                                                                                                                   | Validate kind, cardinality, claim/citation fields, and unit-local business schema.                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `ValidateClarificationNeedProposalAction`                             | one operation-result-valid need, fixed stage/unit descriptor, current subject-authority allowlist, current clarification registry, and either direct-need evidence or the exact consumed no-invention replacement authorization/finding                  | clarification-need evidence with closed origin                                                                                  | Prove a genuine current authority gap, exact stage-compatible subject, bounded closed answer schema, absence of smuggled assumptions/paths/status/identity fields, and exactly one origin: direct with no finding, or replacement with the validated embedded semantic finding.                                                                                                                                                                                                                               |
 | `BuildReferenceConflictClarificationNeedAction`                       | one validated unresolved behavior-changing source conflict, its structural subject coordinate/continuity keys, and exact current claim/citation IDs                                                                                                      | deterministic specification-clarification need plus current conflict binding                                                    | Build a closed select-one/select-many conflict question whose visible option keys are current engine-owned claim IDs while retaining the snapshot-independent continuity keys internally; invoke no model and invent no preferred answer.                                                                                                                                                                                                                                                                     |
-| `BuildClarificationSubjectKeyAction`                                  | validated stage/unit/required-slot/gap descriptor and canonical ordered subject authorities, or a validated reference-conflict subject coordinate                                                                                                        | engine-owned subject key                                                                                                        | Build the exact non-hash tuple used for uniqueness without accepting model wording as identity. The reference-conflict variant excludes snapshot-local state/conflict/claim/citation IDs and uses the structural coordinate plus continuity-contract version.                                                                                                                                                                                                                                                 |
+| `BuildClarificationSubjectKeyAction` | validated target, earliest owner, registered requirement kind, stable unit/subject selector and required slot, or validated reference-conflict subject coordinate | engine-owned stable subject key | Build the exact non-hash tuple across executions. Run IDs, regenerated authority IDs, evidence, gap reason and wording belong to current applicability, not identity. Preserve the reference-conflict continuity contract. |
 | `FindExistingClarificationBySubjectAction`                            | subject key, validated need origin, and validated current/prior clarification registry                                                                                                                                                                   | exact existing record or absent result                                                                                          | Perform one equality lookup across open and closed history; a reused record appends only a nonduplicate validated origin in a new record revision and never creates a second clarification.                                                                                                                                                                                                                                                                                                                   |
 | `ValidateClarificationSubjectUniquenessAction`                        | subject key, lookup result, and stage slot rules                                                                                                                                                                                                         | reuse-or-allocate evidence                                                                                                      | Require reuse for an existing key and reject overlapping ownership of the same required slot; wording changes never create a second record.                                                                                                                                                                                                                                                                                                                                                                   |
 | `AssignClarificationIdAction`                                         | stage, absent-result evidence, and current persisted clarification ID ledger                                                                                                                                                                             | transaction-private `S01..S99`, `P01..P99`, or `T01..T99` identity plus prospective next ledger                                 | Select the next two-digit stage-local ordinal and block at 99 rather than changing filename grammar. The identity and prospective ledger may flow only inside the not-yet-committed registry/view/workflow candidate; no model request, log, diagnostic, path write, serializer, or adapter may observe it before the complete owning transaction commits. A failed uncommitted candidate is discarded with its prospective ledger; the unchanged durable ledger may deterministically reselect that ordinal. |
@@ -3448,6 +3452,15 @@ The engine commits the current clarification registry/forms, immutable `TaskDefi
 
 ### 20.1 Inputs and preconditions
 
+`implement` must not execute while any specification (`SNN`), plan (`PNN`), or
+tasks (`TNN`) clarification is outstanding. The entry gate loads and validates
+the complete retained clarification registry before task selection, model calls,
+command execution, overlays or project changes. An open, deferred, stale or
+unvalidated required answer does not satisfy that gate. It reports the exact
+blocking IDs and returns nonzero; implementation cannot answer, bypass or
+duplicate an upstream clarification. Resolving one prefix does not waive the
+other two.
+
 The stage gate requires workflow state `tasked`, current task definition/runtime state, and an approval whose `taskDefinitionStateId` equals the current immutable graph. Runtime revision changes do not invalidate that approval. It loads/validates the current clarification registry first and exits nonzero with `UPSTREAM_TASKS_CLARIFICATION_OPEN` when any `SNN`, `PNN`, or `TNN` is open; implementation never asks the code-generation model to answer it. It reparses editable `spec.md`, requires equality with the stored plan-input specification IR, loads canonical plan/task/reference state, checks every generated view against deterministic rendering for its recorded definition/runtime binding, and revalidates:
 
 - specification and reference obligations;
@@ -3969,6 +3982,15 @@ The closed downstream matrix is: plan requires no open `S`; tasks requires no op
 
 State alone never authorizes a stage.
 
+The complete clarification registry, forms and responses are retained across
+successive executions, including resolved records. Reruns use applicable
+validated answers before proposing new questions. Deduplication uses the stable
+target, earliest owner, requirement kind, subject selector and required slot;
+execution IDs, regenerated authority IDs, wording and transient gap reasons do
+not define a new clarification. Current applicability is validated separately;
+changed evidence may reopen the same record, never allocate a duplicate. An
+ambiguous subject correspondence blocks rather than using fuzzy text matching.
+
 - The editable `spec.md` is reparsed and fully validated.
 - The current clarification registry and exact `clarify/` inventory are parsed/validated; only registered current-revision answer regions are imported, and the requested stage's closed-prefix matrix is enforced.
 - When canonical plan state exists, the engine compares current normalized `SpecificationIR` directly with the stored plan-input `SpecificationIR`. A difference invalidates plan/task canonical state and approvals and returns the workflow to `specified`.
@@ -4419,6 +4441,13 @@ Tests verify schema validity, detection ambiguity, roots, extensions, naming, pl
 - open clarification views permit only the two registered regions, closed views permit none, and plan/task views reject every direct edit while editable `spec.md` retains its authenticated round-trip path.
 
 ### 28.7 End-to-end tests
+
+Clarification regressions must retain and consume resolved answers across
+successful and failed reruns, reuse one ID after wording/authority/gap changes,
+keep different subjects distinct, and reject ambiguous continuity. Test each
+open `SNN`, `PNN` and `TNN` independently and together: `implement` must invoke
+zero task/model/command/overlay operations until every required answer is
+validated and closed; the normal approval gates must still pass afterward.
 
 In temporary repositories with a fake `LLMProviderInterface`:
 

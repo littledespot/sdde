@@ -27,6 +27,8 @@ test {
     _ = @import("model_request_identity_test.zig");
     _ = @import("model_attempt_accounting_test.zig");
     _ = @import("provider_operation_lifecycle_test.zig");
+    _ = @import("provider_authorization_test.zig");
+    _ = @import("execution_reference_test.zig");
     _ = @import("workflow_token_accounting_test.zig");
     _ = @import("llm_provider_interface_test.zig");
     _ = @import("model_provider_bootstrap_test.zig");

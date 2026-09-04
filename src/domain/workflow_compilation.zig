@@ -33,6 +33,7 @@ pub const CompiledStep = struct {
     operation_id: workflow.RegisteredRef,
     parameters: []const CompiledParameter,
     requires: []const pipeline.DataKey,
+    optional: []const pipeline.DataKey = &.{},
     produces: []const pipeline.DataKey,
     replaces: []const pipeline.DataKey,
     invalidates: []const pipeline.DataKey,
@@ -44,6 +45,7 @@ pub const CompiledStep = struct {
 };
 
 pub const SemanticAuthority = struct {
+    data_schemas: []const @import("pipeline_data.zig").Schema = &.{},
     workflow_id: workflow.WorkflowId,
     workflow_version: u32,
     invocation_operation_id: workflow.RegisteredRef,
