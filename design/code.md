@@ -390,6 +390,7 @@ NodeContract {
                         increment_atomic_repair_attempt |
                         reserve_workflow_tokens |
                         reconcile_workflow_tokens |
+                        advance_provider_operation |
                         consume_no_invention_replacement },
   retryLimitContract?: { parameterId, operationLocalMaximum },
   orderingBarriers[]
@@ -400,6 +401,7 @@ Runner accounting capability registry:
   AdvanceAtomicRepairAttemptAccountingAction -> increment_atomic_repair_attempt
   ReserveWorkflowTokenBudgetAction -> reserve_workflow_tokens
   ReconcileWorkflowTokenUsageAction -> reconcile_workflow_tokens
+  AdvanceProviderOperationLifecycleAction -> advance_provider_operation
   ValidateRepairScopeAction -> consume_no_invention_replacement only when its
     authorization purpose is no_invention_to_clarification
   every other action/orchestrator -> none
@@ -530,6 +532,14 @@ RepairAccountingTransition =
       workflowExecutionId, providerOperationId,
       expectedLedgerRevision,
       commitExactUsage | releaseNotSent | retainFullReservation
+    }
+  | AdvanceProviderOperation {
+      expectedLedger, expectedLedgerRevision,
+      providerOperationId, expectedOperationRevision?,
+      assignCount | assignInferenceWithExactCountEvidence | invoke | terminate
+      // Runner applies one immutable successor after validating request and
+      // attempt revisions. Its non-content journal projection is an intent,
+      // not proof of persistence or result consumption.
     }
   | ConsumeNoInventionReplacement {
       stageRunEpochId,

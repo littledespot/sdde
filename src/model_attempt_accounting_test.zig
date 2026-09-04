@@ -22,12 +22,12 @@ test "initial attempt is separate from explicitly bounded retries" {
 
     var attempts = try attempt_runner.Runner.init(std.testing.allocator, .{ .bytes = "epoch-1" });
     defer attempts.deinit();
-    try expectOrdinal(1, try attempts.reserve(.initial, requests.ledger().?, .{ .value = 1 }, request, .initial));
-    try expectOrdinal(2, try attempts.reserve(.{ .value = 1 }, requests.ledger().?, .{ .value = 1 }, request, .{ .retry = retryAuthority(2) }));
-    try expectOrdinal(3, try attempts.reserve(.{ .value = 2 }, requests.ledger().?, .{ .value = 1 }, request, .{ .retry = retryAuthority(2) }));
+    try expectOrdinal(1, try attempts.reserve(.initial, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .initial));
+    try expectOrdinal(2, try attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = retryAuthority(2) }));
+    try expectOrdinal(3, try attempts.reserve(.{ .value = 2 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = retryAuthority(2) }));
     try std.testing.expectError(
         error.ModelRetryLimitExhausted,
-        attempts.reserve(.{ .value = 3 }, requests.ledger().?, .{ .value = 1 }, request, .{ .retry = retryAuthority(2) }),
+        attempts.reserve(.{ .value = 3 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = retryAuthority(2) }),
     );
     try std.testing.expectEqual(@as(u32, 3), attempts.current().attemptsReserved(request));
 }
@@ -47,29 +47,29 @@ test "attempt classification rejects hidden retry and repeated initial" {
 
     try std.testing.expectError(
         error.InvalidAttemptClassification,
-        attempts.reserve(.initial, requests.ledger().?, .{ .value = 1 }, request, .{ .retry = retryAuthority(1) }),
+        attempts.reserve(.initial, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = retryAuthority(1) }),
     );
-    _ = try attempts.reserve(.initial, requests.ledger().?, .{ .value = 1 }, request, .initial);
+    _ = try attempts.reserve(.initial, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .initial);
     try std.testing.expectError(
         error.InvalidAttemptClassification,
-        attempts.reserve(.{ .value = 1 }, requests.ledger().?, .{ .value = 1 }, request, .initial),
+        attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .initial),
     );
     try std.testing.expectError(
         error.ModelRetryLimitExhausted,
-        attempts.reserve(.{ .value = 1 }, requests.ledger().?, .{ .value = 1 }, request, .{ .retry = retryAuthority(0) }),
+        attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = retryAuthority(0) }),
     );
 
     var foreign = retryAuthority(2);
     foreign.workflow_id = workflow.WorkflowId.parse("foreign-flow").?;
     try std.testing.expectError(
         error.InvalidAttemptClassification,
-        attempts.reserve(.{ .value = 1 }, requests.ledger().?, .{ .value = 1 }, request, .{ .retry = foreign }),
+        attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = foreign }),
     );
     var wrong_operation = retryAuthority(2);
     wrong_operation.operation_instance_id = workflow.WorkflowStepId.parse("repair").?;
     try std.testing.expectError(
         error.InvalidAttemptClassification,
-        attempts.reserve(.{ .value = 1 }, requests.ledger().?, .{ .value = 1 }, request, .{ .retry = wrong_operation }),
+        attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = wrong_operation }),
     );
     try std.testing.expectEqual(@as(u64, 1), attempts.current().revision().value);
 }
@@ -89,7 +89,7 @@ test "attempt and request revisions plus lifecycle reject stale or terminal rese
 
     try std.testing.expectError(
         error.ModelAttemptAccountingRevisionConflict,
-        attempts.reserve(.{ .value = 1 }, requests.ledger().?, .{ .value = 1 }, request, .initial),
+        attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .initial),
     );
     _ = try requests.assign(
         .{ .value = 1 },
@@ -99,12 +99,12 @@ test "attempt and request revisions plus lifecycle reject stale or terminal rese
     );
     try std.testing.expectError(
         error.ModelRequestLedgerRevisionConflict,
-        attempts.reserve(.initial, requests.ledger().?, .{ .value = 1 }, request, .initial),
+        attempts.reserve(.initial, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .initial),
     );
     try requests.advance(.{ .value = 2 }, request, .assigned, .{ .terminal = .not_invoked_authorization_failure });
     try std.testing.expectError(
         error.ModelRequestUnavailableForAttempt,
-        attempts.reserve(.initial, requests.ledger().?, .{ .value = 3 }, request, .initial),
+        attempts.reserve(.initial, requests.ledger().?, requests.providerOperations().current(), .{ .value = 3 }, request, .initial),
     );
 }
 
@@ -125,6 +125,7 @@ test "attempt action proposes one runner-applied transition" {
         current,
         .initial,
         requests.ledger().?,
+        requests.providerOperations().current(),
         .{ .value = 1 },
         request,
         .initial,
@@ -158,7 +159,7 @@ test "attempt reservation rejects a request from another stage epoch" {
     defer attempts.deinit();
     try std.testing.expectError(
         error.ModelRequestUnavailableForAttempt,
-        attempts.reserve(.initial, foreign_requests.ledger().?, .{ .value = 1 }, foreign, .initial),
+        attempts.reserve(.initial, foreign_requests.ledger().?, foreign_requests.providerOperations().current(), .{ .value = 1 }, foreign, .initial),
     );
 }
 

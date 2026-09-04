@@ -313,7 +313,7 @@ test "terminal reason legality is exhaustive for assigned and invoked requests" 
                 modelOperation("generate"),
                 .initial_generation,
             );
-            if (isNotInvokedReason(reason)) {
+            if (isNotInvokedReason(reason) or reason == .cancelled) {
                 try runner.advance(.{ .value = 1 }, request, .assigned, .{ .terminal = reason });
                 try std.testing.expectEqual(reason, runner.ledger().?.record(request).?.terminal_reason.?);
             } else {

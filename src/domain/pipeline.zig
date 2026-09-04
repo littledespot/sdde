@@ -88,6 +88,7 @@ pub const RunnerAccountingCapability = enum {
     increment_model_attempt,
     reserve_workflow_tokens,
     reconcile_workflow_tokens,
+    advance_provider_operation,
 };
 
 pub const NodeKind = enum {
@@ -276,6 +277,13 @@ fn validateRunnerAccountingTransition(
             const value = transition orelse return error.MissingRunnerAccountingTransition;
             switch (value) {
                 .reconcile_workflow_tokens => {},
+                else => return error.UndeclaredRunnerAccountingTransition,
+            }
+        },
+        .advance_provider_operation => {
+            const value = transition orelse return error.MissingRunnerAccountingTransition;
+            switch (value) {
+                .advance_provider_operation => {},
                 else => return error.UndeclaredRunnerAccountingTransition,
             }
         },

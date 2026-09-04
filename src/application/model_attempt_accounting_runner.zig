@@ -4,6 +4,7 @@ const accounting = @import("../domain/model_attempt_accounting.zig");
 const identity = @import("../domain/model_request_identity.zig");
 const operation = @import("../domain/llm_provider_operation.zig");
 const pipeline = @import("../domain/pipeline.zig");
+const provider_lifecycle = @import("../domain/provider_operation_lifecycle.zig");
 
 pub const Runner = struct {
     current_owner: *accounting.Owner,
@@ -25,6 +26,7 @@ pub const Runner = struct {
         self: *Runner,
         expected_accounting_revision: accounting.Revision,
         current_requests: *const identity.ModelRequestIdentityLedger,
+        operations: *const provider_lifecycle.Ledger,
         expected_request_revision: identity.LedgerRevision,
         request_id: *const identity.ModelRequestId,
         attempt: accounting.Attempt,
@@ -37,6 +39,7 @@ pub const Runner = struct {
             accounting.accounting(self.current_owner),
             expected_accounting_revision,
             current_requests,
+            operations,
             expected_request_revision,
             request_id,
             attempt,

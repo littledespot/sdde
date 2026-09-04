@@ -602,7 +602,7 @@ fn transitionRecord(current: Record, transition: LifecycleTransition) Validation
         else
             error.InvalidModelRequestLifecycleTransition,
         .terminal => |reason| switch (current.status) {
-            .assigned => if (current.terminal_reason == null and isNotInvokedReason(reason))
+            .assigned => if (current.terminal_reason == null and (isNotInvokedReason(reason) or reason == .cancelled))
                 .{
                     .model_request_id = current.model_request_id,
                     .status = .terminal,

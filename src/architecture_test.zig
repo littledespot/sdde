@@ -450,6 +450,48 @@ test "workflow token accounting has only its two runner-applied action authoriti
     }
 }
 
+test "provider lifecycle has one pure action and runner-owned immutable ledger" {
+    const lifecycle = @import("domain/provider_operation_lifecycle.zig");
+    switch (@typeInfo(lifecycle.Ledger)) {
+        .@"opaque" => {},
+        else => return error.ProviderOperationLedgerMustBeOpaque,
+    }
+    try std.testing.expect(@TypeOf(@as(lifecycle.TerminalSummary, .counted).counted) == void);
+    try std.testing.expect(!@hasField(lifecycle.Effect, "content"));
+
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var actions = try std.Io.Dir.cwd().openDir(io, "src/actions", .{ .iterate = true });
+    defer actions.close(io);
+    var walker = try actions.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
+        defer allocator.free(source);
+        try std.testing.expectEqual(
+            @as(usize, if (std.mem.eql(u8, entry.path, "model/advance_provider_operation_lifecycle.zig")) 1 else 0),
+            countOccurrences(source, ".runner_accounting = .advance_provider_operation"),
+        );
+    }
+    inline for (.{
+        "actions/model/advance_provider_operation_lifecycle.zig",
+        "domain/provider_operation_lifecycle.zig",
+        "application/provider_operation_lifecycle_runner.zig",
+    }) |path| {
+        const source = @embedFile(path);
+        try expectAbsent(source, "/ports/");
+        try expectAbsent(source, "/adapters/");
+        try expectAbsent(source, "std.Io");
+    }
+    const action_source = @embedFile("actions/model/advance_provider_operation_lifecycle.zig");
+    try expectAbsent(action_source, "lifecycle.apply(");
+    const runner = @embedFile("application/provider_operation_lifecycle_runner.zig");
+    try std.testing.expect(std.mem.indexOf(u8, runner, "envelope.apply(").? < std.mem.indexOf(u8, runner, "lifecycle.apply(").?);
+    const request_runner = @embedFile("application/model_request_identity_runner.zig");
+    try std.testing.expect(std.mem.indexOf(u8, request_runner, "operations.deinit()").? < std.mem.indexOf(u8, request_runner, "identity.deinitOwner(owner)").?);
+}
+
 test "only request identity owners can produce or replace its ledger key" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;

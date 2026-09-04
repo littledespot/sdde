@@ -1,8 +1,9 @@
 const accounting = @import("../../domain/model_attempt_accounting.zig");
 const identity = @import("../../domain/model_request_identity.zig");
 const pipeline = @import("../../domain/pipeline.zig");
+const provider_lifecycle = @import("../../domain/provider_operation_lifecycle.zig");
 
-pub const Error = accounting.ProposalError || error{
+pub const Error = accounting.ProposalError || provider_lifecycle.ValidationError || error{
     ModelRequestLedgerRevisionConflict,
     ModelRequestUnavailableForAttempt,
 };
@@ -22,6 +23,7 @@ pub const Action = struct {
         current_accounting: *const accounting.RunnerModelAttemptAccounting,
         expected_accounting_revision: accounting.Revision,
         current_requests: *const identity.ModelRequestIdentityLedger,
+        operations: *const provider_lifecycle.Ledger,
         expected_request_revision: identity.LedgerRevision,
         request_id: *const identity.ModelRequestId,
         attempt: accounting.Attempt,
@@ -40,6 +42,7 @@ pub const Action = struct {
         const canonical_request_id = current_requests.canonicalRequestId(request_id) orelse {
             return error.ModelRequestUnavailableForAttempt;
         };
+        try operations.validateRequestClosure(canonical_request_id);
         const transition = try accounting.propose(
             current_accounting,
             expected_accounting_revision,

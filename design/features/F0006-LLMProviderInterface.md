@@ -21,7 +21,10 @@ global attempt ceiling has been removed: initial execution is accounted
 separately and later attempts require compiler-proven operation-local retry
 authority. The selected policy's positive total-token budget is compiled into
 the graph, and each execution owns a fresh reservation/reconciliation ledger.
-Provider-operation lifecycle actions, authorization storage, effect journaling,
+`AdvanceProviderOperationLifecycleAction`, its immutable execution-owned ledger,
+runner application, and non-content journal intents are implemented. Request
+finalization and attempt advancement reject unfinished provider operations.
+Durable effect-journal integration, authorization storage, provider-call actions,
 and production provider contracts remain implementation work.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
@@ -537,6 +540,22 @@ not only one inference call. Its sequence is closed:
 operation may remain assigned when its attempt or request terminates. A provider
 action requires proof that its `invoked` transition is already applied.
 
+The implementation retains immutable ledger snapshots under one execution
+owner. The request runner owns that lifetime and destroys it before canonical
+request identities. Every change checks the exact ledger, request, attempt, and
+operation revisions; count and inference reference the existing reserved
+attempt rather than reserving it again. Inference assignment joins successful
+terminal count evidence by operation, binding, input identity, and count value.
+The action emits one declared runner transition, and only the runner publishes
+the successor. Request terminalization and a later attempt are rejected while
+an operation remains assigned or invoked.
+
+The transition projects only `assigned`, `send_may_occur`, or
+`terminal_observed` journal intents. Those projections omit count values and
+model content and do not prove persistence or outcome consumption. Durable
+commit/handoff and recovery remain separate implementation increments; the
+in-memory `requireInvoked` lookup alone does not authorize production I/O.
+
 Authorization failure before the first provider call leaves the logical request
 `assigned`; a typed terminal outcome uses an amended
 `assigned -> terminal(not_invoked_authorization_failure)` transition, while the
@@ -546,6 +565,8 @@ orchestrator chooses a new attempt, otherwise a terminal-outcome action proposes
 `invoked -> terminal`. An inference operation is not assigned until exact count
 evidence exists. These cases, cancellation, and recovery exhaust the legal
 branches; no implicit status or dangling operation exists.
+Cancellation before the first call uses `assigned -> terminal(cancelled)` after
+the assigned operation is closed as not sent; it is not an authorization failure.
 
 The two operation IDs share the attempt ordinal but have distinct kinds. Count
 or authorization failure consumes the reserved attempt and makes that
