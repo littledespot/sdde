@@ -5,7 +5,6 @@ const artifacts = @import("../../domain/workflow_artifact_registry.zig");
 const clarification = @import("../../domain/clarification_inputs.zig");
 const source = @import("../../ports/feature_input_source.zig");
 const directories = @import("directory_access.zig");
-const file_identity = @import("file_identity.zig");
 
 pub const Adapter = struct {
     io: std.Io,
@@ -81,29 +80,6 @@ fn lessForm(_: void, left: clarification.FormCapture, right: clarification.FormC
     return left.id.index() < right.id.index();
 }
 
-/// One fixed leaf under an already no-follow-opened parent. A missing file is
-/// distinct from an unsafe node or read failure; capture never writes.
 fn readFile(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, name: []const u8, maximum: usize) source.Error!?[]const u8 {
-    const named_before = parent.statFile(io, name, .{ .follow_symlinks = false }) catch |err| return switch (err) {
-        error.FileNotFound => null,
-        else => error.FeatureInputUnavailable,
-    };
-    if (named_before.kind != .file or named_before.size > maximum) return error.FeatureInputUnavailable;
-    var file = parent.openFile(io, name, .{ .mode = .read_only, .allow_directory = false, .follow_symlinks = false, .resolve_beneath = true }) catch return error.FeatureInputUnavailable;
-    defer file.close(io);
-    const before = file.stat(io) catch return error.FeatureInputUnavailable;
-    const identity = file_identity.inspect(file.handle) catch return error.FeatureInputUnavailable;
-    if (before.kind != .file or before.inode != named_before.inode or before.size != named_before.size) return error.FeatureInputUnavailable;
-    var reader = file.reader(io, &.{});
-    const bytes = @import("bounded_file_capture.zig").capture(allocator, &reader.interface, before.size, maximum) catch return error.FeatureInputUnavailable;
-    errdefer allocator.free(bytes);
-    const after = file.stat(io) catch return error.FeatureInputUnavailable;
-    const named_after = parent.statFile(io, name, .{ .follow_symlinks = false }) catch return error.FeatureInputUnavailable;
-    if (after.kind != .file or named_after.kind != .file or after.size != before.size or named_after.inode != before.inode or
-        named_after.size != before.size or !std.meta.eql(before.mtime, after.mtime) or !std.meta.eql(before.ctime, after.ctime) or
-        !(file_identity.inspect(file.handle) catch return error.FeatureInputUnavailable).eql(identity)) return error.FeatureInputUnavailable;
-    var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
-    const length = parent.realPathFile(io, name, &path_buffer) catch return error.FeatureInputUnavailable;
-    if (!std.mem.eql(u8, std.fs.path.basename(path_buffer[0..length]), name)) return error.FeatureInputUnavailable;
-    return bytes;
+    return @import("file_access.zig").capture(io, allocator, parent, name, null, maximum) catch return error.FeatureInputUnavailable;
 }

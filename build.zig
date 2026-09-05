@@ -126,7 +126,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }) });
-    const request_preparation_step = b.step("test-model-request-preparation", "Test provider-neutral request construction and static preflight");
+    const request_preparation_step = b.step("test-model-request-preparation", "Test provider-neutral request construction and binding validation");
     request_preparation_step.dependOn(&b.addRunArtifact(request_preparation_tests).step);
 
     const invocation_validation_tests = b.addTest(.{ .root_module = b.createModule(.{

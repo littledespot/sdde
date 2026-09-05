@@ -82,7 +82,6 @@ const Storage = struct {
 pub fn decode(allocator: std.mem.Allocator, complete: *const invocation.CompleteCandidate) Error!Owned {
     const association = complete.association();
     var parsed = json.parse(allocator, complete.content(), .{
-        .maximum_bytes = association.request().limits.maximum_output_bytes,
         .maximum_depth = schema.max_json_depth,
     }, false) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,

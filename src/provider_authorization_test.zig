@@ -90,7 +90,7 @@ test "assigned operation cannot consume a lease using a manufactured invoked val
     defer fixture.deinit();
     try fixture.assignCount();
     const reference = try fixture.prepare(.input_token_count);
-    const invoked = operation.InvokedProviderOperation.init(fixture.id(.input_token_count), 1000, operation.ProviderReceiveBudgets.init(32, 4096, 4096).?).?;
+    const invoked = operation.InvokedProviderOperation.init(fixture.id(.input_token_count), 1000).?;
     try std.testing.expectError(error.AuthorizationDenied, fixture.leasePort().consume(reference, &fixture.provider_binding, &fixture.request, &invoked));
     try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
 }
@@ -139,7 +139,7 @@ test "deadline is checked again at consume including exact equality" {
     try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
 }
 
-test "prepared lease cannot be reused with altered resolved capacity or controls" {
+test "prepared lease cannot be reused with altered binding or controls" {
     for (0..4) |variant| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
@@ -149,10 +149,13 @@ test "prepared lease cannot be reused with altered resolved capacity or controls
         var request = fixture.request;
         switch (variant) {
             0 => {
-                selected.capacity.canonical.maximum_input_bytes += 1;
-                request.limits = selected.capacity.canonical;
+                selected.slot_id.bytes = "another-slot";
+                request.binding_id = selected.bindingId();
             },
-            1 => selected.capacity.wire.maximum_request_body_bytes -= 1,
+            1 => {
+                selected.reasoning_effort = null;
+                request.binding_id = selected.bindingId();
+            },
             2 => {
                 selected.controls.temperature = .{ .value = 200 };
                 request.controls = selected.controls;

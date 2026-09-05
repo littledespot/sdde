@@ -9,3 +9,11 @@ pub const FileIdentity = struct {
             left.generation_id == right.generation_id;
     }
 };
+
+/// Observation used to reject replacement or in-place mutation during capture.
+pub const FileObservation = struct {
+    identity: FileIdentity,
+    size: u64,
+    modified_ns: i128,
+    changed_ns: i128,
+};

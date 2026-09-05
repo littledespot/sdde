@@ -1,5 +1,3 @@
-const limits = @import("model_limits.zig");
-
 pub const ExactTokenCounter = enum { unavailable, provider_input_token_count };
 
 // Native schema profiles must be supplied with a provider implementation. A
@@ -12,10 +10,9 @@ pub const Capabilities = struct {
     exact_token_counter: ExactTokenCounter,
     structured_response: StructuredResponse,
     temperature: bool,
-    capacity: limits.Capacity,
 
     pub fn isValid(self: Capabilities) bool {
-        return self.capacity.isValid() and (self.input_token_count or self.inference) and
+        return (self.input_token_count or self.inference) and
             (self.exact_token_counter != .provider_input_token_count or self.input_token_count) and
             (self.structured_response == .unavailable or self.inference) and
             (!self.temperature or self.inference);

@@ -58,7 +58,6 @@ pub const Entry = struct {
 };
 
 pub const Registry = struct {
-    model_capacity: ?@import("../domain/model_limits.zig").Capacity = null,
     operations: []const Entry,
     data_schemas: []const data.Schema = &.{},
     policies: []const operation.PolicyProfile,
@@ -95,7 +94,6 @@ pub const Registry = struct {
     }
 
     pub fn validate(self: *const Registry) bool {
-        if (self.model_capacity) |capacity| if (!capacity.isValid()) return false;
         if (!self.validGates()) return false;
         for (self.data_schemas, 0..) |schema, index| {
             if (!schema.valid()) return false;
@@ -103,7 +101,6 @@ pub const Registry = struct {
         }
         for (self.operations, 0..) |entry, index| {
             if (entry.binding.implementation.context_required and entry.binding.context == null) return false;
-            if (entry.contract.model_capacity != null and self.model_capacity == null) return false;
             if (workflow.RegisteredRef.parse(entry.contract.id) == null or
                 !validContract(entry.contract, entry.binding.capabilities())) return false;
             inline for (.{ entry.contract.requires, entry.contract.optional, entry.contract.produces, entry.contract.replaces, entry.contract.invalidates }) |keys| {
@@ -177,12 +174,10 @@ fn validContract(contract: operation.Contract, capabilities: []const []const u8)
         if (!descriptor.required or descriptor.allowed_values.len != 0 or descriptor.resource_kind != null) return false;
         model_slot_count += 1;
     }
-    const requires_model_binding = contract.model_capacity != null;
-    if (model_slot_count > 1 or requires_model_binding != (model_slot_count == 1)) return false;
+    const requires_model_binding = contract.requiresModelBinding();
+    if (model_slot_count > 1) return false;
     if (model_capable and !requires_model_binding) return false;
-    if (contract.model_capacity) |capacity| {
-        if (!capacity.isValid() or !@import("../domain/workflow_model.zig").validDescriptors(contract.parameters)) return false;
-    }
+    if (requires_model_binding and !@import("../domain/workflow_model.zig").validDescriptors(contract.parameters)) return false;
     if (contract.retry_limit) |limit| {
         if (contract.kind != .step or limit.maximum == 0) return false;
         const descriptor = findParameter(contract.parameters, workflow_retry.parameter_id) orelse return false;

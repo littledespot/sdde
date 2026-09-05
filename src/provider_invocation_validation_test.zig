@@ -2,15 +2,13 @@ const std = @import("std");
 const action = @import("actions/model/validate_provider_invocation_observation.zig");
 const validation = @import("domain/provider_invocation_validation.zig");
 const provider = @import("domain/llm_provider_operation.zig");
-const preparation = @import("domain/model_request_preparation.zig");
 const build_request = @import("actions/model/build_model_request.zig");
-const preflight = @import("actions/model/validate_static_model_request_capacity.zig");
 
 const Fixture = @import("provider_invocation_test_fixture.zig").Fixture;
 
 test "fake response validation retains exact call authority without copying content or mutating accounting" {
     var fixture: Fixture = undefined;
-    try fixture.init(40);
+    try fixture.init();
     defer fixture.deinit();
     fixture.fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 1_000_000, .output_tokens = 500_000, .provider_latency_ms = 7 } };
     var response = try fixture.response();
@@ -43,7 +41,7 @@ test "fake response validation retains exact call authority without copying cont
 test "all provider stops preserve usage and expose no decoder candidate" {
     inline for (std.enums.values(provider.ProviderNonCandidateStopReason)) |reason| {
         var fixture: Fixture = undefined;
-        try fixture.init(40);
+        try fixture.init();
         defer fixture.deinit();
         fixture.fake.invocation_plan = .{ .stopped = .{ .reason = reason, .input_tokens = std.math.maxInt(u64), .output_tokens = 0 } };
         var response = try fixture.response();
@@ -61,9 +59,8 @@ test "provider failure causes retry facts and delivery are preserved without fab
     inline for (std.enums.values(provider.ProviderFailureCause)) |cause| {
         inline for (std.enums.values(provider.ProviderRetryClass)) |retry| {
             inline for (std.enums.values(provider.ProviderDeliveryDisposition)) |delivery| {
-                if (cause == .request_limit_exceeded and delivery != .not_sent) continue;
                 var fixture: Fixture = undefined;
-                try fixture.init(40);
+                try fixture.init();
                 defer fixture.deinit();
                 fixture.fake.invocation_plan = .{ .failed = .{ .cause = cause, .retry_class = retry, .delivery = delivery } };
                 var response = try fixture.response();
@@ -82,7 +79,7 @@ test "provider failure causes retry facts and delivery are preserved without fab
 
 test "cancellation remains outside invocation observations and destroys the single-use lease" {
     var fixture: Fixture = undefined;
-    try fixture.init(40);
+    try fixture.init();
     defer fixture.deinit();
     fixture.fake.invocation_plan = .cancelled;
     try std.testing.expectError(error.Cancelled, fixture.response());
@@ -92,10 +89,10 @@ test "cancellation remains outside invocation observations and destroys the sing
     try std.testing.expect(!@hasField(provider.ProviderFailureCause, "cancelled"));
 }
 
-test "validation accepts bounded UTF8 without interpreting JSON model claims or echoed IDs" {
+test "validation accepts complete UTF8 without interpreting JSON model claims or echoed IDs" {
     for ([_][]const u8{ "", "not JSON", "```json\n{}\n```", "{\"status\":\"approved\"}", "{\"requestId\":\"another-request\"}" }) |content| {
         var fixture: Fixture = undefined;
-        try fixture.init(40);
+        try fixture.init();
         defer fixture.deinit();
         var response = try rawComplete(&fixture, content);
         defer response.deinit();
@@ -106,23 +103,23 @@ test "validation accepts bounded UTF8 without interpreting JSON model claims or 
     }
 }
 
-test "unsafe response content becomes a failure with retained actual usage and no candidate" {
+test "response size is unrestricted while invalid UTF8 retains usage without a candidate" {
     const invalid_utf8 = [_]u8{0xff};
     const exact = [_]u8{'x'} ** 40;
-    const oversized = [_]u8{'x'} ** 41;
-    for ([_][]const u8{ &exact, &oversized, &invalid_utf8 }, 0..) |bytes, index| {
+    const large = [_]u8{'x'} ** 16_384;
+    for ([_][]const u8{ &exact, &large, &invalid_utf8 }, 0..) |bytes, index| {
         var fixture: Fixture = undefined;
-        try fixture.init(40);
+        try fixture.init();
         defer fixture.deinit();
         var response = try rawComplete(&fixture, bytes);
         defer response.deinit();
         var owned = try (action.Action{}).execute(std.testing.allocator, fixture.call, &response);
         defer owned.deinit();
-        if (index == 0) {
-            try std.testing.expectEqualStrings(&exact, owned.evidence.result().complete.content());
+        if (index < 2) {
+            try std.testing.expectEqualStrings(bytes, owned.evidence.result().complete.content());
         } else {
             const failure = owned.evidence.result().failed;
-            try std.testing.expectEqual(if (index == 1) provider.ProviderFailureCause.response_limit_exceeded else .response_invalid, failure.cause);
+            try std.testing.expectEqual(provider.ProviderFailureCause.response_invalid, failure.cause);
             try std.testing.expectEqual(provider.ProviderRetryClass.never, failure.retry_class);
             try std.testing.expectEqual(provider.ProviderDeliveryDisposition.response_received, failure.delivery);
             try std.testing.expect(failure.operation_id.eql(fixture.call.operation_id));
@@ -140,7 +137,7 @@ test "unsafe response content becomes a failure with retained actual usage and n
 
 test "malformed usage rejects both complete and stopped observations without mutation" {
     var fixture: Fixture = undefined;
-    try fixture.init(40);
+    try fixture.init();
     defer fixture.deinit();
     var response = try fixture.response();
     defer response.deinit();
@@ -169,10 +166,10 @@ test "malformed usage rejects both complete and stopped observations without mut
 
 test "foreign request binding operation kind and attempt observations reject before evidence allocation" {
     var fixture: Fixture = undefined;
-    try fixture.init(40);
+    try fixture.init();
     defer fixture.deinit();
     var other: Fixture = undefined;
-    try other.init(40);
+    try other.init();
     defer other.deinit();
     var response = try fixture.response();
     defer response.deinit();
@@ -213,10 +210,10 @@ test "foreign request binding operation kind and attempt observations reject bef
 
 test "retained operation ledger rejects substituted input binding and unavailable lifecycle authority" {
     var fixture: Fixture = undefined;
-    try fixture.init(40);
+    try fixture.init();
     defer fixture.deinit();
     var other: Fixture = undefined;
-    try other.init(40);
+    try other.init();
     defer other.deinit();
     var response = try fixture.response();
     defer response.deinit();
@@ -224,14 +221,14 @@ test "retained operation ledger rejects substituted input binding and unavailabl
     wrong.operations = other.base.ledger();
     try std.testing.expectError(error.InvalidProviderInvocationContext, (action.Action{}).execute(std.testing.allocator, wrong, &response));
     wrong = fixture.call;
-    wrong.preflight = other.call.preflight;
+    wrong.request = other.call.request;
     try std.testing.expectError(error.InvalidProviderInvocationContext, (action.Action{}).execute(std.testing.allocator, wrong, &response));
     var source = try fixture.requestSource();
     source.model_visible_input_id.bytes = "different-input";
     var substituted = try (build_request.Action{}).execute(std.testing.allocator, source, fixture.prepared.request.content);
     defer substituted.deinit();
     wrong = fixture.call;
-    wrong.preflight = try (preflight.Action{}).execute(source, substituted.request);
+    wrong.request = substituted.request;
     try std.testing.expectError(error.InvalidProviderInvocationContext, (action.Action{}).execute(std.testing.allocator, wrong, &response));
     var different_binding = fixture.base.provider_binding;
     different_binding.slot_id.bytes = "other-slot";
@@ -244,19 +241,20 @@ test "retained operation ledger rejects substituted input binding and unavailabl
     try std.testing.expectError(error.InvalidProviderInvocationContext, (action.Action{}).execute(std.testing.allocator, wrong, &response));
 }
 
-test "request wire-limit rejection cannot claim sent delivery" {
+test "provider size rejection retains response delivery rather than fabricating non-delivery" {
     var fixture: Fixture = undefined;
-    try fixture.init(40);
+    try fixture.init();
     defer fixture.deinit();
-    inline for (.{ .response_received, .accepted_or_unknown }) |delivery| {
-        const response: provider.ProviderInvocationObservation = .{ .failed = .{
-            .operation_id = fixture.call.operation_id,
-            .cause = .request_limit_exceeded,
-            .retry_class = .never,
-            .delivery = delivery,
-        } };
-        try std.testing.expectError(error.InvalidProviderDeliveryDisposition, (action.Action{}).execute(std.testing.allocator, fixture.call, &response));
-    }
+    fixture.fake.invocation_plan = .{ .failed = .{ .cause = .request_rejected, .retry_class = .never, .delivery = .response_received } };
+    var response = try fixture.response();
+    defer response.deinit();
+    var owned = try (action.Action{}).execute(std.testing.allocator, fixture.call, &response);
+    defer owned.deinit();
+    try std.testing.expectEqualDeep(response.failed, owned.evidence.result().failed);
+    try std.testing.expectEqual(provider.ProviderDeliveryDisposition.response_received, owned.evidence.delivery());
+    try std.testing.expect(owned.evidence.usage() == null);
+    try std.testing.expectEqual(@as(usize, 1), fixture.fake.effect_count);
+    try std.testing.expectEqual(@as(usize, 1), fixture.base.preloader.destroyed_count);
 }
 
 test "evidence allocation failure and cleanup never consume or free the raw response" {
@@ -265,7 +263,7 @@ test "evidence allocation failure and cleanup never consume or free the raw resp
 
 fn allocationCase(allocator: std.mem.Allocator) !void {
     var fixture: Fixture = undefined;
-    try fixture.init(40);
+    try fixture.init();
     defer fixture.deinit();
     var response = try fixture.response();
     defer response.deinit();

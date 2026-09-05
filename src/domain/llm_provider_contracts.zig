@@ -110,10 +110,6 @@ test "contract registry is exact unique and provider consistent" {
         .exact_token_counter = .provider_input_token_count,
         .structured_response = .prompt_only,
         .temperature = false,
-        .capacity = .{
-            .canonical = @import("model_limits.zig").Limits.init(100, 100).?,
-            .wire = .{ .maximum_request_body_bytes = 1000, .maximum_request_path_bytes = 100, .maximum_request_header_count = 10, .maximum_request_header_bytes = 100, .maximum_response_header_count = 10, .maximum_response_header_bytes = 100, .maximum_response_body_bytes = 1000 },
-        },
     };
     const provider = identity.ProviderId.parse("compiled-provider").?;
     const first = ProviderModelContract{

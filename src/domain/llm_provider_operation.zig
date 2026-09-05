@@ -2,7 +2,6 @@ const std = @import("std");
 const binding = @import("llm_provider_binding.zig");
 const request_identity = @import("model_request_identity.zig");
 const execution_reference = @import("execution_reference.zig");
-const model_limits = @import("model_limits.zig");
 const model_controls = @import("model_controls.zig");
 
 pub const ProviderOperationKind = enum {
@@ -30,59 +29,26 @@ pub const ProviderOperationId = struct {
     }
 };
 
-pub const ProviderReceiveBudgets = struct {
-    maximum_header_count: u16,
-    maximum_header_bytes: u32,
-    maximum_body_bytes: u32,
-
-    pub fn init(
-        maximum_header_count: u16,
-        maximum_header_bytes: u32,
-        maximum_body_bytes: u32,
-    ) ?ProviderReceiveBudgets {
-        if (maximum_header_count == 0 or maximum_header_bytes == 0 or maximum_body_bytes == 0) {
-            return null;
-        }
-        return .{
-            .maximum_header_count = maximum_header_count,
-            .maximum_header_bytes = maximum_header_bytes,
-            .maximum_body_bytes = maximum_body_bytes,
-        };
-    }
-
-    pub fn isValid(self: ProviderReceiveBudgets) bool {
-        return self.maximum_header_count != 0 and
-            self.maximum_header_bytes != 0 and
-            self.maximum_body_bytes != 0;
-    }
-};
-
 pub const InvokedProviderOperation = struct {
     id: ProviderOperationId,
     deadline_monotonic_ms: u64,
-    receive_budgets: ProviderReceiveBudgets,
 
     pub fn init(
         id: ProviderOperationId,
         deadline_monotonic_ms: u64,
-        receive_budgets: ProviderReceiveBudgets,
     ) ?InvokedProviderOperation {
-        if (id.model_attempt_ordinal.value == 0 or deadline_monotonic_ms == 0 or
-            !receive_budgets.isValid())
-        {
+        if (id.model_attempt_ordinal.value == 0 or deadline_monotonic_ms == 0) {
             return null;
         }
         return .{
             .id = id,
             .deadline_monotonic_ms = deadline_monotonic_ms,
-            .receive_budgets = receive_budgets,
         };
     }
 
     pub fn isValid(self: InvokedProviderOperation) bool {
         return self.id.model_attempt_ordinal.value != 0 and
-            self.deadline_monotonic_ms != 0 and
-            self.receive_budgets.isValid();
+            self.deadline_monotonic_ms != 0;
     }
 };
 
@@ -138,7 +104,6 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     response_schema: *const @import("model_result_schema.zig").Schema,
     response_guidance_mode: model_controls.ResponseGuidanceMode,
     controls: model_controls.InferenceControls,
-    limits: model_limits.Limits,
 
     pub fn init(value: IdentifiedProviderNeutralModelRequest) RequestError!IdentifiedProviderNeutralModelRequest {
         try value.validate();
@@ -153,38 +118,24 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
             ResultSchemaId.parse(self.result_schema_id.bytes) == null or
             ModelVisibleInputId.parse(self.model_visible_input_id.bytes) == null or
             self.content.len == 0 or
-            model_limits.Limits.init(
-                self.limits.maximum_input_bytes,
-                self.limits.maximum_output_bytes,
-            ) == null or
             (self.controls.temperature != null and
                 model_controls.TemperaturePermille.init(self.controls.temperature.?.value) == null))
         {
             return error.InvalidProviderNeutralModelRequest;
         }
 
-        var canonical_bytes: u64 = self.response_schema.bytes().len;
         for (self.content) |part| {
             const bytes = part.bytes();
             if (bytes.len == 0 or !std.unicode.utf8ValidateSlice(bytes)) {
                 return error.InvalidProviderNeutralModelRequest;
             }
-            canonical_bytes = std.math.add(u64, canonical_bytes, bytes.len) catch {
-                return error.InvalidProviderNeutralModelRequest;
-            };
-        }
-        if (canonical_bytes > self.limits.maximum_input_bytes) {
-            return error.InvalidProviderNeutralModelRequest;
         }
     }
 
     pub fn matchesBinding(self: IdentifiedProviderNeutralModelRequest, selected: binding.ValidatedProviderModelBinding) bool {
         const supported = selected.registry_entry.capabilities;
-        const bounded = model_limits.Capacity.intersect(selected.capacity, supported.capacity) orelse return false;
         return supported.supports(selected.response_mode, selected.controls) and
             self.binding_id.eql(selected.bindingId()) and
-            std.meta.eql(bounded, selected.capacity) and
-            std.meta.eql(self.limits, selected.capacity.canonical) and
             self.response_guidance_mode == selected.response_mode and
             std.meta.eql(self.controls, selected.controls);
     }
@@ -205,9 +156,7 @@ pub const ProviderFailureCause = enum {
     timeout,
     service_unavailable,
     transport_failed,
-    request_limit_exceeded,
     response_invalid,
-    response_limit_exceeded,
     exact_token_count_unavailable,
 };
 
@@ -302,31 +251,28 @@ pub const ProviderUsage = struct {
     }
 };
 
-pub const CompleteBoundedOwnedUtf8 = struct {
+pub const CompleteOwnedUtf8 = struct {
     allocator: std.mem.Allocator,
     bytes: []const u8,
 
     pub const ValidationError = error{
         InvalidUtf8,
-        LimitExceeded,
     };
     pub const InitError = std.mem.Allocator.Error || ValidationError;
 
-    pub fn validate(source: []const u8, maximum_bytes: u32) ValidationError!void {
+    pub fn validate(source: []const u8) ValidationError!void {
         if (!std.unicode.utf8ValidateSlice(source)) return error.InvalidUtf8;
-        if (source.len > maximum_bytes) return error.LimitExceeded;
     }
 
     pub fn init(
         allocator: std.mem.Allocator,
         source: []const u8,
-        maximum_bytes: u32,
-    ) InitError!CompleteBoundedOwnedUtf8 {
-        try validate(source, maximum_bytes);
+    ) InitError!CompleteOwnedUtf8 {
+        try validate(source);
         return .{ .allocator = allocator, .bytes = try allocator.dupe(u8, source) };
     }
 
-    pub fn deinit(self: *CompleteBoundedOwnedUtf8) void {
+    pub fn deinit(self: *CompleteOwnedUtf8) void {
         self.allocator.free(self.bytes);
         self.* = undefined;
     }
@@ -344,7 +290,7 @@ pub const RawProviderModelResult = union(enum) {
     complete: struct {
         request_id: *const request_identity.ModelRequestId,
         binding_id: binding.ProviderModelBindingId,
-        content: CompleteBoundedOwnedUtf8,
+        content: CompleteOwnedUtf8,
         usage: ProviderUsage,
         provider_latency_ms: ?u32,
     },
@@ -390,7 +336,6 @@ pub fn validateCountInvocation(
     return operation.id.kind == .input_token_count and
         provider_binding.registry_entry.capabilities.input_token_count and
         provider_binding.registry_entry.capabilities.exact_token_counter == .provider_input_token_count and
-        receiveBudgetsFit(operation.receive_budgets, provider_binding.capacity.wire) and
         operation.isValid() and
         operation.id.model_request_id == request.model_request_id and
         request.matchesBinding(provider_binding.*);
@@ -403,17 +348,9 @@ pub fn validateInferenceInvocation(
 ) bool {
     request.validate() catch return false;
     return operation.id.kind == .inference and
-        receiveBudgetsFit(operation.receive_budgets, provider_binding.capacity.wire) and
         request.matchesBinding(provider_binding.*) and
         operation.isValid() and
         operation.id.model_request_id == request.model_request_id;
-}
-
-fn receiveBudgetsFit(receive: ProviderReceiveBudgets, capacity: model_limits.WireBudgets) bool {
-    return receive.isValid() and capacity.isValid() and
-        receive.maximum_header_count <= capacity.maximum_response_header_count and
-        receive.maximum_header_bytes <= capacity.maximum_response_header_bytes and
-        receive.maximum_body_bytes <= capacity.maximum_response_body_bytes;
 }
 
 pub const RequestError = error{InvalidProviderNeutralModelRequest};

@@ -17,7 +17,6 @@ const Entry = struct {
     operation_id: operation.ProviderOperationId,
     registry_entry: *const registry.Entry,
     binding_id: binding.ProviderModelBindingId,
-    capacity: @import("../domain/model_limits.zig").Capacity,
     response_mode: @import("../domain/model_controls.zig").ResponseGuidanceMode,
     controls: @import("../domain/model_controls.zig").InferenceControls,
     input_id: operation.ModelVisibleInputId,
@@ -78,7 +77,6 @@ pub const Table = struct {
             .operation_id = facts.operation_id,
             .registry_entry = facts.provider_binding.registry_entry,
             .binding_id = record.binding_id,
-            .capacity = facts.provider_binding.capacity,
             .response_mode = facts.provider_binding.response_mode,
             .controls = facts.provider_binding.controls,
             .input_id = record.model_visible_input_id,
@@ -182,7 +180,6 @@ pub const Table = struct {
 
 fn matches(entry: *const Entry, provider_binding: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, deadline: u64) bool {
     return entry.registry_entry == provider_binding.registry_entry and
-        std.meta.eql(entry.capacity, provider_binding.capacity) and
         entry.response_mode == provider_binding.response_mode and
         std.meta.eql(entry.controls, provider_binding.controls) and
         request.matchesBinding(provider_binding.*) and

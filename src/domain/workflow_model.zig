@@ -1,11 +1,9 @@
 const std = @import("std");
-const limits = @import("model_limits.zig");
 const controls = @import("model_controls.zig");
 const compilation = @import("workflow_compilation.zig");
 const operation = @import("workflow_operation.zig");
 
 pub const Requirements = struct {
-    capacity: limits.Capacity,
     response_mode: controls.ResponseGuidanceMode,
     controls: controls.InferenceControls,
 };
@@ -13,8 +11,6 @@ pub const Requirements = struct {
 // Shared generic model parameters. No workflow name, route, or model identity
 // participates in this contract. Omitted controls mean no control is sent.
 pub const parameters = [_]operation.ParameterDescriptor{
-    .{ .id = "input-bytes", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 1, .integer_max = std.math.maxInt(u32) },
-    .{ .id = "output-bytes", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 1, .integer_max = std.math.maxInt(u32) },
     .{ .id = "response-mode", .kind = .enumeration, .required = true, .workflow_definition_safe = true, .allowed_values = &.{ "prompt-only", "native-schema" } },
     .{ .id = "temperature", .kind = .integer, .required = false, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 1000 },
 };
@@ -34,11 +30,14 @@ pub fn validProjection(step: compilation.CompiledStep) bool {
         (step.model != null) != (slot_count == 1) or
         (capability_count == 1 and step.model == null)) return false;
     const model = step.model orelse return true;
-    const expected = resolve(model.capacity, model.capacity, step.parameters) orelse return false;
+    const expected = resolve(step.parameters) orelse return false;
     return std.meta.eql(model, expected);
 }
 
 pub fn validDescriptors(descriptors: []const operation.ParameterDescriptor) bool {
+    for (descriptors) |descriptor| {
+        if (retiredSizeParameter(descriptor.id)) return false;
+    }
     for (parameters) |required| {
         var found = false;
         for (descriptors) |descriptor| {
@@ -55,17 +54,12 @@ pub fn validDescriptors(descriptors: []const operation.ParameterDescriptor) bool
 }
 
 pub fn resolve(
-    engine_capacity: limits.Capacity,
-    operation_capacity: limits.Capacity,
     values: []const compilation.CompiledParameter,
 ) ?Requirements {
     for (values, 0..) |value, index| {
+        if (retiredSizeParameter(value.id.bytes)) return null;
         for (values[0..index]) |prior| if (std.mem.eql(u8, prior.id.bytes, value.id.bytes)) return null;
     }
-    var capacity = limits.Capacity.intersect(engine_capacity, operation_capacity) orelse return null;
-    capacity.canonical.maximum_input_bytes = @intCast(@min(capacity.canonical.maximum_input_bytes, integer(values, "input-bytes", std.math.maxInt(u32)) orelse return null));
-    capacity.canonical.maximum_output_bytes = @intCast(@min(capacity.canonical.maximum_output_bytes, integer(values, "output-bytes", std.math.maxInt(u32)) orelse return null));
-    if (!capacity.isValid()) return null;
     const mode = find(values, "response-mode") orelse return null;
     if (mode != .enumeration) return null;
     const response_mode: controls.ResponseGuidanceMode = if (std.mem.eql(u8, mode.enumeration, "prompt-only"))
@@ -79,13 +73,14 @@ pub fn resolve(
         if (temperature != .integer or temperature.integer < 0 or temperature.integer > 1000) return null;
         selected.temperature = controls.TemperaturePermille.init(@intCast(temperature.integer)) orelse return null;
     }
-    return .{ .capacity = capacity, .response_mode = response_mode, .controls = selected };
+    return .{ .response_mode = response_mode, .controls = selected };
 }
 
-fn integer(values: []const compilation.CompiledParameter, id: []const u8, maximum: u64) ?u64 {
-    const value = find(values, id) orelse return null;
-    if (value != .integer or value.integer <= 0 or value.integer > maximum) return null;
-    return @intCast(value.integer);
+fn retiredSizeParameter(id: []const u8) bool {
+    inline for (.{ "input-bytes", "output-bytes", "input-tokens", "output-tokens" }) |retired| {
+        if (std.mem.eql(u8, id, retired)) return true;
+    }
+    return false;
 }
 
 fn find(values: []const compilation.CompiledParameter, id: []const u8) ?compilation.CompiledParameterValue {

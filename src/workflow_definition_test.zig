@@ -71,7 +71,6 @@ test "concise resources and native parameters compile into immutable operation a
         };
         try std.testing.expectEqual(@as(usize, 1), slots);
         try std.testing.expectEqual(@as(usize, 2), resource_parameters);
-        try std.testing.expectEqual(@as(u32, 1024), graph.authority.steps[0].model.?.capacity.canonical.maximum_output_bytes);
         try std.testing.expectEqualStrings("model-ready@1", graph.authority.steps[0].gates[0].id.bytes);
         if (provider_calls) {
             try std.testing.expectEqualStrings("model-provider", graph.authority.steps[0].capabilities[0]);
@@ -184,14 +183,14 @@ test "unknown operations and unguarded cycles reject the complete graph" {
     );
 }
 
-test "YAML model bounds reject omissions invalid scalars unknown modes and policy authority" {
+test "YAML rejects retired model size parameters missing modes and invalid controls" {
     const substitutions = [_][2][]const u8{
-        .{ "input-bytes: 4096, ", "" },
-        .{ "output-bytes: 1024, ", "" },
+        .{ "response-mode: prompt-only", "response-mode: prompt-only, input-bytes: 4096" },
+        .{ "response-mode: prompt-only", "response-mode: prompt-only, output-bytes: 1024" },
         .{ ", response-mode: prompt-only", "" },
-        .{ "input-bytes: 4096", "input-bytes: 0" },
+        .{ "response-mode: prompt-only", "response-mode: prompt-only, input-bytes: 0" },
         .{ "response-mode: prompt-only", "response-mode: prompt-only, output-tokens: 200" },
-        .{ "input-bytes: 4096", "input-bytes: 4294967296" },
+        .{ "response-mode: prompt-only", "response-mode: prompt-only, output-bytes: 4294967296" },
         .{ "response-mode: prompt-only", "response-mode: prompt-only, input-tokens: 1000" },
         .{ "response-mode: prompt-only", "response-mode: automatic" },
         .{ "response-mode: prompt-only", "response-mode: prompt-only, temperature: 1001" },
@@ -268,7 +267,6 @@ test "compiler rejects parameter outcome gate and capability violations" {
     const accepted = try (validate_schema.Action{}).execute(arena.allocator(), accepted_raw);
     const accepted_manifest = try (resolve_resources.Action{}).execute(arena.allocator(), inventory_value, accepted);
     const restrictive: operation_registry.Registry = .{
-        .model_capacity = @import("model_contract_test_fixture.zig").capacity,
         .operations = &operation_entries,
         .policies = &.{.{
             .id = "test.model-policy@1",
@@ -334,7 +332,7 @@ const resource_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
     \\  validate: { use: test.validate@1, on: { ok: generate } }
 ;
@@ -365,7 +363,7 @@ const wrong_parameter_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: two, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: two, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -381,7 +379,7 @@ const missing_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -397,7 +395,7 @@ const negative_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: -1, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: -1, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -413,7 +411,7 @@ const excessive_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 4, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 4, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -429,7 +427,7 @@ const missing_outcome_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed }
 ;
 
@@ -505,7 +503,6 @@ const operation_entries = [_]operation_registry.Entry{
         .contract = .{
             .id = "model.generate@1",
             .kind = .step,
-            .model_capacity = @import("model_contract_test_fixture.zig").capacity,
             .parameters = &([_]@import("domain/workflow_operation.zig").ParameterDescriptor{
                 .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
                 .{ .id = "prompt", .kind = .resource, .required = true, .workflow_definition_safe = true, .resource_kind = .prompt },
@@ -530,7 +527,6 @@ const operation_entries = [_]operation_registry.Entry{
 };
 
 const operations: operation_registry.Registry = .{
-    .model_capacity = @import("model_contract_test_fixture.zig").capacity,
     .operations = &operation_entries,
     .policies = &.{
         .{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok}, .total_model_token_budget = .{ .value = 1000 } },

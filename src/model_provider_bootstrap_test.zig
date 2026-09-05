@@ -160,7 +160,7 @@ fn compileOne(
     steps[0] = .{
         .id = workflow.WorkflowStepId.parse("run").?,
         .operation_id = workflow.RegisteredRef.parse(contract_id).?,
-        .parameters = if (registry.resolveOperation(.{ .bytes = contract_id }).?.contract.model_capacity != null) &model_parameters else &.{},
+        .parameters = if (registry.resolveOperation(.{ .bytes = contract_id }).?.contract.requiresModelBinding()) &model_parameters else &.{},
         .outcomes = &.{.{ .outcome = .ok, .target = .{ .terminal = .ok } }},
     };
     const definitions = try allocator.alloc(definition.Definition, 1);
@@ -349,7 +349,6 @@ fn testRootRegistry(allocator: std.mem.Allocator) !*bootstrap_root_registry.Owne
 }
 
 const operation_registry: operations.Registry = .{
-    .model_capacity = @import("model_contract_test_fixture.zig").capacity,
     .operations = &.{
         .{
             .contract = .{
@@ -364,7 +363,6 @@ const operation_registry: operations.Registry = .{
             .contract = .{
                 .id = "test.model@1",
                 .kind = .step,
-                .model_capacity = @import("model_contract_test_fixture.zig").capacity,
                 .parameters = &([_]@import("domain/workflow_operation.zig").ParameterDescriptor{.{
                     .id = "slot",
                     .kind = .model_slot,
@@ -401,7 +399,6 @@ const binding_only_entries = blk: {
     break :blk entries;
 };
 const binding_only_registry: operations.Registry = .{
-    .model_capacity = operation_registry.model_capacity,
     .operations = &binding_only_entries,
     .policies = &.{.{
         .id = "test.safe@1",

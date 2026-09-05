@@ -1,12 +1,11 @@
 const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
-const preparation = @import("model_request_preparation.zig");
 const lifecycle = @import("provider_operation_lifecycle.zig");
 
 /// Exact runner-retained call inputs. No identity is recovered from model text.
 pub const Call = struct {
-    preflight: *const preparation.StaticCapacityEvidence,
+    request: *const provider.IdentifiedProviderNeutralModelRequest,
     provider_binding: *const binding.ValidatedProviderModelBinding,
     operations: *const lifecycle.Ledger,
     operation_id: provider.ProviderOperationId,
@@ -16,7 +15,6 @@ pub const ValidationError = error{
     InvalidProviderInvocationContext,
     ProviderInvocationAssociationInvalid,
     InvalidProviderTokenUsage,
-    InvalidProviderDeliveryDisposition,
 };
 pub const Error = ValidationError || std.mem.Allocator.Error;
 
@@ -103,7 +101,7 @@ fn storage(evidence: *const Evidence) *const Storage {
 }
 
 pub fn validate(allocator: std.mem.Allocator, call: Call, observation: *const provider.ProviderInvocationObservation) Error!Owned {
-    const request = call.preflight.request();
+    const request = call.request;
     const invoked = call.operations.requireInvoked(call.operation_id) catch return error.InvalidProviderInvocationContext;
     const record = call.operations.record(call.operation_id) orelse return error.InvalidProviderInvocationContext;
     if (!provider.validateInferenceInvocation(call.provider_binding, request, invoked) or
@@ -117,8 +115,6 @@ pub fn validate(allocator: std.mem.Allocator, call: Call, observation: *const pr
     switch (observation.*) {
         .failed => |failure| {
             if (!failure.operation_id.eql(invoked.id)) return error.ProviderInvocationAssociationInvalid;
-            // This cause proves local rejection before any request byte left.
-            if (failure.cause == .request_limit_exceeded and failure.delivery != .not_sent) return error.InvalidProviderDeliveryDisposition;
             validated.result = .{ .failed = failure };
         },
         .completed => |completed| {
@@ -134,15 +130,12 @@ pub fn validate(allocator: std.mem.Allocator, call: Call, observation: *const pr
             validated.result = switch (completed.raw_result) {
                 .stopped => |result| .{ .stopped = result.reason },
                 .complete => |result| complete: {
-                    provider.CompleteBoundedOwnedUtf8.validate(result.content.bytes, request.limits.maximum_output_bytes) catch |err| {
+                    provider.CompleteOwnedUtf8.validate(result.content.bytes) catch {
                         // Keep valid reported usage even when content is unsafe.
                         // This is a provider-boundary failure, never JSON repair.
                         break :complete .{ .failed = .{
                             .operation_id = invoked.id,
-                            .cause = switch (err) {
-                                error.InvalidUtf8 => .response_invalid,
-                                error.LimitExceeded => .response_limit_exceeded,
-                            },
+                            .cause = .response_invalid,
                             .retry_class = .never,
                             .delivery = .response_received,
                         } };

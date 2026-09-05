@@ -17,8 +17,8 @@ Clarifications and relevant answers survive without duplication.
 [Provider APIs own model-call size limits](design/decisions/0011-provider-owned-request-limits.md).
 SDDE adds no request/response byte ceilings or size-estimation gates. It records
 actual API input/output token usage against the workflow execution's total
-budget and stops subsequent calls at or above that budget. Existing capacity
-checks are legacy code to remove, not missing configuration or approval.
+budget and stops subsequent calls at or above that budget. The legacy capacity
+types, size parameters and static-capacity action have been removed.
 
 Bootstrap loads the exact `.sddtoolkit.json` in the invocation working
 directory, validates configured roots, compiles all concise `workflow/v1`

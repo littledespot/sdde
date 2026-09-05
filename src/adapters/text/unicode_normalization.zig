@@ -11,6 +11,11 @@ pub fn nfc(allocator: std.mem.Allocator, input: []const u8, maximum_bytes: usize
     return transform(allocator, input, maximum_bytes, c.UTF8PROC_STABLE | c.UTF8PROC_COMPOSE);
 }
 
+/// A comparison key only; never replaces the spelling of a selected path.
+pub fn caseFold(allocator: std.mem.Allocator, input: []const u8, maximum_bytes: usize) Error![]u8 {
+    return transform(allocator, input, maximum_bytes, c.UTF8PROC_STABLE | c.UTF8PROC_COMPOSE | c.UTF8PROC_CASEFOLD);
+}
+
 fn transform(allocator: std.mem.Allocator, input: []const u8, maximum_bytes: usize, options: c.utf8proc_option_t) Error![]u8 {
     if (input.len > maximum_bytes or maximum_bytes > std.math.maxInt(isize) / 4) return error.NormalizationLimitExceeded;
     const required = c.utf8proc_decompose(input.ptr, @intCast(input.len), null, 0, options);

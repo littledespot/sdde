@@ -113,7 +113,7 @@ test "explicit unsupported counting rejects before send without disabling infere
     }
 }
 
-test "provider request rejects malformed identity content controls and limits" {
+test "provider request rejects malformed identity content and controls" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
@@ -127,9 +127,6 @@ test "provider request rejects malformed identity content controls and limits" {
     try std.testing.expectError(error.InvalidProviderNeutralModelRequest, operation.IdentifiedProviderNeutralModelRequest.init(invalid));
     invalid = fixture.request;
     invalid.controls.temperature = .{ .value = 1001 };
-    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, operation.IdentifiedProviderNeutralModelRequest.init(invalid));
-    invalid = fixture.request;
-    invalid.limits.maximum_input_bytes = 1;
     try std.testing.expectError(error.InvalidProviderNeutralModelRequest, operation.IdentifiedProviderNeutralModelRequest.init(invalid));
 }
 
@@ -251,7 +248,6 @@ test "fake provider maps malformed and over-limit output to closed failures" {
     const invalid_utf8 = [_]u8{0xff};
     const cases = [_]struct { plan: fake_provider.CompletePlan, cause: operation.ProviderFailureCause }{
         .{ .plan = .{ .content = &invalid_utf8, .input_tokens = 10, .output_tokens = 1 }, .cause = .response_invalid },
-        .{ .plan = .{ .content = "this response exceeds the configured byte ceiling", .input_tokens = 10, .output_tokens = 1 }, .cause = .response_limit_exceeded },
         .{ .plan = .{ .content = "{}", .input_tokens = std.math.maxInt(u64), .output_tokens = 1 }, .cause = .response_invalid },
     };
     for (cases) |case| {

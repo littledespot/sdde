@@ -320,19 +320,23 @@ test "provider catalogue and repository allowlist have one immutable authority e
     try expectAbsent(allowlist, "/ports/");
 }
 
-test "model capability facts and effective limits have no configuration or operational authority" {
+test "model capability facts have no local size ceilings or operational authority" {
     const contracts = @import("domain/llm_provider_contracts.zig");
-    const limits = @import("domain/model_limits.zig");
     const operation_contract = @import("domain/workflow_operation.zig");
     const provider_operation = @import("domain/llm_provider_operation.zig");
     try std.testing.expect(@FieldType(contracts.ProviderModelContract, "capabilities") == @import("domain/model_capabilities.zig").Capabilities);
-    try std.testing.expect(@FieldType(provider_operation.IdentifiedProviderNeutralModelRequest, "limits") == limits.Limits);
+    inline for (.{ contracts.ProviderModelContract, @import("domain/model_capabilities.zig").Capabilities, @import("domain/workflow_model.zig").Requirements, @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding, provider_operation.IdentifiedProviderNeutralModelRequest, provider_operation.InvokedProviderOperation, operation_contract.Contract, @import("ports/workflow_operation_registry.zig").Registry }) |T| {
+        inline for (.{ "limits", "capacity", "model_capacity", "receive_budgets" }) |field| try std.testing.expect(!@hasField(T, field));
+    }
+    try std.testing.expect(!@hasDecl(provider_operation, "ProviderReceiveBudgets"));
+    try std.testing.expect(!@hasDecl(provider_operation, "CompleteBoundedOwnedUtf8"));
+    try std.testing.expect(!@hasField(provider_operation.ProviderFailureCause, "request_limit_exceeded"));
+    try std.testing.expect(!@hasField(provider_operation.ProviderFailureCause, "response_limit_exceeded"));
     try std.testing.expect(!@hasDecl(provider_operation, "EffectiveModelLimits"));
     try std.testing.expect(!@hasField(operation_contract.PolicyProfile, "model_capacity"));
     try std.testing.expect(!@hasField(@import("domain/config.zig").ModelsConfig, "model_capacity"));
     inline for (.{
         @embedFile("domain/model_capabilities.zig"),
-        @embedFile("domain/model_limits.zig"),
         @embedFile("domain/workflow_model.zig"),
         @embedFile("actions/provider/resolve_provider_model_binding.zig"),
     }) |source| {
@@ -342,27 +346,22 @@ test "model capability facts and effective limits have no configuration or opera
         try expectAbsent(source, "std.http");
         try expectAbsent(source, "std.process");
     }
-    try std.testing.expect(std.mem.indexOf(u8, @embedFile("actions/workflow/compile_workflow_graphs.zig"), "self.registry.model_capacity") != null);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("actions/workflow/compile_workflow_graphs.zig"), "entry.contract.requiresModelBinding()") != null);
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("application/workflow_pipeline_runner.zig"), "step.model orelse") != null);
 }
 
 test "request preparation is pure and reuses the sole request validation boundary" {
     const build_request = @import("actions/model/build_model_request.zig").Action;
-    const validate_request = @import("actions/model/validate_static_model_request_capacity.zig").Action;
-    inline for (.{ build_request, validate_request }) |Action| {
+    inline for (.{build_request}) |Action| {
         try std.testing.expectEqual(@as(usize, 0), @typeInfo(Action).@"struct".fields.len);
         try std.testing.expect(Action.contract.side_effect == .none);
         try std.testing.expect(Action.contract.runner_accounting == .none);
     }
     const preparation = @import("domain/model_request_preparation.zig");
     try std.testing.expect(@FieldType(preparation.Owned, "request") == *const llm_provider_operation.IdentifiedProviderNeutralModelRequest);
-    switch (@typeInfo(preparation.StaticCapacityEvidence)) {
-        .@"opaque" => {},
-        else => return error.ModelRequestCapacityEvidenceMustBeOpaque,
-    }
+    try std.testing.expect(!@hasDecl(preparation, "StaticCapacityEvidence"));
     inline for (.{
         @embedFile("actions/model/build_model_request.zig"),
-        @embedFile("actions/model/validate_static_model_request_capacity.zig"),
         @embedFile("domain/model_request_preparation.zig"),
     }) |source| {
         try expectAbsent(source, "/actions/");
@@ -374,7 +373,7 @@ test "request preparation is pure and reuses the sole request validation boundar
         try expectAbsent(source, "std.http");
         try expectAbsent(source, "countInputTokens");
     }
-    try std.testing.expect(std.mem.indexOf(u8, @embedFile("actions/model/build_model_request.zig"), "IdentifiedProviderNeutralModelRequest.init") != null);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("actions/model/build_model_request.zig"), "preparation.validateRequest(") != null);
     const validator = @embedFile("domain/model_request_preparation.zig");
     try std.testing.expect(std.mem.indexOf(u8, validator, "request.validate()") != null);
     try std.testing.expect(std.mem.indexOf(u8, validator, "request.matchesBinding(") != null);
@@ -416,7 +415,7 @@ test "provider observation validation exposes sealed candidate evidence without 
     try std.testing.expect(std.mem.indexOf(u8, source, "requireInvoked(") != null);
     try std.testing.expect(std.mem.indexOf(u8, source, "validateInferenceInvocation(") != null);
     try std.testing.expect(std.mem.indexOf(u8, source, "ProviderUsage.init(") != null);
-    try std.testing.expect(std.mem.indexOf(u8, source, "CompleteBoundedOwnedUtf8.validate(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "CompleteOwnedUtf8.validate(") != null);
 }
 
 test "model decoding consumes sealed complete evidence and exposes only immutable JSON views" {
@@ -492,7 +491,8 @@ test "model-binding requirement is immutable data not a provider-call capability
     const operation = @import("domain/workflow_operation.zig");
     const registry = @import("ports/workflow_operation_registry.zig");
     try std.testing.expect(@FieldType(compilation.CompiledStep, "model") == ?@import("domain/workflow_model.zig").Requirements);
-    try std.testing.expect(@FieldType(operation.Contract, "model_capacity") == ?@import("domain/model_limits.zig").Capacity);
+    try std.testing.expect(@hasDecl(operation.Contract, "requiresModelBinding"));
+    try std.testing.expect(!@hasField(operation.Contract, "model_capacity"));
     try std.testing.expect(@FieldType(registry.StepInput, "model_binding") == ?*const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding);
     try std.testing.expect(!@hasField(registry.StepInput, "provider"));
     const derive = @embedFile("actions/provider/derive_provider_requirement.zig");
@@ -575,7 +575,7 @@ test "provider operation boundary has one capability-limited interface" {
         @typeInfo(llm_provider_interface.LLMProviderInterface.VTable).@"struct".fields.len,
     );
     try std.testing.expectEqual(
-        @as(usize, 12),
+        @as(usize, 10),
         std.enums.values(llm_provider_operation.ProviderFailureCause).len,
     );
     try std.testing.expectEqual(

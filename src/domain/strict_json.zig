@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub const Error = error{InvalidJsonDocument} || std.mem.Allocator.Error;
-pub const Limits = struct { maximum_bytes: usize, maximum_depth: usize };
+pub const Limits = struct { maximum_bytes: ?usize = null, maximum_depth: usize };
 
 /// Syntax only. Callers retain their own schema/root-shape and number policy.
 /// The result owns all strings, keys and collections; it never borrows bytes.
@@ -10,14 +10,14 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, limits: Limits, pa
     return std.json.parseFromSlice(std.json.Value, allocator, bytes, .{
         .duplicate_field_behavior = .@"error",
         .allocate = .alloc_always,
-        .max_value_len = limits.maximum_bytes,
+        .max_value_len = limits.maximum_bytes orelse bytes.len,
         .parse_numbers = parse_numbers,
     }) catch |err| return mapError(err);
 }
 
 /// Shared transport guard for dynamic-tree and closed typed JSON decoders.
 pub fn validateTransport(allocator: std.mem.Allocator, bytes: []const u8, limits: Limits) Error!void {
-    if (bytes.len == 0 or bytes.len > limits.maximum_bytes or
+    if (bytes.len == 0 or (limits.maximum_bytes != null and bytes.len > limits.maximum_bytes.?) or
         !std.unicode.utf8ValidateSlice(bytes) or std.mem.startsWith(u8, bytes, "\xef\xbb\xbf")) return error.InvalidJsonDocument;
     try validateNesting(allocator, bytes, limits.maximum_depth);
 }
@@ -48,4 +48,13 @@ fn validateNesting(allocator: std.mem.Allocator, bytes: []const u8, maximum_dept
 
 fn mapError(err: anyerror) Error {
     return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidJsonDocument;
+}
+
+test "JSON syntax validation preserves explicit resource caps without requiring model-call caps" {
+    var parsed = try parse(std.testing.allocator, "{\"a\":true}", .{ .maximum_depth = 2 }, false);
+    defer parsed.deinit();
+    try std.testing.expect(parsed.value.object.get("a").?.bool);
+    try std.testing.expectError(error.InvalidJsonDocument, parse(std.testing.allocator, "{\"a\":true}", .{ .maximum_bytes = 2, .maximum_depth = 2 }, false));
+    try std.testing.expectError(error.InvalidJsonDocument, parse(std.testing.allocator, "{\"a\":{}}", .{ .maximum_depth = 1 }, false));
+    try std.testing.expectError(error.InvalidJsonDocument, parse(std.testing.allocator, "{\"a\":true,\"a\":false}", .{ .maximum_depth = 2 }, false));
 }

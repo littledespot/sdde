@@ -16,7 +16,9 @@ pub fn bind(comptime T: type, context: ?*T, comptime invoke: *const fn (?*T, ope
                 (if (derived.toolchain_parser) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_parser} else [_][]const u8{}) ++
                 (if (derived.reference_read) [_][]const u8{@import("../domain/workflow_capability.zig").reference_read} else [_][]const u8{}) ++
                 (if (derived.feature_read) [_][]const u8{@import("../domain/workflow_capability.zig").feature_read} else [_][]const u8{}) ++
-                (if (derived.feature_input_read) [_][]const u8{@import("../domain/workflow_capability.zig").feature_input_read} else [_][]const u8{}),
+                (if (derived.feature_input_read) [_][]const u8{@import("../domain/workflow_capability.zig").feature_input_read} else [_][]const u8{}) ++
+                (if (derived.reference_content_read) [_][]const u8{@import("../domain/workflow_capability.zig").reference_content_read} else [_][]const u8{}) ++
+                (if (derived.reference_decode) [_][]const u8{@import("../domain/workflow_capability.zig").reference_decode} else [_][]const u8{}),
         };
         fn call(erased: ?*anyopaque, input: operations.Input) operations.Error!@import("../domain/workflow_execution.zig").Candidate {
             const typed: ?*T = if (erased) |pointer| @ptrCast(@alignCast(pointer)) else null;
@@ -26,11 +28,15 @@ pub fn bind(comptime T: type, context: ?*T, comptime invoke: *const fn (?*T, ope
     return .{ .context = @ptrCast(context), .implementation = &compiled.implementation };
 }
 
-pub const Inspection = struct { valid: bool = true, model_provider: bool = false, toolchain_read: bool = false, toolchain_parser: bool = false, reference_read: bool = false, feature_read: bool = false, feature_input_read: bool = false };
+pub const Inspection = struct { valid: bool = true, model_provider: bool = false, toolchain_read: bool = false, toolchain_parser: bool = false, reference_read: bool = false, feature_read: bool = false, feature_input_read: bool = false, reference_content_read: bool = false, reference_decode: bool = false };
 
 pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
     if (T == provider.LLMProviderInterface) return .{ .model_provider = true };
     if (T == @import("../ports/unicode_normalizer.zig").Normalizer) return .{};
+    if (T == @import("../ports/unicode_normalizer.zig").CaseFolder) return .{};
+    const reference_source = @import("../ports/reference_corpus_source.zig");
+    if (T == reference_source.Enumerator or T == reference_source.Capturer) return .{ .reference_content_read = true };
+    if (T == @import("../ports/reference_decoder.zig").Decoder) return .{ .reference_decode = true };
     if (T == @import("../ports/reference_directory_inspector.zig").Inspector) return .{ .reference_read = true };
     if (T == @import("../ports/feature_directory_inspector.zig").Inspector) return .{ .feature_read = true };
     if (T == @import("../ports/feature_input_source.zig").Capturer) return .{ .feature_input_read = true };
@@ -57,6 +63,8 @@ pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
                 result.reference_read = result.reference_read or child.reference_read;
                 result.feature_read = result.feature_read or child.feature_read;
                 result.feature_input_read = result.feature_input_read or child.feature_input_read;
+                result.reference_content_read = result.reference_content_read or child.reference_content_read;
+                result.reference_decode = result.reference_decode or child.reference_decode;
             }
             break :result result;
         },

@@ -8,7 +8,7 @@ const workflow = @import("workflow.zig");
 pub const ValidationError = provider.RequestError || error{
     InvalidModelRequestSource,
     ModelRequestAssociationInvalid,
-    ModelRequestCapacityInvalid,
+    ModelRequestBindingInvalid,
 };
 pub const Error = ValidationError || std.mem.Allocator.Error;
 
@@ -43,15 +43,9 @@ pub const Owned = struct {
     }
 };
 
-/// Pure preflight evidence for this exact immutable request, not send authority.
-/// It borrows the request owner and never survives that owner.
-pub const StaticCapacityEvidence = opaque {
-    pub fn request(self: *const StaticCapacityEvidence) *const provider.IdentifiedProviderNeutralModelRequest {
-        return @ptrCast(@alignCast(self));
-    }
-};
-
-pub fn validateStaticCapacity(source: Source, request: *const provider.IdentifiedProviderNeutralModelRequest) ValidationError!*const StaticCapacityEvidence {
+/// Validate the prepared request against its exact runner-selected authorities.
+/// This grants no send authority and produces no separate preflight evidence.
+pub fn validateRequest(source: Source, request: *const provider.IdentifiedProviderNeutralModelRequest) ValidationError!void {
     try request.validate();
     const schema = try source.resultSchema();
     if (request.model_request_id != source.request_binding.modelRequestId() or
@@ -59,6 +53,5 @@ pub fn validateStaticCapacity(source: Source, request: *const provider.Identifie
         !std.mem.eql(u8, request.result_schema_id.bytes, source.result_resource.id.bytes) or
         request.response_schema != schema or
         !request.model_visible_input_id.eql(source.model_visible_input_id)) return error.ModelRequestAssociationInvalid;
-    if (!request.matchesBinding(source.provider_binding.*)) return error.ModelRequestCapacityInvalid;
-    return @ptrCast(request);
+    if (!request.matchesBinding(source.provider_binding.*)) return error.ModelRequestBindingInvalid;
 }

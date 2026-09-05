@@ -103,10 +103,8 @@ pub const Runner = struct {
             if (self.envelope.checkGate(gate)) |reason| return .{ .rejected = .{ .gate = reason } };
         }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
-        if (entry.contract.model_capacity) |capacity| {
+        if (entry.contract.requiresModelBinding()) {
             const expected = @import("../domain/workflow_model.zig").resolve(
-                self.operation_registry.model_capacity orelse return .{ .outcome = .failed },
-                capacity,
                 step.parameters,
             ) orelse return .{ .outcome = .failed };
             if (!std.meta.eql(expected, step.model orelse return .{ .outcome = .failed })) return .{ .outcome = .failed };

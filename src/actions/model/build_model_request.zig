@@ -15,8 +15,8 @@ pub const Action = struct {
     pub fn execute(_: Action, allocator: std.mem.Allocator, source: preparation.Source, content: []const provider.ModelVisibleContent) preparation.Error!preparation.Owned {
         const selected = source.provider_binding;
         // Reuse the request's closed validator before any content allocation.
-        // Construction does not grant static-preflight or provider-call authority.
-        var request = try provider.IdentifiedProviderNeutralModelRequest.init(.{
+        // Construction does not grant provider-call authority.
+        var request: provider.IdentifiedProviderNeutralModelRequest = .{
             .model_request_id = source.request_binding.modelRequestId(),
             .model_operation_id = selected.operation_id,
             .binding_id = selected.bindingId(),
@@ -27,8 +27,8 @@ pub const Action = struct {
             .response_schema = try source.resultSchema(),
             .response_guidance_mode = selected.response_mode,
             .controls = selected.controls,
-            .limits = selected.capacity.canonical,
-        });
+        };
+        try preparation.validateRequest(source, &request);
         var arena = std.heap.ArenaAllocator.init(allocator);
         errdefer arena.deinit();
         const owned = arena.allocator();

@@ -44,13 +44,19 @@ as model-call size ceilings.
 
 ## Implementation status and acceptance
 
-This amendment changes documentation, not code. Existing capacity fields,
-intersections and capacity-only checks are legacy implementation to remove.
-Preserve binding/schema/control validation through its existing owners rather
-than introducing another capacity service or authority.
+Implemented across operation registration, workflow compilation, binding,
+request construction, authorization, provider observations and decoding. The
+typed model-slot parameter is the sole binding declaration; capacity fields,
+intersections, wire budgets and the static-capacity action/evidence are removed.
+Request construction reuses existing identity/schema/control validators, and
+observation validation retains the exact prepared request. No replacement
+capacity service or authority exists. Production YAML model-call integration
+and the real Bedrock adapter remain separate work.
 
-Tests must reject retired size parameters, prove registration/preparation needs
-no capacity configuration, accept complete valid payloads beyond former byte
-ceilings, preserve provider-reported size failures/stops, account reported usage
-including overshoot, prohibit subsequent calls at or above budget, and prove
-execution isolation and explicit-only retries.
+Fake-provider and compiler tests cover rejected retired size parameters,
+registration/preparation without capacity configuration, complete valid payloads
+beyond former byte ceilings, preserved size failures/stops and schema rejection.
+Existing accounting tests cover actual usage, overshoot, subsequent-call
+prohibition, execution isolation and explicit-only retries. Architecture tests
+require the retired capacity fields and local size-failure variants to remain
+absent. Configuration/resource capture bounds retain separate negative tests.

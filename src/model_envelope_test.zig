@@ -13,7 +13,7 @@ test "fake response decodes one compact object and preserves exact trusted assoc
         "{\"replacementsByTargetId\":{\"a\":\"first\",\"b\":\"second\"}}",
     }) |bytes| {
         var fixture: Fixture = undefined;
-        try fixture.init(1024);
+        try fixture.init();
         defer fixture.deinit();
         fixture.fake.invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 10, .output_tokens = 2 } };
         var response = try fixture.response();
@@ -44,7 +44,7 @@ test "fake response decodes one compact object and preserves exact trusted assoc
 
 test "read-only views retain decoded keys Unicode scalars arrays and objects" {
     var fixture: Fixture = undefined;
-    try fixture.init(1024);
+    try fixture.init();
     defer fixture.deinit();
     const bytes = "{\"a\\u0062\":[null,true,false,\"\\uD83D\\uDE00\",{\"text\":\"\\n[]{}\\\"\"}],\"empty\":[],\"object\":{}}";
     fixture.fake.invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 1, .output_tokens = 1 } };
@@ -78,7 +78,7 @@ test "decoding preserves exact numeric lexemes without rounding coercion or rang
         const bytes = try std.fmt.allocPrint(std.testing.allocator, "{{\"n\":{s}}}", .{number});
         defer std.testing.allocator.free(bytes);
         var fixture: Fixture = undefined;
-        try fixture.init(1024);
+        try fixture.init();
         defer fixture.deinit();
         fixture.fake.invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 1, .output_tokens = 1 } };
         var response = try fixture.response();
@@ -143,10 +143,10 @@ test "JSON container guard accepts its exact boundary and ignores brackets in st
 
 test "separate decoded candidates own their trees and retain their own associations" {
     var first: Fixture = undefined;
-    try first.init(1024);
+    try first.init();
     defer first.deinit();
     var second: Fixture = undefined;
-    try second.init(1024);
+    try second.init();
     defer second.deinit();
     const bytes = "{\"requestId\":\"not-authority\"}";
     first.fake.invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 1, .output_tokens = 1 } };
@@ -182,7 +182,7 @@ test "every decoding allocation failure and syntax rejection frees partial trees
         "[1,2,3]",
     }, 0..) |bytes, index| {
         var fixture: Fixture = undefined;
-        try fixture.init(1024);
+        try fixture.init();
         defer fixture.deinit();
         fixture.fake.invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 1, .output_tokens = 1 } };
         var response = try fixture.response();
@@ -206,7 +206,7 @@ fn allocationCase(allocator: std.mem.Allocator, complete: *const invocation.Comp
 
 fn checkDocument(bytes: []const u8, accepted: bool) !void {
     var fixture: Fixture = undefined;
-    try fixture.init(1024);
+    try fixture.init();
     defer fixture.deinit();
     fixture.fake.invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 1, .output_tokens = 1 } };
     var response = try fixture.response();

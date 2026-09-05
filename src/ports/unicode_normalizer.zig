@@ -10,3 +10,10 @@ pub const Normalizer = struct {
         return self.normalize_fn(allocator, input, maximum_bytes);
     }
 };
+
+pub const CaseFolder = struct {
+    fold_fn: *const fn (std.mem.Allocator, []const u8, usize) Error![]u8,
+    pub fn key(self: CaseFolder, allocator: std.mem.Allocator, input: []const u8, maximum_bytes: usize) Error![]u8 {
+        return self.fold_fn(allocator, input, maximum_bytes);
+    }
+};

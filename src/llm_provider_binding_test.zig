@@ -148,20 +148,14 @@ test "binding projection rejects missing duplicate malformed or unprojected slot
     }
 }
 
-test "binding narrows provider capacity without copying or changing catalogue authority" {
-    var contract = provider_contracts.entries[0];
-    contract.capabilities.capacity.canonical.maximum_input_bytes = 300;
-    contract.capabilities.capacity.canonical.maximum_output_bytes = 40;
-    contract.capabilities.capacity.wire.maximum_response_body_bytes = 2048;
+test "binding retains the exact catalogue authority without capacity configuration" {
+    const contract = provider_contracts.entries[0];
     var fixture = try Fixture.initWith(.{ .entries = &.{contract} });
     defer fixture.deinit();
     const result = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
-    try std.testing.expectEqual(@as(u64, 300), result.capacity.canonical.maximum_input_bytes);
-    try std.testing.expectEqual(@as(u64, 40), result.capacity.canonical.maximum_output_bytes);
-    try std.testing.expectEqual(@as(u32, 2048), result.capacity.wire.maximum_response_body_bytes);
-    try std.testing.expectEqual(@as(u32, 1024), model_step.model.?.capacity.canonical.maximum_output_bytes);
     try std.testing.expect(result.registry_entry == fixture.services.registry().resolveId(result.registry_entry.id).?);
     try std.testing.expectEqualDeep(contract.capabilities, result.registry_entry.capabilities);
+    try std.testing.expectEqualDeep(model_step.model.?.controls, result.controls);
 }
 
 test "unsupported controls and native schema cannot silently fall back" {
@@ -172,7 +166,7 @@ test "unsupported controls and native schema cannot silently fall back" {
     const parameters = model_parameters ++ [_]compilation.CompiledParameter{.{ .id = .{ .bytes = "temperature" }, .value = .{ .integer = 0 } }};
     var step = model_step;
     step.parameters = &parameters;
-    step.model = @import("domain/workflow_model.zig").resolve(contract.capabilities.capacity, contract.capabilities.capacity, &parameters).?;
+    step.model = @import("domain/workflow_model.zig").resolve(&parameters).?;
     var graph = model_graph;
     graph.authority.steps = &.{step};
     try std.testing.expectError(error.ProviderModelBindingInvalid, (resolve_binding.Action{}).execute(&graph, step.id, fixture.services.registry(), fixture.services.allowlist()));
@@ -181,12 +175,12 @@ test "unsupported controls and native schema cannot silently fall back" {
         if (std.mem.eql(u8, parameter.id.bytes, "response-mode")) parameter.value = .{ .enumeration = "native-schema" };
     }
     step.parameters = &native_parameters;
-    step.model = @import("domain/workflow_model.zig").resolve(contract.capabilities.capacity, contract.capabilities.capacity, &native_parameters).?;
+    step.model = @import("domain/workflow_model.zig").resolve(&native_parameters).?;
     graph.authority.steps = &.{step};
     try std.testing.expectError(error.ProviderModelBindingInvalid, (resolve_binding.Action{}).execute(&graph, step.id, fixture.services.registry(), fixture.services.allowlist()));
 }
 
-test "runner rejects altered or missing compiled model capacity before operation invocation" {
+test "runner rejects altered or missing compiled model controls before operation invocation" {
     var fixture = try Fixture.init();
     defer fixture.deinit();
     var control: OperationControl = .{};
@@ -196,8 +190,8 @@ test "runner rejects altered or missing compiled model capacity before operation
         var step = model_step;
         switch (variant) {
             0 => step.model = null,
-            1 => step.model.?.capacity.canonical.maximum_input_bytes -= 1,
-            2 => step.model.?.capacity.wire.maximum_request_body_bytes += 1,
+            1 => step.model.?.controls.temperature = .{ .value = 100 },
+            2 => step.model.?.response_mode = .native_schema,
             else => unreachable,
         }
         var graph = model_graph;
@@ -349,7 +343,7 @@ const model_parameters = [_]compilation.CompiledParameter{.{
     .value = .{ .model_slot = identity.ModelSlotId.parse("spec-generation").? },
 }} ++ @import("model_contract_test_fixture.zig").compiled_parameters;
 const model_step: compilation.CompiledStep = .{
-    .model = @import("domain/workflow_model.zig").resolve(@import("model_contract_test_fixture.zig").capacity, @import("model_contract_test_fixture.zig").capacity, &model_parameters).?,
+    .model = @import("domain/workflow_model.zig").resolve(&model_parameters).?,
     .id = .{ .bytes = "generate" },
     .operation_id = .{ .bytes = "model.generate@1" },
     .parameters = &model_parameters,
@@ -391,7 +385,6 @@ const OperationControl = struct {
             .contract = .{
                 .id = "model.generate@1",
                 .kind = .step,
-                .model_capacity = @import("model_contract_test_fixture.zig").capacity,
                 .parameters = &([_]@import("domain/workflow_operation.zig").ParameterDescriptor{.{
                     .id = "slot",
                     .kind = .model_slot,
@@ -405,7 +398,6 @@ const OperationControl = struct {
         };
         return .{
             .operations = &self.entries,
-            .model_capacity = @import("model_contract_test_fixture.zig").capacity,
             .policies = &.{.{
                 .id = "test.model-policy@1",
                 .allowed_capabilities = &.{},

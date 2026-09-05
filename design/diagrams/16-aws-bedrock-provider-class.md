@@ -204,7 +204,7 @@ classDiagram
     note for AWSBedrockProvider "PROPOSED ONLY: no src implementation exists; the environment-only API-key source is accepted"
     note for AWSBedrockEnvironmentAPIKeySource "Reads only AWS_BEARER_TOKEN_BEDROCK; no hardcoded key, fallback, reread, or refresh"
     note for AWSBedrockRuntimePort "No SDK, HTTP library, client fields, or concrete method signature has been selected"
-    note for IdentifiedProviderNeutralModelRequest "Request construction, single-call invocation, response validation, decoding and payload schema validation have fake-provider evidence; ADR 0011 retires capacity fields/checks. APIs own size limits; only actual workflow token usage is budgeted. Production YAML binding and native-schema representability remain pending"
+    note for IdentifiedProviderNeutralModelRequest "Request construction, invocation, response validation, decoding and schema validation have fake-provider evidence without capacity fields or gates. APIs own size limits; actual workflow token usage is budgeted. Production YAML binding and native-schema representability remain pending"
     note for ProviderAuthorizationSlot "The authorization adapter can deposit only into this slot; it receives no table lookup or consumption capability"
     note for ProviderOperationLifecycleRunner "Separate count and inference operations progress assigned to invoked to terminal; inference binds directly to request/input identity without counting. Lifecycle is execution-local; no provider-effect journal or restart recovery"
 ```

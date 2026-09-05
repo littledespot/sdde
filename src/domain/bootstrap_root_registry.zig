@@ -24,8 +24,12 @@ pub const ConfiguredBaseRootCapability = opaque {
 pub const LLMProviderConfigCapability = opaque {};
 pub const FeatureDirectoryReadCapability = opaque {};
 pub const FeatureInputReadCapability = opaque {};
+pub const ReferenceContentReadCapability = opaque {};
 
 pub const BootstrapRootRegistry = opaque {
+    pub fn referenceContentRead(self: *const BootstrapRootRegistry) *const ReferenceContentReadCapability {
+        return @ptrCast(self.referenceSources());
+    }
     pub fn featureInputRead(self: *const BootstrapRootRegistry) *const FeatureInputReadCapability {
         return @ptrCast(self);
     }
@@ -126,6 +130,11 @@ pub const ReferenceSourcesAdapterBinding = struct {
     project_relative_path: []const u8,
     physical_identity: roots.PhysicalDirectoryIdentity,
 };
+
+/// Content readers have a separate capability from metadata-only inspection.
+pub fn bindReferenceContentAdapter(capability: *const ReferenceContentReadCapability) ?ReferenceSourcesAdapterBinding {
+    return bindReferenceSourcesAdapter(@ptrCast(capability));
+}
 
 /// Internal handoff restricted to the read-only reference directory adapter.
 pub fn bindReferenceSourcesAdapter(capability: *const ConfiguredBaseRootCapability) ?ReferenceSourcesAdapterBinding {

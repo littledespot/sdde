@@ -408,7 +408,9 @@ Contracts requiring model binding declare their typed slot and explicit
 reject. Registration and compilation require no capacity fields, local size
 ceilings or fit estimates. The compiler retains the typed binding requirements;
 the runner rejects divergence from the registered contract. F0006 owns exact
-slot/model/control/schema compatibility, not provider-size policy.
+slot/model/control/schema compatibility, not provider-size policy. This
+capacity-free projection is implemented through the registry, compiler and
+runner; the typed slot is its only binding declaration.
 
 The existing compiled model projection represents an immutable binding
 requirement independently of operational capabilities (ADR 0004, amended

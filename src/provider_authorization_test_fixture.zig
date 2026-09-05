@@ -71,10 +71,6 @@ pub const Fixture = struct {
             .slot_id = .{ .bytes = "generation" },
             .registry_entry = &self.registry_entry,
             .reasoning_effort = "low",
-            .capacity = .{
-                .canonical = @import("domain/model_limits.zig").Limits.init(256, 40).?,
-                .wire = @import("model_contract_test_fixture.zig").capacity.wire,
-            },
             .response_mode = .prompt_only,
             .controls = .{ .temperature = @import("domain/model_controls.zig").TemperaturePermille.init(100) },
         };
@@ -93,7 +89,6 @@ pub const Fixture = struct {
             .response_schema = response_schema,
             .response_guidance_mode = .prompt_only,
             .controls = self.provider_binding.controls,
-            .limits = self.provider_binding.capacity.canonical,
         });
         self.preloader = .{ .allocator = allocator };
         self.clock = .{};
@@ -159,7 +154,7 @@ pub const Fixture = struct {
             try self.requests.advance(self.requests.ledger().?.revision(), self.model_request_id, .assigned, .invoked);
             self.request_invoked = true;
         }
-        try self.change(kind, .{ .invoke = .{ .deadline_monotonic_ms = 1000, .receive_budgets = operation.ProviderReceiveBudgets.init(32, 4096, 4096).? } });
+        try self.change(kind, .{ .invoke = .{ .deadline_monotonic_ms = 1000 } });
         return self.ledger().requireInvoked(self.id(kind));
     }
 

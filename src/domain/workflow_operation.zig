@@ -36,9 +36,13 @@ pub const Contract = struct {
     side_effect: pipeline.SideEffect,
     gates: []const []const u8 = &.{},
     retry_limit: ?RetryLimitDescriptor = null,
-    // A binding requirement, not permission to call a provider. Operational
-    // capabilities are independently derived from the binding's narrow ports.
-    model_capacity: ?@import("model_limits.zig").Capacity = null,
+
+    // The typed slot is the sole binding declaration, not permission to call
+    // a provider. Operational capabilities derive independently from ports.
+    pub fn requiresModelBinding(self: Contract) bool {
+        for (self.parameters) |parameter| if (parameter.kind == .model_slot) return true;
+        return false;
+    }
 };
 
 pub const PolicyProfile = struct {

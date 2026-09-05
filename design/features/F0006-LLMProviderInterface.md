@@ -47,10 +47,12 @@ actions, production provider composition/contracts and integration into the
 atomic workflow execution remain implementation work. No transaction store or
 provider-effect journal is a prerequisite.
 
-Provider-neutral capability and model-slot binding are implemented. Existing
-capacity fields, intersections, byte parameters and
-`ValidateStaticModelRequestCapacityAction` are superseded implementation to
-remove under ADR 0011, not prerequisites for production registration.
+Provider-neutral capability and model-slot binding are implemented. ADR 0011's
+capacity removal is implemented across registration, compilation, binding,
+request preparation, authorization, observations and decoding. The typed slot
+alone declares a model-binding requirement. Capacity fields, intersections,
+wire budgets, byte parameters and `ValidateStaticModelRequestCapacityAction`
+with its separate evidence have been deleted; no replacement gate exists.
 Response mode and supported controls remain explicit. Inference binds directly
 to its request and operation identity; optional counting provides observations
 only, never inference authority. Binding
@@ -59,8 +61,8 @@ checks those requirements against the exact catalogue contract. The closed
 profile in [ADR 0006](../decisions/0006-minimal-model-response.md#closed-result-schema-profile).
 Graph compilation rejects malformed, unsupported or unbounded schemas and the
 registry owns their immutable typed contracts. The pure `BuildModelRequestAction`
-is implemented and tested through the fake provider. Its existing identity,
-schema and control validators remain; capacity-only checks do not.
+is implemented and tested through the fake provider. It reuses the existing
+identity, schema and control validators before allocating request content.
 `ValidateProviderInvocationObservationAction` validates
 the retained call association, usage and UTF-8 content and exposes sealed
 complete-candidate evidence. `DecodeModelEnvelopeAction` now parses that sealed
@@ -392,8 +394,8 @@ together.
 The neutral contract carries count/inference support, an exact-count
 mechanism (`unavailable | provider_input_token_count`), response support and
 temperature support. These are compiler-supplied capability facts, not
-configuration fields or provider-size policy. Legacy canonical/wire capacity
-fields must be removed rather than populated.
+configuration fields or provider-size policy. Canonical/wire capacity fields
+are absent.
 The catalogue validator proves exact equality with the registered contract;
 even a narrower candidate cannot substitute different contract facts. An
 internally consistent but insufficient contract may remain catalogued, but

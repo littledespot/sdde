@@ -7,7 +7,7 @@ const Fixture = @import("provider_invocation_test_fixture.zig").Fixture;
 
 test "invoke action forwards exact request binding authorization and applied operation once" {
     var fixture: Fixture = undefined;
-    try fixture.init(1024);
+    try fixture.init();
     defer fixture.deinit();
     fixture.fake.invocation_plan = .{ .complete = .{ .content = "not JSON", .input_tokens = 1_000_000, .output_tokens = 500_000, .provider_latency_ms = 7 } };
     var spy: Spy = .{ .inner = fixture.fake.interface() };
@@ -45,7 +45,7 @@ test "invoke action preserves every failure fact without retry or reinterpretati
         inline for (std.enums.values(operation.ProviderRetryClass)) |retry| {
             inline for (std.enums.values(operation.ProviderDeliveryDisposition)) |delivery| {
                 var fixture: Fixture = undefined;
-                try fixture.init(1024);
+                try fixture.init();
                 defer fixture.deinit();
                 fixture.fake.invocation_plan = .{ .failed = .{ .cause = cause, .retry_class = retry, .delivery = delivery } };
                 var response = try fixture.response();
@@ -68,7 +68,7 @@ test "invoke action preserves every failure fact without retry or reinterpretati
 test "invoke action preserves all stops and usage without manufacturing candidate content" {
     inline for (std.enums.values(operation.ProviderNonCandidateStopReason)) |reason| {
         var fixture: Fixture = undefined;
-        try fixture.init(1024);
+        try fixture.init();
         defer fixture.deinit();
         fixture.fake.invocation_plan = .{ .stopped = .{ .reason = reason, .input_tokens = std.math.maxInt(u64), .output_tokens = 0, .provider_latency_ms = 12 } };
         var response = try fixture.response();
@@ -86,7 +86,7 @@ test "invoke action preserves all stops and usage without manufacturing candidat
 
 test "cancellation and allocation errors escape unchanged with no retry and consumed lease cleanup" {
     var fixture: Fixture = undefined;
-    try fixture.init(1024);
+    try fixture.init();
     defer fixture.deinit();
     const ledger = fixture.base.ledger();
     fixture.fake.invocation_plan = .cancelled;
@@ -99,7 +99,7 @@ test "cancellation and allocation errors escape unchanged with no retry and cons
 
 test "a reused authorization reaches the same port once and cannot cause a second effect" {
     var fixture: Fixture = undefined;
-    try fixture.init(1024);
+    try fixture.init();
     defer fixture.deinit();
     var first = try fixture.response();
     defer first.deinit();
@@ -115,10 +115,10 @@ test "a reused authorization reaches the same port once and cannot cause a secon
 test "port rejects substituted binding input operation and lease without an external effect" {
     for (0..4) |case| {
         var fixture: Fixture = undefined;
-        try fixture.init(1024);
+        try fixture.init();
         defer fixture.deinit();
         var foreign: Fixture = undefined;
-        try foreign.init(1024);
+        try foreign.init();
         defer foreign.deinit();
         var wrong_binding = fixture.base.provider_binding;
         wrong_binding.slot_id.bytes = "another-slot";
@@ -144,7 +144,7 @@ test "port rejects substituted binding input operation and lease without an exte
 test "expired authorization and no-longer-invoked operations cannot produce effects" {
     for ([_]bool{ false, true }) |expired| {
         var fixture: Fixture = undefined;
-        try fixture.init(1024);
+        try fixture.init();
         defer fixture.deinit();
         if (expired) {
             fixture.base.clock.now_ms = fixture.authorized.invoked.deadline_monotonic_ms;
@@ -162,7 +162,7 @@ test "expired authorization and no-longer-invoked operations cannot produce effe
 
 fn allocationCase(allocator: std.mem.Allocator) !void {
     var fixture: Fixture = undefined;
-    try fixture.init(1024);
+    try fixture.init();
     defer fixture.deinit();
     fixture.fake.allocator = allocator;
     const ledger = fixture.base.ledger();

@@ -357,7 +357,6 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
 
 const invocation: lifecycle.Invocation = .{
     .deadline_monotonic_ms = 1000,
-    .receive_budgets = provider.ProviderReceiveBudgets.init(32, 4096, 4096).?,
 };
 
 const Fixture = struct {

@@ -21,6 +21,20 @@ test "fake provider through decode and schema validation retains only existing c
     try checkDocument(schema, .{ .bytes = "{\"status\":\"completed\",\"requestId\":\"model-only\",\"values\":[1.0,2e0]}" });
 }
 
+test "complete model payloads beyond former byte ceilings still use their exact schema" {
+    const bytes = try std.testing.allocator.alloc(u8, 16_384);
+    defer std.testing.allocator.free(bytes);
+    @memset(bytes, 'x');
+    const string = try std.fmt.allocPrint(std.testing.allocator, "\"{s}\"", .{bytes});
+    defer std.testing.allocator.free(string);
+    try checkField("{\"type\":\"string\",\"maxLength\":16384}", &.{.{ .bytes = string }});
+    const array = try std.fmt.allocPrint(std.testing.allocator, "[{s},{s}]", .{ string, string });
+    defer std.testing.allocator.free(array);
+    try checkField("{\"type\":\"array\",\"maxItems\":2,\"items\":{\"type\":\"string\",\"maxLength\":16384}}", &.{.{ .bytes = array }});
+    // Removing API-size caps does not weaken workflow-declared schema rules.
+    try checkField("{\"type\":\"string\",\"maxLength\":16383}", &.{.{ .bytes = string, .rejection = .string_length }});
+}
+
 test "closed objects reject unknown and missing properties but do not fill optional fields" {
     const schema =
         \\{"type":"object","properties":{"required":{"type":"boolean"},"optional":{"type":"null"}},"required":["required"],"additionalProperties":false}
@@ -227,7 +241,7 @@ fn checkField(field: []const u8, cases: []const Case) !void {
 
 fn checkDocument(contract: []const u8, case: Case) !void {
     var fixture: Fixture = undefined;
-    try fixture.initWithSchema(1024, contract);
+    try fixture.initWithSchema(contract);
     defer fixture.deinit();
     fixture.fake.invocation_plan = .{ .complete = .{ .content = case.bytes, .input_tokens = 10, .output_tokens = 2 } };
     var response = try fixture.response();

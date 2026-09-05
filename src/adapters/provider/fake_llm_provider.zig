@@ -140,14 +140,12 @@ pub const FakeLLMProvider = struct {
             plan.output_tokens,
             total_tokens,
         ) orelse return responseFailure(operation_id, .response_invalid);
-        var content = operation.CompleteBoundedOwnedUtf8.init(
+        var content = operation.CompleteOwnedUtf8.init(
             self.allocator,
             plan.content,
-            request.limits.maximum_output_bytes,
         ) catch |err| return switch (err) {
             error.OutOfMemory => error.OutOfMemory,
             error.InvalidUtf8 => responseFailure(operation_id, .response_invalid),
-            error.LimitExceeded => responseFailure(operation_id, .response_limit_exceeded),
         };
         errdefer content.deinit();
         return .{ .completed = .{

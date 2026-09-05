@@ -20,7 +20,6 @@ pub const Assignment = struct {
 };
 pub const Invocation = struct {
     deadline_monotonic_ms: u64,
-    receive_budgets: provider.ProviderReceiveBudgets,
 };
 pub const Terminal = union(enum) {
     counted: provider.ExactInputTokenCountEvidence,
@@ -246,7 +245,7 @@ fn nextRecord(current: *const Ledger, authority: Authority, transition: Transiti
             if (record.state != .assigned or authority.requests.record(request).?.status != .invoked) return error.InvalidProviderOperationTransition;
             var next = record.*;
             next.revision = try increment(record.revision);
-            next.state = .{ .invoked = provider.InvokedProviderOperation.init(id, invocation.deadline_monotonic_ms, invocation.receive_budgets) orelse return error.InvalidProviderOperationTransition };
+            next.state = .{ .invoked = provider.InvokedProviderOperation.init(id, invocation.deadline_monotonic_ms) orelse return error.InvalidProviderOperationTransition };
             return next;
         },
         .terminate => |terminal| {
