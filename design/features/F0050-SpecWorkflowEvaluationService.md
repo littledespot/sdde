@@ -239,24 +239,25 @@ read-only contained-directory inspection, and deterministic feature-identity
 seeds through registered operations (F0100 Section 3.1). These allocate no
 feature, claim no identity availability, and read no reference contents.
 
-The shared transaction-ID ledger now validates closed in-memory snapshots and
-reserve/commit/retire successor candidates for project and feature owners
-(`src/domain/transaction_id_ledger.zig`). Tests cover monotonic IDs, immutable
-history, exact retirement projection, owner/kind/revision rejection, and bounded
-allocation failure. A bounded JSON parser and deterministic serializer now
-implement the [closed stored format](../transaction-id-ledger-format.md), using
-collection-relative owner binding and the same ledger validator. Round-trip,
-malformed-input, byte/record-limit, and allocation-failure tests cover both owner
-variants. Neither the codec nor the in-memory ledger supplies journal
-accounting, trusted file reads, locks, durable reservations, or commit evidence;
-registered persistence operations remain unfinished.
+The in-memory transaction-ID ledger and bounded codec exist. Their project-owner
+branch is superseded by the storage amendment in Design Section 25.1 and must
+be removed from code/tests, alongside the loader's extra reserved-child branch,
+not extended into project persistence. The remaining
+feature-owned ledger contract uses the [closed stored format](../transaction-id-ledger-format.md)
+and shared validator. Neither supplies trusted reads, durable reservations, or
+commit evidence.
+
+Project-level transaction storage, ledger persistence, collection locks, and WAL
+recovery are not implementation prerequisites. Feature activation uses the
+validated fixed-path writes in Design Section 25.1; it does not promise automatic
+multi-file rollback. This removal does not create a replacement recovery path.
 
 Remaining:
 
 - feature collision/ownership/inventory, artifact authority, state-ID ledgers,
-  and durable transaction-ID ledger integration;
-- project and feature WAL, locks, failpoints, recovery, and all-or-nothing stage
-  transactions;
+  and fixed-path feature activation;
+- feature-owned stage/task persistence and its existing transaction guarantees,
+  separate from activation; no project-level persistence layer;
 - full workflow state and the `specifying`, clarification-pending, and
   `specified` transitions; and
 - feature-log activation, recovery, flush barriers, and finalization bound to
@@ -267,7 +268,7 @@ are overwritten at the same registered paths without separate overwrite
 approval, and user-closed clarification files MUST remain byte-for-byte
 unchanged. Cover applicable validated answer reuse and rejection of stale/invalid
 or concurrent-close overwrites (Design Section 23.2). This output policy does
-not remove the shared state/transaction foundations above.
+not authorize ownership changes, ledger resets, or writes to unrelated files.
 
 ### 5.3 Implement the Markdown reference vertical slice
 

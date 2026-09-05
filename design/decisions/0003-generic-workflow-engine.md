@@ -3,6 +3,10 @@
 - **Status:** Accepted
 - **Date:** 2026-08-29
 - **Decision authority:** Explicit user direction
+- **Storage amendment (2026-09-05):** Explicit user direction removes the
+  project-level transaction directory and its WAL, ledger, lock, and recovery
+  prerequisites. Feature activation follows Design Section 25.1; this
+  machinery must not be relocated under another path.
 - **Amended by:** [ADR 0005 — workflow-defined operations](0005-workflow-defined-operations.md)
 - **Supersedes:** The fixed four-role workflow registry and compiler-owned
   four-workflow graph described in Sections 5.2, 9.1, 9.2, 30, and 31 of the
@@ -25,8 +29,9 @@ adding the workflow's identity to the engine source.
 
 `paths.workflows` contains an arbitrary bounded number of closed declarative
 workflow definitions and only the bounded resources those definitions
-explicitly declare. `features/` and `transactions/` remain reserved
-engine-owned children and are excluded from workflow-authority traversal.
+explicitly declare. Only the root `features/` child is reserved for engine
+state and excluded from workflow-authority traversal. Other directories have
+no reserved status and follow ordinary definition/resource inventory rules.
 
 Each definition has a validated project-authored `WorkflowId`, version,
 workflow logging shortcode, registered invocation operation, graph of
@@ -51,7 +56,7 @@ A small compiler-locked engine-startup graph is assembled by the composition
 root so the runner can load, compile, and register project workflows before one
 of them exists to execute. This graph is engine machinery, not a project
 workflow: it is not discovered beneath `paths.workflows`, cannot be selected,
-cannot be extended by a definition, and acquires no project/feature transaction
+cannot be extended by a definition, and acquires no feature transaction
 lock.
 
 Every encountered definition must validate, every `WorkflowId` and logging

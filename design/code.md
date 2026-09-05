@@ -721,12 +721,13 @@ StateIdentityTransactionMember {
   // Unchanged variant and never receive a no-op revision.
 }
 
-TransactionStorageOwner =
-  | ProjectTransactionOwner { bootstrapRootRegistryId }
-  | FeatureTransactionOwner { featureId, workflowArtifactRegistryStateId }
+TransactionStorageOwner {
+  featureId,
+  workflowArtifactRegistryStateId
+}
 
 DurableTransactionKind =
-  feature_activation | bootstrap_authority_refresh |
+  bootstrap_authority_refresh |
   state_identity_reservation | state_identity_retirement |
   specification_acknowledgement_id_retirement |
   clarification_pause | clarification_response |
@@ -1404,7 +1405,7 @@ WorkflowRegisteredRef = opaque validated exact registered reference,
 WorkflowDefinitionSchemaVersion = "workflow/v1"
 WorkflowVersion = opaque validated integer in 1..4294967295
 
-WorkflowReservedChildName = features | transactions
+WorkflowReservedChildName = features
 
 WorkflowAuthorityLayout {
   bootstrapRootRegistryId,
@@ -1412,15 +1413,14 @@ WorkflowAuthorityLayout {
   canonicalWorkflowAuthorityRoot,
   definitionInventoryScope: {
     base: workflow_authority_root,
-    includedReservedRootEntries: [features/, transactions/],
-    excludedReservedDescendantSubtrees: [features/**, transactions/**]
+    includedReservedRootEntries: [features/],
+    excludedReservedDescendantSubtrees: [features/**]
   },
   reservedChildren: [
-    { name: features, fixedRelativePath: features/, accessClass: engine_only },
-    { name: transactions, fixedRelativePath: transactions/, accessClass: engine_only }
+    { name: features, fixedRelativePath: features/, accessClass: engine_only }
   ]
   // Definitions live in the workflow-authority root but cannot collide with,
-  // traverse into, or claim either engine-owned child.
+  // traverse into, or claim the engine-owned child.
 }
 
 WorkflowAuthorityNodeKind = directory | regular_file | symlink | special
@@ -1609,25 +1609,7 @@ EngineStartupGraph {
   // WorkflowDefinitionRegistryState.
 }
 
-ProjectTransactionCollectionPath {
-  bootstrapRootRegistryId,
-  configuredWorkflowsRootCapabilityId,
-  fixedRelativePath: transactions/,
-  canonicalContainedPath,
-  accessClass: engine_only
-}
-
-ProjectEngineArtifactSelector =
-  FeatureIdentityRegistryCanonicalState |
-  ProjectTransactionCollection
-
-ProjectTransactionCollectionLockCapability {
-  bootstrapRootRegistryId,
-  projectTransactionCollectionPath,
-  ownerProcessInstanceId,
-  opaqueLockTokenHandle,
-  validOnlyWhileHeld: true
-}
+ProjectEngineArtifactSelector = FeatureIdentityRegistryCanonicalState
 
 FeatureTransactionCollectionLockCapability {
   featureId,
@@ -1638,24 +1620,14 @@ FeatureTransactionCollectionLockCapability {
   validOnlyWhileHeld: true
 }
 
-ValidatedTransactionStorageCapability =
-  | ProjectTransactionStorageCapability {
-      kind: project,
-      bootstrapRootRegistryId,
-      projectTransactionCollectionPath,
-      lock: ProjectTransactionCollectionLockCapability,
-      currentTransactionIdLedger: TransactionIdLedger,
-      allowedTransactionKinds: feature_activation
-    }
-  | FeatureTransactionStorageCapability {
-      kind: feature,
-      featureId,
-      workflowArtifactRegistryStateId,
-      stageTransactionCollectionArtifactPathId,
-      lock: FeatureTransactionCollectionLockCapability,
-      currentTransactionIdLedger: TransactionIdLedger,
-      allowedTransactionKinds: DurableTransactionKind - feature_activation
-    }
+ValidatedTransactionStorageCapability {
+  featureId,
+  workflowArtifactRegistryStateId,
+  stageTransactionCollectionArtifactPathId,
+  lock: FeatureTransactionCollectionLockCapability,
+  currentTransactionIdLedger: TransactionIdLedger,
+  allowedTransactionKinds: DurableTransactionKind
+}
 
 BootstrapRootRegistry {
   bootstrapRootRegistryId: BootstrapRootRegistryId,
@@ -8696,10 +8668,29 @@ ReferenceRevisionDescendantMutation =
       evidenceInvalidation: ExecutionEvidenceInvalidationRecord
     }
 
+FeatureActivation {
+  featureIdentityTarget: NewFeatureIdentity,
+  inputFeatureIdentityRegistryState: FeatureIdentityRegistryState,
+  nextFeatureIdentityRegistryState: FeatureIdentityRegistryState,
+  featureStateIdLedger: StateIdLedger,
+  bootstrapAuthorityState: BootstrapAuthorityState,
+  workflowArtifactRegistry: WorkflowArtifactRegistry,
+  initialActorEvidenceRegistryState: ActorEvidenceRegistryState,
+  initialReviewDecisionRegistryState: ReviewDecisionRegistryState,
+  initialWorkflowControlEventRegistryState: WorkflowControlEventRegistryState,
+  initialPassiveLiteralRegistryState: PassiveLiteralRegistryState,
+  initialClarificationState: ClarificationRegistryState,
+  initialWorkflowState: WorkflowState,
+  directoryEntries: FeatureDirectoryCreationEntry[]
+  // Fixed-path writes under Design Section 25.1, not a StageTransaction.
+  // No transaction ID, project journal, marker, or project storage capability.
+  // Only verified complete persisted state permits an active-feature capability.
+}
+
 StageTransitionKind =
   state_identity_reservation | state_identity_retirement |
   specification_acknowledgement_id_retirement |
-  feature_activation | bootstrap_authority_refresh |
+  bootstrap_authority_refresh |
   clarification_pause | clarification_response |
   clarification_authority_resolution | specify_completion |
   plan_input_authority | plan_candidate |
@@ -8750,21 +8741,6 @@ StageTransaction = DurableTransactionMember & (
       nextWorkflowState: WorkflowState,
       acceptsSpecificationEdit: false,
       changesSpecificationBusinessContent: false
-    }
-  | FeatureActivationStageTransaction {
-      transactionId,
-      featureIdentityTarget: NewFeatureIdentity,
-      inputFeatureIdentityRegistryState: FeatureIdentityRegistryState,
-      nextFeatureIdentityRegistryState: FeatureIdentityRegistryState,
-      bootstrapAuthorityState: BootstrapAuthorityState,
-      workflowArtifactRegistry: WorkflowArtifactRegistry,
-      initialActorEvidenceRegistryState: ActorEvidenceRegistryState,
-      initialReviewDecisionRegistryState: ReviewDecisionRegistryState,
-      initialWorkflowControlEventRegistryState: WorkflowControlEventRegistryState,
-      initialPassiveLiteralRegistryState: PassiveLiteralRegistryState,
-      initialClarificationState: ClarificationRegistryState,
-      initialWorkflowState: WorkflowState,
-      directoryEntries: FeatureDirectoryCreationEntry[]
     }
   | BootstrapAuthorityRefreshStageTransaction {
       transactionId,
@@ -9219,7 +9195,7 @@ provider filename, `.specify/`, source-tree, or example path.
 
 `paths.workflows` is the workflow-authority root. It contains an arbitrary
 bounded number of closed declarative workflow definitions plus the exact
-reserved engine-owned children `features/` and `transactions/`. Each definition
+reserved engine-owned child `features/`. Each definition
 has a unique validated `WorkflowId` and logging shortcode and describes graph
 topology only through the single registry's generic operation IDs, closed
 parameters, declared resources, and typed transitions. It cannot contain
@@ -9248,8 +9224,7 @@ sources and receive no automatic placeholder expansion.
 └── .sddtoolkit/                        # an unconfigured common parent only
     ├── workflows/                      # paths.workflows
     │   ├── <declarative workflow definitions>
-    │   ├── features/                   # exact reserved engine-owned child
-    │   └── transactions/               # exact reserved engine-owned child
+    │   └── features/                   # exact reserved engine-owned child
     ├── toolchainPreset/                # paths.toolchainPreset; preset packages
     ├── principles/                     # paths.principles
     │   ├── toolchain.yaml              # closed mechanical project layer
@@ -9787,7 +9762,7 @@ generatedPaths:
 `forbiddenPaths` above is only the preset-owned portion. The compiler always
 injects a higher-precedence `ReservedEngineRootPathPolicy` from the seven exact
 directory capabilities, the exact provider-document file capability, and the
-engine-derived `features/` and `transactions/` children beneath
+engine-derived `features/` child beneath
 `paths.workflows`. Presets cannot override
 that policy, and neither a model nor a preset supplies its path text.
 
@@ -9994,14 +9969,14 @@ PipelineRunner
 │   │   ├── configuration/root actions
 │   │   ├── workflow inventory/capture/parse/schema actions
 │   │   ├── workflow graph compile/validate actions
-│   │   └── variable-size workflow registry actions; no project/feature lock
+│   │   └── variable-size workflow registry actions; no feature transaction lock
 │   ├── ParseWorkflowSelectionAction and ValidateWorkflowIdAction through runner-owned child bindings
 │   ├── ResolveSelectedWorkflowAction through a runner-owned child binding
 │   └── Selected CompiledWorkflowGraph
 │       ├── YAML-named invocation operation through a runner-owned binding
 │       │   └── parser/validator child bindings when that contract composes them
 │       ├── selected-graph target-context setup binding when required
-│       │   ├── project-WAL/feature-ownership recovery and lock lifecycle
+│       │   ├── feature-ownership validation and feature-local recovery
 │       │   ├── toolchain-preset registry/compilation actions
 │       │   ├── free-text principles ingestion/indexing actions
 │       │   └── repository discovery actions
@@ -10056,8 +10031,8 @@ ENGINE_CONFIG_READ_ERROR without searching an ancestor or descendant
      and requiring providers to name a distinct `.sddproviders.json` file
   -> build/validate BootstrapRootRegistry before any engine-derived child exists
   -> derive/validate the paths.workflows authority layout and reserve its exact
-     engine-owned features/ and transactions/ children; inventory their root
-     entries when present but never traverse either reserved descendant subtree
+     engine-owned features/ child; inventory its root entry when present but
+     never traverse its reserved descendant subtree
   -> bounded no-follow workflow-authority enumeration -> normalize every in-scope
      path -> reject the complete collision set -> sort -> bind inventory ordinals
   -> classify every entry -> capture/parse/validate definition candidates ->
@@ -10072,15 +10047,15 @@ ENGINE_CONFIG_READ_ERROR without searching an ancestor or descendant
   -> build/validate the identity-free WorkflowDefinitionRegistryState candidate;
      assign its owner-local component ID only in the generic bootstrap materialization phase
   -> return the complete validated workflow registry to WorkflowEngineOrchestrator
-     without acquiring a project/feature transaction lock;
+     without acquiring a feature transaction lock;
      ParseWorkflowSelectionAction, ValidateWorkflowIdAction and
      ResolveSelectedWorkflowAction run outside bootstrap
   -> only when the selected graph references the registered target-context
      setup, invoke that portion after its invocation operation produces
      validated workflow context; unrelated workflows do not inherit this branch
-  -> for the initial SDD graphs, resolve the fixed project transaction
-     collection, acquire its lock, recover the project WAL/ID ledger, resolve
-     exact feature ownership, and release or transfer ownership on every branch
+  -> for the initial SDD graphs, read/validate feature ownership and inventory
+     directly; validate existing activation before feature-local recovery;
+     no project transaction collection, ledger, or lock is required
   -> bounded inventory/capture of the direct paths.toolchainPreset root
   -> classify every resource -> reject legacy -> parse/validate closed v1 presets
   -> assign/build/validate ToolchainPresetRegistryState

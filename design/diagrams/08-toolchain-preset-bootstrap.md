@@ -51,7 +51,7 @@ flowchart TD
     ROOTID --> BUILDROOTS[BuildBootstrapRootRegistryAction<br/>identity, exact config/project descriptors plus complete configured-root capabilities]
     BUILDROOTS --> VALIDROOTS{ValidateBootstrapRootRegistryAction<br/>all seven directory roots plus provider file exactly once; no escape, alias, duplicate or illegal overlap;<br/>only specsArchive may nest beneath specs}
     VALIDROOTS -- Invalid --> FAIL
-    VALIDROOTS -- Valid --> WLAYOUT[BuildWorkflowAuthorityLayoutAction<br/>reserve features/ and transactions/ for ownership accounting;<br/>exclude descendants of both reserved subtrees]
+    VALIDROOTS -- Valid --> WLAYOUT[BuildWorkflowAuthorityLayoutAction<br/>reserve only features/ for ownership accounting;<br/>exclude its descendants]
     WLAYOUT --> WINVENTORY[Enumerate and normalize every in-scope entry;<br/>validate the complete portability collision set, sort by Unicode-scalar path,<br/>then bind contiguous one-based inventory ordinals]
     WINVENTORY --> WCLASSIFY[BuildWorkflowAuthorityEntryAccountsAction<br/>classify directories, reserved children, definition candidates and resource candidates;<br/>reject unsupported entries and retain resource candidates for declaration accounting]
     WCLASSIFY --> WACCOUNT[Build exactly one terminal entry account then<br/>BuildWorkflowAuthorityInventoryAction and<br/>ValidateWorkflowAuthorityInventoryAction;<br/>no blocking/unaccounted entry or reserved-child definition is legal]
@@ -63,37 +63,19 @@ flowchart TD
     WSCHEMAFAIL --> FAIL
     WSCHEMA -- Valid or no result-schema resources --> WVALID{ValidateCompiledWorkflowGraphsAction then BuildWorkflowDefinitionRegistryAction<br/>and ValidateWorkflowDefinitionRegistryAction;<br/>unique IDs, shortcodes and source ordinals; complete graph/outcome closure;<br/>registry deep-owns resources, schema trees and exact source bytes}
     WVALID -- Invalid --> FAIL
-    WVALID -- Valid --> PREFLIGHT[Return BootstrapServices: config, roots, logs and workflows;<br/>fixed startup reads no toolchain, principle or provider documents;<br/>acquire no project or feature transaction lock]
+    WVALID -- Valid --> PREFLIGHT[Return BootstrapServices: config, roots, logs and workflows;<br/>fixed startup reads no toolchain, principle or provider documents;<br/>acquire no feature transaction lock]
     PREFLIGHT --> SELECT[ParseWorkflowInvocationAction then SelectCompiledWorkflowAction<br/>exact registry selection outside startup]
     SELECT --> PREP[Fixed ModelProviderBootstrapOrchestrator<br/>DeriveProviderRequirementAction checks exact compiled model-provider capability;<br/>required: one provider capture, registry and allowlist; not_required: no provider probe]
     PREP -- Failed or cancelled --> PREPSTOP[Terminal preparation outcome]
     PREP -- Ready or not_required --> INVOCATION[Runner invokes YAML-named invocation operation once;<br/>then follows only the selected graph's compiled transitions]
-    INVOCATION -. proposed SDD graphs explicitly select these setup operations<br/>after their invocation arguments validate .-> PTXPATH[ResolveProjectTransactionCollectionAction<br/>fixed reserved paths.workflows/transactions collection<br/>for SDD preownership recovery and activation]
-    PTXPATH --> PTXLOCK[AcquireProjectTransactionCollectionLockAction<br/>runner retains the opaque capability while project TransactionIdLedger recovery<br/>and FeatureIdentityRegistry ownership resolution are performed]
-    PTXLOCK --> PTXSCAN[ScanTransactionJournalInventoryAction<br/>bounded raw journal/header/marker and transaction-ledger inventory<br/>before any FeatureIdentityRegistry read]
-    PTXSCAN --> TLPATH[ResolveTransactionIdLedgerPathAction then ReadTransactionIdLedgerAction]
-    TLPATH --> TLCASE{Transaction-ID-ledger bytes present}
-    TLCASE -- No --> TLINIT[BuildInitialTransactionIdLedgerAction]
-    TLCASE -- Yes --> TLPARSE[ParseTransactionIdLedgerAction]
-    TLINIT --> TLVALID{ValidateTransactionJournalInventoryAction then<br/>ValidateTransactionIdLedgerAction over the same owner/inventory pair}
-    TLPARSE --> TLVALID
-    TLVALID -- Invalid --> FAIL
-    TLVALID -- Valid --> TLPLAN[BuildTransactionIdentityRecoveryPlanAction then<br/>ValidateTransactionIdentityRecoveryPlanAction]
-    TLPLAN --> TLDISP{Next typed disposition}
-    TLDISP -- block --> FAIL
-    TLDISP -- retire_orphan, rollback_and_retire,<br/>recover_commit_id or verify_committed --> PTXRECOVER[Invoke the matching recovery portion of diagram 09<br/>under the same held project lock and validated storage capability]
-    PTXRECOVER --> TLRECHECK{Revalidate transaction ledger/inventory and recovery plan}
-    TLRECHECK -- More --> TLDISP
-    TLRECHECK -- Stable --> FEATUREPREP
-    TLDISP -- Complete clean plan --> FEATUREPREP[Return the recovered project TransactionIdLedger<br/>and held project-transaction capability to the selected SDD graph for exact feature ownership resolution]
+    INVOCATION -. proposed SDD graphs explicitly select these setup operations<br/>after their invocation arguments validate .-> FEATUREPREP[Read and validate feature ownership and inventory directly;<br/>no project transaction directory, ledger, lock or recovery prerequisite]
     FEATUREPREP -. after diagram 05 validates FeatureStateInventory and resolves the exact feature target;<br/>the selected SDD graph alone continues this setup .-> TARGETCTX{Post-feature-selector exact target}
     TARGETCTX --> TROOT[ResolveConfiguredToolchainPresetRootAction<br/>sole runtime root paths.toolchainPreset]
     TARGETCTX --> PROOT[ResolveConfiguredPrinciplesRootAction<br/>sole runtime root paths.principles]
     VALIDROOTS -. validate the directory capability only;<br/>normal bootstrap never inventories, reads or copies template content .-> TEMPLATEINERT[paths.templates/*.template.md<br/>inert throughout v1; reserved for a future sdd init boundary]
-    TARGETCTX -- New target --> NOPRIOR[Receive the validated initial in-memory feature StateIdLedger from diagram 05;<br/>use absent optional prior specialized registries and ledgers;<br/>all bootstrap-local namespaces begin at ordinal one and generic authority-state IDs<br/>remain unallocated until post-preactivation activation; retain the project lock]
+    TARGETCTX -- New target --> NOPRIOR[Receive the validated initial in-memory feature StateIdLedger from diagram 05;<br/>use absent optional prior specialized registries and ledgers;<br/>all bootstrap-local namespaces begin at ordinal one and generic authority-state IDs<br/>remain unallocated until post-preactivation activation]
     TARGETCTX -- Existing exact owner --> EHEADER[Require the exact owner plus only the validated WorkflowArtifactRegistry header<br/>and StageTransactionCollection recovery binding from FeatureStateInventory;<br/>trust no feature authority or specialized ledger yet]
-    EHEADER --> EPRELEASE[ReleaseProjectTransactionCollectionLockAction<br/>immediately after ownership and feature recovery-path resolution]
-    EPRELEASE --> ERECOVER[Invoke diagram 09 in recovery-only feature mode:<br/>acquire/recover/validate the feature transaction collection and TransactionIdLedger,<br/>commit or retire each recovered transaction ID before cleanup, rescan,<br/>release the feature lock and allocate no new transaction ID]
+    EHEADER --> ERECOVER[Invoke diagram 09 in recovery-only feature mode:<br/>acquire/recover/validate the feature transaction collection and TransactionIdLedger,<br/>commit or retire each recovered transaction ID before cleanup, rescan,<br/>release the feature lock and allocate no new transaction ID]
     ERECOVER --> EAUTHORITIES[Only after recovery, load/parse/validate the feature StateIdLedger,<br/>WorkflowArtifactRegistry, WorkflowState, current BootstrapAuthorityState<br/>and every actor/review/control/passive/clarification authority]
     EAUTHORITIES --> PRIORPATH[ResolveBootstrapAuthorityStatePathAction<br/>from that recovered and validated current WorkflowArtifactRegistry collection]
     PRIORPATH --> PRIORREAD[Bounded no-follow read through the registered<br/>engine-state reader action and validated FeatureStateInventory entry]
@@ -286,8 +268,8 @@ flowchart TD
     CANDIDATE --> HANDOFF[Return candidate to the selected compiled workflow execution;<br/>no model-bearing workflow node may run yet]
 
     HANDOFF --> HCASE{Exact feature target}
-    HCASE -- New target --> NHANDOFF[Return the validated identity-free candidate to diagram 05 only;<br/>retain the project lock; after reference preactivation that diagram allocates the feature-local<br/>bootstrap/artifact/initial states and commits the sole feature_activation transaction]
-    HCASE -- Existing owner after recovery --> BCOMPARE{CompareBootstrapAuthorityStateAction<br/>use the validated current feature StateIdLedger, artifact/workflow/bootstrap authorities<br/>and released project lock; directly compare every candidate component with current state}
+    HCASE -- New target --> NHANDOFF[Return the validated identity-free candidate to diagram 05 only;<br/>after reference preactivation that diagram allocates the feature-local states,<br/>then performs and verifies fixed-path activation writes under Design Section 25.1]
+    HCASE -- Existing owner after recovery --> BCOMPARE{CompareBootstrapAuthorityStateAction<br/>use the validated current feature StateIdLedger and artifact/workflow/bootstrap authorities;<br/>directly compare every candidate component with current state}
     BCOMPARE -- Equal --> BREUSE[Reuse exact current BootstrapAuthorityState and component IDs/path/bytes;<br/>perform no authority or StateIdLedger write]
     BCOMPARE -- Changed --> BPLAN[ClassifyBootstrapAuthorityChangeAction<br/>produce one complete BootstrapAuthorityChangePlan with total coordinate assignments,<br/>dominant earliest owner, all secondary impacts and unioned obligations]
     BPLAN --> BPVALID{ValidateBootstrapAuthorityChangePlanAction}
@@ -352,10 +334,7 @@ flowchart TD
     FTXEND --> LCHANGE
     BREUSE --> READY
 
-    FAIL --> FLOCK{Project-transaction lock capability is currently held}
-    FLOCK -- Yes --> FRELEASE[ReleaseProjectTransactionCollectionLockAction<br/>exactly once with the typed failure/cancel terminal outcome]
-    FLOCK -- No --> FAILEND[Return the typed bootstrap failure]
-    FRELEASE --> FAILEND
+    FAIL --> FAILEND[Return the typed bootstrap failure;<br/>owning feature transactions release their own locks]
 
     EXAMPLES[design/examples/.sddtoolkit.json<br/>current reader-facing schema example] -. never searched, installed or used as runtime fallback .-> EXCLUDED[Excluded from runtime bootstrap]
     MIGRATE[Offline curated migration and human review] -. never invoked by bootstrap, specify, plan, tasks,<br/>implement or recovery .-> EXCLUDED

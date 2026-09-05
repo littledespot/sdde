@@ -1,19 +1,14 @@
+Feature-owned stage/task transaction lifecycle. Feature activation uses the
+fixed-path writes in Design Section 25.1, not this journal lifecycle. There is
+no project-level transaction collection or replacement recovery directory.
+
 ```mermaid
 flowchart TD
-    START[Owning orchestrator requests one durable project or feature transaction<br/>with a closed DurableTransactionKind and transaction-specific candidate inputs] --> OWNER{Storage owner}
-
-    OWNER -- Project preownership feature_activation only --> PCOL[ResolveProjectTransactionCollectionAction<br/>fixed reserved paths.workflows/transactions capability]
-    PCOL --> PHAS{Caller already carries the exact validated project lock<br/>from pre-feature-target recovery and ownership resolution}
-    PHAS -- No --> PLOCK[AcquireProjectTransactionCollectionLockAction<br/>one opaque runner-held capability]
-    PHAS -- Yes; reuse the same capability without reacquiring --> PSCAN
-    PLOCK --> PSCAN[ScanTransactionJournalInventoryAction<br/>bounded raw project journal and transaction-ID-ledger inventory under the exact lock]
-    OWNER -- Feature closed kinds --> FKIND[bootstrap_authority_refresh; state_identity_reservation or retirement;<br/>specification_acknowledgement_id_retirement; clarification_pause, response or authority_resolution;<br/>specify_completion; plan_input_authority, plan_candidate, tasks_candidate; reference_revision;<br/>rework_invalidation; final_validation_failed; localized_task_remediation;<br/>implementation_reconciliation or completion; review_decision;<br/>task_checkpoint, manual_verification, task_success or task_outcome]
-    FKIND --> FCOL[Resolve validated WorkflowArtifactRegistry StageTransactionCollection<br/>under the committed ActiveFeatureDirectoryCapability]
+    START[Owning orchestrator requests one durable feature transaction<br/>with a closed DurableTransactionKind and transaction-specific candidate inputs] --> FCOL[Resolve validated WorkflowArtifactRegistry StageTransactionCollection<br/>under the validated ActiveFeatureDirectoryCapability]
     FCOL --> FLOCK[AcquireFeatureTransactionCollectionLockAction<br/>one opaque runner-held capability for the exact feature collection]
     FLOCK --> FSCAN[ScanTransactionJournalInventoryAction<br/>bounded raw feature journal and transaction-ID-ledger inventory under the exact lock]
 
-    PSCAN --> LEDGERPATH[ResolveTransactionIdLedgerPathAction<br/>one fixed collection-local ledger child]
-    FSCAN --> LEDGERPATH
+    FSCAN --> LEDGERPATH[ResolveTransactionIdLedgerPathAction<br/>one fixed collection-local ledger child]
     LEDGERPATH --> LREAD[ReadTransactionIdLedgerAction<br/>bounded no-follow read under the same held collection lock]
     LREAD --> LPRESENT{Ledger bytes present}
     LPRESENT -- No; first collection transaction only --> LINIT[BuildInitialTransactionIdLedgerAction<br/>revision zero and next ordinal one]
@@ -52,7 +47,7 @@ flowchart TD
     MODE -- Recovery-only preflight --> RELEASE
     MODE -- New durable transaction requested --> TID[AssignTransactionIdAction<br/>reserve exactly the next collection-local ordinal for the closed DurableTransactionKind]
     TID --> TPERSIST[PersistTransactionIdReservationAction<br/>compare-and-swap and fsync the ledger before constructing or exposing a journal path]
-    TPERSIST --> STORAGE[BuildTransactionStorageCapabilityAction<br/>bind exact project/feature collection, held lock, current ledger and DurableTransactionKind]
+    TPERSIST --> STORAGE[BuildTransactionStorageCapabilityAction<br/>bind exact feature collection, held lock, current ledger and DurableTransactionKind]
     STORAGE --> BUILD[Transaction-specific builder constructs the candidate with<br/>StateIdentityTransactionMember plus TransactionIdentityMember<br/>as the mandatory DurableTransactionMember]
     BUILD --> TVALID[Run the transaction-specific validator and<br/>ValidateTransactionIdentityMemberAction;<br/>reruns MUST overwrite existing selected-workflow outputs at the same registered paths;<br/>no separate overwrite approval;<br/>user-closed clarification files MUST remain byte-for-byte unchanged:<br/>preservation preconditions, never write entries]
     TVALID --> SVALID{ValidateTransactionStorageCapabilityAction<br/>owner, kind, path, process, lock-table and sealed transaction all exact}
@@ -67,7 +62,7 @@ flowchart TD
     MORE -- No --> MARKER[Write and fsync the durable transaction commit marker last]
     MARKER --> TCOMMIT[CommitTransactionIdAction<br/>mark the matching reservation committed only after the marker]
     TCOMMIT --> CLEAN[Run bounded journal/staging cleanup under the same storage capability]
-    CLEAN --> RELEASE{Storage owner}
+    CLEAN --> RELEASE
 
     PREPARE -- Failure before marker --> ROLLBACK[PipelineRunner invokes TransactionRecoveryOrchestrator<br/>to restore every intent-marked entry before retirement]
     INTENT -- Failure before marker --> ROLLBACK
@@ -80,10 +75,7 @@ flowchart TD
     RVERIFY --> TCOMMIT
 
     EARLYFAIL[Typed storage/ledger/recovery failure before a new transaction reservation] --> RELEASE
-    RELEASE -- Project --> PRELEASE[ReleaseProjectTransactionCollectionLockAction<br/>exactly once with the terminal project-storage outcome]
-    RELEASE -- Feature --> FRELEASE[ReleaseFeatureTransactionCollectionLockAction<br/>exactly once with the terminal feature-storage outcome]
-    PRELEASE --> DONE[Return committed retired or failed typed outcome; no lock remains held]
-    FRELEASE --> DONE
+    RELEASE[ReleaseFeatureTransactionCollectionLockAction<br/>exactly once with the terminal feature-storage outcome] --> DONE[Return committed retired or failed typed outcome; no lock remains held]
 
     START -. no model call serializer diagnostic journal path or destination mutation<br/>may observe a new transaction ID before TPERSIST .-> TPERSIST
 ```

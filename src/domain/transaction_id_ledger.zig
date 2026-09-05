@@ -38,7 +38,6 @@ pub const ValidationError = error{
     TransactionLedgerLimitExceeded,
     InvalidTransactionStorageOwner,
     TransactionStorageOwnerMismatch,
-    InvalidTransactionKind,
     InvalidTransactionOrdinal,
     InvalidTransactionLedgerRevision,
     InvalidTransactionRetirementProjection,
@@ -143,8 +142,7 @@ pub fn buildCandidate(
     var count = input.reservations.len;
     var next_ordinal = input.next_transaction_ordinal;
     const target: usize = switch (transition.command) {
-        .reserve => |kind| blk: {
-            if (!input.storage_owner.allows(kind)) return error.InvalidTransactionKind;
+        .reserve => blk: {
             if (count >= limits.maximum_records) return error.TransactionLedgerLimitExceeded;
             next_ordinal.value = std.math.add(u64, next_ordinal.value, 1) catch return error.TransactionOrdinalExhausted;
             count += 1;
@@ -204,7 +202,6 @@ fn validate(candidate: Candidate, expected: identity.StorageOwner, prior: ?*cons
         try validateStorageOwner(record.transaction_id.storage_owner, limits);
         if (!record.transaction_id.storage_owner.eql(expected)) return error.TransactionStorageOwnerMismatch;
         if (record.transaction_id.ordinal.value != @as(u64, @intCast(index)) + 1) return error.InvalidTransactionOrdinal;
-        if (!expected.allows(record.transaction_kind)) return error.InvalidTransactionKind;
         switch (record.status) {
             .reserved => {},
             .committed => terminal += 1,
@@ -252,30 +249,19 @@ fn validateStatusTransition(previous: Status, next: Status) ValidationError!void
 }
 
 fn validateStorageOwner(owner: identity.StorageOwner, limits: Limits) ValidationError!void {
-    const bounded = switch (owner) {
-        .project => |id| id.canonical_project_root.len <= limits.maximum_owner_bytes,
-        .feature => |value| value.feature_id.bytes.len <= limits.maximum_owner_bytes and
-            value.workflow_artifact_registry_state_id.feature_id.bytes.len <= limits.maximum_owner_bytes,
-    };
+    const bounded = owner.feature_id.bytes.len <= limits.maximum_owner_bytes and
+        owner.workflow_artifact_registry_state_id.feature_id.bytes.len <= limits.maximum_owner_bytes;
     if (!bounded) return error.TransactionLedgerLimitExceeded;
     if (!owner.isValid()) return error.InvalidTransactionStorageOwner;
 }
 
 fn cloneStorageOwner(allocator: std.mem.Allocator, source: identity.StorageOwner) std.mem.Allocator.Error!identity.StorageOwner {
-    return switch (source) {
-        .project => |id| .{ .project = .{
-            .canonical_project_root = try allocator.dupe(u8, id.canonical_project_root),
-            .contract_version = @import("bootstrap_roots.zig").bootstrap_root_contract_version,
-        } },
-        .feature => |owner| blk: {
-            const feature_id: @import("feature_identity.zig").FeatureId = .{ .bytes = try allocator.dupe(u8, owner.feature_id.bytes) };
-            break :blk .{ .feature = .{
-                .feature_id = feature_id,
-                .workflow_artifact_registry_state_id = .{
-                    .feature_id = feature_id,
-                    .ordinal = owner.workflow_artifact_registry_state_id.ordinal,
-                },
-            } };
+    const feature_id: @import("feature_identity.zig").FeatureId = .{ .bytes = try allocator.dupe(u8, source.feature_id.bytes) };
+    return .{
+        .feature_id = feature_id,
+        .workflow_artifact_registry_state_id = .{
+            .feature_id = feature_id,
+            .ordinal = source.workflow_artifact_registry_state_id.ordinal,
         },
     };
 }

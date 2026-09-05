@@ -1,23 +1,18 @@
 const std = @import("std");
 const identity = @import("domain/transaction_identity.zig");
 const ledger = @import("domain/transaction_id_ledger.zig");
-const roots = @import("domain/bootstrap_roots.zig");
 const artifacts = @import("domain/workflow_artifact_registry.zig");
 const allocator = std.testing.allocator;
 const limits: ledger.Limits = .{ .maximum_records = 128, .maximum_owner_bytes = 4096 };
 
-fn project(path: []const u8) identity.StorageOwner {
-    return .{ .project = .{ .canonical_project_root = path, .contract_version = roots.bootstrap_root_contract_version } };
-}
-
 fn feature(name: []const u8, ordinal: u64) identity.StorageOwner {
-    return .{ .feature = .{
+    return .{
         .feature_id = .{ .bytes = name },
         .workflow_artifact_registry_state_id = .{ .feature_id = .{ .bytes = name }, .ordinal = ordinal },
-    } };
+    };
 }
 
-const owners = [_]identity.StorageOwner{ project("/project"), feature("hello-world", 1), feature("stock-control", 7) };
+const owners = [_]identity.StorageOwner{ feature("catalogue", 3), feature("hello-world", 1), feature("stock-control", 7) };
 
 fn transactionId(owner: identity.StorageOwner, ordinal: u64) identity.TransactionId {
     return .{ .storage_owner = owner, .ordinal = .{ .value = ordinal } };
@@ -35,8 +30,10 @@ fn initial(test_allocator: std.mem.Allocator, owner: identity.StorageOwner) !*le
     return ledger.createValidated(test_allocator, ledger.initialCandidate(owner), owner, null, limits);
 }
 
-test "transaction owners use the existing root and artifact registry identities" {
-    try std.testing.expect(@FieldType(identity.FeatureOwner, "workflow_artifact_registry_state_id") == artifacts.StateId);
+test "transaction owners use feature and artifact registry identities only" {
+    try std.testing.expect(@FieldType(identity.StorageOwner, "workflow_artifact_registry_state_id") == artifacts.StateId);
+    try std.testing.expect(!@hasField(identity.StorageOwner, "project"));
+    try std.testing.expect(std.meta.stringToEnum(identity.Kind, "feature_activation") == null);
     try std.testing.expect(identity.Ordinal.init(0) == null);
     try std.testing.expectEqual(@as(u64, 1), identity.Ordinal.init(1).?.value);
     for (owners) |owner| {
@@ -45,14 +42,13 @@ test "transaction owners use the existing root and artifact registry identities"
         try std.testing.expect(transactionId(owner, 1).eql(transactionId(owner, 1)));
         try std.testing.expect(!transactionId(owner, 1).eql(transactionId(owner, 2)));
     }
-    try std.testing.expect(!project("/project").eql(project("/different-project")));
     try std.testing.expect(!owners[0].eql(owners[1]));
     try std.testing.expect(!feature("hello-world", 1).eql(feature("hello-world", 2)));
     try std.testing.expect(!feature("hello-world", 1).eql(feature("other-feature", 1)));
     try std.testing.expect(!transactionId(owners[0], 1).eql(transactionId(owners[1], 1)));
 }
 
-test "empty ledgers begin at revision zero and ordinal one for both collection kinds" {
+test "empty ledgers begin at revision zero and ordinal one for each feature owner" {
     for (owners) |owner| {
         const owned = try initial(allocator, owner);
         defer ledger.deinitOwner(owned);
@@ -65,28 +61,20 @@ test "empty ledgers begin at revision zero and ordinal one for both collection k
     }
 }
 
-test "all closed transaction kinds obey the project and feature ownership matrix" {
+test "every closed transaction kind is available to feature owners" {
     inline for (std.meta.tags(identity.Kind)) |kind| {
         for (owners) |owner| {
             const owned = try initial(allocator, owner);
             defer ledger.deinitOwner(owned);
             const current = ledger.ledger(owned);
             const command: ledger.Command = .{ .reserve = kind };
-            const allowed = switch (owner) {
-                .project => kind == .feature_activation,
-                .feature => kind != .feature_activation,
-            };
-            if (allowed) {
-                const next = try ledger.buildCandidate(allocator, current, transition(current, command));
-                defer ledger.deinitOwner(next);
-                const result = ledger.ledger(next).candidate();
-                try std.testing.expectEqual(@as(u64, 1), result.revision.value);
-                try std.testing.expectEqual(@as(u64, 2), result.next_transaction_ordinal.value);
-                try std.testing.expectEqual(kind, result.reservations[0].transaction_kind);
-                try std.testing.expectEqual(ledger.Status.reserved, result.reservations[0].status);
-            } else {
-                try std.testing.expectError(error.InvalidTransactionKind, ledger.buildCandidate(allocator, current, transition(current, command)));
-            }
+            const next = try ledger.buildCandidate(allocator, current, transition(current, command));
+            defer ledger.deinitOwner(next);
+            const result = ledger.ledger(next).candidate();
+            try std.testing.expectEqual(@as(u64, 1), result.revision.value);
+            try std.testing.expectEqual(@as(u64, 2), result.next_transaction_ordinal.value);
+            try std.testing.expectEqual(kind, result.reservations[0].transaction_kind);
+            try std.testing.expectEqual(ledger.Status.reserved, result.reservations[0].status);
             try std.testing.expectEqual(@as(usize, 0), current.candidate().reservations.len);
         }
     }
@@ -97,10 +85,7 @@ test "reserve commit and retire retain history without reusing IDs or mutating p
         const empty_owner = try initial(allocator, owner);
         defer ledger.deinitOwner(empty_owner);
         const empty = ledger.ledger(empty_owner);
-        const kind: identity.Kind = switch (owner) {
-            .project => .feature_activation,
-            .feature => .review_decision,
-        };
+        const kind: identity.Kind = .review_decision;
         const first_owner = try ledger.buildCandidate(allocator, empty, transition(empty, .{ .reserve = kind }));
         defer ledger.deinitOwner(first_owner);
         const first = ledger.ledger(first_owner);
@@ -138,11 +123,9 @@ test "reserve commit and retire retain history without reusing IDs or mutating p
 
 test "closed structural validation rejects invalid owners and mismatched namespaces" {
     var mismatch = feature("first-feature", 1);
-    mismatch.feature.workflow_artifact_registry_state_id.feature_id.bytes = "second-feature";
-    var wrong_version = project("/project");
-    wrong_version.project.contract_version = "unknown-root-contract";
+    mismatch.workflow_artifact_registry_state_id.feature_id.bytes = "second-feature";
     const invalid = [_]identity.StorageOwner{
-        project("relative"), wrong_version, feature("", 1), feature("UPPER", 1), feature("hello-world", 0), mismatch,
+        feature("", 1), feature("UPPER", 1), feature("../escape", 1), feature("/absolute", 1), feature("hello-world", 0), mismatch,
     };
     for (invalid) |owner| {
         try std.testing.expectError(error.InvalidTransactionStorageOwner, initial(allocator, owner));
@@ -202,9 +185,6 @@ test "ledger validator rejects duplicate reordered missing zero and reused ordin
     try std.testing.expectError(error.InvalidTransactionOrdinal, ledger.createValidated(allocator, missing, owner, null, limits));
     records[1].transaction_id.storage_owner = owners[2];
     try std.testing.expectError(error.TransactionStorageOwnerMismatch, ledger.createValidated(allocator, valid, owner, null, limits));
-    records = valid_records;
-    records[1].transaction_kind = .feature_activation;
-    try std.testing.expectError(error.InvalidTransactionKind, ledger.createValidated(allocator, valid, owner, null, limits));
     records = valid_records;
     for ([_]u64{ 0, 4, 6, std.math.maxInt(u64) }) |revision| {
         var invalid = valid;
@@ -275,10 +255,7 @@ test "transition candidates reject stale revisions foreign snapshots and unknown
 
 test "committed and retired records cannot be terminalized twice or changed to the other terminal status" {
     for (owners) |owner| {
-        const kind: identity.Kind = switch (owner) {
-            .project => .feature_activation,
-            .feature => .reference_revision,
-        };
+        const kind: identity.Kind = .reference_revision;
         const empty_owner = try initial(allocator, owner);
         defer ledger.deinitOwner(empty_owner);
         const empty = ledger.ledger(empty_owner);
@@ -351,8 +328,8 @@ test "record and owner limits are enforced before snapshot construction" {
         .{ .maximum_records = 1, .maximum_owner_bytes = 2 },
     ));
     const oversized_records = [_]ledger.Record{
-        reservation(owner, 1, .feature_activation, .reserved),
-        reservation(owner, 2, .feature_activation, .reserved),
+        reservation(owner, 1, .specify_completion, .reserved),
+        reservation(owner, 2, .plan_candidate, .reserved),
     };
     var oversized = ledger.initialCandidate(owner);
     oversized.reservations = &oversized_records;
@@ -375,14 +352,14 @@ test "record and owner limits are enforced before snapshot construction" {
     const empty_owner = try ledger.createValidated(allocator, ledger.initialCandidate(owner), owner, null, .{ .maximum_records = 1, .maximum_owner_bytes = 4096 });
     defer ledger.deinitOwner(empty_owner);
     const empty = ledger.ledger(empty_owner);
-    const first_owner = try ledger.buildCandidate(allocator, empty, transition(empty, .{ .reserve = .feature_activation }));
+    const first_owner = try ledger.buildCandidate(allocator, empty, transition(empty, .{ .reserve = .specify_completion }));
     defer ledger.deinitOwner(first_owner);
     const first = ledger.ledger(first_owner);
-    try std.testing.expectError(error.TransactionLedgerLimitExceeded, ledger.buildCandidate(allocator, first, transition(first, .{ .reserve = .feature_activation })));
+    try std.testing.expectError(error.TransactionLedgerLimitExceeded, ledger.buildCandidate(allocator, first, transition(first, .{ .reserve = .specify_completion })));
     const committed_owner = try ledger.buildCandidate(allocator, first, transition(first, .{ .commit = transactionId(owner, 1) }));
     defer ledger.deinitOwner(committed_owner);
     const committed = ledger.ledger(committed_owner);
-    try std.testing.expectError(error.TransactionLedgerLimitExceeded, ledger.buildCandidate(allocator, committed, transition(committed, .{ .reserve = .feature_activation })));
+    try std.testing.expectError(error.TransactionLedgerLimitExceeded, ledger.buildCandidate(allocator, committed, transition(committed, .{ .reserve = .specify_completion })));
 }
 
 test "snapshots own all input bytes and successors outlive their predecessors" {
@@ -419,22 +396,23 @@ test "snapshots own all input bytes and successors outlive their predecessors" {
     try std.testing.expectEqual(@as(u64, 2), next.reservations[1].transaction_id.ordinal.value);
 }
 
-test "project snapshots own root identity bytes independently of their input" {
-    var bytes = "/project".*;
-    const owned = try initial(allocator, project(&bytes));
+test "snapshots own feature identity bytes from independently borrowed fields" {
+    var feature_bytes = "catalogue".*;
+    var artifact_feature_bytes = "catalogue".*;
+    var owner = feature(&feature_bytes, 3);
+    owner.workflow_artifact_registry_state_id.feature_id.bytes = &artifact_feature_bytes;
+    const owned = try initial(allocator, owner);
     defer ledger.deinitOwner(owned);
-    @memset(&bytes, 'z');
-    try std.testing.expect(ledger.ledger(owned).candidate().storage_owner.eql(project("/project")));
+    @memset(&feature_bytes, 'z');
+    @memset(&artifact_feature_bytes, 'y');
+    try std.testing.expect(ledger.ledger(owned).candidate().storage_owner.eql(feature("catalogue", 3)));
 }
 
 fn allocationScenario(test_allocator: std.mem.Allocator, owner: identity.StorageOwner) !void {
     const first_owner = try initial(test_allocator, owner);
     defer ledger.deinitOwner(first_owner);
     const first = ledger.ledger(first_owner);
-    const kind: identity.Kind = switch (owner) {
-        .project => .feature_activation,
-        .feature => .task_outcome,
-    };
+    const kind: identity.Kind = .task_outcome;
     const second_owner = try ledger.buildCandidate(test_allocator, first, transition(first, .{ .reserve = kind }));
     defer ledger.deinitOwner(second_owner);
     const second = ledger.ledger(second_owner);
@@ -444,7 +422,7 @@ fn allocationScenario(test_allocator: std.mem.Allocator, owner: identity.Storage
     defer ledger.deinitOwner(restored_owner);
 }
 
-test "every allocation failure cleans up both collection owner variants" {
+test "every allocation failure cleans up each feature owner" {
     for (owners) |owner| try std.testing.checkAllAllocationFailures(allocator, allocationScenario, .{owner});
 }
 
@@ -452,10 +430,7 @@ test "monotonic sequences retain all terminal IDs across repeated snapshot repla
     for (owners) |owner| {
         var current_owner = try initial(allocator, owner);
         defer ledger.deinitOwner(current_owner);
-        const kind: identity.Kind = switch (owner) {
-            .project => .feature_activation,
-            .feature => .manual_verification,
-        };
+        const kind: identity.Kind = .manual_verification;
         for (1..65) |ordinal| {
             const current = ledger.ledger(current_owner);
             const reserved_owner = try ledger.buildCandidate(allocator, current, transition(current, .{ .reserve = kind }));

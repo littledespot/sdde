@@ -4,6 +4,7 @@ const filesystem_identity = @import("filesystem_identity.zig");
 const definition = @import("workflow_definition.zig");
 
 pub const definition_suffix = ".workflow.yaml";
+const reserved_child = "features";
 pub const max_inventory_entries: usize = 4096;
 pub const max_inventory_depth: usize = 16;
 pub const max_inventory_duration_ms: i64 = 5000;
@@ -44,9 +45,7 @@ pub const ResourceManifest = struct {
 pub const Error = error{InvalidWorkflowInventory};
 
 pub fn classifyInventoryDescriptor(descriptor: InventoryDescriptor) ?Disposition {
-    if (std.mem.eql(u8, descriptor.path, "features") or
-        std.mem.eql(u8, descriptor.path, "transactions"))
-    {
+    if (isReservedRootChild(descriptor.path)) {
         return if (descriptor.kind == .directory and descriptor.identity != null)
             .reserved_child
         else
@@ -126,10 +125,12 @@ pub fn portablePathEqual(left: []const u8, right: []const u8) bool {
     return std.ascii.eqlIgnoreCase(left, right);
 }
 
+pub fn isReservedRootChild(path: []const u8) bool {
+    return std.mem.eql(u8, path, reserved_child);
+}
+
 pub fn reservedAlias(path: []const u8) bool {
-    if (std.mem.indexOfScalar(u8, path, '/') != null) return false;
-    const reserved = std.ascii.eqlIgnoreCase(path, "features") or std.ascii.eqlIgnoreCase(path, "transactions");
-    return reserved and !std.mem.eql(u8, path, "features") and !std.mem.eql(u8, path, "transactions");
+    return std.ascii.eqlIgnoreCase(path, reserved_child) and !isReservedRootChild(path);
 }
 
 fn validateEntries(
@@ -176,7 +177,7 @@ fn definitionPath(path: []const u8) bool {
 }
 
 fn reservedDescendant(path: []const u8) bool {
-    return std.mem.startsWith(u8, path, "features/") or std.mem.startsWith(u8, path, "transactions/");
+    return std.mem.startsWith(u8, path, reserved_child ++ "/");
 }
 
 fn samePhysicalIdentity(left: InventoryDescriptor, right: InventoryDescriptor) bool {

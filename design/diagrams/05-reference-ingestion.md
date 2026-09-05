@@ -7,7 +7,7 @@ below remain the proposed design. Selection and preparation follow
 flowchart TD
     START[sdd specify --reference &lt;relative-selector&gt;] --> COMPOSE[Composition root assembles fixed startup and invocation bindings]
     COMPOSE --> RUNNER[PipelineRunner<br/>sole node invocation and delta application owner]
-    RUNNER --> BOOT[Invoke the fixed startup BootstrapOrchestrator through its runner-owned binding;<br/>diagram 08 loads and compiles the variable-size workflow registry without selecting a workflow<br/>and returns without acquiring a project or feature transaction lock]
+    RUNNER --> BOOT[Invoke the fixed startup BootstrapOrchestrator through its runner-owned binding;<br/>diagram 08 loads and compiles the variable-size workflow registry without selecting a workflow<br/>and returns without acquiring a feature transaction lock]
     BOOT --> CONFIG[Engine startup only: use the invocation working directory as project root;<br/>read/directly decode only its exact .sddtoolkit.json or fail the invocation if missing;<br/>validate seven configured directory roots plus paths.providers and every discovered workflow definition;<br/>do not read provider config or inventory presets/toolchain.yaml/principles yet]
     CONFIG --> ENGINE[WorkflowEngineOrchestrator<br/>no workflow-name branch;<br/>coordinate only through runner-owned ChildNodeBinding values]
     ENGINE --> WSELECT[Runner invokes ParseWorkflowInvocationAction;<br/>validate WorkflowId specify and preserve the remaining arguments]
@@ -26,7 +26,7 @@ flowchart TD
     RDIR -- No --> INPUTERR
     RDIR -- Yes --> FID[derive-feature-identity@1<br/>full canonical selector + required YAML max-length 1–255<br/>pinned Unicode folding, ASCII slug, truncation and portable validation]
     FID -- Empty, invalid or over transformation limit --> INPUTERR
-    FID -- Seed only: selector, policy version, maximum and prospective ID --> SDDSETUP[Later feature-context setup from diagram 08;<br/>resolve the fixed project transaction collection, acquire its lock,<br/>and recover the project WAL and transaction-ID ledger before feature ownership reads]
+    FID -- Seed only: selector, policy version, maximum and prospective ID --> SDDSETUP[Later feature-context setup from diagram 08;<br/>read and validate feature ownership directly;<br/>no project transaction storage, ledger or lock prerequisite]
     SDDSETUP --> FIPATH[ResolveFeatureIdentityRegistryPathAction<br/>sole project-level registry beneath the reserved paths.workflows/features child]
     FIPATH --> FIREAD[ReadFeatureIdentityRegistryAction<br/>bounded no-follow read; absence is valid only before first activation]
     FIREAD --> FIPRESENT{Registry bytes present}
@@ -48,8 +48,7 @@ flowchart TD
     NFLEDGER --> NEWCTX[Use empty prior preset/principle ID-ledger inputs and buffer<br/>bounded preactivation telemetry; no feature directory or feature log exists]
     TARGET -- Existing owner --> EHEADER[From the validated FeatureStateInventory resolve and validate only<br/>the exact WorkflowArtifactRegistry header and StageTransactionCollection path;<br/>do not trust WorkflowState, BootstrapAuthorityState or any specialized ledger yet]
     EHEADER --> ECAP[LoadActiveFeatureDirectoryCapabilityAction<br/>reissue only for the exact stored owner and fresh no-follow root/header metadata]
-    ECAP --> EPRELEASE[ReleaseProjectTransactionCollectionLockAction<br/>immediately after exact ownership and the feature recovery path are resolved;<br/>all later existing-owner work uses only feature-owned storage]
-    EPRELEASE --> ERECOVER[Invoke diagram 09 in recovery-only feature mode:<br/>acquire the exact feature collection lock, scan journals, load/initialize and validate<br/>its TransactionIdLedger, build/validate the typed recovery plan, perform every disposition,<br/>commit or retire each ID before cleanup, rescan, then release the feature lock;<br/>assign no new transaction ID and trust no canonical feature authority during recovery]
+    ECAP --> ERECOVER[Invoke diagram 09 in recovery-only feature mode:<br/>acquire the exact feature collection lock, scan journals, load/initialize and validate<br/>its TransactionIdLedger, build/validate the typed recovery plan, perform every disposition,<br/>commit or retire each ID before cleanup, rescan, then release the feature lock;<br/>assign no new transaction ID and trust no canonical feature authority during recovery]
     ERECOVER --> EFLEDGER[ResolveFeatureStateIdLedgerPathAction, ReadStateIdLedgerAction,<br/>ParseStateIdLedgerAction and ValidateStateIdLedgerAction<br/>against the recovered exact inventory header and feature owner]
     EFLEDGER --> ELOAD[Only after feature-WAL recovery, bounded-load/parse/validate<br/>the exact current WorkflowArtifactRegistry, WorkflowState, BootstrapAuthorityState,<br/>actor/review/control/passive/clarification authorities and prior preset/principle ledgers]
     ELOAD --> ELOG[BuildFeatureLogPolicyIdAction, BuildFeatureLogPolicyAction and<br/>ValidateFeatureLogPolicyAction from the persisted current BootstrapAuthorityState<br/>and its recorded config version; initialize/recover all streams through diagram 06,<br/>acquiring/validating/releasing each exact stream lock]
@@ -144,7 +143,7 @@ flowchart TD
     NGRAMMAR --> NGRAMMARMAP[BuildBootstrapCandidateDependencyResolutionMapAction and<br/>ValidateBootstrapCandidateDependencyResolutionMapAction at base_grammar_resolved;<br/>prove strict extension from leaf_dependencies and only policy remains unresolved]
     NGRAMMARMAP --> NPOLICY[AssembleCompiledEnginePolicyAction, ValidateCompiledEnginePolicyAction<br/>and BindDerivedBootstrapCandidateComponentAction using the grammar-resolved map]
     NPOLICY --> NCOMPLETEMAP[BuildBootstrapCandidateDependencyResolutionMapAction and<br/>ValidateBootstrapCandidateDependencyResolutionMapAction at complete;<br/>prove total one-to-one generic-handle coverage with none unresolved]
-    NCOMPLETEMAP --> NMAT[BuildBootstrapAuthorityStateCoreAction and ValidateBootstrapAuthorityStateCoreAction,<br/>then BuildInitialBootstrapAuthorityStateAction and ValidateBootstrapAuthorityStateAction;<br/>resolve/serialize through the exact artifact collection; bytes remain transaction-private]
+    NCOMPLETEMAP --> NMAT[BuildBootstrapAuthorityStateCoreAction and ValidateBootstrapAuthorityStateCoreAction,<br/>then BuildInitialBootstrapAuthorityStateAction and ValidateBootstrapAuthorityStateAction;<br/>resolve/serialize through the exact artifact collection; bytes remain in memory until activation validation]
     NMAT --> PASS0[Assign, build and validate the revision-zero passive-literal registry<br/>under the canonical base grammar; consume the exact artifact-ledger successor<br/>and return the next feature-ledger successor]
     PASS0 --> ACTOR0[Assign, build and validate empty revision-zero ActorEvidenceRegistryState;<br/>consume the exact passive-ledger successor and return the next]
     ACTOR0 --> REVIEW0[AssignReviewDecisionRegistryStateIdAction then<br/>BuildInitialReviewDecisionRegistryAction and ValidateReviewDecisionRegistryAction;<br/>consume the exact actor-ledger successor and return the next]
@@ -156,8 +155,9 @@ flowchart TD
     FINEXT --> FINVALID{ValidateFeatureIdentityRegistryAction<br/>input and successor revisions, ownership uniqueness and exact pointers}
     FINVALID -- Invalid --> PREBLOCK
     FINVALID -- Valid --> FISERIAL[SerializeFeatureIdentityRegistryAction]
-    FISERIAL --> ACT09[Invoke diagram 09 project-storage lifecycle for feature_activation:<br/>recover first; reserve and fsync the collection-local transaction ID;<br/>then BuildFeatureActivationStageTransactionAction and ValidateFeatureActivationStageTransactionAction<br/>with the mandatory DurableTransactionMember, validate project storage, journal/apply/mark,<br/>commit the transaction ID, clean up and ReleaseProjectTransactionCollectionLockAction exactly once]
-    ACT09 --> CAP[BuildActiveFeatureDirectoryCapabilityAction<br/>issue only from the durably committed activation]
+    FISERIAL --> ACTIVATE[BuildFeatureActivationAction and ValidateFeatureActivationAction;<br/>persist only the validated fixed-path activation set under Design Section 25.1;<br/>no project transaction ID, journal, marker or lock;<br/>interrupted activation is not success and has no automatic multi-file rollback]
+    ACTIVATE -- Incomplete or invalid persisted set --> PREBLOCK
+    ACTIVATE -- Complete persisted set validates --> CAP[BuildActiveFeatureDirectoryCapabilityAction<br/>issue only for complete validated activation]
 
     CAP --> NLOG[Run the complete feature-log startup protocol in diagram 06;<br/>for each enabled stream acquire and validate its exact lock capability,<br/>inspect or initialize/recover, apply retention, then release every lock]
     NLOG --> LOGREADY[Feature log ready; flush bounded preactivation metadata<br/>without exposing any provisional reference identity]
@@ -355,16 +355,7 @@ flowchart TD
     SCLOG -- True --> SCLOGTX[Invoke diagram 06 complete policy transition before any plan gate or normal event]
     SCLOGTX --> DONE
 
-    INPUTERR --> ILOCK{Project-transaction lock capability is held}
-    ILOCK -- Yes --> IRELEASE[ReleaseProjectTransactionCollectionLockAction<br/>with user-input failure terminal outcome]
-    ILOCK -- No; failure occurred before selected SDD setup acquired it --> ISTOP[Return the typed nonzero outcome]
-    IRELEASE --> ISTOP
-    PREBLOCK --> PLOCK{Project-transaction lock capability is held}
-    PLOCK -- Yes --> PRELEASE[ReleaseProjectTransactionCollectionLockAction<br/>with preactivation/ownership block terminal outcome]
-    PLOCK -- No; already released after an owning transaction --> PBSTOP[Return the typed blocking outcome]
-    PRELEASE --> PBSTOP
-    INVALID --> XLOCK{Project-transaction lock capability is held}
-    XLOCK -- Yes --> XRELEASE[ReleaseProjectTransactionCollectionLockAction<br/>with reference/specification failure terminal outcome]
-    XLOCK -- No; already released after activation or bootstrap transaction --> XSTOP[Return the typed failure outcome]
-    XRELEASE --> XSTOP
+    INPUTERR --> ISTOP[Return the typed nonzero outcome]
+    PREBLOCK --> PBSTOP[Return the typed blocking outcome; incomplete activation authorizes no downstream work]
+    INVALID --> XSTOP[Return the typed failure outcome; owning feature transactions release their own locks]
 ```

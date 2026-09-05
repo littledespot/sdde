@@ -17,7 +17,7 @@ authority.
 | `specs` | Canonical feature-facing views, clarification forms, and logs. |
 | `references` | Project reference corpora supplied to specification workflows. |
 | `specsArchive` | Archived feature views. This is the sole configured-root nesting exception: it may be beneath `specs`, and its subtree is excluded from active feature discovery. |
-| `workflows` | An arbitrary bounded number of closed declarative workflow definitions and their explicitly declared resources. V1 recursively admits only strict UTF-8 YAML 1.2 regular files with the exact case-sensitive `*.workflow.yaml` suffix and the formal closed [workflow-definition v1 structural schema](schemas/workflow-definition-v1.schema.json); `WorkflowId` comes from validated content, never the filename. Each definition has a unique validated `WorkflowId`, logging shortcode, and graph composed only from the single registry's generic operation contracts. Definitions cannot contain executable code, select infrastructure, grant capabilities, weaken registered gates, or bypass runner validation. The initial definitions are `specify`, `plan`, `tasks`, and `implement`, whose own predecessor gates enforce their order. This root also owns the engine-reserved `features/` and `transactions/` children; their root entries are accounted when present and their descendants are excluded from definition traversal. |
+| `workflows` | An arbitrary bounded number of closed declarative workflow definitions and their explicitly declared resources. V1 recursively admits only strict UTF-8 YAML 1.2 regular files with the exact case-sensitive `*.workflow.yaml` suffix and the formal closed [workflow-definition v1 structural schema](schemas/workflow-definition-v1.schema.json); `WorkflowId` comes from validated content, never the filename. Each definition has a unique validated `WorkflowId`, logging shortcode, and graph composed only from the single registry's generic operation contracts. Definitions cannot contain executable code, select infrastructure, grant capabilities, weaken registered gates, or bypass runner validation. The initial definitions are `specify`, `plan`, `tasks`, and `implement`, whose own predecessor gates enforce their order. This root also owns the engine-reserved `features/` child; its root entry is accounted when present and its descendants are excluded from definition traversal. |
 | `toolchainPreset` | The installed toolchain preset packages from which the project's `toolchain.yaml` inherits. Presets remain candidate policy until parsed, composed, and deterministically validated. |
 | `principles` | Project principles. Markdown files are free-text principle sources. The exact root child `toolchain.yaml` is also a project principle, but it is parsed separately as a closed typed project-toolchain layer and never ingested as free text. |
 | `templates` | Inert `*.template.md` principle templates reserved for a future `sdd init` template-to-principles boundary. Current v1 defines no init action or transaction and normal bootstrap and feature workflows neither ingest nor copy these files. A future accepted init design may materialize copies in `principles`, where they would become ordinary project principle input. |
@@ -33,7 +33,10 @@ The engine derives, rather than separately configures, these storage children:
 | Derived path | Purpose |
 | --- | --- |
 | `<paths.workflows>/features/` | Engine-owned canonical per-feature workflow and execution state. |
-| `<paths.workflows>/transactions/` | Engine-owned project activation and recovery transaction collection. |
+
+Only `features/` is reserved at the workflow root. There is no project-level
+transaction storage child or replacement recovery location. Other directories
+follow the ordinary workflow-definition/resource inventory rules.
 
 The current reader-facing schema example is
 [`examples/.sddtoolkit.json`](examples/.sddtoolkit.json). The engine never

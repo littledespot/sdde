@@ -168,7 +168,7 @@ tree, packaged asset, or default path.
 F0004 passes F0005 only a borrowed immutable registry view, from which F0005
 receives the exact `workflow_authority` capability plus validated
 bootstrap-root-registry evidence. F0005 derives the workflow layout, including
-the fixed `features/` and `transactions/` reserved children, from that
+the fixed `features/` reserved child, from that
 capability.
 
 F0004 does not:
@@ -178,7 +178,7 @@ F0004 does not:
 - read, parse, schema-validate, or compile a definition;
 - build or select a workflow registry entry;
 - derive a feature-state or transaction-storage capability; or
-- acquire a project/feature transaction lock.
+- acquire a feature transaction lock.
 
 The handoff is one-way:
 
@@ -239,7 +239,7 @@ publishes no service.
    only the borrowed registry and its typed opaque directory/file
    capabilities.
 9. The fixed startup graph is nonselectable and not project-extensible, uses
-   only runner-owned bindings, and acquires no project/feature transaction
+   only runner-owned bindings, and acquires no feature transaction
    lock.
 10. Every invalid input or operational failure publishes no service or registry
     and stops before workflow loading or any downstream operation.

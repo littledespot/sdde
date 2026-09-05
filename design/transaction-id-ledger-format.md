@@ -1,24 +1,21 @@
 # Transaction-ID ledger stored format
 
-This closes the byte representation used by Design Section 25.1. Workflow
-definitions remain YAML; this engine-state document is UTF-8 JSON without BOM.
+This closes the feature-owned ledger representation used by Design Section
+25.1. Workflow definitions remain YAML; this engine-state document is UTF-8
+JSON without BOM. Feature activation uses no transaction-ID ledger.
 
 ```json
-{"schema":"transaction-id-ledger/v1","storageOwner":{"project":{"bootstrapRootContractVersion":"bootstrap-roots/v2"}},"revision":1,"nextTransactionOrdinal":2,"reservations":[{"transactionOrdinal":1,"transactionKind":"feature_activation","status":"reserved"}],"retiredTransactionOrdinals":[]}
+{"schema":"transaction-id-ledger/v1","storageOwner":{"feature":{"featureId":"sample-feature","workflowArtifactRegistryStateOrdinal":1}},"revision":1,"nextTransactionOrdinal":2,"reservations":[{"transactionOrdinal":1,"transactionKind":"specify_completion","status":"reserved"}],"retiredTransactionOrdinals":[]}
 ```
 
 The root contains exactly the six fields shown. Every field is required.
-`storageOwner` contains exactly one of:
-
-- `project`: exactly `bootstrapRootContractVersion`, equal to the current
-  bootstrap-root identity's contract version.
-- `feature`: exactly `featureId` and `workflowArtifactRegistryStateOrdinal`.
-  The ordinal identifies the workflow-artifact-registry state for that feature;
-  the namespace is fixed by this field, not supplied by the document.
+`storageOwner` contains exactly `feature`, whose fields are exactly `featureId`
+and `workflowArtifactRegistryStateOrdinal`. The ordinal identifies the
+workflow-artifact-registry state for that feature; the namespace is fixed by
+this field, not supplied by the document. No project-owner variant is admitted.
 
 Owner references are collection-relative. The codec requires the expected typed
-storage owner from its caller; a project reference resolves only to that
-context's bootstrap-root identity. Feature fields must match that context's
+storage owner from its caller. Feature fields must match that context's
 feature and artifact-registry state. The document cannot choose a project root,
 collection, filename, or write target. Absolute paths and fingerprints are not
 stored. These bytes alone do not authenticate their originating project: a
@@ -39,7 +36,8 @@ transition checks. The codec does not repeat those rules.
 
 Parsing rejects missing, unknown, duplicate (including escaped-equivalent), or
 wrong-type fields, unsupported schema versions, malformed UTF-8/JSON, and
-trailing non-whitespace data. The closed nonrecursive shape bounds nesting.
+trailing non-whitespace data. The closed nonrecursive shape permits at most
+three nested containers; the shared strict-JSON transport guard enforces this.
 The caller supplies a positive byte ceiling and the existing ledger limits;
 oversized input is rejected before parsing and record limits before conversion.
 
@@ -54,3 +52,7 @@ The codec performs no filesystem access, ID allocation, recovery, or commit.
 Registered persistence operations and their capability bindings remain separate
 work. Rerun output replacement and protection of user-closed clarification files
 remain governed by Design Section 23.2.
+
+Implementation gap: the current codec/domain still accept a project owner.
+Remove that branch and its tests; do not add a compatibility reader or project
+persistence to preserve it. This documentation amendment changes no runtime code.

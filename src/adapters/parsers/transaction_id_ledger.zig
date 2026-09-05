@@ -1,6 +1,7 @@
 const std = @import("std");
 const identity = @import("../../domain/transaction_identity.zig");
 const ledger = @import("../../domain/transaction_id_ledger.zig");
+const json = @import("../../domain/strict_json.zig");
 
 pub const schema = "transaction-id-ledger/v1";
 pub const Limits = struct { maximum_bytes: u32, ledger: ledger.Limits };
@@ -46,8 +47,7 @@ const Text = struct {
     }
 };
 
-const StoredOwner = union(enum) {
-    project: struct { bootstrapRootContractVersion: Text },
+const StoredOwner = struct {
     feature: struct { featureId: Text, workflowArtifactRegistryStateOrdinal: Integer },
 };
 const StoredRecord = struct {
@@ -76,8 +76,13 @@ pub fn decode(
     if (limits.maximum_bytes == 0) return error.InvalidTransactionLedgerDocumentLimit;
     try limits.ledger.validateCounts(0, 0);
     if (bytes.len > limits.maximum_bytes) return error.TransactionLedgerDocumentLimitExceeded;
-    if (bytes.len == 0 or !std.unicode.utf8ValidateSlice(bytes) or std.mem.startsWith(u8, bytes, "\xef\xbb\xbf"))
-        return error.InvalidTransactionLedgerDocument;
+    json.validateTransport(allocator, bytes, .{
+        .maximum_bytes = limits.maximum_bytes,
+        .maximum_depth = 3,
+    }) catch |err| return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.InvalidJsonDocument => error.InvalidTransactionLedgerDocument,
+    };
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const temporary = arena.allocator();
@@ -89,7 +94,7 @@ pub fn decode(
     }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidTransactionLedgerDocument;
     if (!std.mem.eql(u8, document.schema.bytes, schema)) return error.UnsupportedTransactionLedgerSchema;
     try limits.ledger.validateCounts(document.reservations.len, document.retiredTransactionOrdinals.len);
-    const owner = try bindOwner(document.storageOwner, expected_owner);
+    const owner = decodeOwner(document.storageOwner);
     const records = try temporary.alloc(ledger.Record, document.reservations.len);
     for (document.reservations, records) |record, *result| result.* = .{
         .transaction_id = .{ .storage_owner = owner, .ordinal = .{ .value = record.transactionOrdinal.value } },
@@ -130,13 +135,10 @@ pub fn encode(
     for (candidate.retired_transaction_ids, retired) |id, *result| result.* = .{ .value = id.ordinal.value };
     const document: Document = .{
         .schema = .{ .bytes = schema },
-        .storageOwner = switch (candidate.storage_owner) {
-            .project => |id| .{ .project = .{ .bootstrapRootContractVersion = .{ .bytes = id.contract_version } } },
-            .feature => |owner| .{ .feature = .{
-                .featureId = .{ .bytes = owner.feature_id.bytes },
-                .workflowArtifactRegistryStateOrdinal = .{ .value = owner.workflow_artifact_registry_state_id.ordinal },
-            } },
-        },
+        .storageOwner = .{ .feature = .{
+            .featureId = .{ .bytes = candidate.storage_owner.feature_id.bytes },
+            .workflowArtifactRegistryStateOrdinal = .{ .value = candidate.storage_owner.workflow_artifact_registry_state_id.ordinal },
+        } },
         .revision = .{ .value = candidate.revision.value },
         .nextTransactionOrdinal = .{ .value = candidate.next_transaction_ordinal.value },
         .reservations = records,
@@ -154,24 +156,12 @@ pub fn encode(
     return output;
 }
 
-fn bindOwner(stored: StoredOwner, expected: identity.StorageOwner) Error!identity.StorageOwner {
-    return switch (stored) {
-        .project => |project| switch (expected) {
-            .project => |id| .{ .project = .{
-                .canonical_project_root = id.canonical_project_root,
-                .contract_version = project.bootstrapRootContractVersion.bytes,
-            } },
-            .feature => error.TransactionStorageOwnerMismatch,
-        },
-        .feature => |feature| switch (expected) {
-            .feature => .{ .feature = .{
-                .feature_id = .{ .bytes = feature.featureId.bytes },
-                .workflow_artifact_registry_state_id = .{
-                    .feature_id = .{ .bytes = feature.featureId.bytes },
-                    .ordinal = feature.workflowArtifactRegistryStateOrdinal.value,
-                },
-            } },
-            .project => error.TransactionStorageOwnerMismatch,
+fn decodeOwner(stored: StoredOwner) identity.StorageOwner {
+    return .{
+        .feature_id = .{ .bytes = stored.feature.featureId.bytes },
+        .workflow_artifact_registry_state_id = .{
+            .feature_id = .{ .bytes = stored.feature.featureId.bytes },
+            .ordinal = stored.feature.workflowArtifactRegistryStateOrdinal.value,
         },
     };
 }

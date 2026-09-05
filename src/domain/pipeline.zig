@@ -89,6 +89,7 @@ pub const SideEffect = enum {
     none,
     filesystem_read,
     filesystem_write,
+    model_call,
 };
 
 pub const RunnerAccountingCapability = enum {

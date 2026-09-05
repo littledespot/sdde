@@ -145,6 +145,22 @@ pub fn build(b: *std.Build) void {
     const model_envelope_step = b.step("test-model-envelope", "Test strict model result decoding and retained invocation association");
     model_envelope_step.dependOn(&b.addRunArtifact(model_envelope_tests).step);
 
+    const payload_schema_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/model_payload_schema_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    const payload_schema_step = b.step("test-model-payload-schema", "Test bound model-result schema validation");
+    payload_schema_step.dependOn(&b.addRunArtifact(payload_schema_tests).step);
+
+    const invoke_model_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/invoke_model_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    const invoke_model_step = b.step("test-invoke-model", "Test single-call provider invocation and outcome propagation");
+    invoke_model_step.dependOn(&b.addRunArtifact(invoke_model_tests).step);
+
     const reference_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/reference_preflight_test.zig"),
         .target = target,

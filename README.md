@@ -57,4 +57,6 @@ The shared transaction-ID ledger has in-memory owner/ID validation and immutable
 reserve/commit/retire candidates, plus a bounded parser and deterministic
 serializer for its [stored format](design/transaction-id-ledger-format.md).
 It does not persist IDs, recover journals, activate features, or authorize
-output writes.
+output writes. The project-owner branch is superseded and awaits code removal;
+it must not be developed into project-level transaction storage. The current
+activation and rerun contracts are in Design Sections 25.1 and 23.2.

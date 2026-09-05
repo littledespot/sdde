@@ -133,7 +133,7 @@ It ends with either:
 
 The fixed startup graph is compiler-locked, composition-root-owned,
 nonselectable, and not project-extensible. It is not a member of the resulting
-registry and acquires no project/feature transaction lock.
+registry and acquires no feature transaction lock.
 
 ## 3. Closed workflow-definition encoding and schema
 
@@ -335,17 +335,19 @@ timeout or cancellation never turns an incomplete inventory into success.
 
 `BuildWorkflowAuthorityLayoutAction` derives its root only from F0004's exact
 `workflow_authority` capability. The root inventory includes an encountered
-direct child named exactly `features` or `transactions` so ownership can be
-validated, but enumeration never enters either complete descendant subtree.
-Each encountered reserved child must be a no-follow directory and receives one
-`reserved_child_accounted` disposition. Absence is legal; later state or
-transaction work may create the derived child only through its own authorized
-transaction boundary.
+direct child named exactly `features` so ownership can be validated, but
+enumeration never enters its descendant subtree. That child must be a
+no-follow directory and receives one `reserved_child_accounted` disposition.
+Absence is legal; later authorized feature activation may create it under
+Design Section 25.1.
 
-Only those two exact root children are reserved. An identically named nested
+Only that exact root child is reserved. An identically named nested
 directory elsewhere has no reserved status. Normalization, case-fold,
 portable-name, or physical aliases of a reserved child are rejected rather
 than treated as another spelling.
+
+Implementation gap: remove the loader's superseded second reserved-child branch
+and update its tests; it is not authority to retain project transaction storage.
 
 The engine recursively encounters every other directory, regular file,
 symlink, and special node without following links. Exact `*.workflow.yaml`
@@ -571,7 +573,7 @@ registry candidates, handles, and evidence remain distinct owned values. Each is
 destroyed exactly once on success, deterministic rejection, cancellation,
 timeout, and unexpected operational error. Before workflow selection there is
 no model call, workflow log binding, state write, cache write, transaction,
-project/feature lock, or filesystem mutation.
+feature lock, or filesystem mutation.
 An explicit runner/user cancellation propagates terminal `cancelled` unchanged,
 performs the same complete cleanup, and publishes no service. Cancellation is
 never collapsed into `failed`.
@@ -590,9 +592,9 @@ F0005 does not implement:
   alternate authoring aliases, or compatibility readers;
 - bootstrap component ID allocation, persistence, registry refresh/migration,
   active-feature change classification, or recovery;
-- feature state, project WAL, toolchain/preset/principle loading, repository
+- feature state, toolchain/preset/principle loading, repository
   discovery, model calls, logging sinks, or transaction locks; or
-- creation of missing `features/` or `transactions/` directories.
+- creation of the missing `features/` directory.
 
 Those concerns remain with their accepted owners or later increments.
 
@@ -606,8 +608,10 @@ Those concerns remain with their accepted owners or later increments.
    Definitions conform to the formal closed structural schema.
 3. Workflow identity comes only from content; a filename/content mismatch does
    not rename, reject, or select the workflow.
-4. Exact root children `features/` and `transactions/` are accounted when
-   present and never traversed; aliases and wrong kinds block.
+4. The exact root child `features/` is accounted when present and never
+   traversed; aliases and wrong kinds block. All other directories follow
+   normal traversal and definition/resource accounting, with no second
+   reserved storage child.
 5. Every other encountered entry receives exactly one terminal account.
    Unreferenced or unsupported files, links, special nodes, collisions,
    incomplete definition/resource capture, and invalid definitions block the
@@ -643,7 +647,7 @@ Those concerns remain with their accepted owners or later increments.
     validation; `registry()` returns the same borrowed immutable value without I/O,
     compilation, selection, allocation, or mutation.
 17. The startup graph is nonselectable and not project-extensible, uses only
-    runner-owned bindings, and acquires no project/feature transaction lock.
+    runner-owned bindings, and acquires no feature transaction lock.
 18. F0005 performs no model call, command, write, state transition, logging sink
     operation, workflow selection, or graph execution.
 19. The packaged executable requires no design schema/example, source tree,
@@ -708,7 +712,7 @@ Implementation tests must cover the owning boundaries:
   adapter-private; workflow and toolchain ports/raw values/schema validators do
   not merge; the startup orchestrator has only child bindings; the runner is
   the sole node/delta owner; the fixed startup graph is absent from the
-  registry; no write, model call, command, or project/feature lock occurs; and
+  registry; no write, model call, command, or feature lock occurs; and
   all owned intermediates are released on every terminal branch.
 - **Packaging:** load a valid relocated variable registry and its declared
   workflow-owned resources with the native

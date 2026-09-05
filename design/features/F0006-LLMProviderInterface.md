@@ -31,9 +31,10 @@ finalization and attempt advancement reject unfinished provider operations.
 port, runner-private single-use lease table and fake-provider consumption are
 implemented. The action publishes only an opaque identity reference through a
 typed `NodeDelta`; shared execution-reference ownership preserves identity
-without copying capabilities. Durable effect-journal integration, production
-provider-call actions/composition and production provider contracts remain
-implementation work.
+without copying capabilities. `InvokeModelAction` now makes one interface
+inference call with fake-provider acceptance evidence. Durable effect-journal
+integration, optional count-call actions, production provider composition and
+production provider contracts remain implementation work.
 
 The provider-neutral capability/capacity contract and effective-limit binding
 are implemented. The accepted token-policy amendment removes per-operation token ceilings and
@@ -50,8 +51,10 @@ the fake provider. `ValidateProviderInvocationObservationAction` now validates
 the retained call association, usage and content safety and exposes sealed
 complete-candidate evidence. `DecodeModelEnvelopeAction` now parses that sealed
 input into an owned, read-only JSON object retaining the same association and
-compiled schema. Production YAML registration, provider-native schema
-representability and payload schema validation remain work.
+compiled schema. `ValidateModelPayloadSchemaAction` now checks that tree against
+only its retained schema and returns allocation-free candidate evidence or a
+closed rejection reason. Production YAML registration and provider-native
+schema representability remain work.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -618,6 +621,17 @@ model content and do not prove persistence or outcome consumption. Durable
 commit/handoff and recovery remain separate implementation increments; the
 in-memory `requireInvoked` lookup alone does not authorize production I/O.
 
+`InvokeModelAction` forwards the exact prepared request, binding, single-use
+authorization reference and applied invocation record through the existing
+`LLMProviderInterface.invoke` port once. The port owns lease consumption and
+call checks; the action adds no counting, retry, fallback, response parsing,
+validation or accounting. Complete/stopped observations and failure facts pass
+through unchanged, as do cancellation and allocation errors. The caller owns
+the returned observation. Its `model_call` side-effect classification grants
+no capability or send authority; capability derivation still uses the injected
+port. Fake-provider tests exercise the action through observation validation,
+decoding and payload schema validation; production registration stays disabled.
+
 Authorization failure before the first provider call leaves the logical request
 `assigned`; a typed terminal outcome uses an amended
 `assigned -> terminal(not_invoked_authorization_failure)` transition, while the
@@ -919,10 +933,26 @@ The decoded candidate owns one parse tree and exposes only read-only object,
 array and scalar views. It borrows the original invocation evidence, whose
 request/graph/observation owners must outlive it; it creates no competing
 identity or schema authority. Rejection and allocation failure free partial
-trees without consuming that evidence or its response bytes. The separate
-`ValidateModelPayloadSchemaAction` must validate this tree against the retained
-compiled schema without reparsing; successful decoding alone grants no workflow
-authority. Production YAML binding remains a subsequent integration step.
+trees without consuming that evidence or its response bytes.
+
+`ValidateModelPayloadSchemaAction` validates the complete supported profile
+against that retained compiled schema without reparsing or rechecking call
+association. It checks required/unknown properties, scalar types and bounds,
+all array items, constants, enumerations and the exact declared alternative.
+Optional fields remain absent; no defaults, coercion, field dropping or schema
+selection from model content occurs. String lengths count Unicode scalars.
+Following the profile's [JSON Schema numeric semantics](https://json-schema.org/understanding-json-schema/reference/numeric),
+integer candidates are checked by exact value, including decimal/exponent
+spellings such as `1.0` and `1e0`; no floating-point rounding or conversion of
+numeric strings is permitted. Schema bounds/constants retain their existing
+signed-64-bit literal contract.
+
+Validation returns either an opaque, allocation-free view of the same decoded
+candidate or one closed rejection reason. One invalid member rejects the whole
+result; no partial proof is published. The proof borrows its existing owners
+and changes no candidate, usage, lifecycle or execution state. Schema validity
+proves neither semantic correctness nor permission to commit. Production YAML
+binding remains a subsequent integration step.
 
 Explicit cancellation remains terminal `cancelled` and is propagated outside
 the failure union. Provider failure is never converted to the model-content

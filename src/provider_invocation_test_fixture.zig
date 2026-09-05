@@ -6,6 +6,7 @@ const compilation = @import("domain/workflow_compilation.zig");
 const build_request = @import("actions/model/build_model_request.zig");
 const preflight = @import("actions/model/validate_static_model_request_capacity.zig");
 const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
+const invoke_model = @import("actions/model/invoke_model.zig");
 const authorization_fixture = @import("provider_authorization_test_fixture.zig");
 
 pub const Fixture = struct {
@@ -17,8 +18,17 @@ pub const Fixture = struct {
     fake: fake_provider.FakeLLMProvider,
 
     pub fn init(self: *Fixture, maximum_output_bytes: u32) !void {
+        return self.initWithSchema(maximum_output_bytes, null);
+    }
+
+    pub fn initWithSchema(self: *Fixture, maximum_output_bytes: u32, schema_bytes: ?[]const u8) !void {
         try self.base.init(std.testing.allocator);
         errdefer self.base.deinit();
+        if (schema_bytes) |bytes| {
+            var adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+            self.base.request.response_schema = try adapter.compiler().compile(self.base.schema_arena.allocator(), bytes);
+            self.base.provider_binding.capacity.canonical.maximum_input_bytes = @import("model_contract_test_fixture.zig").capacity.canonical.maximum_input_bytes;
+        }
         self.base.provider_binding.capacity.canonical.maximum_output_bytes = maximum_output_bytes;
         self.resource = .{ .id = .{ .bytes = "result" }, .content = .{ .result_schema = self.base.request.response_schema } };
         const source = try self.requestSource();
@@ -42,7 +52,7 @@ pub const Fixture = struct {
     }
 
     pub fn response(self: *Fixture) !provider.ProviderInvocationObservation {
-        return self.fake.interface().invoke(&self.base.provider_binding, self.prepared.request, self.authorized.reference, self.authorized.invoked);
+        return (invoke_model.Action{ .provider = self.fake.interface() }).execute(&self.base.provider_binding, self.prepared.request, self.authorized.reference, self.authorized.invoked);
     }
 
     pub fn requestSource(self: *Fixture) !preparation.Source {

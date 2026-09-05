@@ -19,8 +19,12 @@ test "transaction ledger candidates are opaque capability-free snapshots with sh
     const ledger = @import("domain/transaction_id_ledger.zig");
     try std.testing.expect(@typeInfo(ledger.Ledger) == .@"opaque");
     try std.testing.expect(@typeInfo(ledger.Owner) == .@"opaque");
-    try std.testing.expect(@FieldType(identity.StorageOwner, "project") == @import("domain/bootstrap_roots.zig").BootstrapRootRegistryId);
-    try std.testing.expect(@FieldType(identity.FeatureOwner, "workflow_artifact_registry_state_id") == @import("domain/workflow_artifact_registry.zig").StateId);
+    try std.testing.expect(@typeInfo(identity.StorageOwner) == .@"struct");
+    try std.testing.expectEqual(@as(usize, 2), @typeInfo(identity.StorageOwner).@"struct".fields.len);
+    try std.testing.expect(!@hasField(identity.StorageOwner, "project"));
+    try std.testing.expect(@FieldType(identity.StorageOwner, "feature_id") == @import("domain/feature_identity.zig").FeatureId);
+    try std.testing.expect(@FieldType(identity.StorageOwner, "workflow_artifact_registry_state_id") == @import("domain/workflow_artifact_registry.zig").StateId);
+    try std.testing.expect(std.meta.stringToEnum(identity.Kind, "feature_activation") == null);
     try std.testing.expect(@FieldType(ledger.Transition, "expected_ledger") == *const ledger.Ledger);
     try std.testing.expect(@FieldType(ledger.Candidate, "reservations") == []const ledger.Record);
     try std.testing.expect(ledger.Revision != model_request_identity.LedgerRevision);
@@ -40,6 +44,8 @@ test "transaction ledger stored format reuses domain authority and its documente
     const source = @embedFile("adapters/parsers/transaction_id_ledger.zig");
     try std.testing.expect(std.mem.indexOf(u8, source, "ledger.createValidated") != null);
     try std.testing.expect(std.mem.indexOf(u8, source, "limits.ledger.validateCounts") != null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "json.validateTransport") != null);
+    try expectAbsent(source, "utf8ValidateSlice");
     try expectAbsent(source, "NodeContract");
     try expectAbsent(source, "/actions/");
     try expectAbsent(source, "std.Io.Dir");
@@ -52,10 +58,13 @@ test "transaction ledger stored format reuses domain authority and its documente
     const start = (std.mem.indexOf(u8, documented, "```json\n") orelse return error.MissingStoredFormatExample) + "```json\n".len;
     const end = std.mem.indexOf(u8, documented[start..], "```") orelse return error.MissingStoredFormatExample;
     const sample = documented[start..][0..end];
-    const owner: identity.StorageOwner = .{ .project = .{
-        .canonical_project_root = "/project",
-        .contract_version = @import("domain/bootstrap_roots.zig").bootstrap_root_contract_version,
-    } };
+    const owner: identity.StorageOwner = .{
+        .feature_id = .{ .bytes = "sample-feature" },
+        .workflow_artifact_registry_state_id = .{
+            .feature_id = .{ .bytes = "sample-feature" },
+            .ordinal = 1,
+        },
+    };
     const parsed = try codec.decode(allocator, sample, owner, null, .{
         .maximum_bytes = 65536,
         .ledger = .{ .maximum_records = 10, .maximum_owner_bytes = 4096 },
@@ -491,6 +500,35 @@ test "model decoding consumes sealed complete evidence and exposes only immutabl
     }
 }
 
+test "payload validation uses only the retained schema and produces allocation-free candidate evidence" {
+    const validator = @import("actions/model/validate_model_payload_schema.zig").Action;
+    const validation = @import("domain/model_payload_schema.zig");
+    const envelope = @import("domain/model_envelope.zig");
+    try std.testing.expectEqual(@as(usize, 0), @typeInfo(validator).@"struct".fields.len);
+    try std.testing.expect(validator.contract.side_effect == .none);
+    try std.testing.expect(validator.contract.runner_accounting == .none);
+    const execute = @typeInfo(@TypeOf(validator.execute)).@"fn";
+    try std.testing.expectEqual(@as(usize, 2), execute.params.len);
+    try std.testing.expect(execute.params[1].type.? == *const envelope.Candidate);
+    try std.testing.expect(execute.return_type.? == validation.Result);
+    try std.testing.expect(@FieldType(validation.Result, "valid") == *const validation.Evidence);
+    try std.testing.expect(@FieldType(validation.Result, "invalid") == validation.Rejection);
+    try std.testing.expectEqual(@as(usize, 2), @typeInfo(validation.Result).@"union".fields.len);
+    switch (@typeInfo(validation.Evidence)) {
+        .@"opaque" => {},
+        else => return error.PayloadSchemaEvidenceMustBeOpaque,
+    }
+    try std.testing.expect(@typeInfo(@TypeOf(validation.Evidence.candidate)).@"fn".return_type.? == *const envelope.Candidate);
+    inline for (.{ @embedFile("actions/model/validate_model_payload_schema.zig"), @embedFile("domain/model_payload_schema.zig") }) |source| {
+        inline for (.{ "/actions/", "/ports/", "/adapters/", "anyopaque", "@constCast", "std.Io", "std.http", "std.process", "std.json", "parseFloat", "Allocator", "workflow_token_accounting", "logger", "validateInferenceInvocation", "requireInvoked", "schema.compile" }) |forbidden| {
+            try expectAbsent(source, forbidden);
+        }
+    }
+    const source = @embedFile("domain/model_payload_schema.zig");
+    try std.testing.expect(std.mem.indexOf(u8, source, "candidate.association().request().response_schema") != null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "schema.findProperty(") != null);
+}
+
 test "model-binding requirement is immutable data not a provider-call capability" {
     const compilation = @import("domain/workflow_compilation.zig");
     const operation = @import("domain/workflow_operation.zig");
@@ -542,6 +580,31 @@ test "model request identity has one opaque ledger and runner applied mutation b
     try expectAbsent(runner, "/ports/");
     try expectAbsent(runner, "std.Io");
     try std.testing.expectEqual(@as(usize, 3), countOccurrences(runner, "envelope.apply("));
+}
+
+test "model invocation forwards one call through the sole provider port without hidden work" {
+    const action = @import("actions/model/invoke_model.zig").Action;
+    try std.testing.expectEqual(@as(usize, 1), @typeInfo(action).@"struct".fields.len);
+    try std.testing.expect(@FieldType(action, "provider") == llm_provider_interface.LLMProviderInterface);
+    try std.testing.expect(action.contract.side_effect == .model_call);
+    try std.testing.expect(action.contract.runner_accounting == .none);
+    const signature = @typeInfo(@TypeOf(action.execute)).@"fn";
+    try std.testing.expectEqual(@as(usize, 5), signature.params.len);
+    try std.testing.expect(signature.params[1].type.? == *const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding);
+    try std.testing.expect(signature.params[2].type.? == *const llm_provider_operation.IdentifiedProviderNeutralModelRequest);
+    try std.testing.expect(signature.params[3].type.? == *const llm_provider_operation.ValidatedProviderAuthorizationLeaseRef);
+    try std.testing.expect(signature.params[4].type.? == *const llm_provider_operation.InvokedProviderOperation);
+    try std.testing.expect(signature.return_type.? == llm_provider_interface.Error!llm_provider_operation.ProviderInvocationObservation);
+    const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(action, &.{});
+    try std.testing.expect(capabilities.valid and capabilities.model_provider);
+    try std.testing.expect(!capabilities.toolchain_read and !capabilities.toolchain_parser and !capabilities.reference_read);
+    const source = @embedFile("actions/model/invoke_model.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.provider.invoke("));
+    inline for (.{ "/actions/", "/application/", "/adapters/", "anyopaque", "@constCast", "std.Io", "std.http", "std.process", "std.json", "countInputTokens", "while (", "for (", "catch", ".deinit(", "validateInferenceInvocation", "requireInvoked", "schema", "workflow_token_accounting", "logger" }) |forbidden| {
+        try expectAbsent(source, forbidden);
+    }
+    // This increment provides an action, not a production provider activation.
+    try expectAbsent(@embedFile("composition/native_workflow_operations.zig"), "invoke_model.zig");
 }
 
 test "provider operation boundary has one capability-limited interface" {

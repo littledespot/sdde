@@ -78,7 +78,7 @@ pub const Adapter = struct {
                 .symlink, .special => {},
             }
             descriptors.append(allocator, descriptor) catch return error.InventoryInvalid;
-            if (entry.kind == .directory and !reserved(entry.path, entry.depth())) {
+            if (entry.kind == .directory and !inventory.isReservedRootChild(entry.path)) {
                 walker.enter(self.io, entry) catch return error.InventoryInvalid;
             }
         }
@@ -156,7 +156,4 @@ fn classify(kind: Io.File.Kind) inventory.EntryKind {
         .sym_link => .symlink,
         else => .special,
     };
-}
-fn reserved(path: []const u8, depth: usize) bool {
-    return depth == 1 and (std.mem.eql(u8, path, "features") or std.mem.eql(u8, path, "transactions"));
 }
