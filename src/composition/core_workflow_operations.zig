@@ -28,12 +28,17 @@ pub const entries = [_]operations.Entry{
     },
 };
 
-pub const profiles = [_]@import("../domain/workflow_operation.zig").PolicyProfile{.{
+pub const profiles = [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = capability_free_policy_id,
     .allowed_capabilities = &.{},
     .allowed_terminal_outcomes = &.{ .ok, .needs_user, .invalid, .blocked, .failed, .cancelled },
     .total_model_token_budget = .{ .value = 100_000 },
-}};
+}, .{
+    .id = "core.model-authorization@1",
+    .allowed_capabilities = &.{@import("../domain/workflow_capability.zig").provider_authorization},
+    .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
+    .total_model_token_budget = .{ .value = 100_000 },
+} };
 
 pub const registry: operations.Registry = .{
     .operations = &entries,

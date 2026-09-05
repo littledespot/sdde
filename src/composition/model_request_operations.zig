@@ -5,9 +5,11 @@ const binding = @import("../application/workflow_operation_binding.zig");
 const attempts = @import("../application/model_attempt_workflow.zig");
 const provider_operations = @import("../application/provider_operation_workflow.zig");
 const accounting = @import("../application/workflow_model_accounting.zig");
+const authorization = @import("../application/provider_authorization_workflow.zig");
+const lifecycle = @import("../application/model_request_lifecycle_workflow.zig");
 
-pub const count = 6;
-pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema };
+pub const count = 8;
+pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, authorization.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
 pub const Assembly = struct {
@@ -17,6 +19,8 @@ pub const Assembly = struct {
     build: requests.Build,
     advance_attempt: attempts.Advance,
     assign_operation: provider_operations.Assign,
+    prepare_authorization: authorization.Prepare,
+    advance_request: lifecycle.Advance,
     entries: [count]operations.Entry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator) void {
@@ -27,6 +31,8 @@ pub const Assembly = struct {
             .build = .{ .allocator = allocator },
             .advance_attempt = .{},
             .assign_operation = .{},
+            .prepare_authorization = .{ .allocator = allocator },
+            .advance_request = .{ .allocator = allocator },
             .entries = undefined,
         };
         self.entries = .{
@@ -36,6 +42,8 @@ pub const Assembly = struct {
             entry(requests.Build, &self.build),
             entry(attempts.Advance, &self.advance_attempt),
             entry(provider_operations.Assign, &self.assign_operation),
+            entry(authorization.Prepare, &self.prepare_authorization),
+            entry(lifecycle.Advance, &self.advance_request),
         };
     }
 };

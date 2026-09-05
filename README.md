@@ -37,6 +37,16 @@ initial execution; applied attempt evidence and ledgers remain execution-local.
 `assign-provider-operation@1` then explicitly selects `inference` or
 `input-token-count` and publishes sealed assignment evidence for that attempt.
 Assignment makes no API call, prepares no authorization and charges no tokens.
+`prepare-provider-operation-authorization@1` explicitly prepares the assigned
+operation's single-use lease, with a required `timeout-ms` and the separate
+`provider-authorization` capability. Preparation uses only a preloaded port;
+it performs no I/O, refresh, provider call or token charge. The runner owns
+lease cleanup; YAML receives only an opaque result. Bedrock composition remains
+separate, and an unbound authorization adapter fails closed.
+`advance-model-request-lifecycle@1` with `transition: invoked` then explicitly
+advances the logical request through its existing immutable ledger. It requires
+that same prepared authorization and changes no request content, attempt, lease
+or provider-operation state. No API call occurs in this step.
 
 ## Requirements
 
@@ -55,6 +65,7 @@ zig build test-reference-preflight
 zig build test-reference-ingestion
 zig build test-reference-evidence
 zig build test-reference-extraction
+zig build test-path-tokens
 zig build test-feature-directory
 zig build test-clarification-inputs
 zig build smoke
@@ -93,6 +104,10 @@ engine-assigned claim/citation IDs and complete chunk accounting are also tested
 through YAML with scripted results. Model extraction, semantic reconciliation
 and snapshot publication remain future work. See
 [F0100](design/features/F0100-SpecWorkflow.md#35-extraction-candidate-accounting).
+Registered toolchain naming rules now feed a shared, YAML-addressable path-token
+grammar and detector, including current reference basenames. Detection grants
+no file authority; typed extraction text and passive-literal validation remain
+unfinished. See [F0100's lexical boundary](design/features/F0100-SpecWorkflow.md#36-shared-naming-policy-and-path-token-grammar).
 Full `spec.md` generation remains unfinished. Shared NFC uses statically
 linked utf8proc with packaged license notices
 ([ADR 0007](design/decisions/0007-unicode-normalization.md)).

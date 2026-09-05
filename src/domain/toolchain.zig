@@ -38,5 +38,11 @@ pub const Preset = struct {
 pub const Registry = struct { presets: []const Preset };
 pub const Resolved = struct { packages: []const *const Preset };
 pub const Composed = struct { packages: []const []const u8, policies: []const []const u8 };
-pub const PolicyContract = struct { id: []const u8, project_selectable: bool, locked_required: bool };
+pub const PolicyContract = struct {
+    id: []const u8,
+    project_selectable: bool,
+    locked_required: bool,
+    // Explicit empty means this registered policy contributes no naming rules.
+    naming: []const @import("naming_rule.zig").Rule,
+};
 pub const PolicyRegistry = struct { contracts: []const PolicyContract };

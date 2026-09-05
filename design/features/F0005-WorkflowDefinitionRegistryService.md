@@ -435,6 +435,25 @@ sealed assigned-operation value. Missing dependencies, hidden accounting
 permissions, undeclared kind parameters and forged/stale handoffs reject; no
 new YAML fields, resource overrides or provider capability are introduced.
 
+The native authorization-preparation binding requires those same retained
+inputs and explicit positive `timeout-ms`. It derives the separate
+`provider-authorization` capability from its narrow preloaded preparation port,
+not a `model-provider` capability. The runner supplies only the exact facts and
+one allocated deposit/publication slot for that invocation, never its private
+table. A sealed result carries a lease reference or closed failure/cancellation
+facts; publication and consumption checks retain the same request association.
+No provider call, refresh, retry or I/O is implicit.
+
+`advance-model-request-lifecycle@1` declares a ledger replacement and explicit
+`transition: invoked`. Its compiled contract requires the retained request,
+attempt, assignment and authorization result, permits no operational capability
+or retry, and preserves the other values. The runner requires a prepared lease,
+rechecks it before publication, and validates an exact direct lifecycle
+successor. Assignment-shaped replacements instead require an actual new request
+assignment. Neither writer can hide another kind of ledger change. Publication
+updates the runner's retained snapshot with the envelope, so an old snapshot
+cannot reset invocation. This is state advancement, not a provider call.
+
 The selected result-schema resource describes the entire compact model result
 under [ADR 0006](../decisions/0006-minimal-model-response.md), not an inner
 payload or repeated execution metadata. The protocol version and exact resource
@@ -473,7 +492,13 @@ capability or service locator. Kernel rejection is terminal, not a YAML outcome
 that can route around the guard. Cancellation is checked before and after guard
 evaluation. These contracts add no workflow-YAML fields.
 
+An unexpected binding error terminates as an operation failure without applying
+a delta or following a YAML outcome edge. A declared `failed` edge is available
+to an expected failure returned with its valid typed delta; catching an error
+does not synthesize that result or its promised data.
+
 Registered operational ports include `LLMProviderInterface` (`model-provider`),
+the preloaded authorization preparation port (`provider-authorization`),
 the three root-bound toolchain source ports (`toolchain-read`), the toolchain
 document parser (`toolchain-parser`), and reference directory inspection
 (`reference-read`). The pure bounded Unicode normalizer grants no operational

@@ -22,6 +22,7 @@ pub const StepInput = struct {
     resources: []const compilation.CompiledResource,
     model_binding: ?*const provider_binding.ValidatedProviderModelBinding,
     log: pipeline.WorkflowLog,
+    model_request_lifecycle: ?*const @import("../domain/provider_operation_lifecycle.zig").Ledger = null,
     model_attempt: ?struct {
         accounting: *const @import("../domain/model_attempt_accounting.zig").RunnerModelAttemptAccounting,
         operations: *const @import("../domain/provider_operation_lifecycle.zig").Ledger,
@@ -30,6 +31,11 @@ pub const StepInput = struct {
     provider_operation: ?struct {
         ledger: *const @import("../domain/provider_operation_lifecycle.zig").Ledger,
         authority: @import("../domain/provider_operation_lifecycle.zig").Authority,
+    } = null,
+    provider_authorization: ?struct {
+        facts: @import("provider_operation_authorization.zig").Facts,
+        slot: @import("provider_operation_authorization.zig").AllocatedSlot,
+        runtime: pipeline.NodeRuntime,
     } = null,
 };
 
@@ -157,6 +163,8 @@ pub const Registry = struct {
 };
 
 fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
+    if (!@import("../domain/workflow_model_request_lifecycle.zig").validContract(contract, capabilities)) return false;
+    if (!@import("../domain/workflow_provider_authorization.zig").validContract(contract, capabilities)) return false;
     if (!operation.validAccounting(contract.runner_accounting, contract.requires, contract.produces, contract.side_effect, contract.retry_limit != null)) return false;
     if (contract.runner_accounting == .advance_provider_operation and !@import("../domain/workflow_provider_operation.zig").validDescriptors(contract.parameters)) return false;
     if (contract.outcomes.len == 0 or !uniqueOutcomes(contract.outcomes) or

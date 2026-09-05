@@ -1,14 +1,15 @@
 const std = @import("std");
-const advance_lifecycle = @import("../actions/model/advance_model_request_lifecycle.zig");
-const assign_request = @import("../actions/model/assign_model_request_id.zig");
-const build_ledger = @import("../actions/model/build_initial_model_request_identity_ledger.zig");
-const validate_binding = @import("../actions/model/validate_model_request_binding.zig");
-const provider_binding = @import("../domain/llm_provider_binding.zig");
-const identity = @import("../domain/model_request_identity.zig");
-const pipeline = @import("../domain/pipeline.zig");
-const provider_lifecycle = @import("../domain/provider_operation_lifecycle.zig");
-const provider_runner = @import("provider_operation_lifecycle_runner.zig");
+const advance_lifecycle = @import("actions/model/advance_model_request_lifecycle.zig");
+const assign_request = @import("actions/model/assign_model_request_id.zig");
+const build_ledger = @import("actions/model/build_initial_model_request_identity_ledger.zig");
+const validate_binding = @import("actions/model/validate_model_request_binding.zig");
+const provider_binding = @import("domain/llm_provider_binding.zig");
+const identity = @import("domain/model_request_identity.zig");
+const pipeline = @import("domain/pipeline.zig");
+const provider_lifecycle = @import("domain/provider_operation_lifecycle.zig");
+const provider_runner = @import("application/provider_operation_lifecycle_runner.zig");
 
+/// Isolated action-test harness; production request transitions use YAML.
 pub const Runner = struct {
     allocator: std.mem.Allocator,
     envelope: pipeline.DataShape = pipeline.DataShape.init(&.{}),

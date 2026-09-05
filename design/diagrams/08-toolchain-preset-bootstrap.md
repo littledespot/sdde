@@ -1,29 +1,27 @@
-Generic startup and YAML-declared target preparation. Startup is fixed engine
-machinery; workflow behavior remains in the selected compiled YAML.
+High-level startup flow and workflow-selected toolchain preparation.
 
 ```mermaid
 flowchart TD
-    CLI[Invocation working directory] --> CONFIG[Read exact .sddtoolkit.json<br/>validate closed config and configured roots]
-    CONFIG --> INVENTORY[Discover workflow definitions and explicitly declared resources]
-    INVENTORY --> COMPILE[Validate and compile through one immutable generic operation registry]
-    COMPILE --> SELECT[Resolve exact selected workflow]
-    SELECT --> REQUIRE{Selected graph needs model binding or provider calls}
-    REQUIRE -- No --> START[New atomic workflow execution at compiled start]
-    REQUIRE -- Yes --> PROVIDERS[Capture configured .sddproviders.json once<br/>validate catalogue repository allowlist and immutable bindings]
-    PROVIDERS -- Ready --> START
-    PROVIDERS -- Failure or cancellation --> STOP[Return exact failure or cancellation; execute no workflow node]
-    START --> INVOKE[Run YAML-named invocation contract]
-    INVOKE --> SETUP[Run only YAML-declared preparation operations]
-    SETUP --> CONTEXT[Resolve any selected feature directory relative to configured paths.specs;<br/>validate target preset and project toolchain;<br/>capture relevant principles and repository facts]
-    CONTEXT --> RUN[Follow compiled YAML transitions through runner-owned bindings]
-    RUN --> END{Terminal outcome}
-    END -- Success --> OUTPUT[Publish complete validated workflow output]
-    END -- Non-success --> ABANDON[Abandon candidate; preserve clarifications]
+    START["Run an sdd command"] --> CONFIG["Read .sddtoolkit.json from the invocation directory;<br/>validate configuration and configured roots"]
+    CONFIG --> WORKFLOWS["Discover workflow definitions and declared resources;<br/>validate and compile their operations"]
+    WORKFLOWS --> SELECT["Select the requested workflow"]
+    SELECT --> MODEL{"Selected workflow requires a model provider?"}
+    MODEL -->|Yes| PROVIDERS["Load the configured provider catalogue;<br/>validate permitted model bindings"]
+    MODEL -->|No| INVOKE
+    PROVIDERS -->|Ready| INVOKE["Validate arguments through the selected invocation contract"]
+    PROVIDERS -->|Failed or cancelled| STOP["End with the corresponding outcome"]
+    INVOKE --> EXECUTE["Start a fresh workflow execution"]
+    EXECUTE --> TOOLCHAIN{"Workflow requests toolchain preparation?"}
+    TOOLCHAIN -->|No| RUN["Continue the declared workflow"]
+    TOOLCHAIN -->|Yes| PRESETS["Load and validate the complete preset registry<br/>and project toolchain configuration"]
+    PRESETS --> INHERIT["Resolve preset inheritance<br/>and compose the project toolchain"]
+    INHERIT --> SAFETY{"Effective paths, environments and command policies valid?"}
+    SAFETY -->|Yes| PUBLISH["Make validated toolchain policy available<br/>to subsequent workflow operations"]
+    PUBLISH --> RUN
+    SAFETY -->|No| STOP
 ```
 
-For SDD feature selection, `.sddtoolkit.json`'s `paths.specs` supplies the root;
-`--feature` supplies only its relative directory, with no ownership registry.
-Provider calls do not require a feature-owned journal. No project/feature
-transaction recovery, ledger scan or checkpoint precedes execution. Templates
-remain inert; no source-tree fallback or hidden model route is introduced.
-[ADR 0009](../decisions/0009-atomic-workflow-execution.md) governs fresh reruns.
+The selected workflow controls when toolchain preparation occurs and which
+principles or repository facts it needs. Toolchain policy governs target-project
+files and commands; semantic principles provide guidance only where applicable.
+Templates remain inert during ordinary workflow execution.

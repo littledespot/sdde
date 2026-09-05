@@ -2,6 +2,14 @@ const std = @import("std");
 
 pub const Error = std.mem.Allocator.Error || error{ InvalidUtf8, NormalizationLimitExceeded, NormalizationFailed };
 
+/// Unicode character properties only; carries no operational capability.
+pub const LexicalClassifier = struct {
+    boundary_fn: *const fn (u21) bool,
+    pub fn isBoundary(self: LexicalClassifier, scalar: u21) bool {
+        return self.boundary_fn(scalar);
+    }
+};
+
 /// Pure, bounded text transformation. It conveys no operational capability.
 pub const Normalizer = struct {
     normalize_fn: *const fn (std.mem.Allocator, []const u8, usize) Error![]u8,

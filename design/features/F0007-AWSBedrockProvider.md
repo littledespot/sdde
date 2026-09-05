@@ -10,8 +10,9 @@ lifecycle and authorization belong only to the current atomic execution.
 removes adapter-side request/response byte ceilings and wire-budget proofs.
 Bedrock reports its API limits; SDDE preserves those failures/stops and accounts
 actual usage. F0006's capacity-free boundary and native YAML request preparation,
-attempt accounting and operation-assignment handoff
-(ADR 0012) are implemented; no size-ceiling
+attempt accounting, operation-assignment handoff and preloaded authorization
+preparation and logical-request invocation-state advancement (ADR 0012) are
+implemented; provider-operation invocation is not yet YAML-integrated. No size-ceiling
 decision is a prerequisite for this feature. The Bedrock adapter remains proposed.
 
 **Implementation readiness:** Blocked. F0006 and its governing amendments are

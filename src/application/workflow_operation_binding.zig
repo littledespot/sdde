@@ -12,6 +12,7 @@ pub fn bind(comptime T: type, context: ?*T, comptime invoke: *const fn (?*T, ope
             .invoke_fn = call,
             .context_required = T != void,
             .capabilities = &(if (derived.model_provider) [_][]const u8{@import("../domain/workflow_capability.zig").model_provider} else [_][]const u8{}) ++
+                (if (derived.provider_authorization) [_][]const u8{@import("../domain/workflow_capability.zig").provider_authorization} else [_][]const u8{}) ++
                 (if (derived.toolchain_read) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_read} else [_][]const u8{}) ++
                 (if (derived.toolchain_parser) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_parser} else [_][]const u8{}) ++
                 (if (derived.reference_read) [_][]const u8{@import("../domain/workflow_capability.zig").reference_read} else [_][]const u8{}) ++
@@ -29,12 +30,14 @@ pub fn bind(comptime T: type, context: ?*T, comptime invoke: *const fn (?*T, ope
     return .{ .context = @ptrCast(context), .implementation = &compiled.implementation };
 }
 
-pub const Inspection = struct { valid: bool = true, model_provider: bool = false, toolchain_read: bool = false, toolchain_parser: bool = false, reference_read: bool = false, feature_read: bool = false, feature_input_read: bool = false, reference_content_read: bool = false, reference_decode: bool = false, reference_identity: bool = false };
+pub const Inspection = struct { valid: bool = true, model_provider: bool = false, provider_authorization: bool = false, toolchain_read: bool = false, toolchain_parser: bool = false, reference_read: bool = false, feature_read: bool = false, feature_input_read: bool = false, reference_content_read: bool = false, reference_decode: bool = false, reference_identity: bool = false };
 
 pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
     if (T == provider.LLMProviderInterface) return .{ .model_provider = true };
+    if (T == @import("../ports/provider_operation_authorization.zig").Port) return .{ .provider_authorization = true };
     if (T == @import("../ports/unicode_normalizer.zig").Normalizer) return .{};
     if (T == @import("../ports/unicode_normalizer.zig").CaseFolder) return .{};
+    if (T == @import("../ports/unicode_normalizer.zig").LexicalClassifier) return .{};
     const reference_source = @import("../ports/reference_corpus_source.zig");
     if (T == reference_source.Enumerator or T == reference_source.Capturer) return .{ .reference_content_read = true };
     if (T == @import("../ports/reference_decoder.zig").Decoder) return .{ .reference_decode = true };
@@ -60,6 +63,7 @@ pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
                 const child = inspect(field.type, next);
                 result.valid = result.valid and child.valid;
                 result.model_provider = result.model_provider or child.model_provider;
+                result.provider_authorization = result.provider_authorization or child.provider_authorization;
                 result.toolchain_read = result.toolchain_read or child.toolchain_read;
                 result.toolchain_parser = result.toolchain_parser or child.toolchain_parser;
                 result.reference_read = result.reference_read or child.reference_read;

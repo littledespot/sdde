@@ -142,6 +142,54 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_assignment.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
     denied_accounting.step.dependOn(&denied_assignment.step);
 
+    const missing_assignment_directory = b.addTempFiles();
+    const missing_assignment_executable = missing_assignment_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_assignment_directory.add(".sddtoolkit.json", configuration);
+    _ = missing_assignment_directory.add(".sddtoolkit/workflows/authorize.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: authorize
+        \\version: 1
+        \\shortcode: AUTH
+        \\invoke: core.empty-invocation@1
+        \\policy: core.model-authorization@1
+        \\start: authorize
+        \\steps:
+        \\  authorize: { use: prepare-provider-operation-authorization@1, with: { timeout-ms: 1000 }, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
+    );
+    const denied_authorization = std.Build.Step.Run.create(b, "reject packaged authorization without an assigned operation");
+    denied_authorization.addFileArg(missing_assignment_executable);
+    denied_authorization.addArg("authorize");
+    denied_authorization.setCwd(missing_assignment_directory.getDirectory());
+    denied_authorization.clearEnvironment();
+    denied_authorization.expectExitCode(1);
+    denied_authorization.expectStdOutEqual("");
+    denied_authorization.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_assignment.step.dependOn(&denied_authorization.step);
+
+    const missing_authorization_directory = b.addTempFiles();
+    const missing_authorization_executable = missing_authorization_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_authorization_directory.add(".sddtoolkit.json", configuration);
+    _ = missing_authorization_directory.add(".sddtoolkit/workflows/advance.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: advance
+        \\version: 1
+        \\shortcode: ADVN
+        \\invoke: core.empty-invocation@1
+        \\policy: core.capability-free@1
+        \\start: advance
+        \\steps:
+        \\  advance: { use: advance-model-request-lifecycle@1, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
+    );
+    const denied_request_lifecycle = std.Build.Step.Run.create(b, "reject packaged request invocation without prepared authorization");
+    denied_request_lifecycle.addFileArg(missing_authorization_executable);
+    denied_request_lifecycle.addArg("advance");
+    denied_request_lifecycle.setCwd(missing_authorization_directory.getDirectory());
+    denied_request_lifecycle.clearEnvironment();
+    denied_request_lifecycle.expectExitCode(1);
+    denied_request_lifecycle.expectStdOutEqual("");
+    denied_request_lifecycle.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_authorization.step.dependOn(&denied_request_lifecycle.step);
+
     const denied_toolchain = std.Build.Step.Run.create(b, "reject invalid toolchain only when selected");
     denied_toolchain.addFileArg(packaged_executable);
     denied_toolchain.addArg("toolchain-check");
@@ -164,6 +212,17 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     toolchain_command.clearEnvironment();
     toolchain_command.expectStdOutEqual("");
     toolchain_command.expectStdErrEqual("");
+
+    _ = toolchain_directory.add(".sddtoolkit/workflows/path-tokens.workflow.yaml", @import("../../src/test_fixtures/path_token_workflow.zig").yaml(b.allocator) catch @panic("build path-token fixture"));
+    _ = toolchain_directory.add(".sddtoolkit/workflows/sample.txt", "Use stories.md, spec.md and src/main.zig; https://example.test is inert text.");
+    _ = toolchain_directory.add("references/Hello/stories.md", "A simple business requirement.\n");
+    const path_token_command = std.Build.Step.Run.create(b, "run packaged shared naming-policy and path-token detector");
+    path_token_command.addFileArg(toolchain_executable);
+    path_token_command.addArgs(&.{ "reference-ingestion", "--feature", "Lexical/Example", "--reference", "Hello" });
+    path_token_command.setCwd(toolchain_directory.getDirectory());
+    path_token_command.clearEnvironment();
+    path_token_command.expectStdOutEqual("");
+    path_token_command.expectStdErrEqual("");
 
     const missing_config_directory = b.addTempFiles();
     const reference_command = std.Build.Step.Run.create(b, "run packaged config-root-relative feature and Unicode reference preflight");
@@ -196,6 +255,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     missing_config_command.step.dependOn(&denied_accounting.step);
     missing_config_command.step.dependOn(&denied_toolchain.step);
     missing_config_command.step.dependOn(&toolchain_command.step);
+    missing_config_command.step.dependOn(&path_token_command.step);
     missing_config_command.step.dependOn(&reference_command.step);
     missing_config_command.step.dependOn(&denied_reference.step);
     for ([_]struct { selector: []const u8, rejected: bool }{

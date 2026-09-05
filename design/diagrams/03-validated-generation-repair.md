@@ -1,144 +1,42 @@
-Proposed generation and repair flow under
-[ADR 0006](../decisions/0006-minimal-model-response.md). Result-schema
-compilation, request construction, candidate decoding/validation, accounting and
-provider-authorization primitives exist. Native YAML request preparation,
-attempt accounting and provider-operation assignment now
-retain one originating request under [ADR 0012](../decisions/0012-workflow-owned-model-request.md);
-complete provider-call and SDD production integration
-remains pending. Every retry/repair branch below belongs to the declared YAML
-graph. [ADR 0011](../decisions/0011-provider-owned-request-limits.md) prohibits
-local model-call size ceilings and guidance-fit gates.
+High-level flow for generating, validating and repairing model-produced content.
 
 ```mermaid
 flowchart TD
-    VG[Compiled YAML model-operation subgraph] --> AREQ[Build and validate complete AuthorityRequirementLedger<br/>from closed schemas obligations policies and accepted authority]
-    AREQ --> ARECON[AuthorityReconciliationOrchestrator<br/>one validated closed outcome per structural requirement]
-    ARECON -- All required authority resolved --> CTX[Select bounded authoritative context actions]
-    ARECON -- Same-stage clarification required --> GAPNEED[BuildAuthorityGapClarificationNeedAction<br/>registered subject question why and answer schema]
-    GAPNEED --> CL
-    ARECON -- Earlier owner requires rework --> REWORK[Section 24.5 owner-derived invalidation and regeneration<br/>no local substitute or shallower owner]
-    ARECON -- Administrative block --> STOP[Blocked, failed or cancelled execution; no candidate publication]
-    CTX --> PSTAGE{Declared operation uses technical principles}
-    PSTAGE -- Plan tasks or implement --> PSEL[Select every raw principle chunk/span in configured eligible filename categories<br/>free text is never ranked, summarized or omitted by inferred meaning]
-    PSTAGE -- Reference or specify --> GUIDE[Build initial deterministic guidance action<br/>closed schema, allowed IDs, preset rules and minimal example]
-    PSEL --> GUIDE
-    EPOCH[Closed request-purpose registry] --> MLEDGER[BuildInitialModelRequestIdentityLedgerAction<br/>fresh process-local epoch and empty ledger;<br/>initialize no request implicitly]
-    GUIDE --> UOWNER[BuildImmutableUnitOwnerIdAction<br/>compiled-step owner for generic work;<br/>canonical SDD owner tuple where required]
-    UOWNER --> MID[AssignModelRequestIdAction<br/>allocate one generation-purpose logical request ID from the current run-local ledger]
-    MLEDGER --> MID
-    MID --> MBIND[ValidateModelRequestBindingAction<br/>prove epoch, unit, compiled operation, purpose, ordinal and ledger membership]
-    MBIND --> REQ[BuildModelRequestAction<br/>retain originating identity, binding and resources across steps;<br/>send needed guidance, evidence and the already compiled compact result schema]
-    RSCHEMA[Workflow-registry-owned model-result-schema/v1 authority<br/>opaque closed tree and exact captured resource bytes;<br/>invalid schema rejects during workflow compilation] -. borrowed schema; no second parser .-> REQ
-    REQ --> MADV[AdvanceModelAttemptAccountingAction<br/>explicit YAML step; initial execution plus local retry-limit;<br/>runner publishes applied attempt evidence]
-    MADV --> PASSIGN[assign-provider-operation@1<br/>explicit inference or input-token-count;<br/>runner publishes applied assignment evidence]
-    PASSIGN --> PAUTH[Explicit authorization and remaining lifecycle operations<br/>YAML integration pending; no hidden provider call]
-    PAUTH --> MINVOKED[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to invoked exactly once]
-    MINVOKED --> MTOKEN{CheckWorkflowTokenBudgetAction<br/>current actual usage below execution budget?}
-    MTOKEN -- Exhausted or unavailable --> MTTERM[Runner budget error; invoke nothing]
-    MTTERM --> STOP
-    MTOKEN -- Available --> CALL[InvokeModelAction]
-    CALL --> OBS{ValidateProviderInvocationObservationAction<br/>exact runner-owned call association and complete-result eligibility}
-    OBS -- Invalid trusted association --> STOP
-    OBS -- Associated usage or non-delivery --> MUSE{ReconcileWorkflowTokenUsageAction<br/>record actual input plus output once}
-    MUSE -- Exceeded or unavailable --> STOP
-    MUSE -- Complete candidate within budget --> DECODE[DecodeModelEnvelopeAction<br/>parse one compact JSON object and retain trusted binding]
-    MUSE -- Failure, stopped or cancelled --> POUT[Compiled YAML provider outcome;<br/>no candidate decode or protocol repair]
+    START["Workflow reaches a model operation"] --> AUTH{"Required authority resolved?"}
+    AUTH -->|Yes| REQUEST["Build a request from current evidence,<br/>declared guidance and the required result schema"]
+    AUTH -->|Missing or conflicting| GAP["Route the gap to its owning workflow;<br/>request clarification or upstream rework"]
+    REQUEST --> ALLOW{"Token budget and operation authorization<br/>permit the next call?"}
+    ALLOW -->|Yes| CALL["Invoke the selected model"]
+    ALLOW -->|No| STOP["End blocked or failed;<br/>retain no successful output"]
+    CALL --> OBSERVE["Validate response association<br/>and account actual token usage"]
+    OBSERVE -->|Eligible complete result within budget| PARSE{"Response matches the required schema?"}
+    OBSERVE -->|Failure or exhausted budget| STOP
 
-    DECODE -- No typed result --> PROTO[YAML-declared protocol-retry operation]
-    PROTO --> PG[Build protocol-only retry guidance action]
-    PG --> PREQ[ValidateModelRequestBindingAction then BuildModelRequestAction<br/>protocol-only retry retaining the same exact logical request ID;<br/>do not allocate or repeat assigned-to-invoked]
-    PREQ --> PMADV{AdvanceModelAttemptAccountingAction<br/>reserve this retry against the YAML operation instance's explicit retry-limit}
-    PMADV -- Explicit retry limit exhausted; invoke nothing --> PTERM[AdvanceModelRequestLifecycleAction<br/>compare-and-swap invoked to terminal with invalid_exhausted]
-    PTERM --> STOP
-    PMADV -- Reserved --> PTOKEN{CheckWorkflowTokenBudgetAction<br/>same execution's actual usage}
-    PTOKEN -- Exhausted or unavailable --> PTERM
-    PTOKEN -- Available --> PCALL[InvokeModelAction]
-    PCALL --> OBS
-
-    DECODE -- Parsed result --> SCHEMA[ValidateModelPayloadSchemaAction<br/>exact bound compact result schema]
-    SCHEMA -- Invalid result schema --> PROTO
-    SCHEMA -- Valid --> ROUTE{Declared result variant;<br/>single object has no constant kind echo;<br/>oneOf alternatives require distinct root kind constants}
-
-    ROUTE -- clarification_needed --> NEED[ValidateClarificationNeedProposalAction]
-    NEED -- Valid genuine current authority gap; no operation retry consumed --> NACCEPT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with needs_user]
-    NACCEPT --> CL[ClarificationLifecycleOrchestrator]
-    CL --> USER[NeedsUser; preserve deduplicated clarifications and end execution;<br/>publish no partial workflow output and save no continuation]
-    NEED -- Repairable invalid need proposal --> CREJECT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with failed<br/>before allocating a distinct repair request]
-    NEED -- Non-repairable policy or environment defect --> CFAIL[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with blocked/failed fact]
-
-    ROUTE -- content --> UNIT[Stage-specific identity and unit-schema actions]
-    UNIT -- Invalid identity/schema --> CREJECT
-    UNIT --> FILEMODE{Stage file-reference contract}
-    FILEMODE -- Reference or specify --> SFILES[Engine artifact selectors and source/passive-literal IDs only<br/>reject unbound operational path-shaped prose]
-    FILEMODE -- Plan --> PFILES[Existing fileId or engine-materialized preset PathCandidateId<br/>raw create fallback only when explicitly enabled and fully validated]
-    FILEMODE -- Tasks --> TFILES[Approved PlanState fileIds and grants only]
-    FILEMODE -- Implement --> IFILES[Approved fileId, copy sourceId and operation-intent ID only]
-    SFILES --> VALIDATE[Stage-specific deterministic validators<br/>run before rendering or whole-workflow output]
-    PFILES --> VALIDATE
-    TFILES --> VALIDATE
-    IFILES --> VALIDATE
-    VALIDATE -- Asserted content lacks or conflicts with authority, one repair only --> CREJECT
-    VALIDATE -- Non-repairable policy or environment defect --> CFAIL
-    VALIDATE -- Repairable deterministic defect --> CREJECT
-    VALIDATE -- Unit valid --> FULL[Run full candidate validator set]
-    FULL -- Structurally and semantically valid candidate --> RECON2[Rebuild and validate the complete authority-reconciliation projection<br/>immediately before accepting the unit or stage candidate]
-    RECON2 -- All required authority resolved --> UACCEPT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with accepted content result]
-    RECON2 -- Same-stage gap --> GAPNEED
-    RECON2 -- Earlier-owner gap --> REWORK
-    RECON2 -- Administrative block --> CFAIL
-    UACCEPT --> OK[Accepted typed unit]
-    FULL -- Asserted content lacks or conflicts with authority, one repair only --> CREJECT
-    FULL -- Non-repairable --> CFAIL
-    FULL -- Repairable deterministic defect --> CREJECT
-    CREJECT --> REPAIR
-    CFAIL --> STOP
-
-    REPAIR[YAML-declared atomic-repair operation] --> ORDER[Order diagnostics action]
-    ORDER --> ONE[Select exactly one diagnostic action]
-    ONE --> PURPOSE{ClassifyRepairAuthorizationPurposeAction<br/>selected diagnostic, embedded validated SemanticFinding if present,<br/>operation-result kind and closed purpose table}
-    PURPOSE -- Ordinary atomic repair --> OAUTH[CreateRepairAuthorizationAction<br/>one candidate ID, pointer, operation and revision]
-    OAUTH --> OADV{AdvanceAtomicRepairAttemptAccountingAction<br/>compare-and-swap the YAML repair operation instance's explicit retry counter}
-    OADV -- Explicit retry limit exhausted; emit no transition --> STOP
-    OADV -- Advanced --> RGUIDE[Build preset-specific atomic repair guidance action]
-    PURPOSE -- unsupported_behavior SemanticFinding on content --> NAUTH[CreateNoInventionClarificationReplacementAuthorizationAction<br/>unit-local one-shot; authorize only whole operation-result replacement<br/>from content to schema-valid clarification_needed]
-    NAUTH --> RGUIDE
-    PURPOSE -- Nonrepairable evidence --> STOP
-    RGUIDE --> RIDENT[AssignModelRequestIdAction<br/>allocate a distinct purpose-bound repair request ID from the current run-local ledger;<br/>reuse the same immutable unit owner but never the generation request ID]
-    RIDENT --> RBIND[ValidateModelRequestBindingAction<br/>prove the exact repair authorization is the purpose owner]
-    RBIND --> RREQ[BuildModelRequestAction for the YAML-selected repair operation;<br/>the new repair request ID has its own ordinal sequence;<br/>any retry uses that operation instance's explicit retry-limit]
-    RREQ --> RMADV{AdvanceModelAttemptAccountingAction<br/>reserve the initial attempt or an explicitly bounded retry for this repair request ID}
-    RMADV -- Explicit retry limit exhausted on an invoked retry; invoke nothing --> RABORT[AdvanceModelRequestLifecycleAction<br/>compare-and-swap invoked to terminal with invalid_exhausted]
-    RABORT --> STOP
-    RMADV -- Reserved --> RINVOKED{Repair request lifecycle status}
-    RINVOKED -- assigned; first call --> RSTART[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to invoked]
-    RSTART --> RTOKEN{CheckWorkflowTokenBudgetAction<br/>same execution's actual usage}
-    RINVOKED -- already invoked; protocol retry --> RTOKEN
-    RTOKEN -- Exhausted or unavailable --> RABORT
-    RTOKEN -- Available --> RCALL[InvokeModelAction]
-    RCALL --> ROBS{ValidateProviderInvocationObservationAction<br/>exact repair-call association and complete-result eligibility}
-    ROBS -- Invalid trusted association --> STOP
-    ROBS -- Associated usage or non-delivery --> RUSE{ReconcileWorkflowTokenUsageAction<br/>record actual input plus output once}
-    RUSE -- Exceeded or unavailable --> STOP
-    RUSE -- Complete candidate within budget --> RDECODE[DecodeModelEnvelopeAction then ValidateModelPayloadSchemaAction<br/>compact repair result and bound schema]
-    RUSE -- Failure, stopped or cancelled --> POUT
-    RDECODE -- No typed repair --> RPROTO[YAML-declared protocol-retry operation]
-    RPROTO --> RPG[Build repair-protocol retry guidance]
-    RPG --> RPREQ[ValidateModelRequestBindingAction then BuildModelRequestAction<br/>protocol-only retry retaining the same repair request ID;<br/>do not allocate or repeat assigned-to-invoked]
-    RPREQ --> RMADV
-    RDECODE -- Typed repair --> RBOUND{ValidateRepairEnvelopeAction<br/>retained authorization, diagnostic and current candidate revision}
-    RBOUND -- Invalid or stale authority --> STOP
-    RBOUND -- Valid --> RSCOPE[ValidateRepairScopeAction<br/>prove authorized pointer/key set and one-operation scope;<br/>consume the unit-local one-shot only for no-invention replacement]
-    RSCOPE -- Invalid --> RPROTO
-    RSCOPE -- Valid --> MERGE[MergeAtomicRepairAction]
-    MERGE --> IMPACT[Run producing and dependent validators]
-    IMPACT -- Invalid within the repair operation's explicit retry limit --> CREJECT
-    IMPACT -- Invalid after the one operation-result replacement repair --> CFAIL
-    IMPACT -- Exhausted or non-repairable --> CFAIL
-    IMPACT -- Valid --> RROUTE{Repaired candidate result}
-    RROUTE -- clarification_needed --> NEED
-    RROUTE -- content from ordinary field repair --> VALIDATE
-    RROUTE -- content or malformed result after operation-result replacement authorization --> CFAIL
-
-    CL --> END[Preserve deduplicated clarifications and end needs_user;<br/>no saved continuation or partial workflow output]
-    OK --> CANDIDATE[Retain candidate for the remaining YAML steps;<br/>publish output only after whole-workflow success]
+    PARSE -->|No| RETRY{"Protocol retry available?"}
+    RETRY -->|Yes: retain the same request| ALLOW
+    RETRY -->|No| STOP
+    PARSE -->|Yes| RESULT{"Content or clarification request?"}
+    RESULT -->|Clarification| NEED["Validate the clarification request"]
+    NEED -->|Valid| GAP
+    NEED -->|Repairable defect| REPAIR
+    NEED -->|Non-repairable| STOP
+    RESULT -->|Content or repair| APPLY["Validate content and any repair authorization;<br/>merge only authorized changes"]
+    APPLY --> CHECK{"Impacted units and complete candidate valid<br/>with current supporting authority?"}
+    CHECK -->|Yes| ACCEPT["Accept the typed candidate<br/>for the remaining workflow steps"]
+    CHECK -->|Repairable mechanical defect| REPAIR["Authorize the smallest repair within its retry limit;<br/>preserve valid content and create a distinct repair request"]
+    REPAIR -->|Authorized| ALLOW
+    REPAIR -->|Stale, disallowed or exhausted| STOP
+    CHECK -->|Missing authority| GAP
+    CHECK -->|Non-repairable defect| STOP
+    CHECK -->|Unsupported asserted content| REPLACE["Allow one authorized replacement<br/>with a valid clarification request"]
+    REPLACE -->|Valid clarification| GAP
+    REPLACE -->|Rejected or exhausted| STOP
+    GAP --> END["End the current execution;<br/>preserve clarification questions and answers"]
 ```
+
+A request retains its originating workflow-step identity, model binding and
+resources as it passes between steps. Protocol retries retain that request;
+repairs receive distinct requests. Every model call follows the declared
+authorization, token accounting and retry rules. Provider failure or cancellation
+keeps its own outcome. Semantic review is model-assisted; accepted content is
+published only after the complete workflow succeeds.

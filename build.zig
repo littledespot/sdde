@@ -213,6 +213,15 @@ pub fn build(b: *std.Build) void {
     const extraction_step = b.step("test-reference-extraction", "Test closed reference claim candidates and complete chunk accounting");
     extraction_step.dependOn(&b.addRunArtifact(extraction_tests).step);
 
+    const path_token_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/path_token_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const path_token_step = b.step("test-path-tokens", "Test shared naming-policy compilation and inert path-token detection");
+    path_token_step.dependOn(&b.addRunArtifact(path_token_tests).step);
+
     const feature_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/feature_directory_test.zig"),
         .target = target,

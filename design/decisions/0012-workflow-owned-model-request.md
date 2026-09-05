@@ -71,6 +71,33 @@ Rejected deltas publish neither; consuming evidence does not remove an open
 operation. No authorization preparation, API call, retry, token charge or
 persistence is implicit. Later lifecycle phases remain separate integration work.
 
+## Authorization preparation integration (implemented 2026-09-06)
+
+Authorization preparation is also integrated through the existing
+`prepare-provider-operation-authorization@1` action and runner-private lease
+table. YAML supplies only explicit positive `timeout-ms`; the runner binds the
+deadline to the exact retained request, attempt, assignment, model and input.
+The separately policy-permitted `provider-authorization` port can prepare only
+from preloaded state, without I/O, refresh or a model call. Its sealed result
+retains only an opaque lease reference or closed failure/cancellation facts.
+The runner validates publication and consumers, releases rejected/expired
+leases and destroys remaining capabilities at execution cleanup. No additional
+ledger, persisted handoff, implicit retry or token charge is introduced.
+
+## Request invocation-state integration (implemented 2026-09-06)
+
+Request invocation state is integrated by `advance-model-request-lifecycle@1`
+with explicit `transition: invoked`. The existing action creates the immutable
+`assigned -> invoked` successor; only validated runner publication makes it
+current. Request-ledger replacements are checked at their shared boundary:
+assignment and lifecycle changes cannot impersonate each other, skip revisions
+or change another request. The runner retains the exact applied snapshot while
+all request/binding/resource/attempt/lease references stay unchanged. Prepared
+authorization is required and rechecked; cancellation or rejected publication
+leaves the prior ledger current. The provider operation stays assigned and no
+API call, token charge, new limit or persistence occurs. Request terminalization
+and provider invocation remain separate work.
+
 ## Acceptance
 
 Compile and execute arbitrary YAML using the native preparation bindings and
@@ -78,6 +105,9 @@ test-only provider contracts. Prove exact identity/resource retention across
 different steps, missing-input and rebinding rejection, malformed SDD owners,
 cancellation, allocation cleanup and isolation between executions. Test-only
 assignment cases also cover duplicate/open operations, both kinds, stale/foreign
-evidence, forged transitions and compiler-permission tampering. Test-only
+evidence, forged transitions and compiler-permission tampering. Authorization
+cases cover both operation kinds, missing/invalid deadlines, denied capability,
+failed preparation, forged/mismatched deposits and results, duplicate use,
+expiration, cancellation and allocation-failure cleanup. Test-only
 provider contracts do not enter production composition. Provider invocation
 integration and Bedrock remain separate increments.

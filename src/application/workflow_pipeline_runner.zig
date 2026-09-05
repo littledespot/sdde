@@ -21,6 +21,13 @@ const identity = @import("../domain/model_request_identity.zig");
 const values = @import("pipeline_values.zig");
 const lifecycle = @import("../domain/provider_operation_lifecycle.zig");
 const operation_selection = @import("../domain/workflow_provider_operation.zig");
+const authorization_selection = @import("../domain/workflow_provider_authorization.zig");
+const authorization_binding = @import("workflow_provider_authorization.zig");
+const authorization_workflow = @import("provider_authorization_workflow.zig");
+const authorization_result = @import("../domain/provider_authorization_result.zig");
+const lease = @import("../ports/provider_authorization_lease.zig");
+const request_lifecycle_selection = @import("../domain/workflow_model_request_lifecycle.zig");
+const request_lifecycle_binding = @import("workflow_model_request_lifecycle.zig");
 
 const ExpectedAccounting = union(enum) {
     none,
@@ -39,6 +46,7 @@ pub const Runner = struct {
     envelope: envelope_module.PipelineEnvelope,
     token_accounting: workflow_token_runner.Runner,
     model_accounting: ?model_accounting.State = null,
+    provider_clock: ?lease.Clock = null,
     retry_execution_counts: [definition.max_steps]u64 = [_]u64{0} ** definition.max_steps,
 
     pub fn init(
@@ -65,8 +73,8 @@ pub const Runner = struct {
     }
 
     pub fn deinit(self: *Runner) void {
-        self.envelope.deinit();
         if (self.model_accounting) |*state| state.deinit();
+        self.envelope.deinit();
         self.token_accounting.deinit();
         self.* = undefined;
     }
@@ -88,7 +96,7 @@ pub const Runner = struct {
             return .{ .rejected = .authority };
         }
         var candidate = entry.invoke(.{ .invocation = .{ .arguments = self.selected.invocation.arguments } }) catch {
-            return .{ .outcome = .failed };
+            return .{ .rejected = .operation_failed };
         };
         defer self.envelope.discard(&candidate.delta);
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
@@ -127,6 +135,13 @@ pub const Runner = struct {
             if (!std.meta.eql(expected, step.model orelse return .{ .outcome = .failed })) return .{ .outcome = .failed };
         } else if (step.model != null) return .{ .outcome = .failed };
         const input_data = self.envelope.view(stepPipelineContract(step.*)) catch return .{ .outcome = .invalid };
+        const advances_request = request_lifecycle_selection.advances(step.replaces, step.produces);
+        if (self.model_accounting) |state| {
+            if (input_data.contains(.model_request_identity_ledger)) {
+                const current = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
+                if (current != identity.ledger(state.requests)) return .{ .rejected = .authority };
+            }
+        }
         var resource_buffer: [definition.max_parameters]compilation.CompiledResource = undefined;
         const resources = bindStepResources(
             step.parameters,
@@ -153,6 +168,11 @@ pub const Runner = struct {
             const evidence = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
             const request = retained_request orelse return .{ .rejected = .authority };
             state.validateAssignment(evidence, request.prepared().?) catch return .{ .rejected = .authority };
+            if (input_data.contains(.provider_authorization_result)) {
+                const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
+                authorization_binding.validateConsumer(&state.authorization_leases, result, request, evidence.record().id, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return authorizationRejected(err);
+                if (advances_request) authorization_binding.requirePrepared(result) catch |err| return authorizationRejected(err);
+            }
         }
         var resolved_binding = self.resolveModelBinding(step.*) catch {
             return .{ .outcome = .failed };
@@ -168,7 +188,7 @@ pub const Runner = struct {
         var expected: ExpectedAccounting = .none;
         if (step.runner_accounting == .increment_model_attempt) {
             const current_requests = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
-            if (self.model_accounting == null) self.model_accounting = model_accounting.State.init(self.allocator, current_requests) catch return .{ .outcome = .failed };
+            if (self.model_accounting == null) self.model_accounting = model_accounting.State.init(self.allocator, current_requests) catch return .{ .rejected = .operation_failed };
             const state = &self.model_accounting.?;
             const current = attempt.accounting(state.attempts);
             if (!current.stageRunEpochId().eql(current_requests.stageRunEpochId())) return .{ .rejected = .authority };
@@ -194,6 +214,19 @@ pub const Runner = struct {
                 return .{ .outcome = .failed };
             };
         }
+        var authorization: ?authorization_binding.Binding = null;
+        var authorization_published = false;
+        defer if (authorization) |bound| {
+            if (!authorization_published) bound.cancel();
+        };
+        if (authorization_selection.prepares(step.produces)) {
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
+            const evidence = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
+            authorization = authorization_binding.Binding.allocate(&state.authorization_leases, retained_request orelse return .{ .rejected = .authority }, evidence.record().id, authorization_selection.timeout(step.parameters) orelse return .{ .rejected = .authority }, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return switch (err) {
+                error.OutOfMemory => .{ .rejected = .operation_failed },
+                else => |failure| authorizationRejected(failure),
+            };
+        }
         var candidate = entry.invoke(.{ .step = .{
             .data = input_data,
             .step = step,
@@ -201,12 +234,25 @@ pub const Runner = struct {
             .model_binding = if (retained_request) |request| request.binding() else if (resolved_binding) |*value| value else null,
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
             .model_attempt = attempt_input,
+            .model_request_lifecycle = if (advances_request) self.model_accounting.?.current_operations else null,
             .provider_operation = provider_input,
-        } }) catch return .{ .outcome = .failed };
+            .provider_authorization = if (authorization) |bound| .{ .facts = bound.facts, .slot = bound.slot, .runtime = bound.runtime } else null,
+        } }) catch return .{ .rejected = .operation_failed };
         defer self.envelope.discard(&candidate.delta);
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .outcome = .failed };
-        return self.applyCandidate(stepPipelineContract(step.*), &candidate, expected);
+        if (advances_request) {
+            const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
+            const assigned = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
+            authorization_binding.validateConsumer(&self.model_accounting.?.authorization_leases, result, retained_request.?, assigned.record().id, self.provider_clock.?, self.runtime) catch |err| return authorizationRejected(err);
+        }
+        const prepared = if (authorization) |bound| prepared: {
+            const result = values.read(&.{ .slots = candidate.delta.data_writes }, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
+            break :prepared bound.validate(result, candidate.outcome) catch |err| return authorizationRejected(err);
+        } else false;
+        const applied = self.applyCandidate(stepPipelineContract(step.*), &candidate, expected);
+        authorization_published = prepared and applied == .outcome and applied.outcome == .ok;
+        return applied;
     }
 
     pub fn tokenLedger(self: *const Runner) *const @import("../domain/workflow_token_accounting.zig").Ledger {
@@ -258,6 +304,14 @@ pub const Runner = struct {
     }
 
     fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: *execution.Candidate, expected: ExpectedAccounting) execution.Applied {
+        var request_owner: ?*identity.Owner = null;
+        defer if (request_owner) |owner| identity.deinitOwner(owner);
+        if (candidate.delta.data_replacements[@intFromEnum(pipeline.DataKey.model_request_identity_ledger)] != null) {
+            if (candidate.outcome != .ok) return .{ .rejected = .authority };
+            const input = self.envelope.view(contract) catch return .{ .rejected = .authority };
+            const successor = request_lifecycle_binding.validateReplacement(&input, contract, &candidate.delta) catch return .{ .rejected = .authority };
+            if (self.model_accounting != null) request_owner = identity.retainLedger(successor) catch return .{ .rejected = .operation_failed };
+        }
         var pending: ?model_accounting.Pending = null;
         defer if (pending) |unapplied| unapplied.discard();
         if (expected != .none) {
@@ -277,17 +331,21 @@ pub const Runner = struct {
             switch (expected) {
                 .attempt => |classification| {
                     if (transition != .increment_model_attempt) return .{ .outcome = .invalid };
-                    pending = state.prepare(current, request.id(), classification, transition.increment_model_attempt) catch |err| return .{ .outcome = if (err == error.OutOfMemory) .failed else .invalid };
+                    pending = state.prepare(current, request.id(), classification, transition.increment_model_attempt) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .outcome = .invalid };
                 },
                 .assignment => |kind| {
                     if (transition != .advance_provider_operation) return .{ .outcome = .invalid };
-                    pending = state.prepareAssignment(current, request.prepared().?, kind, transition.advance_provider_operation) catch |err| return .{ .outcome = if (err == error.OutOfMemory) .failed else .invalid };
+                    pending = state.prepareAssignment(current, request.prepared().?, kind, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .outcome = .invalid };
                 },
                 .none => unreachable,
             }
             candidate.delta.data_writes[key] = pending.?.value;
         }
         self.envelope.apply(contract, &candidate.delta, candidate.outcome) catch return .{ .outcome = .invalid };
+        if (request_owner) |owner| {
+            self.model_accounting.?.replaceRequests(owner);
+            request_owner = null;
+        }
         if (pending) |applied| {
             self.model_accounting.?.commit(applied);
             pending = null;
@@ -299,6 +357,14 @@ pub const Runner = struct {
         return .{ .outcome = candidate.outcome };
     }
 };
+
+fn authorizationRejected(err: lease.Error) execution.Applied {
+    return .{ .rejected = switch (err) {
+        error.Cancelled => .cancelled,
+        error.AuthorizationExpired => .deadline_exhausted,
+        error.AuthorizationDenied, error.ClockUnavailable => .authority,
+    } };
+}
 
 fn stepPipelineContract(step: compilation.CompiledStep) pipeline.NodeContract {
     return .{

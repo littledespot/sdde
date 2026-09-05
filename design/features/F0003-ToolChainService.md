@@ -55,6 +55,13 @@ or second authority is introduced. A borrowed service cannot outlive its
 envelope value; replacement, invalidation, rejection, and execution cleanup
 release native owners through the shared value lifecycle.
 
+Registered policy descriptors now include explicit naming rules. The separate,
+pure `compile-naming-policy@1` operation normalizes all selected rules from
+`ValidToolchain` for the shared lexical detector; it never infers rules from
+package names or source examples. Full environment/file-kind authorization and
+repository discovery remain separate work. See
+[F0100 §3.6](F0100-SpecWorkflow.md#36-shared-naming-policy-and-path-token-grammar).
+
 ### Workflow bindings
 
 The single operation registry exposes the existing action IDs below. Each has
@@ -72,6 +79,7 @@ The YAML graph owns ordering; no combined setup operation hides this sequence.
 | `resolve-toolchain-inheritance@1` | `resolved_toolchain_inheritance` |
 | `compose-toolchain@1` | `composed_toolchain` |
 | `validate-toolchain-safety@1` | `valid_toolchain` |
+| `compile-naming-policy@1` | `compiled_naming_policy` |
 
 Composition binds each source port to its exact F0004 root capability after
 startup, before invocation. Roots are not copied into workflow data or supplied
@@ -208,6 +216,30 @@ or pre-safety policy. Its sole consumer-visible value is the borrowed immutable
 no service-consumer exception; intermediate workflow keys are not service authority.
 Persistence of validated bootstrap authority
 remains runner/transaction work outside this read-only boundary.
+
+### 3.5 Registered lexical naming rules
+
+Every native `PolicyContract` has a required `naming` collection; an empty
+collection is explicit. Each rule has a stable registry-wide unique ID, kind,
+value and case-sensitivity flag. Supported kinds are compound `extension`,
+`exact`, basename `glob`, `manifest` and `reserved`. The native glob subset
+supports `*`, `?` and ASCII character classes/ranges, with whole-token matching;
+separators, globstar, braces, negation and regex fallback are rejected. Matching
+uses Unicode scalars after NFC and the declared case folding.
+
+Safety validates every registered descriptor, including unselected entries,
+and owns immutable copies of selected rules. Bounds are 256 rules per policy,
+128 bytes per rule ID and 255 bytes per value. The compiler preserves complete
+selected-policy/rule order and provenance, including explicitly empty policies,
+and binds the result to the exact execution-local `ValidToolchain` identity.
+Consumers reject stale, omitted, additional or altered rules.
+
+The existing project/preset YAML schemas are unchanged: they select registered
+policy IDs, never supply raw rules. Engine filenames reuse their owning artifact
+and configuration constants. No second policy registry, runtime fallback,
+filesystem grant or persisted naming state is introduced. RE2 rules and full
+environment/repository-bound policy compilation are not implemented by this
+lexical increment.
 
 ## 4. Read-only and logging boundary
 

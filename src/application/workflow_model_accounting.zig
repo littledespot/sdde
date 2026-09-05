@@ -5,6 +5,7 @@ const lifecycle = @import("../domain/provider_operation_lifecycle.zig");
 const values = @import("pipeline_values.zig");
 const data = @import("../domain/pipeline_data.zig");
 const provider = @import("../domain/llm_provider_operation.zig");
+const leases = @import("provider_authorization_lease_table.zig");
 
 pub const schema = values.schema(.accounted_model_attempt, accounting.AccountedAttempt, 1, null);
 pub const operation_schema = values.schema(.assigned_provider_operation, lifecycle.AssignedOperation, 1, null);
@@ -16,6 +17,7 @@ pub const State = struct {
     attempts: *accounting.Owner,
     operations: *lifecycle.Owner,
     current_operations: *const lifecycle.Ledger,
+    authorization_leases: leases.Table,
     requests: *identity.Owner,
 
     pub fn init(allocator: std.mem.Allocator, requests: *const identity.ModelRequestIdentityLedger) Error!State {
@@ -24,10 +26,11 @@ pub const State = struct {
         const attempts = try accounting.createInitial(allocator, requests.stageRunEpochId());
         errdefer accounting.deinitOwner(attempts);
         const operations = try lifecycle.createInitial(allocator, requests.stageRunEpochId());
-        return .{ .allocator = allocator, .attempts = attempts, .operations = operations, .current_operations = lifecycle.initial(operations), .requests = retained };
+        return .{ .allocator = allocator, .attempts = attempts, .operations = operations, .current_operations = lifecycle.initial(operations), .authorization_leases = leases.Table.init(allocator, lifecycle.initial(operations)), .requests = retained };
     }
 
     pub fn deinit(self: *State) void {
+        self.authorization_leases.deinit();
         lifecycle.deinitOwner(self.operations);
         accounting.deinitOwner(self.attempts);
         identity.deinitOwner(self.requests);
@@ -57,6 +60,12 @@ pub const State = struct {
     pub fn operationAuthority(self: *const State, requests: *const identity.ModelRequestIdentityLedger) lifecycle.Authority {
         const current = accounting.accounting(self.attempts);
         return .{ .requests = requests, .expected_request_revision = requests.revision(), .attempts = current, .expected_attempt_revision = current.revision() };
+    }
+
+    /// Retain the exact envelope snapshot; this is not a separately advanced ledger.
+    pub fn replaceRequests(self: *State, requests: *identity.Owner) void {
+        identity.deinitOwner(self.requests);
+        self.requests = requests;
     }
 
     pub fn prepareAssignment(self: *const State, requests: *const identity.ModelRequestIdentityLedger, request: *const provider.IdentifiedProviderNeutralModelRequest, kind: provider.ProviderOperationKind, transition: lifecycle.Transition) Error!Pending {
@@ -98,10 +107,12 @@ pub const State = struct {
                 accounting.deinitOwner(self.attempts);
                 self.attempts = next;
             },
-            .operations => |next| self.current_operations = next,
+            .operations => |next| {
+                self.current_operations = next;
+                self.authorization_leases.update(next);
+            },
         }
-        identity.deinitOwner(self.requests);
-        self.requests = pending.requests;
+        self.replaceRequests(pending.requests);
     }
 };
 

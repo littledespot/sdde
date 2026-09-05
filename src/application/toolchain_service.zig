@@ -14,7 +14,7 @@ test "exposes only the same borrowed safety-valid toolchain" {
         @import("std").testing.allocator,
         .{ .packages = &.{}, .policies = &.{} },
         .{ .contracts = &.{
-            .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true },
+            .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true, .naming = &.{} },
         } },
     );
     defer safety.deinitOwner(owner);

@@ -1,4 +1,8 @@
 const std = @import("std");
+pub const specification_filename = "spec.md";
+pub const reference_context_filename = "reference-context.md";
+pub const clarification_state_filename = "clarifications.json";
+pub const workflow_state_filename = "workflow.json";
 const bootstrap = @import("bootstrap_root_registry.zig");
 const log_binding = @import("feature_log_binding.zig");
 const feature_identity = @import("feature_identity.zig");
@@ -33,11 +37,11 @@ pub fn resolveFeaturePaths(allocator: std.mem.Allocator, configured: FeatureRoot
         allocator.free(entry.project_relative);
     };
     inline for (.{
-        .{ Artifact.specification, Root.specs, "spec.md" },
-        .{ Artifact.reference_context, Root.specs, "reference-context.md" },
+        .{ Artifact.specification, Root.specs, specification_filename },
+        .{ Artifact.reference_context, Root.specs, reference_context_filename },
         .{ Artifact.clarification_forms, Root.specs, "clarify" },
-        .{ Artifact.clarification_state, Root.workflows, "state/clarifications.json" },
-        .{ Artifact.workflow_state, Root.workflows, "state/workflow.json" },
+        .{ Artifact.clarification_state, Root.workflows, "state/" ++ clarification_state_filename },
+        .{ Artifact.workflow_state, Root.workflows, "state/" ++ workflow_state_filename },
         .{ Artifact.event_logs, Root.specs, "logs/events" },
         .{ Artifact.prompt_logs, Root.specs, "logs/prompts" },
     }) |item| {

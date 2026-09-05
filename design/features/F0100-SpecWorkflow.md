@@ -311,6 +311,47 @@ and retain only execution-local predecessors; they impose no model-call byte
 ceiling. The test-only YAML path runs the five operations with scripted results
 and does not write artifacts, accept clarifications or mark a stage complete.
 
+### 3.6 Shared naming-policy and path-token grammar
+
+Replacing the temporary claim strings requires the shared `BusinessText` /
+`ReferenceSemanticText` and passive-literal contracts in Design §7.1. Their
+inline-literal validator must use §11's `SupersetPathTokenGrammar`, compiled
+from all resolved environment naming/extension rules, reserved/manifest names
+and current reference basenames. A unit allowlist cannot narrow that detector.
+
+The initial native boundary is implemented through three pure registered
+operations:
+
+| Operation | Required inputs → output |
+| --- | --- |
+| `compile-naming-policy@1` | `valid_toolchain` → `compiled_naming_policy` |
+| `build-superset-path-token-grammar@1` | Compiled naming policy, current toolchain and citable reference inputs → `path_token_grammar` |
+| `scan-path-tokens@1` | Grammar, current toolchain, citable inputs and required `text` data-resource parameter → `path_token_scan` |
+
+[F0003 §3.5](F0003-ToolChainService.md#35-registered-lexical-naming-rules) owns
+the registered rule contract. Grammar construction includes every selected rule
+and captured reference basename, with exact toolchain, feature and reference
+bindings; omitted, altered or stale inputs fail. The shared lexer detects
+path/drive/UNC/URI forms, encoded separators/dots and policy/reference filename
+tokens. Unicode punctuation separates lexemes while path/URI punctuation stays
+internal. Matches retain end-exclusive byte spans into the owned original text;
+NFC/case folding never changes those offsets. No unit allowlist narrows scanning.
+
+`ok` means scanning succeeded, **not** that matched text is valid or any path is
+authorized. The YAML registry remains generic. `core.reference-ingestion@1`
+permits the existing toolchain read/parser operations so selected YAML can
+compose these prerequisites; unused operations perform no reads. Tests compose
+the existing toolchain and ingestion fixtures, without a required extra user
+workflow, model calls or artifact writes.
+
+This is the native registered-rule lexical slice, not the full proposed
+environment/repository-bound grammar: RE2 rules and repository discovery remain
+unimplemented. Source examples cannot supply missing runtime authority. Next,
+replace the temporary extraction strings with shared typed text, register
+source-backed inert literals, validate exact unit-local IDs and remove the
+temporary reader. Scanning alone does not implement those validation gates or
+permit specification publication.
+
 ## 4. Required logical coverage
 
 The compiled registered contracts collectively cover:
@@ -560,6 +601,10 @@ YAML definition.
   failures. `zig build verify` additionally covers native YAML dependencies,
   rejection before continuation, cancellation and the packaged read-only
   ingestion path;
+- `zig build test-path-tokens` covers closed naming rules, selected-policy
+  coverage, NFC/case folding, original-byte spans, stale bindings, ownership
+  and allocation failures. `zig build verify` also exercises these operations
+  through renamed YAML and the packaged executable, without artifact writes;
 - closed YAML fixtures reject missing, unknown, duplicate, and wrong-kind
   fields and every prohibited operational value;
 - compiler tests cover exact reference resolution, complete outcomes, graph

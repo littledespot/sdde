@@ -440,6 +440,36 @@ pub fn ledger(owner: *const Owner) *const ModelRequestIdentityLedger {
     return @ptrCast(&ownerStorageConst(owner).ledger);
 }
 
+/// Validate the exact immutable successor without constructing another ledger.
+pub fn validateLifecycleSuccessor(current: *const ModelRequestIdentityLedger, next: *const ModelRequestIdentityLedger, request_id: *const ModelRequestId, expected_status: RequestStatus, transition: LifecycleTransition) ValidationError!void {
+    const node = try validateSuccessor(current, next);
+    const prior = current.record(request_id) orelse return error.ModelRequestNotFound;
+    if (current.canonicalRequestId(request_id) != request_id or node.canonical_model_request_id != request_id or
+        next.recordCount() != current.recordCount()) return error.ModelRequestBindingInvalid;
+    if (prior.status != expected_status) return error.ModelRequestStatusConflict;
+    const expected = try transitionRecord(prior.*, transition);
+    if (node.record.status != expected.status or node.record.terminal_reason != expected.terminal_reason) return error.InvalidModelRequestLifecycleTransition;
+}
+
+/// Assignment and lifecycle replacements cannot masquerade as one another.
+pub fn validateAssignmentSuccessor(current: *const ModelRequestIdentityLedger, next: *const ModelRequestIdentityLedger, request_id: *const ModelRequestId) ValidationError!void {
+    const node = try validateSuccessor(current, next);
+    const count = std.math.add(usize, current.recordCount(), 1) catch return error.ModelRequestOrdinalExhausted;
+    if (node.canonical_model_request_id != request_id or current.containsRequest(request_id) or
+        next.recordCount() != count or node.record.status != .assigned or node.record.terminal_reason != null) return error.ModelRequestBindingInvalid;
+}
+
+fn validateSuccessor(current: *const ModelRequestIdentityLedger, next: *const ModelRequestIdentityLedger) ValidationError!*const RecordNode {
+    const prior = ledgerStorage(current);
+    const value = ledgerStorage(next);
+    const revision = std.math.add(u64, prior.revision.value, 1) catch return error.ModelRequestRevisionExhausted;
+    if (ownerStorageConst(value.owner).previous_owner != prior.owner or value.revision.value != revision or
+        !value.stage_run_epoch_id.eql(prior.stage_run_epoch_id)) return error.ModelRequestRevisionConflict;
+    const node = value.latest_record orelse return error.ModelRequestNotFound;
+    if (node.previous != prior.latest_record) return error.ModelRequestRevisionConflict;
+    return node;
+}
+
 pub fn retainLedger(current: *const ModelRequestIdentityLedger) ValidationError!*Owner {
     const owner = ledgerStorage(current).owner;
     try retainOwner(owner);

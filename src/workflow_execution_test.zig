@@ -213,6 +213,30 @@ test "runner rejects an operation binding that differs from compiled authority" 
     try std.testing.expectEqual(@as(usize, 0), barrier.calls);
 }
 
+test "unexpected binding failure never follows a declared failed transition" {
+    var steps = [_]compilation.CompiledStep{test_steps[0]} ** 2;
+    steps[0].id = .{ .bytes = "first" };
+    steps[1].id = .{ .bytes = "later" };
+    const transitions = [_]workflow.Transition{
+        .{ .from = steps[0].id, .outcome = .failed, .target = .{ .step = steps[1].id } },
+        .{ .from = steps[1].id, .outcome = .ok, .target = .{ .terminal = .ok } },
+    };
+    var graph = try testGraph();
+    graph.authority.steps = &steps;
+    graph.authority.start_step_id = steps[0].id;
+    graph.authority.transitions = &transitions;
+    graph.authority.maximum_step_executions = 2;
+    var control: OperationControl = .{ .state = .{ .outcome = .ok, .fail_call = 1 } };
+    var registry = testRegistry(&control);
+    var barrier: FakeBarrier = .{};
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
+    var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+    try std.testing.expectEqual(.failed, engine.run(children.bindings()).execution);
+    try std.testing.expectEqual(@as(usize, 1), control.state.calls);
+    try std.testing.expectEqual(@as(usize, 0), barrier.calls);
+}
+
 const TestEngineBindings = struct {
     graph: *const compilation.CompiledWorkflow,
     runner: *runner_module.Runner,
@@ -276,6 +300,7 @@ const OperationState = struct {
     expected_steps: []const []const u8 = &.{},
     expected_resource_id: ?[]const u8 = null,
     calls: usize = 0,
+    fail_call: ?usize = null,
 };
 const FakeBarrier = struct {
     calls: usize = 0,
@@ -343,6 +368,7 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
             else
                 control.outcome;
             control.calls += 1;
+            if (control.fail_call == control.calls) return error.OperationExecutionFailed;
             var delta: pipeline.NodeDelta = .{};
             step_input.log.log(&delta, .{ .event_type = .action_completed }) catch return error.OperationExecutionFailed;
             break :step .{ .outcome = outcome, .delta = delta };

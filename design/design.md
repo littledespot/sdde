@@ -414,6 +414,11 @@ registry and must fit the compiled policy ceiling. Guard rejection terminates
 execution without following a workflow transition; it introduces no hidden
 domain validation, authority refresh, or alternative evidence store.
 
+An unexpected binding error terminates execution without applying a delta or
+following a YAML outcome edge. Expected failures return their declared typed
+data and follow the ordinary validated YAML outcome; no successor may run on
+an error that failed to produce its promised inputs.
+
 ### 6.1 Action rules
 
 Every action must:
@@ -1399,6 +1404,27 @@ publishes the immutable ledger successor and sealed `assigned_provider_operation
 view together. Consuming evidence cannot erase an unfinished operation or permit
 a retry. This step neither invokes a provider nor prepares authorization, counts
 tokens or persists records. Those operations remain explicit separate YAML work.
+
+Native `prepare-provider-operation-authorization@1` now consumes that same
+request, attempt and assignment through a separate YAML step with required
+positive `timeout-ms`. The runner derives one absolute monotonic deadline,
+allocates the existing private lease slot and validates exact result correlation
+before publication. The action holds only the policy-permitted preloaded
+`provider-authorization` port: no I/O, refresh or provider call is allowed.
+Its sealed result contains a lease reference or closed failure/cancellation
+facts, never a backing capability. Rejected/expired preparation and execution
+cleanup release unused leases. Invocation and lifecycle closure remain explicit
+separate integration work; no token charge or persistent record is added.
+
+Native `advance-model-request-lifecycle@1` with `transition: invoked` now exposes
+the existing logical-request `assigned -> invoked` action. The runner requires
+the exact prepared authorization and validates one direct immutable successor
+before replacing the request ledger. It retains that published snapshot and
+rejects stale, foreign, duplicate, skipped or assignment-disguised updates.
+Authorization is rechecked before publication; rejection preserves the prior
+ledger. The prepared request, attempt and lease are unchanged and the provider
+operation remains assigned. This step performs no API call or token accounting;
+provider-operation invocation and request closure remain separate YAML work.
 
 Each workflow-declared result schema defines the entire compact response;
 there is no generic open payload or repeated engine metadata. Repair operations

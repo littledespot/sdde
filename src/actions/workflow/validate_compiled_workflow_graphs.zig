@@ -39,7 +39,9 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
         if (!@import("../../domain/workflow_operation.zig").validAccounting(step.runner_accounting, step.requires, step.produces, step.side_effect, step.retry_authority != null)) return invalid();
         if (!@import("../../domain/workflow_capability.zig").permits(graph.authority.allowed_capabilities, step.capabilities)) return invalid();
         if (!@import("../../domain/workflow_model.zig").validProjection(step)) return invalid();
+        if (!@import("../../domain/workflow_model_request_lifecycle.zig").validProjection(step)) return invalid();
         if (!@import("../../domain/workflow_provider_operation.zig").validProjection(step)) return invalid();
+        if (!@import("../../domain/workflow_provider_authorization.zig").validProjection(step)) return invalid();
         const retry_parameter = findParameter(step.parameters, workflow_retry.parameter_id);
         if (step.retry_authority) |authority| {
             if (!authority.isValid() or

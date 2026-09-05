@@ -7,6 +7,13 @@ const c = @cImport({
 
 pub const Error = std.mem.Allocator.Error || error{ InvalidUtf8, NormalizationLimitExceeded, NormalizationFailed };
 
+pub fn lexicalBoundary(scalar: u21) bool {
+    return switch (c.utf8proc_category(@intCast(scalar))) {
+        c.UTF8PROC_CATEGORY_PC, c.UTF8PROC_CATEGORY_PD, c.UTF8PROC_CATEGORY_PS, c.UTF8PROC_CATEGORY_PE, c.UTF8PROC_CATEGORY_PI, c.UTF8PROC_CATEGORY_PF, c.UTF8PROC_CATEGORY_PO, c.UTF8PROC_CATEGORY_ZS, c.UTF8PROC_CATEGORY_ZL, c.UTF8PROC_CATEGORY_ZP, c.UTF8PROC_CATEGORY_CC, c.UTF8PROC_CATEGORY_CF => true,
+        else => false,
+    };
+}
+
 pub fn nfc(allocator: std.mem.Allocator, input: []const u8, maximum_bytes: usize) Error![]u8 {
     return transform(allocator, input, maximum_bytes, c.UTF8PROC_STABLE | c.UTF8PROC_COMPOSE);
 }

@@ -582,6 +582,26 @@ RepairAccountingTransition =
 // Publishing this view and its ledger successor is one runner application.
 // Its value retains operation/request owners; no lease or provider call occurs.
 
+// prepare-provider-operation-authorization@1 requires that same request,
+// attempt and assignment plus explicit positive timeout-ms. The runner binds
+// one deadline and private slot; the action uses only its preloaded no-I/O port.
+ProviderAuthorizationResult = opaque {
+  outcome: prepared(ValidatedProviderAuthorizationLeaseRef)
+         | failed(ProviderFailure)
+         | cancelled(ProviderOperationId)
+}
+// The runner validates exact slot/association before publishing this value.
+// Backing capabilities remain solely in its existing single-use lease table.
+// Expected failure carries typed data; unexpected binding errors terminate
+// without a delta or YAML transition. Execution cleanup releases unused leases.
+
+// advance-model-request-lifecycle@1 with transition: invoked requires the same
+// prepared authorization. AdvanceModelRequestLifecycleAction creates exactly
+// the assigned -> invoked request-ledger successor. The runner validates its
+// direct parent and exact request before replacing the ledger; all prepared
+// request, attempt, operation and lease values remain unchanged. The provider
+// operation is still assigned. No API call or delivery claim is made here.
+
 TelemetryFact =
   | RunStartedFact
   | RunCompletedFact { outcome, durationMs? }

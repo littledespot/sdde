@@ -1,14 +1,14 @@
 const std = @import("std");
-const action = @import("../actions/model/prepare_provider_operation_authorization.zig");
-const table_module = @import("provider_authorization_lease_table.zig");
-const pipeline = @import("../domain/pipeline.zig");
-const operation = @import("../domain/llm_provider_operation.zig");
-const preparation = @import("../ports/provider_operation_authorization.zig");
-const lease = @import("../ports/provider_authorization_lease.zig");
-const binding = @import("../domain/llm_provider_binding.zig");
-const envelope_module = @import("pipeline_envelope.zig");
-const values = @import("pipeline_values.zig");
-const data = @import("../domain/pipeline_data.zig");
+const action = @import("actions/model/prepare_provider_operation_authorization.zig");
+const table_module = @import("application/provider_authorization_lease_table.zig");
+const pipeline = @import("domain/pipeline.zig");
+const operation = @import("domain/llm_provider_operation.zig");
+const preparation = @import("ports/provider_operation_authorization.zig");
+const lease = @import("ports/provider_authorization_lease.zig");
+const binding = @import("domain/llm_provider_binding.zig");
+const envelope_module = @import("application/pipeline_envelope.zig");
+const values = @import("application/pipeline_values.zig");
+const data = @import("domain/pipeline_data.zig");
 
 // Pipeline evidence references the immutable registry; it never copies config.
 const binding_schema = values.schema(.validated_provider_model_binding, binding.ProviderModelBindingId, 1, 1024);
@@ -26,8 +26,8 @@ pub const Outcome = union(enum) {
     cancelled,
 };
 
-/// Runs one preparation child. The lifecycle runner owns the private table;
-/// this binding publishes only its opaque reference, never its capability.
+/// Isolated action-test harness. Production preparation uses the generic YAML
+/// runner; this fixture does not register operations or own execution authority.
 pub const Runner = struct {
     table: *table_module.Table,
     prepare_action: action.Action,

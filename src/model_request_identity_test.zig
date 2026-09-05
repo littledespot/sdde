@@ -1,7 +1,7 @@
 const std = @import("std");
 
 test "workflow-owned requests retain their origin without accepting SDD authority substitutes" {
-    var runner = @import("application/model_request_identity_runner.zig").Runner.init(std.testing.allocator);
+    var runner = @import("model_request_identity_runner_test_fixture.zig").Runner.init(std.testing.allocator);
     defer runner.deinit();
     try runner.initialize(@import("domain/model_request_identity.zig").RequestPurposeRegistry.all());
     const origin = modelOperation("origin");
@@ -20,7 +20,7 @@ const assign_request = @import("actions/model/assign_model_request_id.zig");
 const build_ledger = @import("actions/model/build_initial_model_request_identity_ledger.zig");
 const build_owner = @import("actions/model/build_immutable_unit_owner_id.zig");
 const validate_binding = @import("actions/model/validate_model_request_binding.zig");
-const runner_module = @import("application/model_request_identity_runner.zig");
+const runner_module = @import("model_request_identity_runner_test_fixture.zig");
 const binding = @import("domain/llm_provider_binding.zig");
 const identity = @import("domain/model_request_identity.zig");
 const pipeline = @import("domain/pipeline.zig");
@@ -41,6 +41,38 @@ test "request purpose registry is closed and duplicate free" {
         error.InvalidRequestPurposeRegistry,
         identity.RequestPurposeRegistry.init(&.{ .initial_generation, .initial_generation }),
     );
+}
+
+test "ledger replacement validation binds one direct successor and one exact request transition" {
+    const allocator = std.testing.allocator;
+    const initial = try identity.createInitial(allocator, .all());
+    defer identity.deinitOwner(initial);
+    const first = try identity.createSuccessor(identity.ledger(initial), .initial, .workflow_step, modelOperation("first"), .initial_generation);
+    defer identity.deinitOwner(first.owner);
+    try identity.validateAssignmentSuccessor(identity.ledger(initial), identity.ledger(first.owner), first.model_request_id);
+    const second = try identity.createSuccessor(identity.ledger(first.owner), identity.ledger(first.owner).revision(), .workflow_step, modelOperation("second"), .initial_generation);
+    defer identity.deinitOwner(second.owner);
+    const current = identity.ledger(second.owner);
+    const invoked = try identity.createLifecycleSuccessor(current, current.revision(), first.model_request_id, .assigned, .invoked);
+    defer identity.deinitOwner(invoked);
+    const next = identity.ledger(invoked);
+    try identity.validateLifecycleSuccessor(current, next, first.model_request_id, .assigned, .invoked);
+    try std.testing.expectEqual(.assigned, next.record(second.model_request_id).?.status);
+    try std.testing.expect(next.canonicalRequestId(first.model_request_id) == first.model_request_id);
+    try std.testing.expectError(error.ModelRequestBindingInvalid, identity.validateLifecycleSuccessor(current, next, second.model_request_id, .assigned, .invoked));
+    try std.testing.expectError(error.ModelRequestBindingInvalid, identity.validateAssignmentSuccessor(current, next, first.model_request_id));
+    try std.testing.expectError(error.ModelRequestBindingInvalid, identity.validateLifecycleSuccessor(identity.ledger(first.owner), current, first.model_request_id, .assigned, .invoked));
+    try std.testing.expectError(error.ModelRequestStatusConflict, identity.validateLifecycleSuccessor(current, next, first.model_request_id, .invoked, .invoked));
+    try std.testing.expectError(error.ModelRequestRevisionConflict, identity.validateLifecycleSuccessor(current, current, first.model_request_id, .assigned, .invoked));
+    try std.testing.expectError(error.ModelRequestRevisionConflict, identity.validateLifecycleSuccessor(identity.ledger(first.owner), next, first.model_request_id, .assigned, .invoked));
+    const cancelled = try identity.createLifecycleSuccessor(current, current.revision(), first.model_request_id, .assigned, .{ .terminal = .cancelled });
+    defer identity.deinitOwner(cancelled);
+    try std.testing.expectError(error.InvalidModelRequestLifecycleTransition, identity.validateLifecycleSuccessor(current, identity.ledger(cancelled), first.model_request_id, .assigned, .invoked));
+    const foreign = try identity.createInitial(allocator, .all());
+    defer identity.deinitOwner(foreign);
+    const foreign_request = try identity.createSuccessor(identity.ledger(foreign), .initial, .workflow_step, modelOperation("first"), .initial_generation);
+    defer identity.deinitOwner(foreign_request.owner);
+    try std.testing.expectError(error.ModelRequestRevisionConflict, identity.validateAssignmentSuccessor(identity.ledger(initial), identity.ledger(foreign_request.owner), foreign_request.model_request_id));
 }
 
 test "immutable unit owner builder validates the complete typed descriptor" {

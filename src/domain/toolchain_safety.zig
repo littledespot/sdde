@@ -1,7 +1,12 @@
 const std = @import("std");
 const toolchain = @import("toolchain.zig");
+const reference = @import("execution_reference.zig");
+const naming = @import("naming_rule.zig");
 
 pub const ValidToolchain = opaque {
+    pub fn identity(self: *const ValidToolchain) reference.Ref {
+        return validStorage(self).identity;
+    }
     pub fn packages(self: *const ValidToolchain) []const []const u8 {
         return validStorage(self).packages;
     }
@@ -12,6 +17,7 @@ pub const ValidToolchain = opaque {
 };
 
 const ValidToolchainStorage = struct {
+    identity: reference.Ref,
     packages: []const []const u8,
     policies: []const toolchain.PolicyContract,
 };
@@ -28,9 +34,15 @@ pub fn validate(
     composed: toolchain.Composed,
     registry: toolchain.PolicyRegistry,
 ) toolchain.Error!*Owner {
-    for (registry.contracts, 0..) |contract, index| for (registry.contracts[0..index]) |prior| {
-        if (std.mem.eql(u8, contract.id, prior.id)) return error.InvalidToolchain;
-    };
+    for (registry.contracts, 0..) |contract, index| {
+        naming.validate(contract.naming) catch return error.InvalidToolchain;
+        for (registry.contracts[0..index]) |prior| {
+            if (std.mem.eql(u8, contract.id, prior.id)) return error.InvalidToolchain;
+            for (contract.naming) |rule| for (prior.naming) |previous| {
+                if (std.mem.eql(u8, rule.id.bytes, previous.id.bytes)) return error.InvalidToolchain;
+            };
+        }
+    }
     const owner = backing_allocator.create(OwnerStorage) catch return error.InvalidToolchain;
     errdefer backing_allocator.destroy(owner);
     owner.* = .{ .backing_allocator = backing_allocator, .arena = .init(backing_allocator), .value = undefined };
@@ -46,12 +58,21 @@ pub fn validate(
         try appendPolicy(allocator, &selected, contract);
     }
     const policies = allocator.alloc(toolchain.PolicyContract, selected.items.len) catch return error.InvalidToolchain;
-    for (selected.items, policies) |contract, *copy| copy.* = .{
-        .id = allocator.dupe(u8, contract.id) catch return error.InvalidToolchain,
-        .project_selectable = contract.project_selectable,
-        .locked_required = contract.locked_required,
-    };
-    owner.value = .{ .packages = packages, .policies = policies };
+    for (selected.items, policies) |contract, *copy| {
+        const rules = allocator.alloc(naming.Rule, contract.naming.len) catch return error.InvalidToolchain;
+        for (contract.naming, rules) |rule, *item| {
+            item.* = rule;
+            item.id.bytes = allocator.dupe(u8, rule.id.bytes) catch return error.InvalidToolchain;
+            item.value = allocator.dupe(u8, rule.value) catch return error.InvalidToolchain;
+        }
+        copy.* = .{
+            .id = allocator.dupe(u8, contract.id) catch return error.InvalidToolchain,
+            .project_selectable = contract.project_selectable,
+            .locked_required = contract.locked_required,
+            .naming = rules,
+        };
+    }
+    owner.value = .{ .identity = reference.create(backing_allocator) catch return error.InvalidToolchain, .packages = packages, .policies = policies };
     return @ptrCast(owner);
 }
 
@@ -67,6 +88,7 @@ pub fn retainedBytes(owner: *const Owner) usize {
 pub fn deinitOwner(owner: *Owner) void {
     const storage = ownerStorage(owner);
     const allocator = storage.backing_allocator;
+    storage.value.identity.release();
     storage.arena.deinit();
     allocator.destroy(storage);
 }
@@ -99,8 +121,8 @@ fn validStorage(valid: *const ValidToolchain) *const ValidToolchainStorage {
 
 test "safety injects locked policy and owns immutable result" {
     const registry: toolchain.PolicyRegistry = .{ .contracts = &.{
-        .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true },
-        .{ .id = "project.zig@1", .project_selectable = true, .locked_required = false },
+        .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true, .naming = &.{} },
+        .{ .id = "project.zig@1", .project_selectable = true, .locked_required = false, .naming = &.{} },
     } };
     const owner = try validate(std.testing.allocator, .{ .packages = &.{"zig@0.16.0"}, .policies = &.{"project.zig@1"} }, registry);
     defer deinitOwner(owner);
@@ -110,14 +132,14 @@ test "safety injects locked policy and owns immutable result" {
 
 test "safety rejects unknown nonselectable and duplicate policy authority" {
     const registry: toolchain.PolicyRegistry = .{ .contracts = &.{
-        .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true },
+        .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true, .naming = &.{} },
     } };
     try std.testing.expectError(error.InvalidToolchain, validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{"unknown@1"} }, registry));
     try std.testing.expectError(error.InvalidToolchain, validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{"core.safety@1"} }, registry));
 
     const duplicate: toolchain.PolicyRegistry = .{ .contracts = &.{
-        .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true },
-        .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true },
+        .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true, .naming = &.{} },
+        .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true, .naming = &.{} },
     } };
     try std.testing.expectError(error.InvalidToolchain, validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{} }, duplicate));
 }

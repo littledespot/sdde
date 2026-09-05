@@ -1,25 +1,22 @@
-Clarifications are the explicit persistence exception to
-[atomic workflow execution](../decisions/0009-atomic-workflow-execution.md).
-They preserve answers, not execution continuations.
+High-level lifecycle of a workflow clarification and the user's answer.
 
 ```mermaid
 flowchart TD
-    START[New workflow invocation at start] --> LOAD[Load and validate clarification registry and protected forms]
-    LOAD --> ANSWERS[Apply relevant validated answers to current inputs]
-    ANSWERS --> GATE{Declared predecessor and clarification gates}
-    GATE -- Satisfied --> RUN[Execute compiled YAML]
-    GATE -- Outstanding spec plan or tasks clarification for implement --> BLOCK[Do not execute implementation work]
-    RUN -- Required authority gap --> SUBJECT[Derive stable owner target subject and slot]
-    SUBJECT --> FIND{Existing clarification identity}
-    FIND -- Yes --> REUSE[Reuse identity; never duplicate or reopen a user-closed form]
-    FIND -- No --> CREATE[Create one validated clarification and registered form]
-    REUSE --> PRESERVE[Preserve registry answers and protected user-closed files]
-    CREATE --> PRESERVE
-    PRESERVE --> END[End needs_user execution<br/>publish no partial workflow output]
-    END -. User supplies answers; new invocation .-> START
+    START["Start a workflow"] --> LOAD["Load existing questions and protected answers;<br/>validate answers against current inputs"]
+    LOAD --> GATE{"Required knowledge and predecessor gates satisfied?"}
+    GATE -->|Yes| RUN["Continue the workflow"]
+    GATE -->|Missing or conflicting knowledge| OWNER["Identify the workflow that owns the decision;<br/>invalidate affected downstream authority when needed"]
+    RUN -->|New knowledge gap| OWNER
+    OWNER --> SUBJECT["Find the existing question for the same subject<br/>or identify a new question"]
+    SUBJECT --> PROTECTED{"Does a protected answer need reconsideration?"}
+    PROTECTED -->|Yes| BLOCKED["End blocked;<br/>request explicit user direction"]
+    PROTECTED -->|No| SAVE["Create or refresh the controlled clarification form;<br/>preserve protected answers"]
+    SAVE --> WAIT["End needs_user;<br/>publish no partial workflow output"]
+    WAIT --> USER["User answers the question"]
+    USER --> RERUN["Rerun the owning workflow from the beginning"]
+    RERUN --> LOAD
 ```
 
-Changed wording, execution identity or authority revision does not create a
-second clarification for the same subject. Invalid/stale protected answers
-block rather than being overwritten. No clarification transaction, checkpoint
-or saved-step resume is required.
+The same subject retains the same clarification identity across runs. User-closed
+forms remain unchanged. Applicable validated answers become inputs to a new
+execution, which regenerates and validates the owning workflow's complete output.

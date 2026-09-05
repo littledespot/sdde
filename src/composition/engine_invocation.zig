@@ -19,6 +19,7 @@ pub const Assembly = struct {
     selection: workflow_selection_runner.Runner,
     provider_outcome: ?model_provider_orchestrator.Outcome = null,
     pipeline_runner: ?workflow_pipeline_runner.Runner = null,
+    provider_clock: ?@import("../ports/provider_authorization_lease.zig").Clock = null,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -81,6 +82,7 @@ pub const Assembly = struct {
                     self.selection.runtime,
                     self.preparedProviderServices(),
                 );
+                self.pipeline_runner.?.provider_clock = self.provider_clock;
                 break :ready .ok;
             },
             .failed => |failure| .{ .failed = failure },

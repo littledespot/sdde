@@ -1,27 +1,26 @@
-Initial SDD suite: each workflow invocation is atomic and starts at its own
-compiled `start`. These domain gates do not form a fixed engine registry.
-Specify resolves `--feature` relative to `.sddtoolkit.json`'s `paths.specs`
-and validates the independent `--reference` selector.
+High-level progression through the Specify, Plan, Tasks and Implement workflows.
 
 ```mermaid
 flowchart TD
-    SPEC[New Specify execution] --> SOUT[Complete validated specification output]
-    SOUT --> PLAN[New Plan execution<br/>revalidate current specification and clarification gates]
-    PLAN --> POUT[Complete validated plan output]
-    POUT --> PA[Explicit approval bound to current plan state]
-    PA --> TASKS[New Tasks execution<br/>revalidate plan and clarification gates]
-    TASKS --> TOUT[Complete validated tasks output]
-    TOUT --> TA[Explicit approval bound to current task definition]
-    TA --> IMPL[New Implement execution<br/>current approvals and no outstanding spec plan or tasks clarifications]
-    IMPL --> IOUT[Complete validated implementation output<br/>all task evidence and final checks pass]
-    GAP[Required authority missing in any execution] --> CLARIFY[Preserve deduplicated clarification and end needs_user]
-    CLARIFY --> NEW[After answers: new owning workflow execution at start]
-    FAILURE[Failure blocking cancellation or interruption] --> END[Abandon the whole execution<br/>no partial successful output]
-    END --> RERUN[Later invocation starts the whole workflow again]
+    SPEC["Run Specify"] --> SPECOUT["Publish a validated specification"]
+    SPECOUT --> PLAN["Run Plan<br/>Revalidate the current specification and clarification answers"]
+    PLAN --> PLANOUT["Publish a validated plan"]
+    PLANOUT --> PLANAPPROVAL["User approves the exact current plan"]
+    PLANAPPROVAL --> TASKS["Run Tasks<br/>Revalidate the approved plan and clarification gates"]
+    TASKS --> TASKOUT["Publish a validated task graph"]
+    TASKOUT --> TASKAPPROVAL["User approves the exact current task graph"]
+    TASKAPPROVAL --> IMPLEMENT["Run Implement<br/>Revalidate both approvals and all predecessor gates"]
+    IMPLEMENT --> COMPLETE["Publish completed project changes<br/>with passing validation and task evidence"]
+
+    GAP["Required knowledge is missing during a workflow"] --> CLARIFY["Save or reuse questions in the owning workflow;<br/>end needs_user"]
+    CLARIFY --> ANSWERS["User answers the questions"]
+    ANSWERS --> RERUN["Start a new execution of the owning workflow"]
+
+    CHANGE["Upstream inputs change"] --> INVALIDATE["Invalidate affected downstream authority and approvals"]
+    INVALIDATE --> RERUN
 ```
 
-No task transaction, intermediate publication or checkpoint continuation exists.
-Upstream changes invalidate affected downstream authority; the next invocation
-revalidates current inputs and approvals. Relevant clarification answers survive,
-and user-closed forms remain unchanged. See
-[ADR 0009](../decisions/0009-atomic-workflow-execution.md).
+Each workflow starts from its beginning and publishes its complete output only
+on success. Failure, blocking or cancellation ends that execution. Relevant
+clarification answers are retained for the next run. Other workflow definitions
+follow their own declared gates and transitions.

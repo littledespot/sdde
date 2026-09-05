@@ -107,6 +107,29 @@ pub const Table = struct {
         if (self.findSlot(slot.deposit)) |entry| finalize(entry);
     }
 
+    /// A candidate may publish only the reference of its allocated slot.
+    pub fn validatePublication(self: *Table, slot: preparation.AllocatedSlot, reference: operation.ValidatedProviderAuthorizationLeaseRef) lease.Error!void {
+        const entry = self.findSlot(slot.deposit) orelse return error.AuthorizationDenied;
+        if (entry.state != .published or !entry.reference.identity.eql(reference.identity)) return error.AuthorizationDenied;
+    }
+
+    /// Checks without consuming; rejection destroys the unused capability. The
+    /// private table remains the sole deadline and lease-association authority.
+    pub fn validateReference(self: *Table, reference: operation.ValidatedProviderAuthorizationLeaseRef, provider_binding: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId, now: lease.Error!u64) lease.Error!void {
+        var next = self.first;
+        while (next) |entry| : (next = entry.next) {
+            if (!reference.identity.eql(entry.reference.identity)) continue;
+            if (entry.state != .published) return error.AuthorizationDenied;
+            errdefer finalize(entry);
+            if (try now >= entry.deadline) return error.AuthorizationExpired;
+            const record = self.operations.record(id) orelse return error.AuthorizationDenied;
+            if (record.state != .assigned or !entry.operation_id.eql(id) or request.model_request_id != id.model_request_id or
+                !matches(entry, provider_binding, request, entry.deadline)) return error.AuthorizationDenied;
+            return;
+        }
+        return error.AuthorizationDenied;
+    }
+
     pub fn port(self: *Table, clock: lease.Clock, runtime: pipeline.NodeRuntime) lease.Port {
         return .{ .context = @ptrCast(self), .clock = clock, .runtime = runtime, .consume_fn = consume };
     }

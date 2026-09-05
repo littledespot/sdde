@@ -107,13 +107,44 @@ input and current revisions must match. Duplicate assignments, unfinished
 operations and stale/foreign evidence reject. Assignment performs no provider
 call, authorization preparation, counting, token charge or persistence.
 
+**Implemented YAML authorization preparation:**
+`prepare-provider-operation-authorization@1` consumes the retained request,
+applied attempt and assigned operation. Its required positive `timeout-ms`
+has no default; the runner binds one absolute monotonic deadline when allocating
+the slot. The existing action calls only the preloaded, non-refreshing, no-I/O
+preparation port. Its separately derived `provider-authorization` capability
+must be policy-permitted and grants no model-call capability.
+The sealed `provider_authorization_result` contains either an opaque lease
+reference, the exact typed pre-send failure, or the cancelled operation ID.
+The runner validates the result against the allocated slot and exact retained
+association before publishing it. Expected failures follow the declared YAML
+edge; unexpected binding errors terminate without publishing a result or
+following an edge with missing data. Rejected publication, expiry, cancellation
+and execution cleanup release unused capabilities through the existing private
+table. Preparation never marks an operation invoked or charges tokens.
+Native composition exposes the operation but fails with `authorization_denied`
+until an adapter is explicitly bound; fake preloaders remain test-only.
+
+**Implemented YAML request invocation state:**
+`advance-model-request-lifecycle@1` requires explicit `transition: invoked`.
+It reuses `AdvanceModelRequestLifecycleAction` for exactly `assigned -> invoked`;
+terminal transitions remain separate integration work. The runner requires the
+same prepared request, applied attempt, assigned operation and prepared lease,
+rechecks authorization/deadline before publication, and validates the exact
+direct ledger successor. Failed, cancelled, expired or foreign authorization,
+duplicate/stale transitions and rejected deltas cannot advance the request.
+The existing prepared request, binding, resources, attempt and lease remain
+unchanged. Provider-operation state remains `assigned`; this in-memory change
+is not an API call or evidence of delivery. No new ledger, capability, timeout,
+retry, token charge or persistence is introduced.
+
 A consumer declares the prepared-request and request-ledger data dependencies;
 the runner supplies the retained binding, not a new selection for the consumer
 step. Slot/resource/control overrides reject. The existing compiler proves the
 handoff and the runner rejects foreign execution references. No new YAML
 syntax, route registry, provider port, byte cap or persisted state is added.
 
-For example, this preparation and assignment workflow uses one repository-authorized
+For example, this request and authorization preparation workflow uses one repository-authorized
 slot and two captured resources. It makes no provider call; response operations are
 separate integration work. The prompt and closed result schema remain in files.
 
@@ -123,7 +154,7 @@ id: prepare-request
 version: 1
 shortcode: PREP
 invoke: core.empty-invocation@1
-policy: core.capability-free@1
+policy: core.model-authorization@1
 start: initialize
 resources: { prompt: prompt.md, result: result.json }
 steps:
@@ -135,7 +166,9 @@ steps:
   validate: { use: validate-model-request-binding@1, on: { ok: build, failed: end.failed } }
   build: { use: build-model-request@1, on: { ok: account, failed: end.failed } }
   account: { use: advance-model-attempt-accounting@1, with: { retry-limit: 0 }, on: { ok: operation, failed: end.failed } }
-  operation: { use: assign-provider-operation@1, with: { kind: inference }, on: { ok: end.ok, failed: end.failed } }
+  operation: { use: assign-provider-operation@1, with: { kind: inference }, on: { ok: authorize, failed: end.failed } }
+  authorize: { use: prepare-provider-operation-authorization@1, with: { timeout-ms: 1000 }, on: { ok: advance-request, failed: end.failed, cancelled: end.cancelled } }
+  advance-request: { use: advance-model-request-lifecycle@1, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
 ```
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
@@ -671,8 +704,10 @@ applied-attempt dependencies. The runner supplies read-only lifecycle authority,
 checks the proposal against the retained request, and publishes the successor
 and evidence together only after envelope validation. Removing evidence cannot
 erase an open operation or reset an attempt. Assignment is not invocation or a
-lease: YAML integration of authorization, invocation and terminalization remains
-separate work. Execution cleanup discards its in-memory records, never resumes
+lease: authorization preparation is a separate implemented YAML operation;
+Logical-request invocation state is also YAML-integrated; provider-operation
+invocation and terminalization integration remain separate work.
+Execution cleanup discards its in-memory records, never resumes
 or persists them.
 
 The applied invocation record belongs only to the current execution. No
@@ -727,8 +762,9 @@ capability store. Provider-specific credential and signing types remain wholly
 inside infrastructure.
 
 The implementation separates the adapter's deposit-only slot from the action's
-slot-bound reference publication. The runner validates/applies that reference's
-normal `NodeDelta`; the backing capability never enters a pipeline value.
+slot-bound reference publication. The YAML binding retains that reference in
+the closed `provider_authorization_result`; the runner validates/applies its
+normal `NodeDelta`. The backing capability never enters a pipeline value.
 Reference tokens contain no payload, retain identity through immutable value
 copies, and remain distinct while any owner retains them. Consumption joins the
 current invoked ledger record, exact binding/input/provider and deadline, then
@@ -1153,6 +1189,10 @@ F0006 does not:
     Native assignment is also implemented for both operation kinds: exact
     retained associations, immutable applied evidence, duplicate/open-operation
     rejection, compiled permission checks, cancellation and allocation cleanup.
+    YAML logical-request invocation retains that association through an exact
+    ledger successor, with prepared-lease guards before execution/publication;
+    stale snapshots, wrong requests, disguised assignments and skipped revisions
+    reject without publishing an invocation state or performing a provider call.
 13. Each call performs zero or one provider request with no hidden retry,
     fallback, backoff, credential acquisition/refresh, or second operation;
     any permitted credential I/O has separate accepted accounting.

@@ -34,6 +34,7 @@ pub const Applied = union(enum) {
 pub const Rejection = union(enum) {
     gate: @import("workflow_gate.zig").Rejection,
     authority,
+    operation_failed,
     logging: @import("feature_log_stream.zig").FailureCode,
     cancelled,
     deadline_exhausted,
@@ -42,7 +43,7 @@ pub const Rejection = union(enum) {
     pub fn status(self: Rejection) workflow.OutcomeTag {
         return switch (self) {
             .gate, .logging => .blocked,
-            .authority, .deadline_exhausted, .token_budget => .failed,
+            .authority, .operation_failed, .deadline_exhausted, .token_budget => .failed,
             .cancelled => .cancelled,
         };
     }

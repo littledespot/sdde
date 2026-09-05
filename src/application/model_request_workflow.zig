@@ -138,7 +138,7 @@ fn resource(input: operations.StepInput, parameter_id: []const u8) ?compilation.
     return null;
 }
 
-fn adoptLedger(allocator: std.mem.Allocator, owner: *identity.Owner) values.Error!*data.Value {
+pub fn adoptLedger(allocator: std.mem.Allocator, owner: *identity.Owner) values.Error!*data.Value {
     return values.adopt(allocator, ledger_schema, identity.ModelRequestIdentityLedger, identity.Owner, owner, identity.ledger, identity.deinitOwner, null);
 }
 
