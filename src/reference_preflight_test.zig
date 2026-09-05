@@ -6,7 +6,8 @@ const normalize = @import("actions/reference/normalize_reference_selector.zig");
 const lexical = @import("actions/reference/validate_reference_selector.zig");
 const runner = @import("application/reference_workflow_runner.zig");
 const values = @import("application/pipeline_values.zig");
-const schemas = @import("application/reference_workflow_values.zig");
+const schemas = @import("application/specify_invocation_values.zig");
+const invocation_runner = @import("application/specify_invocation_runner.zig");
 const Envelope = @import("application/pipeline_envelope.zig").PipelineEnvelope;
 const unicode = @import("unicode_normalization");
 const normalizer: @import("ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = unicode.nfc };
@@ -15,6 +16,9 @@ test "Specify grammar requires independent feature and reference inputs" {
     const result = try (validate.Action{}).execute(try (parse.Action{}).execute(&.{ "--feature", "Chosen/日本語", "--reference", "hello-world" }));
     try std.testing.expectEqualStrings("hello-world", result.raw_reference);
     try std.testing.expectEqualStrings("Chosen/日本語", result.raw_feature);
+    const reversed = try (validate.Action{}).execute(try (parse.Action{}).execute(&.{ "--reference", "hello-world", "--feature", "Chosen/日本語" }));
+    try std.testing.expectEqualStrings(result.raw_feature, reversed.raw_feature);
+    try std.testing.expectEqualStrings(result.raw_reference, reversed.raw_reference);
     const rejected = [_][]const []const u8{
         &.{},                                             &.{"--reference"},                                              &.{ "--reference", "" },
         &.{ "--reference", "one", "--reference", "two" }, &.{ "--reference", "one", "extra" },                            &.{"description"},
@@ -29,6 +33,11 @@ test "Specify grammar requires independent feature and reference inputs" {
             continue;
         };
         try std.testing.expectError(error.InvalidSpecifyArguments, (validate.Action{}).execute(parsed));
+    }
+    const oversized = [_]u8{'a'} ** (reference.max_bytes + 1);
+    for ([_][]const u8{ "", "--", &oversized }) |invalid| {
+        try std.testing.expectError(error.InvalidSpecifyArguments, (validate.Action{}).execute(.{ .feature = invalid, .reference = "valid" }));
+        try std.testing.expectError(error.InvalidSpecifyArguments, (validate.Action{}).execute(.{ .feature = "valid", .reference = invalid }));
     }
 }
 
@@ -82,18 +91,18 @@ test "selector normalization cleans up at every allocation failure" {
 }
 
 test "invocation publishes only validated owned context and rejects without output" {
-    var binding: runner.Invocation = .{ .allocator = std.testing.allocator };
-    var candidate = try runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{ "--reference", "hello", "--feature", "chosen" } } });
+    var binding: invocation_runner.Invocation = .{ .allocator = std.testing.allocator };
+    var candidate = try invocation_runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{ "--reference", "hello", "--feature", "chosen" } } });
     var envelope: Envelope = .init(&schemas.schemas);
     defer envelope.deinit();
     defer envelope.discard(&candidate.delta);
-    const contract: @import("domain/pipeline.zig").NodeContract = .{ .id = runner.Invocation.contract.id, .kind = .orchestrator, .requires = &.{}, .produces = runner.Invocation.contract.produces, .side_effect = .none };
+    const contract: @import("domain/pipeline.zig").NodeContract = .{ .id = invocation_runner.Invocation.contract.id, .kind = .orchestrator, .requires = &.{}, .produces = invocation_runner.Invocation.contract.produces, .side_effect = .none };
     try envelope.apply(contract, &candidate.delta, .ok);
     try std.testing.expect(envelope.slots[@intFromEnum(schemas.parsed.key)] == null);
     const read_contract: @import("domain/pipeline.zig").NodeContract = .{ .id = "read@1", .kind = .action, .requires = &.{.specify_invocation}, .produces = &.{}, .side_effect = .none };
     const view = try envelope.view(read_contract);
     try std.testing.expectEqualStrings("hello", (try values.read(&view, schemas.invocation, @import("domain/specify_invocation.zig").Invocation)).raw_reference);
-    try std.testing.expectError(error.OperationExecutionFailed, runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{} } }));
+    try std.testing.expectError(error.OperationExecutionFailed, invocation_runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{} } }));
 }
 
 test "registered bindings derive only their narrow operational capabilities" {
@@ -102,12 +111,12 @@ test "registered bindings derive only their narrow operational capabilities" {
     const inspection = comptime binding.inspect(runner.InspectDirectory, &.{});
     try std.testing.expect(normalization.valid and !normalization.reference_read and !normalization.model_provider);
     try std.testing.expect(inspection.valid and inspection.reference_read and !inspection.model_provider and !inspection.toolchain_read);
-    try std.testing.expect((comptime binding.inspect(runner.Invocation, &.{})).valid);
+    try std.testing.expect((comptime binding.inspect(invocation_runner.Invocation, &.{})).valid);
 }
 
 fn invocationAllocationCase(allocator: std.mem.Allocator) !void {
-    var binding: runner.Invocation = .{ .allocator = allocator };
-    var candidate = runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{ "--reference", "hello", "--feature", "chosen" } } }) catch return error.OutOfMemory;
+    var binding: invocation_runner.Invocation = .{ .allocator = allocator };
+    var candidate = invocation_runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{ "--reference", "hello", "--feature", "chosen" } } }) catch return error.OutOfMemory;
     var envelope: Envelope = .init(&schemas.schemas);
     defer envelope.deinit();
     defer envelope.discard(&candidate.delta);

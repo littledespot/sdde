@@ -17,7 +17,7 @@ pub const Normalize = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const source = values.read(&input.step.data, @import("reference_workflow_values.zig").invocation, @import("../domain/specify_invocation.zig").Invocation) catch return error.OperationExecutionFailed;
+        const source = values.read(&input.step.data, @import("specify_invocation_values.zig").invocation, @import("../domain/specify_invocation.zig").Invocation) catch return error.OperationExecutionFailed;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
         const result = self.action.execute(scratch.allocator(), source.*) catch return error.OperationExecutionFailed;

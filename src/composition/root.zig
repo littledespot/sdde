@@ -790,6 +790,147 @@ test "reference preflight cancellation stops safely at each runtime checkpoint" 
     return error.ReferencePreflightNeverCompleted;
 }
 
+test "feature preflight uses configured specs roots and preserves selected files across reference changes" {
+    const io = std.testing.io;
+    const feature = @import("../domain/feature_directory.zig");
+    for ([_][]const u8{ "specs", "requirements/current" }) |specs_root| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeReferencePreflightFixture(io, project.dir);
+        const root_value = try std.fmt.allocPrint(std.testing.allocator, "\"specs\": \"{s}\"", .{specs_root});
+        defer std.testing.allocator.free(root_value);
+        const root_config = try std.mem.replaceOwned(u8, std.testing.allocator, valid_config, "\"specs\": \"specs\"", root_value);
+        defer std.testing.allocator.free(root_config);
+        const archive_path = try std.mem.concat(std.testing.allocator, u8, &.{ specs_root, "/archive" });
+        defer std.testing.allocator.free(archive_path);
+        const configuration = try std.mem.replaceOwned(u8, std.testing.allocator, root_config, "specs/archive", archive_path);
+        defer std.testing.allocator.free(configuration);
+        try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = configuration });
+        try project.dir.createDirPath(io, "references/first");
+        try project.dir.createDirPath(io, "references/second");
+        // Missing configured root and target are observations, never mkdir.
+        const arguments: []const []const u8 = &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" };
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, arguments).execution);
+        try std.testing.expectError(error.FileNotFound, project.dir.access(io, specs_root, .{}));
+
+        // Selected content, including a user-closed clarification, is untouched.
+        const selected = try feature.validate(std.testing.allocator, .{ .bytes = "Chosen/Café" }, .{ .specs = specs_root, .archive = "elsewhere/archive" });
+        defer std.testing.allocator.free(selected.project_relative_path);
+        try project.dir.createDirPath(io, selected.project_relative_path);
+        var target = try project.dir.openDir(io, selected.project_relative_path, .{});
+        defer target.close(io);
+        try target.createDir(io, "clarify", .default_dir);
+        try target.writeFile(io, .{ .sub_path = "spec.md", .data = "existing spec\n" });
+        try target.writeFile(io, .{ .sub_path = "clarify/S01.md", .data = "Status: closed\nAnswer: keep exactly\n" });
+        try target.writeFile(io, .{ .sub_path = "unrelated.txt", .data = "unrelated\n" });
+        var project_source = toolchain_authority_source.Adapter.init(io, project.dir);
+        var document_parser: toolchain_documents.Adapter = .{};
+        var reference_source: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var feature_source: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var native: @import("native_workflow_operations.zig").Assembly = undefined;
+        native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector());
+        var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
+        defer boot.deinit();
+        try std.testing.expect(boot == .ready);
+        var adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var inspector = adapter.inspector();
+        inspector.capability = boot.ready.roots.registry().featureDirectoryRead();
+        const observed = try inspector.inspect(std.testing.allocator, selected);
+        try std.testing.expect(observed.observation == .directory);
+        for ([_][]const u8{ "first", "second", "first" }) |reference| {
+            try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", reference }).execution);
+            const again = try inspector.inspect(std.testing.allocator, selected);
+            try std.testing.expect(observed.observation.directory.eql(again.observation.directory));
+        }
+        const untouched = .{ .{ "spec.md", "existing spec\n" }, .{ "clarify/S01.md", "Status: closed\nAnswer: keep exactly\n" }, .{ "unrelated.txt", "unrelated\n" } };
+        inline for (untouched) |file| {
+            const bytes = try target.readFileAlloc(io, file[0], std.testing.allocator, .limited(256));
+            defer std.testing.allocator.free(bytes);
+            try std.testing.expectEqualStrings(file[1], bytes);
+        }
+        const missing = try feature.validate(std.testing.allocator, .{ .bytes = "Uncreated/child" }, boot.ready.roots.registry().featureDirectoryRoots());
+        defer std.testing.allocator.free(missing.project_relative_path);
+        try std.testing.expect((try inspector.inspect(std.testing.allocator, missing)).observation == .absent);
+        try std.testing.expectError(error.FileNotFound, project.dir.access(io, missing.project_relative_path, .{}));
+    }
+}
+
+test "feature preflight rejects archive traversal files and symlink ancestors without output" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeReferencePreflightFixture(io, project.dir);
+    try project.dir.createDirPath(io, "references/source");
+    try project.dir.createDirPath(io, "specs/Real/child");
+    try project.dir.createDirPath(io, "outside/child");
+    try project.dir.writeFile(io, .{ .sub_path = "specs/file", .data = "not a directory" });
+    try project.dir.symLink(io, "Real", "specs/linked", .{ .is_directory = true });
+    try project.dir.symLink(io, "../outside", "specs/escape", .{ .is_directory = true });
+    try project.dir.symLink(io, "missing", "specs/dangling", .{ .is_directory = true });
+    for ([_][]const u8{ "archive", "ARCHIVE/child", "../outside", "/outside", "file", "file/child", "linked/child", "escape/child", "dangling/child" }) |feature_path| {
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", feature_path, "--reference", "source" }).execution);
+    }
+    // On a case-insensitive filesystem, an existing alias must be rejected.
+    // On a case-sensitive filesystem, the spelling is a distinct absent target.
+    const alias_exists = if (project.dir.access(io, "specs/real", .{})) |_| true else |err| switch (err) {
+        error.FileNotFound => false,
+        else => return err,
+    };
+    const alias_result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "real/child", "--reference", "source" });
+    try std.testing.expectEqual(if (alias_exists) workflow.OutcomeTag.failed else workflow.OutcomeTag.ok, alias_result.execution);
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, ".sdd/workflows/features", .{}));
+    try std.testing.expectError(error.FileNotFound, project.dir.access(io, "specs/Real/child/spec.md", .{}));
+}
+
+test "feature inspection rejects missing authority stale roots and forged resolved paths" {
+    const io = std.testing.io;
+    const feature = @import("../domain/feature_directory.zig");
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeReferencePreflightFixture(io, project.dir);
+    try project.dir.createDirPath(io, "specs/chosen");
+    var project_source = toolchain_authority_source.Adapter.init(io, project.dir);
+    var document_parser: toolchain_documents.Adapter = .{};
+    var reference_source: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var feature_source: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var native: @import("native_workflow_operations.zig").Assembly = undefined;
+    native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector());
+    var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+    const registry = boot.ready.roots.registry();
+    const selected = try feature.validate(std.testing.allocator, .{ .bytes = "chosen" }, registry.featureDirectoryRoots());
+    defer std.testing.allocator.free(selected.project_relative_path);
+    var adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var inspector = adapter.inspector();
+    try std.testing.expectError(error.FeatureDirectoryUnavailable, inspector.inspect(std.testing.allocator, selected));
+    inspector.capability = registry.featureDirectoryRead();
+    _ = try inspector.inspect(std.testing.allocator, selected);
+    try std.testing.expectError(error.FeatureDirectoryUnavailable, inspector.inspect(std.testing.allocator, .{ .feature_id = selected.feature_id, .project_relative_path = "elsewhere/chosen" }));
+    try project.dir.rename("specs", project.dir, "previous-specs", io);
+    try std.testing.expectError(error.FeatureDirectoryUnavailable, inspector.inspect(std.testing.allocator, selected));
+    try project.dir.createDirPath(io, "specs/chosen");
+    try std.testing.expectError(error.FeatureDirectoryUnavailable, inspector.inspect(std.testing.allocator, selected));
+}
+
+test "feature YAML rejects missing typed input unknown parameters and insufficient read authority" {
+    const io = std.testing.io;
+    const changes = .{
+        .{ "use: normalize-feature-directory@1", "use: normalize-reference-selector@1" },
+        .{ "use: validate-feature-directory@1", "use: validate-feature-directory@1\n    with: { unexpected: true }" },
+        .{ "policy: core.directory-read@1", "policy: core.reference-read@1" },
+    };
+    inline for (changes) |change| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeReferencePreflightFixture(io, project.dir);
+        const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/reference-preflight.workflow.yaml"), change[0], change[1]);
+        defer std.testing.allocator.free(changed);
+        try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
+        try std.testing.expect(runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "chosen", "--reference", "source" }) == .bootstrap_failed);
+    }
+}
+
 const second_workflow_same_shortcode =
     \\schema: workflow/v1
     \\id: goodbye

@@ -10,6 +10,8 @@ const toolchain = @import("../domain/toolchain.zig");
 const roots = @import("../domain/bootstrap_root_registry.zig");
 const capabilities = @import("../domain/workflow_capability.zig");
 const reference = @import("../application/reference_workflow_runner.zig");
+const invocation = @import("../application/specify_invocation_runner.zig");
+const invocation_values = @import("../application/specify_invocation_values.zig");
 const reference_values = @import("../application/reference_workflow_values.zig");
 const normalizer = @import("../ports/unicode_normalizer.zig");
 const reference_source = @import("../ports/reference_directory_inspector.zig");
@@ -28,9 +30,9 @@ pub const Assembly = struct {
     resolve_inheritance: runners.ResolveInheritance,
     compose: runners.Compose,
     validate_safety: runners.ValidateSafety,
-    invocation: reference.Invocation,
-    parse_invocation: reference.ParseInvocation,
-    validate_arguments: reference.ValidateArguments,
+    invocation: invocation.Invocation,
+    parse_invocation: invocation.ParseInvocation,
+    validate_arguments: invocation.ValidateArguments,
     normalize_selector: reference.NormalizeSelector,
     validate_selector: reference.ValidateSelector,
     inspect_directory: reference.InspectDirectory,
@@ -73,9 +75,9 @@ pub const Assembly = struct {
             entry(runners.ResolveInheritance, &self.resolve_inheritance),
             entry(runners.Compose, &self.compose),
             entry(runners.ValidateSafety, &self.validate_safety),
-            .{ .contract = reference.Invocation.contract, .binding = binding.bind(reference.Invocation, &self.invocation, reference.Invocation.invoke) },
-            invocationEntry(reference.ParseInvocation, &self.parse_invocation),
-            entry(reference.ValidateArguments, &self.validate_arguments),
+            .{ .contract = invocation.Invocation.contract, .binding = binding.bind(invocation.Invocation, &self.invocation, invocation.Invocation.invoke) },
+            invocationEntry(invocation.ParseInvocation, &self.parse_invocation),
+            entry(invocation.ValidateArguments, &self.validate_arguments),
             entry(reference.NormalizeSelector, &self.normalize_selector),
             entry(reference.ValidateSelector, &self.validate_selector),
             entry(reference.InspectDirectory, &self.inspect_directory),
@@ -83,12 +85,7 @@ pub const Assembly = struct {
             entry(feature.Validate, &self.validate_feature),
             entry(feature.Inspect, &self.inspect_feature),
         };
-        self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{}, .{
-    .id = "core.directory-read@1",
-    .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read },
-    .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
-} };
+        self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{} };
     }
 
     pub fn bindRoots(self: *Assembly, registry: *const roots.BootstrapRootRegistry) void {
@@ -97,12 +94,11 @@ pub const Assembly = struct {
         self.capture_presets.action.source.capability = registry.toolchainPresetRegistry();
         self.inspect_directory.action.inspector.capability = registry.referenceSources();
         self.validate_feature.action.roots = registry.featureDirectoryRoots();
-        self.inspect_feature.action.inspector.specs = registry.specsArtifacts();
-        self.inspect_feature.action.inspector.archive = registry.archivedSpecs();
+        self.inspect_feature.action.inspector.capability = registry.featureDirectoryRead();
     }
 };
 
-const schemas = values.schemas ++ reference_values.schemas ++ feature.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.toolchain@1",
     .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },

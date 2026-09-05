@@ -35,7 +35,7 @@ zig build test
 zig build test-atomic-execution
 zig build test-model-result-schema
 zig build test-reference-preflight
-zig build test-feature-identity
+zig build test-feature-directory
 zig build smoke
 zig build verify
 ```
@@ -50,14 +50,16 @@ after a successful build.
 Concrete domain operations and the full initial SDD workflow suite remain
 incremental work under `design/design.md` and their feature contracts.
 
-Specify's read-only reference-selector preflight exists. The design now requires
-a feature directory relative to `.sddtoolkit.json`'s `paths.specs`, independent
-of its reference source: `--feature hello-world` selects `<paths.specs>/hello-world/`
-([ADR 0010](design/decisions/0010-explicit-feature-directory.md)). The reference-only
-invocation and derived-name operation remain superseded code to replace; there
-is no feature-ownership registry to implement. Full `spec.md` generation remains
-unfinished. Shared NFC uses statically linked utf8proc with packaged license
-notices ([ADR 0007](design/decisions/0007-unicode-normalization.md)).
+Specify's registered invocation requires `--feature <directory> --reference <selector>`.
+The read-only preflight resolves the feature beneath `.sddtoolkit.json`'s
+`paths.specs`, independently of its reference source: `--feature hello-world`
+selects `<paths.specs>/hello-world/`
+([ADR 0010](design/decisions/0010-explicit-feature-directory.md)). Shared path
+validation rejects traversal, archive targets and filesystem aliases/symlinks.
+Missing targets remain absent; no ownership registry or generated-name operation
+exists. Full `spec.md` generation remains unfinished. Shared NFC uses statically
+linked utf8proc with packaged license notices
+([ADR 0007](design/decisions/0007-unicode-normalization.md)).
 
 Transaction-ID modules, provider journal projections, and logging transaction
 stabilization/events have been removed under ADR 0009. Provider lifecycle and

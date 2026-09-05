@@ -52,9 +52,9 @@ fresh reruns follow ADR 0009; this decision introduces no recovery mechanism.
 
 ## Implementation status
 
-Documentation only. The reference-only invocation and derived-name implementation
-are superseded and must be replaced, not retained as a compatibility path.
-Tests must cover config-root-relative selection with both standard and nonstandard
-`paths.specs` values (no hard-coded prefix), same-directory reruns, independent
-reference changes, containment/alias rejection, selected-output replacement,
-and protected clarification preservation without an ownership registry.
+Implemented: the two-field invocation and read-only feature/reference preflight,
+shared path validation, config-root-relative selection, archive/alias rejection,
+and directory-key consumers. The derived-name operation and naming parameters
+are removed. Tests cover standard/custom specs roots, independent reference
+changes and unchanged existing files. Generation, selected-output replacement
+and write-time protection of closed clarifications remain unimplemented.

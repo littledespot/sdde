@@ -5,10 +5,10 @@
 **Implementation readiness:** The generic concise YAML, declared-resource,
 compiler, registry, and transition-runner boundaries are implemented by F0005
 and ADR 0005. The logical Specify flow, `spec.md` section hierarchy, and
-clarification separation are defined below. Shared reference-selector preflight
-exists, but the invocation must adopt the explicit feature directory in Section
-3.1. The old reference-only invocation and naming operation are superseded;
-generation, output publication and the complete definition remain unfinished.
+clarification separation are defined below. The explicit feature/reference
+invocation and shared read-only directory preflight in Section 3.1 are implemented.
+Generated-name code is removed; generation, output publication and the complete
+definition remain unfinished.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -149,11 +149,14 @@ portable names. Inspection alone carries `reference-read`; it rechecks root
 identity, follows no symlinks, requires a readable directory, and grants no write
 capability. Reference inspection does not read or reconcile the corpus.
 
-**Implementation gap:** replace the reference-only invocation and remove
-`derive-feature-identity@1`, its naming parameters and obsolete fixtures/tests.
-Reuse the existing runner/value envelope and shared path validation rather than
-adding another loader, policy owner or hidden workflow sequence. The current
-preflight fixture is evidence for the old implementation, not the amended CLI.
+**Implemented preflight:** `specify-invocation@1` requires both inputs.
+`normalize-feature-directory@1`, `validate-feature-directory@1` and
+`inspect-feature-directory@1` reuse shared path policy and the runner/value
+envelope. Inspection carries only `feature-read`; `core.directory-read@1`
+permits feature/reference inspection. The fixture selects these steps through
+ordinary YAML, accepts absent targets without creation, and rejects archive
+targets, aliases and symlinks. Generated-name code and parameters are removed.
+State loading, generation and output replacement remain unimplemented.
 
 Specify follows [ADR 0009](../decisions/0009-atomic-workflow-execution.md): each
 execution starts at `start`; no transaction/checkpoint/recovery prerequisite.

@@ -11,8 +11,8 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\  "logs": { "level": "debug", "console": false, "promptCapture": [] },
         \\  "models": { "slots": {} },
         \\  "paths": {
-        \\    "specs": "specs", "references": "references",
-        \\    "specsArchive": "specs/_archive", "workflows": ".sddtoolkit/workflows",
+        \\    "specs": "requirements/current", "references": "references",
+        \\    "specsArchive": "requirements/current/_archive", "workflows": ".sddtoolkit/workflows",
         \\    "toolchainPreset": ".sddtoolkit/toolchainPreset",
         \\    "principles": ".sddtoolkit/principles", "templates": ".sddtoolkit/templates",
         \\    "providers": ".sddproviders.json"
@@ -38,6 +38,8 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     _ = package_directory.add(".sddtoolkit/workflows/toolchain.workflow.yaml", @embedFile("../../src/test_fixtures/toolchain.workflow.yaml"));
     _ = package_directory.add(".sddtoolkit/workflows/preflight.workflow.yaml", @embedFile("../../src/test_fixtures/reference-preflight.workflow.yaml"));
     _ = package_directory.add("references/Café/日本語/stories.md", "Hello, World!\n");
+    // A hard-coded specs root would select this non-directory and fail.
+    _ = package_directory.add("specs/Selected/日本語", "not a directory\n");
     _ = package_directory.add(".sddtoolkit/toolchainPreset/core.toolchain-preset.yaml", "invalid unselected preset");
     _ = package_directory.add(".sddtoolkit/principles/toolchain.yaml", "invalid unselected project layer");
 
@@ -87,7 +89,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     toolchain_command.expectStdErrEqual("");
 
     const missing_config_directory = b.addTempFiles();
-    const reference_command = std.Build.Step.Run.create(b, "run packaged Unicode reference and identity preflight without source or shared Unicode library");
+    const reference_command = std.Build.Step.Run.create(b, "run packaged config-root-relative feature and Unicode reference preflight");
     reference_command.addFileArg(packaged_executable);
     reference_command.addArgs(&.{ "reference-preflight", "--feature", "Selected/日本語", "--reference", "./Cafe\u{301}/日本語" });
     reference_command.setCwd(package_directory.getDirectory());
@@ -117,6 +119,21 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     missing_config_command.step.dependOn(&toolchain_command.step);
     missing_config_command.step.dependOn(&reference_command.step);
     missing_config_command.step.dependOn(&denied_reference.step);
+    for ([_][]const []const u8{
+        &.{ "reference-preflight", "--reference", "Café/日本語" },
+        &.{ "reference-preflight", "--feature", "../escape", "--reference", "Café/日本語" },
+        &.{ "reference-preflight", "--feature", "_archive/child", "--reference", "Café/日本語" },
+    }) |arguments| {
+        const rejected = std.Build.Step.Run.create(b, "reject packaged invalid feature selection");
+        rejected.addFileArg(packaged_executable);
+        rejected.addArgs(arguments);
+        rejected.setCwd(package_directory.getDirectory());
+        rejected.clearEnvironment();
+        rejected.expectExitCode(1);
+        rejected.expectStdOutEqual("");
+        rejected.expectStdErrEqual("failed\n");
+        missing_config_command.step.dependOn(&rejected.step);
+    }
     missing_config_command.addFileArg(executable_without_config);
     missing_config_command.addArg("hello");
     missing_config_command.setCwd(missing_config_directory.getDirectory());

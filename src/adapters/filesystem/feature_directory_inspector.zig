@@ -13,9 +13,9 @@ pub const Adapter = struct {
         return .{ .context = self, .inspect_fn = inspect };
     }
 
-    fn inspect(context: *anyopaque, specs: *const roots.ConfiguredBaseRootCapability, archive: *const roots.ConfiguredBaseRootCapability, allocator: std.mem.Allocator, selector: feature.Selector) source.Error!feature.Directory {
+    fn inspect(context: *anyopaque, capability: *const roots.FeatureDirectoryReadCapability, allocator: std.mem.Allocator, selector: feature.Selector) source.Error!feature.Directory {
         const self: *Adapter = @ptrCast(@alignCast(context));
-        const binding = roots.bindFeatureDirectoryAdapter(specs, archive) orelse return error.FeatureDirectoryUnavailable;
+        const binding = roots.bindFeatureDirectoryAdapter(capability);
         const checked = feature.validate(allocator, .{ .bytes = selector.feature_id.bytes }, binding.paths) catch return error.FeatureDirectoryUnavailable;
         defer allocator.free(checked.project_relative_path);
         if (!std.mem.eql(u8, checked.project_relative_path, selector.project_relative_path)) return error.FeatureDirectoryUnavailable;

@@ -190,7 +190,7 @@ fixture.
 | Feature logging | Policy, records, sinks, rotation, retention, recovery, and composition tests | Subsystem exists, but no Specify activation/state transaction binds it to a feature run. |
 | Workflow authority | Bounded inventory/capture/YAML parse/schema validation, compiler, graph validator, and immutable ID registry | Strong generic foundation exists. The current uncommitted tests strengthen this boundary only. |
 | Generic execution | Exact workflow selection, compiled transitions, owned typed invocation/value flow, declared-input views, and schema-checked delta application | Value-flow foundation exists; Specify generation/commit operations remain missing. |
-| Registered behavior | Core invocation/no-op, nine toolchain operations, and Specify invocation/read-only selector preflight | No content generation; naming a definition `specify` adds no behavior. |
+| Registered behavior | Core invocation/no-op, nine toolchain operations, and Specify invocation/read-only feature/reference directory preflight | No content generation; naming a definition `specify` adds no behavior. |
 | Toolchain | Closed v1 project/preset package references, inheritance, policy composition, and safety validation through selected YAML operations | F0003 owns one sealed validated result in the workflow envelope. Node/Vitest commands and environment facts remain absent. |
 | Workflow artifact registry | Validated feature-log paths and sink binding | Logging-only; no specification, reference, clarification, workflow-state, or stage-transaction paths. |
 | Specify domain | Invocation and contained-directory preflight implemented; no `SpecificationIR`, reference snapshot, renderer/parser, clarification, or commit implementation | Preflight only; full Specify remains unavailable. |
@@ -234,11 +234,11 @@ adding an unrelated definition changes neither execution nor authority.
 
 ### 5.2 Complete deterministic feature/state foundations
 
-Shared NFC/lexical validation and read-only contained reference-directory
-inspection exist. The current reference-only invocation and deterministic
-name derivation are superseded by [ADR 0010](../decisions/0010-explicit-feature-directory.md).
-Implement the explicit feature-directory input and remove the naming operation;
-no separate ownership registry or feature-availability check is required.
+The explicit config-root-relative feature input and independent reference input
+are implemented with shared NFC/lexical validation and read-only no-follow
+directory inspection ([ADR 0010](../decisions/0010-explicit-feature-directory.md)).
+The naming operation is removed. Preflight creates no directories and performs
+no ownership lookup; selected-state loading and generation remain separate work.
 
 [ADR 0009](../decisions/0009-atomic-workflow-execution.md) removes transaction
 storage, checkpoint and provider-recovery prerequisites at every scope.

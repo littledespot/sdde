@@ -63,3 +63,26 @@ test "feature inspection is a narrow read capability not a reference or model ca
     const validation = comptime binding.inspect(runners.Validate, &.{});
     try std.testing.expect(validation.valid and !validation.feature_read and !validation.reference_read);
 }
+
+test "feature state and logging consumers accept directory keys without relaxing other identifiers" {
+    const binding = @import("domain/feature_log_binding.zig");
+    const telemetry = @import("domain/telemetry.zig");
+    const path = identity.FeatureId.parse("Group/Café/日本語").?;
+    const owner = try binding.createValidated(std.testing.allocator, .{
+        .log_policy_id = telemetry.Identifier.validate("POLICY-1").?,
+        .binding_id = telemetry.Identifier.validate("BINDING-1").?,
+        .run_id = telemetry.Identifier.validate("RUN-1").?,
+        .feature_id = path,
+    });
+    defer binding.deinitOwner(owner);
+    try std.testing.expectEqualStrings(path.bytes, binding.binding(owner).featureId().bytes);
+    const state: @import("domain/workflow_artifact_registry.zig").StateId = .{ .feature_id = path, .ordinal = 1 };
+    try std.testing.expect(state.isValid());
+    try std.testing.expect(telemetry.Identifier.validate(path.bytes) == null);
+    try std.testing.expectError(error.InvalidFeatureLogBinding, binding.createValidated(std.testing.allocator, .{
+        .log_policy_id = telemetry.Identifier.validate("POLICY-1").?,
+        .binding_id = telemetry.Identifier.validate("BINDING-1").?,
+        .run_id = telemetry.Identifier.validate("RUN-1").?,
+        .feature_id = .{ .bytes = "../escape" },
+    }));
+}

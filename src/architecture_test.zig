@@ -1287,6 +1287,26 @@ test "feature directory selection shares path policy and has no generated identi
     try expectAbsent(filesystem, "writeFile");
 }
 
+test "feature inspection root handoff has one narrow consumer and cannot mix configured roots" {
+    const roots = @import("domain/bootstrap_root_registry.zig");
+    const inspector = @import("ports/feature_directory_inspector.zig").Inspector;
+    try std.testing.expect(@FieldType(inspector, "capability") == ?*const roots.FeatureDirectoryReadCapability);
+    const io = std.testing.io;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(std.testing.allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.eql(u8, entry.path, "domain/bootstrap_root_registry.zig") or
+            std.mem.eql(u8, entry.path, "adapters/filesystem/feature_directory_inspector.zig") or
+            std.mem.eql(u8, entry.path, "architecture_test.zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, std.testing.allocator, .limited(1024 * 1024));
+        defer std.testing.allocator.free(source);
+        try expectAbsent(source, "bindFeatureDirectoryAdapter");
+    }
+}
+
 test "feature document filenames and headings agree" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;

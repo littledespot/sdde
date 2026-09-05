@@ -1,11 +1,12 @@
 const std = @import("std");
+const pipeline = @import("../../domain/pipeline.zig");
 const feature = @import("../../domain/feature_directory.zig");
 const path = @import("../../domain/relative_directory_path.zig");
 const unicode = @import("../../ports/unicode_normalizer.zig");
 
 pub const Action = struct {
     normalizer: unicode.Normalizer,
-    pub const contract: @import("../../domain/pipeline.zig").NodeContract = .{
+    pub const contract: pipeline.NodeContract = .{
         .id = "normalize-feature-directory@1",
         .kind = .action,
         .requires = &.{.specify_invocation},
