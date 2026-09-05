@@ -14,65 +14,11 @@ const llm_provider_registry_service = @import("application/llm_provider_registry
 const derive_provider_requirement = @import("actions/provider/derive_provider_requirement.zig");
 const workflow_execution = @import("domain/workflow_execution.zig");
 
-test "transaction ledger candidates are opaque capability-free snapshots with shared owner identities" {
-    const identity = @import("domain/transaction_identity.zig");
-    const ledger = @import("domain/transaction_id_ledger.zig");
-    try std.testing.expect(@typeInfo(ledger.Ledger) == .@"opaque");
-    try std.testing.expect(@typeInfo(ledger.Owner) == .@"opaque");
-    try std.testing.expect(@typeInfo(identity.StorageOwner) == .@"struct");
-    try std.testing.expectEqual(@as(usize, 2), @typeInfo(identity.StorageOwner).@"struct".fields.len);
-    try std.testing.expect(!@hasField(identity.StorageOwner, "project"));
-    try std.testing.expect(@FieldType(identity.StorageOwner, "feature_id") == @import("domain/feature_identity.zig").FeatureId);
-    try std.testing.expect(@FieldType(identity.StorageOwner, "workflow_artifact_registry_state_id") == @import("domain/workflow_artifact_registry.zig").StateId);
-    try std.testing.expect(std.meta.stringToEnum(identity.Kind, "feature_activation") == null);
-    try std.testing.expect(@FieldType(ledger.Transition, "expected_ledger") == *const ledger.Ledger);
-    try std.testing.expect(@FieldType(ledger.Candidate, "reservations") == []const ledger.Record);
-    try std.testing.expect(ledger.Revision != model_request_identity.LedgerRevision);
-    inline for (.{ @embedFile("domain/transaction_identity.zig"), @embedFile("domain/transaction_id_ledger.zig") }) |source| {
-        try expectAbsent(source, "/ports/");
-        try expectAbsent(source, "/actions/");
-        try expectAbsent(source, "/adapters/");
-        try expectAbsent(source, "std.Io");
-        try expectAbsent(source, "NodeContract");
-    }
-}
-
-test "transaction ledger stored format reuses domain authority and its documented sample round trips" {
-    const codec = @import("adapters/parsers/transaction_id_ledger.zig");
-    const identity = @import("domain/transaction_identity.zig");
-    const ledger = @import("domain/transaction_id_ledger.zig");
-    const source = @embedFile("adapters/parsers/transaction_id_ledger.zig");
-    try std.testing.expect(std.mem.indexOf(u8, source, "ledger.createValidated") != null);
-    try std.testing.expect(std.mem.indexOf(u8, source, "limits.ledger.validateCounts") != null);
-    try std.testing.expect(std.mem.indexOf(u8, source, "json.validateTransport") != null);
-    try expectAbsent(source, "utf8ValidateSlice");
-    try expectAbsent(source, "NodeContract");
-    try expectAbsent(source, "/actions/");
-    try expectAbsent(source, "std.Io.Dir");
-    try expectAbsent(source, "std.Io.File");
-    try expectAbsent(@embedFile("domain/transaction_id_ledger.zig"), "std.json");
-
-    const allocator = std.testing.allocator;
-    const documented = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/transaction-id-ledger-format.md", allocator, .limited(65536));
-    defer allocator.free(documented);
-    const start = (std.mem.indexOf(u8, documented, "```json\n") orelse return error.MissingStoredFormatExample) + "```json\n".len;
-    const end = std.mem.indexOf(u8, documented[start..], "```") orelse return error.MissingStoredFormatExample;
-    const sample = documented[start..][0..end];
-    const owner: identity.StorageOwner = .{
-        .feature_id = .{ .bytes = "sample-feature" },
-        .workflow_artifact_registry_state_id = .{
-            .feature_id = .{ .bytes = "sample-feature" },
-            .ordinal = 1,
-        },
-    };
-    const parsed = try codec.decode(allocator, sample, owner, null, .{
-        .maximum_bytes = 65536,
-        .ledger = .{ .maximum_records = 10, .maximum_owner_bytes = 4096 },
-    });
-    defer ledger.deinitOwner(parsed);
-    const bytes = try codec.encode(allocator, ledger.ledger(parsed), owner, 65536);
-    defer allocator.free(bytes);
-    try std.testing.expectEqualStrings(sample, bytes);
+test "workflow filesystem traversal uses the inventory reserved-child policy" {
+    const source = @embedFile("adapters/filesystem/workflow_authority_source.zig");
+    try std.testing.expect(std.mem.indexOf(u8, source, "inventory.isReservedRootChild(entry.path)") != null);
+    try expectAbsent(source, "\"features\"");
+    try expectAbsent(source, "\"transactions\"");
 }
 
 test "result schema authority is opaque and compilation remains a kernel concern" {
@@ -789,8 +735,12 @@ test "provider lifecycle has one pure action and runner-owned immutable ledger" 
         .@"opaque" => {},
         else => return error.ProviderOperationLedgerMustBeOpaque,
     }
-    try std.testing.expect(@TypeOf(@as(lifecycle.TerminalSummary, .counted).counted) == void);
-    try std.testing.expect(!@hasField(lifecycle.Effect, "content"));
+    try std.testing.expect(!@hasDecl(lifecycle, "Effect"));
+    try std.testing.expect(!@hasDecl(lifecycle, "TerminalSummary"));
+    try std.testing.expect(!@hasDecl(lifecycle, "projectEffect"));
+    try std.testing.expect(!@hasDecl(lifecycle.Transition, "effect"));
+    const runner = @import("application/provider_operation_lifecycle_runner.zig").Runner;
+    try std.testing.expect(@typeInfo(@TypeOf(runner.advance)).@"fn".return_type.? == lifecycle.Error!void);
 
     const io = std.testing.io;
     const allocator = std.testing.allocator;

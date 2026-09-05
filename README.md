@@ -8,6 +8,12 @@ through one registry of generic operations, and execute one selected workflow
 by its compiled transitions. `specify`, `plan`, `tasks`, and `implement` are
 the initial workflow suite, not a fixed engine registry.
 
+The accepted execution contract is [one atomic workflow from beginning to
+end](design/decisions/0009-atomic-workflow-execution.md). Non-success abandons
+its candidate output; a new invocation starts at `start`. There are no
+project/feature transactions, provider-effect journals or saved continuations.
+Clarifications and relevant answers survive without duplication.
+
 Bootstrap loads the exact `.sddtoolkit.json` in the invocation working
 directory, validates configured roots, compiles all concise `workflow/v1`
 definitions, and publishes the immutable workflow registry before selection.
@@ -45,18 +51,17 @@ after a successful build.
 Concrete domain operations and the full initial SDD workflow suite remain
 incremental work under `design/design.md` and their feature contracts.
 
-Specify's registered invocation, read-only reference-selector preflight, and
-deterministic identity derivation are implemented; they do not activate a
-feature or generate `spec.md`. Identity derivation requires an explicit YAML
-`max-length` (see [ADR 0008](design/decisions/0008-feature-naming-policy.md)).
-Unicode NFC and naming folds use pinned
-utf8proc compiled into the executable; `zig build` installs its license under
-`zig-out/share/licenses/utf8proc/` (see [ADR 0007](design/decisions/0007-unicode-normalization.md)).
+Specify's read-only reference-selector preflight exists. The design now requires
+a feature directory relative to `.sddtoolkit.json`'s `paths.specs`, independent
+of its reference source: `--feature hello-world` selects `<paths.specs>/hello-world/`
+([ADR 0010](design/decisions/0010-explicit-feature-directory.md)). The reference-only
+invocation and derived-name operation remain superseded code to replace; there
+is no feature-ownership registry to implement. Full `spec.md` generation remains
+unfinished. Shared NFC uses statically linked utf8proc with packaged license
+notices ([ADR 0007](design/decisions/0007-unicode-normalization.md)).
 
-The shared transaction-ID ledger has in-memory owner/ID validation and immutable
-reserve/commit/retire candidates, plus a bounded parser and deterministic
-serializer for its [stored format](design/transaction-id-ledger-format.md).
-It does not persist IDs, recover journals, activate features, or authorize
-output writes. The project-owner branch is superseded and awaits code removal;
-it must not be developed into project-level transaction storage. The current
-activation and rerun contracts are in Design Sections 25.1 and 23.2.
+Existing transaction-ID ledger/codec code is superseded by ADR 0009 and is
+not a persistence foundation to extend. Removing that code is separate from
+this documentation amendment. Only the root `features/` directory is reserved
+during workflow discovery. Rerun output replacement and protected
+clarifications follow Design Sections 25 and 23.2.

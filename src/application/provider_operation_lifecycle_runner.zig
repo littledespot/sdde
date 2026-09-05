@@ -34,7 +34,7 @@ pub const Runner = struct {
         operation_id: provider.ProviderOperationId,
         expected_operation_revision: ?lifecycle.Revision,
         command: lifecycle.Command,
-    ) lifecycle.Error!lifecycle.Effect {
+    ) lifecycle.Error!void {
         const envelope = pipeline.DataShape.init(&.{.model_request_identity_ledger});
         envelope.validateInvocation(advance_action.Action.contract) catch return error.InvalidProviderOperationTransition;
         const delta = try self.action.execute(self.ledger, authority, expected_revision, operation_id, expected_operation_revision, command);
@@ -45,7 +45,6 @@ pub const Runner = struct {
         };
         self.ledger = try lifecycle.apply(self.ledger, authority, transition);
         self.authorization_leases.update(self.ledger);
-        return lifecycle.projectEffect(self.ledger.record(operation_id).?.*, expected_operation_revision);
     }
 
     pub fn current(self: *const Runner) *const lifecycle.Ledger {

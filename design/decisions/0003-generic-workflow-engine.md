@@ -8,6 +8,9 @@
   prerequisites. Feature activation follows Design Section 25.1; this
   machinery must not be relocated under another path.
 - **Amended by:** [ADR 0005 — workflow-defined operations](0005-workflow-defined-operations.md)
+  and [ADR 0009 — atomic workflow execution](0009-atomic-workflow-execution.md).
+  One whole execution is atomic; there are no feature/task transactions,
+  provider-effect journals, checkpoints or saved-step recovery.
 - **Supersedes:** The fixed four-role workflow registry and compiler-owned
   four-workflow graph described in Sections 5.2, 9.1, 9.2, 30, and 31 of the
   proposed design

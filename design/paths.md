@@ -34,6 +34,15 @@ The engine derives, rather than separately configures, these storage children:
 | --- | --- |
 | `<paths.workflows>/features/` | Engine-owned canonical per-feature workflow and execution state. |
 
+`--feature` supplies a directory relative to `.sddtoolkit.json`'s `paths.specs`.
+The engine resolves `<paths.specs>/<feature-directory>/` and excludes
+`paths.specsArchive`. For `--feature hello-world`, Specify writes
+`<paths.specs>/hello-world/spec.md`. The caller does not include the configured
+root, and the engine never hard-codes `specs/` or guesses/removes a prefix.
+The normalized relative key also identifies associated canonical state; there
+is no reference-derived name or separate identity/ownership registry
+([ADR 0010](decisions/0010-explicit-feature-directory.md)).
+
 Only `features/` is reserved at the workflow root. There is no project-level
 transaction storage child or replacement recovery location. Other directories
 follow the ordinary workflow-definition/resource inventory rules.

@@ -248,6 +248,38 @@ test "inventory validation owns collision and accounting joins" {
     try std.testing.expectError(error.InvalidWorkflowInventory, validateEntries(&physical_alias, &accounts, &definition_ordinals, &.{}));
 }
 
+test "only the exact feature root is reserved and ordinary descendants are fully accounted" {
+    const root_identity: filesystem_identity.FileIdentity = .{ .filesystem_id = 1, .file_id = 1 };
+    try std.testing.expect(isReservedRootChild("features"));
+    try std.testing.expect(classifyInventoryDescriptor(.{ .path = "features", .kind = .directory, .identity = root_identity }) == .reserved_child);
+    for ([_]EntryKind{ .file, .symlink, .special }) |kind| {
+        try std.testing.expect(classifyInventoryDescriptor(.{ .path = "features", .kind = kind, .identity = root_identity, .size = 1 }) == null);
+    }
+    for ([_][]const u8{ "Features", "FEATURES" }) |alias| try std.testing.expect(reservedAlias(alias));
+    try std.testing.expect(reservedDescendant("features/state.json"));
+    try std.testing.expect(!reservedAlias("features"));
+
+    for ([_][]const u8{ "transactions", "Transactions", "utilities", "nested/features" }) |directory| {
+        try std.testing.expect(!isReservedRootChild(directory));
+        try std.testing.expect(!reservedAlias(directory));
+        const child = try std.fmt.allocPrint(std.testing.allocator, "{s}/check.workflow.yaml", .{directory});
+        defer std.testing.allocator.free(child);
+        const descriptors = [_]InventoryDescriptor{
+            .{ .path = directory, .kind = .directory, .identity = root_identity },
+            .{ .path = child, .kind = .file, .identity = .{ .filesystem_id = 1, .file_id = 2 }, .size = 1 },
+        };
+        const accounts = [_]InventoryAccount{
+            .{ .ordinal = 1, .path = directory, .disposition = .directory },
+            .{ .ordinal = 2, .path = child, .disposition = .definition },
+        };
+        try validateEntries(&descriptors, &accounts, &.{2}, &.{});
+        var skipped = accounts;
+        skipped[0].disposition = .reserved_child;
+        try std.testing.expectError(error.InvalidWorkflowInventory, validateEntries(&descriptors, &skipped, &.{2}, &.{}));
+        try std.testing.expectError(error.InvalidWorkflowInventory, validateEntries(&descriptors, &accounts, &.{}, &.{}));
+    }
+}
+
 test "aggregate capture bytes are bounded before reads" {
     var descriptors: [17]InventoryDescriptor = undefined;
     var ordinals: [17]u16 = undefined;

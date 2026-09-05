@@ -21,7 +21,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     ;
     _ = package_directory.add(".sddtoolkit.json", configuration);
     _ = package_directory.add(".sddtoolkit/workflows/features/.keep", "");
-    _ = package_directory.add(".sddtoolkit/workflows/hello.workflow.yaml",
+    const hello_workflow =
         \\schema: workflow/v1
         \\id: hello
         \\version: 1
@@ -33,7 +33,8 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\  run:
         \\    use: core.noop@1
         \\    on: { ok: end.ok }
-    );
+    ;
+    _ = package_directory.add(".sddtoolkit/workflows/transactions/hello.workflow.yaml", hello_workflow);
     _ = package_directory.add(".sddtoolkit/workflows/toolchain.workflow.yaml", @embedFile("../../src/test_fixtures/toolchain.workflow.yaml"));
     _ = package_directory.add(".sddtoolkit/workflows/preflight.workflow.yaml", @embedFile("../../src/test_fixtures/reference-preflight.workflow.yaml"));
     _ = package_directory.add("references/Café/日本語/stories.md", "Hello, World!\n");
@@ -47,6 +48,20 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     valid_command.clearEnvironment();
     valid_command.expectStdOutEqual("");
     valid_command.expectStdErrEqual("");
+
+    const unregistered_directory = b.addTempFiles();
+    const unregistered_executable = unregistered_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = unregistered_directory.add(".sddtoolkit.json", configuration);
+    _ = unregistered_directory.add(".sddtoolkit/workflows/hello.workflow.yaml", hello_workflow);
+    _ = unregistered_directory.add(".sddtoolkit/workflows/transactions/unregistered.json", "{}");
+    const denied_unregistered = std.Build.Step.Run.create(b, "reject unregistered files beneath an ordinary packaged workflow directory");
+    denied_unregistered.addFileArg(unregistered_executable);
+    denied_unregistered.addArg("hello");
+    denied_unregistered.setCwd(unregistered_directory.getDirectory());
+    denied_unregistered.clearEnvironment();
+    denied_unregistered.expectExitCode(1);
+    denied_unregistered.expectStdOutEqual("");
+    denied_unregistered.expectStdErrEqual("WORKFLOW_AUTHORITY_INVENTORY_INVALID\n");
 
     const denied_toolchain = std.Build.Step.Run.create(b, "reject invalid toolchain only when selected");
     denied_toolchain.addFileArg(packaged_executable);
@@ -97,6 +112,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         "reject packaged SDDE invocation without target config",
     );
     missing_config_command.step.dependOn(&valid_command.step);
+    missing_config_command.step.dependOn(&denied_unregistered.step);
     missing_config_command.step.dependOn(&denied_toolchain.step);
     missing_config_command.step.dependOn(&toolchain_command.step);
     missing_config_command.step.dependOn(&reference_command.step);

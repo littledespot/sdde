@@ -181,22 +181,6 @@ pub fn build(b: *std.Build) void {
     identity_step.dependOn(&b.addRunArtifact(identity_tests).step);
     identity_step.dependOn(&run_unicode_tests.step);
 
-    const transaction_tests = b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/transaction_id_ledger_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    }) });
-    const transaction_step = b.step("test-transaction-id-ledger", "Test in-memory transaction identity and ledger transitions");
-    transaction_step.dependOn(&b.addRunArtifact(transaction_tests).step);
-
-    const transaction_codec_tests = b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/transaction_id_ledger_codec_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    }) });
-    const transaction_codec_step = b.step("test-transaction-id-ledger-codec", "Test the closed transaction ledger stored format");
-    transaction_codec_step.dependOn(&b.addRunArtifact(transaction_codec_tests).step);
-
     const smoke_command = packaging_smoke.add(b, executable);
     const smoke_step = b.step("smoke", "Test the packaged executable in a clean directory");
     smoke_step.dependOn(&smoke_command.step);

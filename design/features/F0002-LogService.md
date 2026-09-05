@@ -73,7 +73,7 @@ The graph returns the existing common `Outcome` and composite `NodeDelta`:
 | --- | --- |
 | `ok` with drop evidence | The event is below threshold; no event identity, sequence, lock, or write is created. |
 | `ok` with persistence evidence | The complete safe record was appended, any required flush completed, and the stream lock was released. |
-| `blocked` | Logging failed; cleanup, emergency reporting, and required transaction stabilization completed before new work was blocked. |
+| `blocked` | Logging failed; cleanup, emergency reporting, and execution cleanup completed before new work was blocked. |
 
 There is no logging-specific public response type or direct producer-to-sink
 call. `WorkflowLog.log` returns only candidate-delta construction success or
@@ -186,7 +186,6 @@ must supply its own valid unique shortcode.
 | Emit/drop comparison | `EvaluateLogThresholdAction` |
 | Feature log collection paths | `WorkflowArtifactRegistry` and validated `FeatureLogBinding` |
 | Fact ordering and business-node barriers | Pipeline runner |
-| Transaction stabilization | `TransactionRecoveryOrchestrator` |
 | Concrete adapters and registered node implementation bindings | Composition root |
 | Immutable executable workflow graph construction | Workflow compiler |
 
@@ -379,11 +378,6 @@ registered.
 | `review.requested` | `info` | — | — |
 | `review.approved` | `info` | `outcome` | — |
 | `review.rejected` | `warning` | `outcome` | — |
-| `transaction.prepared` | `debug` | `transaction_id`, `count` | — |
-| `transaction.applying` | `debug` | `transaction_id`, `count` | — |
-| `transaction.committed` | `info` | `transaction_id`, `count`, `outcome` | — |
-| `transaction.rolled_back` | `warning` | `transaction_id`, `diagnostic_code`, `outcome` | `count` |
-| `transaction.recovered` | `warning` | `transaction_id`, `outcome` | `count` |
 | `command.started` | `debug` | `command_id` | — |
 | `command.completed` | `debug` | `command_id`, `outcome` | `exit_code`, `duration_ms` |
 | `command.failed` | `error` | `command_id`, `diagnostic_code`, `outcome` | `exit_code`, `duration_ms` |
@@ -563,10 +557,9 @@ logging barrier before the next applicable business node. It has no background
 dispatcher, public queue, or fire-and-forget path. The bounded policy-transition
 buffer required by Section 14.10 is not a general logging queue.
 
-Logs are never workflow authority and are not stage/task transaction members.
-Their presence, absence, or content cannot prove approval, completion,
-rollback, recovery, or commit. A transaction event is eligible only after the
-corresponding durable transition.
+Logs are observations, never approval, completion or continuation authority.
+ADR 0009 removes transaction events and transaction-stabilization requirements;
+log-tail handling cannot resume an abandoned workflow.
 
 ## 8. Failure contract
 
@@ -581,13 +574,11 @@ An initialized logging failure follows the governing
 2. make one direct `stderr` attempt using the exact bounded ASCII emergency
    line in Section 6.4, containing the exact workflow shortcode, canonical
    `fatal` level, and one closed failure code, without invoking the failed sink;
-3. stabilize an already prepared/applying transaction through the existing
-   transaction-recovery boundary; and
-4. return `blocked` before the runner starts new work.
+3. abandon the workflow candidate and return `blocked` before new work.
+   No transaction recovery or persisted continuation is performed.
 
-The failure path is not logged through F0002 and cannot recurse. A durable
-commit remains committed; an uncommitted transaction reaches a stable boundary
-before blocking.
+The failure path is not logged through F0002 and cannot recurse. The atomic
+execution contract in ADR 0009 applies; log state never resumes a workflow.
 
 Before a current feature binding exists, the bounded content-free emergency
 path is available only after the selected compiled workflow's runner-created
@@ -671,8 +662,8 @@ F0002 does not:
 13. Filtering allocates no record identity, sequence, segment, or lock.
 14. Storage/recovery follows the governing lock, ordering, rotation, retention,
    restart, and policy-transition contracts without a second implementation.
-15. Logging failure cleans up, reports once without recursion, stabilizes any
-   in-flight transaction, and blocks before new work.
+15. Logging failure cleans up, reports once without recursion, abandons the
+   execution candidate, and blocks before new work without recovery.
 16. Logs cannot affect workflow state, approval, evidence, or completion.
 17. The packaged executable has no dependency on source examples, the source
     tree, build cache, or Zig toolchain.
@@ -718,7 +709,8 @@ negative cases:
   bytes, and representative clean-tail versus corrupt-tail recovery;
 - failure: each operation class reaches the one non-recursive emergency/block
   route, the emergency line is byte-exact and at most 128 ASCII bytes, a failed
-  emergency write is not retried, and transaction durability is preserved; and
+  emergency write is not retried, and the execution is abandoned without
+  partial successful output; and
 - packaging: a clean native-executable run with no source-tree fallback.
 
 Detailed fault matrices remain owned by governing Section 28 and are referenced

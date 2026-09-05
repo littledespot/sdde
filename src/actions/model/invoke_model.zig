@@ -16,7 +16,6 @@ pub const Action = struct {
 
     /// The runner supplies the applied invocation record and single-use lease.
     /// The port owns consumption; the returned observation remains caller-owned.
-    /// In-memory invocation evidence alone does not authorize production I/O.
     pub fn execute(
         self: Action,
         provider_binding: *const binding.ValidatedProviderModelBinding,

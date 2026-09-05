@@ -335,19 +335,20 @@ timeout or cancellation never turns an incomplete inventory into success.
 
 `BuildWorkflowAuthorityLayoutAction` derives its root only from F0004's exact
 `workflow_authority` capability. The root inventory includes an encountered
-direct child named exactly `features` so ownership can be validated, but
+direct child named exactly `features` to validate its reserved state-root role, but
 enumeration never enters its descendant subtree. That child must be a
 no-follow directory and receives one `reserved_child_accounted` disposition.
-Absence is legal; later authorized feature activation may create it under
-Design Section 25.1.
+Absence is legal; authorized canonical state publication may create it under
+Design Section 25.1. This is not a feature-identity or ownership registry.
 
 Only that exact root child is reserved. An identically named nested
 directory elsewhere has no reserved status. Normalization, case-fold,
 portable-name, or physical aliases of a reserved child are rejected rather
 than treated as another spelling.
 
-Implementation gap: remove the loader's superseded second reserved-child branch
-and update its tests; it is not authority to retain project transaction storage.
+Implemented: the filesystem loader reuses the inventory's single reserved-child
+rule. Regression tests cover ordinary directory traversal, nested names,
+reserved-root rejection, and unregistered-file rejection in the packaged engine.
 
 The engine recursively encounters every other directory, regular file,
 symlink, and special node without following links. Exact `*.workflow.yaml`

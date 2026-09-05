@@ -58,7 +58,7 @@ flowchart TD
     ROUTE -- clarification_needed --> NEED[ValidateClarificationNeedProposalAction]
     NEED -- Valid genuine current authority gap; no operation retry consumed --> NACCEPT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with needs_user]
     NACCEPT --> CL[ClarificationLifecycleOrchestrator]
-    CL --> USER[NeedsUser; commit the complete stage-specific pause authority set,<br/>forms and pending workflow state; persist no partial stage IR]
+    CL --> USER[NeedsUser; preserve deduplicated clarifications and end execution;<br/>publish no partial workflow output and save no continuation]
     NEED -- Repairable invalid need proposal --> CREJECT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with failed<br/>before allocating a distinct repair request]
     NEED -- Non-repairable policy or environment defect --> CFAIL[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with blocked/failed fact]
 
@@ -69,7 +69,7 @@ flowchart TD
     FILEMODE -- Plan --> PFILES[Existing fileId or engine-materialized preset PathCandidateId<br/>raw create fallback only when explicitly enabled and fully validated]
     FILEMODE -- Tasks --> TFILES[Approved PlanState fileIds and grants only]
     FILEMODE -- Implement --> IFILES[Approved fileId, copy sourceId and operation-intent ID only]
-    SFILES --> VALIDATE[Stage-specific deterministic validators<br/>run before rendering, transaction staging or project writes]
+    SFILES --> VALIDATE[Stage-specific deterministic validators<br/>run before rendering or whole-workflow output]
     PFILES --> VALIDATE
     TFILES --> VALIDATE
     IFILES --> VALIDATE
@@ -135,7 +135,6 @@ flowchart TD
     RROUTE -- content from ordinary field repair --> VALIDATE
     RROUTE -- content or malformed result after operation-result replacement authorization --> CFAIL
 
-    TX09REF[Diagram 09 feature-storage lifecycle is invoked only when the owning stage<br/>commits an accepted candidate or clarification pause: acquire/recover feature storage,<br/>reserve/fsync transaction ID before the stage builder, validate DurableTransactionMember,<br/>commit or retire, clean up and release; no lock is held during model or repair calls]
-    CL -. clarification-pause transaction .-> TX09REF
-    OK -. owning-stage candidate transaction .-> TX09REF
+    CL --> END[Preserve deduplicated clarifications and end needs_user;<br/>no saved continuation or partial workflow output]
+    OK --> CANDIDATE[Retain candidate for the remaining YAML steps;<br/>publish output only after whole-workflow success]
 ```

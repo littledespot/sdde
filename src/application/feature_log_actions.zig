@@ -8,7 +8,6 @@ const close_stream = @import("../actions/log/close_feature_log_stream.zig");
 const read_clock = @import("../actions/log/read_trusted_log_clock.zig");
 const write_console = @import("../actions/log/write_console_log_record.zig");
 const emit_emergency = @import("../actions/log/emit_emergency_log_failure_record.zig");
-const stabilize_failure = @import("../actions/log/stabilize_log_failure.zig");
 
 /// Closed runner dependencies for the feature-log graph. This is constructed
 /// only by composition and is never exposed to an orchestrator.
@@ -23,5 +22,4 @@ pub const Set = struct {
     read_clock: read_clock.Action,
     write_console: write_console.Action,
     emit_emergency: emit_emergency.Action,
-    stabilize_failure: stabilize_failure.Action,
 };

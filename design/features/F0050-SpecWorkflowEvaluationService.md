@@ -174,7 +174,7 @@ invents enough content merely to force success must be rejected.
 
 ### 3.6 Align the executable and harness command contracts
 
-The proposed CLI is `sdd specify --reference <relative-selector>`, while the
+The proposed CLI is `sdd specify --feature <feature-directory> --reference <relative-selector>`, while the
 current native artifact is named `sdde`. The harness build-step names are also
 only proposals, and no per-case selector grammar exists. The accepted command
 surface must settle these names without a compatibility shim inferred from the
@@ -234,30 +234,25 @@ adding an unrelated definition changes neither execution nor authority.
 
 ### 5.2 Complete deterministic feature/state foundations
 
-Implemented: exact one-selector invocation, Unicode NFC/lexical validation,
-read-only contained-directory inspection, and deterministic feature-identity
-seeds through registered operations (F0100 Section 3.1). These allocate no
-feature, claim no identity availability, and read no reference contents.
+Shared NFC/lexical validation and read-only contained reference-directory
+inspection exist. The current reference-only invocation and deterministic
+name derivation are superseded by [ADR 0010](../decisions/0010-explicit-feature-directory.md).
+Implement the explicit feature-directory input and remove the naming operation;
+no separate ownership registry or feature-availability check is required.
 
-The in-memory transaction-ID ledger and bounded codec exist. Their project-owner
-branch is superseded by the storage amendment in Design Section 25.1 and must
-be removed from code/tests, alongside the loader's extra reserved-child branch,
-not extended into project persistence. The remaining
-feature-owned ledger contract uses the [closed stored format](../transaction-id-ledger-format.md)
-and shared validator. Neither supplies trusted reads, durable reservations, or
-commit evidence.
-
-Project-level transaction storage, ledger persistence, collection locks, and WAL
-recovery are not implementation prerequisites. Feature activation uses the
-validated fixed-path writes in Design Section 25.1; it does not promise automatic
-multi-file rollback. This removal does not create a replacement recovery path.
+[ADR 0009](../decisions/0009-atomic-workflow-execution.md) removes transaction
+storage, checkpoint and provider-recovery prerequisites at every scope.
+Existing transaction-ID codec code is superseded implementation to remove,
+not a foundation to extend. Specify executes atomically; non-success abandons
+its candidate output and a later invocation starts at `start`.
 
 Remaining:
 
-- feature collision/ownership/inventory, artifact authority, state-ID ledgers,
-  and fixed-path feature activation;
-- feature-owned stage/task persistence and its existing transaction guarantees,
-  separate from activation; no project-level persistence layer;
+- feature-directory resolution relative to configured `paths.specs` (no repeated
+  or hard-coded root), validation and fixed artifact-path binding, plus
+  validation of only the selected feature's required existing state;
+- the complete atomic workflow output boundary, with no independently
+  published stage/task or transaction/recovery layer;
 - full workflow state and the `specifying`, clarification-pending, and
   `specified` transitions; and
 - feature-log activation, recovery, flush barriers, and finalization bound to
@@ -268,7 +263,8 @@ are overwritten at the same registered paths without separate overwrite
 approval, and user-closed clarification files MUST remain byte-for-byte
 unchanged. Cover applicable validated answer reuse and rejection of stale/invalid
 or concurrent-close overwrites (Design Section 23.2). This output policy does
-not authorize ownership changes, ledger resets, or writes to unrelated files.
+not authorize automatic state resets, writes to unrelated files, or a generated
+feature name when the supplied directory is invalid.
 
 ### 5.3 Implement the Markdown reference vertical slice
 
@@ -312,7 +308,7 @@ another encountered media type.
 - canonical `spec.md` and `reference-context.md` renderers;
 - editable-spec parser and normalized IR round trip;
 - generated-view equality and tamper handling;
-- the complete atomic Specify transaction; and
+- complete atomic Specify execution and whole-workflow output; and
 - success only after durable artifacts/state/evidence commit and recorded
   `specified` state.
 
@@ -406,7 +402,8 @@ governing design change.
   tests;
 - reference accounting and unsupported-reader negative tests;
 - renderer/parser golden and round-trip tests;
-- transaction failpoints before, during, and after every durable phase;
+- interruption before, during and after model/task work, with no partial
+  successful output and a full new execution rather than checkpoint recovery;
 - end-to-end fake-model success and clarification flows; and
 - clean packaged-native execution without source tree, Zig toolchain, cache,
   Node.js, provider credentials, or development-only assets.

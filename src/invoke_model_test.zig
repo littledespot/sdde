@@ -149,7 +149,7 @@ test "expired authorization and no-longer-invoked operations cannot produce effe
         if (expired) {
             fixture.base.clock.now_ms = fixture.authorized.invoked.deadline_monotonic_ms;
         } else {
-            _ = try fixture.base.change(.inference, .{ .terminate = .{ .cancelled = .not_sent } });
+            try fixture.base.change(.inference, .{ .terminate = .{ .cancelled = .not_sent } });
         }
         var response = try fixture.response();
         defer response.deinit();

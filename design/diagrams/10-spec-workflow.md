@@ -4,11 +4,13 @@
 flowchart TD
     A[Resolve workflowId specify] --> P[Fixed model-provider preparation from selected graph capabilities<br/>ready or not_required continues; failure or cancellation terminates]
     P --> B[Registered Specify invocation contract]
-    B --> C[specify-invocation@1<br/>Runner-bound argument parser and validator]
-    C --> C1[normalize-reference-selector@1<br/>Shared pinned NFC; separators and literal dots]
+    B --> C[Registered parser and validator<br/>required --feature directory and independent --reference selector]
+    C --> FD[Resolve --feature relative to paths.specs from .sddtoolkit.json;<br/>normalize validate and inspect with containment no-follow and archive exclusion;<br/>no repeated root generated name or ownership registry]
+    FD --> C1[normalize-reference-selector@1<br/>Shared pinned NFC; separators and literal dots]
+    FD -->|Invalid or unsafe| PF
     C1 --> C2[validate-reference-selector@1<br/>Lexical safety and bounds]
     C2 --> C3[inspect-reference-directory@1<br/>Bound root identity; no-follow readable directory]
-    C3 --> D[Deterministic feature, recovery, and complete corpus preflight<br/>Not implemented by selector inspection]
+    C3 --> D[Validate the selected feature's required existing state<br/>and complete reference corpus; no cross-feature scan]
     D --> CL[Load retained clarification history and forms;<br/>preserve user-closed bytes before ingestion and consume applicable validated answers;<br/>accepted closure commits its response without rerendering the submitted form]
     CL --> E[Ingest and reconcile complete reference authority]
     CL -->|Stale or invalid user close, or protected answer requires reconsideration| CB[Block for explicit user direction;<br/>do not overwrite the form or allocate a duplicate clarification]
@@ -29,10 +31,10 @@ flowchart TD
     I --> J[Validate fixed heading order, required groups,<br/>conditional entities, and absence of placeholders or inline clarification]
     J --> K[Render spec.md and reference-context.md]
     K --> M[Reparse spec.md and compare normalized IR]
-    M --> N[Validate and commit complete stage transaction;<br/>reruns MUST overwrite existing Specify outputs at the same registered paths;<br/>no separate overwrite approval;<br/>user-closed clarification files MUST remain byte-for-byte unchanged;<br/>never clear the feature directory]
+    M --> N[Publish only the complete validated workflow output;<br/>reruns MUST overwrite existing Specify outputs at the same registered paths;<br/>no separate overwrite approval;<br/>user-closed clarification files MUST remain byte-for-byte unchanged;<br/>never clear the feature directory]
     N --> O[Workflow state specified]
 
-    S --> NU[Terminal needs_user;<br/>a later invocation resumes through the ordinary selection and preflight path]
+    S --> NU[Terminal needs_user; preserve clarifications and end execution;<br/>a later invocation starts the entire workflow again]
     C -->|Rejected invocation| PF[Terminal failed; no feature or artifact writes]
     C1 -->|Failed| PF
     C2 -->|Failed| PF

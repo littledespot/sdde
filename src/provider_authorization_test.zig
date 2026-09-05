@@ -186,7 +186,7 @@ test "operation terminalization destroys its unused lease before request complet
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
     const authorized = try fixture.startCount();
-    _ = try fixture.change(.input_token_count, .{ .terminate = .{ .cancelled = .not_sent } });
+    try fixture.change(.input_token_count, .{ .terminate = .{ .cancelled = .not_sent } });
     try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
     try std.testing.expectError(error.AuthorizationDenied, fixture.leasePort().consume(authorized.reference, &fixture.provider_binding, &fixture.request, authorized.invoked));
     try fixture.requests.advance(fixture.requests.ledger().?.revision(), fixture.model_request_id, .invoked, .{ .terminal = .cancelled });
@@ -202,7 +202,7 @@ test "preparation rejects unassigned duplicate and terminal operations" {
     try fixture.assignCount();
     _ = try fixture.prepare(.input_token_count);
     try std.testing.expect((try runner.prepare(fixture.facts(.input_token_count))) == .failed);
-    _ = try fixture.change(.input_token_count, .{ .terminate = .{ .cancelled = .not_sent } });
+    try fixture.change(.input_token_count, .{ .terminate = .{ .cancelled = .not_sent } });
     try std.testing.expect((try runner.prepare(fixture.facts(.input_token_count))) == .failed);
     try std.testing.expectEqual(@as(usize, 1), fixture.preloader.prepare_count);
     try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);

@@ -1,6 +1,12 @@
 # Deterministic SDD Engine contract and data-shape samples
 
-This companion contains the sample contracts, schemas, configuration, flow notation, and package layout referenced by [the engine design](design.md). The design document is normative; these samples illustrate its contracts and must evolve with it.
+This companion illustrates [the engine design](design.md).
+[ADR 0010](decisions/0010-explicit-feature-directory.md) makes the explicitly
+supplied feature directory the identity; no naming or ownership registry applies.
+[ADR 0009](decisions/0009-atomic-workflow-execution.md) makes the whole workflow
+atomic. Candidate state is execution-local; no sample authorizes independent
+task commits, transaction storage, durable checkpoints or restart recovery.
+Clarifications survive; every new execution begins at `start`.
 
 Clarification identity is independent of execution identity. Its complete
 registry, forms, and responses persist across successive workflows and are
@@ -630,9 +636,9 @@ StateIdNamespaceDescriptor {
   allocationMode: monotonic_ordinal,
   registryVersion
   // The compiler-locked registry contains exactly one descriptor for every
-  // feature-scoped canonical authority type. BootstrapRootRegistry and its fixed
-  // FeatureIdentityRegistryState revision chain are project-level tuple exceptions
-  // outside this registry. Owner-local principle,
+  // feature-scoped canonical authority type. BootstrapRootRegistry is the sole
+  // project-level tuple exception. Feature identity is the supplied directory
+  // under ADR 0010, not a separate ownership registry. Owner-local principle,
   // preset, reference, specification, clarification, plan, and task-execution
   // child IDs are disjoint and use only their named specialized ledgers. A
   // model, preset, config file, or orchestrator cannot add/select a namespace.
@@ -648,13 +654,6 @@ CanonicalStateId {
 }
 
 StateIdPurposeKey =
-  | FeatureActivationStatePurpose {
-      featureId,
-      inputFeatureIdentityRegistryStateId,
-      inputFeatureIdentityRegistryStateRevision,
-      stateTypeId,
-      transitionSlotId
-    }
   | WorkflowStageStatePurpose {
       featureId,
       inputWorkflowStateId?,
@@ -713,75 +712,6 @@ StateIdentityMutation =
       nextLedger: StateIdLedger,
       reservedIds[], committedIds[], retiredIds[]
     }
-
-StateIdentityTransactionMember {
-  stateIdentityMutations: StateIdentityMutation[]
-  // Exactly one mutation per touched owner. Every state ID newly referenced by
-  // the transaction is reserved/committed here; untouched ledgers use the
-  // Unchanged variant and never receive a no-op revision.
-}
-
-TransactionStorageOwner {
-  featureId,
-  workflowArtifactRegistryStateId
-}
-
-DurableTransactionKind =
-  bootstrap_authority_refresh |
-  state_identity_reservation | state_identity_retirement |
-  specification_acknowledgement_id_retirement |
-  clarification_pause | clarification_response |
-  clarification_authority_resolution | specify_completion |
-  plan_input_authority | plan_candidate | tasks_candidate |
-  reference_revision | rework_invalidation | final_validation_failed |
-  localized_task_remediation | implementation_reconciliation |
-  implementation_completion | review_decision | task_checkpoint |
-  manual_verification | task_success | task_outcome
-
-TransactionId {
-  storageOwner: TransactionStorageOwner,
-  transactionOrdinal: PositiveInteger
-}
-
-TransactionIdLedger {
-  storageOwner: TransactionStorageOwner,
-  revision,
-  nextTransactionOrdinal,
-  reservations: {
-    transactionId: TransactionId,
-    transactionKind: DurableTransactionKind,
-    status: reserved | committed | retired
-  }[],
-  retiredTransactionIds[]
-}
-
-TransactionIdentityMember {
-  transactionId: TransactionId,
-  inputTransactionIdLedgerRevision,
-  nextTransactionIdLedger: TransactionIdLedger
-  // Reservation is durably CAS-persisted under the collection lock before a
-  // journal path is created; the owning transaction commits or later retires it.
-}
-
-TransactionIdentityRecoveryDisposition =
-  | RetireOrphanReservation { transactionId, reason: reserved_without_journal }
-  | RollbackAndRetire { transactionId, journalId, reason: uncommitted_journal }
-  | RecoverCommitId { transactionId, journalId, reason: committed_marker_with_reserved_id }
-  | VerifyCommitted { transactionId, journalId }
-  | BlockTransactionIdentityRecovery {
-      transactionId?, journalId?, diagnosticCode
-    }
-
-TransactionIdentityRecoveryPlan {
-  storageOwner: TransactionStorageOwner,
-  inputTransactionIdLedgerRevision,
-  dispositions: TransactionIdentityRecoveryDisposition[]
-  // One disposition per ledger reservation and journal, sorted by ordinal;
-  // impossible/duplicate/cross-owner combinations have only the block variant.
-}
-
-DurableTransactionMember =
-  StateIdentityTransactionMember & TransactionIdentityMember
 
 ImmutableUnitOwnerId =
   | ReferenceChunkOwner { kind: reference_chunk, referenceStateId, chunkId }
@@ -1609,25 +1539,6 @@ EngineStartupGraph {
   // WorkflowDefinitionRegistryState.
 }
 
-ProjectEngineArtifactSelector = FeatureIdentityRegistryCanonicalState
-
-FeatureTransactionCollectionLockCapability {
-  featureId,
-  workflowArtifactRegistryStateId,
-  stageTransactionCollectionArtifactPathId,
-  ownerProcessInstanceId,
-  opaqueLockTokenHandle,
-  validOnlyWhileHeld: true
-}
-
-ValidatedTransactionStorageCapability {
-  featureId,
-  workflowArtifactRegistryStateId,
-  stageTransactionCollectionArtifactPathId,
-  lock: FeatureTransactionCollectionLockCapability,
-  currentTransactionIdLedger: TransactionIdLedger,
-  allowedTransactionKinds: DurableTransactionKind
-}
 
 BootstrapRootRegistry {
   bootstrapRootRegistryId: BootstrapRootRegistryId,
@@ -2567,77 +2478,18 @@ RendererContract {
 }
 
 SpecifyInvocation {
+  featureDirectory: ValidatedFeatureDirectory,
   referenceSelector: RelativeReferenceSelector
 }
 
-FeatureIdentitySeed {
-  referenceSelector: RelativeReferenceSelector,
-  namingPolicy: { version: unicode17_ascii_v1, maximumLength: 1..255 },
-  featureId
+ValidatedFeatureDirectory {
+  specsRelativePath: NormalizedRelativePath
+  // Invocation/API input relative only to .sddtoolkit.json paths.specs.
+  // Resolve the configured root plus this path once; exclude paths.specsArchive.
+  // No hard-coded specs/ prefix or caller-supplied output-root override.
+  // Fresh no-follow inspection is required before I/O. Existing featureId
+  // fields are this lossless relative key, not independent identity/authority.
 }
-
-FeatureIdentityOwnershipRecord {
-  featureId,
-  canonicalReferenceSelector: RelativeReferenceSelector,
-  namingPolicy: { version: unicode17_ascii_v1, maximumLength: 1..255 },
-  lifecycle: active | archived,
-  workflowStateId,
-  workflowArtifactRegistryStateId,
-  featureRootPathId,
-  activatedAt,
-  archivedAt?
-}
-
-FeatureIdentityRegistryState {
-  // This is a fixed project-level registry under <paths.workflows>/features/.
-  // Its identity is the closed tuple (bootstrapRootRegistryId, revision), not a hash.
-  featureIdentityRegistryStateId: { bootstrapRootRegistryId, revision },
-  bootstrapRootRegistryId,
-  revision,
-  parentFeatureIdentityRegistryStateId?,
-  records: FeatureIdentityOwnershipRecord[]
-  // Records are retained across archive; featureId and the exact selector plus
-  // naming-policy version are each unique under the portability policy.
-}
-
-FeatureStateInventoryEntry {
-  featureId,
-  ownershipLifecycle: active | archived,
-  ownershipWorkflowStateId,
-  ownershipArtifactRegistryStateId,
-  ownershipFeatureRootPathId,
-  resolvedFeatureRoot,
-  rootNodeObservation,
-  workflowStateHeaderObservation?,
-  artifactRegistryHeaderObservation?,
-  featureStateIdLedgerHeaderObservation?,
-  terminalAccount:
-    | { kind: live_state_headers_captured }
-    | { kind: archived_state_headers_captured }
-    | { kind: blocking, diagnosticId }
-}
-
-FeatureStateInventory {
-  featureIdentityRegistryStateId,
-  featureIdentityRegistryStateRevision,
-  traversalBudget,
-  entries: FeatureStateInventoryEntry[]
-  // Exactly one ordered entry/account per ownership record. Observations are
-  // bounded, no-follow, immutable captures from engine-derived paths only.
-}
-
-FeatureIdentityTarget =
-  | NewFeatureIdentity {
-      seed: FeatureIdentitySeed,
-      inputFeatureIdentityRegistryStateId,
-      inputFeatureIdentityRegistryStateRevision
-    }
-  | ExistingFeatureIdentity {
-      seed: FeatureIdentitySeed,
-      identityRegistryStateId,
-      identityRegistryStateRevision,
-      ownership: FeatureIdentityOwnershipRecord
-    }
 
 FeatureBriefProposal {
   title: BusinessText,
@@ -3473,7 +3325,7 @@ ReferencePreactivationSession {
   referencePreactivationSessionId: {
     runId, canonicalReferenceSelector, sessionOrdinal
   },
-  featureIdentitySeed,
+  featureDirectory: ValidatedFeatureDirectory,
   provisionalNextSourceOrdinal,
   provisionalNextBlockOrdinal,
   retiredProvisionalIds[]
@@ -7123,282 +6975,6 @@ RecoveredTaskExecutionAdapterBoundaryObservation =
         unauthorized_effect_kind
     }
 
-TaskExecutionAdapterBoundaryRecoveryDisposition =
-  | ClearNeverEnteredBoundary {
-      kind: clear_never_entered,
-      requiresAdapterMutation: false
-    }
-  | ClearAlreadyTerminalizedBoundary {
-      kind: clear_already_terminalized,
-      terminalKind: discarded_no_parent_effect | restored_no_parent_effect,
-      requiresAdapterMutation: false
-    }
-  | DiscardRecoveredUnpromotedSavepoint {
-      kind: discard_unpromoted_savepoint,
-      requiresAdapterMutation: true
-    }
-  | ReconstructRecoveredOperationPromotion {
-      kind: reconstruct_operation_promotion,
-      requiresAdapterMutation: false
-    }
-  | RestoreRecoveredEffectBeforeImage {
-      kind: restore_exact_before_image,
-      reason:
-        promotion_without_promotion_ready_authority |
-        command_evidence_not_durable_at_boundary,
-      requiresAdapterMutation: true
-    }
-  | BlockIndeterminateAdapterBoundary {
-      kind: block_indeterminate,
-      requiresAdapterMutation: false,
-      diagnosticCode
-    }
-
-TaskExecutionAdapterBoundaryRecoveryPlan {
-  taskExecutionCheckpointId,
-  boundaryRecordSet: TaskExecutionAdapterBoundaryRecordSet,
-  taskExecutionIdLedgerStateId,
-  taskExecutionIdLedgerRevision,
-  boundaryKind: operation_apply_ready | operation_promotion_ready | command_run_ready,
-  observation: RecoveredTaskExecutionAdapterBoundaryObservation,
-  disposition: TaskExecutionAdapterBoundaryRecoveryDisposition,
-  requiredTerminalBoundary: none,
-  ordinaryAllocationModelAndAdapterWorkBlocked: true
-  // Only IDs/actions required to reconstruct an already authorized operation
-  // promotion and to commit the pending-release and cleanup-closed checkpoints
-  // are allowed before closure.
-}
-
-RecoveredTaskExecutionSavepointDiscardEvidence {
-  taskExecutionCheckpointId,
-  boundaryRecordSet: TaskExecutionAdapterBoundaryRecordSet,
-  boundaryKind: operation_apply_ready | operation_promotion_ready | command_run_ready,
-  savepointId,
-  childSavepointRecordId,
-  expectedTaskOverlayRevision,
-  observedTaskOverlayRevision,
-  discardReceipt: TaskExecutionAdapterDiscardReceipt,
-  childSavepointAbsentAfterDiscard: true,
-  taskOverlayDirectlyEqualToExpected: true,
-  adapterDiscardReceiptAppended: true
-}
-
-RecoveredTaskExecutionBeforeImageRestoreEvidence {
-  taskExecutionCheckpointId,
-  boundaryRecordSet: TaskExecutionAdapterBoundaryRecordSet,
-  boundaryKind: operation_apply_ready | command_run_ready,
-  savepointId,
-  promotionReceipt: TaskExecutionAdapterPromotionReceipt,
-  restoreReceipt: TaskExecutionAdapterRestoreReceipt,
-  promotedOverlayRevision,
-  restoredTaskOverlayRevision,
-  restoredFileIds[],
-  exactBeforeImagesRestored: true,
-  residualEffectEntryCount: 0,
-  adapterRestoreReceiptAppended: true
-}
-
-RecoveredOperationPromotionObservation {
-  taskExecutionCheckpointId,
-  boundaryRecordSet: OperationPromotionAdapterBoundaryRecordSet,
-  boundaryKind: operation_promotion_ready,
-  operationAuthorizationId,
-  operationSavepointId,
-  promotionAuthorizationId,
-  operationRecordId,
-  promotionReceipt: TaskExecutionAdapterPromotionReceipt,
-  prePromotionOverlayRevision,
-  postPromotionOverlayRevision,
-  changedFileIds[],
-  exactReceiptReconstruction: true
-}
-
-TaskExecutionAdapterBoundaryRecoveryTerminalEvidence =
-  | NeverEnteredBoundaryTerminalEvidence {
-      observation: RecoveredAdapterBoundaryNeverEnteredObservation
-    }
-  | AlreadyDiscardedBoundaryTerminalEvidence {
-      observation: RecoveredAdapterBoundaryAlreadyDiscardedObservation
-    }
-  | AlreadyRestoredBoundaryTerminalEvidence {
-      observation: RecoveredAdapterBoundaryAlreadyRestoredObservation
-    }
-  | DiscardedRecoveredSavepointTerminalEvidence {
-      evidence: RecoveredTaskExecutionSavepointDiscardEvidence
-    }
-  | RestoredRecoveredEffectTerminalEvidence {
-      evidence: RecoveredTaskExecutionBeforeImageRestoreEvidence
-    }
-  | ReconstructedOperationPromotionTerminalEvidence {
-      recoveredObservation: RecoveredOperationPromotionObservation,
-      operationPromotionEvidenceId,
-      fileStateTransitionIds[],
-      operationJournalEntryOrdinal,
-      executionEvidenceRegistryStateId,
-      executionEvidenceRegistryStateRevision
-    }
-
-TaskExecutionAdapterBoundaryRecoveryCompletionEvidence {
-  inputTaskExecutionCheckpointId,
-  boundaryRecordSet: TaskExecutionAdapterBoundaryRecordSet,
-  recoveryPlan: TaskExecutionAdapterBoundaryRecoveryPlan,
-  terminalEvidence: TaskExecutionAdapterBoundaryRecoveryTerminalEvidence,
-  boundaryFreeTaskExecutionCheckpointId,
-  boundaryFreeCheckpointTransactionId,
-  adapterRecordCleanupState: pending_release,
-  committedBoundaryFreeCheckpoint: true
-}
-
-TaskExecutionAdapterBoundaryRecordReleaseAuthorization {
-  boundaryRecordSet: TaskExecutionAdapterBoundaryRecordSet,
-  boundaryFreeTaskExecutionCheckpointId,
-  boundaryFreeCheckpointTransactionId,
-  committedBoundaryFreeCheckpoint: true,
-  terminalAuthority:
-    | { kind: forward,
-        evidence:
-          OperationSavepointDiscardEvidence |
-          OperationPromotionEvidence |
-          CommandSavepointDiscardEvidence |
-          CommandPromotionEvidence }
-    | { kind: recovered,
-        completion: TaskExecutionAdapterBoundaryRecoveryCompletionEvidence }
-  // This engine-built value is not a persistence authorization. It permits only
-  // idempotent deletion of the complete, now-inert adapter record set.
-}
-
-TaskExecutionAdapterBoundaryRecordReleaseAuthorizationValidation {
-  boundaryRecordSet: TaskExecutionAdapterBoundaryRecordSet,
-  pendingReleaseTaskExecutionCheckpointId,
-  boundaryFreeCheckpointTransactionId,
-  exactTerminalAuthorityJoin: true,
-  completeRetainedRecordInventoryCovered: true,
-  cleanupOnlyAfterCommittedBoundaryFreeCheckpoint: true
-}
-
-TaskExecutionAdapterBoundaryRecordReleaseObservation =
-  | TaskExecutionAdapterBoundaryRecordsReleasedNowObservation {
-      kind: released_now,
-      boundaryRecordSet: TaskExecutionAdapterBoundaryRecordSet,
-      boundaryFreeTaskExecutionCheckpointId,
-      boundaryFreeCheckpointTransactionId,
-      releasedRecordIds: TaskExecutionAdapterRecordId[],
-      releasedBlobIds: TaskExecutionAdapterImageBlobId[],
-      residualRecordCount: 0
-    }
-  | TaskExecutionAdapterBoundaryRecordsAlreadyReleasedObservation {
-      kind: already_released,
-      boundaryRecordSet: TaskExecutionAdapterBoundaryRecordSet,
-      boundaryFreeTaskExecutionCheckpointId,
-      boundaryFreeCheckpointTransactionId,
-      completeAuthorizedRecordSetAlreadyAbsent: true,
-      residualRecordCount: 0
-    }
-
-TaskExecutionAdapterBoundaryRecordReleaseEvidence {
-  authorization: TaskExecutionAdapterBoundaryRecordReleaseAuthorization,
-  observation: TaskExecutionAdapterBoundaryRecordReleaseObservation,
-  completeRecordSetReleasedOrAlreadyAbsent: true,
-  ordinaryWorkAuthorityUnchanged: true
-  // Cleanup is permitted only after the named checkpoint transaction is known
-  // committed. Failure to clean leaks inert metadata and never reauthorizes work.
-}
-
-TaskExecutionAdapterRecordCleanupState =
-  | NoPendingTaskExecutionAdapterRecordCleanup { kind: none }
-  | PendingTaskExecutionAdapterRecordRelease {
-      kind: pending_release,
-      inputBoundaryTaskExecutionCheckpointId,
-      boundaryRecordSet: TaskExecutionAdapterBoundaryRecordSet,
-      terminalAuthority:
-        | { kind: forward,
-            evidence:
-              OperationSavepointDiscardEvidence |
-              OperationPromotionEvidence |
-              CommandSavepointDiscardEvidence |
-              CommandPromotionEvidence }
-        | { kind: recovered,
-            terminalEvidence: TaskExecutionAdapterBoundaryRecoveryTerminalEvidence }
-    }
-
-TaskExecutionAdapterRecordCleanupClosureBinding {
-  inputPendingReleaseTaskExecutionCheckpointId,
-  boundaryRecordSet: TaskExecutionAdapterBoundaryRecordSet,
-  releaseEvidence: TaskExecutionAdapterBoundaryRecordReleaseEvidence,
-  outputCleanupState: none
-}
-
-TaskExecutionAdapterRecordCleanupClosureEvidence {
-  inputPendingReleaseTaskExecutionCheckpointId,
-  boundaryRecordSet: TaskExecutionAdapterBoundaryRecordSet,
-  releaseEvidence: TaskExecutionAdapterBoundaryRecordReleaseEvidence,
-  cleanupClosedTaskExecutionCheckpointId,
-  cleanupClosedCheckpointTransactionId,
-  cleanupClosedTaskExecutionIdLedgerStateId,
-  cleanupClosedTaskExecutionIdLedgerRevision,
-  pendingAdapterBoundary: none,
-  adapterRecordCleanupState: none,
-  nonCheckpointAuthoritiesDirectlyEqual: true,
-  committedAndReloaded: true
-}
-
-TaskExecutionRecoveryResumeGate {
-  taskExecutionCheckpointId,
-  taskExecutionIdLedgerStateId,
-  taskExecutionIdLedgerRevision,
-  pendingAdapterBoundary: none,
-  adapterRecordCleanupState: NoPendingTaskExecutionAdapterRecordCleanup,
-  adapterRecordCleanupClosureEvidence: TaskExecutionAdapterRecordCleanupClosureEvidence,
-  residualAdapterBoundaryRecordCount: 0,
-  ordinaryAllocationModelAndAdapterWorkAuthorized: true
-}
-
-TaskExecutionCheckpoint =
-  | TaskExecutionPreparationCheckpoint {
-      phase: preparation,
-      taskExecutionCheckpointId,
-      parentTaskExecutionCheckpointId?,
-      serializerContractVersion,
-      taskExecutionIdLedger: TaskExecutionIdLedger,
-      taskDefinitionStateId,
-      taskLeaseId,
-      copySourceRegistry: CopySourceRegistry,
-      pendingAdapterBoundary: NoPendingTaskExecutionAdapterBoundary,
-      adapterRecordCleanupState: NoPendingTaskExecutionAdapterRecordCleanup,
-      statePath
-    }
-  | ActiveTaskExecutionCheckpoint {
-      phase: active,
-      taskExecutionCheckpointId,
-      parentTaskExecutionCheckpointId?,
-      serializerContractVersion,
-      taskExecutionIdLedger: TaskExecutionIdLedger,
-      taskExecutionAttempts: TaskExecutionAttemptRegistry,
-      activeTaskExecutionAttemptId,
-      taskDefinitionStateId,
-      principleRegistryStateId,
-      principleRegistryStateRevision,
-      principleSelectionIds[],
-      taskLeaseId,
-      operationIntentPlan: OperationIntentPlan,
-      copySourceRegistry: CopySourceRegistry,
-      operationRecords: OperationRecordRegistry,
-      operationJournal: OperationJournal,
-      fileStateTransitions: FileStateTransitionRegistry,
-      runtimeFileState: RuntimeFileState,
-      executionEvidenceRegistry: ExecutionEvidenceRegistryState,
-      taskOverlayId,
-      expectedTaskOverlayRevision,
-      pendingAdapterBoundary: TaskExecutionAdapterBoundary,
-      adapterRecordCleanupState: TaskExecutionAdapterRecordCleanupState,
-      adapterRecordCleanupClosureBinding?: TaskExecutionAdapterRecordCleanupClosureBinding,
-      statePath
-      // A ready boundary requires cleanup kind none. A terminal successor has
-      // boundary none + pending_release; its committed cleanup-only successor
-      // has both discriminants none plus the closure binding before ordinary
-      // work may resume. The binding is forbidden on every other checkpoint.
-    }
-
 FinalValidationInvocationId {
   featureId,
   workflowStateId,
@@ -8553,97 +8129,6 @@ ImplementationActorRegistryMutation =
       appendedEvidenceIds[]
     }
 
-ManualVerificationTransaction = DurableTransactionMember & {
-  transactionId,
-  expectedWorkflowStateId,
-  expectedWorkflowStateRevision,
-  taskDefinitionStateId,
-  taskId,
-  expectedTaskRuntimeRevision,
-  taskExecutionCheckpointId,
-  inputExecutionEvidenceRegistryStateId,
-  inputExecutionEvidenceRegistryStateRevision,
-  nextExecutionEvidenceRegistry: ExecutionEvidenceRegistryState,
-  actorEvidenceRegistryMutation: AppendedImplementationActorRegistry,
-  manualVerificationEvidenceId,
-  unchangedRuntimeFileStateId,
-  unchangedRuntimeFileStateRevision,
-  unchangedTaskOverlayId,
-  unchangedTaskOverlayRevision,
-  unchangedTaskRuntimeState: TaskRuntimeState,
-  renderedTasksView: GeneratedView,
-  projectDelta: none,
-  singleUse: true
-}
-
-TaskExecutionCheckpointTransaction = DurableTransactionMember & {
-  transactionId,
-  featureId,
-  expectedWorkflowStateId,
-  expectedWorkflowStateRevision,
-  taskDefinitionStateId,
-  taskId,
-  expectedTaskRuntimeRevision,
-  inputTaskExecutionCheckpointId?,
-  nextTaskExecutionCheckpoint: TaskExecutionCheckpoint,
-  renderedTasksView: GeneratedView,
-  projectDelta: none,
-  singleUse: true
-  // The inherited StateIdentityTransactionMember.stateIdentityMutations array
-  // commits the first TaskExecutionIdLedger feature-state reservation; later
-  // checkpoints carry its explicit unchanged/advanced feature-ledger member.
-}
-
-TaskOutcomeTransaction = DurableTransactionMember & {
-  transactionId,
-  taskDefinitionStateId,
-  expectedRuntimeRevision,
-  nextRuntimeState,
-  executionJournalDelta,
-  diagnosticIds[],
-  evidenceIds[],
-  inputExecutionEvidenceRegistryStateId,
-  inputExecutionEvidenceRegistryRevision,
-  nextExecutionEvidenceRegistry: ExecutionEvidenceRegistryState,
-  actorEvidenceRegistryMutation: ImplementationActorRegistryMutation,
-  unchangedRuntimeFileStateId,
-  unchangedRuntimeFileStateRevision,
-  renderedTasksView,
-  leaseAndLockReleaseDelta,
-  projectDelta: none
-}
-
-TaskTransaction = DurableTransactionMember & {
-  transactionId,
-  taskValidationAuthorizationId,
-  taskDefinitionStateId,
-  expectedTaskRuntimeRevision,
-  taskId,
-  taskLeaseId,
-  taskOverlayId,
-  expectedTaskOverlayRevision,
-  taskExecutionAttemptId,
-  taskExecutionCheckpointId,
-  operationIntentPlanId,
-  operationRecords: OperationRecordRegistry,
-  operationJournal: OperationJournal,
-  fileStateTransitions: FileStateTransitionRegistry,
-  inputRuntimeFileStateId,
-  inputRuntimeFileStateRevision,
-  nextRuntimeFileState: RuntimeFileState,
-  inputExecutionEvidenceRegistryStateId,
-  inputExecutionEvidenceRegistryRevision,
-  nextExecutionEvidenceRegistry: ExecutionEvidenceRegistryState,
-  actorEvidenceRegistryMutation: ImplementationActorRegistryMutation,
-  projectDelta,
-  evidenceIds[],
-  nextTaskRuntimeState: TaskRuntimeState,
-  renderedTasksView: GeneratedView,
-  leaseAndLockReleaseDelta,
-  nextWorkflowState,
-  singleUse: true
-}
-
 ReferenceRevisionDescendantMutation =
   | NoReferenceDescendantMutation {
       reason: no_feature_request_or_descendants
@@ -8668,25 +8153,6 @@ ReferenceRevisionDescendantMutation =
       evidenceInvalidation: ExecutionEvidenceInvalidationRecord
     }
 
-FeatureActivation {
-  featureIdentityTarget: NewFeatureIdentity,
-  inputFeatureIdentityRegistryState: FeatureIdentityRegistryState,
-  nextFeatureIdentityRegistryState: FeatureIdentityRegistryState,
-  featureStateIdLedger: StateIdLedger,
-  bootstrapAuthorityState: BootstrapAuthorityState,
-  workflowArtifactRegistry: WorkflowArtifactRegistry,
-  initialActorEvidenceRegistryState: ActorEvidenceRegistryState,
-  initialReviewDecisionRegistryState: ReviewDecisionRegistryState,
-  initialWorkflowControlEventRegistryState: WorkflowControlEventRegistryState,
-  initialPassiveLiteralRegistryState: PassiveLiteralRegistryState,
-  initialClarificationState: ClarificationRegistryState,
-  initialWorkflowState: WorkflowState,
-  directoryEntries: FeatureDirectoryCreationEntry[]
-  // Fixed-path writes under Design Section 25.1, not a StageTransaction.
-  // No transaction ID, project journal, marker, or project storage capability.
-  // Only verified complete persisted state permits an active-feature capability.
-}
-
 StageTransitionKind =
   state_identity_reservation | state_identity_retirement |
   specification_acknowledgement_id_retirement |
@@ -8697,379 +8163,6 @@ StageTransitionKind =
   tasks_candidate | reference_revision | rework_invalidation |
   final_validation_failed | localized_task_remediation |
   implementation_reconciliation | implementation_completion
-
-StageTransaction = DurableTransactionMember & (
-  | StateIdentityReservationStageTransaction {
-      transactionId,
-      featureId,
-      currentWorkflowStateId,
-      currentWorkflowStateRevision,
-      reservedStateIds[],
-      exposureBoundary:
-        model_provider | nontransactional_adapter |
-        nontransactional_serializer | diagnostic_or_log |
-        public_artifact_or_path,
-      changesCanonicalBusinessState: false
-    }
-  | StateIdentityRetirementStageTransaction {
-      transactionId,
-      featureId,
-      currentWorkflowStateId,
-      currentWorkflowStateRevision,
-      retiredStateIds[],
-      retirementCause,
-      changesCanonicalBusinessState: false
-    }
-  | SpecificationAcknowledgementIdRetirementStageTransaction {
-      transactionId,
-      featureId,
-      expectedWorkflowStateId,
-      expectedWorkflowStateRevision,
-      expectedWorkflowStage: specified | planning,
-      inputSpecificationProvenanceStateId,
-      inputSpecificationProvenanceStateRevision,
-      inputSpecificationAcknowledgementStateId,
-      inputSpecificationAcknowledgementStateRevision,
-      retirement: SpecificationAcknowledgementIdRetirement,
-      actorEvidenceRegistryMutation:
-        SpecificationEditFailureActorEvidenceRegistryMutation,
-      nextSpecificationAcknowledgementState: SpecificationAcknowledgementState,
-      nextSpecificationProvenanceState: SpecificationProvenanceState,
-      planInputAuthorityMutation:
-        SpecificationAcknowledgementRetirementPlanInputMutation,
-      specificationView: EditableSpecificationArtifactView,
-      nextWorkflowState: WorkflowState,
-      acceptsSpecificationEdit: false,
-      changesSpecificationBusinessContent: false
-    }
-  | BootstrapAuthorityRefreshStageTransaction {
-      transactionId,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      inputBootstrapAuthorityStateId,
-      nextBootstrapAuthorityState: BootstrapAuthorityState,
-      changePlan: CompatibleRuntimeOnlyBootstrapChangePlan,
-      changeEvidence: MaterializedBootstrapChangeEvidence,
-      nextWorkflowState: WorkflowState
-    }
-  | ClarificationPauseStageTransaction {
-      transactionId,
-      stage: spec | plan | tasks,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      authorityBindings: {
-        effectiveBootstrapAuthorityStateId,
-        workflowArtifactRegistryStateId,
-        referenceStateId,
-        priorClarificationStateId,
-        priorClarificationStateRevision,
-        specificationProvenanceStateId?,
-        planInputAuthorityStateId?,
-        planStateId?,
-        taskDefinitionStateId?
-      },
-      stagedEntries:
-        | SpecificationClarificationPauseEntries {
-            bootstrapAuthorityMutation: SpecificationClarificationBootstrapAuthorityMutation,
-            actorEvidenceRegistryState: ActorEvidenceRegistryState,
-            referenceSnapshot: ReferenceSnapshot,
-            descendantMutation: ReferenceRevisionDescendantMutation,
-            referenceConflictSetTransition?: ReferenceConflictClarificationSetTransition,
-            // Required whenever validated P or C is nonempty, or the adopted
-            // reference state applies a prior conflict answer.
-            passiveLiteralRegistryState,
-            featureRequestState?,
-            specificationIdLedger?,
-            specificationAcknowledgementState?,
-            specificationProvenanceState?,
-            nextClarificationState: ClarificationRegistryState,
-            referenceContextView: GeneratedView,
-            clarificationViews: ClarificationView[],
-            nextWorkflowState: WorkflowState
-          }
-        | PlanClarificationPauseEntries {
-            bootstrapAuthorityMutation: PlanningStageBootstrapAuthorityMutation,
-            actorEvidenceRegistryState: ActorEvidenceRegistryState,
-            nextPlanInputAuthorityState: PlanInputAuthorityState,
-            nextClarificationState: ClarificationRegistryState,
-            clarificationViews: ClarificationView[],
-            nextWorkflowState: WorkflowState
-          }
-        | TasksClarificationPauseEntries {
-            bootstrapAuthorityState: BootstrapAuthorityState,
-            actorEvidenceRegistryState: ActorEvidenceRegistryState,
-            nextClarificationState: ClarificationRegistryState,
-            clarificationViews: ClarificationView[],
-            nextWorkflowState: WorkflowState
-          },
-      forbiddenEntries: [SpecificationIR, PlanState, TaskDefinitionState]
-    }
-  | ClarificationResponseStageTransaction {
-      transactionId,
-      stage: spec | plan | tasks,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      expectedClarificationStateId,
-      expectedClarificationStateRevision,
-      inputActorEvidenceRegistryStateId,
-      inputActorEvidenceRegistryStateRevision,
-      nextActorEvidenceRegistryState: ActorEvidenceRegistryState,
-      nextClarificationState: ClarificationRegistryState,
-      nextPassiveLiteralRegistryState?,
-      clarificationViews: ClarificationView[],
-      nextWorkflowState: WorkflowState
-    }
-  | ClarificationAuthorityResolutionStageTransaction {
-      transactionId,
-      stage: spec | plan | tasks,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      expectedClarificationStateId,
-      expectedClarificationStateRevision,
-      refreshedAuthorityEntries:
-        | SpecificationCurrentReferenceAuthorityRefreshEntries {
-            bootstrapAuthorityMutation: SpecificationContractBootstrapAuthorityMutation,
-            actorEvidenceRegistryState: ActorEvidenceRegistryState,
-            referenceSnapshot: ReferenceSnapshot,
-            referenceDisposition: retain_current_reference,
-            passiveLiteralRegistryState,
-            specificationProvenanceState?
-          }
-        | SpecificationReferenceRevisionAuthorityRefreshEntries {
-            bootstrapAuthorityMutation: ReferenceRevisionBootstrapAuthorityMutation,
-            actorEvidenceRegistryState: ActorEvidenceRegistryState,
-            referenceSnapshot: ReferenceSnapshot,
-            referenceDisposition: adopt_successor_reference,
-            descendantMutation: ReferenceRevisionDescendantMutation,
-            passiveLiteralRegistryState,
-            referenceContextView: GeneratedView,
-            forbiddenEntries: [
-              FeatureRequestState, SpecificationProvenanceState,
-              PlanInputAuthorityState, PlanState, TaskDefinitionState
-            ]
-          }
-        | PlanAuthorityRefreshEntries {
-            bootstrapAuthorityMutation: PlanningStageBootstrapAuthorityMutation,
-            actorEvidenceRegistryState: ActorEvidenceRegistryState,
-            nextPlanInputAuthorityState: PlanInputAuthorityState
-          }
-        | TasksAuthorityRefreshEntries {
-            bootstrapAuthorityState: BootstrapAuthorityState,
-            actorEvidenceRegistryState: ActorEvidenceRegistryState
-          },
-      nextClarificationState: ClarificationRegistryState,
-      clarificationViews: ClarificationView[],
-      nextWorkflowState: WorkflowState
-    }
-  | SpecifyCompletionStageTransaction {
-      transactionId,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      bootstrapAuthorityMutation: SpecificationContractBootstrapAuthorityMutation,
-      workflowArtifactRegistry: WorkflowArtifactRegistry,
-      actorEvidenceRegistryState: ActorEvidenceRegistryState,
-      referenceSnapshot: ReferenceSnapshot,
-      featureRequestState: FeatureRequestState,
-      passiveLiteralRegistryState,
-      specificationIdLedger: SpecificationIdLedger,
-      specificationAcknowledgementState: SpecificationAcknowledgementState,
-      clarificationState: ClarificationRegistryState,
-      specificationProvenanceState: SpecificationProvenanceState,
-      specification: SpecificationIR,
-      specificationView: EditableSpecificationArtifactView,
-      referenceContextView: GeneratedView,
-      clarificationViews: ClarificationView[],
-      nextWorkflowState: WorkflowState
-    }
-  | PlanInputAuthorityStageTransaction {
-      transactionId,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      bootstrapAuthorityMutation: PlanningStageBootstrapAuthorityMutation,
-      actorEvidenceRegistryMutation:
-        | UnchangedPlanInputActorRegistry {
-            currentActorEvidenceRegistryState: ActorEvidenceRegistryState
-          }
-        | AppendedPlanInputActorRegistry {
-            inputActorEvidenceRegistryStateId,
-            inputActorEvidenceRegistryStateRevision,
-            nextActorEvidenceRegistryState: ActorEvidenceRegistryState
-          },
-      specificationMutation: PlanInputSpecificationMutation,
-      normalizedSpecification: SpecificationIR,
-      specificationView: EditableSpecificationArtifactView,
-      specificationIdLedger: SpecificationIdLedger,
-      specificationAcknowledgementState: SpecificationAcknowledgementState,
-      clarificationState: ClarificationRegistryState,
-      specificationProvenanceState: SpecificationProvenanceState,
-      passiveLiteralRegistryState: PassiveLiteralRegistryState,
-      planInputAuthorityState: PlanInputAuthorityState,
-      nextWorkflowState: WorkflowState
-    }
-  | PlanCandidateStageTransaction {
-      transactionId,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      bootstrapAuthorityState: BootstrapAuthorityState,
-      actorEvidenceRegistryState: ActorEvidenceRegistryState,
-      normalizedSpecification: SpecificationIR,
-      specificationView: EditableSpecificationArtifactView,
-      specificationIdLedger: SpecificationIdLedger,
-      specificationAcknowledgementState: SpecificationAcknowledgementState,
-      clarificationState: ClarificationRegistryState,
-      specificationProvenanceState: SpecificationProvenanceState,
-      passiveLiteralRegistryState,
-      planInputAuthorityState: PlanInputAuthorityState,
-      planState: PlanState,
-      generatedPlanViews: GeneratedView[],
-      clarificationViews: ClarificationView[],
-      nextWorkflowState: WorkflowState
-    }
-  | TasksCandidateStageTransaction {
-      transactionId,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      bootstrapAuthorityState: BootstrapAuthorityState,
-      actorEvidenceRegistryState: ActorEvidenceRegistryState,
-      clarificationState: ClarificationRegistryState,
-      taskDefinitionState: TaskDefinitionState,
-      runtimeFileState: RuntimeFileState,
-      executionEvidenceRegistry: ExecutionEvidenceRegistryState,
-      taskRuntimeState: TaskRuntimeState,
-      tasksView: GeneratedView,
-      clarificationViews: ClarificationView[],
-      nextWorkflowState: WorkflowState
-    }
-  | ReferenceRevisionStageTransaction {
-      transactionId,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      inputActorEvidenceRegistryStateId,
-      inputActorEvidenceRegistryStateRevision,
-      bootstrapAuthorityMutation: ReferenceRevisionBootstrapAuthorityMutation,
-      referenceSnapshot: ReferenceSnapshot,
-      nextActorEvidenceRegistryState: ActorEvidenceRegistryState,
-      passiveLiteralRegistryState: PassiveLiteralRegistryState,
-      clarificationState: ClarificationRegistryState,
-      referenceConflictSetTransition?: ReferenceConflictClarificationSetTransition,
-      // Required whenever validated P or C is nonempty, including the
-      // zero-open-subject branch after all answers apply.
-      clarificationViews: ClarificationView[],
-      // Complete registered historical view set. Its open_submission subject
-      // projection must equal the successor unresolved-current subject set;
-      // the zero-open branch retains closed_audit and preserved_user_closed
-      // views. Preserved members are validated, never emitted as file writes.
-      descendantMutation: ReferenceRevisionDescendantMutation,
-      referenceContextView: GeneratedView,
-      nextWorkflowState: WorkflowState
-    }
-  | ReworkInvalidationStageTransaction {
-      transactionId,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      inputWorkflowControlEventRegistryStateId,
-      inputWorkflowControlEventRegistryStateRevision,
-      nextWorkflowControlEventRegistryState: WorkflowControlEventRegistryState,
-      invalidation: ReworkInvalidationRecord,
-      bootstrapAuthorityMutation: ReworkBootstrapAuthorityMutation,
-      clarificationState: ClarificationRegistryState,
-      actorEvidenceRegistryState: ActorEvidenceRegistryState,
-      runtimeMutation:
-        | NoImplementationRuntimeMutation { reason: no_committed_task_runtime }
-        | ReconcileCommittedRuntimeMutation {
-            inputTaskDefinitionStateId,
-            inputTaskRuntimeRevision,
-            nextTaskRuntimeState: TaskRuntimeState,
-            inputExecutionEvidenceRegistryStateId,
-            inputExecutionEvidenceRegistryStateRevision,
-            nextExecutionEvidenceRegistry: ExecutionEvidenceRegistryState,
-            evidenceInvalidation: ExecutionEvidenceInvalidationRecord
-          },
-      regeneratedViews: GeneratedView[],
-      nextWorkflowState: WorkflowState
-    }
-  | FinalValidationFailedStageTransaction {
-      transactionId,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      inputWorkflowControlEventRegistryStateId,
-      inputWorkflowControlEventRegistryStateRevision,
-      nextWorkflowControlEventRegistryState: WorkflowControlEventRegistryState,
-      finalValidation: FinalValidationRecord,
-      inputExecutionEvidenceRegistryStateId,
-      inputExecutionEvidenceRegistryStateRevision,
-      nextExecutionEvidenceRegistry: ExecutionEvidenceRegistryState,
-      unchangedTaskRuntimeRevision,
-      tasksView: GeneratedView,
-      nextWorkflowState: WorkflowState
-    }
-  | LocalizedTaskRemediationStageTransaction {
-      transactionId,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      failedFinalValidationRecordId,
-      inputWorkflowControlEventRegistryStateId,
-      inputWorkflowControlEventRegistryStateRevision,
-      nextWorkflowControlEventRegistryState: WorkflowControlEventRegistryState,
-      localizedTaskId,
-      inputTaskRuntimeRevision,
-      nextTaskRuntimeState: TaskRuntimeState,
-      inputExecutionEvidenceRegistryStateId,
-      inputExecutionEvidenceRegistryStateRevision,
-      nextExecutionEvidenceRegistry: ExecutionEvidenceRegistryState,
-      evidenceInvalidation: ExecutionEvidenceInvalidationRecord,
-      tasksView: GeneratedView,
-      nextWorkflowState: WorkflowState
-    }
-  | ImplementationReconciliationStageTransaction {
-      transactionId,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      inputWorkflowControlEventRegistryStateId,
-      inputWorkflowControlEventRegistryStateRevision,
-      nextWorkflowControlEventRegistryState: WorkflowControlEventRegistryState,
-      invalidation: ReworkInvalidationRecord,
-      finalValidation?: FinalValidationRecord,
-      inputTaskRuntimeRevision,
-      nextTaskRuntimeState: TaskRuntimeState,
-      inputExecutionEvidenceRegistryStateId,
-      inputExecutionEvidenceRegistryStateRevision,
-      nextExecutionEvidenceRegistry: ExecutionEvidenceRegistryState,
-      evidenceInvalidation: ExecutionEvidenceInvalidationRecord,
-      tasksView: GeneratedView,
-      nextWorkflowState: WorkflowState
-    }
-  | ImplementationCompletionStageTransaction {
-      transactionId,
-      expectedWorkflowStateId,
-      expectedWorkflowRevision,
-      inputWorkflowControlEventRegistryStateId,
-      inputWorkflowControlEventRegistryStateRevision,
-      nextWorkflowControlEventRegistryState: WorkflowControlEventRegistryState,
-      finalValidation: FinalValidationRecord,
-      nextExecutionEvidenceRegistry: ExecutionEvidenceRegistryState,
-      finalRuntimeFileState: RuntimeFileState,
-      finalTaskRuntimeState: TaskRuntimeState,
-      tasksView: GeneratedView,
-      nextWorkflowState: WorkflowState
-    }
-)
-
-ReviewTransaction = DurableTransactionMember & {
-  transactionId,
-  expectedWorkflowStateId,
-  expectedWorkflowRevision,
-  decision: ReviewDecision,
-  exactTargetStateId,
-  inputActorEvidenceRegistryStateId,
-  inputActorEvidenceRegistryStateRevision,
-  nextActorEvidenceRegistryState: ActorEvidenceRegistryState,
-  inputReviewDecisionRegistryStateId,
-  inputReviewDecisionRegistryStateRevision,
-  nextReviewDecisionRegistryState: ReviewDecisionRegistryState,
-  nextWorkflowState: WorkflowState,
-  singleUse: true
-}
 
 FileOperationProposal {
   taskId,
@@ -9976,7 +9069,7 @@ PipelineRunner
 │       ├── YAML-named invocation operation through a runner-owned binding
 │       │   └── parser/validator child bindings when that contract composes them
 │       ├── selected-graph target-context setup binding when required
-│       │   ├── feature-ownership validation and feature-local recovery
+│       │   ├── explicit feature-directory and selected-state validation
 │       │   ├── toolchain-preset registry/compilation actions
 │       │   ├── free-text principles ingestion/indexing actions
 │       │   └── repository discovery actions
@@ -9988,10 +9081,6 @@ PipelineRunner
     └── FeatureLoggingFailureOrchestrator
         ├── transient-handle destruction action
         ├── one emergency-record action
-        ├── TransactionRecoveryOrchestrator (only for prepared/applying work)
-        │   ├── ReadTransactionRecoveryStateAction
-        │   ├── RestoreTransactionEntryAction per uncommitted entry, reverse order
-        │   └── VerifyCommittedTransactionEntryAction per committed entry, forward order
         └── fail-closed runner-control action
 
 Project workflow graphs are not registered in source. The compiler constructs
@@ -10053,9 +9142,9 @@ ENGINE_CONFIG_READ_ERROR without searching an ancestor or descendant
   -> only when the selected graph references the registered target-context
      setup, invoke that portion after its invocation operation produces
      validated workflow context; unrelated workflows do not inherit this branch
-  -> for the initial SDD graphs, read/validate feature ownership and inventory
-     directly; validate existing activation before feature-local recovery;
-     no project transaction collection, ledger, or lock is required
+  -> for the initial SDD graphs, validate the supplied feature directory and
+     only its required existing state; no derived name, ownership registry,
+     cross-feature inventory or recovery prerequisite
   -> bounded inventory/capture of the direct paths.toolchainPreset root
   -> classify every resource -> reject legacy -> parse/validate closed v1 presets
   -> assign/build/validate ToolchainPresetRegistryState
@@ -10147,19 +9236,25 @@ DecoderBlockProposal {
 ## 27. Specify CLI contract
 
 ```text
-sdd specify --reference <relative-selector>
+sdd specify --feature <feature-directory> --reference <relative-selector>
 
 SpecifyCommand {
   verb: specify,
+  featureDirectory: ValidatedFeatureDirectory,
   referenceSelector: RelativeReferenceSelector
 }
 
 SpecifyApiRequest {
+  featureDirectory: ValidatedFeatureDirectory,
   referenceSelector: RelativeReferenceSelector
 }
 
-Removed inputs (`--feature`, `--description`, `--feature-id`, `--ref`,
-`-type`, positional descriptions, and Git/branch flags) are schema errors.
+Both inputs are required and independent. featureDirectory is relative to
+.sddtoolkit.json paths.specs; referenceSelector is relative to paths.references.
+For --feature hello-world, the output is <paths.specs>/hello-world/spec.md.
+The configured root is neither repeated by the caller nor hard-coded by the engine.
+Missing, duplicate, unknown or positional inputs are schema errors. The generic
+engine delegates this grammar to the selected registered invocation operation.
 ```
 
 ---

@@ -238,7 +238,7 @@ test "retained operation ledger rejects substituted input binding and unavailabl
     wrong = fixture.call;
     wrong.provider_binding = &different_binding;
     try std.testing.expectError(error.InvalidProviderInvocationContext, (action.Action{}).execute(std.testing.allocator, wrong, &response));
-    _ = try fixture.base.change(.inference, .{ .terminate = .completed });
+    try fixture.base.change(.inference, .{ .terminate = .completed });
     wrong = fixture.call;
     wrong.operations = fixture.base.ledger();
     try std.testing.expectError(error.InvalidProviderInvocationContext, (action.Action{}).execute(std.testing.allocator, wrong, &response));

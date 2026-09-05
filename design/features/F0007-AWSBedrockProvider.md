@@ -2,6 +2,10 @@
 
 **Status:** Proposed feature design
 
+**Execution amendment:** [ADR 0009](../decisions/0009-atomic-workflow-execution.md)
+removes durable provider-effect records and restart recovery. The adapter's
+lifecycle and authorization belong only to the current atomic execution.
+
 **Implementation readiness:** Blocked. F0006 and its governing amendments are
 accepted. Production implementation still requires accepted
 compiler-registered Bedrock model contracts, target/region/data-routing policy,
@@ -81,8 +85,7 @@ F0007 begins with:
   `model-envelope/v1` schema, ordered content, controls, `ModelVisibleInputId`,
   and effective limits;
 - one assigned `ProviderOperationId` and, before network I/O, proof of its
-  durably journaled runner-applied `send_may_occur`/`invoked` transition;
-- exact input-token evidence for inference; and
+  runner-applied in-memory `invoked` transition; and
 - one validated opaque authorization lease reference whose nonserializable
   backing capability remains in the runner-private table and is bound to the
   same provider, operation ID, source region, service, deadline, and request.
@@ -103,7 +106,7 @@ Responsibilities remain narrow:
 | `AWSBedrockRuntimePort` | Send and receive at most one already authorized Bedrock Runtime request under its deadline, cancellation, and wire budget. |
 | Trusted endpoint resolver | Resolve one registered partition/region and fixed `bedrock-runtime` service to one trusted HTTPS origin. |
 | Composition root | Construct the fixed Bedrock model contracts, endpoint policy, provider adapter, environment source, and narrow infrastructure implementations; it does not read or retain the key itself. |
-| Pipeline runner | Own the single-use authorization table and effect-journal handle, apply lifecycle transitions, expose only opaque lease references, and finalize every slot on every path. |
+| Pipeline runner | Own the execution-local single-use authorization table, apply lifecycle transitions, expose only opaque lease references, and finalize every slot on every path. |
 
 `AWSBedrockProvider` exhaustively matches the already validated
 `aws_bedrock` union tag and operation kind as a defensive internal invariant.
@@ -583,26 +586,21 @@ Delivery disposition is classified independently:
 - any timeout, cancellation, crash, connection loss, or receive failure after
   transmission begins is `accepted_or_unknown`.
 
-The adapter never infers delivery from HTTP status or error prose. Recovery of
-an invoked operation without a durable terminal observation is
-`accepted_or_unknown`, never an automatic replay. The default terminal result
-is blocked for ambiguous external effect/provider spend; only an explicitly
-accepted duplicate-effect policy may permit a new separately reserved attempt.
+The adapter never infers delivery from HTTP status or error prose. Delivery
+classification belongs to the current call's observation; it does not create
+a durable provider record or restart gate.
 
-`AWSBedrockProvider` cannot write or inspect the effect journal. It receives an
-`InvokedProviderOperation` only after the runner durably commits
-`send_may_occur`; `AWSBedrockRuntimePort` rejects any call without that proof.
-On restart, F0006 recovery classifies journal records before a workflow may
-reserve another provider operation. A crash before `send_may_occur` is
-not-sent; a crash from that commit until `terminal_observed` is durable is
-ambiguous, including after AWS returned a response that was not durably
-recorded. A durable `terminal_observed` AWS success is not recoverable merely
-from its non-content journal facts: recovery must prove the exact durable
-CountTokens-evidence or model-result successor and idempotently mark
-`outcome_consumed`; without that successor it returns
-`terminal_result_unavailable` and blocks by default. Only an accepted
-duplicate-effect/spend policy may authorize a new attempt, never reuse of the
-old operation.
+`AWSBedrockProvider` receives an `InvokedProviderOperation` after the runner
+applies its in-memory lifecycle transition. The transport enforces the exact
+single-use authorization, request binding, deadline and byte budgets. It
+requires no journal, persisted send proof, result-consumption marker or
+feature-storage capability.
+
+An interrupted workflow execution is abandoned in full. A later invocation
+starts at its compiled `start` step with fresh provider state and token
+accounting. AWS may still process and charge an already sent request, and the
+new workflow execution may repeat it. No previous response is restored and no
+cross-execution duplicate-effect approval is required.
 
 All AWS SDK/client automatic retries, adaptive retries, redirect retries, and
 API-key refresh retries inside the provider call are disabled. One F0006
@@ -628,17 +626,17 @@ response.
 ## 10. Ownership, cleanup, and concurrency
 
 Every endpoint value, environment API-key snapshot, transient authorization
-header, request body, lease slot/ref, authorization capability, effect-journal
-handle, transport handle, raw response buffer, decoded AWS value, and normalized
+header, request body, lease slot/ref, authorization capability, transport
+handle, raw response buffer, decoded AWS value and normalized
 observation has one owner and deterministic destruction on success, rejection,
-cancellation, timeout, recovery, and operational failure.
+cancellation, timeout and operational failure.
 
 Before consume, the runner-private table exclusively owns each move-only,
 nonserializable, nonloggable authorization capability. A successful one-use CAS
 moves ownership to `AWSBedrockProvider`, which destroys it after the call. If no
 consume occurs, the table finalizes it. The envelope contains only the opaque
-reference, never the capability. Journal records persist no reference backing
-or API key and cannot reconstruct one after restart. Raw bodies remain
+reference, never the capability. Neither the reference backing nor API key
+is persisted or reconstructed by a later workflow execution. Raw bodies remain
 adapter-private until `.complete` text is moved into the bounded F0006 result;
 all output for `.stopped` is discarded and all AWS storage is destroyed.
 
@@ -659,7 +657,7 @@ failpoint evidence; client thread safety alone is insufficient.
   AWS infrastructure implementation has no model-operation port.
 - The API key, authorization header, environment snapshot, raw bodies,
   endpoints, and AWS error details never enter canonical state, diagnostics,
-  the provider-operation effect journal, prompt capture, or metadata logs.
+  prompt capture or metadata logs.
 - F0002 prompt capture uses only pre-serialization typed fragments with
   opt-in selectors, redaction, and limits. A Bedrock wire body is never captured
   opaquely.
@@ -740,12 +738,10 @@ F0007 does not implement:
     input plus output totals, never from a prior count or output allowance.
 18. Every known stop reason and AWS exception maps to one exact observation;
     unknown, inconsistent, or unregistered nested status fails closed.
-19. Every failure records `not_sent`, `response_received`, or
-    `accepted_or_unknown`; `send_may_occur` is durable before transmission,
-    distinct CountTokens/Converse records join one attempt record, and
-    `terminal_observed -> outcome_consumed` proves the result handoff.
-    Invoked-without-terminal and terminal-result-unavailable recovery never
-    auto-replay.
+19. Every failure retains its current-call delivery disposition. CountTokens
+    and Converse have distinct execution-local operation identities beneath
+    one attempt. Interruption abandons the whole execution; a new invocation
+    starts at `start`, with no journal, restored response or resume gate.
 20. Provider failures never become model-content `invalid`; only an accepted
     capability-free provider/generation retry owner chooses a new attempt, and
     the runner only validates/applies its accounting.
@@ -807,12 +803,10 @@ Implementation evidence must cover:
   AWS 400/403/404/408/424 nested-status cases/429/500/503 responses,
   status/discriminator conflict, malformed error, TLS/DNS/transport failure,
   `not_sent`/`response_received`/`accepted_or_unknown`, one attempt record with
-  distinct CountTokens/Converse operation records, and durable journal crashes
-  before/after `send_may_occur`, first byte, response, `terminal_observed`,
-  successor commit, and `outcome_consumed`. Recovery fixtures cover both an
-  idempotently joined durable successor and `terminal_result_unavailable`
-  without replay, plus no raw-error leakage, disabled retries, and a new
-  runner-owned attempt before any second call.
+  distinct CountTokens/Converse operation records, abandonment before/after
+  transmission and response, and a full rerun with fresh accounting and no
+  persisted provider-state access. Cover no raw-error leakage, disabled adapter
+  retries and a new runner-owned attempt before a second within-run call.
 - **Architecture/security:** AWS and environment imports confined to their
   narrow adapters; common
   authorization action depends only on the provider-neutral port; AWS

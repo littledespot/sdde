@@ -18,9 +18,9 @@ folding, case folding, transliteration, or removal of characters is implied.
 Selector policy separately owns separator and segment rules. Existing ASCII
 configuration-root policy remains unchanged.
 
-[ADR 0008](0008-feature-naming-policy.md) adds a separately selected naming
-transform to this same adapter. It does not change selector NFC or implicitly
-enable folding for other consumers.
+ADR 0008's separately selected naming transform is superseded by
+[ADR 0010](0010-explicit-feature-directory.md). Its removal does not remove shared
+NFC or change the dependency/packaging decision.
 
 Install the dependency's MIT/Unicode license notices with the distribution.
 Verify Unicode composition, invalid UTF-8, bounds, allocation failures, and

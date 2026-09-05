@@ -381,7 +381,6 @@ pub const Runner = struct {
 
     pub fn reportFailure(self: *Runner, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) log_stream.FailureCode {
         self.actions.emit_emergency.execute(shortcode, failure);
-        self.actions.stabilize_failure.execute() catch return .LOG_SINK_FAILURE;
         return failure;
     }
 

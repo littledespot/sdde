@@ -32,6 +32,46 @@ test "generic engine preserves every YAML-compiled terminal outcome" {
     }
 }
 
+test "rerunning an abandoned workflow executes every step again from compiled start" {
+    inline for (.{ .failed, .blocked, .cancelled, .needs_user }) |terminal| {
+        var steps = [_]compilation.CompiledStep{test_steps[0]} ** 3;
+        for (&steps, [_][]const u8{ "first", "second", "last" }) |*step, id| step.id = .{ .bytes = id };
+        const transitions = [_]workflow.Transition{
+            .{ .from = .{ .bytes = "first" }, .outcome = .ok, .target = .{ .step = .{ .bytes = "second" } } },
+            .{ .from = .{ .bytes = "second" }, .outcome = .ok, .target = .{ .step = .{ .bytes = "last" } } },
+            .{ .from = .{ .bytes = "second" }, .outcome = terminal, .target = .{ .terminal = terminal } },
+            .{ .from = .{ .bytes = "last" }, .outcome = .ok, .target = .{ .terminal = .ok } },
+        };
+        var graph = try testGraph();
+        graph.authority.start_step_id = steps[0].id;
+        graph.authority.steps = &steps;
+        graph.authority.transitions = &transitions;
+        graph.authority.maximum_step_executions = steps.len;
+        {
+            var control: OperationControl = .{ .state = .{
+                .outcome = terminal,
+                .scripted = &.{ .ok, terminal },
+                .expected_steps = &.{ "first", "second" },
+            } };
+            var barrier: FakeBarrier = .{};
+            var registry = testRegistry(&control);
+            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+            defer runner.deinit();
+            var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+            try std.testing.expectEqual(@as(workflow.OutcomeTag, terminal), engine.run(children.bindings()).execution);
+            try std.testing.expectEqual(@as(usize, 2), control.state.calls);
+        }
+        var control: OperationControl = .{ .state = .{ .outcome = .ok, .expected_steps = &.{ "first", "second", "last" } } };
+        var barrier: FakeBarrier = .{};
+        var registry = testRegistry(&control);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).execution);
+        try std.testing.expectEqual(@as(usize, 3), control.state.calls);
+    }
+}
+
 test "runner applies an operation delta before the telemetry barrier" {
     var control: OperationControl = .{ .state = .{ .outcome = .ok } };
     var barrier: FakeBarrier = .{ .block = true };
@@ -233,6 +273,7 @@ const retry_parameters = [_]@import("domain/workflow_operation.zig").ParameterDe
 const OperationState = struct {
     outcome: workflow.OutcomeTag,
     scripted: []const workflow.OutcomeTag = &.{},
+    expected_steps: []const []const u8 = &.{},
     expected_resource_id: ?[]const u8 = null,
     calls: usize = 0,
 };
@@ -285,6 +326,11 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
         .invocation => .{ .outcome = .ok, .delta = .{} },
         .step => |step_input| step: {
             const control = context.?;
+            if (control.expected_steps.len != 0) {
+                if (control.calls >= control.expected_steps.len or
+                    !std.mem.eql(u8, step_input.step.id.bytes, control.expected_steps[control.calls]))
+                    return error.OperationExecutionFailed;
+            }
             if (control.expected_resource_id) |expected| {
                 if (step_input.resources.len != 1 or
                     !std.mem.eql(u8, step_input.resources[0].id.bytes, expected))

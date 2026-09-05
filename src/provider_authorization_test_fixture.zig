@@ -126,7 +126,7 @@ pub const Fixture = struct {
         return .{ .binding_id = self.provider_binding.bindingId(), .model_visible_input_id = self.request.model_visible_input_id };
     }
 
-    pub fn change(self: *Fixture, kind: operation.ProviderOperationKind, command: lifecycle.Command) !lifecycle.Effect {
+    pub fn change(self: *Fixture, kind: operation.ProviderOperationKind, command: lifecycle.Command) !void {
         const operation_id = self.id(kind);
         const previous = self.ledger().record(operation_id);
         const authority: lifecycle.Authority = .{
@@ -139,7 +139,7 @@ pub const Fixture = struct {
     }
 
     pub fn assignCount(self: *Fixture) !void {
-        _ = try self.change(.input_token_count, .{ .assign_count = self.assignment() });
+        try self.change(.input_token_count, .{ .assign_count = self.assignment() });
     }
 
     pub fn preparationRunner(self: *Fixture) preparation_runner.Runner {
@@ -159,7 +159,7 @@ pub const Fixture = struct {
             try self.requests.advance(self.requests.ledger().?.revision(), self.model_request_id, .assigned, .invoked);
             self.request_invoked = true;
         }
-        _ = try self.change(kind, .{ .invoke = .{ .deadline_monotonic_ms = 1000, .receive_budgets = operation.ProviderReceiveBudgets.init(32, 4096, 4096).? } });
+        try self.change(kind, .{ .invoke = .{ .deadline_monotonic_ms = 1000, .receive_budgets = operation.ProviderReceiveBudgets.init(32, 4096, 4096).? } });
         return self.ledger().requireInvoked(self.id(kind));
     }
 
@@ -178,12 +178,12 @@ pub const Fixture = struct {
     }
 
     pub fn finishCountAndStartInference(self: *Fixture, count: operation.ExactInputTokenCountEvidence) !Authorized {
-        _ = try self.change(.input_token_count, .{ .terminate = .{ .counted = count } });
+        try self.change(.input_token_count, .{ .terminate = .{ .counted = count } });
         return self.startInference();
     }
 
     pub fn startInference(self: *Fixture) !Authorized {
-        _ = try self.change(.inference, .{ .assign_inference = self.assignment() });
+        try self.change(.inference, .{ .assign_inference = self.assignment() });
         const reference = try self.prepare(.inference);
         return .{ .reference = reference, .invoked = try self.invoke(.inference) };
     }

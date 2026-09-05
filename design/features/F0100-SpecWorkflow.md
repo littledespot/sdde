@@ -5,9 +5,10 @@
 **Implementation readiness:** The generic concise YAML, declared-resource,
 compiler, registry, and transition-runner boundaries are implemented by F0005
 and ADR 0005. The logical Specify flow, `spec.md` section hierarchy, and
-clarification separation are defined below. Invocation and read-only selector
-preflight are implemented in Section 3.1; generation, activation, persistence,
-and the complete executable definition remain unfinished.
+clarification separation are defined below. Shared reference-selector preflight
+exists, but the invocation must adopt the explicit feature directory in Section
+3.1. The old reference-only invocation and naming operation are superseded;
+generation, output publication and the complete definition remain unfinished.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -39,7 +40,7 @@ runner-owned bindings; it contains no `specify` name branch.
 
 YAML-selected registered operations in the selected graph build and validate `SpecificationIR`,
 render and reparse `spec.md`, render `reference-context.md`, and commit the
-complete artifact/state transaction. The generic workflow engine performs none
+complete atomic workflow output. The generic workflow engine performs none
 of that Specify-specific work. The YAML explicitly selects every operation,
 model slot, prompt/schema resource, and outcome transition. It contains no raw
 operational output path, command, adapter, capability, or executable payload.
@@ -106,84 +107,72 @@ workflow-owned value and every selected operation outcome has exactly one
 mapping. `validate` and `repair` are illustrative local steps and must also be
 declared in a complete definition.
 
-### 3.1 Registered invocation and read-only identity preflight
+### 3.1 Explicit feature directory and reference preflight
 
-These native contracts use the existing runner, owned value envelope, and
-registry. Any workflow may select them. Only identity derivation takes a YAML
-parameter: the required `max-length` integer described below.
+[ADR 0010](../decisions/0010-explicit-feature-directory.md) replaces generated
+feature names and ownership registration with the exact supplied directory:
 
-| Contract | Kind | Input → output |
-| --- | --- | --- |
-| `specify-invocation@1` | Invocation | Remaining arguments → validated `specify_invocation` |
-| `parse-specify-invocation@1` | Invocation | Remaining arguments → `parsed_specify_invocation` |
-| `validate-specify-arguments@1` | Step | Parsed invocation → validated invocation |
-| `normalize-reference-selector@1` | Step | Validated invocation → `normalized_reference_selector` |
-| `validate-reference-selector@1` | Step | Normalized candidate → `relative_reference_selector` |
-| `inspect-reference-directory@1` | Step | Relative selector → read-only `reference_directory` observation |
-| `derive-feature-identity@1` | Step | Relative selector + `max-length` → `feature_identity_seed` |
+```text
+sdd specify --feature <feature-directory> --reference <relative-selector>
+```
 
-`specify-invocation@1` atomically coordinates the same parser and validator
-through runner-owned child bindings; only its validated result leaves that
-boundary. Invocation accepts exactly `--reference <non-empty-value>`; removed,
-unknown, duplicate, positional, missing, and `--` forms fail. Invocation success
-is `ok`; rejection uses the existing operation-failure boundary. Steps declare
-`ok` and `failed`; runner cancellation remains `cancelled`.
+The registered invocation requires `featureDirectory` and `referenceSelector`.
+`--feature` and the API's `featureDirectory` are relative to `.sddtoolkit.json`'s
+`paths.specs`, not the project root. For example, `--feature hello-world` writes
+`<paths.specs>/hello-world/spec.md`. Do not repeat or hard-code the specs root;
+resolve from configuration and exclude `paths.specsArchive`.
 
-Selector policy `reference-selector/v1` bounds raw and normalized UTF-8 to
-4,096 bytes and each normalized segment to 255 bytes. The shared
-[ADR 0007](../decisions/0007-unicode-normalization.md) adapter performs NFC.
-Normalization maps literal backslashes to `/` and removes only literal `.`
-segments. Validation rejects empty/dot-only, absolute/drive/UNC/URI, traversal,
-encoded dot/separator, controls/NUL, empty segments, trailing separators, and
-portable-invalid segment names. Unicode remains supported; configured-root
-ASCII policy is unchanged. Bounds are engine contracts, not YAML overrides.
+`--reference` independently selects the source directory beneath `paths.references`.
+Missing, duplicate, empty, unknown and positional inputs fail. Unrelated workflows
+keep their own registered invocation contracts; the generic engine has no Specify
+argument branch.
 
-Only directory inspection carries `reference-read`; the other operations are
-capability-free. `core.reference-read@1` permits that read capability and
-`ok`/`failed`/`cancelled` terminals; it authorizes no provider or write.
-The inspector rechecks the bound configured-root identity and opens each
-descendant component without following symlinks. It requires a readable
-directory and publishes repository-relative metadata and physical identities,
-not a reusable filesystem capability. Future readers must revalidate them.
+Use shared path normalization, containment, portability and no-follow validation
+for the target. Resolve its registered artifact paths directly and validate only
+the existing state needed by the selected workflow. The same directory is the
+same feature, including when reference input changes. No slug, `max-length`,
+identity seed, owner registry, active/archive ownership scan, or registration
+write is required. An existing directory is not a collision requiring approval.
 
-Identity derivation follows [ADR 0008](../decisions/0008-feature-naming-policy.md).
-`with: { max-length: 64 }` is an explicit example, not a default; the closed
-parameter accepts integers 1–255. The operation folds the full selector with
-the pinned Unicode naming policy, constructs and truncates a portable ASCII
-kebab-case ID, and rejects empty/invalid results. The seed retains the exact
-selector, policy version, maximum length, and prospective ID; it is neither
-an availability claim nor feature ownership. No reference prose or model title
-participates. Identity derivation itself is capability-free and need not read
-a directory; the full Specify preflight separately requires inspection.
+The existing reusable reference operations remain:
 
-The [preflight fixture](../../src/test_fixtures/reference-preflight.workflow.yaml)
-proves these operations without claiming `specified`. It reads no reference
-contents and creates no feature, log, clarification, transaction, or artifact.
-Collision/ownership checks, recovery/activation, and complete corpus validation
-remain later work; an identity seed alone cannot authorize them.
+| Contract | Input → output |
+| --- | --- |
+| `normalize-reference-selector@1` | Validated reference input → normalized candidate |
+| `validate-reference-selector@1` | Normalized candidate → relative selector |
+| `inspect-reference-directory@1` | Relative selector → read-only directory observation |
 
-Feature activation uses validated fixed-path writes under Design Section 25.1.
-There is no project-level transaction directory, WAL, ledger, or lock prerequisite.
-Existing project-owner ledger code is superseded and requires removal, not
-persistence implementation (F0050 Section 5.2). Feature-owned stage/task
-transactions remain separate from activation.
+The shared ADR 0007 adapter owns NFC. Reference policy retains its 4,096-byte
+raw/normalized limit, 255-byte segment limit, separator/dot normalization, and
+rejection of traversal, absolute paths, encoded separators, controls and invalid
+portable names. Inspection alone carries `reference-read`; it rechecks root
+identity, follows no symlinks, requires a readable directory, and grants no write
+capability. Reference inspection does not read or reconcile the corpus.
 
-Reruns MUST overwrite the selected workflow's known output files at the same
-registered paths without separate overwrite approval. User-closed clarification
-files remain byte-for-byte unchanged; reuse applicable validated answers and
-recheck protection before writing (Design Section 23.2).
+**Implementation gap:** replace the reference-only invocation and remove
+`derive-feature-identity@1`, its naming parameters and obsolete fixtures/tests.
+Reuse the existing runner/value envelope and shared path validation rather than
+adding another loader, policy owner or hidden workflow sequence. The current
+preflight fixture is evidence for the old implementation, not the amended CLI.
+
+Specify follows [ADR 0009](../decisions/0009-atomic-workflow-execution.md): each
+execution starts at `start`; no transaction/checkpoint/recovery prerequisite.
+Successful reruns overwrite the selected workflow's known outputs at the same
+paths without separate approval. User-closed clarification files remain
+byte-for-byte unchanged, including stale/invalid submissions; reuse applicable
+validated answers and recheck protection immediately before writing (§23.2).
 
 ## 4. Required logical coverage
 
 The compiled registered contracts collectively cover:
 
-1. parse and validate only `sdd specify --reference <relative-selector>`;
-2. perform deterministic feature, recovery, and reference preflight;
+1. validate the explicit feature directory and independent reference selector under Section 3.1;
+2. validate the selected directory, required existing state and reference corpus without an ownership registry or cross-feature scan;
 3. ingest and reconcile the complete supported reference corpus;
 4. generate a reference-grounded feature brief and the typed units mapped in
    Section 5;
 5. send missing, unsupported, ambiguous, or conflicting specification
-   authority to an `SNN` clarification transaction without persisting a partial
+   authority to the persistent `SNN` clarification registry without publishing a partial
    `SpecificationIR` or `spec.md`;
 6. atomically repair only engine-authorized invalid candidate units, then rerun
    impacted and complete validation;
@@ -405,7 +394,8 @@ YAML definition.
 11. Adding any other correctly configured workflow YAML composed only from
     registered generic operations requires no workflow-name branch, hidden
     operation, or engine rebuild.
-12. A Specify rerun MUST overwrite its existing registered output files at the
+12. The supplied directory identifies the feature; reference changes do not select
+    another directory or require an ownership lookup. A Specify rerun MUST overwrite its existing registered output files at the
     same paths under Design Section 23.2, without skipping, renaming, or separate
     overwrite approval. It MUST NOT overwrite user-closed clarification files;
     they remain byte-identical through generation, reference refresh,

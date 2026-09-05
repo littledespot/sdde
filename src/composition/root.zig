@@ -69,7 +69,6 @@ const active_feature_log_runtime = @import("active_feature_log_runtime.zig");
 const feature_log_finalization_runner = @import("../application/feature_log_finalization_runner.zig");
 const model_provider_bootstrap = @import("model_provider_bootstrap.zig");
 const engine_invocation = @import("engine_invocation.zig");
-const stabilizer_port = @import("../ports/transaction_stabilizer.zig");
 const workflow_operation_registry = @import("../ports/workflow_operation_registry.zig");
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) run_outcome.Outcome {
@@ -963,23 +962,74 @@ fn createFeatureLogLayout(
 
 test "loads and resolves a generic workflow definition from the configured root" {
     const io = std.testing.io;
-    var project_root = std.testing.tmpDir(.{});
-    defer project_root.cleanup();
-    try project_root.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
-    try project_root.dir.createDirPath(io, ".sdd/workflows/nested");
-    try project_root.dir.writeFile(io, .{
-        .sub_path = ".sdd/workflows/nested/arbitrary-name.workflow.yaml",
-        .data = valid_workflow,
-    });
+    for ([_][]const u8{ "nested", "transactions", "Transactions", "utilities", "nested/features" }) |directory| {
+        var project_root = std.testing.tmpDir(.{});
+        defer project_root.cleanup();
+        try project_root.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
+        const parent = try std.fmt.allocPrint(std.testing.allocator, ".sdd/workflows/{s}", .{directory});
+        defer std.testing.allocator.free(parent);
+        try project_root.dir.createDirPath(io, parent);
+        const filename = try std.fmt.allocPrint(std.testing.allocator, "{s}/arbitrary-name.workflow.yaml", .{parent});
+        defer std.testing.allocator.free(filename);
+        try project_root.dir.writeFile(io, .{ .sub_path = filename, .data = valid_workflow });
+        // Only this exact root subtree is excluded from workflow discovery.
+        try project_root.dir.createDirPath(io, ".sdd/workflows/features/private");
+        try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/features/private/state.json", .data = "not workflow input" });
 
-    var outcome = runInProject(io, std.testing.allocator, project_root.dir);
-    defer outcome.deinit();
-    try std.testing.expect(outcome == .ready);
-    const registry = outcome.ready.workflows.registry();
-    try std.testing.expectEqual(@as(usize, 1), registry.count());
-    const graph = registry.resolve(workflow.WorkflowId.parse("hello").?);
-    try std.testing.expect(graph != null);
-    try std.testing.expectEqualStrings("core.noop@1", graph.?.authority.steps[0].operation_id.bytes);
+        var outcome = runInProject(io, std.testing.allocator, project_root.dir);
+        defer outcome.deinit();
+        try std.testing.expect(outcome == .ready);
+        const registry = outcome.ready.workflows.registry();
+        try std.testing.expectEqual(@as(usize, 1), registry.count());
+        const graph = registry.resolve(workflow.WorkflowId.parse("hello").?);
+        try std.testing.expect(graph != null);
+        try std.testing.expectEqualStrings("core.noop@1", graph.?.authority.steps[0].operation_id.bytes);
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project_root.dir, &.{"hello"}).execution);
+    }
+}
+
+test "ordinary workflow directories cannot hide undeclared files or symlinks" {
+    const io = std.testing.io;
+    for ([_][]const u8{ "transactions", "utilities", "nested/features" }) |directory| {
+        for ([_]bool{ false, true }) |linked| {
+            var project_root = std.testing.tmpDir(.{});
+            defer project_root.cleanup();
+            try project_root.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
+            const parent = try std.fmt.allocPrint(std.testing.allocator, ".sdd/workflows/{s}", .{directory});
+            defer std.testing.allocator.free(parent);
+            try project_root.dir.createDirPath(io, parent);
+            try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/hello.workflow.yaml", .data = valid_workflow });
+            const filename = try std.fmt.allocPrint(std.testing.allocator, "{s}/unregistered.json", .{parent});
+            defer std.testing.allocator.free(filename);
+            if (linked) {
+                try project_root.dir.symLink(io, "../hello.workflow.yaml", filename, .{});
+            } else {
+                try project_root.dir.writeFile(io, .{ .sub_path = filename, .data = "{}" });
+            }
+            var outcome = runInProject(io, std.testing.allocator, project_root.dir);
+            defer outcome.deinit();
+            try std.testing.expectEqual(@import("../domain/bootstrap_error.zig").PublicError.WORKFLOW_AUTHORITY_INVENTORY_INVALID, outcome.failed);
+        }
+    }
+}
+
+test "reserved feature roots still reject files symlinks and case aliases" {
+    const io = std.testing.io;
+    const InvalidRoot = enum { file, symlink, case_alias };
+    for (std.enums.values(InvalidRoot)) |kind| {
+        var project_root = std.testing.tmpDir(.{});
+        defer project_root.cleanup();
+        try project_root.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
+        try project_root.dir.createDirPath(io, ".sdd/workflows");
+        switch (kind) {
+            .file => try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/features", .data = "{}" }),
+            .symlink => try project_root.dir.symLink(io, "../outside", ".sdd/workflows/features", .{}),
+            .case_alias => try project_root.dir.createDirPath(io, ".sdd/workflows/Features"),
+        }
+        var outcome = runInProject(io, std.testing.allocator, project_root.dir);
+        defer outcome.deinit();
+        try std.testing.expectEqual(@import("../domain/bootstrap_error.zig").PublicError.WORKFLOW_AUTHORITY_INVENTORY_INVALID, outcome.failed);
+    }
 }
 
 test "duplicate workflow shortcodes reject the complete registry" {
@@ -1032,7 +1082,6 @@ test "feature log storage opens only an activated layout from present artifact a
     try project_root.dir.access(io, "specs/F0002/logs/events/RUN-1/LOGBIND-1", .{});
     try project_root.dir.access(io, "specs/F0002/logs/prompts/RUN-1/LOGBIND-1", .{});
 
-    var stabilizer: TestStabilizer = .{};
     const active_runtime = try active_feature_log_runtime.create(
         std.testing.allocator,
         io,
@@ -1040,7 +1089,6 @@ test "feature log storage opens only an activated layout from present artifact a
         boot.ready.logs.policy(),
         workflow_artifacts.registry(artifact_owner),
         log_binding.binding(binding_owner),
-        stabilizer.port(),
     );
     defer active_feature_log_runtime.deinit(active_runtime);
     const shortcode = try @import("../domain/telemetry.zig").WorkflowShortcode.parse("TEST");
@@ -1333,18 +1381,6 @@ const RuntimeAfterObservations = struct {
     }
 };
 
-const TestStabilizer = struct {
-    calls: usize = 0,
-
-    fn port(self: *TestStabilizer) stabilizer_port.Stabilizer {
-        return .{ .context = self, .stabilize_fn = stabilize };
-    }
-
-    fn stabilize(context: *anyopaque) stabilizer_port.Error!void {
-        const self: *TestStabilizer = @ptrCast(@alignCast(context));
-        self.calls += 1;
-    }
-};
 
 test "missing exact config returns the public read error" {
     const io = std.testing.io;

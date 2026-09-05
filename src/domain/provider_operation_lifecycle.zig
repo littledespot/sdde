@@ -51,27 +51,7 @@ pub const TerminalFact = union(enum) {
     preparation_failed: FailureFact,
     cancelled: provider.ProviderDeliveryDisposition,
 
-    pub fn summary(self: TerminalFact) TerminalSummary {
-        return switch (self) {
-            .counted => .counted,
-            .completed => .completed,
-            .stopped => |value| .{ .stopped = value },
-            .failed => |value| .{ .failed = value },
-            .preparation_failed => |value| .{ .preparation_failed = value },
-            .cancelled => |value| .{ .cancelled = value },
-        };
-    }
-};
-
-pub const TerminalSummary = union(enum) {
-    counted,
-    completed,
-    stopped: provider.ProviderNonCandidateStopReason,
-    failed: FailureFact,
-    preparation_failed: FailureFact,
-    cancelled: provider.ProviderDeliveryDisposition,
-
-    pub fn delivery(self: TerminalSummary) provider.ProviderDeliveryDisposition {
+    pub fn delivery(self: TerminalFact) provider.ProviderDeliveryDisposition {
         return switch (self) {
             .counted, .completed, .stopped => .response_received,
             .failed, .preparation_failed => |failure| failure.delivery,
@@ -92,20 +72,6 @@ pub const Record = struct {
     state: State,
 };
 
-// Journal intent only. No durability or outcome-consumption evidence is minted here.
-pub const Effect = struct {
-    operation_id: provider.ProviderOperationId,
-    binding_id: binding.ProviderModelBindingId,
-    model_visible_input_id: provider.ModelVisibleInputId,
-    expected_revision: ?Revision,
-    revision: Revision,
-    phase: union(enum) {
-        assigned,
-        send_may_occur,
-        terminal_observed: TerminalSummary,
-    },
-};
-
 pub const Authority = struct {
     requests: *const identity.ModelRequestIdentityLedger,
     expected_request_revision: identity.LedgerRevision,
@@ -119,10 +85,6 @@ pub const Transition = struct {
     expected_operation_revision: ?Revision,
     command: Command,
 
-    pub fn effect(self: Transition, authority: Authority) ValidationError!Effect {
-        const next = try nextRecord(self.expected_ledger, authority, self);
-        return projectEffect(next, self.expected_operation_revision);
-    }
 };
 
 pub const Ledger = opaque {
@@ -346,20 +308,6 @@ fn failureFact(failure: provider.ProviderFailure) FailureFact {
 }
 fn increment(revision: Revision) ValidationError!Revision {
     return .{ .value = std.math.add(u64, revision.value, 1) catch return error.ProviderOperationRevisionExhausted };
-}
-pub fn projectEffect(record: Record, expected_revision: ?Revision) Effect {
-    return .{
-        .operation_id = record.id,
-        .binding_id = record.binding_id,
-        .model_visible_input_id = record.model_visible_input_id,
-        .expected_revision = expected_revision,
-        .revision = record.revision,
-        .phase = switch (record.state) {
-            .assigned => .assigned,
-            .invoked => .send_may_occur,
-            .terminal => |terminal| .{ .terminal_observed = terminal.summary() },
-        },
-    };
 }
 fn cloneBinding(allocator: std.mem.Allocator, source: binding.ProviderModelBindingId) std.mem.Allocator.Error!binding.ProviderModelBindingId {
     var result = source;

@@ -190,11 +190,7 @@ flowchart TD
     APPEND -- Failure --> EFAILREL
     FAULT --> FDESTROY[DestroyRawPromptLogHandlesAction if transient handles remain]
     FDESTROY --> EMERGENCY[EmitEmergencyLogFailureRecordAction<br/>one direct stderr attempt, max 128 ASCII bytes:<br/>SDDE_LOG_FAILURE workflow=CODE level=fatal code=FAILURE_CODE]
-    EMERGENCY --> TXSTATE{Workflow, stage or task transaction is prepared or applying}
-    TXSTATE -- No --> STABLE[Typed no-prepared-transaction stable-boundary outcome]
-    TXSTATE -- Yes --> RECOVERY[Invoke the recovery subroutine in diagram 09:<br/>acquire the exact feature collection lock, validate storage capability,<br/>run TransactionRecoveryOrchestrator and ReadTransactionRecoveryStateAction;<br/>RestoreTransactionEntryAction in reverse without a marker or<br/>VerifyCommittedTransactionEntryAction forward with a marker;<br/>commit/retire transaction ID, clean up and release exactly once]
-    RECOVERY --> STABLE
-    STABLE --> BLOCK[BuildLoggingBlockedControlAction<br/>block the runner before its next node]
+    EMERGENCY --> BLOCK[BuildLoggingBlockedControlAction<br/>abandon the workflow candidate and block before the next node;<br/>no transaction stabilization or recovery]
 
     LOG -. compiler-locked logging action IDs are excluded from observation .-> OBS
 ```

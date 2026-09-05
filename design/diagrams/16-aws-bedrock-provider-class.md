@@ -122,7 +122,7 @@ classDiagram
 
     class ProviderOperationLifecycleRunner {
         <<runner-owned accounting>>
-        +advance(authority, revisions, operationId, command) Effect
+        +advance(authority, revisions, operationId, command)
     }
 
     class AdvanceProviderOperationLifecycleAction {
@@ -206,7 +206,7 @@ classDiagram
     note for AWSBedrockProvider "PROPOSED ONLY: no src implementation exists; the environment-only API-key source is accepted"
     note for AWSBedrockEnvironmentAPIKeySource "Reads only AWS_BEARER_TOKEN_BEDROCK; no hardcoded key, fallback, reread, or refresh"
     note for AWSBedrockRuntimePort "No SDK, HTTP library, client fields, or concrete method signature has been selected"
-    note for IdentifiedProviderNeutralModelRequest "Request construction, static preflight, single-call invocation, response validation, decoding and payload schema validation are implemented with the fake provider and exact compiled schema; production YAML binding, durable send integration and native-schema representability remain pending"
+    note for IdentifiedProviderNeutralModelRequest "Request construction, static preflight, single-call invocation, response validation, decoding and payload schema validation are implemented with the fake provider and exact compiled schema; production YAML binding and native-schema representability remain pending"
     note for ProviderAuthorizationSlot "The authorization adapter can deposit only into this slot; it receives no table lookup or consumption capability"
-    note for ProviderOperationLifecycleRunner "Separate count and inference operations progress assigned to invoked to terminal; inference binds directly to request/input identity without counting. Effects are journal intent, not durability proof"
+    note for ProviderOperationLifecycleRunner "Separate count and inference operations progress assigned to invoked to terminal; inference binds directly to request/input identity without counting. Lifecycle is execution-local; no provider-effect journal or restart recovery"
 ```

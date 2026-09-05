@@ -2,6 +2,10 @@
 
 **Status:** Accepted feature design
 
+**Execution amendment:** [ADR 0009](../decisions/0009-atomic-workflow-execution.md)
+removes provider-effect persistence, durable handoff and cross-execution
+recovery. The whole workflow is atomic; an abandoned execution is never resumed.
+
 **Implementation readiness:** The configured provider-document path and
 read-only byte service are accepted and implemented by F0001/F0004/F0008. The
 strict common decoder, compiler-contract registry join, immutable
@@ -25,16 +29,18 @@ separately and later attempts require compiler-proven operation-local retry
 authority. The selected policy's positive total-token budget is compiled into
 the graph, and each execution owns a fresh actual-usage ledger.
 `AdvanceProviderOperationLifecycleAction`, its immutable execution-owned ledger,
-runner application, and non-content journal intents are implemented. Request
+and runner application are implemented. Existing journal-intent projections
+are superseded code to remove, not persistence work to complete. Request
 finalization and attempt advancement reject unfinished provider operations.
 `PrepareProviderOperationAuthorizationAction`, its deposit-only preparation
 port, runner-private single-use lease table and fake-provider consumption are
 implemented. The action publishes only an opaque identity reference through a
 typed `NodeDelta`; shared execution-reference ownership preserves identity
 without copying capabilities. `InvokeModelAction` now makes one interface
-inference call with fake-provider acceptance evidence. Durable effect-journal
-integration, optional count-call actions, production provider composition and
-production provider contracts remain implementation work.
+inference call with fake-provider acceptance evidence. Optional count-call
+actions, production provider composition/contracts and integration into the
+atomic workflow execution remain implementation work. No transaction store or
+provider-effect journal is a prerequisite.
 
 The provider-neutral capability/capacity contract and effective-limit binding
 are implemented. The accepted token-policy amendment removes per-operation token ceilings and
@@ -170,11 +176,9 @@ runtime evidence; the remaining items define subsequent implementation work:
    each operation failure terminal and attempt-consuming; relate request
    `assigned`, `invoked`, and terminal transitions to those operations; and
    close every assigned/uninvoked branch. There is no workflow-global attempt,
-   retry, unit-repair, or stage-repair ceiling. It also amends Sections 24-25 with the
-   engine-owned provider-attempt/operation effect journal in Section 8: exact
-   safe location, schema/version, split attempt/operation records, locking/CAS,
-   write-before-send durability, terminal-observation/result-consumption
-   handoff, retention/redaction, recovery scan, and cleanup;
+   retry, unit-repair, or stage-repair ceiling. ADR 0009 withdraws this item's
+   former durable provider-effect journal and recovery requirements. These
+   lifecycle facts are execution-local and abandoned with the execution;
 8. **Accepted:** establishes `LLMProviderInterface` as the sole governing name
    in design, package, and architecture-test authority, without an alias; and
 9. **Accepted:** updates packaged-executable acceptance criteria so a relocated executable
@@ -589,8 +593,8 @@ One ordinal represents one provider attempt. Inference has no count prerequisite
    operation's explicit compiler-validated `retry-limit`;
 3. assign the chosen operation from its exact binding/input identity and prepare
    its single-use authorization;
-4. check actual execution token usage, apply invoked transitions and durable
-   `send_may_occur`, then perform that one API call under byte/transport guards;
+4. check actual execution token usage, apply the in-memory invoked transitions,
+   then perform that one API call under byte/transport guards;
 5. record reported input/output usage once and close the operation, retaining
    any overshoot before returning the budget error; and
 6. follow explicit YAML transitions for retry or logical-request closure.
@@ -615,11 +619,10 @@ The action emits one declared runner transition, and only the runner publishes
 the successor. Request terminalization and a later attempt are rejected while
 an operation remains assigned or invoked.
 
-The transition projects only `assigned`, `send_may_occur`, or
-`terminal_observed` journal intents. Those projections omit count values and
-model content and do not prove persistence or outcome consumption. Durable
-commit/handoff and recovery remain separate implementation increments; the
-in-memory `requireInvoked` lookup alone does not authorize production I/O.
+The applied invocation record belongs only to the current execution. No
+persisted send marker or result-consumption record is required. The runner's
+binding, single-use authorization, budget and deadline checks remain required;
+an invocation record alone does not grant a provider capability.
 
 `InvokeModelAction` forwards the exact prepared request, binding, single-use
 authorization reference and applied invocation record through the existing
@@ -676,15 +679,15 @@ current invoked ledger record, exact binding/input/provider and deadline, then
 transfers ownership once. Preparation failure, expiration, cancellation and
 operation terminalization release unused backing; consumed backing is destroyed
 by the adapter. The lifecycle runner destroys its table before its ledger and
-canonical request identities. This in-memory lease is not durable send proof
-and does not enable a production provider or bypass the outstanding recovery
-contract.
+canonical request identities. Leases are execution-local and never restored
+by a later invocation. Production composition remains separate implementation
+work; there is no outstanding provider-recovery storage contract.
 
 The minimum v1 authorization path uses already loaded, non-refreshing material
 and performs no filesystem, process, metadata, STS, or refresh I/O. If an
 accepted credential policy later permits any such effect, each effect first
-requires its own closed operation identity, lifecycle, budget, retry, recovery,
-and terminal accounting. It cannot be hidden inside authorization preparation
+requires its own closed operation identity, lifecycle, budget, explicit retry
+policy and terminal accounting within the current execution. It cannot be hidden inside authorization preparation
 or a model operation. The envelope-visible lease reference contains no
 credential bytes, provider client, or operation capability and is harmless
 without the runner-private table.
@@ -830,65 +833,26 @@ content exists.
 `ProviderFailure.operationId.kind` is the single operation-kind authority; an
 observation carries no second identity that could disagree. `not_sent` is
 provable only when no request byte left the process. A decoded provider response
-is `response_received`. Any interruption after transmission begins, or any
-restart that finds `invoked` without a durable terminal observation, is
-`accepted_or_unknown` because the provider may have accepted and charged the
-request.
+is `response_received`; interruption after transmission begins is
+`accepted_or_unknown` in that execution's observation. These classifications
+support diagnostics and current-execution control, not restart recovery.
 
-Cross-process recovery depends on an engine-owned
-`ProviderOperationEffectJournal`; the run-local pipeline ledger is
-insufficient. The accepted schema has two distinct record types:
+The whole workflow execution is atomic under ADR 0009. Provider attempts,
+operations, observations and leases remain in memory for that execution.
+Failure, cancellation or interruption abandons it; a later invocation starts
+at the compiled `start` step with fresh lifecycle and token accounting. It
+never restores a provider response, resumes an operation or consults a durable
+send/result marker. A full rerun may repeat API calls and incur cost again.
 
-```text
-ProviderAttemptEffectRecord.phase = reserved | terminal
+There is no provider-effect journal service, persisted attempt/operation record
+schema, recovery action, storage-ownership decision or durable-result handoff.
+Do not introduce the same machinery beneath feature transaction storage. A
+model-capable workflow has no active-feature prerequisite solely for provider
+storage. Its declared domain gates and provider capabilities still apply.
 
-ProviderOperationEffectRecord.phase =
-  assigned | send_may_occur | terminal_observed | outcome_consumed
-```
-
-An attempt record is created exactly once when its ordinal is reserved. Each
-count or inference record has its own operation ID and compare-and-swap
-revision, references that one attempt record, and never repeats attempt
-reservation. A successfully consumed count operation may therefore remain
-terminal while a distinct inference operation is assigned beneath the same
-still-reserved attempt. The attempt becomes terminal after a count-side
-terminal outcome that makes inference unreachable, or after the inference
-outcome is consumed.
-
-The closed records contain only run/request/attempt/operation, binding,
-`ModelVisibleInputId`, lifecycle revision, and delivery/terminal/handoff facts—
-never prompt/response content, headers, credentials, or provider error text.
-The runner must commit an operation's `send_may_occur` and the matching logical
-request/operation `invoked` facts before any request byte can leave. A crash
-after that commit is conservatively ambiguous even if transport had not yet
-sent. A crash at attempt `reserved`, or operation `assigned`, without
-`send_may_occur` is provably not sent. A crash after `send_may_occur`, after
-send, or after a response arrives but before `terminal_observed` durability is
-`accepted_or_unknown`.
-
-`terminal_observed` records the bounded terminal classification but does not
-claim that its omitted count value or model content can be reconstructed.
-`outcome_consumed` may be written only after an exact identity/revision join
-proves a durable successor state that no longer needs the raw observation. The
-accepted transaction amendment must make that handoff atomic or recoverably
-idempotent. If such a successor is already durable after a crash, recovery may
-idempotently advance the marker. If no successor exists and the required value
-or content was intentionally not journaled, recovery returns the distinct
-`terminal_result_unavailable` outcome, terminally closes the attempt/request,
-and blocks by default; it never fabricates or replays the lost result.
-
-`RecoverProviderOperationLifecycleAction` classifies and closes attempt and
-operation records under their exact revisions. An invoked-but-unobserved
-operation becomes `accepted_or_unknown`; a terminal observation without a
-recoverable successor becomes `terminal_result_unavailable`. The owning
-orchestrator may issue another provider call only under an explicitly accepted
-duplicate-external-effect/spend policy, using a new model attempt and operation
-ID. The default is to block for either ambiguous external effect or unavailable
-terminal result. A policy-eligible cause alone never authorizes replay.
-
-Every provider-operation terminal lifecycle fact also records delivery
-disposition, including cancellation paths that remain outside `ProviderFailure`.
-Thus cancellation never erases an ambiguous external effect.
+Every terminal lifecycle fact retains delivery disposition, including
+cancellation outside `ProviderFailure`. An API request already sent cannot be
+undone; it does not make any candidate workflow output successful.
 
 Both `RawProviderModelResult` variants contain only engine-supplied identities,
 bounded nonnegative usage, and optional bounded latency; neither accepts an
@@ -991,17 +955,15 @@ the runner only validates/applies it and never chooses `blocked`, `failed`,
 | `CheckWorkflowTokenBudgetAction` | Read the execution's actual-usage ledger and reject further provider calls when the total is at or above budget or usage is unavailable; reserve nothing. |
 | `ReconcileWorkflowTokenUsageAction` | Propose once-only recording of validated API input/output usage or a proven not-sent/unavailable disposition; the runner retains an overshoot before returning the budget error. |
 | `AdvanceModelRequestLifecycleAction` | Propose the amended logical request compare-and-swap transition. |
-| `AdvanceProviderOperationLifecycleAction` | Propose one count/inference lifecycle plus effect-journal compare-and-swap transition; perform no journal I/O. |
+| `AdvanceProviderOperationLifecycleAction` | Propose one execution-local count/inference lifecycle compare-and-swap transition; perform no I/O. |
 | `PrepareProviderOperationAuthorizationAction` | Fill one runner-private operation-bound lease slot through the provider-neutral preparation port and return only validated opaque lease-reference evidence. |
 | `CountModelInputTokensAction` | Make exactly one interface count call for an already invoked count operation. |
 | `ValidateModelTokenCountObservationAction` | Validate a separately requested count observation against its operation, binding and input; impose no token/context ceiling or inference prerequisite. |
 | `InvokeModelAction` | Make exactly one interface inference call for an already invoked inference operation. |
 | `ValidateProviderInvocationObservationAction` | Validate the exact runner-bound operation/request/input/schema/model association, delivery, stop, usage, wire/content ceilings, and complete-candidate eligibility before decoding. |
-| `RecoverProviderOperationLifecycleAction` | Join durable successors and classify/close reloaded attempt and operation records as provably not-sent, ambiguous external effect, or unavailable terminal result without replay. |
 | `DecodeModelEnvelopeAction` | Parse one complete compact JSON object and retain its bound schema and validated invocation association; never invoke a provider or recover IDs from model content. |
 | `ValidateModelPayloadSchemaAction` | Validate the decoded result against only its bound closed schema; do not repeat parsing or trusted call-association checks. |
-| `ProviderOperationEffectJournalService` | Durably apply/reload the closed operation-effect CAS records through its accepted lock/transaction adapter; expose no model content or provider port. |
-| Pipeline runner | Invoke bound children; own the per-execution token ledger, private authorization-lease table, and effect-journal handle; validate/apply deltas, lifecycle compare-and-swap transitions, explicit operation-local retry accounting, actual token-usage reconciliation and pre-call budget guards, deadlines, and cleanup; choose no workflow branch. |
+| Pipeline runner | Invoke bound children; own the per-execution token ledger, private authorization-lease table; validate/apply deltas, lifecycle compare-and-swap transitions, explicit operation-local retry accounting, actual token-usage reconciliation and pre-call budget guards, deadlines, and cleanup; choose no workflow branch. |
 
 `ModelProviderBootstrapOrchestrator` coordinates only the requirement and
 provider-file child bindings described in Section 5. It is engine preparation,
@@ -1030,11 +992,9 @@ They contain no raw request/response body, arbitrary provider JSON, header,
 credential, environment value, signature, canonical request, unrestricted URL,
 or provider error text.
 
-The effect journal follows its accepted retention and recovery policy and
-contains only the closed non-content facts in Section 8. Authorization lease
-references may be recorded for same-process cleanup but their private table
-entries and capabilities are never persisted; a restarted process finalizes
-open journal records without reconstructing a credential.
+Authorization references and private capabilities are never persisted. Each
+execution owns and destroys its lease table; a new execution constructs a new
+one. Logs cannot act as send, result or continuation authority.
 
 Only concrete infrastructure adapters import provider clients, networking,
 TLS, signing, or credential sources. Application and domain code import only
@@ -1048,9 +1008,9 @@ existing opt-in, redaction, and byte limits. Logs are observations and have no
 retry, validation, provider, or workflow authority.
 
 Every raw/configured/validated request buffer, response buffer, binding,
-transport handle, authorization table slot/capability, lease reference,
-journal lock/handle, and observation has explicit ownership and deterministic
-cleanup on success, rejection, timeout, cancellation, recovery, and operational
+transport handle, authorization table slot/capability, lease reference and
+observation has explicit ownership and deterministic cleanup on success,
+rejection, timeout, cancellation and operational
 error. No failed bootstrap retains a partial or last-known registry; no failed
 provider operation retains a stale successful response.
 
@@ -1123,7 +1083,7 @@ F0006 does not:
     compiler-validated `retry-limit`. Exact provider serialization/wire-cap checks occur only inside an
     already invoked operation; `request_limit_exceeded` is `not_sent` but
     terminally consumes that attempt. Every count and inference operation has a
-    distinct durably journaled runner-applied identity/lifecycle transition,
+    distinct execution-local runner-applied identity/lifecycle transition,
     and every attempted operation closes without a hidden retry or count prerequisite.
 13. Each call performs zero or one provider request with no hidden retry,
     fallback, backoff, credential acquisition/refresh, or second operation;
@@ -1131,12 +1091,11 @@ F0006 does not:
 14. Only an opaque validated lease reference enters the pipeline envelope; its
     move-only authorization capability stays in a single-use runner-private
     table with compare-and-swap consume and one cleanup owner.
-15. One attempt reservation owns distinct count/inference journal records;
-    `send_may_occur` is durable before transmission, and
-    `terminal_observed -> outcome_consumed` proves the durable result handoff.
-    Restart closes earlier records as not-sent, later open records as
-    accepted-or-unknown, and an unconsumed terminal result with no durable
-    successor as `terminal_result_unavailable`, all without replay.
+15. Attempts and operations exist only within their workflow execution. A
+    crash abandons that execution. A subsequent invocation starts at `start`
+    with fresh identities, leases and token usage, without a journal read,
+    response restoration or saved-step continuation. A full rerun may repeat
+    API calls; no feature-storage capability is required merely to call a model.
 16. Only the compiled YAML graph may choose an explicit registered retry
     operation, and every retry-capable operation instance supplies its own
     bounded `retry-limit`; no workflow policy, configuration file, provider, or
@@ -1194,14 +1153,12 @@ Implementation evidence must cover:
   beneath one attempt record, lifecycle CAS, provider-neutral static-preflight
   ordering, operation-scoped wire-cap rejection that consumes the reserved
   attempt, direct inference without counting support, optional count outcomes
-  and association without token-capacity policy, every assigned-branch close, durable effect-journal lock/CAS/
-  redaction/retention, and crashes between attempt reservation, operation
-  assignment, logical invoked, `send_may_occur`, first byte, response arrival,
-  `terminal_observed`, durable successor commit, and `outcome_consumed`.
-  Evidence distinguishes not-sent, accepted-or-unknown, successor-already-
-  committed, and terminal-result-unavailable recovery; every permitted retry
-  receives a new ordinal, every retry-capable operation instance declares and
-  exhausts its own validated `retry-limit`, missing limits and policy-supplied
+  and association without token-capacity policy, every assigned-branch close,
+  abandonment before send, after send and after response, and a new execution
+  starting at `start` rather than restoring the old operation. No provider
+  record, recovery lock or result marker is read or written. Every within-run
+  retry receives a new ordinal; every retry-capable operation instance declares
+  and exhausts its own validated `retry-limit`; missing limits and policy-supplied
   retry defaults are rejected, cancellation is terminal, and the client never
   auto-retries. Per-execution token-ledger evidence covers initial isolation,
   exact-budget stopping, retained actual overshoot before error, safe addition,
@@ -1222,7 +1179,7 @@ Implementation evidence must cover:
   dispatch, pipeline containing only authorization lease references, runner-
   private capability table one-use/cleanup tests, no operation port in an
   orchestrator or `NodeRuntime`, no provider imports outside adapters,
-  secret/body/header canaries absent from state/journal/logs, and F0002
+  secret/body/header canaries absent from state/logs, and F0002
   fragment-only capture.
 - **End to end/packaging:** fake-provider workflows first; relocated target
   files; clean native executable without source examples or development assets.
@@ -1240,6 +1197,6 @@ Implementation evidence must cover:
 | Request/invoke/decode separation | Design Sections 12.1-12.4 and 13.4; `design/code.md` Sections 21-24 |
 | Compact response and runner-owned correlation | [ADR 0006](../decisions/0006-minimal-model-response.md); Design Sections 12.3 and 22.4 |
 | Workflow-operation limits, retry, fallback, and repair authority | ADR 0005; Design Sections 12.5-12.7 and 21-22 |
-| Provider-operation durability and recovery amendment | Accepted Section 7 contract; Design Sections 24-25 |
+| Atomic execution and fresh reruns; no provider recovery | ADR 0009; Design Sections 24–25 |
 | Secret-safe logging | Design Sections 26.5 and 27; F0002 |
 | Fake-first testing and native packaging | Design Sections 28 and 30-31 |

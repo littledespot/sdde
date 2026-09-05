@@ -28,8 +28,8 @@ test "fake provider executes only after applied count and inference lifecycle tr
     const count_operation = try fixture.ledger().requireInvoked(fixture.id(.input_token_count));
     const observation = try fake.interface().countInputTokens(&fixture.provider_binding, &fixture.request, count_lease, count_operation);
     const evidence = try provider.ExactInputTokenCountEvidence.fromObservation(observation, fixture.request, fixture.provider_binding);
-    _ = try fixture.change(.input_token_count, .{ .terminate = .{ .counted = evidence } });
-    _ = try fixture.change(.inference, .{ .assign_inference = fixture.assignment() });
+    try fixture.change(.input_token_count, .{ .terminate = .{ .counted = evidence } });
+    try fixture.change(.inference, .{ .assign_inference = fixture.assignment() });
     try std.testing.expectError(error.ProviderOperationNotInvoked, fixture.ledger().requireInvoked(fixture.id(.inference)));
     try std.testing.expectEqual(@as(usize, 0), fake.invocation_call_count);
     const inference_lease = try fixture.prepare(.inference);
@@ -40,7 +40,7 @@ test "fake provider executes only after applied count and inference lifecycle tr
     try std.testing.expect(result == .completed);
     try std.testing.expect(result.completed.operation_id.eql(fixture.id(.inference)));
     try std.testing.expect(result.completed.raw_result == .complete);
-    _ = try fixture.change(.inference, .{ .terminate = .completed });
+    try fixture.change(.inference, .{ .terminate = .completed });
     try std.testing.expectEqual(@as(usize, 1), fake.count_call_count);
     try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
     try std.testing.expectEqual(@as(usize, 2), fixture.preloader.destroyed_count);
@@ -51,19 +51,19 @@ test "count and inference share one attempt and preserve immutable lifecycle sna
     defer fixture.deinit();
     const empty = fixture.ledger();
     const assigned = try fixture.change(.input_token_count, .{ .assign_count = facts() });
-    try std.testing.expect(assigned.phase == .assigned);
-    try std.testing.expect(assigned.expected_revision == null);
+    try std.testing.expect(assigned.state == .assigned);
+    try std.testing.expectEqual(@as(u64, 1), assigned.revision.value);
     try std.testing.expect(empty.record(fixture.id(.input_token_count)) == null);
     const count_snapshot = fixture.ledger();
     try std.testing.expectError(error.ProviderOperationNotInvoked, count_snapshot.requireInvoked(fixture.id(.input_token_count)));
     try fixture.invokeRequest();
     const invoked = try fixture.change(.input_token_count, .{ .invoke = invocation });
-    try std.testing.expect(invoked.phase == .send_may_occur);
+    try std.testing.expect(invoked.state == .invoked);
     try std.testing.expect(count_snapshot.record(fixture.id(.input_token_count)).?.state == .assigned);
     const applied = try fixture.ledger().requireInvoked(fixture.id(.input_token_count));
     try std.testing.expectEqual(@as(u64, 1000), applied.deadline_monotonic_ms);
     const terminal = try fixture.change(.input_token_count, .{ .terminate = .{ .counted = fixture.evidence() } });
-    try std.testing.expectEqual(provider.ProviderDeliveryDisposition.response_received, terminal.phase.terminal_observed.delivery());
+    try std.testing.expectEqual(provider.ProviderDeliveryDisposition.response_received, terminal.state.terminal.delivery());
     _ = try fixture.change(.inference, .{ .assign_inference = facts() });
     try std.testing.expect(fixture.ledger().record(fixture.id(.input_token_count)).?.state == .terminal);
     _ = try fixture.change(.inference, .{ .invoke = invocation });
@@ -121,7 +121,7 @@ test "failed optional count preserves delivery and does not authorize or prohibi
         defer fixture.deinit();
         try fixture.startCount();
         const result = try fixture.change(.input_token_count, .{ .terminate = .{ .failed = fixture.failure(.input_token_count, delivery) } });
-        try std.testing.expectEqual(delivery, result.phase.terminal_observed.delivery());
+        try std.testing.expectEqual(delivery, result.state.terminal.delivery());
         _ = try fixture.change(.inference, .{ .assign_inference = facts() });
         try std.testing.expectError(error.InvalidProviderOperationTransition, fixture.change(.input_token_count, .{ .terminate = .{ .cancelled = delivery } }));
     }
@@ -130,8 +130,8 @@ test "failed optional count preserves delivery and does not authorize or prohibi
         defer fixture.deinit();
         try fixture.startCount();
         const result = try fixture.change(.input_token_count, .{ .terminate = .{ .cancelled = delivery } });
-        try std.testing.expectEqual(delivery, result.phase.terminal_observed.delivery());
-        try std.testing.expectEqual(std.meta.Tag(lifecycle.TerminalSummary).cancelled, std.meta.activeTag(result.phase.terminal_observed));
+        try std.testing.expectEqual(delivery, result.state.terminal.delivery());
+        try std.testing.expectEqual(std.meta.Tag(lifecycle.TerminalFact).cancelled, std.meta.activeTag(result.state.terminal));
     }
 }
 
@@ -145,8 +145,8 @@ test "assigned operations close only through not-sent preparation failure or can
         try std.testing.expectError(error.InvalidProviderOperationTransition, fixture.change(.input_token_count, .{ .terminate = .{ .cancelled = .accepted_or_unknown } }));
         try std.testing.expectError(error.InvalidProviderOperationTransition, fixture.change(.input_token_count, .{ .terminate = .{ .preparation_failed = fixture.failure(.input_token_count, .response_received) } }));
         const terminal: lifecycle.Terminal = if (cancelled) .{ .cancelled = .not_sent } else .{ .preparation_failed = fixture.failure(.input_token_count, .not_sent) };
-        const effect = try fixture.change(.input_token_count, .{ .terminate = terminal });
-        try std.testing.expectEqual(provider.ProviderDeliveryDisposition.not_sent, effect.phase.terminal_observed.delivery());
+        const record = try fixture.change(.input_token_count, .{ .terminate = terminal });
+        try std.testing.expectEqual(provider.ProviderDeliveryDisposition.not_sent, record.state.terminal.delivery());
         try std.testing.expectEqual(@as(u32, 1), fixture.attempts.current().attemptsReserved(fixture.request));
         try fixture.requests.advance(fixture.requests.ledger().?.revision(), fixture.request, .assigned, .{ .terminal = if (cancelled) .cancelled else .not_invoked_authorization_failure });
     }
@@ -174,7 +174,7 @@ test "operation lifecycle rejects skipped transitions repeated invocation and wr
     _ = try fixture.change(.inference, .{ .invoke = invocation });
     try std.testing.expectError(error.InvalidProviderOperationTransition, fixture.change(.inference, .{ .terminate = .{ .counted = fixture.evidence() } }));
     const stopped = try fixture.change(.inference, .{ .terminate = .{ .stopped = .output_limit } });
-    try std.testing.expectEqual(provider.ProviderNonCandidateStopReason.output_limit, stopped.phase.terminal_observed.stopped);
+    try std.testing.expectEqual(provider.ProviderNonCandidateStopReason.output_limit, stopped.state.terminal.stopped);
     try std.testing.expectError(error.InvalidProviderOperationTransition, fixture.change(.inference, .{ .invoke = invocation }));
 }
 
@@ -193,10 +193,10 @@ test "inference preparation failure cancellation and provider failure preserve t
             3 => .{ .cancelled = .accepted_or_unknown },
             else => unreachable,
         };
-        const effect = try fixture.change(.inference, .{ .terminate = terminal });
+        const record = try fixture.change(.inference, .{ .terminate = terminal });
         try std.testing.expectEqual(
             if (case < 2) provider.ProviderDeliveryDisposition.not_sent else provider.ProviderDeliveryDisposition.accepted_or_unknown,
-            effect.phase.terminal_observed.delivery(),
+            record.state.terminal.delivery(),
         );
         try std.testing.expectError(error.InvalidProviderOperationTransition, fixture.change(.inference, .{ .terminate = terminal }));
         try fixture.requests.advance(fixture.requests.ledger().?.revision(), fixture.request, .invoked, .{ .terminal = if (case == 1 or case == 3) .cancelled else .failed });
@@ -241,8 +241,9 @@ test "lifecycle rejects stale ledger operation request and attempt revisions wit
     try std.testing.expectError(error.UndeclaredRunnerAccountingTransition, envelope.applyDelta(forbidden, &proposal));
     try std.testing.expectError(error.MissingRunnerAccountingTransition, envelope.apply(action.Action.contract, pipeline.DataEffects.fromContract(action.Action.contract)));
     try std.testing.expect(empty.record(fixture.id(.input_token_count)) == null);
-    const effect = try transition.effect(fixture.authority());
-    try std.testing.expect(effect.phase == .assigned);
+    try std.testing.expect(transition.expected_ledger == empty);
+    try std.testing.expect(transition.expected_operation_revision == null);
+    try std.testing.expect(transition.command == .assign_count);
     _ = try fixture.change(.input_token_count, .{ .assign_count = facts() });
     try std.testing.expectError(error.ProviderOperationRevisionConflict, lifecycle.apply(fixture.ledger(), fixture.authority(), transition));
     const before = fixture.ledger();
@@ -302,13 +303,38 @@ test "lifecycle owns assignment bytes and isolates executions" {
     var assigned_facts = facts();
     assigned_facts.binding_id.slot_id.bytes = &slot;
     assigned_facts.model_visible_input_id.bytes = &input;
-    const effect = try fixture.change(.input_token_count, .{ .assign_count = assigned_facts });
+    const record = try fixture.change(.input_token_count, .{ .assign_count = assigned_facts });
     @memset(&slot, 'x');
     @memset(&input, 'x');
     try std.testing.expectEqualStrings("slot", fixture.ledger().record(fixture.id(.input_token_count)).?.binding_id.slot_id.bytes);
-    try std.testing.expectEqualStrings("input", effect.model_visible_input_id.bytes);
+    try std.testing.expectEqualStrings("input", record.model_visible_input_id.bytes);
     try std.testing.expectEqual(@as(u64, 0), other.ledger().revision().value);
     try std.testing.expect(other.ledger().record(fixture.id(.input_token_count)) == null);
+}
+
+test "abandoned assigned and invoked operations require no recovery for a fresh execution" {
+    inline for (.{ false, true }) |invoked| {
+        {
+            var abandoned = try Fixture.init(std.testing.allocator);
+            defer abandoned.deinit();
+            _ = try abandoned.change(.inference, .{ .assign_inference = facts() });
+            if (invoked) {
+                try abandoned.invokeRequest();
+                _ = try abandoned.change(.inference, .{ .invoke = invocation });
+            }
+            try std.testing.expectError(error.ProviderOperationStillOpen, abandoned.ledger().validateRequestClosure(abandoned.request));
+        }
+        var fresh = try Fixture.init(std.testing.allocator);
+        defer fresh.deinit();
+        try std.testing.expectEqual(lifecycle.Revision.initial, fresh.ledger().revision());
+        try std.testing.expectEqual(@as(u32, 1), fresh.attempts.current().attemptsReserved(fresh.request));
+        try std.testing.expectError(error.ProviderOperationNotFound, fresh.ledger().requireInvoked(fresh.id(.inference)));
+        _ = try fresh.change(.inference, .{ .assign_inference = facts() });
+        try fresh.invokeRequest();
+        _ = try fresh.change(.inference, .{ .invoke = invocation });
+        _ = try fresh.change(.inference, .{ .terminate = .completed });
+        try fresh.requests.advance(fresh.requests.ledger().?.revision(), fresh.request, .invoked, .{ .terminal = .accepted });
+    }
 }
 
 test "lifecycle allocation failures preserve current state and release all ownership" {
@@ -380,10 +406,11 @@ const Fixture = struct {
         return .{ .count_operation_id = self.id(.input_token_count), .binding_id = facts().binding_id, .model_visible_input_id = facts().model_visible_input_id, .input_tokens = 10 };
     }
 
-    fn change(self: *Fixture, kind: provider.ProviderOperationKind, command: lifecycle.Command) !lifecycle.Effect {
+    fn change(self: *Fixture, kind: provider.ProviderOperationKind, command: lifecycle.Command) !*const lifecycle.Record {
         const operation_id = self.id(kind);
         const previous = self.ledger().record(operation_id);
-        return self.requests.providerOperations().advance(self.authority(), self.ledger().revision(), operation_id, if (previous) |record| record.revision else null, command);
+        try self.requests.providerOperations().advance(self.authority(), self.ledger().revision(), operation_id, if (previous) |record| record.revision else null, command);
+        return self.ledger().record(operation_id).?;
     }
 
     fn invokeRequest(self: *Fixture) !void {
