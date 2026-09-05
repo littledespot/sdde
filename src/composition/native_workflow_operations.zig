@@ -20,6 +20,9 @@ const feature_source = @import("../ports/feature_directory_inspector.zig");
 const clarification = @import("../application/clarification_input_workflow.zig");
 const input_source = @import("../ports/feature_input_source.zig");
 const input_parser = @import("../ports/clarification_input_parser.zig");
+const ingestion = @import("../application/reference_ingestion_workflow.zig");
+const corpus_source = @import("../ports/reference_corpus_source.zig");
+const corpus_decoder = @import("../ports/reference_decoder.zig");
 
 /// Composition of native implementations, not a workflow graph. No setup action
 /// executes until the selected YAML reaches its registered operation.
@@ -47,10 +50,15 @@ pub const Assembly = struct {
     parse_clarification_state: clarification.ParseState,
     validate_clarification_state: clarification.ValidateState,
     validate_clarification_forms: clarification.ValidateForms,
-    entries: [core.entries.len + 23]operations.Entry,
+    inventory_references: ingestion.Inventory,
+    validate_reference_inventory: ingestion.ValidateInventory,
+    capture_references: ingestion.Capture,
+    decode_references: ingestion.Decode,
+    validate_reference_accounting: ingestion.ValidateAccounting,
+    entries: [core.entries.len + 28]operations.Entry,
     registry: operations.Registry,
 
-    pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser) void {
+    pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder) void {
         self.* = .{
             .capture_project = .{ .allocator = allocator, .action = .{ .source = project_source } },
             .inventory_presets = .{ .allocator = allocator, .action = .{ .source = preset_source } },
@@ -75,6 +83,11 @@ pub const Assembly = struct {
             .parse_clarification_state = .{ .allocator = allocator, .action = .{ .parser = state_parser } },
             .validate_clarification_state = .{ .allocator = allocator },
             .validate_clarification_forms = .{ .allocator = allocator, .action = .{ .parser = form_parser } },
+            .inventory_references = .{ .allocator = allocator, .action = .{ .source = reference_inventory } },
+            .validate_reference_inventory = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder } },
+            .capture_references = .{ .allocator = allocator, .action = .{ .source = reference_capture } },
+            .decode_references = .{ .allocator = allocator, .action = .{ .decoder = reference_decoder } },
+            .validate_reference_accounting = .{ .allocator = allocator },
             .entries = undefined,
             .registry = undefined,
         };
@@ -102,6 +115,11 @@ pub const Assembly = struct {
             entry(clarification.ParseState, &self.parse_clarification_state),
             entry(clarification.ValidateState, &self.validate_clarification_state),
             entry(clarification.ValidateForms, &self.validate_clarification_forms),
+            entry(ingestion.Inventory, &self.inventory_references),
+            entry(ingestion.ValidateInventory, &self.validate_reference_inventory),
+            entry(ingestion.Capture, &self.capture_references),
+            entry(ingestion.Decode, &self.decode_references),
+            entry(ingestion.ValidateAccounting, &self.validate_reference_accounting),
         };
         self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{} };
     }
@@ -115,10 +133,12 @@ pub const Assembly = struct {
         self.inspect_feature.action.inspector.capability = registry.featureDirectoryRead();
         self.resolve_feature_paths.action.roots = registry.featureArtifactRoots();
         self.capture_clarifications.action.source.capability = registry.featureInputRead();
+        self.inventory_references.action.source.capability = registry.referenceContentRead();
+        self.capture_references.action.source.capability = registry.referenceContentRead();
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.toolchain@1",
     .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },
@@ -137,6 +157,11 @@ const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig")
 }, .{
     .id = "core.feature-input-read@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read },
+    .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
+    .total_model_token_budget = .{ .value = 100_000 },
+}, .{
+    .id = "core.reference-ingestion@1",
+    .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode },
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
     .total_model_token_budget = .{ .value = 100_000 },
 } };

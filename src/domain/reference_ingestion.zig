@@ -70,8 +70,9 @@ pub const CapturedCorpus = struct {
 pub const Position = struct { byte: usize, line: u32, column: u32 };
 pub const Span = struct { start: Position, end: Position };
 pub const BlockProposal = struct { span: Span };
+pub const ReaderId = enum { markdown_source_v1 };
 pub const Decoded = struct {
-    reader: []const u8,
+    reader: ReaderId,
     media: enum { markdown },
     blocks: []const BlockProposal,
 };
@@ -92,7 +93,7 @@ pub const Block = struct { id: BlockId, span: Span };
 pub const Document = struct {
     source: SourceId,
     path: RelativePath,
-    reader: []const u8,
+    reader: ReaderId,
     media: @FieldType(Decoded, "media"),
     bytes: []const u8,
     blocks: []const Block,

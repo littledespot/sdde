@@ -91,7 +91,9 @@ fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, p
     var feature_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
     var native_bindings: @import("native_workflow_operations.zig").Assembly = undefined;
     var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project_root };
-    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser());
+    var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project_root };
+    var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
+    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold });
     var boot = runInProjectWithRegistry(io, allocator, project_root, runtime, &native_bindings.registry);
     if (boot == .ready) native_bindings.bindRoots(boot.ready.roots.registry());
     defer boot.deinit();
@@ -620,7 +622,9 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     var feature_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
     var operations: @import("native_workflow_operations.zig").Assembly = undefined;
     var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project_root };
-    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser());
+    var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project_root };
+    var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
+    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold });
     var boot = runInProjectWithRegistry(io, std.testing.allocator, project_root, .{}, &operations.registry);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
@@ -1045,7 +1049,9 @@ test "feature preflight uses configured specs roots and preserves selected files
         var feature_source: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
         var native: @import("native_workflow_operations.zig").Assembly = undefined;
         var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-        native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser());
+        var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
+        native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold });
         var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
         defer boot.deinit();
         try std.testing.expect(boot == .ready);
@@ -1112,7 +1118,9 @@ test "feature inspection rejects missing authority stale roots and forged resolv
     var feature_source: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
     var native: @import("native_workflow_operations.zig").Assembly = undefined;
     var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
-    native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser());
+    var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
+    native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold });
     var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);

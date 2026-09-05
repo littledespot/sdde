@@ -2,7 +2,7 @@
 const std = @import("std");
 const reference = @import("../../domain/reference_ingestion.zig");
 const decoder = @import("../../ports/reference_decoder.zig");
-pub const reader_id = "markdown-source@1";
+pub const reader_id: reference.ReaderId = .markdown_source_v1;
 
 pub const Adapter = struct {
     io: std.Io,
@@ -25,8 +25,12 @@ pub const Adapter = struct {
         errdefer blocks.deinit(allocator);
         var position: reference.Position = .{ .byte = 0, .line = 1, .column = 1 };
         var start = position;
+        var check_at: usize = 0;
         while (position.byte < bytes.len) {
-            if (self.elapsed(started)) return error.DecodeLimitExceeded;
+            if (position.byte >= check_at) {
+                if (self.elapsed(started)) return error.DecodeLimitExceeded;
+                check_at = position.byte + 4096;
+            }
             const next = reference.advance(bytes, position) catch return error.MalformedText;
             if (next.byte - start.byte > reference.limits.block_bytes) {
                 if (blocks.items.len == reference.limits.blocks_per_file) return error.DecodeLimitExceeded;

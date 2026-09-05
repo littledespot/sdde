@@ -4,6 +4,7 @@ test {
     _ = @import("pipeline_native_value_test.zig");
     _ = @import("toolchain_workflow_test.zig");
     _ = @import("reference_preflight_test.zig");
+    _ = @import("reference_ingestion_test.zig");
     _ = @import("feature_directory_test.zig");
     _ = @import("clarification_inputs_test.zig");
     _ = @import("application/specify_invocation_orchestrator.zig");

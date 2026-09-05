@@ -43,7 +43,7 @@ pub const Action = struct {
                 .empty => |value| if (bytes.len == 0) value else return error.InvalidReferenceAccounting,
                 .directory, .blocked => return error.InvalidReferenceAccounting,
             };
-            if (result.reader.len == 0 or result.blocks.len > reference.limits.blocks_per_file) return error.InvalidReferenceAccounting;
+            if (result.blocks.len > reference.limits.blocks_per_file) return error.InvalidReferenceAccounting;
             const blocks = try allocator.alloc(reference.Block, result.blocks.len);
             var position: reference.Position = .{ .byte = 0, .line = 1, .column = 1 };
             for (result.blocks, 0..) |block, block_index| {

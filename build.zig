@@ -171,6 +171,15 @@ pub fn build(b: *std.Build) void {
     reference_step.dependOn(&b.addRunArtifact(reference_tests).step);
     reference_step.dependOn(&run_unicode_tests.step);
 
+    const ingestion_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/reference_ingestion_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const ingestion_step = b.step("test-reference-ingestion", "Test read-only Markdown reference evidence");
+    ingestion_step.dependOn(&b.addRunArtifact(ingestion_tests).step);
+
     const feature_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/feature_directory_test.zig"),
         .target = target,

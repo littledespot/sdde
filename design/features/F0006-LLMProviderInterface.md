@@ -72,6 +72,23 @@ only its retained schema and returns allocation-free candidate evidence or a
 closed rejection reason. Production YAML registration and provider-native
 schema representability remain work.
 
+**YAML preparation integration dependency:** The existing actions are not yet
+wired into the production workflow registry. Design Section 7.3 currently
+requires a closed SDD-specific unit owner, and ADR 0004 supplies only the active
+step's binding. Separate identity, preparation and invocation steps therefore
+cannot simply substitute their own step identities for one logical request.
+Production sources for the execution epoch and canonical unit/purpose inputs
+also remain unwired; test-fixture values are not runtime defaults.
+
+The proposed next amendment is an execution-local, workflow-step-owned request
+identity and one typed retained request reference shared by its explicit YAML
+consumers. The originating step would own slot/resource selection; later steps
+would retain that exact association rather than independently select a binding.
+SDD-specific operations would still validate their required canonical unit and
+purpose authorities. This proposal is **not accepted**: it must amend Section
+7.3 and ADR 0004 before implementation. It introduces no provider calls, size
+limits, persistence, hidden transitions or automatic retries.
+
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
 implicit provider, cached fallback, source-example fallback, or permissive
