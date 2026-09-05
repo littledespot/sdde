@@ -86,13 +86,25 @@ generation requests; SDD-specific owners and other purpose bindings remain
 validated by their existing contracts, not fabricated by generic preparation.
 Provider calls, counting and retries are not part of these operations.
 
+**Implemented YAML attempt accounting:** `advance-model-attempt-accounting@1`
+consumes the retained prepared request and declares an explicit `retry-limit`.
+The compiler preserves its accounting permission; only the runner applies its
+transition and publishes `accounted_model_attempt` as a sealed view of the
+canonical applied record. Initialization uses the same execution epoch for
+request, attempt and provider-operation ledgers. The initial execution is
+separate; later visits use that accounting step's compiled authority and the
+runner's existing retry counter, not the request-origin step or request ordinal
+as retry policy. Consumers invalidate used attempt evidence before a YAML retry.
+Missing/foreign/stale evidence, forged transitions and rejected deltas cannot
+publish or reset accounting. No provider call, lease or token charge occurs.
+
 A consumer declares the prepared-request and request-ledger data dependencies;
 the runner supplies the retained binding, not a new selection for the consumer
 step. Slot/resource/control overrides reject. The existing compiler proves the
 handoff and the runner rejects foreign execution references. No new YAML
 syntax, route registry, provider port, byte cap or persisted state is added.
 
-For example, this preparation-only workflow uses one repository-authorized slot
+For example, this preparation/accounting workflow uses one repository-authorized slot
 and two captured resources. It makes no provider call; response operations are
 separate integration work. The prompt and closed result schema remain in files.
 
@@ -112,7 +124,8 @@ steps:
     with: { slot: generation, response-mode: prompt-only, prompt: prompt, result-schema: result }
     on: { ok: validate, failed: end.failed }
   validate: { use: validate-model-request-binding@1, on: { ok: build, failed: end.failed } }
-  build: { use: build-model-request@1, on: { ok: end.ok, failed: end.failed } }
+  build: { use: build-model-request@1, on: { ok: account, failed: end.failed } }
+  account: { use: advance-model-attempt-accounting@1, with: { retry-limit: 0 }, on: { ok: end.ok, failed: end.failed } }
 ```
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
@@ -1113,6 +1126,10 @@ F0006 does not:
     response delivery classification. Count and inference operations each have
     a distinct execution-local identity/lifecycle transition; no hidden retry,
     size preflight or count prerequisite exists.
+    Native YAML accounting is implemented: retained binding, fresh epoch-bound
+    ledgers, initial/retry classification, compiler-permitted delta application,
+    sealed applied evidence, explicit retry exhaustion, cancellation, allocation
+    cleanup, and rejection of forged/stale/cross-execution associations are tested.
 13. Each call performs zero or one provider request with no hidden retry,
     fallback, backoff, credential acquisition/refresh, or second operation;
     any permitted credential I/O has separate accepted accounting.

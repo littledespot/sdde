@@ -29,7 +29,7 @@ fn captured(allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) !
     entries[0] = .{ .entry = inventory.entries[0], .source = .{ .bytes = bytes }, .debit = .{ .reserved = bytes.len, .outcome = .{ .committed = bytes.len } } };
     return .{ .inventory = inventory, .entries = entries, .source_bytes = bytes.len, .budget_revision = 1 };
 }
-fn read(allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) !reference.Inputs {
+pub fn read(allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) !reference.Inputs {
     var adapter: markdown.Adapter = .{ .io = std.testing.io };
     const decoded = try (decode_action.Action{ .decoder = adapter.decoderPort() }).execute(allocator, try captured(allocator, path, bytes));
     return (account_action.Action{}).execute(allocator, decoded);

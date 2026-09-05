@@ -18,6 +18,8 @@ const identity = @import("domain/model_request_identity.zig");
 const registry = @import("domain/llm_provider_registry.zig");
 const contracts = @import("domain/llm_provider_contracts.zig");
 const roots = @import("domain/bootstrap_root_registry.zig");
+const attempt_accounting = @import("domain/model_attempt_accounting.zig");
+const attempt_values = @import("application/workflow_model_accounting.zig");
 
 const yaml =
     \\schema: workflow/v1
@@ -228,14 +230,237 @@ fn allocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const
     try std.testing.expectEqual(.ok, outcome);
 }
 
+test "YAML accounting publishes applied attempt evidence without rebinding or provider work" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try accountingYaml(&fixture, 0, false));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.ok, harness.run());
+    const evidence = try values.read(&.{ .slots = runner.envelope.slots }, attempt_values.schema, attempt_accounting.AccountedAttempt);
+    const request = try currentRequest(&runner);
+    try std.testing.expect(evidence.requestId() == request.id());
+    try std.testing.expectEqual(@as(u32, 1), evidence.ordinal().value);
+    try std.testing.expectEqualStrings("origin", request.id().model_operation_id.workflow_step_id.bytes);
+    try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+    try std.testing.expectEqual(@as(u64, 0), @import("domain/provider_operation_lifecycle.zig").initial(runner.model_accounting.?.operations).revision().value);
+    for (graph.authority.steps) |step| if (step.runner_accounting == .increment_model_attempt) {
+        try std.testing.expectEqualStrings("account", step.retry_authority.?.operation_instance_id.bytes);
+        try std.testing.expectEqual(@as(usize, 0), step.capabilities.len);
+    };
+}
+
+test "YAML accounting permits only the declared retries after the initial execution" {
+    for ([_]u32{ 0, 1, 3 }) |limit| for ([_]bool{ false, true }) |exhaust| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try accountingYaml(&fixture, limit, true));
+        fixture.observer.retry_until = limit + 1 + @intFromBool(exhaust);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(@as(workflow.OutcomeTag, if (exhaust) .failed else .ok), harness.run());
+        try std.testing.expectEqual(@as(usize, limit + 1), fixture.observer.calls);
+        try std.testing.expectEqual(limit + 1, fixture.observer.last_attempt);
+        const request = try currentRequest(&runner);
+        try std.testing.expectEqual(limit + 1, attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved(request.id()));
+    };
+}
+
+test "accounting schema rejects missing invalid excessive hidden and policy retry parameters" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const source = try accountingYaml(&fixture, 0, false);
+    for ([_][2][]const u8{
+        .{ "with: {retry-limit: 0}, ", "" },
+        .{ "retry-limit: 0", "retry-limit: -1" },
+        .{ "retry-limit: 0", "retry-limit: 4294967296" },
+        .{ "retry-limit: 0", "retry-limit: true" },
+        .{ "retry-limit: 0", "attempts: 1" },
+        .{ "retry-limit: 0", "retry-limit: 0, slot: selected" },
+        .{ "policy: core.capability-free@1", "policy: {use: core.capability-free@1, retry-limit: 1}" },
+        .{ "use: build-model-request@1", "use: core.noop@1" },
+    }) |change| {
+        const invalid = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, change[0], change[1]);
+        if (fixture.compile(invalid)) |_| return error.ExpectedRejection else |err| switch (err) {
+            error.WorkflowGraphCompileInvalid, error.WorkflowDefinitionSchemaInvalid => {},
+            else => return err,
+        }
+    }
+}
+
+test "accounted attempts are isolated and foreign evidence cannot reach a consumer" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try accountingYaml(&fixture, 0, false));
+    var first = fixture.runner(graph, std.testing.allocator);
+    defer first.deinit();
+    var second = fixture.runner(graph, std.testing.allocator);
+    defer second.deinit();
+    var one: Harness = .{ .runner = &first };
+    var two: Harness = .{ .runner = &second };
+    try std.testing.expectEqual(.ok, one.run());
+    try std.testing.expectEqual(.ok, two.run());
+    const key = @intFromEnum(pipeline.DataKey.accounted_model_attempt);
+    std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[key], &second.envelope.slots[key]);
+    defer std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[key], &second.envelope.slots[key]);
+    const result = second.bindings().invokeStep(.{ .bytes = "observe" });
+    try std.testing.expectEqual(.authority, result.rejected);
+    try std.testing.expectEqual(@as(usize, 2), fixture.observer.calls);
+    try std.testing.expectEqual(@as(u32, 1), fixture.observer.last_attempt);
+}
+
+test "accounting cancellation and allocation failures retain no partial evidence" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try accountingYaml(&fixture, 0, false));
+    for (0..6) |boundary| {
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var harness: Harness = .{ .runner = &runner, .cancel_at = boundary };
+        runner.runtime = .{ .context = &harness, .status_fn = Harness.status };
+        try std.testing.expectEqual(.cancelled, harness.run());
+        if (boundary <= 4) try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.accounted_model_attempt)] == null);
+    }
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ &fixture, graph });
+}
+
+fn accountingYaml(fixture: *Fixture, limit: u32, cycle: bool) ![]const u8 {
+    const allocator = fixture.arena.allocator();
+    const consumer = &fixture.entries[fixture.entries.len - 1];
+    consumer.contract.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt };
+    consumer.contract.outcomes = if (cycle) &.{ .ok, .invalid } else &.{.ok};
+    consumer.contract.invalidates = if (cycle) &.{.accounted_model_attempt} else &.{};
+    fixture.observer.consume_attempt = cycle;
+    var source = try std.mem.replaceOwned(u8, allocator, yaml, "ok: observe", "ok: account");
+    if (cycle) source = try std.mem.replaceOwned(u8, allocator, source, "on: { ok: end.ok }", "on: { ok: end.ok, invalid: account }");
+    return std.fmt.allocPrint(allocator, "{s}\n  account: {{ use: advance-model-attempt-accounting@1, with: {{retry-limit: {d}}}, on: {{ok: observe, failed: end.failed}} }}\n", .{ source, limit });
+}
+
+test "forged accounting transitions and rejected deltas cannot publish attempts" {
+    for ([_]FaultyAdvance.Fault{ .missing_transition, .wrong_ordinal, .stale_revision, .undeclared_write, .cancel_after_action }) |fault| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try accountingYaml(&fixture, 1, false));
+        var faulty: FaultyAdvance = .{ .fault = fault };
+        for (&fixture.entries) |*entry| if (entry.contract.runner_accounting == .increment_model_attempt) {
+            entry.binding = bindings.bind(FaultyAdvance, &faulty, FaultyAdvance.invoke);
+        };
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        runner.runtime = .{ .context = &faulty, .status_fn = FaultyAdvance.status };
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(@as(workflow.OutcomeTag, if (fault == .cancel_after_action) .cancelled else .invalid), harness.run());
+        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        const request = try currentRequest(&runner);
+        try std.testing.expectEqual(@as(u32, 0), attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved(request.id()));
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.accounted_model_attempt)] == null);
+    }
+}
+
+test "runner rejects tampered accounting permissions and registry rejects hidden accounting" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try accountingYaml(&fixture, 0, false));
+    var tampered = graph.*;
+    const steps = try fixture.arena.allocator().dupe(compilation.CompiledStep, graph.authority.steps);
+    for (steps) |*step| if (step.runner_accounting == .increment_model_attempt) {
+        step.runner_accounting = .none;
+    };
+    tampered.authority.steps = steps;
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+    var runner = fixture.runner(&tampered, std.testing.allocator);
+    defer runner.deinit();
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.failed, harness.run());
+    try std.testing.expect(runner.model_accounting == null);
+
+    for (&fixture.entries) |*entry| if (entry.contract.runner_accounting == .increment_model_attempt) {
+        entry.contract.runner_accounting = .none;
+    };
+    try std.testing.expect(!fixture.registry.validate());
+}
+
+test "runner binds retry authority to the accounting step not the request origin" {
+    for ([_]FaultyAdvance.Fault{ .foreign_retry, .forged_retry_count }) |fault| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try accountingYaml(&fixture, 2, true));
+        fixture.observer.retry_until = 3;
+        var faulty: FaultyAdvance = .{ .fault = fault };
+        for (&fixture.entries) |*entry| if (entry.contract.runner_accounting == .increment_model_attempt) {
+            entry.binding = bindings.bind(FaultyAdvance, &faulty, FaultyAdvance.invoke);
+        };
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.invalid, harness.run());
+        try std.testing.expectEqual(@as(usize, 1), fixture.observer.calls);
+        try std.testing.expectEqual(@as(u64, 1), attempt_accounting.accounting(runner.model_accounting.?.attempts).revision().value);
+    }
+}
+
+const FaultyAdvance = struct {
+    const Fault = enum { missing_transition, wrong_ordinal, stale_revision, undeclared_write, cancel_after_action, foreign_retry, forged_retry_count };
+    action: @import("actions/model/advance_model_attempt_accounting.zig").Action = .{},
+    fault: Fault,
+    cancelled: bool = false,
+
+    fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
+        const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+        const facts = input.step.model_attempt.?;
+        var delta = self.action.execute(facts.accounting, facts.accounting.revision(), ledger, facts.operations, ledger.revision(), request.id(), facts.attempt) catch return error.OperationExecutionFailed;
+        switch (self.fault) {
+            .missing_transition => delta.runner_accounting_transition = null,
+            .wrong_ordinal => delta.runner_accounting_transition.?.increment_model_attempt.next_request_value += 1,
+            .stale_revision => delta.runner_accounting_transition.?.increment_model_attempt.expected_revision.value += 1,
+            .undeclared_write => delta.data_writes[@intFromEnum(pipeline.DataKey.raw_engine_config)] = values.create(std.testing.allocator, values.schema(.raw_engine_config, bool, 1, 1), bool, true) catch return error.OperationExecutionFailed,
+            .cancel_after_action => self.cancelled = true,
+            .foreign_retry => if (facts.attempt == .retry) {
+                delta.runner_accounting_transition.?.increment_model_attempt.attempt.retry.authority.operation_instance_id = .{ .bytes = "origin" };
+            },
+            .forged_retry_count => if (facts.attempt == .retry) {
+                delta.runner_accounting_transition.?.increment_model_attempt.attempt.retry.completed_retries += 1;
+            },
+        }
+        return .{ .outcome = .ok, .delta = delta };
+    }
+
+    fn status(context: ?*anyopaque) pipeline.RuntimeStatus {
+        const self: *const FaultyAdvance = @ptrCast(@alignCast(context.?));
+        return if (self.cancelled) .cancelled else .active;
+    }
+};
+
 const Observer = struct {
     calls: usize = 0,
+    last_attempt: u32 = 0,
+    retry_until: u32 = 1,
+    consume_attempt: bool = false,
     fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         if (request.prepared() == null or input.step.model_binding != request.binding()) return error.OperationExecutionFailed;
         self.calls += 1;
-        return .{ .outcome = .ok, .delta = .{} };
+        var delta: pipeline.NodeDelta = .{};
+        if (input.step.data.slots[@intFromEnum(pipeline.DataKey.accounted_model_attempt)] != null) {
+            const evidence = values.read(&input.step.data, attempt_values.schema, attempt_accounting.AccountedAttempt) catch return error.OperationExecutionFailed;
+            if (evidence.requestId() != request.id()) return error.OperationExecutionFailed;
+            self.last_attempt = evidence.ordinal().value;
+            if (self.consume_attempt) delta.data_invalidations.insert(.accounted_model_attempt);
+        }
+        return .{ .outcome = if (self.last_attempt != 0 and self.last_attempt < self.retry_until) .invalid else .ok, .delta = delta };
     }
 };
 
@@ -260,7 +485,7 @@ const Fixture = struct {
             .contract = .{ .id = "test.observe-request@1", .kind = .step, .requires = &.{ .model_request_identity_ledger, .prepared_model_request }, .outcomes = &.{.ok}, .side_effect = .none },
             .binding = bindings.bind(Observer, &self.observer, Observer.invoke),
         }};
-        self.registry = .{ .operations = &self.entries, .data_schemas = &requests.schemas, .policies = &core.profiles, .gates = &.{} };
+        self.registry = .{ .operations = &self.entries, .data_schemas = &native.schemas, .policies = &core.profiles, .gates = &.{} };
     }
 
     fn deinit(self: *Fixture) void {

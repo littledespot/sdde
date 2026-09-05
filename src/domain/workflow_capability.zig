@@ -8,9 +8,10 @@ pub const feature_read = "feature-read";
 pub const feature_input_read = "feature-input-read";
 pub const reference_content_read = "reference-content-read";
 pub const reference_decode = "reference-decode";
+pub const reference_identity = "reference-identity";
 
 pub fn known(id: []const u8) bool {
-    inline for (.{ model_provider, toolchain_read, toolchain_parser, reference_read, feature_read, feature_input_read, reference_content_read, reference_decode }) |known_id| {
+    inline for (.{ model_provider, toolchain_read, toolchain_parser, reference_read, feature_read, feature_input_read, reference_content_read, reference_decode, reference_identity }) |known_id| {
         if (std.mem.eql(u8, id, known_id)) return true;
     }
     return false;

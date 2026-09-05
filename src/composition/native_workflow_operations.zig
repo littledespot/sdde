@@ -24,6 +24,8 @@ const input_parser = @import("../ports/clarification_input_parser.zig");
 const ingestion = @import("../application/reference_ingestion_workflow.zig");
 const corpus_source = @import("../ports/reference_corpus_source.zig");
 const corpus_decoder = @import("../ports/reference_decoder.zig");
+const evidence = @import("../application/reference_evidence_workflow.zig");
+const identity_source = @import("../ports/reference_state_identity.zig");
 
 /// Composition of native implementations, not a workflow graph. No setup action
 /// executes until the selected YAML reaches its registered operation.
@@ -56,11 +58,15 @@ pub const Assembly = struct {
     capture_references: ingestion.Capture,
     decode_references: ingestion.Decode,
     validate_reference_accounting: ingestion.ValidateAccounting,
+    assign_reference_identities: evidence.Assign,
+    build_reference_chunks: evidence.BuildChunks,
+    validate_reference_chunks: evidence.ValidateChunks,
+    validate_source_citations: evidence.ValidateCitations,
     model_requests: model_request.Assembly,
-    entries: [core.entries.len + 28 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 32 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
-    pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder) void {
+    pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source) void {
         self.* = .{
             .capture_project = .{ .allocator = allocator, .action = .{ .source = project_source } },
             .inventory_presets = .{ .allocator = allocator, .action = .{ .source = preset_source } },
@@ -90,6 +96,10 @@ pub const Assembly = struct {
             .capture_references = .{ .allocator = allocator, .action = .{ .source = reference_capture } },
             .decode_references = .{ .allocator = allocator, .action = .{ .decoder = reference_decoder } },
             .validate_reference_accounting = .{ .allocator = allocator },
+            .assign_reference_identities = .{ .allocator = allocator, .action = .{ .identities = reference_identity } },
+            .build_reference_chunks = .{ .allocator = allocator },
+            .validate_reference_chunks = .{ .allocator = allocator },
+            .validate_source_citations = .{ .allocator = allocator },
             .model_requests = undefined,
             .entries = undefined,
             .registry = undefined,
@@ -124,6 +134,10 @@ pub const Assembly = struct {
             entry(ingestion.Capture, &self.capture_references),
             entry(ingestion.Decode, &self.decode_references),
             entry(ingestion.ValidateAccounting, &self.validate_reference_accounting),
+            entry(evidence.Assign, &self.assign_reference_identities),
+            entry(evidence.BuildChunks, &self.build_reference_chunks),
+            entry(evidence.ValidateChunks, &self.validate_reference_chunks),
+            entry(evidence.ValidateCitations, &self.validate_source_citations),
         };
         self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{} };
     }
@@ -142,7 +156,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ model_request.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ model_request.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.toolchain@1",
     .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },
@@ -165,7 +179,7 @@ const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig")
     .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.reference-ingestion@1",
-    .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode },
+    .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity },
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
     .total_model_token_budget = .{ .value = 100_000 },
 } };

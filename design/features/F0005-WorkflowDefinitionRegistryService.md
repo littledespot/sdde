@@ -423,6 +423,13 @@ compiler proves the producer/consumer handoff without new YAML syntax or a
 second model projection. Provider calls still require an independently
 port-derived, policy-permitted capability and the existing token-budget guard.
 
+Registered accounting permissions are compiled alongside data effects and
+compared against the live immutable operation registry at execution. YAML cannot
+author them. The implemented attempt-accounting binding consumes the retained
+request, requires an explicit operation-local `retry-limit`, and publishes only
+runner-applied typed attempt evidence. Its next visit requires the previous
+evidence to have been consumed/invalidated through declared data effects.
+
 The selected result-schema resource describes the entire compact model result
 under [ADR 0006](../decisions/0006-minimal-model-response.md), not an inner
 payload or repeated execution metadata. The protocol version and exact resource

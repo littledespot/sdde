@@ -42,6 +42,24 @@ has none. Their ownership transfer remains typed and opaque; ordinary copying
 values and contracts with explicit resource bounds retain their existing checks.
 This is not a second request store or a model-call size policy.
 
+## Accounting integration (implemented 2026-09-06)
+
+The explicitly selected `advance-model-attempt-accounting@1` step consumes the
+prepared request and declares `retry-limit` (`0` permits only its initial
+execution). The compiler retains its accounting permission. The runner supplies
+read-only ledger snapshots and initial/retry classification, validates the
+proposed transition, and publishes sealed evidence from the applied record.
+Its existing step-execution counter alone supplies retries used; request
+ordinals never become a second retry counter. Retry authority names the
+accounting step, not the request origin. Consumers retain that original request
+and must invalidate consumed attempt evidence before a YAML retry revisits the
+accounting step. A second initial attempt cannot reset an existing request.
+
+The attempt and provider-operation ledgers share the request execution identity
+and have one cleanup owner. Rejected deltas publish neither accounting changes
+nor attempt evidence. No provider call, lifecycle advancement, lease preparation
+or token charge is hidden in this integration.
+
 ## Acceptance
 
 Compile and execute arbitrary YAML using the native preparation bindings and

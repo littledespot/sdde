@@ -135,7 +135,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{.{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module }},
     }) });
-    b.step("test-model-request-workflow", "Test native YAML request preparation and immutable handoff").dependOn(&b.addRunArtifact(request_workflow_tests).step);
+    b.step("test-model-request-workflow", "Test native YAML request preparation, accounting and immutable handoff").dependOn(&b.addRunArtifact(request_workflow_tests).step);
+
+    const attempt_accounting_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/model_attempt_accounting_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    b.step("test-model-attempt-accounting", "Test model attempt classification and immutable accounting transitions").dependOn(&b.addRunArtifact(attempt_accounting_tests).step);
 
     const invocation_validation_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/provider_invocation_validation_test.zig"),
@@ -187,6 +194,15 @@ pub fn build(b: *std.Build) void {
     }) });
     const ingestion_step = b.step("test-reference-ingestion", "Test read-only Markdown reference evidence");
     ingestion_step.dependOn(&b.addRunArtifact(ingestion_tests).step);
+
+    const evidence_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/reference_evidence_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const evidence_step = b.step("test-reference-evidence", "Test reference identities chunks and citation boundaries");
+    evidence_step.dependOn(&b.addRunArtifact(evidence_tests).step);
 
     const feature_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/feature_directory_test.zig"),

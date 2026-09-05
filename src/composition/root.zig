@@ -93,7 +93,8 @@ fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, p
     var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project_root };
     var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project_root };
     var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
-    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold });
+    var reference_ids: @import("../adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
+    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source());
     var boot = runInProjectWithRegistry(io, allocator, project_root, runtime, &native_bindings.registry);
     if (boot == .ready) native_bindings.bindRoots(boot.ready.roots.registry());
     defer boot.deinit();
@@ -624,7 +625,8 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project_root };
     var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project_root };
     var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
-    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold });
+    var reference_ids: @import("../adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
+    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source());
     var boot = runInProjectWithRegistry(io, std.testing.allocator, project_root, .{}, &operations.registry);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
@@ -938,6 +940,10 @@ test "reference ingestion compiler enforces inputs and content-read capability" 
         .{ "policy: core.reference-ingestion@1", "policy: core.feature-input-read@1" },
         .{ "use: capture-reference-sources@1", "use: core.noop@1" },
         .{ "use: validate-reference-inventory@1", "use: core.noop@1" },
+        .{ "use: assign-reference-identities@1", "use: core.noop@1" },
+        .{ "use: build-reference-chunks@1", "use: core.noop@1" },
+        .{ "use: validate-reference-chunks@1", "use: validate-source-citations@1" },
+        .{ "use: assign-reference-identities@1", "use: assign-reference-identities@1\n    with: { state-id: invented }" },
     }) |edit| {
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
@@ -963,6 +969,75 @@ test "reference ingestion cancellation does not create artifacts" {
         try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.execution);
     }
     return error.ReferenceIngestionNeverCompleted;
+}
+
+const ReferenceCitationTestProducer = struct {
+    invalid: bool,
+    observed: usize = 0,
+    const bindings = @import("../application/reference_evidence_workflow.zig");
+    const evidence = @import("../domain/reference_evidence.zig");
+    const values = @import("../application/pipeline_values.zig");
+    fn propose(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
+        const source = values.read(&input.step.data, bindings.inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
+        const chunk = source.chunks.entries[0];
+        const proposal: evidence.CitationProposal = .{
+            .source_id = chunk.source_id,
+            .block_id = chunk.block_id,
+            .location = chunk.span,
+            .verbatim = if (context.?.invalid) "not in the source" else null,
+        };
+        return @import("../application/workflow_candidate.zig").publish(std.testing.allocator, bindings.proposals_schema, evidence.CitationProposals, .{
+            .scope = .{ .state_id = source.corpus.state_id, .chunk_id = chunk.id },
+            .entries = &.{proposal},
+        });
+    }
+    fn observe(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
+        const result = values.read(&input.step.data, bindings.citations_schema, evidence.ValidatedCitations) catch return error.OperationExecutionFailed;
+        if (result.entries.len != 1) return error.OperationExecutionFailed;
+        context.?.observed += 1;
+        return .{ .outcome = .ok, .delta = .{} };
+    }
+};
+
+test "native YAML validates proposed citations before allowing the next operation" {
+    const io = std.testing.io;
+    const binding = @import("../application/workflow_operation_binding.zig");
+    for ([_]bool{ false, true }) |invalid| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeReferenceIngestionFixture(io, project.dir);
+        const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/reference-ingestion.workflow.yaml"), "use: validate-reference-chunks@1\n    on: { ok: end.ok, failed: end.failed }", "use: validate-reference-chunks@1\n    on: { ok: propose-citations, failed: end.failed }\n" ++
+            "  propose-citations: { use: test.propose-citations@1, on: { ok: validate-citations } }\n" ++
+            "  validate-citations: { use: validate-source-citations@1, on: { ok: observe-citations, failed: end.failed } }\n" ++
+            "  observe-citations: { use: test.observe-citations@1, on: { ok: end.ok } }");
+        defer std.testing.allocator.free(yaml);
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = yaml });
+        var project_source = toolchain_authority_source.Adapter.init(io, project.dir);
+        var document_parser: toolchain_documents.Adapter = .{};
+        var reference_source: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var feature_source: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
+        var reference_ids: @import("../adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
+        var native: @import("native_workflow_operations.zig").Assembly = undefined;
+        native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source());
+        var producer: ReferenceCitationTestProducer = .{ .invalid = invalid };
+        const entries = native.entries ++ [_]workflow_operation_registry.Entry{
+            .{ .contract = .{ .id = "test.propose-citations@1", .kind = .step, .requires = &.{.citable_reference_inputs}, .produces = &.{.reference_citation_proposals}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.propose) },
+            .{ .contract = .{ .id = "test.observe-citations@1", .kind = .step, .requires = &.{.validated_source_citations}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.observe) },
+        };
+        native.registry.operations = &entries;
+        var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
+        defer boot.deinit();
+        try std.testing.expect(boot == .ready);
+        native.bindRoots(boot.ready.roots.registry());
+        var providers = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project.dir, .{}, &llm_provider_contracts.Registry.empty);
+        const result = runBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{});
+        try std.testing.expectEqual(if (invalid) workflow.OutcomeTag.failed else .ok, result.execution);
+        try std.testing.expectEqual(@as(usize, if (invalid) 0 else 1), producer.observed);
+        try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
+    }
 }
 
 fn writeFeatureInputFixture(io: std.Io, project: std.Io.Dir) !void {
@@ -1220,7 +1295,8 @@ test "feature preflight uses configured specs roots and preserves selected files
         var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
         var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
         var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
-        native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold });
+        var reference_ids: @import("../adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
+        native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source());
         var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
         defer boot.deinit();
         try std.testing.expect(boot == .ready);
@@ -1289,7 +1365,8 @@ test "feature inspection rejects missing authority stale roots and forged resolv
     var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
     var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
     var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
-    native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold });
+    var reference_ids: @import("../adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
+    native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source());
     var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);

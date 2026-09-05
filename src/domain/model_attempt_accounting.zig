@@ -15,8 +15,38 @@ pub const Revision = struct {
 
 pub const Attempt = union(enum) {
     initial,
-    retry: workflow_retry.CompiledAuthority,
+    retry: struct {
+        authority: workflow_retry.CompiledAuthority,
+        // Borrowed observation of the runner's operation-local counter, not
+        // a second counter derived from this request's total attempt ordinal.
+        completed_retries: u64,
+    },
+
+    pub fn eql(left: Attempt, right: Attempt) bool {
+        if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
+        return switch (left) {
+            .initial => true,
+            .retry => |value| value.authority.eql(right.retry.authority) and value.completed_retries == right.retry.completed_retries,
+        };
+    }
 };
+
+/// Read-only view of a canonical applied accounting record, never a proposal.
+pub const AccountedAttempt = opaque {
+    pub fn requestId(self: *const AccountedAttempt) *const request_identity.ModelRequestId {
+        const record: *const Record = @ptrCast(@alignCast(self));
+        return record.model_request_id;
+    }
+
+    pub fn ordinal(self: *const AccountedAttempt) operation.ModelAttemptOrdinal {
+        const record: *const Record = @ptrCast(@alignCast(self));
+        return operation.ModelAttemptOrdinal.init(record.attempts_reserved).?;
+    }
+};
+
+pub fn latestAttempt(owner: *const Owner) *const AccountedAttempt {
+    return @ptrCast(ownerStorageConst(owner).accounting.latest_record.?);
+}
 
 pub const Transition = struct {
     stage_run_epoch_id: request_identity.StageRunEpochId,
@@ -92,6 +122,20 @@ pub const ProposalError = error{
 
 pub const Error = std.mem.Allocator.Error || ValidationError;
 
+pub const RequestError = @import("provider_operation_lifecycle.zig").ValidationError || error{
+    ModelRequestLedgerRevisionConflict,
+    ModelRequestUnavailableForAttempt,
+};
+
+pub fn validateRequest(current: *const RunnerModelAttemptAccounting, requests: *const request_identity.ModelRequestIdentityLedger, operations: *const @import("provider_operation_lifecycle.zig").Ledger, revision: request_identity.LedgerRevision, request: *const request_identity.ModelRequestId) RequestError!*const request_identity.ModelRequestId {
+    if (!requests.revision().eql(revision)) return error.ModelRequestLedgerRevisionConflict;
+    const record = requests.record(request) orelse return error.ModelRequestUnavailableForAttempt;
+    if (record.status == .terminal or !current.stageRunEpochId().eql(record.model_request_id.stage_run_epoch_id)) return error.ModelRequestUnavailableForAttempt;
+    const canonical = requests.canonicalRequestId(request) orelse return error.ModelRequestUnavailableForAttempt;
+    try operations.validateRequestClosure(canonical);
+    return canonical;
+}
+
 pub fn createInitial(
     allocator: std.mem.Allocator,
     stage_run_epoch_id: request_identity.StageRunEpochId,
@@ -153,7 +197,9 @@ pub fn apply(
     if (!current_storage.revision.eql(transition.expected_revision)) {
         return error.ModelAttemptAccountingRevisionConflict;
     }
-    if (!current_storage.stage_run_epoch_id.eql(transition.stage_run_epoch_id)) {
+    if (!current_storage.stage_run_epoch_id.eql(transition.stage_run_epoch_id) or
+        !current_storage.stage_run_epoch_id.eql(transition.model_request_id.stage_run_epoch_id))
+    {
         return error.ModelAttemptAccountingEpochConflict;
     }
     const reserved = if (resolveRecord(current_storage, transition.model_request_id)) |record|
@@ -227,16 +273,15 @@ fn validateAttempt(
 ) ProposalError!void {
     switch (attempt) {
         .initial => if (reserved != 0) return error.InvalidAttemptClassification,
-        .retry => |authority| {
+        .retry => |retry| {
+            const authority = retry.authority;
             if (reserved == 0 or !authority.isValid() or
                 !std.mem.eql(u8, authority.workflow_id.bytes, model_request_id.model_operation_id.workflow_id.bytes) or
-                authority.workflow_version != model_request_id.model_operation_id.workflow_version or
-                !std.mem.eql(u8, authority.operation_instance_id.bytes, model_request_id.model_operation_id.workflow_step_id.bytes))
+                authority.workflow_version != model_request_id.model_operation_id.workflow_version)
             {
                 return error.InvalidAttemptClassification;
             }
-            const retries_used = reserved - 1;
-            if (retries_used >= authority.limit.value) return error.ModelRetryLimitExhausted;
+            if (retry.completed_retries >= authority.limit.value) return error.ModelRetryLimitExhausted;
         },
     }
 }
@@ -252,7 +297,7 @@ fn resolveRecord(
     return null;
 }
 
-fn retainOwner(owner: *Owner) ValidationError!void {
+pub fn retainOwner(owner: *Owner) ValidationError!void {
     const value = ownerStorage(owner);
     std.debug.assert(value.reference_count > 0);
     value.reference_count = std.math.add(usize, value.reference_count, 1) catch {

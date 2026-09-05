@@ -14,8 +14,14 @@ const resolve_provider_binding = @import("../actions/provider/resolve_provider_m
 const workflow_token_runner = @import("workflow_token_accounting_runner.zig");
 const envelope_module = @import("pipeline_envelope.zig");
 const data = @import("../domain/pipeline_data.zig");
+const model_accounting = @import("workflow_model_accounting.zig");
+const attempt = @import("../domain/model_attempt_accounting.zig");
+const requests = @import("model_request_workflow.zig");
+const identity = @import("../domain/model_request_identity.zig");
+const values = @import("pipeline_values.zig");
 
 pub const Runner = struct {
+    allocator: std.mem.Allocator,
     selected: execution.SelectedWorkflow,
     operation_registry: *const operations.Registry,
     barrier: telemetry_barrier.Barrier,
@@ -24,6 +30,7 @@ pub const Runner = struct {
     resolve_provider_binding_action: resolve_provider_binding.Action = .{},
     envelope: envelope_module.PipelineEnvelope,
     token_accounting: workflow_token_runner.Runner,
+    model_accounting: ?model_accounting.State = null,
     retry_execution_counts: [definition.max_steps]u64 = [_]u64{0} ** definition.max_steps,
 
     pub fn init(
@@ -35,6 +42,7 @@ pub const Runner = struct {
         model_provider_services: ?*const provider_services.ModelProviderBootstrapServices,
     ) Runner {
         return .{
+            .allocator = allocator,
             .selected = selected,
             .operation_registry = operation_registry,
             .barrier = barrier,
@@ -50,6 +58,7 @@ pub const Runner = struct {
 
     pub fn deinit(self: *Runner) void {
         self.envelope.deinit();
+        if (self.model_accounting) |*state| state.deinit();
         self.token_accounting.deinit();
         self.* = undefined;
     }
@@ -83,7 +92,7 @@ pub const Runner = struct {
             .produces = authority.invocation_outputs,
             .side_effect = .none,
         };
-        return self.applyCandidate(contract, &candidate);
+        return self.applyCandidate(contract, &candidate, null);
     }
 
     fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
@@ -123,6 +132,14 @@ pub const Runner = struct {
         if (retained_request) |request| {
             if (request.prepared() == null) return .{ .rejected = .authority };
         }
+        if (input_data.slots[@intFromEnum(pipeline.DataKey.accounted_model_attempt)] != null) {
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
+            const evidence = values.read(&input_data, model_accounting.schema, attempt.AccountedAttempt) catch return .{ .rejected = .authority };
+            const request = retained_request orelse return .{ .rejected = .authority };
+            const current = attempt.accounting(state.attempts);
+            if (evidence.requestId() != request.id() or current.attemptsReserved(request.id()) != evidence.ordinal().value or
+                !current.stageRunEpochId().eql(request.id().stage_run_epoch_id)) return .{ .rejected = .authority };
+        }
         var resolved_binding = self.resolveModelBinding(step.*) catch {
             return .{ .outcome = .failed };
         };
@@ -131,6 +148,21 @@ pub const Runner = struct {
             if (std.mem.eql(u8, capability, @import("../domain/workflow_capability.zig").model_provider)) {
                 self.token_accounting.check() catch |err| return .{ .rejected = .{ .token_budget = err } };
             }
+        }
+        var attempt_input: @FieldType(operations.StepInput, "model_attempt") = null;
+        if (step.runner_accounting == .increment_model_attempt) {
+            const current_requests = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
+            if (self.model_accounting == null) self.model_accounting = model_accounting.State.init(self.allocator, current_requests) catch return .{ .outcome = .failed };
+            const state = &self.model_accounting.?;
+            const current = attempt.accounting(state.attempts);
+            if (!current.stageRunEpochId().eql(current_requests.stageRunEpochId())) return .{ .rejected = .authority };
+            const authority = step.retry_authority orelse return .{ .rejected = .authority };
+            const executions = self.retry_execution_counts[index];
+            attempt_input = .{
+                .accounting = current,
+                .operations = @import("../domain/provider_operation_lifecycle.zig").initial(state.operations),
+                .attempt = if (executions == 0) .initial else .{ .retry = .{ .authority = authority, .completed_retries = executions - 1 } },
+            };
         }
         if (step.retry_authority) |authority| {
             if (self.retry_execution_counts[index] > @as(u64, authority.limit.value)) return .{ .outcome = .failed };
@@ -144,11 +176,12 @@ pub const Runner = struct {
             .resources = resources,
             .model_binding = if (retained_request) |request| request.binding() else if (resolved_binding) |*value| value else null,
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
+            .model_attempt = attempt_input,
         } }) catch return .{ .outcome = .failed };
         defer self.envelope.discard(&candidate.delta);
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .outcome = .failed };
-        return self.applyCandidate(stepPipelineContract(step.*), &candidate);
+        return self.applyCandidate(stepPipelineContract(step.*), &candidate, if (attempt_input) |input| input.attempt else null);
     }
 
     pub fn tokenLedger(self: *const Runner) *const @import("../domain/workflow_token_accounting.zig").Ledger {
@@ -199,8 +232,28 @@ pub const Runner = struct {
         return true;
     }
 
-    fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: *execution.Candidate) execution.Applied {
+    fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: *execution.Candidate, expected_attempt: ?attempt.Attempt) execution.Applied {
+        var pending: ?model_accounting.Pending = null;
+        defer if (pending) |unapplied| unapplied.discard();
+        if (contract.runner_accounting == .increment_model_attempt) {
+            if (candidate.outcome != .ok) return .{ .outcome = .invalid };
+            const transition = candidate.delta.runner_accounting_transition orelse return .{ .outcome = .invalid };
+            if (transition != .increment_model_attempt) return .{ .outcome = .invalid };
+            const key = @intFromEnum(pipeline.DataKey.accounted_model_attempt);
+            // Only application of the accounting transition creates evidence.
+            if (candidate.delta.data_writes[key] != null or candidate.delta.data_replacements[key] != null) return .{ .outcome = .invalid };
+            const view = self.envelope.view(contract) catch return .{ .outcome = .invalid };
+            const request = requests.readCurrent(&view, requests.prepared_schema) catch return .{ .rejected = .authority };
+            const current = values.read(&view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
+            pending = state.prepare(current, request.id(), expected_attempt orelse return .{ .rejected = .authority }, transition.increment_model_attempt) catch |err| return .{ .outcome = if (err == error.OutOfMemory) .failed else .invalid };
+            candidate.delta.data_writes[key] = pending.?.value;
+        }
         self.envelope.apply(contract, &candidate.delta, candidate.outcome) catch return .{ .outcome = .invalid };
+        if (pending) |applied| {
+            self.model_accounting.?.commit(applied);
+            pending = null;
+        }
         for (candidate.delta.addedTelemetryFacts()) |fact| {
             const logging_result = self.barrier.process(fact);
             if (logging_result == .blocked) return .{ .rejected = .{ .logging = logging_result.blocked } };
@@ -219,6 +272,7 @@ fn stepPipelineContract(step: compilation.CompiledStep) pipeline.NodeContract {
         .replaces = step.replaces,
         .invalidates = step.invalidates,
         .side_effect = step.side_effect,
+        .runner_accounting = step.runner_accounting,
     };
 }
 fn contractMatchesStep(
@@ -233,6 +287,7 @@ fn contractMatchesStep(
         std.mem.eql(pipeline.DataKey, contract.invalidates, step.invalidates) and
         std.mem.eql(workflow.OutcomeTag, contract.outcomes, step.outcomes) and
         contract.side_effect == step.side_effect and
+        contract.runner_accounting == step.runner_accounting and
         gateIdsMatch(contract.gates, step.gates) and
         retryContractMatches(contract, step);
 }

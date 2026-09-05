@@ -34,6 +34,7 @@ pub const Contract = struct {
     invalidates: []const pipeline.DataKey = &.{},
     outcomes: []const workflow.OutcomeTag,
     side_effect: pipeline.SideEffect,
+    runner_accounting: pipeline.RunnerAccountingCapability = .none,
     gates: []const []const u8 = &.{},
     retry_limit: ?RetryLimitDescriptor = null,
 
@@ -55,3 +56,15 @@ pub const PolicyProfile = struct {
     allowed_terminal_outcomes: []const workflow.OutcomeTag,
     total_model_token_budget: workflow_token_budget.TotalTokenBudget,
 };
+
+pub fn validAccounting(capability: pipeline.RunnerAccountingCapability, requires: []const pipeline.DataKey, produces: []const pipeline.DataKey, effect: pipeline.SideEffect, retry: bool) bool {
+    return switch (capability) {
+        .none => for (produces) |key| {
+            if (key == .accounted_model_attempt) break false;
+        } else true,
+        .increment_model_attempt => @import("workflow_model.zig").consumesPreparedRequest(requires) and
+            std.mem.eql(pipeline.DataKey, produces, &.{.accounted_model_attempt}) and effect == .none and retry,
+        // These lifecycle primitives are not yet integrated into YAML execution.
+        .advance_provider_operation, .reconcile_workflow_tokens => false,
+    };
+}

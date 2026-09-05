@@ -31,6 +31,9 @@ now have native YAML initialization, assignment, binding-validation and building
 operations. One request retains its originating slot/resources across steps;
 generic preparation needs no SDD feature or task. Inference integration and
 Bedrock remain separate work.
+`advance-model-attempt-accounting@1` now accounts that prepared request through
+the same YAML runner. Its explicit `retry-limit` permits retries after the
+initial execution; applied attempt evidence and ledgers remain execution-local.
 
 ## Requirements
 
@@ -46,6 +49,8 @@ zig build test
 zig build test-atomic-execution
 zig build test-model-result-schema
 zig build test-reference-preflight
+zig build test-reference-ingestion
+zig build test-reference-evidence
 zig build test-feature-directory
 zig build test-clarification-inputs
 zig build smoke
@@ -74,6 +79,13 @@ paths and reads bounded clarification state/forms. It preserves closed files,
 rejects stale/malformed submissions, and distinguishes submitted from recorded
 answers without accepting either as current authority. See
 [F0100's input contract](design/features/F0100-SpecWorkflow.md#32-read-only-artifact-and-clarification-inputs).
+Reference preparation now captures Markdown once, accounts every source, assigns
+reference identities and builds source-mapped extraction chunks. Citation checks
+reject foreign states/IDs, out-of-chunk spans and altered quotations against the
+captured bytes. The [ingestion YAML fixture](src/test_fixtures/reference-ingestion.workflow.yaml)
+tests these read-only preparation steps; it is not an additional required user
+workflow. Claim extraction/reconciliation and snapshot publication remain future
+work. See [F0100](design/features/F0100-SpecWorkflow.md#34-citable-reference-inputs).
 Full `spec.md` generation remains unfinished. Shared NFC uses statically
 linked utf8proc with packaged license notices
 ([ADR 0007](design/decisions/0007-unicode-normalization.md)).

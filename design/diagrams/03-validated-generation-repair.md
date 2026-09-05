@@ -1,7 +1,8 @@
 Proposed generation and repair flow under
 [ADR 0006](../decisions/0006-minimal-model-response.md). Result-schema
 compilation, request construction, candidate decoding/validation, accounting and
-provider-authorization primitives exist. Native YAML request preparation now
+provider-authorization primitives exist. Native YAML request preparation and
+attempt accounting now
 retains one originating request under [ADR 0012](../decisions/0012-workflow-owned-model-request.md);
 complete provider-call and SDD production integration
 remains pending. Every retry/repair branch below belongs to the declared YAML
@@ -28,7 +29,7 @@ flowchart TD
     MID --> MBIND[ValidateModelRequestBindingAction<br/>prove epoch, unit, compiled operation, purpose, ordinal and ledger membership]
     MBIND --> REQ[BuildModelRequestAction<br/>retain originating identity, binding and resources across steps;<br/>send needed guidance, evidence and the already compiled compact result schema]
     RSCHEMA[Workflow-registry-owned model-result-schema/v1 authority<br/>opaque closed tree and exact captured resource bytes;<br/>invalid schema rejects during workflow compilation] -. borrowed schema; no second parser .-> REQ
-    REQ --> MADV[AdvanceModelAttemptAccountingAction<br/>reserve initial attempt ordinal; no global attempt ceiling]
+    REQ --> MADV[AdvanceModelAttemptAccountingAction<br/>explicit YAML step; initial execution plus local retry-limit;<br/>runner publishes applied attempt evidence]
     MADV --> MINVOKED[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to invoked exactly once]
     MINVOKED --> MTOKEN{CheckWorkflowTokenBudgetAction<br/>current actual usage below execution budget?}
     MTOKEN -- Exhausted or unavailable --> MTTERM[Runner budget error; invoke nothing]

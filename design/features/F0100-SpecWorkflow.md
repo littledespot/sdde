@@ -6,10 +6,10 @@
 compiler, registry, and transition-runner boundaries are implemented by F0005
 and ADR 0005. The logical Specify flow, `spec.md` section hierarchy, and
 clarification separation are defined below. The explicit feature/reference
-invocation, shared directory preflight and read-only clarification inputs in
-Sections 3.1–3.2 are implemented.
-Generated-name code is removed; generation, output publication and the complete
-definition remain unfinished.
+invocation, shared directory preflight, read-only clarification inputs, Markdown
+ingestion and citable reference preparation in Sections 3.1–3.4 are implemented.
+Generated-name code is removed; semantic extraction/reconciliation, generation,
+output publication and the complete definition remain unfinished.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -208,6 +208,63 @@ closed bytes unchanged. Structural validation is not actor authentication or
 current-authority/applicability validation. Response acceptance, source
 reconciliation, clarification transitions/writes and publication-time
 protection checks remain later work; no stage completion is inferred.
+
+### 3.3 Read-only Markdown ingestion
+
+Five registered operations cover the physical source boundary:
+`inventory-reference-sources@1`, `validate-reference-inventory@1`,
+`capture-reference-sources@1`, `decode-reference-markdown@1` and
+`validate-reference-accounting@1`. They use the configured `paths.references`
+root and independent selector. Every encountered entry, including hidden files,
+directories and non-followed symlinks, is accounted; unsupported, unreadable,
+changed, malformed or over-limit inputs fail without output writes.
+
+The native `markdown_source_v1` reader retains lossless UTF-8 source ranges,
+not a semantic Markdown AST. Inventory/capture/decoding enforce 1,024 entries,
+depth 16, 1 MiB per source, 8 MiB source/decoded corpus budgets, 1,024 blocks per
+file, 16 KiB blocks and 5-second phase checks. Blocks also break at 64 lines and
+never split a Unicode scalar or CRLF. These are source-reader limits, not model
+request-size estimates. Decoding never reopens captured source bodies.
+
+Additional formats and the full multi-reader probe/rank registry remain future
+work; this initial reader does not claim support for arbitrary reference bytes.
+
+### 3.4 Citable reference inputs
+
+Four registered operations extend that boundary:
+
+| Operation | Contract |
+| --- | --- |
+| `assign-reference-identities@1` | Validated reference inputs and selected feature → identified corpus and total provisional-to-canonical mappings. |
+| `build-reference-chunks@1` | Identified corpus → state-bound chunks; `source_blocks_v1` uses one chunk per existing source block. |
+| `validate-reference-chunks@1` | Original inputs, feature, corpus and chunks → validated citable inputs; reject omissions, duplicates, changed bytes, wrong mappings or foreign state/feature bindings. |
+| `validate-source-citations@1` | Citable inputs and engine-scoped typed proposals → validated source citations. |
+
+The [reference identity owner](../../src/domain/reference_identity.zig) supplies
+the same state/chunk types used by model-request owners. Each corpus receives a
+fresh 128-bit system-random namespace, formatted as `reference-<hex>`; entropy
+failure fails the operation. Only identity assignment has `reference-identity`,
+explicitly allowed by `core.reference-ingestion@1`. There is no persisted ID
+counter, reservation, hash or journal. Files keep normalized source order;
+source, state-global block and chunk ordinals are deterministic within the state.
+These values remain execution candidates until later complete publication.
+
+Chunks reference captured source ranges instead of owning a second body.
+Locations use zero-based byte offsets, one-based Unicode-scalar line/column
+coordinates, exclusive ends and CRLF as one newline. The citation validator
+checks the engine-supplied state/chunk scope, exact source/block joins and
+nonempty in-chunk locations. Optional verbatim text must equal the entire cited
+range byte-for-byte; validated text comes from the captured source, without NFC
+normalization. This proves location/quotation integrity, not semantic support.
+Models cannot choose the call scope or assign citation IDs.
+
+[`reference-ingestion.workflow.yaml`](../../src/test_fixtures/reference-ingestion.workflow.yaml)
+is an executable **test fixture**, ending at validated chunk preparation. Tests
+also inject typed citation proposals to exercise the registered validator through
+the native runner. No production proposal producer, model call, claim ledger,
+persistent snapshot, clarification acceptance or `spec.md` publication is added.
+The complete Specify YAML will compose these same operations, not invoke a
+second required user workflow. Closed clarification files remain untouched.
 
 ## 4. Required logical coverage
 
@@ -451,6 +508,11 @@ YAML definition.
 
 ## 8. Verification
 
+- `zig build test-reference-ingestion test-reference-evidence` covers source
+  accounting, deterministic identity mappings, complete chunks, Unicode/CRLF,
+  exact quotations, foreign scopes and allocation failures. `zig build verify`
+  additionally covers native YAML dependencies, failed-citation continuation
+  rejection, cancellation and the packaged read-only ingestion path;
 - closed YAML fixtures reject missing, unknown, duplicate, and wrong-kind
   fields and every prohibited operational value;
 - compiler tests cover exact reference resolution, complete outcomes, graph

@@ -1376,6 +1376,21 @@ the provider reports its own size errors or stops. The runner
 accounts API-reported input plus output usage against the execution's total
 token budget. Optional count operations provide observations only and never
 authorize inference or replace actual-usage accounting.
+
+Native `advance-model-attempt-accounting@1` consumes the retained prepared
+request through an explicit YAML step and requires `retry-limit` (`0` means
+initial execution only). Its accounting permission is compiled from the
+registered contract, never authored in YAML. The runner binds the attempt and
+provider-operation ledgers to the request's fresh execution identity, applies
+the proposed accounting transition, and publishes sealed `accounted_model_attempt`
+evidence from that canonical record together with the envelope delta. Rejection
+publishes neither. Later visits use the accounting step's existing runner retry
+counter and compiled authority, not the request origin or ordinal as a second
+retry policy. A consumer must invalidate used attempt evidence before retry;
+foreign/stale evidence and another initial attempt cannot reset accounting.
+This operation prepares no lease, advances no provider operation, performs no
+provider call and charges no tokens. All its owners are destroyed with execution.
+
 Each workflow-declared result schema defines the entire compact response;
 there is no generic open payload or repeated engine metadata. Repair operations
 do not recursively repair semantic failures: malformed responses may receive

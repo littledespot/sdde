@@ -711,15 +711,20 @@ test "model attempt accounting has one runner-applied transition authority" {
     try expectAbsent(workflow_operation, "loop_budget");
     try expectAbsent(workflow_operation, "retry_count");
 
-    const runner = @embedFile("application/model_attempt_accounting_runner.zig");
-    try expectAbsent(runner, "/ports/");
+    const runner = @embedFile("application/workflow_pipeline_runner.zig");
     try expectAbsent(runner, "/adapters/");
     try expectAbsent(runner, "std.Io");
-    const validate_index = std.mem.indexOf(u8, runner, "envelope.applyDelta(").?;
-    const apply_index = std.mem.indexOf(u8, runner, "accounting.apply(").?;
-    const replace_index = std.mem.indexOf(u8, runner, "self.current_owner = successor").?;
-    try std.testing.expect(validate_index < apply_index);
-    try std.testing.expect(apply_index < replace_index);
+    const prepare_index = std.mem.indexOf(u8, runner, "pending = state.prepare(").?;
+    const validate_index = std.mem.indexOf(u8, runner, "self.envelope.apply(").?;
+    const commit_index = std.mem.indexOf(u8, runner, "self.model_accounting.?.commit(").?;
+    try std.testing.expect(prepare_index < validate_index);
+    try std.testing.expect(validate_index < commit_index);
+    const state = @embedFile("application/workflow_model_accounting.zig");
+    inline for (.{ "/ports/", "/adapters/", "/actions/", "std.Io", "retry_execution_counts" }) |forbidden| try expectAbsent(state, forbidden);
+    const native = @embedFile("application/model_attempt_workflow.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(native, "self.action.execute("));
+    inline for (.{ "accounting.apply(", "lifecycle.apply(", "std.Io", "LLMProviderInterface" }) |forbidden| try expectAbsent(native, forbidden);
+    try std.testing.expect(@typeInfo(model_attempt_accounting.AccountedAttempt) == .@"opaque");
 }
 
 test "workflow token accounting has one mutation authority and a read-only check" {
@@ -1367,6 +1372,38 @@ test "feature input filesystem handoff has exactly one authorized consumer" {
         defer std.testing.allocator.free(source);
         try expectAbsent(source, "bindFeatureInputAdapter");
     }
+}
+
+test "reference evidence has shared identity types and pure chunk citation boundaries" {
+    const evidence = @import("domain/reference_evidence.zig");
+    const model = @import("domain/model_request_identity.zig");
+    try std.testing.expect(model.ReferenceStateId == evidence.identity.StateId);
+    try std.testing.expect(model.ReferenceChunkId == evidence.identity.ChunkId);
+    const binding = @import("application/workflow_operation_binding.zig");
+    const operations = @import("application/reference_evidence_workflow.zig");
+    const assigning = comptime binding.inspect(operations.Assign, &.{});
+    try std.testing.expect(assigning.valid and assigning.reference_identity);
+    try std.testing.expect(!assigning.reference_read and !assigning.reference_content_read and !assigning.model_provider);
+    inline for (.{ operations.BuildChunks, operations.ValidateChunks, operations.ValidateCitations }) |T| {
+        const pure = comptime binding.inspect(T, &.{});
+        try std.testing.expectEqual(@import("application/workflow_operation_binding.zig").Inspection{}, pure);
+    }
+    inline for (.{
+        @embedFile("domain/reference_evidence.zig"),
+        @embedFile("actions/reference/assign_reference_identities.zig"),
+        @embedFile("actions/reference/build_reference_chunks.zig"),
+        @embedFile("actions/reference/validate_reference_chunks.zig"),
+        @embedFile("actions/reference/validate_source_citations.zig"),
+        @embedFile("application/reference_evidence_workflow.zig"),
+    }) |source| {
+        try expectAbsent(source, "std.Io");
+        try expectAbsent(source, "/adapters/");
+        try expectAbsent(source, "std.json");
+    }
+    try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "reference_evidence");
+    try std.testing.expect(!@hasField(evidence.CitationProposal, "state_id"));
+    try std.testing.expect(!@hasField(evidence.CitationProposal, "chunk_id"));
+    try std.testing.expect(!@hasField(evidence.CitationProposal, "citation_id"));
 }
 
 test "feature document filenames and headings agree" {

@@ -95,6 +95,29 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_unregistered.expectStdOutEqual("");
     denied_unregistered.expectStdErrEqual("WORKFLOW_AUTHORITY_INVENTORY_INVALID\n");
 
+    const missing_request_directory = b.addTempFiles();
+    const missing_request_executable = missing_request_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_request_directory.add(".sddtoolkit.json", configuration);
+    _ = missing_request_directory.add(".sddtoolkit/workflows/account.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: account
+        \\version: 1
+        \\shortcode: ACCT
+        \\invoke: core.empty-invocation@1
+        \\policy: core.capability-free@1
+        \\start: account
+        \\steps:
+        \\  account: { use: advance-model-attempt-accounting@1, with: { retry-limit: 0 }, on: { ok: end.ok, failed: end.failed } }
+    );
+    const denied_accounting = std.Build.Step.Run.create(b, "reject packaged attempt accounting without a prepared request");
+    denied_accounting.addFileArg(missing_request_executable);
+    denied_accounting.addArg("account");
+    denied_accounting.setCwd(missing_request_directory.getDirectory());
+    denied_accounting.clearEnvironment();
+    denied_accounting.expectExitCode(1);
+    denied_accounting.expectStdOutEqual("");
+    denied_accounting.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+
     const denied_toolchain = std.Build.Step.Run.create(b, "reject invalid toolchain only when selected");
     denied_toolchain.addFileArg(packaged_executable);
     denied_toolchain.addArg("toolchain-check");
@@ -146,6 +169,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     missing_config_command.step.dependOn(&valid_command.step);
     missing_config_command.step.dependOn(&request_ledger_command.step);
     missing_config_command.step.dependOn(&denied_unregistered.step);
+    missing_config_command.step.dependOn(&denied_accounting.step);
     missing_config_command.step.dependOn(&denied_toolchain.step);
     missing_config_command.step.dependOn(&toolchain_command.step);
     missing_config_command.step.dependOn(&reference_command.step);

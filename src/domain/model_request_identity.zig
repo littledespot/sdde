@@ -8,8 +8,8 @@ pub const StageRunEpochId = struct {
         return left.reference.eql(right.reference);
     }
 };
-pub const ReferenceStateId = struct { bytes: []const u8 };
-pub const ReferenceChunkId = struct { bytes: []const u8 };
+pub const ReferenceStateId = @import("reference_identity.zig").StateId;
+pub const ReferenceChunkId = @import("reference_identity.zig").ChunkId;
 pub const UnitSlotId = struct { bytes: []const u8 };
 pub const FeatureRequestId = struct { bytes: []const u8 };
 pub const PlanInputAuthorityStateId = struct { bytes: []const u8 };
@@ -438,6 +438,12 @@ pub fn createLifecycleSuccessor(
 
 pub fn ledger(owner: *const Owner) *const ModelRequestIdentityLedger {
     return @ptrCast(&ownerStorageConst(owner).ledger);
+}
+
+pub fn retainLedger(current: *const ModelRequestIdentityLedger) ValidationError!*Owner {
+    const owner = ledgerStorage(current).owner;
+    try retainOwner(owner);
+    return owner;
 }
 
 pub fn deinitOwner(owner: *Owner) void {

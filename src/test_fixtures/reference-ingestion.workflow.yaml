@@ -53,4 +53,13 @@ steps:
     on: { ok: validate-accounting, failed: end.failed }
   validate-accounting:
     use: validate-reference-accounting@1
+    on: { ok: identify-references, failed: end.failed }
+  identify-references:
+    use: assign-reference-identities@1
+    on: { ok: build-chunks, failed: end.failed }
+  build-chunks:
+    use: build-reference-chunks@1
+    on: { ok: validate-chunks, failed: end.failed }
+  validate-chunks:
+    use: validate-reference-chunks@1
     on: { ok: end.ok, failed: end.failed }

@@ -536,8 +536,10 @@ RepairAccountingTransition =
   | IncrementModelAttempt {
       stageRunEpochId, modelRequestId, expectedOrdinal, nextOrdinal,
       initialOrRetry,
-      retryOperationInstanceId?, expectedRetryValue?, nextRetryValue?,
+      retryOperationInstanceId?, completedRetries?,
       explicitRetryLimit?
+      // Retry facts borrow the runner's existing operation-local counter.
+      // The request's originating step remains unchanged.
     }
   | IncrementAtomicRepairAttempt {
       stageRunEpochId, retryOperationInstanceId,
@@ -555,8 +557,8 @@ RepairAccountingTransition =
       // Either assignment binds the request, model binding and exact input;
       // inference requires no prior count operation or count evidence.
       // Runner applies one immutable successor after validating request and
-      // attempt revisions. Its non-content journal projection is an intent,
-      // not proof of persistence or result consumption.
+      // attempt revisions. All operation state is execution-local; there is
+      // no journal projection or persisted result handoff.
     }
   | ConsumeNoInventionReplacement {
       stageRunEpochId,
@@ -566,8 +568,12 @@ RepairAccountingTransition =
     }
 
 // PipelineRunner accepts this field only from the compiler-registered accounting
-// action contract, validates compare-and-swap and hard ceilings, and constructs
+// action contract, validates compare-and-swap and the explicit local retry
+// authority against its existing step counter, and constructs
 // the next envelope. It is not a general node-controlled runner mutation.
+// accounted_model_attempt is a sealed view of the applied canonical record.
+// Envelope publication and accounting installation succeed together or neither
+// becomes visible. The value retains its request and accounting owners.
 
 TelemetryFact =
   | RunStartedFact

@@ -22,6 +22,11 @@ pub const StepInput = struct {
     resources: []const compilation.CompiledResource,
     model_binding: ?*const provider_binding.ValidatedProviderModelBinding,
     log: pipeline.WorkflowLog,
+    model_attempt: ?struct {
+        accounting: *const @import("../domain/model_attempt_accounting.zig").RunnerModelAttemptAccounting,
+        operations: *const @import("../domain/provider_operation_lifecycle.zig").Ledger,
+        attempt: @import("../domain/model_attempt_accounting.zig").Attempt,
+    } = null,
 };
 
 pub const Input = union(enum) {
@@ -148,6 +153,7 @@ pub const Registry = struct {
 };
 
 fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
+    if (!operation.validAccounting(contract.runner_accounting, contract.requires, contract.produces, contract.side_effect, contract.retry_limit != null)) return false;
     if (contract.outcomes.len == 0 or !uniqueOutcomes(contract.outcomes) or
         !uniqueStrings(contract.gates) or !uniqueStrings(capabilities) or
         !validDataContract(contract)) return false;
@@ -155,7 +161,7 @@ fn validContract(contract: operation.Contract, capabilities: []const []const u8)
     if (contract.kind == .invocation and
         (contract.parameters.len != 0 or contract.requires.len != 0 or contract.optional.len != 0 or contract.replaces.len != 0 or
             contract.invalidates.len != 0 or contract.side_effect != .none or contract.gates.len != 0 or
-            capabilities.len != 0 or contract.retry_limit != null or
+            capabilities.len != 0 or contract.retry_limit != null or contract.runner_accounting != .none or
             contract.outcomes.len != 1 or contract.outcomes[0] != .ok)) return false;
     for (contract.parameters, 0..) |descriptor, index| {
         if (workflow.WorkflowParameterId.parse(descriptor.id) == null or
@@ -192,6 +198,8 @@ fn validContract(contract: operation.Contract, capabilities: []const []const u8)
 }
 
 fn validDataContract(contract: operation.Contract) bool {
+    if (containsKey(contract.replaces, .accounted_model_attempt) or
+        ((containsKey(contract.requires, .accounted_model_attempt) or containsKey(contract.optional, .accounted_model_attempt)) and !contract.consumesPreparedRequest())) return false;
     if (!uniqueKeys(contract.requires) or !uniqueKeys(contract.optional) or !uniqueKeys(contract.produces) or
         !uniqueKeys(contract.replaces) or !uniqueKeys(contract.invalidates)) return false;
     for (contract.optional) |key| if (containsKey(contract.requires, key)) return false;

@@ -1,11 +1,12 @@
 const std = @import("std");
-const advance_attempt = @import("../actions/model/advance_model_attempt_accounting.zig");
-const accounting = @import("../domain/model_attempt_accounting.zig");
-const identity = @import("../domain/model_request_identity.zig");
-const operation = @import("../domain/llm_provider_operation.zig");
-const pipeline = @import("../domain/pipeline.zig");
-const provider_lifecycle = @import("../domain/provider_operation_lifecycle.zig");
+const advance_attempt = @import("actions/model/advance_model_attempt_accounting.zig");
+const accounting = @import("domain/model_attempt_accounting.zig");
+const identity = @import("domain/model_request_identity.zig");
+const operation = @import("domain/llm_provider_operation.zig");
+const pipeline = @import("domain/pipeline.zig");
+const provider_lifecycle = @import("domain/provider_operation_lifecycle.zig");
 
+/// Isolated action/ledger fixture. Production uses only the generic YAML runner.
 pub const Runner = struct {
     current_owner: *accounting.Owner,
     advance_action: advance_attempt.Action = .{},

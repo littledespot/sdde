@@ -1,6 +1,6 @@
 const std = @import("std");
 const advance_attempt = @import("actions/model/advance_model_attempt_accounting.zig");
-const attempt_runner = @import("application/model_attempt_accounting_runner.zig");
+const attempt_runner = @import("model_attempt_test_fixture.zig");
 const request_runner = @import("application/model_request_identity_runner.zig");
 const binding = @import("domain/llm_provider_binding.zig");
 const identity = @import("domain/model_request_identity.zig");
@@ -23,11 +23,11 @@ test "initial attempt is separate from explicitly bounded retries" {
     var attempts = try attempt_runner.Runner.init(std.testing.allocator, requests.ledger().?.stageRunEpochId());
     defer attempts.deinit();
     try expectOrdinal(1, try attempts.reserve(.initial, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .initial));
-    try expectOrdinal(2, try attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = retryAuthority(2) }));
-    try expectOrdinal(3, try attempts.reserve(.{ .value = 2 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = retryAuthority(2) }));
+    try expectOrdinal(2, try attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = .{ .authority = retryAuthority(2), .completed_retries = 0 } }));
+    try expectOrdinal(3, try attempts.reserve(.{ .value = 2 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = .{ .authority = retryAuthority(2), .completed_retries = 1 } }));
     try std.testing.expectError(
         error.ModelRetryLimitExhausted,
-        attempts.reserve(.{ .value = 3 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = retryAuthority(2) }),
+        attempts.reserve(.{ .value = 3 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = .{ .authority = retryAuthority(2), .completed_retries = 2 } }),
     );
     try std.testing.expectEqual(@as(u32, 3), attempts.current().attemptsReserved(request));
 }
@@ -47,7 +47,7 @@ test "attempt classification rejects hidden retry and repeated initial" {
 
     try std.testing.expectError(
         error.InvalidAttemptClassification,
-        attempts.reserve(.initial, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = retryAuthority(1) }),
+        attempts.reserve(.initial, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = .{ .authority = retryAuthority(1), .completed_retries = 0 } }),
     );
     _ = try attempts.reserve(.initial, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .initial);
     try std.testing.expectError(
@@ -56,20 +56,20 @@ test "attempt classification rejects hidden retry and repeated initial" {
     );
     try std.testing.expectError(
         error.ModelRetryLimitExhausted,
-        attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = retryAuthority(0) }),
+        attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = .{ .authority = retryAuthority(0), .completed_retries = 0 } }),
     );
 
     var foreign = retryAuthority(2);
     foreign.workflow_id = workflow.WorkflowId.parse("foreign-flow").?;
     try std.testing.expectError(
         error.InvalidAttemptClassification,
-        attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = foreign }),
+        attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = .{ .authority = foreign, .completed_retries = 0 } }),
     );
     var wrong_operation = retryAuthority(2);
-    wrong_operation.operation_instance_id = workflow.WorkflowStepId.parse("repair").?;
+    wrong_operation.operation_instance_id = .{ .bytes = "" };
     try std.testing.expectError(
         error.InvalidAttemptClassification,
-        attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = wrong_operation }),
+        attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = .{ .authority = wrong_operation, .completed_retries = 0 } }),
     );
     try std.testing.expectEqual(@as(u64, 1), attempts.current().revision().value);
 }
@@ -164,6 +164,8 @@ test "attempt reservation rejects a request from another stage epoch" {
         error.ModelRequestUnavailableForAttempt,
         attempts.reserve(.initial, foreign_requests.ledger().?, foreign_requests.providerOperations().current(), .{ .value = 1 }, foreign, .initial),
     );
+    const forged = try accounting.propose(attempts.current(), .initial, foreign, .initial);
+    try std.testing.expectError(error.ModelAttemptAccountingEpochConflict, accounting.apply(attempts.current(), forged));
 }
 
 fn expectOrdinal(expected: u32, actual: @import("domain/llm_provider_operation.zig").ModelAttemptOrdinal) !void {
@@ -174,7 +176,7 @@ fn retryAuthority(limit: u32) workflow_retry.CompiledAuthority {
     return .{
         .workflow_id = workflow.WorkflowId.parse("arbitrary-flow").?,
         .workflow_version = 1,
-        .operation_instance_id = workflow.WorkflowStepId.parse("generate").?,
+        .operation_instance_id = workflow.WorkflowStepId.parse("account").?,
         .limit = .{ .value = limit },
     };
 }

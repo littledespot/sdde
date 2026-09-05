@@ -5,7 +5,7 @@ const provider = @import("domain/llm_provider_operation.zig");
 const identity = @import("domain/model_request_identity.zig");
 const pipeline = @import("domain/pipeline.zig");
 const requests_module = @import("application/model_request_identity_runner.zig");
-const attempts_module = @import("application/model_attempt_accounting_runner.zig");
+const attempts_module = @import("model_attempt_test_fixture.zig");
 const lifecycle_runner = @import("application/provider_operation_lifecycle_runner.zig");
 const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
 const AuthorizationFixture = @import("provider_authorization_test_fixture.zig").Fixture;
@@ -428,10 +428,13 @@ const Fixture = struct {
 
     fn retry(self: *Fixture) !void {
         _ = try self.attempts.reserve(self.attempts.current().revision(), self.requests.ledger().?, self.ledger(), self.requests.ledger().?.revision(), self.request, .{ .retry = .{
-            .workflow_id = self.request.model_operation_id.workflow_id,
-            .workflow_version = self.request.model_operation_id.workflow_version,
-            .operation_instance_id = self.request.model_operation_id.workflow_step_id,
-            .limit = .{ .value = 1 },
+            .authority = .{
+                .workflow_id = self.request.model_operation_id.workflow_id,
+                .workflow_version = self.request.model_operation_id.workflow_version,
+                .operation_instance_id = self.request.model_operation_id.workflow_step_id,
+                .limit = .{ .value = 1 },
+            },
+            .completed_retries = 0,
         } });
     }
 };

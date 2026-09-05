@@ -3,10 +3,7 @@ const identity = @import("../../domain/model_request_identity.zig");
 const pipeline = @import("../../domain/pipeline.zig");
 const provider_lifecycle = @import("../../domain/provider_operation_lifecycle.zig");
 
-pub const Error = accounting.ProposalError || provider_lifecycle.ValidationError || error{
-    ModelRequestLedgerRevisionConflict,
-    ModelRequestUnavailableForAttempt,
-};
+pub const Error = accounting.ProposalError || accounting.RequestError;
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
@@ -28,21 +25,7 @@ pub const Action = struct {
         request_id: *const identity.ModelRequestId,
         attempt: accounting.Attempt,
     ) Error!pipeline.NodeDelta {
-        if (!current_requests.revision().eql(expected_request_revision)) {
-            return error.ModelRequestLedgerRevisionConflict;
-        }
-        const current_record = current_requests.record(request_id) orelse {
-            return error.ModelRequestUnavailableForAttempt;
-        };
-        if (current_record.status == .terminal or
-            !current_accounting.stageRunEpochId().eql(current_record.model_request_id.stage_run_epoch_id))
-        {
-            return error.ModelRequestUnavailableForAttempt;
-        }
-        const canonical_request_id = current_requests.canonicalRequestId(request_id) orelse {
-            return error.ModelRequestUnavailableForAttempt;
-        };
-        try operations.validateRequestClosure(canonical_request_id);
+        const canonical_request_id = try accounting.validateRequest(current_accounting, current_requests, operations, expected_request_revision, request_id);
         const transition = try accounting.propose(
             current_accounting,
             expected_accounting_revision,

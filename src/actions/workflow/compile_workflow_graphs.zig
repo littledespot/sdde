@@ -62,6 +62,7 @@ pub const Action = struct {
                     .invalidates = entry.contract.invalidates,
                     .outcomes = entry.contract.outcomes,
                     .side_effect = entry.contract.side_effect,
+                    .runner_accounting = entry.contract.runner_accounting,
                     .gates = try compileGates(allocator, self.registry, entry.contract.gates),
                     .capabilities = entry.binding.capabilities(),
                     .retry_authority = retry_authority,
