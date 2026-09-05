@@ -46,8 +46,12 @@ profile in [ADR 0006](../decisions/0006-minimal-model-response.md#closed-result-
 Graph compilation rejects malformed, unsupported or unbounded schemas and the
 registry owns their immutable typed contracts. The pure `BuildModelRequestAction`
 and `ValidateStaticModelRequestCapacityAction` are implemented and tested through
-the fake provider. Production YAML registration, provider-native schema
-representability and response decoding/validation remain subsequent work.
+the fake provider. `ValidateProviderInvocationObservationAction` now validates
+the retained call association, usage and content safety and exposes sealed
+complete-candidate evidence. `DecodeModelEnvelopeAction` now parses that sealed
+input into an owned, read-only JSON object retaining the same association and
+compiled schema. Production YAML registration, provider-native schema
+representability and payload schema validation remain work.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -884,6 +888,41 @@ transport optimization: the engine validates the exact runner-owned
 observation/request association, then decodes and validates the complete compact
 result, semantic assertions and no-invention requirements. It never correlates
 from echoed IDs or attaches unbound bytes to the latest request.
+
+The observation validator joins the retained preflight request to its immutable
+invoked-operation ledger record, including binding and input identity. The
+exact input and compiled schema remain request-owned authority, never model
+echoes. Shared invocation, usage and UTF-8/byte validators supply the checks;
+no token/context ceiling, JSON parsing, wire-size proof or accounting mutation
+is introduced. Identity/usage rejection returns a typed error without evidence.
+Valid usage survives content rejection as `response_invalid` or
+`response_limit_exceeded`, with `response_received` delivery and no candidate.
+Other provider failures retain their exact cause/retry/delivery facts and have
+no fabricated usage. `request_limit_exceeded` must remain `not_sent`.
+
+One owned immutable evidence object retains the validated metadata and borrows
+the request and complete response bytes; those owners must outlive it. Only its
+complete branch exposes the sealed decoder input. Validation never consumes or
+frees the raw observation, including on rejection or allocation failure. Usage
+is available independently for the existing accounting action; evidence does
+not prove budget reconciliation or candidate schema validity.
+
+`DecodeModelEnvelopeAction` accepts only that sealed complete branch. It reuses
+the strict JSON syntax boundary with result-schema transport, accepts one object
+with optional JSON whitespace, and rejects duplicate decoded keys at every
+depth, malformed JSON, non-object roots, fences and trailing content. Parsing
+uses the request's existing output-byte bound and the schema profile's 64-level
+JSON nesting guard. Numeric lexemes remain exact; no rounding, coercion, JSON
+extraction, wrapper insertion or schema validation occurs here.
+
+The decoded candidate owns one parse tree and exposes only read-only object,
+array and scalar views. It borrows the original invocation evidence, whose
+request/graph/observation owners must outlive it; it creates no competing
+identity or schema authority. Rejection and allocation failure free partial
+trees without consuming that evidence or its response bytes. The separate
+`ValidateModelPayloadSchemaAction` must validate this tree against the retained
+compiled schema without reparsing; successful decoding alone grants no workflow
+authority. Production YAML binding remains a subsequent integration step.
 
 Explicit cancellation remains terminal `cancelled` and is propagated outside
 the failure union. Provider failure is never converted to the model-content

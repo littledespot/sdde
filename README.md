@@ -29,6 +29,8 @@ zig build test
 zig build test-model-result-schema
 zig build test-reference-preflight
 zig build test-feature-identity
+zig build test-transaction-id-ledger
+zig build test-transaction-id-ledger-codec
 zig build smoke
 zig build verify
 ```
@@ -50,3 +52,9 @@ feature or generate `spec.md`. Identity derivation requires an explicit YAML
 Unicode NFC and naming folds use pinned
 utf8proc compiled into the executable; `zig build` installs its license under
 `zig-out/share/licenses/utf8proc/` (see [ADR 0007](design/decisions/0007-unicode-normalization.md)).
+
+The shared transaction-ID ledger has in-memory owner/ID validation and immutable
+reserve/commit/retire candidates, plus a bounded parser and deterministic
+serializer for its [stored format](design/transaction-id-ledger-format.md).
+It does not persist IDs, recover journals, activate features, or authorize
+output writes.

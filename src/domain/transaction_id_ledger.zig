@@ -26,6 +26,11 @@ pub const Candidate = struct {
 pub const Limits = struct {
     maximum_records: u32,
     maximum_owner_bytes: u32,
+
+    pub fn validateCounts(self: Limits, records: usize, retired_ids: usize) ValidationError!void {
+        if (self.maximum_records == 0 or self.maximum_owner_bytes == 0) return error.InvalidTransactionLedgerLimits;
+        if (records > self.maximum_records or retired_ids > self.maximum_records) return error.TransactionLedgerLimitExceeded;
+    }
 };
 
 pub const ValidationError = error{
@@ -148,7 +153,11 @@ pub fn buildCandidate(
         .commit, .retire => |id| blk: {
             if (!id.storage_owner.eql(input.storage_owner)) return error.TransactionStorageOwnerMismatch;
             const record = current.record(id) orelse return error.TransactionNotFound;
-            if (record.status != .reserved) return error.InvalidTransactionTransition;
+            try validateStatusTransition(record.status, switch (transition.command) {
+                .commit => .committed,
+                .retire => .retired,
+                .reserve => unreachable,
+            });
             break :blk @intCast(id.ordinal.value - 1);
         },
     };
@@ -181,9 +190,7 @@ pub fn buildCandidate(
 }
 
 fn validate(candidate: Candidate, expected: identity.StorageOwner, prior: ?*const Ledger, limits: Limits) ValidationError!void {
-    if (limits.maximum_records == 0 or limits.maximum_owner_bytes == 0) return error.InvalidTransactionLedgerLimits;
-    if (candidate.reservations.len > limits.maximum_records or candidate.retired_transaction_ids.len > limits.maximum_records)
-        return error.TransactionLedgerLimitExceeded;
+    try limits.validateCounts(candidate.reservations.len, candidate.retired_transaction_ids.len);
     try validateStorageOwner(expected, limits);
     try validateStorageOwner(candidate.storage_owner, limits);
     if (!candidate.storage_owner.eql(expected)) return error.TransactionStorageOwnerMismatch;
@@ -223,19 +230,25 @@ fn validateSuccessor(current: *const Ledger, candidate: Candidate) ValidationErr
     if (!candidate.storage_owner.eql(previous.storage_owner)) return error.TransactionStorageOwnerMismatch;
     const next = std.math.add(u64, previous.revision.value, 1) catch return error.TransactionLedgerRevisionExhausted;
     if (candidate.revision.value != next) return error.TransactionLedgerRevisionConflict;
-    const added = candidate.reservations.len == previous.reservations.len + 1;
+    const added = candidate.reservations.len > previous.reservations.len and
+        candidate.reservations.len - previous.reservations.len == 1;
     if (!added and candidate.reservations.len != previous.reservations.len) return error.InvalidTransactionTransition;
     var changes: usize = 0;
     for (previous.reservations, candidate.reservations[0..previous.reservations.len]) |old, new| {
         if (!old.transaction_id.eql(new.transaction_id) or old.transaction_kind != new.transaction_kind)
             return error.InvalidTransactionTransition;
         if (old.status == new.status) continue;
-        if (added or old.status != .reserved or new.status == .reserved) return error.InvalidTransactionTransition;
+        if (added) return error.InvalidTransactionTransition;
+        try validateStatusTransition(old.status, new.status);
         changes += 1;
     }
     if (added) {
         if (candidate.reservations[previous.reservations.len].status != .reserved) return error.InvalidTransactionTransition;
     } else if (changes != 1) return error.InvalidTransactionTransition;
+}
+
+fn validateStatusTransition(previous: Status, next: Status) ValidationError!void {
+    if (previous != .reserved or next == .reserved) return error.InvalidTransactionTransition;
 }
 
 fn validateStorageOwner(owner: identity.StorageOwner, limits: Limits) ValidationError!void {

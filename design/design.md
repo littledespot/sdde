@@ -4171,6 +4171,11 @@ Before commit the engine validates:
 
 Every project/feature transaction first operates under the matching collection lock. Before a journal path is constructed, the engine loads and validates the collection-local `TransactionIdLedger`, assigns the next typed `TransactionId`, and atomically replaces/fsyncs the ledger with its `reserved` record. The sealed transaction and journal carry that exact identity and kind. This reservation protocol is independent of state-ID allocation and applies equally to activation, stage, review, task, task-outcome, checkpoint, and manual-verification transactions.
 
+The closed stored representation is defined in
+[Transaction-ID ledger format](transaction-id-ledger-format.md). Its codec
+binds owner references to the supplied collection context and reuses the shared
+ledger validator; decoding alone is not trusted storage or durability evidence.
+
 Every multi-entry stage or task transaction then uses this durable journal state machine:
 
 `OPEN -> PREPARED -> APPLYING -> COMMITTED -> CLEANED`

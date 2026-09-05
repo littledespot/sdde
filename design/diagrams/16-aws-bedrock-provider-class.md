@@ -206,7 +206,7 @@ classDiagram
     note for AWSBedrockProvider "PROPOSED ONLY: no src implementation exists; the environment-only API-key source is accepted"
     note for AWSBedrockEnvironmentAPIKeySource "Reads only AWS_BEARER_TOKEN_BEDROCK; no hardcoded key, fallback, reread, or refresh"
     note for AWSBedrockRuntimePort "No SDK, HTTP library, client fields, or concrete method signature has been selected"
-    note for IdentifiedProviderNeutralModelRequest "Pure request construction and static preflight are implemented using exact compiled schema authority; production YAML binding, candidate decoding and native-schema representability remain pending"
+    note for IdentifiedProviderNeutralModelRequest "Request construction, static preflight, response-association validation and strict candidate decoding are implemented using exact compiled schema authority; production YAML binding, payload schema validation and native-schema representability remain pending"
     note for ProviderAuthorizationSlot "The authorization adapter can deposit only into this slot; it receives no table lookup or consumption capability"
     note for ProviderOperationLifecycleRunner "Separate count and inference operations progress assigned to invoked to terminal; inference binds directly to request/input identity without counting. Effects are journal intent, not durability proof"
 ```

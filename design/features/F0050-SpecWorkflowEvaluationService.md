@@ -239,10 +239,22 @@ read-only contained-directory inspection, and deterministic feature-identity
 seeds through registered operations (F0100 Section 3.1). These allocate no
 feature, claim no identity availability, and read no reference contents.
 
+The shared transaction-ID ledger now validates closed in-memory snapshots and
+reserve/commit/retire successor candidates for project and feature owners
+(`src/domain/transaction_id_ledger.zig`). Tests cover monotonic IDs, immutable
+history, exact retirement projection, owner/kind/revision rejection, and bounded
+allocation failure. A bounded JSON parser and deterministic serializer now
+implement the [closed stored format](../transaction-id-ledger-format.md), using
+collection-relative owner binding and the same ledger validator. Round-trip,
+malformed-input, byte/record-limit, and allocation-failure tests cover both owner
+variants. Neither the codec nor the in-memory ledger supplies journal
+accounting, trusted file reads, locks, durable reservations, or commit evidence;
+registered persistence operations remain unfinished.
+
 Remaining:
 
-- feature collision/ownership/inventory, artifact authority, state-ID and transaction-ID
-  ledgers;
+- feature collision/ownership/inventory, artifact authority, state-ID ledgers,
+  and durable transaction-ID ledger integration;
 - project and feature WAL, locks, failpoints, recovery, and all-or-nothing stage
   transactions;
 - full workflow state and the `specifying`, clarification-pending, and

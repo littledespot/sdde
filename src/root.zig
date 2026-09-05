@@ -28,7 +28,11 @@ test {
     _ = @import("llm_provider_binding_test.zig");
     _ = @import("model_request_identity_test.zig");
     _ = @import("model_request_preparation_test.zig");
+    _ = @import("provider_invocation_validation_test.zig");
+    _ = @import("model_envelope_test.zig");
     _ = @import("model_attempt_accounting_test.zig");
+    _ = @import("transaction_id_ledger_test.zig");
+    _ = @import("transaction_id_ledger_codec_test.zig");
     _ = @import("provider_operation_lifecycle_test.zig");
     _ = @import("provider_authorization_test.zig");
     _ = @import("execution_reference_test.zig");

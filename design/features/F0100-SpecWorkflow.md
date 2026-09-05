@@ -162,6 +162,11 @@ contents and creates no feature, log, clarification, transaction, or artifact.
 Collision/ownership checks, recovery/activation, and complete corpus validation
 remain later work; an identity seed alone cannot authorize them.
 
+Shared in-memory transaction-ID ledger contracts, a bounded stored-format codec,
+and tests are implemented (F0050 Section 5.2). Their validated successor
+candidates are not durable reservation/commit evidence and do not extend this
+preflight's capabilities.
+
 ## 4. Required logical coverage
 
 The compiled registered contracts collectively cover:

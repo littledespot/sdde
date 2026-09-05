@@ -129,6 +129,22 @@ pub fn build(b: *std.Build) void {
     const request_preparation_step = b.step("test-model-request-preparation", "Test provider-neutral request construction and static preflight");
     request_preparation_step.dependOn(&b.addRunArtifact(request_preparation_tests).step);
 
+    const invocation_validation_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/provider_invocation_validation_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    const invocation_validation_step = b.step("test-provider-invocation-validation", "Test provider response association and candidate eligibility");
+    invocation_validation_step.dependOn(&b.addRunArtifact(invocation_validation_tests).step);
+
+    const model_envelope_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/model_envelope_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    const model_envelope_step = b.step("test-model-envelope", "Test strict model result decoding and retained invocation association");
+    model_envelope_step.dependOn(&b.addRunArtifact(model_envelope_tests).step);
+
     const reference_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/reference_preflight_test.zig"),
         .target = target,
@@ -148,6 +164,22 @@ pub fn build(b: *std.Build) void {
     const identity_step = b.step("test-feature-identity", "Test deterministic feature identity derivation");
     identity_step.dependOn(&b.addRunArtifact(identity_tests).step);
     identity_step.dependOn(&run_unicode_tests.step);
+
+    const transaction_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/transaction_id_ledger_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    const transaction_step = b.step("test-transaction-id-ledger", "Test in-memory transaction identity and ledger transitions");
+    transaction_step.dependOn(&b.addRunArtifact(transaction_tests).step);
+
+    const transaction_codec_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/transaction_id_ledger_codec_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    const transaction_codec_step = b.step("test-transaction-id-ledger-codec", "Test the closed transaction ledger stored format");
+    transaction_codec_step.dependOn(&b.addRunArtifact(transaction_codec_tests).step);
 
     const smoke_command = packaging_smoke.add(b, executable);
     const smoke_step = b.step("smoke", "Test the packaged executable in a clean directory");
