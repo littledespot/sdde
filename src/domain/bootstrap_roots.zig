@@ -151,6 +151,16 @@ pub const ValidatedConfiguredRoot = struct {
 pub const BootstrapRootRegistryId = struct {
     canonical_project_root: []const u8,
     contract_version: []const u8,
+
+    pub fn isValid(self: BootstrapRootRegistryId) bool {
+        return std.fs.path.isAbsolute(self.canonical_project_root) and
+            std.mem.eql(u8, self.contract_version, bootstrap_root_contract_version);
+    }
+
+    pub fn eql(self: BootstrapRootRegistryId, other: BootstrapRootRegistryId) bool {
+        return std.mem.eql(u8, self.canonical_project_root, other.canonical_project_root) and
+            std.mem.eql(u8, self.contract_version, other.contract_version);
+    }
 };
 
 pub const BootstrapRootRegistryCandidate = struct {

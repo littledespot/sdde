@@ -18,7 +18,7 @@ test "fake provider executes only after applied count and inference lifecycle tr
         .allocator = std.testing.allocator,
         .authorization_leases = fixture.leasePort(),
         .count_plan = .{ .counted = 10 },
-        .invocation_plan = .{ .complete = .{ .content = "{}", .output_tokens = 5 } },
+        .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 10, .output_tokens = 5 } },
     };
     try std.testing.expectError(error.ProviderOperationNotFound, fixture.ledger().requireInvoked(fixture.id(.input_token_count)));
     try std.testing.expectEqual(@as(usize, 0), fake.count_call_count);
@@ -29,13 +29,13 @@ test "fake provider executes only after applied count and inference lifecycle tr
     const observation = try fake.interface().countInputTokens(&fixture.provider_binding, &fixture.request, count_lease, count_operation);
     const evidence = try provider.ExactInputTokenCountEvidence.fromObservation(observation, fixture.request, fixture.provider_binding);
     _ = try fixture.change(.input_token_count, .{ .terminate = .{ .counted = evidence } });
-    _ = try fixture.change(.inference, .{ .assign_inference = evidence });
+    _ = try fixture.change(.inference, .{ .assign_inference = fixture.assignment() });
     try std.testing.expectError(error.ProviderOperationNotInvoked, fixture.ledger().requireInvoked(fixture.id(.inference)));
     try std.testing.expectEqual(@as(usize, 0), fake.invocation_call_count);
     const inference_lease = try fixture.prepare(.inference);
     _ = try fixture.invoke(.inference);
     const inference_operation = try fixture.ledger().requireInvoked(fixture.id(.inference));
-    var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, &evidence, inference_lease, inference_operation);
+    var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference_lease, inference_operation);
     defer result.deinit();
     try std.testing.expect(result == .completed);
     try std.testing.expect(result.completed.operation_id.eql(fixture.id(.inference)));
@@ -64,7 +64,7 @@ test "count and inference share one attempt and preserve immutable lifecycle sna
     try std.testing.expectEqual(@as(u64, 1000), applied.deadline_monotonic_ms);
     const terminal = try fixture.change(.input_token_count, .{ .terminate = .{ .counted = fixture.evidence() } });
     try std.testing.expectEqual(provider.ProviderDeliveryDisposition.response_received, terminal.phase.terminal_observed.delivery());
-    _ = try fixture.change(.inference, .{ .assign_inference = fixture.evidence() });
+    _ = try fixture.change(.inference, .{ .assign_inference = facts() });
     try std.testing.expect(fixture.ledger().record(fixture.id(.input_token_count)).?.state == .terminal);
     _ = try fixture.change(.inference, .{ .invoke = invocation });
     _ = try fixture.change(.inference, .{ .terminate = .completed });
@@ -74,43 +74,55 @@ test "count and inference share one attempt and preserve immutable lifecycle sna
     try std.testing.expectError(error.ProviderOperationNotInvoked, fixture.ledger().requireInvoked(fixture.id(.inference)));
 }
 
-test "inference requires successful terminal count and exact attempt binding input and value" {
+test "inference assigns directly without count and owns immutable binding input facts" {
     var fixture = try Fixture.init(std.testing.allocator);
     defer fixture.deinit();
-    try std.testing.expectError(error.InvalidProviderOperationCountEvidence, fixture.change(.inference, .{ .assign_inference = fixture.evidence() }));
-    _ = try fixture.change(.input_token_count, .{ .assign_count = facts() });
-    try std.testing.expectError(error.InvalidProviderOperationCountEvidence, fixture.change(.inference, .{ .assign_inference = fixture.evidence() }));
+    const before = fixture.ledger();
+    var input = "input".*;
+    var assignment = facts();
+    assignment.model_visible_input_id.bytes = &input;
+    _ = try fixture.change(.inference, .{ .assign_inference = assignment });
+    input[0] = 'X';
+    try std.testing.expect(before.record(fixture.id(.inference)) == null);
+    try std.testing.expect(fixture.ledger().record(fixture.id(.input_token_count)) == null);
+    try std.testing.expectEqualStrings("input", fixture.ledger().record(fixture.id(.inference)).?.model_visible_input_id.bytes);
     try fixture.invokeRequest();
-    _ = try fixture.change(.input_token_count, .{ .invoke = invocation });
-    try std.testing.expectError(error.InvalidProviderOperationCountEvidence, fixture.change(.inference, .{ .assign_inference = fixture.evidence() }));
-
-    var wrong = fixture.evidence();
-    wrong.model_visible_input_id.bytes = "different-input";
-    try std.testing.expectError(error.InvalidProviderOperationCountEvidence, fixture.change(.input_token_count, .{ .terminate = .{ .counted = wrong } }));
-    _ = try fixture.change(.input_token_count, .{ .terminate = .{ .counted = fixture.evidence() } });
-    inline for (0..5) |case| {
-        wrong = fixture.evidence();
-        switch (case) {
-            0 => wrong.count_operation_id.model_attempt_ordinal.value = 2,
-            1 => wrong.binding_id.registry_entry_id.ordinal = 2,
-            2 => wrong.model_visible_input_id.bytes = "different-input",
-            3 => wrong.input_tokens += 1,
-            4 => wrong.count_operation_id.kind = .inference,
-            else => unreachable,
-        }
-        try std.testing.expectError(error.InvalidProviderOperationCountEvidence, fixture.change(.inference, .{ .assign_inference = wrong }));
-    }
+    _ = try fixture.change(.inference, .{ .invoke = invocation });
+    _ = try fixture.change(.inference, .{ .terminate = .completed });
     try std.testing.expectEqual(@as(u64, 3), fixture.ledger().revision().value);
 }
 
-test "failed count cannot assign inference and cancellation preserves delivery" {
+test "optional count must close before another operation and cannot forge terminal evidence" {
+    var fixture = try Fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    _ = try fixture.change(.input_token_count, .{ .assign_count = facts() });
+    try std.testing.expectError(error.ProviderOperationStillOpen, fixture.change(.inference, .{ .assign_inference = facts() }));
+    try fixture.invokeRequest();
+    _ = try fixture.change(.input_token_count, .{ .invoke = invocation });
+    try std.testing.expectError(error.ProviderOperationStillOpen, fixture.change(.inference, .{ .assign_inference = facts() }));
+    inline for (0..4) |variant| {
+        var wrong = fixture.evidence();
+        switch (variant) {
+            0 => wrong.count_operation_id.model_attempt_ordinal.value = 2,
+            1 => wrong.binding_id.registry_entry_id.ordinal = 2,
+            2 => wrong.model_visible_input_id.bytes = "different-input",
+            3 => wrong.count_operation_id.kind = .inference,
+            else => unreachable,
+        }
+        try std.testing.expectError(error.InvalidProviderOperationCountEvidence, fixture.change(.input_token_count, .{ .terminate = .{ .counted = wrong } }));
+    }
+    _ = try fixture.change(.input_token_count, .{ .terminate = .{ .counted = fixture.evidence() } });
+    _ = try fixture.change(.inference, .{ .assign_inference = facts() });
+}
+
+test "failed optional count preserves delivery and does not authorize or prohibit inference" {
     inline for (std.enums.values(provider.ProviderDeliveryDisposition)) |delivery| {
         var fixture = try Fixture.init(std.testing.allocator);
         defer fixture.deinit();
         try fixture.startCount();
         const result = try fixture.change(.input_token_count, .{ .terminate = .{ .failed = fixture.failure(.input_token_count, delivery) } });
         try std.testing.expectEqual(delivery, result.phase.terminal_observed.delivery());
-        try std.testing.expectError(error.InvalidProviderOperationCountEvidence, fixture.change(.inference, .{ .assign_inference = fixture.evidence() }));
+        _ = try fixture.change(.inference, .{ .assign_inference = facts() });
         try std.testing.expectError(error.InvalidProviderOperationTransition, fixture.change(.input_token_count, .{ .terminate = .{ .cancelled = delivery } }));
     }
     inline for (std.enums.values(provider.ProviderDeliveryDisposition)) |delivery| {
@@ -136,7 +148,6 @@ test "assigned operations close only through not-sent preparation failure or can
         const effect = try fixture.change(.input_token_count, .{ .terminate = terminal });
         try std.testing.expectEqual(provider.ProviderDeliveryDisposition.not_sent, effect.phase.terminal_observed.delivery());
         try std.testing.expectEqual(@as(u32, 1), fixture.attempts.current().attemptsReserved(fixture.request));
-        try std.testing.expectError(error.InvalidProviderOperationCountEvidence, fixture.change(.inference, .{ .assign_inference = fixture.evidence() }));
         try fixture.requests.advance(fixture.requests.ledger().?.revision(), fixture.request, .assigned, .{ .terminal = if (cancelled) .cancelled else .not_invoked_authorization_failure });
     }
 }
@@ -159,7 +170,7 @@ test "operation lifecycle rejects skipped transitions repeated invocation and wr
     try std.testing.expectError(error.InvalidProviderOperationTransition, fixture.change(.input_token_count, .{ .terminate = .{ .preparation_failed = fixture.failure(.input_token_count, .not_sent) } }));
     try std.testing.expectError(error.InvalidProviderOperationTransition, fixture.change(.input_token_count, .{ .terminate = .{ .failed = fixture.failure(.inference, .not_sent) } }));
     _ = try fixture.change(.input_token_count, .{ .terminate = .{ .counted = fixture.evidence() } });
-    _ = try fixture.change(.inference, .{ .assign_inference = fixture.evidence() });
+    _ = try fixture.change(.inference, .{ .assign_inference = facts() });
     _ = try fixture.change(.inference, .{ .invoke = invocation });
     try std.testing.expectError(error.InvalidProviderOperationTransition, fixture.change(.inference, .{ .terminate = .{ .counted = fixture.evidence() } }));
     const stopped = try fixture.change(.inference, .{ .terminate = .{ .stopped = .output_limit } });
@@ -173,7 +184,7 @@ test "inference preparation failure cancellation and provider failure preserve t
         defer fixture.deinit();
         try fixture.startCount();
         _ = try fixture.change(.input_token_count, .{ .terminate = .{ .counted = fixture.evidence() } });
-        _ = try fixture.change(.inference, .{ .assign_inference = fixture.evidence() });
+        _ = try fixture.change(.inference, .{ .assign_inference = facts() });
         if (case >= 2) _ = try fixture.change(.inference, .{ .invoke = invocation });
         const terminal: lifecycle.Terminal = switch (case) {
             0 => .{ .preparation_failed = fixture.failure(.inference, .not_sent) },
@@ -266,9 +277,17 @@ test "foreign forged and unreserved operation identities fail closed" {
     var foreign_epoch = try lifecycle_runner.Runner.init(std.testing.allocator, .{ .bytes = "other-epoch" });
     defer foreign_epoch.deinit();
     try std.testing.expectError(error.ProviderOperationEpochConflict, foreign_epoch.advance(fixture.authority(), .initial, fixture.id(.input_token_count), null, .{ .assign_count = facts() }));
-    var invalid_facts = facts();
-    invalid_facts.binding_id.operation_id.workflow_version += 1;
-    try std.testing.expectError(error.InvalidProviderOperationBinding, fixture.change(.input_token_count, .{ .assign_count = invalid_facts }));
+    inline for (0..3) |variant| {
+        var invalid_facts = facts();
+        switch (variant) {
+            0 => invalid_facts.binding_id.operation_id.workflow_version += 1,
+            1 => invalid_facts.binding_id.slot_id.bytes = "",
+            2 => invalid_facts.model_visible_input_id.bytes = "",
+            else => unreachable,
+        }
+        try std.testing.expectError(error.InvalidProviderOperationBinding, fixture.change(.input_token_count, .{ .assign_count = invalid_facts }));
+        try std.testing.expectError(error.InvalidProviderOperationBinding, fixture.change(.inference, .{ .assign_inference = invalid_facts }));
+    }
     try fixture.requests.advance(fixture.requests.ledger().?.revision(), fixture.request, .assigned, .{ .terminal = .not_invoked_authorization_failure });
     try std.testing.expectError(error.ProviderOperationRequestUnavailable, fixture.change(.input_token_count, .{ .assign_count = facts() }));
 }
@@ -301,7 +320,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     defer fixture.deinit();
     try fixture.startCount();
     _ = try fixture.change(.input_token_count, .{ .terminate = .{ .counted = fixture.evidence() } });
-    _ = try fixture.change(.inference, .{ .assign_inference = fixture.evidence() });
+    _ = try fixture.change(.inference, .{ .assign_inference = facts() });
     _ = try fixture.change(.inference, .{ .invoke = invocation });
     const before = fixture.ledger();
     _ = fixture.change(.inference, .{ .terminate = .completed }) catch |err| {

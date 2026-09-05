@@ -28,6 +28,7 @@ zig build lint
 zig build test
 zig build test-model-result-schema
 zig build test-reference-preflight
+zig build test-feature-identity
 zig build smoke
 zig build verify
 ```
@@ -42,7 +43,10 @@ after a successful build.
 Concrete domain operations and the full initial SDD workflow suite remain
 incremental work under `design/design.md` and their feature contracts.
 
-Specify's registered invocation and read-only reference-selector preflight are
-implemented; they do not yet generate `spec.md`. Unicode NFC uses pinned
+Specify's registered invocation, read-only reference-selector preflight, and
+deterministic identity derivation are implemented; they do not activate a
+feature or generate `spec.md`. Identity derivation requires an explicit YAML
+`max-length` (see [ADR 0008](design/decisions/0008-feature-naming-policy.md)).
+Unicode NFC and naming folds use pinned
 utf8proc compiled into the executable; `zig build` installs its license under
 `zig-out/share/licenses/utf8proc/` (see [ADR 0007](design/decisions/0007-unicode-normalization.md)).

@@ -13,6 +13,7 @@ const reference = @import("../application/reference_workflow_runner.zig");
 const reference_values = @import("../application/reference_workflow_values.zig");
 const normalizer = @import("../ports/unicode_normalizer.zig");
 const reference_source = @import("../ports/reference_directory_inspector.zig");
+const identity = @import("../application/feature_identity_workflow.zig");
 
 /// Composition of native implementations, not a workflow graph. No setup action
 /// executes until the selected YAML reaches its registered operation.
@@ -32,7 +33,8 @@ pub const Assembly = struct {
     normalize_selector: reference.NormalizeSelector,
     validate_selector: reference.ValidateSelector,
     inspect_directory: reference.InspectDirectory,
-    entries: [core.entries.len + 15]operations.Entry,
+    derive_identity: identity.Derive,
+    entries: [core.entries.len + 16]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector) void {
@@ -52,6 +54,7 @@ pub const Assembly = struct {
             .normalize_selector = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .validate_selector = .{ .allocator = allocator },
             .inspect_directory = .{ .allocator = allocator, .action = .{ .inspector = directory_inspector } },
+            .derive_identity = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .entries = undefined,
             .registry = undefined,
         };
@@ -71,6 +74,7 @@ pub const Assembly = struct {
             entry(reference.NormalizeSelector, &self.normalize_selector),
             entry(reference.ValidateSelector, &self.validate_selector),
             entry(reference.InspectDirectory, &self.inspect_directory),
+            entry(identity.Derive, &self.derive_identity),
         };
         self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{} };
     }
@@ -83,7 +87,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = values.schemas ++ reference_values.schemas;
+const schemas = values.schemas ++ reference_values.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{identity.seed_schema};
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.toolchain@1",
     .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },
@@ -109,6 +113,7 @@ fn entry(comptime T: type, context: *T) operations.Entry {
         .contract = .{
             .id = contract.id,
             .kind = .step,
+            .parameters = if (@hasDecl(T, "parameters")) &T.parameters else &.{},
             .requires = contract.requires,
             .optional = contract.optional,
             .produces = contract.produces,

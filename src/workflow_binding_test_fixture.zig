@@ -26,6 +26,6 @@ fn count(_: *provider_port.Context, _: *const provider_binding.ValidatedProvider
     return error.Cancelled;
 }
 
-fn invoke(_: *provider_port.Context, _: *const provider_binding.ValidatedProviderModelBinding, _: *const provider_operation.IdentifiedProviderNeutralModelRequest, _: *const provider_operation.ExactInputTokenCountEvidence, _: *const provider_operation.ValidatedProviderAuthorizationLeaseRef, _: *const provider_operation.InvokedProviderOperation) provider_port.Error!provider_operation.ProviderInvocationObservation {
+fn invoke(_: *provider_port.Context, _: *const provider_binding.ValidatedProviderModelBinding, _: *const provider_operation.IdentifiedProviderNeutralModelRequest, _: *const provider_operation.ValidatedProviderAuthorizationLeaseRef, _: *const provider_operation.InvokedProviderOperation) provider_port.Error!provider_operation.ProviderInvocationObservation {
     return error.Cancelled;
 }

@@ -10,13 +10,14 @@ test "fake provider conforms to count and inference through the sole interface" 
     var fake = makeFake(&fixture);
     fake.invocation_plan = .{ .complete = .{
         .content = "{\"schemaVersion\":\"model-envelope/v1\"}",
+        .input_tokens = 10,
         .output_tokens = 5,
         .provider_latency_ms = 7,
     } };
     const evidence = try countEvidence(&fixture, &fake);
     try std.testing.expectEqual(@as(u64, 10), evidence.input_tokens);
     const inference = try fixture.finishCountAndStartInference(evidence);
-    var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, &evidence, inference.reference, inference.invoked);
+    var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked);
     defer result.deinit();
     switch (result) {
         .completed => |completed| {
@@ -40,6 +41,78 @@ test "fake provider conforms to count and inference through the sole interface" 
     try std.testing.expectEqual(@as(usize, 2), fixture.preloader.destroyed_count);
 }
 
+test "actual fake-provider usage may overshoot and prevents another API call" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    var tokens = @import("application/workflow_token_accounting_runner.zig").Runner.init(std.testing.allocator, .{ .value = 14 });
+    defer tokens.deinit();
+    var fake = makeFake(&fixture);
+    fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 10, .output_tokens = 5 } };
+    try tokens.check();
+    const evidence = try countEvidence(&fixture, &fake);
+    const inference = try fixture.finishCountAndStartInference(evidence);
+    try tokens.check();
+    var response = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked);
+    defer response.deinit();
+    const actual = response.completed.raw_result.complete.usage;
+    try std.testing.expectError(error.WorkflowTokenBudgetExceeded, tokens.reconcile(.initial, inference.invoked.id, .{ .exact_usage = actual }));
+    try std.testing.expectEqual(@as(u128, 15), tokens.current().committed());
+    try std.testing.expectError(error.WorkflowTokenBudgetExceeded, tokens.check());
+    try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
+    try std.testing.expectEqual(@as(usize, 1), fake.count_call_count);
+}
+
+test "inference needs no counter and preserves provider-reported large usage and limit stops" {
+    for (0..3) |variant| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        fixture.registry_entry.capabilities.input_token_count = false;
+        fixture.registry_entry.capabilities.exact_token_counter = .unavailable;
+        var fake = makeFake(&fixture);
+        fake.count_plan = .{ .failed = .{
+            .cause = .exact_token_count_unavailable,
+            .retry_class = .never,
+            .delivery = .not_sent,
+        } };
+        fake.invocation_plan = if (variant == 0)
+            .{ .complete = .{ .content = "{}", .input_tokens = 1_000_000, .output_tokens = 500_000 } }
+        else
+            .{ .stopped = .{ .reason = if (variant == 1) .output_limit else .context_limit, .input_tokens = 1_000_000, .output_tokens = 500_000 } };
+        const inference = try fixture.startInference();
+        try std.testing.expect(fixture.ledger().record(fixture.id(.input_token_count)) == null);
+        var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked);
+        defer result.deinit();
+        const usage = switch (result.completed.raw_result) {
+            .complete => |value| value.usage,
+            .stopped => |value| value.usage,
+        };
+        try std.testing.expectEqual(@as(u64, 1_500_000), usage.total_tokens);
+        try std.testing.expectEqual(@as(usize, 0), fake.count_call_count);
+        try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
+        try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
+    }
+}
+
+test "explicit unsupported counting rejects before send without disabling inference" {
+    inline for (.{ false, true }) |count_supported| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        fixture.registry_entry.capabilities.input_token_count = count_supported;
+        fixture.registry_entry.capabilities.exact_token_counter = .unavailable;
+        try std.testing.expect(fixture.request.matchesBinding(fixture.provider_binding));
+        var fake = makeFake(&fixture);
+        const count = try fixture.startCount();
+        const result = try fake.interface().countInputTokens(&fixture.provider_binding, &fixture.request, count.reference, count.invoked);
+        try std.testing.expectEqual(operation.ProviderFailureCause.request_rejected, result.failed.cause);
+        try std.testing.expectEqual(operation.ProviderDeliveryDisposition.not_sent, result.failed.delivery);
+        try std.testing.expectEqual(@as(usize, 0), fake.effect_count);
+        try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
+    }
+}
+
 test "provider request rejects malformed identity content controls and limits" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
@@ -60,7 +133,7 @@ test "provider request rejects malformed identity content controls and limits" {
     try std.testing.expectError(error.InvalidProviderNeutralModelRequest, operation.IdentifiedProviderNeutralModelRequest.init(invalid));
 }
 
-test "exact count evidence rejects failures mismatches and exhausted capacity" {
+test "optional count evidence validates association without imposing token capacity" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
@@ -77,9 +150,9 @@ test "exact count evidence rejects failures mismatches and exhausted capacity" {
         .model_visible_input_id = fixture.request.model_visible_input_id,
         .input_tokens = 81,
     } };
-    try std.testing.expectError(error.InvalidExactTokenCountEvidence, operation.ExactInputTokenCountEvidence.fromObservation(counted, fixture.request, fixture.provider_binding));
-    counted.counted.input_tokens = 101;
-    try std.testing.expectError(error.InvalidExactTokenCountEvidence, operation.ExactInputTokenCountEvidence.fromObservation(counted, fixture.request, fixture.provider_binding));
+    _ = try operation.ExactInputTokenCountEvidence.fromObservation(counted, fixture.request, fixture.provider_binding);
+    counted.counted.input_tokens = std.math.maxInt(u64);
+    _ = try operation.ExactInputTokenCountEvidence.fromObservation(counted, fixture.request, fixture.provider_binding);
     counted.counted.input_tokens = 10;
     counted.counted.model_visible_input_id = operation.ModelVisibleInputId.parse("other-input").?;
     try std.testing.expectError(error.InvalidExactTokenCountEvidence, operation.ExactInputTokenCountEvidence.fromObservation(counted, fixture.request, fixture.provider_binding));
@@ -137,10 +210,10 @@ test "noncandidate stops carry no content" {
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         var fake = makeFake(&fixture);
-        fake.invocation_plan = .{ .stopped = .{ .reason = reason, .output_tokens = 0 } };
+        fake.invocation_plan = .{ .stopped = .{ .reason = reason, .input_tokens = 10, .output_tokens = 0 } };
         const evidence = try countEvidence(&fixture, &fake);
         const inference = try fixture.finishCountAndStartInference(evidence);
-        var stopped = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, &evidence, inference.reference, inference.invoked);
+        var stopped = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked);
         defer stopped.deinit();
         switch (stopped) {
             .completed => |completed| switch (completed.raw_result) {
@@ -168,7 +241,7 @@ test "provider cancellation stays distinct and destroys its consumed authorizati
             const evidence = try countEvidence(&fixture, &fake);
             fake.invocation_plan = .cancelled;
             const inference = try fixture.finishCountAndStartInference(evidence);
-            try std.testing.expectError(error.Cancelled, fake.interface().invoke(&fixture.provider_binding, &fixture.request, &evidence, inference.reference, inference.invoked));
+            try std.testing.expectError(error.Cancelled, fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked));
             try std.testing.expectEqual(@as(usize, 2), fixture.preloader.destroyed_count);
         }
     }
@@ -177,9 +250,9 @@ test "provider cancellation stays distinct and destroys its consumed authorizati
 test "fake provider maps malformed and over-limit output to closed failures" {
     const invalid_utf8 = [_]u8{0xff};
     const cases = [_]struct { plan: fake_provider.CompletePlan, cause: operation.ProviderFailureCause }{
-        .{ .plan = .{ .content = &invalid_utf8, .output_tokens = 1 }, .cause = .response_invalid },
-        .{ .plan = .{ .content = "this response exceeds the configured byte ceiling", .output_tokens = 1 }, .cause = .response_limit_exceeded },
-        .{ .plan = .{ .content = "{}", .output_tokens = 21 }, .cause = .response_limit_exceeded },
+        .{ .plan = .{ .content = &invalid_utf8, .input_tokens = 10, .output_tokens = 1 }, .cause = .response_invalid },
+        .{ .plan = .{ .content = "this response exceeds the configured byte ceiling", .input_tokens = 10, .output_tokens = 1 }, .cause = .response_limit_exceeded },
+        .{ .plan = .{ .content = "{}", .input_tokens = std.math.maxInt(u64), .output_tokens = 1 }, .cause = .response_invalid },
     };
     for (cases) |case| {
         var fixture: Fixture = undefined;
@@ -189,7 +262,7 @@ test "fake provider maps malformed and over-limit output to closed failures" {
         fake.invocation_plan = .{ .complete = case.plan };
         const evidence = try countEvidence(&fixture, &fake);
         const inference = try fixture.finishCountAndStartInference(evidence);
-        var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, &evidence, inference.reference, inference.invoked);
+        var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked);
         defer result.deinit();
         try expectFailure(result, case.cause, .response_received);
         try std.testing.expectEqual(@as(usize, 2), fixture.preloader.destroyed_count);
@@ -208,7 +281,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     fake.allocator = allocator;
     const evidence = try countEvidence(&fixture, &fake);
     const inference = try fixture.finishCountAndStartInference(evidence);
-    var result = fake.interface().invoke(&fixture.provider_binding, &fixture.request, &evidence, inference.reference, inference.invoked) catch |err| {
+    var result = fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked) catch |err| {
         try std.testing.expectEqual(fixture.preloader.prepared_count, fixture.preloader.destroyed_count);
         return err;
     };
@@ -222,7 +295,7 @@ fn makeFake(fixture: *Fixture) fake_provider.FakeLLMProvider {
         .allocator = std.testing.allocator,
         .authorization_leases = fixture.leasePort(),
         .count_plan = .{ .counted = 10 },
-        .invocation_plan = .{ .complete = .{ .content = "{}", .output_tokens = 1 } },
+        .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 10, .output_tokens = 1 } },
     };
 }
 

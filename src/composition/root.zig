@@ -90,7 +90,7 @@ fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, p
     var toolchain_parser_adapter: toolchain_documents.Adapter = .{};
     var reference_adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
     var native_bindings: @import("native_workflow_operations.zig").Assembly = undefined;
-    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_nfc").normalize }, reference_adapter.inspector());
+    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc, .fold_fn = @import("unicode_normalization").fold }, reference_adapter.inspector());
     var boot = runInProjectWithRegistry(io, allocator, project_root, runtime, &native_bindings.registry);
     if (boot == .ready) native_bindings.bindRoots(boot.ready.roots.registry());
     defer boot.deinit();
@@ -617,7 +617,7 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     var parser: toolchain_documents.Adapter = .{};
     var reference_adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
     var operations: @import("native_workflow_operations.zig").Assembly = undefined;
-    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_nfc").normalize }, reference_adapter.inspector());
+    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc, .fold_fn = @import("unicode_normalization").fold }, reference_adapter.inspector());
     var boot = runInProjectWithRegistry(io, std.testing.allocator, project_root, .{}, &operations.registry);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
@@ -784,6 +784,80 @@ test "reference preflight cancellation stops safely at each runtime checkpoint" 
         try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.execution);
     }
     return error.ReferencePreflightNeverCompleted;
+}
+
+test "identity YAML rejects missing unknown mistyped duplicate and out-of-range parameters" {
+    const io = std.testing.io;
+    const rejected = [_][]const u8{
+        "with: {}",                           "with: { max-length: 0 }",
+        "with: { max-length: -1 }",           "with: { max-length: 256 }",
+        "with: { max-length: true }",         "with: { max-length: \"64\" }",
+        "with: { max-length: 64, other: 1 }", "with: { max-length: 64, max-length: 32 }",
+    };
+    for (rejected) |parameters| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeReferencePreflightFixture(io, project.dir);
+        const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/reference-preflight.workflow.yaml"), "with: { max-length: 64 }", parameters);
+        defer std.testing.allocator.free(changed);
+        try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
+        const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", "anything" });
+        try std.testing.expect(result == .bootstrap_failed);
+    }
+}
+
+test "identity runs under capability-free YAML and obeys its configured maximum" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeReferencePreflightFixture(io, project.dir);
+    const fixture =
+        \\schema: workflow/v1
+        \\id: identity-check
+        \\version: 1
+        \\shortcode: IDEN
+        \\invoke: specify-invocation@1
+        \\policy: core.capability-free@1
+        \\start: normalize
+        \\steps:
+        \\  normalize:
+        \\    use: normalize-reference-selector@1
+        \\    on: { ok: validate, failed: end.failed }
+        \\  validate:
+        \\    use: validate-reference-selector@1
+        \\    on: { ok: identify, failed: end.failed }
+        \\  identify:
+        \\    use: derive-feature-identity@1
+        \\    with: { max-length: 3 }
+        \\    on: { ok: end.ok, failed: end.failed }
+    ;
+    try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = fixture });
+    // "console" truncates to the portable-reserved "con" at 3, but "cons" at 4.
+    const arguments: []const []const u8 = &.{ "identity-check", "--reference", "console" };
+    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, arguments).execution);
+    const changed = try std.mem.replaceOwned(u8, std.testing.allocator, fixture, "max-length: 3", "max-length: 4");
+    defer std.testing.allocator.free(changed);
+    try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, arguments).execution);
+    // Pure derivation does not require or materialize the selected directory.
+    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "references", .{}));
+    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "specs", .{}));
+}
+
+test "identity failures publish no artifacts and cannot become successful preflight" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeReferencePreflightFixture(io, project.dir);
+    for ([_][]const u8{ "日本語", "ＣＯＮ", "---" }) |selector| {
+        const path = try std.fmt.allocPrint(std.testing.allocator, "references/{s}", .{selector});
+        defer std.testing.allocator.free(path);
+        try project.dir.createDirPath(io, path);
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", selector }).execution);
+    }
+    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "specs", .{}));
+    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, ".sdd/workflows/features", .{}));
+    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, ".sdd/workflows/transactions", .{}));
 }
 
 const second_workflow_same_shortcode =

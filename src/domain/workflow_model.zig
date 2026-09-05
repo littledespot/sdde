@@ -15,8 +15,6 @@ pub const Requirements = struct {
 pub const parameters = [_]operation.ParameterDescriptor{
     .{ .id = "input-bytes", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 1, .integer_max = std.math.maxInt(u32) },
     .{ .id = "output-bytes", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 1, .integer_max = std.math.maxInt(u32) },
-    .{ .id = "input-tokens", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 1 },
-    .{ .id = "output-tokens", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 1 },
     .{ .id = "response-mode", .kind = .enumeration, .required = true, .workflow_definition_safe = true, .allowed_values = &.{ "prompt-only", "native-schema" } },
     .{ .id = "temperature", .kind = .integer, .required = false, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 1000 },
 };
@@ -67,8 +65,6 @@ pub fn resolve(
     var capacity = limits.Capacity.intersect(engine_capacity, operation_capacity) orelse return null;
     capacity.canonical.maximum_input_bytes = @intCast(@min(capacity.canonical.maximum_input_bytes, integer(values, "input-bytes", std.math.maxInt(u32)) orelse return null));
     capacity.canonical.maximum_output_bytes = @intCast(@min(capacity.canonical.maximum_output_bytes, integer(values, "output-bytes", std.math.maxInt(u32)) orelse return null));
-    capacity.canonical.maximum_input_tokens = @min(capacity.canonical.maximum_input_tokens, integer(values, "input-tokens", std.math.maxInt(i64)) orelse return null);
-    capacity.canonical.maximum_output_tokens = @min(capacity.canonical.maximum_output_tokens, integer(values, "output-tokens", std.math.maxInt(i64)) orelse return null);
     if (!capacity.isValid()) return null;
     const mode = find(values, "response-mode") orelse return null;
     if (mode != .enumeration) return null;

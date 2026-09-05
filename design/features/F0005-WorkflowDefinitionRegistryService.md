@@ -399,9 +399,10 @@ service is published.
 ## 7. Registered-operation graph compilation
 
 Contracts requiring model binding additionally require explicit positive `input-bytes`,
-`output-bytes`, `input-tokens`, `output-tokens`, and `response-mode` parameters.
+`output-bytes` and `response-mode` parameters. Retired per-operation token-limit
+parameters are rejected; only the execution actual-usage budget limits tokens.
 The compiler projects their typed requirements into each model step using the
-existing registry's engine and operation capacity facts. Immutable storage
+existing registry's engine and operation memory/transport safety facts. Immutable storage
 retains that projection; the runner rejects divergence from its registered
 contract before invoking the step. F0006 owns capability compatibility and the
 final intersection with the selected catalogue model. These per-operation

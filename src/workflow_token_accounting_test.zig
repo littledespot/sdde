@@ -1,16 +1,15 @@
 const std = @import("std");
-const reserve_action = @import("actions/model/reserve_workflow_token_budget.zig");
+const check_action = @import("actions/model/check_workflow_token_budget.zig");
 const reconcile_action = @import("actions/model/reconcile_workflow_token_usage.zig");
 const token_runner = @import("application/workflow_token_accounting_runner.zig");
 const request_runner = @import("application/model_request_identity_runner.zig");
-const binding = @import("domain/llm_provider_binding.zig");
 const identity = @import("domain/model_request_identity.zig");
 const operation = @import("domain/llm_provider_operation.zig");
 const accounting = @import("domain/workflow_token_accounting.zig");
 const pipeline = @import("domain/pipeline.zig");
 const workflow = @import("domain/workflow.zig");
 
-test "workflow executions initialize independent total-token ledgers" {
+test "actual usage accumulates across retries and executions remain isolated" {
     var fixture = try Fixture.init();
     defer fixture.deinit();
     var first = token_runner.Runner.init(std.testing.allocator, .{ .value = 100 });
@@ -18,115 +17,112 @@ test "workflow executions initialize independent total-token ledgers" {
     var second = token_runner.Runner.init(std.testing.allocator, .{ .value = 100 });
     defer second.deinit();
 
-    try first.reserve(.initial, fixture.inferenceId(1), fixture.countEvidence(1, 20), 30);
-    try std.testing.expectEqual(@as(u64, 50), first.current().reserved());
-    try std.testing.expectEqual(@as(u64, 0), second.current().reserved());
-    try std.testing.expectEqual(@as(u64, 100), second.current().totalTokenBudget().value);
+    try first.check();
+    try first.reconcile(.initial, fixture.inferenceId(1), usage(20, 10));
+    try first.check();
+    try first.reconcile(.{ .value = 1 }, fixture.inferenceId(2), usage(30, 5));
+    try std.testing.expectEqual(@as(u128, 65), first.current().committed());
+    try std.testing.expectEqual(@as(u128, 0), second.current().committed());
+    try second.check();
 }
 
-test "reservation blocks before exceeding the execution budget" {
+test "overshooting call records all usage before error and blocks subsequent calls" {
     var fixture = try Fixture.init();
     defer fixture.deinit();
     var runner = token_runner.Runner.init(std.testing.allocator, .{ .value = 50 });
     defer runner.deinit();
 
-    try runner.reserve(.initial, fixture.inferenceId(1), fixture.countEvidence(1, 20), 30);
-    try std.testing.expectError(
-        error.WorkflowTokenBudgetExceeded,
-        runner.reserve(.{ .value = 1 }, fixture.inferenceId(2), fixture.countEvidence(2, 1), 1),
-    );
-    try std.testing.expectEqual(@as(u64, 1), runner.current().revision().value);
-    try std.testing.expectEqual(@as(u64, 50), runner.current().reserved());
-
-    var overflow = token_runner.Runner.init(std.testing.allocator, .{ .value = std.math.maxInt(u64) });
-    defer overflow.deinit();
-    try std.testing.expectError(
-        error.WorkflowTokenBudgetExceeded,
-        overflow.reserve(.initial, fixture.inferenceId(3), fixture.countEvidence(3, std.math.maxInt(u64)), 1),
-    );
-    try std.testing.expect(accounting.TotalTokenBudget.init(0) == null);
+    try runner.check();
+    try runner.reconcile(.initial, fixture.inferenceId(1), usage(20, 10));
+    try runner.check(); // No maximum-output reservation or estimate.
+    try std.testing.expectError(error.WorkflowTokenBudgetExceeded, runner.reconcile(.{ .value = 1 }, fixture.inferenceId(2), usage(15, 25)));
+    try std.testing.expectEqual(@as(u128, 70), runner.current().committed());
+    try std.testing.expectEqual(@as(u64, 2), runner.current().revision().value);
+    try std.testing.expectError(error.WorkflowTokenBudgetExceeded, runner.check());
+    try std.testing.expectError(error.TokenUsageAlreadyAccounted, runner.reconcile(.{ .value = 2 }, fixture.inferenceId(2), usage(15, 25)));
+    try std.testing.expectEqual(@as(u128, 70), runner.current().committed());
 }
 
-test "exact usage commits while not-sent releases and ambiguous delivery retains" {
+test "exact budget permits the current result but no subsequent model call" {
     var fixture = try Fixture.init();
     defer fixture.deinit();
-    var runner = token_runner.Runner.init(std.testing.allocator, .{ .value = 200 });
+    var runner = token_runner.Runner.init(std.testing.allocator, .{ .value = 50 });
     defer runner.deinit();
-
-    const exact = fixture.inferenceId(1);
-    try runner.reserve(.initial, exact, fixture.countEvidence(1, 20), 30);
-    try runner.reconcile(.{ .value = 1 }, exact, .{ .exact_usage = operation.ProviderUsage.init(20, 10, 30).? });
-    try std.testing.expectEqual(@as(u64, 30), runner.current().committed());
-    try std.testing.expectEqual(@as(u64, 0), runner.current().reserved());
-    try std.testing.expectError(
-        error.TokenReservationAlreadyReconciled,
-        runner.reconcile(.{ .value = 2 }, exact, .not_sent),
-    );
-
-    const not_sent = fixture.inferenceId(2);
-    try runner.reserve(.{ .value = 2 }, not_sent, fixture.countEvidence(2, 15), 25);
-    try runner.reconcile(.{ .value = 3 }, not_sent, .not_sent);
-    try std.testing.expectEqual(@as(u64, 0), runner.current().reserved());
-
-    const ambiguous = fixture.inferenceId(3);
-    try runner.reserve(.{ .value = 4 }, ambiguous, fixture.countEvidence(3, 10), 20);
-    try runner.reconcile(.{ .value = 5 }, ambiguous, .retain);
-    try std.testing.expectEqual(@as(u64, 30), runner.current().reserved());
-    try std.testing.expectEqual(@as(u64, 30), runner.current().committed());
+    try runner.reconcile(.initial, fixture.inferenceId(1), usage(20, 30));
+    try std.testing.expectEqual(accounting.BudgetStatus.exhausted, runner.current().status());
+    try std.testing.expectError(error.WorkflowTokenBudgetExceeded, runner.check());
 }
 
-test "reservation rejects mismatched count evidence and invalid exact usage" {
+test "unknown usage blocks without inventing a charge and not-sent adds none" {
     var fixture = try Fixture.init();
     defer fixture.deinit();
     var runner = token_runner.Runner.init(std.testing.allocator, .{ .value = 100 });
     defer runner.deinit();
-
-    try std.testing.expectError(
-        error.InvalidTokenReservation,
-        runner.reserve(.initial, fixture.inferenceId(1), fixture.countEvidence(2, 10), 20),
-    );
-    const inference = fixture.inferenceId(1);
-    try runner.reserve(.initial, inference, fixture.countEvidence(1, 10), 20);
-    try std.testing.expectError(
-        error.InvalidProviderTokenUsage,
-        runner.reconcile(.{ .value = 1 }, inference, .{ .exact_usage = .{
-            .input_tokens = 10,
-            .output_tokens = 30,
-            .total_tokens = 40,
-        } }),
-    );
+    try runner.reconcile(.initial, fixture.inferenceId(1), .not_sent);
+    try runner.check();
+    try std.testing.expectError(error.ProviderTokenUsageUnavailable, runner.reconcile(.{ .value = 1 }, fixture.inferenceId(2), .unavailable));
+    try std.testing.expectEqual(@as(u128, 0), runner.current().committed());
+    try std.testing.expectError(error.ProviderTokenUsageUnavailable, runner.check());
 }
 
-test "token actions only propose their declared runner transitions" {
+test "usage validation rejects malformed totals count operations stale and duplicate reports" {
     var fixture = try Fixture.init();
     defer fixture.deinit();
-    var ledger = accounting.Ledger.init(std.testing.allocator, .{ .value = 100 }).?;
-    defer ledger.deinit();
-    const inference = fixture.inferenceId(1);
-    const reserve_delta = try (reserve_action.Action{}).execute(
-        &ledger,
-        .initial,
-        inference,
-        fixture.countEvidence(1, 10),
-        20,
-    );
-    try std.testing.expectEqual(@as(u64, 0), ledger.revision().value);
-    const empty = pipeline.DataShape.init(&.{});
-    _ = try empty.applyDelta(reserve_action.Action.contract, &reserve_delta);
-    const reservation = switch (reserve_delta.runner_accounting_transition.?) {
-        .reserve_workflow_tokens => |value| value,
-        else => unreachable,
-    };
-    try ledger.applyReservation(reservation);
+    var runner = token_runner.Runner.init(std.testing.allocator, .{ .value = 100 });
+    defer runner.deinit();
+    const id = fixture.inferenceId(1);
+    for ([_]u64{ 0, 10, 29, 31 }) |total| {
+        try std.testing.expectError(error.InvalidProviderTokenUsage, runner.reconcile(.initial, id, .{ .exact_usage = .{
+            .input_tokens = 20,
+            .output_tokens = 10,
+            .total_tokens = total,
+        } }));
+    }
+    try std.testing.expect(operation.ProviderUsage.init(std.math.maxInt(u64), 1, std.math.maxInt(u64)) == null);
+    var invalid = id;
+    invalid.kind = .input_token_count;
+    try std.testing.expectError(error.InvalidTokenAccountingOperation, runner.reconcile(.initial, invalid, usage(0, 0)));
+    invalid = id;
+    invalid.model_attempt_ordinal.value = 0;
+    try std.testing.expectError(error.InvalidTokenAccountingOperation, runner.reconcile(.initial, invalid, .not_sent));
+    try runner.reconcile(.initial, id, usage(20, 10));
+    try std.testing.expectError(error.TokenAccountingRevisionConflict, runner.reconcile(.initial, fixture.inferenceId(2), usage(1, 1)));
+    try std.testing.expectError(error.TokenUsageAlreadyAccounted, runner.reconcile(.{ .value = 1 }, id, .not_sent));
+    try std.testing.expectEqual(@as(u128, 30), runner.current().committed());
+}
 
-    const reconcile_delta = try (reconcile_action.Action{}).execute(
-        &ledger,
-        .{ .value = 1 },
-        inference,
-        .not_sent,
-    );
-    _ = try empty.applyDelta(reconcile_action.Action.contract, &reconcile_delta);
-    try std.testing.expectEqual(@as(u64, 1), ledger.revision().value);
+test "large actual totals cannot wrap into an available budget" {
+    var fixture = try Fixture.init();
+    defer fixture.deinit();
+    var runner = token_runner.Runner.init(std.testing.allocator, .{ .value = std.math.maxInt(u64) });
+    defer runner.deinit();
+    try runner.reconcile(.initial, fixture.inferenceId(1), usage(std.math.maxInt(u64) - 1, 0));
+    try runner.check();
+    try std.testing.expectError(error.WorkflowTokenBudgetExceeded, runner.reconcile(.{ .value = 1 }, fixture.inferenceId(2), usage(2, 1)));
+    try std.testing.expectEqual(@as(u128, std.math.maxInt(u64)) + 2, runner.current().committed());
+    try std.testing.expectError(error.WorkflowTokenBudgetExceeded, runner.check());
+    try std.testing.expect(accounting.TotalTokenBudget.init(0) == null);
+}
+
+test "check is read-only and reconciliation only proposes its declared transition" {
+    var fixture = try Fixture.init();
+    defer fixture.deinit();
+    var ledger = accounting.Ledger.init(std.testing.allocator, .{ .value = 10 }).?;
+    defer ledger.deinit();
+    try (check_action.Action{}).execute(&ledger);
+    const delta = try (reconcile_action.Action{}).execute(&ledger, .initial, fixture.inferenceId(1), usage(20, 10));
+    try std.testing.expectEqual(@as(u64, 0), ledger.revision().value);
+    try std.testing.expectEqual(@as(u128, 0), ledger.committed());
+    const shape = pipeline.DataShape.init(&.{});
+    _ = try shape.applyDelta(reconcile_action.Action.contract, &delta);
+    try std.testing.expectError(error.UndeclaredRunnerAccountingTransition, shape.applyDelta(check_action.Action.contract, &delta));
+    const transition = delta.runner_accounting_transition.?.reconcile_workflow_tokens;
+    try std.testing.expectEqual(accounting.BudgetStatus.exceeded, try ledger.applyReconciliation(transition));
+    try std.testing.expectEqual(@as(u128, 30), ledger.committed());
+}
+
+fn usage(input: u64, output: u64) accounting.Reconciliation {
+    return .{ .exact_usage = operation.ProviderUsage.init(input, output, input + output).? };
 }
 
 const Fixture = struct {
@@ -158,19 +154,6 @@ const Fixture = struct {
         self.* = undefined;
     }
 
-    fn countEvidence(self: *const Fixture, attempt: u32, input_tokens: u64) operation.ExactInputTokenCountEvidence {
-        return .{
-            .count_operation_id = .{
-                .model_request_id = self.request,
-                .model_attempt_ordinal = operation.ModelAttemptOrdinal.init(attempt).?,
-                .kind = .input_token_count,
-            },
-            .binding_id = bindingId(),
-            .model_visible_input_id = operation.ModelVisibleInputId.parse("input-1").?,
-            .input_tokens = input_tokens,
-        };
-    }
-
     fn inferenceId(self: *const Fixture, attempt: u32) operation.ProviderOperationId {
         return .{
             .model_request_id = self.request,
@@ -179,16 +162,3 @@ const Fixture = struct {
         };
     }
 };
-
-fn bindingId() binding.ProviderModelBindingId {
-    return .{
-        .operation_id = .{
-            .workflow_id = workflow.WorkflowId.parse("arbitrary-flow").?,
-            .workflow_version = 1,
-            .workflow_step_id = workflow.WorkflowStepId.parse("generate").?,
-        },
-        .slot_id = @import("domain/llm_provider_identity.zig").ModelSlotId.parse("slot").?,
-        .registry_entry_id = .{ .ordinal = 1 },
-        .reasoning_effort = null,
-    };
-}

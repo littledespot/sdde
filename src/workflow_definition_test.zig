@@ -71,7 +71,7 @@ test "concise resources and native parameters compile into immutable operation a
         };
         try std.testing.expectEqual(@as(usize, 1), slots);
         try std.testing.expectEqual(@as(usize, 2), resource_parameters);
-        try std.testing.expectEqual(@as(u64, 200), graph.authority.steps[0].model.?.capacity.canonical.maximum_output_tokens);
+        try std.testing.expectEqual(@as(u32, 1024), graph.authority.steps[0].model.?.capacity.canonical.maximum_output_bytes);
         try std.testing.expectEqualStrings("model-ready@1", graph.authority.steps[0].gates[0].id.bytes);
         if (provider_calls) {
             try std.testing.expectEqualStrings("model-provider", graph.authority.steps[0].capabilities[0]);
@@ -188,13 +188,11 @@ test "YAML model bounds reject omissions invalid scalars unknown modes and polic
     const substitutions = [_][2][]const u8{
         .{ "input-bytes: 4096, ", "" },
         .{ "output-bytes: 1024, ", "" },
-        .{ "input-tokens: 1000, ", "" },
-        .{ "output-tokens: 200, ", "" },
         .{ ", response-mode: prompt-only", "" },
         .{ "input-bytes: 4096", "input-bytes: 0" },
-        .{ "output-tokens: 200", "output-tokens: -1" },
+        .{ "response-mode: prompt-only", "response-mode: prompt-only, output-tokens: 200" },
         .{ "input-bytes: 4096", "input-bytes: 4294967296" },
-        .{ "input-tokens: 1000", "input-tokens: many" },
+        .{ "response-mode: prompt-only", "response-mode: prompt-only, input-tokens: 1000" },
         .{ "response-mode: prompt-only", "response-mode: automatic" },
         .{ "response-mode: prompt-only", "response-mode: prompt-only, temperature: 1001" },
     };
@@ -336,7 +334,7 @@ const resource_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
     \\  validate: { use: test.validate@1, on: { ok: generate } }
 ;
@@ -367,7 +365,7 @@ const wrong_parameter_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: two, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: two, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -383,7 +381,7 @@ const missing_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -399,7 +397,7 @@ const negative_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: -1, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: -1, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -415,7 +413,7 @@ const excessive_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 4, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 4, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -431,7 +429,7 @@ const missing_outcome_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, input-bytes: 4096, output-bytes: 1024, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed }
 ;
 

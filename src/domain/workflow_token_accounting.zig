@@ -6,26 +6,18 @@ pub const TotalTokenBudget = budget.TotalTokenBudget;
 
 pub const Revision = struct {
     value: u64,
-
     pub const initial: Revision = .{ .value = 0 };
-
     pub fn eql(left: Revision, right: Revision) bool {
         return left.value == right.value;
     }
 };
 
-pub const ReservationTransition = struct {
-    expected_revision: Revision,
-    operation_id: provider.ProviderOperationId,
-    count_operation_id: provider.ProviderOperationId,
-    exact_input_tokens: u64,
-    maximum_output_tokens: u64,
-};
-
+// Only validated provider observations enter this boundary. Missing usage is
+// never estimated; only proven non-delivery permits a zero-charge disposition.
 pub const Reconciliation = union(enum) {
     exact_usage: provider.ProviderUsage,
     not_sent,
-    retain,
+    unavailable,
 };
 
 pub const ReconciliationTransition = struct {
@@ -34,23 +26,16 @@ pub const ReconciliationTransition = struct {
     reconciliation: Reconciliation,
 };
 
-const ReservationStatus = enum { active, committed, released, retained };
-
-const Reservation = struct {
-    operation_id: provider.ProviderOperationId,
-    exact_input_tokens: u64,
-    maximum_output_tokens: u64,
-    amount: u64,
-    status: ReservationStatus,
-};
+pub const BudgetStatus = enum { available, exhausted, exceeded, usage_unavailable };
 
 pub const Ledger = struct {
     allocator: std.mem.Allocator,
     total_budget: TotalTokenBudget,
     revision_value: Revision = .initial,
-    committed_tokens: u64 = 0,
-    reserved_tokens: u64 = 0,
-    reservations: std.ArrayListUnmanaged(Reservation) = .empty,
+    // One API report is u64; a cumulative total may exceed even a u64 budget.
+    committed_tokens: u128 = 0,
+    usage_unavailable: bool = false,
+    accounted_operations: std.ArrayListUnmanaged(provider.ProviderOperationId) = .empty,
 
     pub fn init(allocator: std.mem.Allocator, total_budget: TotalTokenBudget) ?Ledger {
         if (!total_budget.isValid()) return null;
@@ -58,7 +43,7 @@ pub const Ledger = struct {
     }
 
     pub fn deinit(self: *Ledger) void {
-        self.reservations.deinit(self.allocator);
+        self.accounted_operations.deinit(self.allocator);
         self.* = undefined;
     }
 
@@ -70,91 +55,46 @@ pub const Ledger = struct {
         return self.total_budget;
     }
 
-    pub fn committed(self: *const Ledger) u64 {
+    pub fn committed(self: *const Ledger) u128 {
         return self.committed_tokens;
     }
 
-    pub fn reserved(self: *const Ledger) u64 {
-        return self.reserved_tokens;
+    pub fn status(self: *const Ledger) BudgetStatus {
+        if (self.usage_unavailable) return .usage_unavailable;
+        if (self.committed_tokens > self.total_budget.value) return .exceeded;
+        if (self.committed_tokens == self.total_budget.value) return .exhausted;
+        return .available;
     }
 
-    pub fn applyReservation(
-        self: *Ledger,
-        transition: ReservationTransition,
-    ) Error!void {
-        const amount = try validateReservation(self, transition);
-        const next_revision = std.math.add(u64, self.revision_value.value, 1) catch {
-            return error.TokenAccountingRevisionExhausted;
-        };
-        try self.reservations.append(self.allocator, .{
-            .operation_id = transition.operation_id,
-            .exact_input_tokens = transition.exact_input_tokens,
-            .maximum_output_tokens = transition.maximum_output_tokens,
-            .amount = amount,
-            .status = .active,
-        });
-        self.reserved_tokens = std.math.add(u64, self.reserved_tokens, amount) catch unreachable;
-        self.revision_value = .{ .value = next_revision };
-    }
-
-    pub fn applyReconciliation(
-        self: *Ledger,
-        transition: ReconciliationTransition,
-    ) Error!void {
+    pub fn applyReconciliation(self: *Ledger, transition: ReconciliationTransition) Error!BudgetStatus {
         try validateReconciliation(self, transition);
-        const reservation = self.findReservation(transition.operation_id).?;
-        const next_revision = std.math.add(u64, self.revision_value.value, 1) catch {
+        const next_revision = std.math.add(u64, self.revision_value.value, 1) catch
             return error.TokenAccountingRevisionExhausted;
+        const amount: u64 = switch (transition.reconciliation) {
+            .exact_usage => |usage| usage.total_tokens,
+            .not_sent, .unavailable => 0,
         };
-        switch (transition.reconciliation) {
-            .exact_usage => |usage| {
-                const next_committed = std.math.add(u64, self.committed_tokens, usage.total_tokens) catch {
-                    return error.WorkflowTokenBudgetExceeded;
-                };
-                self.reserved_tokens -= reservation.amount;
-                self.committed_tokens = next_committed;
-                reservation.status = .committed;
-            },
-            .not_sent => {
-                self.reserved_tokens -= reservation.amount;
-                reservation.status = .released;
-            },
-            .retain => reservation.status = .retained,
-        }
+        // At most u64 revisions, each adding at most u64 tokens, fits u128.
+        const next_total = self.committed_tokens + @as(u128, amount);
+        try self.accounted_operations.append(self.allocator, transition.operation_id);
+        self.committed_tokens = next_total;
+        if (transition.reconciliation == .unavailable) self.usage_unavailable = true;
         self.revision_value = .{ .value = next_revision };
+        return self.status();
     }
 
-    fn findReservation(self: *Ledger, operation_id: provider.ProviderOperationId) ?*Reservation {
-        for (self.reservations.items) |*reservation| {
-            if (reservation.operation_id.eql(operation_id)) return reservation;
-        }
-        return null;
-    }
-
-    fn findReservationConst(self: *const Ledger, operation_id: provider.ProviderOperationId) ?*const Reservation {
-        for (self.reservations.items) |*reservation| {
-            if (reservation.operation_id.eql(operation_id)) return reservation;
-        }
-        return null;
+    fn contains(self: *const Ledger, id: provider.ProviderOperationId) bool {
+        for (self.accounted_operations.items) |prior| if (prior.eql(id)) return true;
+        return false;
     }
 };
 
-pub fn proposeReservation(
-    ledger: *const Ledger,
-    expected_revision: Revision,
-    inference_operation_id: provider.ProviderOperationId,
-    count_evidence: provider.ExactInputTokenCountEvidence,
-    effective_maximum_output_tokens: u64,
-) ProposalError!ReservationTransition {
-    const transition: ReservationTransition = .{
-        .expected_revision = expected_revision,
-        .operation_id = inference_operation_id,
-        .count_operation_id = count_evidence.count_operation_id,
-        .exact_input_tokens = count_evidence.input_tokens,
-        .maximum_output_tokens = effective_maximum_output_tokens,
-    };
-    _ = try validateReservation(ledger, transition);
-    return transition;
+pub fn checkBudget(ledger: *const Ledger) BudgetError!void {
+    switch (ledger.status()) {
+        .available => {},
+        .exhausted, .exceeded => return error.WorkflowTokenBudgetExceeded,
+        .usage_unavailable => return error.ProviderTokenUsageUnavailable,
+    }
 }
 
 pub fn proposeReconciliation(
@@ -172,59 +112,25 @@ pub fn proposeReconciliation(
     return transition;
 }
 
-fn validateReservation(ledger: *const Ledger, transition: ReservationTransition) ProposalError!u64 {
-    if (!ledger.revision_value.eql(transition.expected_revision)) return error.TokenAccountingRevisionConflict;
-    const expected_amount = std.math.add(
-        u64,
-        transition.exact_input_tokens,
-        transition.maximum_output_tokens,
-    ) catch return error.WorkflowTokenBudgetExceeded;
-    if (transition.operation_id.kind != .inference or
-        transition.count_operation_id.kind != .input_token_count or
-        !transition.operation_id.sameAttempt(transition.count_operation_id) or
-        transition.maximum_output_tokens == 0 or expected_amount == 0)
-    {
-        return error.InvalidTokenReservation;
-    }
-    if (ledger.findReservationConst(transition.operation_id) != null) return error.TokenReservationAlreadyExists;
-    const used = std.math.add(u64, ledger.committed_tokens, ledger.reserved_tokens) catch {
-        return error.WorkflowTokenBudgetExceeded;
-    };
-    const next_used = std.math.add(u64, used, expected_amount) catch {
-        return error.WorkflowTokenBudgetExceeded;
-    };
-    if (next_used > ledger.total_budget.value) return error.WorkflowTokenBudgetExceeded;
-    return expected_amount;
-}
-
 fn validateReconciliation(ledger: *const Ledger, transition: ReconciliationTransition) ProposalError!void {
     if (!ledger.revision_value.eql(transition.expected_revision)) return error.TokenAccountingRevisionConflict;
-    const reservation = ledger.findReservationConst(transition.operation_id) orelse return error.TokenReservationNotFound;
-    if (reservation.status != .active) return error.TokenReservationAlreadyReconciled;
+    if (transition.operation_id.kind != .inference or
+        transition.operation_id.model_attempt_ordinal.value == 0) return error.InvalidTokenAccountingOperation;
+    if (ledger.contains(transition.operation_id)) return error.TokenUsageAlreadyAccounted;
     switch (transition.reconciliation) {
         .exact_usage => |usage| {
-            if (provider.ProviderUsage.init(usage.input_tokens, usage.output_tokens, usage.total_tokens) == null or
-                usage.input_tokens != reservation.exact_input_tokens or
-                usage.output_tokens > reservation.maximum_output_tokens or
-                usage.total_tokens > reservation.amount)
-            {
+            if (provider.ProviderUsage.init(usage.input_tokens, usage.output_tokens, usage.total_tokens) == null)
                 return error.InvalidProviderTokenUsage;
-            }
         },
-        .not_sent, .retain => {},
+        .not_sent, .unavailable => {},
     }
 }
 
+pub const BudgetError = error{ WorkflowTokenBudgetExceeded, ProviderTokenUsageUnavailable };
 pub const ProposalError = error{
-    InvalidTokenReservation,
+    InvalidTokenAccountingOperation,
     InvalidProviderTokenUsage,
     TokenAccountingRevisionConflict,
-    TokenReservationAlreadyExists,
-    TokenReservationNotFound,
-    TokenReservationAlreadyReconciled,
-    WorkflowTokenBudgetExceeded,
+    TokenUsageAlreadyAccounted,
 };
-
-pub const Error = std.mem.Allocator.Error || ProposalError || error{
-    TokenAccountingRevisionExhausted,
-};
+pub const Error = std.mem.Allocator.Error || ProposalError || error{TokenAccountingRevisionExhausted};

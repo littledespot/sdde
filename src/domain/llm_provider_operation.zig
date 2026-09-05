@@ -28,11 +28,6 @@ pub const ProviderOperationId = struct {
             left.model_attempt_ordinal.value == right.model_attempt_ordinal.value and
             left.kind == right.kind;
     }
-
-    pub fn sameAttempt(left: ProviderOperationId, right: ProviderOperationId) bool {
-        return left.model_request_id == right.model_request_id and
-            left.model_attempt_ordinal.value == right.model_attempt_ordinal.value;
-    }
 };
 
 pub const ProviderReceiveBudgets = struct {
@@ -145,12 +140,12 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     controls: model_controls.InferenceControls,
     limits: model_limits.Limits,
 
-    pub fn init(value: IdentifiedProviderNeutralModelRequest) Error!IdentifiedProviderNeutralModelRequest {
+    pub fn init(value: IdentifiedProviderNeutralModelRequest) RequestError!IdentifiedProviderNeutralModelRequest {
         try value.validate();
         return value;
     }
 
-    pub fn validate(self: IdentifiedProviderNeutralModelRequest) Error!void {
+    pub fn validate(self: IdentifiedProviderNeutralModelRequest) RequestError!void {
         if (!self.model_request_id.model_operation_id.eql(self.model_operation_id) or
             !self.binding_id.operation_id.eql(self.model_operation_id) or
             !self.binding_id.isValid() or
@@ -161,9 +156,6 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
             model_limits.Limits.init(
                 self.limits.maximum_input_bytes,
                 self.limits.maximum_output_bytes,
-                self.limits.maximum_input_tokens,
-                self.limits.maximum_output_tokens,
-                self.limits.context_window_tokens,
             ) == null or
             (self.controls.temperature != null and
                 model_controls.TemperaturePermille.init(self.controls.temperature.?.value) == null))
@@ -282,6 +274,7 @@ pub const ExactInputTokenCountEvidence = struct {
         expected_binding: binding.ProviderModelBindingId,
     ) bool {
         if (self.count_operation_id.kind != .input_token_count or
+            self.count_operation_id.model_attempt_ordinal.value == 0 or
             self.count_operation_id.model_request_id != request.model_request_id or
             !self.binding_id.eql(expected_binding) or
             !self.binding_id.eql(request.binding_id) or
@@ -289,7 +282,7 @@ pub const ExactInputTokenCountEvidence = struct {
         {
             return false;
         }
-        return request.limits.acceptsInputTokens(self.input_tokens);
+        return true;
     }
 };
 
@@ -299,7 +292,8 @@ pub const ProviderUsage = struct {
     total_tokens: u64,
 
     pub fn init(input_tokens: u64, output_tokens: u64, total_tokens: u64) ?ProviderUsage {
-        if (total_tokens < input_tokens or total_tokens < output_tokens) return null;
+        const sum = std.math.add(u64, input_tokens, output_tokens) catch return null;
+        if (total_tokens != sum) return null;
         return .{
             .input_tokens = input_tokens,
             .output_tokens = output_tokens,
@@ -312,18 +306,23 @@ pub const CompleteBoundedOwnedUtf8 = struct {
     allocator: std.mem.Allocator,
     bytes: []const u8,
 
-    pub const InitError = std.mem.Allocator.Error || error{
+    pub const ValidationError = error{
         InvalidUtf8,
         LimitExceeded,
     };
+    pub const InitError = std.mem.Allocator.Error || ValidationError;
+
+    pub fn validate(source: []const u8, maximum_bytes: u32) ValidationError!void {
+        if (!std.unicode.utf8ValidateSlice(source)) return error.InvalidUtf8;
+        if (source.len > maximum_bytes) return error.LimitExceeded;
+    }
 
     pub fn init(
         allocator: std.mem.Allocator,
         source: []const u8,
         maximum_bytes: u32,
     ) InitError!CompleteBoundedOwnedUtf8 {
-        if (!std.unicode.utf8ValidateSlice(source)) return error.InvalidUtf8;
-        if (source.len > maximum_bytes) return error.LimitExceeded;
+        try validate(source, maximum_bytes);
         return .{ .allocator = allocator, .bytes = try allocator.dupe(u8, source) };
     }
 
@@ -389,6 +388,8 @@ pub fn validateCountInvocation(
 ) bool {
     request.validate() catch return false;
     return operation.id.kind == .input_token_count and
+        provider_binding.registry_entry.capabilities.input_token_count and
+        provider_binding.registry_entry.capabilities.exact_token_counter == .provider_input_token_count and
         receiveBudgetsFit(operation.receive_budgets, provider_binding.capacity.wire) and
         operation.isValid() and
         operation.id.model_request_id == request.model_request_id and
@@ -398,18 +399,14 @@ pub fn validateCountInvocation(
 pub fn validateInferenceInvocation(
     provider_binding: *const binding.ValidatedProviderModelBinding,
     request: *const IdentifiedProviderNeutralModelRequest,
-    count_evidence: *const ExactInputTokenCountEvidence,
     operation: *const InvokedProviderOperation,
 ) bool {
     request.validate() catch return false;
-    const binding_id = provider_binding.bindingId();
     return operation.id.kind == .inference and
         receiveBudgetsFit(operation.receive_budgets, provider_binding.capacity.wire) and
         request.matchesBinding(provider_binding.*) and
         operation.isValid() and
-        operation.id.model_request_id == request.model_request_id and
-        operation.id.sameAttempt(count_evidence.count_operation_id) and
-        count_evidence.isValidFor(request.*, binding_id);
+        operation.id.model_request_id == request.model_request_id;
 }
 
 fn receiveBudgetsFit(receive: ProviderReceiveBudgets, capacity: model_limits.WireBudgets) bool {
@@ -419,8 +416,8 @@ fn receiveBudgetsFit(receive: ProviderReceiveBudgets, capacity: model_limits.Wir
         receive.maximum_body_bytes <= capacity.maximum_response_body_bytes;
 }
 
-pub const Error = error{
-    InvalidProviderNeutralModelRequest,
+pub const RequestError = error{InvalidProviderNeutralModelRequest};
+pub const Error = RequestError || error{
     ExactTokenCountEvidenceUnavailable,
     InvalidExactTokenCountEvidence,
 };

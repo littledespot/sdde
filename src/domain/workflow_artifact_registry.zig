@@ -1,6 +1,22 @@
 const std = @import("std");
 const bootstrap = @import("bootstrap_root_registry.zig");
 const log_binding = @import("feature_log_binding.zig");
+const feature_identity = @import("feature_identity.zig");
+
+/// Canonical feature-state tuple; the namespace is fixed by this type.
+/// A well-formed ID alone proves neither allocation nor committed authority.
+pub const StateId = struct {
+    feature_id: feature_identity.FeatureId,
+    ordinal: u64,
+
+    pub fn isValid(self: StateId) bool {
+        return self.ordinal > 0 and feature_identity.FeatureId.parse(self.feature_id.bytes) != null;
+    }
+
+    pub fn eql(self: StateId, other: StateId) bool {
+        return self.ordinal == other.ordinal and std.mem.eql(u8, self.feature_id.bytes, other.feature_id.bytes);
+    }
+};
 
 pub const Error = error{InvalidWorkflowArtifactRegistry};
 

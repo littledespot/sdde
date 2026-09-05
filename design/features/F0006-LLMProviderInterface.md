@@ -23,7 +23,7 @@ runner-owned model-attempt ordinal accounting are implemented. The legacy
 global attempt ceiling has been removed: initial execution is accounted
 separately and later attempts require compiler-proven operation-local retry
 authority. The selected policy's positive total-token budget is compiled into
-the graph, and each execution owns a fresh reservation/reconciliation ledger.
+the graph, and each execution owns a fresh actual-usage ledger.
 `AdvanceProviderOperationLifecycleAction`, its immutable execution-owned ledger,
 runner application, and non-content journal intents are implemented. Request
 finalization and attempt advancement reject unfinished provider operations.
@@ -36,16 +36,18 @@ provider-call actions/composition and production provider contracts remain
 implementation work.
 
 The provider-neutral capability/capacity contract and effective-limit binding
-are implemented. The workflow compiler requires explicit model byte/token
-parameters and response mode, intersects them with registered engine/operation
-ceilings, and retains typed requirements in the immutable graph. Binding
+are implemented. The accepted token-policy amendment removes per-operation token ceilings and
+mandatory pre-call counting. The compiler retains byte-safety parameters and
+response mode. Inference binds directly to its request and operation identity;
+optional counting provides observations only, never inference authority. Binding
 intersects those requirements with the exact catalogue contract. The closed
 `model-result-schema/v1` resource compiler now implements the compact schema
 profile in [ADR 0006](../decisions/0006-minimal-model-response.md#closed-result-schema-profile).
 Graph compilation rejects malformed, unsupported or unbounded schemas and the
-registry owns their immutable typed contracts. Request construction, static
-request preflight, provider-native schema representability and response
-decoding/validation remain subsequent work.
+registry owns their immutable typed contracts. The pure `BuildModelRequestAction`
+and `ValidateStaticModelRequestCapacityAction` are implemented and tested through
+the fake provider. Production YAML registration, provider-native schema
+representability and response decoding/validation remain subsequent work.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -158,7 +160,7 @@ runtime evidence; the remaining items define subsequent implementation work:
    operation; reserve a later attempt only through a YAML-selected retry
    operation carrying its own compiler-validated explicit `retry-limit`; define
    count and inference operation lifecycles under that attempt; make
-   preparation/count failure terminal and attempt-consuming; relate request
+   each operation failure terminal and attempt-consuming; relate request
    `assigned`, `invoked`, and terminal transitions to those operations; and
    close every assigned/uninvoked branch. There is no workflow-global attempt,
    retry, unit-repair, or stage-repair ceiling. It also amends Sections 24-25 with the
@@ -181,11 +183,15 @@ runtime evidence; the remaining items define subsequent implementation work:
    no provider or generation orchestrator hides that branch; and
 12. **Accepted and implemented:** the selected workflow policy supplies the only
    workflow-global consumption limit: one positive total model-token budget
-   initialized for each workflow execution. Before inference, the runner
-   reserves exact input tokens plus the effective maximum output; terminal
-   accounting commits exact validated usage, releases only a provably not-sent
-   reservation, and otherwise retains the full reservation. Count-token
-   evidence is not double-counted as inference usage.
+   initialized for each workflow execution. Amended by explicit user direction:
+   before a provider call, the runner rejects an already exhausted budget.
+   After inference it records the API-reported input plus output tokens once.
+   The current call may overshoot; its full usage is retained and an exceeded
+   budget returns an error before candidate success. At exact equality the
+   current result may proceed, but subsequent model calls are prohibited.
+   There is no token reservation, estimated charge or budget-derived output
+   allowance. Retries share the same total; a new execution starts at zero.
+   Count-token evidence is not charged again as inference usage.
 
 The two project inputs have distinct responsibilities:
 
@@ -321,8 +327,6 @@ ProviderModelContract {
   exactTokenCounter: RegisteredExactTokenCounter,
   structuredResponse: RegisteredStructuredResponseContract,
   supportedControls: RegisteredInferenceControlSet,
-  contextWindowTokens: PositiveInteger,
-  maximumOutputTokens: PositiveInteger,
   providerWireBudgets: RegisteredProviderWireBudgets
 }
 ```
@@ -369,7 +373,7 @@ together.
 
 The current neutral contract carries count/inference support, an exact-count
 mechanism (`unavailable | provider_input_token_count`), response support,
-temperature support, canonical capacity, and separate request/response wire
+temperature support, canonical byte safety, and separate request/response wire
 budgets. These are required compiler-supplied facts, not configuration fields.
 The catalogue validator proves exact equality with the registered contract;
 even a narrower candidate cannot substitute different contract facts. An
@@ -468,18 +472,17 @@ facts. Decoded strings alone grant no provider authority.
 2. the entry resolves to exactly one registered provider discriminator and
    compiled model contract, without storing a concrete adapter;
 3. its provider-specific configuration, target, source region, destination
-   policy, operation set, and exact token-count mechanism are valid;
+   policy and selected operation support are valid; counting support is optional;
 4. every selected option, including `reasoningEffort`, is explicitly supported
    and representable rather than silently ignored;
 5. the complete `model-envelope/v1` response schema and YAML-declared result schema are
    the same compact result-object contract under ADR 0006 and are representable
    by the registered response mode; and
-6. effective limits are the strict minimum of engine, compiled workflow operation, and registered
-   model-contract limits.
+6. effective memory/transport safety bounds intersect the registered engine,
+   operation and provider byte bounds; no token/context ceiling is imposed.
 
 Operation contracts requiring model binding use the shared `with` parameters
-`input-bytes`, `output-bytes`, `input-tokens`, `output-tokens`, and
-`response-mode` (`prompt-only | native-schema`). All are explicit and required.
+`input-bytes`, `output-bytes`, and `response-mode` (`prompt-only | native-schema`). All are explicit and required.
 Optional `temperature` is an integer in thousandths (`0..1000`); omission
 sends no temperature control. Resource aliases, slot selection and outcomes
 remain in the existing concise workflow structure.
@@ -491,8 +494,8 @@ no provider port; actual provider-call capabilities remain independently derived
 from narrow ports and constrained by the selected policy. No additional flag,
 registry or YAML field duplicates this authority.
 
-The existing generic operation registry owns the engine capacity facts, and
-each registered model operation owns its operation ceilings. A missing or
+The existing generic operation registry owns engine memory/transport safety
+bounds, and each registered model operation owns its byte-safety ceilings. A missing or
 invalid ceiling rejects registration; there is no production default. The
 compiler intersects those ceilings with the positive YAML values; values above
 a trusted ceiling narrow to that ceiling, while malformed or unrepresentable
@@ -508,24 +511,23 @@ those bound facts for exact consumption checks. None of these projections
 creates a second catalogue, repository allowlist, workflow budget or retry
 authority.
 
-The following checks use checked integer arithmetic:
-
-```text
-canonicalInputBytes <= effectiveOperationInputBytes
-exactInputTokens <= effectiveOperationInputTokens
-exactInputTokens + effectiveMaximumOutputTokens <= modelContextWindowTokens
-```
-
-These per-operation capacity checks are not workflow-global usage limits. The
+Canonical input and response bytes stay bounded for memory safety. Token and
+context restrictions are reported by the provider as typed failures/stops, not
+duplicated by engine preflight. Retired `input-tokens` and `output-tokens` YAML
+parameters are rejected. Byte safety is separate from workflow consumption. The
 selected workflow policy contributes one `totalModelTokenBudget` to each
-workflow execution. After exact counting and before inference, the runner must
-reserve `exactInputTokens + effectiveMaximumOutputTokens` from that execution's
-single immutable-ledger lineage. A reservation that would exceed the remaining
-budget prevents the call. A validated terminal inference observation commits
-exact reported usage; a provably `not_sent` operation releases its reservation;
-`accepted_or_unknown` or unavailable exact usage retains the full reservation.
+workflow execution. Its sole accounting authority records actual API-reported
+input plus output tokens. A pre-call check reads the current total without
+changing it; total usage at or above the budget rejects further model calls.
+Reconciliation records each inference operation once, including retries and
+stopped responses. Usage above budget remains recorded and returns
+`WorkflowTokenBudgetExceeded`; exact equality allows the current result only.
+No input count, maximum-output estimate, reservation, release or retained
+worst-case charge participates in workflow budgeting. Proven non-delivery adds
+no charge. Unavailable usage blocks further model calls with
+`ProviderTokenUsageUnavailable`, never a fabricated zero or estimate.
 The count operation supplies evidence and is not charged again as inference
-usage.
+usage. Ordinary non-model cleanup is not prohibited by an exhausted budget.
 
 Before signing or network I/O, the provider serializer also proves the exact
 serialized CountTokens/inference request body, path, and bounded headers fit
@@ -573,34 +575,22 @@ ProviderOperationId {
 }
 ```
 
-The accepted contract treats one ordinal as one complete provider attempt,
-not only one inference call. Its sequence is closed:
+One ordinal represents one provider attempt. Inference has no count prerequisite:
 
-1. validate provider/model binding, controls, schema representability,
-   canonical input bytes, output reservation, and every other provider-neutral
-   deterministic preflight before authorization or attempt reservation; the
-   exact provider wire serialization and its body/path/header caps are
-   deliberately excluded from this step;
-2. invoke `AdvanceModelAttemptAccountingAction` once to reserve the initial
-   ordinal, or for a later attempt only after the compiled YAML selects a retry
-   operation with its own explicit validated `retry-limit`;
-3. assign its `input_token_count` operation and prepare authorization;
-4. before the first provider call, apply logical request
-   `assigned -> invoked`, operation `assigned -> invoked`, and the durable
-   `send_may_occur` effect-journal phase;
-5. inside that already invoked operation, serialize the exact CountTokens wire
-   request and enforce its body/path/header caps before signing or sending; a
-   cap failure terminally returns `request_limit_exceeded`/`not_sent` and
-   consumes this attempt;
-6. terminally account the count observation, validate its identity/value and
-   exact capacity, and build count evidence;
-7. only after successful evidence, reserve worst-case tokens against the one
-   workflow-execution budget, assign and authorize the inference operation,
-   apply the same invoked/journal transition, perform its exact
-   serialization/cap checks, invoke it, and terminally reconcile the token
-   reservation and operation outcome; and
-8. keep the logical request `invoked` across any separately authorized provider
-   or protocol retry, then apply exactly one final terminal transition.
+1. validate binding, controls, schema and canonical byte safety;
+2. reserve the initial ordinal, or a later ordinal only under the YAML-selected
+   operation's explicit compiler-validated `retry-limit`;
+3. assign the chosen operation from its exact binding/input identity and prepare
+   its single-use authorization;
+4. check actual execution token usage, apply invoked transitions and durable
+   `send_may_occur`, then perform that one API call under byte/transport guards;
+5. record reported input/output usage once and close the operation, retaining
+   any overshoot before returning the budget error; and
+6. follow explicit YAML transitions for retry or logical-request closure.
+
+A separately selected count operation has its own identity, authorization,
+lifecycle and observation. Its value or failure is not an implicit inference
+gate. An unfinished operation must close before another operation or attempt.
 
 `AdvanceProviderOperationLifecycleAction` proposes compare-and-swap deltas for
 `assigned -> invoked -> terminal`; preparation failure or cancellation may use
@@ -612,8 +602,8 @@ The implementation retains immutable ledger snapshots under one execution
 owner. The request runner owns that lifetime and destroys it before canonical
 request identities. Every change checks the exact ledger, request, attempt, and
 operation revisions; count and inference reference the existing reserved
-attempt rather than reserving it again. Inference assignment joins successful
-terminal count evidence by operation, binding, input identity, and count value.
+attempt rather than reserving it again. Either assignment owns immutable
+binding and input-identity facts; inference does not join a count record.
 The action emits one declared runner transition, and only the runner publishes
 the successor. Request terminalization and a later attempt are rejected while
 an operation remains assigned or invoked.
@@ -627,23 +617,16 @@ in-memory `requireInvoked` lookup alone does not authorize production I/O.
 Authorization failure before the first provider call leaves the logical request
 `assigned`; a typed terminal outcome uses an amended
 `assigned -> terminal(not_invoked_authorization_failure)` transition, while the
-already reserved attempt remains consumed. Count failure occurs after logical
-`assigned -> invoked`; the request remains `invoked` only while an accepted
-orchestrator chooses a new attempt, otherwise a terminal-outcome action proposes
-`invoked -> terminal`. An inference operation is not assigned until exact count
-evidence exists. These cases, cancellation, and recovery exhaust the legal
-branches; no implicit status or dangling operation exists.
-Cancellation before the first call uses `assigned -> terminal(cancelled)` after
-the assigned operation is closed as not sent; it is not an authorization failure.
+already reserved attempt remains consumed. A failure after logical
+`assigned -> invoked` leaves the request invoked only while explicit YAML
+selects further permitted work; otherwise a terminal action closes it.
+Cancellation before the first call closes the assigned operation as not sent,
+then closes the request as cancelled.
 
-The two operation IDs share the attempt ordinal but have distinct kinds. Count
-or authorization failure consumes the reserved attempt and makes that
-attempt's inference operation unreachable. Only the compiled YAML may choose a
-registered retry operation. That exact operation instance must carry an
-explicit compiler-validated `retry-limit`; a selected workflow policy cannot
-supply it. Each permitted retry receives a new ordinal, both new operation IDs,
-and a new count. No count or inference retry is hidden inside an adapter or
-client, and no workflow-global attempt ceiling exists.
+Optional count and inference IDs can share an ordinal but have distinct kinds.
+Count evidence does not assign or authorize inference. Retry requires the
+YAML-selected instance's explicit `retry-limit` and a new ordinal; no count,
+inference, fallback or retry is hidden inside an adapter.
 
 `PrepareProviderOperationAuthorizationAction` depends only on the
 provider-neutral `ProviderOperationAuthorizationPort`. The runner first
@@ -702,7 +685,6 @@ port LLMProviderInterface {
   invoke(
     binding: ValidatedProviderModelBinding,
     request: IdentifiedProviderNeutralModelRequest,
-    countEvidence: ExactInputTokenCountEvidence,
     authorization: ValidatedProviderAuthorizationLeaseRef,
     operation: InvokedProviderOperation
   ) -> ProviderInvocationObservation
@@ -732,8 +714,8 @@ binds ordered model-visible content, controls, response-guidance mode, and the
 full response-schema identity shared by counting and inference; it is not a
 provider wire-request digest because count and inference wire shapes differ. A
 different binding, content projection, control, schema mode, schema, or attempt
-invalidates the evidence. An estimate is never an exact count; when no accepted
-exact mechanism exists, inference blocks.
+invalidates the optional count evidence. Unavailable counting rejects only a
+requested count operation; inference neither accepts nor requires count evidence.
 
 ## 8. Closed request, observation, and failure algebra
 
@@ -752,6 +734,19 @@ result/payload wrapper, echoed identity or version. Only a multi-variant result
 requires a root `kind`. The runner carries the exact association from request
 through validated observation, decode and candidate consumption; necessary
 domain selections and citations remain in model content.
+
+Request preparation consumes existing request-binding evidence, the validated
+model binding, runner-supplied request-schema/input IDs, the selected compiled
+result-schema resource, and explicitly ordered content. The builder copies
+content and transient IDs without adding guidance, duplicating schema text, or
+allocating execution identities. Canonical request identity, binding identity
+and the exact compiled schema remain borrowed execution authorities; their
+owners outlive the prepared request. Its arena has one explicit cleanup owner.
+Static preflight reuses the shared request and binding validators and checks
+the exact identity/schema association. Its opaque evidence borrows that request
+and grants no send authority, token allowance, or provider-wire size proof.
+These pure actions do not reserve attempts, change ledgers, prepare leases or
+call a provider. Their production YAML bindings remain a separate increment.
 
 Provider observations are closed tagged unions:
 
@@ -922,22 +917,22 @@ the runner only validates/applies it and never chooses `blocked`, `failed`,
 | `AssignModelRequestIdAction` | Allocate one purpose-bound ordinal from the current ledger revision and return an immutable successor; never mutate the current ledger or reassign a protocol retry. |
 | `ValidateModelRequestBindingAction` | Prove exact ledger membership and epoch/unit/workflow-operation/purpose/ordinal binding without changing the ledger. |
 | `BuildModelRequestAction` | Build one identified bounded provider-neutral request; keep execution identity internal and project only needed guidance/evidence and the exact compact result schema. |
-| `ValidateStaticModelRequestCapacityAction` | Prove every provider-neutral deterministic binding/control/schema/input-byte/output-reservation ceiling before attempt reservation or authorization; it does not serialize a provider wire request. |
+| `ValidateStaticModelRequestCapacityAction` | Prove every provider-neutral deterministic binding/control/schema/input-byte/output-byte safety bound before attempt reservation or authorization; it does not serialize a provider wire request. |
 | `AdvanceModelAttemptAccountingAction` | Reserve the initial complete provider-attempt ordinal, or a later ordinal only under the YAML-selected operation instance's explicit compiler-validated `retry-limit`; it applies no workflow-global attempt ceiling. |
-| `ReserveWorkflowTokenBudgetAction` | Reserve exact input tokens plus effective maximum output tokens against the selected policy's one total model-token budget for this workflow execution. |
-| `ReconcileWorkflowTokenUsageAction` | Commit exact validated inference usage once, release a provably not-sent reservation, or retain the full reservation when delivery or exact usage is unavailable. |
+| `CheckWorkflowTokenBudgetAction` | Read the execution's actual-usage ledger and reject further provider calls when the total is at or above budget or usage is unavailable; reserve nothing. |
+| `ReconcileWorkflowTokenUsageAction` | Propose once-only recording of validated API input/output usage or a proven not-sent/unavailable disposition; the runner retains an overshoot before returning the budget error. |
 | `AdvanceModelRequestLifecycleAction` | Propose the amended logical request compare-and-swap transition. |
 | `AdvanceProviderOperationLifecycleAction` | Propose one count/inference lifecycle plus effect-journal compare-and-swap transition; perform no journal I/O. |
 | `PrepareProviderOperationAuthorizationAction` | Fill one runner-private operation-bound lease slot through the provider-neutral preparation port and return only validated opaque lease-reference evidence. |
 | `CountModelInputTokensAction` | Make exactly one interface count call for an already invoked count operation. |
-| `ValidateExactModelInputCapacityAction` | Validate count identity/value and token/context ceilings, then build attempt/binding/model-visible-input-bound exact-count evidence. |
+| `ValidateModelTokenCountObservationAction` | Validate a separately requested count observation against its operation, binding and input; impose no token/context ceiling or inference prerequisite. |
 | `InvokeModelAction` | Make exactly one interface inference call for an already invoked inference operation. |
 | `ValidateProviderInvocationObservationAction` | Validate the exact runner-bound operation/request/input/schema/model association, delivery, stop, usage, wire/content ceilings, and complete-candidate eligibility before decoding. |
 | `RecoverProviderOperationLifecycleAction` | Join durable successors and classify/close reloaded attempt and operation records as provably not-sent, ambiguous external effect, or unavailable terminal result without replay. |
 | `DecodeModelEnvelopeAction` | Parse one complete compact JSON object and retain its bound schema and validated invocation association; never invoke a provider or recover IDs from model content. |
 | `ValidateModelPayloadSchemaAction` | Validate the decoded result against only its bound closed schema; do not repeat parsing or trusted call-association checks. |
 | `ProviderOperationEffectJournalService` | Durably apply/reload the closed operation-effect CAS records through its accepted lock/transaction adapter; expose no model content or provider port. |
-| Pipeline runner | Invoke bound children; own the per-execution token ledger, private authorization-lease table, and effect-journal handle; validate/apply deltas, lifecycle compare-and-swap transitions, explicit operation-local retry accounting, token reservation/reconciliation, deadlines, and cleanup; choose no branch or terminal outcome. |
+| Pipeline runner | Invoke bound children; own the per-execution token ledger, private authorization-lease table, and effect-journal handle; validate/apply deltas, lifecycle compare-and-swap transitions, explicit operation-local retry accounting, actual token-usage reconciliation and pre-call budget guards, deadlines, and cleanup; choose no workflow branch. |
 
 `ModelProviderBootstrapOrchestrator` coordinates only the requirement and
 provider-file child bindings described in Section 5. It is engine preparation,
@@ -1041,16 +1036,18 @@ F0006 does not:
 9. Project configuration contains no secret, executable behavior, arbitrary
    endpoint, retry policy, header, wire parameter, or capability claim.
 10. Effective canonical, serialized request, header, encoded/decoded response,
-    token, context, output, and provider-wire limits use the strictest
-    applicable registered limits and checked arithmetic.
+    and provider-wire byte bounds use the strictest applicable registered
+    safety limits and checked arithmetic. No engine token/context ceiling or
+    pre-call token reservation is imposed.
     Model-request IDs are engine-assigned from one immutable run-local ledger by
     exact revision; their unit, compiled workflow operation, purpose owner, and
     ordinal must all validate before request construction.
     The selected workflow policy contributes the only workflow-global limit:
     one positive total model-token budget initialized independently for each
     workflow execution.
-11. Count evidence is exact and bound to the same attempt, binding, and
-    `ModelVisibleInputId`; unavailable evidence prevents inference.
+11. Inference works without a count operation or count capability. Optional
+    count observations remain bound to their operation, binding and input, but
+    do not authorize or prohibit inference.
 12. Provider-neutral static preflight precedes one reserved full-attempt
     ordinal. The initial ordinal is unconditional after preflight; every later
     ordinal requires a YAML-selected retry operation with its own explicit
@@ -1058,7 +1055,7 @@ F0006 does not:
     already invoked operation; `request_limit_exceeded` is `not_sent` but
     terminally consumes that attempt. Every count and inference operation has a
     distinct durably journaled runner-applied identity/lifecycle transition,
-    and count/authorization failure consumes that attempt without inference.
+    and every attempted operation closes without a hidden retry or count prerequisite.
 13. Each call performs zero or one provider request with no hidden retry,
     fallback, backoff, credential acquisition/refresh, or second operation;
     any permitted credential I/O has separate accepted accounting.
@@ -1127,8 +1124,8 @@ Implementation evidence must cover:
   count/inference IDs and operation records
   beneath one attempt record, lifecycle CAS, provider-neutral static-preflight
   ordering, operation-scoped wire-cap rejection that consumes the reserved
-  attempt, count-once, count failure making inference unreachable, evidence
-  binding, every assigned-branch close, durable effect-journal lock/CAS/
+  attempt, direct inference without counting support, optional count outcomes
+  and association without token-capacity policy, every assigned-branch close, durable effect-journal lock/CAS/
   redaction/retention, and crashes between attempt reservation, operation
   assignment, logical invoked, `send_may_occur`, first byte, response arrival,
   `terminal_observed`, durable successor commit, and `outcome_consumed`.
@@ -1138,8 +1135,9 @@ Implementation evidence must cover:
   exhausts its own validated `retry-limit`, missing limits and policy-supplied
   retry defaults are rejected, cancellation is terminal, and the client never
   auto-retries. Per-execution token-ledger evidence covers initial isolation,
-  exact and over-budget reservations, checked addition, exact-usage
-  reconciliation, provably-not-sent release, retained ambiguous reservations,
+  exact-budget stopping, retained actual overshoot before error, safe addition,
+  once-only actual-usage reconciliation, no charge for proven non-delivery,
+  unavailable-usage blocking without estimates,
   count-token non-duplication, and independence between two executions of the
   same workflow.
 - **Port conformance:** identical golden provider-neutral cases through fake

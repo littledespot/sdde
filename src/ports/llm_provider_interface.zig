@@ -22,7 +22,6 @@ pub const LLMProviderInterface = struct {
             *Context,
             *const binding.ValidatedProviderModelBinding,
             *const operation.IdentifiedProviderNeutralModelRequest,
-            *const operation.ExactInputTokenCountEvidence,
             *const operation.ValidatedProviderAuthorizationLeaseRef,
             *const operation.InvokedProviderOperation,
         ) Error!operation.ProviderInvocationObservation,
@@ -48,7 +47,6 @@ pub const LLMProviderInterface = struct {
         self: LLMProviderInterface,
         provider_binding: *const binding.ValidatedProviderModelBinding,
         request: *const operation.IdentifiedProviderNeutralModelRequest,
-        count_evidence: *const operation.ExactInputTokenCountEvidence,
         authorization: *const operation.ValidatedProviderAuthorizationLeaseRef,
         invoked_operation: *const operation.InvokedProviderOperation,
     ) Error!operation.ProviderInvocationObservation {
@@ -56,7 +54,6 @@ pub const LLMProviderInterface = struct {
             self.context,
             provider_binding,
             request,
-            count_evidence,
             authorization,
             invoked_operation,
         );

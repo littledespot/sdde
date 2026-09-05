@@ -8,8 +8,8 @@ const runner = @import("application/reference_workflow_runner.zig");
 const values = @import("application/pipeline_values.zig");
 const schemas = @import("application/reference_workflow_values.zig");
 const Envelope = @import("application/pipeline_envelope.zig").PipelineEnvelope;
-const nfc = @import("unicode_nfc");
-const normalizer: @import("ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = nfc.normalize };
+const unicode = @import("unicode_normalization");
+const normalizer: @import("ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = unicode.nfc, .fold_fn = unicode.fold };
 
 test "Specify grammar accepts one required reference and rejects every removed input form" {
     const result = try (validate.Action{}).execute(try (parse.Action{}).execute(&.{ "--reference", "hello-world" }));

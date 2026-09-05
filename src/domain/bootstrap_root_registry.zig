@@ -306,12 +306,7 @@ pub fn deinitOwner(owner: *Owner) void {
 }
 
 fn validateIdentityAndLocation(candidate: roots.BootstrapRootRegistryCandidate) Error!void {
-    if (!std.mem.eql(
-        u8,
-        candidate.id.contract_version,
-        roots.bootstrap_root_contract_version,
-    ) or
-        !std.fs.path.isAbsolute(candidate.id.canonical_project_root) or
+    if (!candidate.id.isValid() or
         !std.mem.eql(
             u8,
             candidate.id.canonical_project_root,

@@ -327,6 +327,40 @@ test "model capability facts and effective limits have no configuration or opera
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("application/workflow_pipeline_runner.zig"), "step.model orelse") != null);
 }
 
+test "request preparation is pure and reuses the sole request validation boundary" {
+    const build_request = @import("actions/model/build_model_request.zig").Action;
+    const validate_request = @import("actions/model/validate_static_model_request_capacity.zig").Action;
+    inline for (.{ build_request, validate_request }) |Action| {
+        try std.testing.expectEqual(@as(usize, 0), @typeInfo(Action).@"struct".fields.len);
+        try std.testing.expect(Action.contract.side_effect == .none);
+        try std.testing.expect(Action.contract.runner_accounting == .none);
+    }
+    const preparation = @import("domain/model_request_preparation.zig");
+    try std.testing.expect(@FieldType(preparation.Owned, "request") == *const llm_provider_operation.IdentifiedProviderNeutralModelRequest);
+    switch (@typeInfo(preparation.StaticCapacityEvidence)) {
+        .@"opaque" => {},
+        else => return error.ModelRequestCapacityEvidenceMustBeOpaque,
+    }
+    inline for (.{
+        @embedFile("actions/model/build_model_request.zig"),
+        @embedFile("actions/model/validate_static_model_request_capacity.zig"),
+        @embedFile("domain/model_request_preparation.zig"),
+    }) |source| {
+        try expectAbsent(source, "/actions/");
+        try expectAbsent(source, "/ports/");
+        try expectAbsent(source, "/adapters/");
+        try expectAbsent(source, "anyopaque");
+        try expectAbsent(source, "std.Io");
+        try expectAbsent(source, "std.process");
+        try expectAbsent(source, "std.http");
+        try expectAbsent(source, "countInputTokens");
+    }
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("actions/model/build_model_request.zig"), "IdentifiedProviderNeutralModelRequest.init") != null);
+    const validator = @embedFile("domain/model_request_preparation.zig");
+    try std.testing.expect(std.mem.indexOf(u8, validator, "request.validate()") != null);
+    try std.testing.expect(std.mem.indexOf(u8, validator, "request.matchesBinding(") != null);
+}
+
 test "model-binding requirement is immutable data not a provider-call capability" {
     const compilation = @import("domain/workflow_compilation.zig");
     const operation = @import("domain/workflow_operation.zig");
@@ -406,6 +440,7 @@ test "provider operation boundary has one capability-limited interface" {
     try expectAbsent(port, "anyopaque");
     try expectAbsent(port, "/adapters/");
     try expectAbsent(port, "std.Io");
+    try expectAbsent(port, "ExactInputTokenCountEvidence");
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(port, "pub const LLMProviderInterface"));
 
     const contract = @embedFile("domain/llm_provider_operation.zig");
@@ -520,7 +555,7 @@ test "model attempt accounting has one runner-applied transition authority" {
     try std.testing.expect(apply_index < replace_index);
 }
 
-test "workflow token accounting has only its two runner-applied action authorities" {
+test "workflow token accounting has one mutation authority and a read-only check" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
     var actions = try std.Io.Dir.cwd().openDir(io, "src/actions", .{ .iterate = true });
@@ -531,12 +566,7 @@ test "workflow token accounting has only its two runner-applied action authoriti
         if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
         const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
         defer allocator.free(source);
-        const reserves = countOccurrences(source, ".runner_accounting = .reserve_workflow_tokens");
         const reconciles = countOccurrences(source, ".runner_accounting = .reconcile_workflow_tokens");
-        try std.testing.expectEqual(
-            @as(usize, if (std.mem.eql(u8, entry.path, "model/reserve_workflow_token_budget.zig")) 1 else 0),
-            reserves,
-        );
         try std.testing.expectEqual(
             @as(usize, if (std.mem.eql(u8, entry.path, "model/reconcile_workflow_token_usage.zig")) 1 else 0),
             reconciles,
@@ -544,7 +574,7 @@ test "workflow token accounting has only its two runner-applied action authoriti
     }
 
     inline for (.{
-        "actions/model/reserve_workflow_token_budget.zig",
+        "actions/model/check_workflow_token_budget.zig",
         "actions/model/reconcile_workflow_token_usage.zig",
     }) |path| {
         const source = @embedFile(path);
@@ -552,10 +582,16 @@ test "workflow token accounting has only its two runner-applied action authoriti
         try expectAbsent(source, "/adapters/");
         try expectAbsent(source, "std.Io");
     }
+    const tokens = @import("domain/workflow_token_accounting.zig");
+    try std.testing.expect(!@hasDecl(tokens, "ReservationTransition"));
+    try std.testing.expect(!@hasField(tokens.Ledger, "reserved_tokens"));
+    try std.testing.expect(@import("actions/model/check_workflow_token_budget.zig").Action.contract.runner_accounting == .none);
 }
 
 test "provider lifecycle has one pure action and runner-owned immutable ledger" {
     const lifecycle = @import("domain/provider_operation_lifecycle.zig");
+    try std.testing.expect(@FieldType(lifecycle.Command, "assign_count") == lifecycle.Assignment);
+    try std.testing.expect(@FieldType(lifecycle.Command, "assign_inference") == lifecycle.Assignment);
     switch (@typeInfo(lifecycle.Ledger)) {
         .@"opaque" => {},
         else => return error.ProviderOperationLedgerMustBeOpaque,
@@ -1069,6 +1105,23 @@ test "reference root path handoff has one authorized adapter consumer" {
         defer std.testing.allocator.free(source);
         try expectAbsent(source, "bindReferenceSourcesAdapter");
     }
+}
+
+test "feature identity shares portable naming policy and has no operational authority" {
+    const domain = @embedFile("domain/feature_identity.zig");
+    try expectAbsent(domain, "@cImport");
+    try expectAbsent(domain, "/adapters/");
+    try std.testing.expect(std.mem.indexOf(u8, domain, "path_policy.validateComponent") != null);
+    const action = @embedFile("actions/specify/derive_feature_identity.zig");
+    try expectAbsent(action, "std.Io.Dir");
+    try expectAbsent(action, "/adapters/");
+    try expectAbsent(action, "model_provider");
+    try std.testing.expect(std.mem.indexOf(u8, action, "normalizer.fold") != null);
+    const runner = @embedFile("application/feature_identity_workflow.zig");
+    try expectAbsent(runner, "std.Io.Dir");
+    try expectAbsent(runner, "/adapters/");
+    const engine = @embedFile("application/workflow_engine_orchestrator.zig");
+    try expectAbsent(engine, "feature_identity");
 }
 
 test "feature document filenames and headings agree" {

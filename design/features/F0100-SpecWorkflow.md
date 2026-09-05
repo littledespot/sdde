@@ -106,10 +106,11 @@ workflow-owned value and every selected operation outcome has exactly one
 mapping. `validate` and `repair` are illustrative local steps and must also be
 declared in a complete definition.
 
-### 3.1 Registered invocation and read-only selector preflight
+### 3.1 Registered invocation and read-only identity preflight
 
-These native contracts take no YAML parameters and use the existing runner,
-owned value envelope, and registry. Any workflow may select them.
+These native contracts use the existing runner, owned value envelope, and
+registry. Any workflow may select them. Only identity derivation takes a YAML
+parameter: the required `max-length` integer described below.
 
 | Contract | Kind | Input → output |
 | --- | --- | --- |
@@ -119,6 +120,7 @@ owned value envelope, and registry. Any workflow may select them.
 | `normalize-reference-selector@1` | Step | Validated invocation → `normalized_reference_selector` |
 | `validate-reference-selector@1` | Step | Normalized candidate → `relative_reference_selector` |
 | `inspect-reference-directory@1` | Step | Relative selector → read-only `reference_directory` observation |
+| `derive-feature-identity@1` | Step | Relative selector + `max-length` → `feature_identity_seed` |
 
 `specify-invocation@1` atomically coordinates the same parser and validator
 through runner-owned child bindings; only its validated result leaves that
@@ -144,11 +146,21 @@ descendant component without following symlinks. It requires a readable
 directory and publishes repository-relative metadata and physical identities,
 not a reusable filesystem capability. Future readers must revalidate them.
 
+Identity derivation follows [ADR 0008](../decisions/0008-feature-naming-policy.md).
+`with: { max-length: 64 }` is an explicit example, not a default; the closed
+parameter accepts integers 1–255. The operation folds the full selector with
+the pinned Unicode naming policy, constructs and truncates a portable ASCII
+kebab-case ID, and rejects empty/invalid results. The seed retains the exact
+selector, policy version, maximum length, and prospective ID; it is neither
+an availability claim nor feature ownership. No reference prose or model title
+participates. Identity derivation itself is capability-free and need not read
+a directory; the full Specify preflight separately requires inspection.
+
 The [preflight fixture](../../src/test_fixtures/reference-preflight.workflow.yaml)
 proves these operations without claiming `specified`. It reads no reference
 contents and creates no feature, log, clarification, transaction, or artifact.
-Feature identity/recovery/activation and complete corpus validation remain later
-work; selector success alone cannot authorize them.
+Collision/ownership checks, recovery/activation, and complete corpus validation
+remain later work; an identity seed alone cannot authorize them.
 
 ## 4. Required logical coverage
 
@@ -296,6 +308,21 @@ conflicting, the engine:
 6. after a current authenticated answer or authority resolution commits,
    regenerates every specification unit before validation and rendering.
 
+On a Specify rerun, the engine MUST overwrite existing `spec.md` and
+`reference-context.md` with the newly validated output at the same paths,
+including prior edits to `spec.md`. It must not skip existing output, require
+separate overwrite approval, or add a filename suffix. This uses the shared
+rerun rule in Design Section 23.2; it never deletes the feature directory or
+its clarification history.
+
+The engine MUST NOT overwrite user-closed `clarify/SNN.md` files. Retain them
+byte-for-byte and consume applicable validated answers before generation.
+Accept a valid close into canonical state without rewriting its submitted form. A pending,
+stale, or invalid close is not overwritten; an inapplicable protected answer
+blocks for user direction rather than automatic reopening or a duplicate ID.
+The complete clarification view set includes these retained files, not writes
+to them. Transaction validation rechecks their preservation preconditions.
+
 There is no committed `Open Questions` section in `spec.md`. Specification-owned
 unknowns use the clarification lifecycle above; reference-context questions
 remain in their separate sidecar authority. The proposed `OQ-*` specification
@@ -367,6 +394,12 @@ YAML definition.
 11. Adding any other correctly configured workflow YAML composed only from
     registered generic operations requires no workflow-name branch, hidden
     operation, or engine rebuild.
+12. A Specify rerun MUST overwrite its existing registered output files at the
+    same paths under Design Section 23.2, without skipping, renaming, or separate
+    overwrite approval. It MUST NOT overwrite user-closed clarification files;
+    they remain byte-identical through generation, reference refresh,
+    failed/cancelled runs, and commit; applicable validated
+    answers are reused and no duplicate question bypasses that protection.
 
 ## 8. Verification
 
@@ -384,6 +417,11 @@ YAML definition.
   triplet; and
 - golden tests prove byte-stable `spec.md`, mandatory sidecar generation, and
   atomic commit before `specified`.
+- rerun tests prove existing outputs are overwritten at the same paths without
+  skipping, renaming, or separate overwrite approval, while preserving pending
+  and accepted user-closed forms, including when another question is opened;
+  stale/invalid submissions and changed answer applicability block without rewriting, and
+  a user close concurrent with commit cannot be lost.
 
 ## 9. Traceability
 

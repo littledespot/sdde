@@ -367,7 +367,7 @@ fn cancelled(_: ?*anyopaque) pipeline.RuntimeStatus {
 }
 
 fn model(fixture: *Fixture) fake_provider.FakeLLMProvider {
-    return .{ .allocator = std.testing.allocator, .authorization_leases = fixture.leasePort(), .count_plan = .{ .counted = 10 }, .invocation_plan = .{ .complete = .{ .content = "{}", .output_tokens = 5 } } };
+    return .{ .allocator = std.testing.allocator, .authorization_leases = fixture.leasePort(), .count_plan = .{ .counted = 10 }, .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 10, .output_tokens = 5 } } };
 }
 
 fn denied(observation: operation.ProviderTokenCountObservation) !void {

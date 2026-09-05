@@ -72,7 +72,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     toolchain_command.expectStdErrEqual("");
 
     const missing_config_directory = b.addTempFiles();
-    const reference_command = std.Build.Step.Run.create(b, "run packaged Unicode reference preflight without source or shared Unicode library");
+    const reference_command = std.Build.Step.Run.create(b, "run packaged Unicode reference and identity preflight without source or shared Unicode library");
     reference_command.addFileArg(packaged_executable);
     reference_command.addArgs(&.{ "reference-preflight", "--reference", "./Cafe\u{301}/日本語" });
     reference_command.setCwd(package_directory.getDirectory());

@@ -85,23 +85,23 @@ test "binding rejects absent slot authority and non-model steps" {
     );
 }
 
-test "binding rejects catalogue models missing exact count inference or response support" {
-    for (0..4) |variant| {
+test "inference binding does not require optional count support" {
+    var contract = provider_contracts.entries[0];
+    contract.capabilities.input_token_count = false;
+    contract.capabilities.exact_token_counter = .unavailable;
+    var fixture = try Fixture.initWith(.{ .entries = &.{contract} });
+    defer fixture.deinit();
+    _ = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
+}
+
+test "binding rejects catalogue models missing inference or response support" {
+    for (0..2) |variant| {
         var contract = provider_contracts.entries[0];
-        switch (variant) {
-            0 => {
-                contract.capabilities.input_token_count = false;
-                contract.capabilities.exact_token_counter = .unavailable;
-            },
-            1 => {
-                contract.capabilities.inference = false;
-                contract.capabilities.structured_response = .unavailable;
-                contract.capabilities.temperature = false;
-            },
-            2 => contract.capabilities.exact_token_counter = .unavailable,
-            3 => contract.capabilities.structured_response = .unavailable,
-            else => unreachable,
-        }
+        if (variant == 0) {
+            contract.capabilities.inference = false;
+            contract.capabilities.structured_response = .unavailable;
+            contract.capabilities.temperature = false;
+        } else contract.capabilities.structured_response = .unavailable;
         var fixture = try Fixture.initWith(.{ .entries = &.{contract} });
         defer fixture.deinit();
         try std.testing.expectError(error.ProviderModelBindingInvalid, (resolve_binding.Action{}).execute(
@@ -150,16 +150,16 @@ test "binding projection rejects missing duplicate malformed or unprojected slot
 
 test "binding narrows provider capacity without copying or changing catalogue authority" {
     var contract = provider_contracts.entries[0];
-    contract.capabilities.capacity.canonical.maximum_input_tokens = 300;
-    contract.capabilities.capacity.canonical.maximum_output_tokens = 40;
+    contract.capabilities.capacity.canonical.maximum_input_bytes = 300;
+    contract.capabilities.capacity.canonical.maximum_output_bytes = 40;
     contract.capabilities.capacity.wire.maximum_response_body_bytes = 2048;
     var fixture = try Fixture.initWith(.{ .entries = &.{contract} });
     defer fixture.deinit();
     const result = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
-    try std.testing.expectEqual(@as(u64, 300), result.capacity.canonical.maximum_input_tokens);
-    try std.testing.expectEqual(@as(u64, 40), result.capacity.canonical.maximum_output_tokens);
+    try std.testing.expectEqual(@as(u64, 300), result.capacity.canonical.maximum_input_bytes);
+    try std.testing.expectEqual(@as(u64, 40), result.capacity.canonical.maximum_output_bytes);
     try std.testing.expectEqual(@as(u32, 2048), result.capacity.wire.maximum_response_body_bytes);
-    try std.testing.expectEqual(@as(u64, 200), model_step.model.?.capacity.canonical.maximum_output_tokens);
+    try std.testing.expectEqual(@as(u32, 1024), model_step.model.?.capacity.canonical.maximum_output_bytes);
     try std.testing.expect(result.registry_entry == fixture.services.registry().resolveId(result.registry_entry.id).?);
     try std.testing.expectEqualDeep(contract.capabilities, result.registry_entry.capabilities);
 }
@@ -251,6 +251,52 @@ test "generic runner supplies immutable binding to a pure operation without a pr
         runner_without_authority.bindings().invokeStep(model_step.id).outcome,
     );
     try std.testing.expectEqual(@as(usize, 1), control.state.calls);
+}
+
+test "generic runner blocks provider ports at exhausted budget but permits pure binding steps" {
+    var fixture = try Fixture.init();
+    defer fixture.deinit();
+    var identity_fixture: @import("provider_authorization_test_fixture.zig").Fixture = undefined;
+    try identity_fixture.init(std.testing.allocator);
+    defer identity_fixture.deinit();
+    var control: OperationControl = .{};
+    var registry = control.registry();
+    var barrier: FakeBarrier = .{};
+    var runner = workflow_runner.Runner.init(std.testing.allocator, .{
+        .invocation = .{ .workflow_id = model_graph.authority.workflow_id, .arguments = &.{} },
+        .graph = &model_graph,
+    }, &registry, barrier.port(), .{}, &fixture.services);
+    defer runner.deinit();
+    try runner.token_accounting.reconcile(.initial, identity_fixture.id(.inference), .{
+        .exact_usage = @import("domain/llm_provider_operation.zig").ProviderUsage.init(900, 100, 1000).?,
+    });
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, runner.bindings().invokeStep(model_step.id).outcome);
+
+    const CallingStep = struct {
+        provider: @import("ports/llm_provider_interface.zig").LLMProviderInterface = @import("workflow_binding_test_fixture.zig").port(),
+        calls: usize = 0,
+        fn invoke(context: ?*@This(), _: operation_registry.Input) operation_registry.Error!execution.Candidate {
+            context.?.calls += 1;
+            return .{ .outcome = .ok, .delta = .{} };
+        }
+    };
+    var calling: CallingStep = .{};
+    control.entries[0].binding = @import("application/workflow_operation_binding.zig").bind(CallingStep, &calling, CallingStep.invoke);
+    registry.policies = &.{.{
+        .id = "test.model-policy@1",
+        .allowed_capabilities = &.{"model-provider"},
+        .allowed_terminal_outcomes = &.{.ok},
+        .total_model_token_budget = .{ .value = 1000 },
+    }};
+    var step = model_step;
+    step.capabilities = &.{"model-provider"};
+    var graph = model_graph;
+    graph.authority.steps = &.{step};
+    graph.authority.allowed_capabilities = &.{"model-provider"};
+    runner.selected.graph = &graph;
+    const rejected = runner.bindings().invokeStep(step.id);
+    try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, rejected.rejected.token_budget);
+    try std.testing.expectEqual(@as(usize, 0), calling.calls);
 }
 
 const Fixture = struct {

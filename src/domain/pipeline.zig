@@ -59,6 +59,7 @@ pub const DataKey = enum {
     normalized_reference_selector,
     relative_reference_selector,
     reference_directory,
+    feature_identity_seed,
     feature_log_binding,
     workflow_telemetry_fact,
     sanitized_prompt_fragment,
@@ -93,7 +94,6 @@ pub const SideEffect = enum {
 pub const RunnerAccountingCapability = enum {
     none,
     increment_model_attempt,
-    reserve_workflow_tokens,
     reconcile_workflow_tokens,
     advance_provider_operation,
 };
@@ -331,13 +331,6 @@ fn validateRunnerAccountingTransition(
             const value = transition orelse return error.MissingRunnerAccountingTransition;
             switch (value) {
                 .increment_model_attempt => {},
-                else => return error.UndeclaredRunnerAccountingTransition,
-            }
-        },
-        .reserve_workflow_tokens => {
-            const value = transition orelse return error.MissingRunnerAccountingTransition;
-            switch (value) {
-                .reserve_workflow_tokens => {},
                 else => return error.UndeclaredRunnerAccountingTransition,
             }
         },

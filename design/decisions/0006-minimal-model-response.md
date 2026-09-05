@@ -168,7 +168,8 @@ adds structural guards: at most 64 JSON container levels, 16 schema-node levels
 (root is level 1), 4,096 schema nodes including alternative objects and their
 fields, 256 properties per object, and 256 enum values. These are compiler
 safety bounds, not workflow token budgets or retry limits. No schema budget
-overrides the selected operation's later byte/token capacity checks.
+overrides the selected operation's later byte-safety checks or the execution's
+actual-usage token budget. Inference requires no token/context preflight.
 
 The existing workflow compiler calls one narrow result-schema compiler port
 only for explicitly referenced resources of that kind. Its adapter checks JSON

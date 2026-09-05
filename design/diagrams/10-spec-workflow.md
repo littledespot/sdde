@@ -9,10 +9,12 @@ flowchart TD
     C1 --> C2[validate-reference-selector@1<br/>Lexical safety and bounds]
     C2 --> C3[inspect-reference-directory@1<br/>Bound root identity; no-follow readable directory]
     C3 --> D[Deterministic feature, recovery, and complete corpus preflight<br/>Not implemented by selector inspection]
-    D --> E[Ingest and reconcile complete reference authority]
+    D --> CL[Load retained clarification history and forms;<br/>preserve user-closed bytes before ingestion and consume applicable validated answers;<br/>accepted closure commits its response without rerendering the submitted form]
+    CL --> E[Ingest and reconcile complete reference authority]
+    CL -->|Stale or invalid user close, or protected answer requires reconsideration| CB[Block for explicit user direction;<br/>do not overwrite the form or allocate a duplicate clarification]
 
     E -->|All required authority resolved| F[Generate and validate reference-grounded feature brief]
-    E -->|Specification-owned gap| S[Commit controlled clarify/SNN.md and<br/>spec_clarification_pending; no partial SpecificationIR or spec.md]
+    E -->|Specification-owned gap| S[Create or refresh only unprotected clarify/SNN.md forms;<br/>retain protected forms in the complete view set and commit spec_clarification_pending;<br/>no new partial SpecificationIR or spec.md]
 
     F --> G[Generate typed User Scenarios and Testing units:<br/>Primary User Story, AC, UO and EC]
     G --> H[Generate typed Requirements units:<br/>FR, BR, assumptions, non-goals and prohibited behaviors]
@@ -27,7 +29,7 @@ flowchart TD
     I --> J[Validate fixed heading order, required groups,<br/>conditional entities, and absence of placeholders or inline clarification]
     J --> K[Render spec.md and reference-context.md]
     K --> M[Reparse spec.md and compare normalized IR]
-    M --> N[Validate and commit complete stage transaction]
+    M --> N[Validate and commit complete stage transaction;<br/>reruns MUST overwrite existing Specify outputs at the same registered paths;<br/>no separate overwrite approval;<br/>user-closed clarification files MUST remain byte-for-byte unchanged;<br/>never clear the feature directory]
     N --> O[Workflow state specified]
 
     S --> NU[Terminal needs_user;<br/>a later invocation resumes through the ordinary selection and preflight path]

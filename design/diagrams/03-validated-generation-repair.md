@@ -29,14 +29,16 @@ flowchart TD
     RSCHEMA[Workflow-registry-owned model-result-schema/v1 authority<br/>opaque closed tree and exact captured resource bytes;<br/>invalid schema rejects during workflow compilation] -. borrowed schema; no second parser .-> REQ
     REQ --> MADV[AdvanceModelAttemptAccountingAction<br/>reserve initial attempt ordinal; no global attempt ceiling]
     MADV --> MINVOKED[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to invoked exactly once]
-    MINVOKED --> MTOKEN{ReserveWorkflowTokenBudgetAction<br/>exact input plus maximum output against this execution's total token budget}
-    MTOKEN -- Insufficient --> MTTERM[Compiled YAML terminal outcome; invoke nothing]
+    MINVOKED --> MTOKEN{CheckWorkflowTokenBudgetAction<br/>current actual usage below execution budget?}
+    MTOKEN -- Exhausted or unavailable --> MTTERM[Runner budget error; invoke nothing]
     MTTERM --> STOP
-    MTOKEN -- Reserved --> CALL[InvokeModelAction]
+    MTOKEN -- Available --> CALL[InvokeModelAction]
     CALL --> OBS{ValidateProviderInvocationObservationAction<br/>exact runner-owned call association and complete-result eligibility}
     OBS -- Invalid trusted association --> STOP
-    OBS -- Complete candidate --> DECODE[DecodeModelEnvelopeAction<br/>parse one compact JSON object and retain trusted binding]
-    OBS -- Failure, stopped or cancelled --> POUT[Compiled YAML provider outcome;<br/>no candidate decode or protocol repair]
+    OBS -- Associated usage or non-delivery --> MUSE{ReconcileWorkflowTokenUsageAction<br/>record actual input plus output once}
+    MUSE -- Exceeded or unavailable --> STOP
+    MUSE -- Complete candidate within budget --> DECODE[DecodeModelEnvelopeAction<br/>parse one compact JSON object and retain trusted binding]
+    MUSE -- Failure, stopped or cancelled --> POUT[Compiled YAML provider outcome;<br/>no candidate decode or protocol repair]
 
     DECODE -- No typed result --> PROTO[YAML-declared protocol-retry operation]
     PROTO --> PG[Build protocol-only retry guidance action]
@@ -44,9 +46,9 @@ flowchart TD
     PREQ --> PMADV{AdvanceModelAttemptAccountingAction<br/>reserve this retry against the YAML operation instance's explicit retry-limit}
     PMADV -- Explicit retry limit exhausted; invoke nothing --> PTERM[AdvanceModelRequestLifecycleAction<br/>compare-and-swap invoked to terminal with invalid_exhausted]
     PTERM --> STOP
-    PMADV -- Reserved --> PTOKEN{ReserveWorkflowTokenBudgetAction<br/>against the same workflow-execution ledger}
-    PTOKEN -- Insufficient --> PTERM
-    PTOKEN -- Reserved --> PCALL[InvokeModelAction]
+    PMADV -- Reserved --> PTOKEN{CheckWorkflowTokenBudgetAction<br/>same execution's actual usage}
+    PTOKEN -- Exhausted or unavailable --> PTERM
+    PTOKEN -- Available --> PCALL[InvokeModelAction]
     PCALL --> OBS
 
     DECODE -- Parsed result --> SCHEMA[ValidateModelPayloadSchemaAction<br/>exact bound compact result schema]
@@ -105,14 +107,16 @@ flowchart TD
     RABORT --> STOP
     RMADV -- Reserved --> RINVOKED{Repair request lifecycle status}
     RINVOKED -- assigned; first call --> RSTART[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to invoked]
-    RSTART --> RTOKEN{ReserveWorkflowTokenBudgetAction<br/>against the same workflow-execution ledger}
+    RSTART --> RTOKEN{CheckWorkflowTokenBudgetAction<br/>same execution's actual usage}
     RINVOKED -- already invoked; protocol retry --> RTOKEN
-    RTOKEN -- Insufficient --> RABORT
-    RTOKEN -- Reserved --> RCALL[InvokeModelAction]
+    RTOKEN -- Exhausted or unavailable --> RABORT
+    RTOKEN -- Available --> RCALL[InvokeModelAction]
     RCALL --> ROBS{ValidateProviderInvocationObservationAction<br/>exact repair-call association and complete-result eligibility}
     ROBS -- Invalid trusted association --> STOP
-    ROBS -- Complete candidate --> RDECODE[DecodeModelEnvelopeAction then ValidateModelPayloadSchemaAction<br/>compact repair result and bound schema]
-    ROBS -- Failure, stopped or cancelled --> POUT
+    ROBS -- Associated usage or non-delivery --> RUSE{ReconcileWorkflowTokenUsageAction<br/>record actual input plus output once}
+    RUSE -- Exceeded or unavailable --> STOP
+    RUSE -- Complete candidate within budget --> RDECODE[DecodeModelEnvelopeAction then ValidateModelPayloadSchemaAction<br/>compact repair result and bound schema]
+    RUSE -- Failure, stopped or cancelled --> POUT
     RDECODE -- No typed repair --> RPROTO[YAML-declared protocol-retry operation]
     RPROTO --> RPG[Build repair-protocol retry guidance]
     RPG --> RPREQ[ValidateModelRequestBindingAction then BuildModelRequestAction<br/>protocol-only retry retaining the same repair request ID;<br/>do not allocate or repeat assigned-to-invoked]

@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const unicode_dependency = b.dependency("utf8proc", .{});
     const unicode_module = b.createModule(.{
-        .root_source_file = b.path("src/adapters/text/unicode_nfc.zig"),
+        .root_source_file = b.path("src/adapters/text/unicode_normalization.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -43,7 +43,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
-            .{ .name = "unicode_nfc", .module = unicode_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
         },
     });
 
@@ -121,15 +121,33 @@ pub fn build(b: *std.Build) void {
     const result_schema_step = b.step("test-model-result-schema", "Test the closed model result-schema boundary");
     result_schema_step.dependOn(&b.addRunArtifact(result_schema_tests).step);
 
+    const request_preparation_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/model_request_preparation_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    const request_preparation_step = b.step("test-model-request-preparation", "Test provider-neutral request construction and static preflight");
+    request_preparation_step.dependOn(&b.addRunArtifact(request_preparation_tests).step);
+
     const reference_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/reference_preflight_test.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "unicode_nfc", .module = unicode_module }},
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
     }) });
     const reference_step = b.step("test-reference-preflight", "Test Specify arguments and reference selector contracts");
     reference_step.dependOn(&b.addRunArtifact(reference_tests).step);
     reference_step.dependOn(&run_unicode_tests.step);
+
+    const identity_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/feature_identity_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const identity_step = b.step("test-feature-identity", "Test deterministic feature identity derivation");
+    identity_step.dependOn(&b.addRunArtifact(identity_tests).step);
+    identity_step.dependOn(&run_unicode_tests.step);
 
     const smoke_command = packaging_smoke.add(b, executable);
     const smoke_step = b.step("smoke", "Test the packaged executable in a clean directory");

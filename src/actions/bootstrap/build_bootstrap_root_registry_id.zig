@@ -18,7 +18,11 @@ pub const Action = struct {
         allocator: std.mem.Allocator,
         canonical_project_root: []const u8,
     ) Error!bootstrap_roots.BootstrapRootRegistryId {
-        if (!std.fs.path.isAbsolute(canonical_project_root)) {
+        const candidate: bootstrap_roots.BootstrapRootRegistryId = .{
+            .canonical_project_root = canonical_project_root,
+            .contract_version = bootstrap_roots.bootstrap_root_contract_version,
+        };
+        if (!candidate.isValid()) {
             return error.BootstrapRootRegistryInvalid;
         }
         return .{

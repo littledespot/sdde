@@ -5,9 +5,9 @@
 **Implementation readiness:** Blocked. F0006 and its governing amendments are
 accepted. Production implementation still requires accepted
 compiler-registered Bedrock model contracts, target/region/data-routing policy,
-an exact token-count mechanism for every enabled model, a token-accounting
-proof for any native structured-output mode, and approval of the concrete AWS
-transport dependency. The environment-only API-key source is accepted: the
+schema representability for any native structured-output mode, and approval
+of the concrete AWS transport dependency. Counting is optional and never an
+inference prerequisite; provider token/context limits are reported by the API. The environment-only API-key source is accepted: the
 engine reads `AWS_BEARER_TOKEN_BEDROCK` and never accepts a hardcoded key. No
 dependency or live AWS activity is authorized here.
 
@@ -189,8 +189,6 @@ AWSBedrockModelContract {
     prompt_only |
     native_model_envelope_v1 { schemaFeatureProfileId },
   supportedControls: RegisteredBedrockInferenceControlSet,
-  contextWindowTokens: PositiveInteger,
-  maximumOutputTokens: PositiveInteger,
   wireBudgets: RegisteredBedrockWireBudgetProof
 }
 ```
@@ -235,11 +233,10 @@ applies. `global` is never interpreted as local to `config.region`.
 The current example's `global.amazon.nova-2-lite-v1:0` is therefore useful as a
 shape example but not automatic runtime authority. AWS documents Nova 2 Lite as
 supporting global inference while not supporting CountTokens or structured
-output. Under F0006's exact-token and full-envelope rules, that entry cannot
-bind to a token-bounded YAML-declared model operation until an exact accepted tokenizer contract
-exists, and it must use `prompt_only`. Its global data-routing policy must also
-be explicitly accepted. No heuristic tokenizer or optimistic feature flag is
-permitted.
+output. Its accepted contract must therefore reject explicit count or native
+schema operations, but lack of counting does not block prompt-only inference.
+Its model contract and global data-routing policy must still be explicitly
+accepted. No heuristic tokenizer or optimistic feature flag is permitted.
 
 The example's OpenAI entries are likewise not executable through F0007. The
 current provider and toolkit examples are not asserted to be a jointly runnable
@@ -320,7 +317,10 @@ evidence. Deployment authority should permit only the registered operations
 and targets. F0007 does not create, edit, rotate, or validate API keys or IAM
 policies and does not enable a model.
 
-## 6. Exact token-count operation
+## 6. Optional exact token-count operation
+
+Counting runs only when explicitly selected by the compiled workflow. It does
+not authorize inference, reserve budget, or enforce token/context capacity.
 
 When the registered model contract selects
 `bedrock_count_tokens { relation }`,
@@ -361,32 +361,16 @@ and containing one nonnegative bounded `inputTokens` integer. The observation
 binds that number to the exact operation ID, binding ID, and
 `ModelVisibleInputId`.
 
-A relation carried by the `bedrock_count_tokens` tag must prove that every
-Converse field omitted by `ConverseTokensRequest`, including `inferenceConfig`,
-is input-token and context neutral for the exact provider/model/protocol
-version. For
-`native_model_envelope_v1` it must additionally cover `outputConfig` and prove
-that CountTokens over the permitted input equals charged Converse input usage
-for that native mode. Without this proof, the affected mode cannot bind to an
-exact-token model operation; prompt-only guidance remains conforming only when its own
-omitted-field relation is registered.
+The registered count relation identifies the exact supported text/schema
+projection and protocol. Any claim that a count equals inference input usage
+requires a proven relation for that mode; it is never an inference gate.
 
-Before inference, F0006 proves with checked arithmetic:
-
-```text
-canonicalInputBytes <= effectiveOperationInputBytes
-inputTokens <= effectiveOperationInputTokens
-inputTokens + effectiveMaximumOutputTokens <= modelContextWindowTokens
-```
-
-Equality is accepted; arithmetic overflow or one token over is rejected.
-
-If the model contract says `unavailable`, the binding fails before assigning a
-count operation. A missing or malformed successful count, or otherwise
-unavailable exact count observation, normalizes to
+If the model contract says `unavailable`, an explicitly requested count
+operation rejects before send; inference remains independently supported. A
+missing or malformed successful count normalizes to
 `exact_token_count_unavailable`; authorization, throttling, timeout, and service
-failures retain their more precise common cause with operation kind
-`input_token_count`. For example, a CountTokens `AccessDeniedException` is
+failures retain their common cause with operation kind `input_token_count`.
+For example, a CountTokens `AccessDeniedException` is
 `authorization_denied`, not an ambiguous count failure.
 
 A runtime `ValidationException` is `request_rejected`. F0007 never parses AWS
@@ -394,14 +378,14 @@ error-message text to infer unsupported CountTokens capability; support is a
 compiler-registered preflight fact.
 
 F0007 never estimates tokens from bytes, characters, words, or a related model.
-It never calls Converse after count failure. CountTokens has no internal retry;
-a policy-approved new model attempt receives a new ordinal and is counted
-again.
+CountTokens has no internal retry or implicit successor. Only compiled YAML
+transitions may choose a subsequent operation or an explicitly authorized
+retry; a count failure is not a hidden engine-wide inference gate.
 
 ## 7. Converse request translation
 
-`invoke` consumes exact token evidence and translates one invoked `inference`
-operation to exactly:
+`invoke` consumes the identified request and operation-bound authorization,
+without count evidence, and translates one invoked `inference` operation to exactly:
 
 ```text
 POST /model/{canonical registered target}/converse
@@ -418,7 +402,6 @@ synchronous Converse subset:
 | Registered target | URI `modelId` |
 | Ordered system/guidance text | `system[].text`, preserving item and byte order |
 | Ordered user/evidence messages | `messages[]` and `content[].text`, preserving roles and order |
-| Effective maximum output tokens | `inferenceConfig.maxTokens` |
 | Optional registered temperature | `inferenceConfig.temperature` only when the exact model contract supports it |
 | Complete `model-envelope/v1` schema | `outputConfig.textFormat` only for a compatible `native_model_envelope_v1` contract |
 
@@ -429,16 +412,15 @@ ConverseBody {
     { role: <registered role>, content: [{ text: <ordered message text> }, ...] },
     ...
   ],
-  inferenceConfig: {
-    maxTokens: <effective maximum>,
-    temperature?: <validated registered value>
-  },
+  inferenceConfig?: { temperature: <validated registered value> },
   outputConfig?: <the exact native structure below>
 }
 ```
 
 Optional members are present only under the stated registered condition; no
-empty placeholder or `null` form is accepted.
+empty placeholder or `null` form is accepted. No engine token ceiling or
+workflow-budget-derived `maxTokens` is sent. Provider token/context limits
+remain provider-owned and their rejection or stop is normalized below.
 
 The adapter uses one canonical JSON serializer. URI escaping, JSON escaping,
 content length, host selection, and bearer-header construction are mechanical
@@ -501,9 +483,8 @@ Positive and negative fixtures cover every supported and prohibited schema
 feature. Failure to represent the full schema blocks before the request.
 Provider rejection never triggers an unaccounted prompt-only repeat. In
 `prompt_only`, `outputConfig` is absent and the full schema remains in bounded,
-counted engine guidance. Both modes still require authoritative engine decode
-and validation. Native mode additionally requires the CountTokens-neutrality
-proof in Section 6.
+engine guidance. Both modes still require authoritative engine decode and
+validation. Native representability does not depend on CountTokens support.
 
 ## 8. Converse response normalization and limits
 
@@ -525,18 +506,15 @@ After strict response decoding, the adapter separately enforces:
 
 ```text
 modelEnvelopeContentBytes <= effectiveOperationOutputBytes
-reportedInputTokens == exactCountEvidence.inputTokens
-reportedOutputTokens <= effectiveOperationOutputTokens
-reportedTotalTokens >= reportedInputTokens
-reportedTotalTokens >= reportedOutputTokens
+reportedTotalTokens == reportedInputTokens + reportedOutputTokens
 ```
 
-The equality follows AWS's CountTokens contract for the same accepted input and
-is also gated by Section 6's native-mode neutrality proof. The adapter applies
-any stronger usage relation in the registered model contract. Overflow,
-negative values, unsupported cache/accounting fields, inconsistent usage, a
-crossed header/body/content cap, or an input-count mismatch fails closed
-without truncation.
+Usage values are nonnegative integers with checked addition. Overflow,
+unsupported cache/accounting fields, inconsistent usage, or a crossed
+header/body/content cap fails closed without truncation. There is no token
+ceiling or comparison with a previous count. The runner records actual input
+plus output usage in the execution ledger, including stopped output; an
+overshoot returns the workflow-budget error and prevents subsequent calls.
 
 Strict bounded decoding reads the known `stopReason` before applying content
 shape rules. `end_turn` requires exactly one assistant output message and one
@@ -737,14 +715,14 @@ F0007 does not implement:
    over-limit input fails before send. Lease preparation is then in-memory
    and no-I/O. The move-only capability stays in a runner-private single-use
    table; only its validated opaque reference enters the pipeline.
-9. CountTokens is called only for a registered supported model and exactly once
-   per reserved attempt; unavailable exact count makes inference unreachable.
+9. CountTokens is called only for an explicitly selected, registered supported
+   count operation, at most once for that operation identity. Inference works
+   without counting.
 10. Nova 2 Lite cannot silently use CountTokens or native structured output;
-    it remains blocked until an exact tokenizer is accepted and uses only the
-    registered prompt-only response mode.
-11. Checked canonical input, serialized CountTokens/Converse request and header
-    bytes, exact input tokens, output reservation, and context limits pass at
-    their defined pre-I/O gates.
+    an accepted prompt-only contract does not require a tokenizer.
+11. Checked canonical input and serialized CountTokens/Converse request/header
+    byte safety pass at their defined pre-I/O gates. No engine token/context
+    preflight or output-token reservation is imposed.
 12. Inference is exactly one synchronous Converse request with SDK/client
     automatic retries disabled.
 13. Only the Section 7 request subset is reachable; unsupported content or
@@ -752,15 +730,14 @@ F0007 does not implement:
 14. Native response schema, when registered, covers the complete exact
     compact result under `model-envelope/v1` (not engine-only identity fields),
     uses the fixed Section 7 projection, passes the
-    versioned Bedrock schema-feature proof, and has an accepted CountTokens
-    neutrality/accounting proof.
+    versioned Bedrock schema-feature proof, and requires no count prerequisite.
 15. Native response rejection never triggers an unaccounted prompt-only call;
     every result still passes engine decoding and validation.
 16. Request headers/bodies, response headers/identity-encoded bodies, and
     canonical envelope caps are separate, proven, and enforced without
     truncation or transparent decompression.
-17. Returned Converse input usage equals bound CountTokens evidence; a mismatch
-    fails closed before candidate decoding.
+17. Returned Converse usage is internally consistent and accounted from API
+    input plus output totals, never from a prior count or output allowance.
 18. Every known stop reason and AWS exception maps to one exact observation;
     unknown, inconsistent, or unregistered nested status fails closed.
 19. Every failure records `not_sent`, `response_received`, or
@@ -811,18 +788,19 @@ Implementation evidence must cover:
 - **Token count:** registered support and Nova unsupported case; exact request
   content/order; zero/boundary/overflow counts; missing/malformed count;
   AccessDenied, throttle, timeout, service failure, cancellation, wire cap;
-  native-mode token-neutrality rejection/proof; returned Converse input-usage
-  equality; count-once and inference unreachable after every failure.
+  optional count association and registered relation; one call per explicit
+  count operation; inference without a counter or count evidence.
 - **Request/schema:** golden URI, system/message order, UTF-8/JSON escaping,
   exact/over request and header caps including schema double-encoding,
-  `maxTokens`, supported temperature, prompt-only omission, fixed full-envelope
+  absent `maxTokens`, supported temperature, prompt-only omission, fixed full-envelope
   `outputConfig` structure/name/description omission, every allowed/prohibited
   Bedrock JSON Schema feature, and negative fixtures for every undeclared
   request field/content kind.
 - **Response/limits:** valid complete text; every known and unknown stop;
   non-text/nonexistent output on known non-candidate stops; missing/multiple text
   on `end_turn`; invalid UTF-8/JSON; negative/overflow/inconsistent usage and
-  count mismatch; exact/exceeded header/body/content/token caps; rejected
+  no count prerequisite; exact/exceeded header/body/content caps; provider
+  output/context stops and workflow actual-usage exhaustion; rejected
   content encoding; short read; cancellation/timeout at each receive boundary;
   deterministic cleanup.
 - **Failures/accounting:** exception-discriminator mapping for representative

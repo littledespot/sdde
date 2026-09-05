@@ -72,7 +72,7 @@ pub const Fixture = struct {
             .registry_entry = &self.registry_entry,
             .reasoning_effort = "low",
             .capacity = .{
-                .canonical = @import("domain/model_limits.zig").Limits.init(256, 40, 100, 20, 100).?,
+                .canonical = @import("domain/model_limits.zig").Limits.init(256, 40).?,
                 .wire = @import("model_contract_test_fixture.zig").capacity.wire,
             },
             .response_mode = .prompt_only,
@@ -179,7 +179,11 @@ pub const Fixture = struct {
 
     pub fn finishCountAndStartInference(self: *Fixture, count: operation.ExactInputTokenCountEvidence) !Authorized {
         _ = try self.change(.input_token_count, .{ .terminate = .{ .counted = count } });
-        _ = try self.change(.inference, .{ .assign_inference = count });
+        return self.startInference();
+    }
+
+    pub fn startInference(self: *Fixture) !Authorized {
+        _ = try self.change(.inference, .{ .assign_inference = self.assignment() });
         const reference = try self.prepare(.inference);
         return .{ .reference = reference, .invoked = try self.invoke(.inference) };
     }

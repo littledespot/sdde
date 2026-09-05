@@ -234,14 +234,14 @@ adding an unrelated definition changes neither execution nor authority.
 
 ### 5.2 Complete deterministic feature/state foundations
 
-Implemented: exact one-selector invocation, Unicode NFC/lexical validation, and
-read-only contained-directory inspection through registered operations (F0100
-Section 3.1). These allocate no feature and read no reference contents.
+Implemented: exact one-selector invocation, Unicode NFC/lexical validation,
+read-only contained-directory inspection, and deterministic feature-identity
+seeds through registered operations (F0100 Section 3.1). These allocate no
+feature, claim no identity availability, and read no reference contents.
 
 Remaining:
 
-- deterministic feature identity;
-- feature ownership/inventory, artifact authority, state-ID and transaction-ID
+- feature collision/ownership/inventory, artifact authority, state-ID and transaction-ID
   ledgers;
 - project and feature WAL, locks, failpoints, recovery, and all-or-nothing stage
   transactions;
@@ -249,6 +249,13 @@ Remaining:
   `specified` transitions; and
 - feature-log activation, recovery, flush barriers, and finalization bound to
   exact feature/run/workflow identities.
+
+Rerun regression fixtures MUST prove that existing selected-workflow outputs
+are overwritten at the same registered paths without separate overwrite
+approval, and user-closed clarification files MUST remain byte-for-byte
+unchanged. Cover applicable validated answer reuse and rejection of stale/invalid
+or concurrent-close overwrites (Design Section 23.2). This output policy does
+not remove the shared state/transaction foundations above.
 
 ### 5.3 Implement the Markdown reference vertical slice
 

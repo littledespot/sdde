@@ -37,11 +37,12 @@ pub const Rejection = union(enum) {
     logging: @import("feature_log_stream.zig").FailureCode,
     cancelled,
     deadline_exhausted,
+    token_budget: @import("workflow_token_accounting.zig").BudgetError,
 
     pub fn status(self: Rejection) workflow.OutcomeTag {
         return switch (self) {
             .gate, .logging => .blocked,
-            .authority, .deadline_exhausted => .failed,
+            .authority, .deadline_exhausted, .token_budget => .failed,
             .cancelled => .cancelled,
         };
     }

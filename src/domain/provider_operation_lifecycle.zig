@@ -32,7 +32,7 @@ pub const Terminal = union(enum) {
 };
 pub const Command = union(enum) {
     assign_count: Assignment,
-    assign_inference: provider.ExactInputTokenCountEvidence,
+    assign_inference: Assignment,
     invoke: Invocation,
     terminate: Terminal,
 };
@@ -246,7 +246,7 @@ pub fn apply(current: *const Ledger, authority: Authority, transition: Transitio
     const snapshot = try allocator.create(Storage);
     const node = try allocator.create(Node);
     var owned = next;
-    if (transition.command == .assign_count) {
+    if (transition.command == .assign_count or transition.command == .assign_inference) {
         owned.binding_id = try cloneBinding(allocator, next.binding_id);
         owned.model_visible_input_id.bytes = try allocator.dupe(u8, next.model_visible_input_id.bytes);
     }
@@ -273,20 +273,12 @@ fn nextRecord(current: *const Ledger, authority: Authority, transition: Transiti
     } else if (transition.expected_operation_revision != null) return error.ProviderOperationNotFound;
 
     switch (transition.command) {
-        .assign_count => |facts| {
-            if (previous != null or id.kind != .input_token_count) return error.InvalidProviderOperationTransition;
+        .assign_count, .assign_inference => |facts| {
+            const kind: provider.ProviderOperationKind = if (transition.command == .assign_count) .input_token_count else .inference;
+            if (previous != null or id.kind != kind) return error.InvalidProviderOperationTransition;
             try current.validateRequestClosure(request);
             try validateBinding(request, facts);
             return assignedRecord(id, facts);
-        },
-        .assign_inference => |evidence| {
-            if (previous != null or id.kind != .inference) return error.InvalidProviderOperationTransition;
-            const count = current.record(evidence.count_operation_id) orelse return error.InvalidProviderOperationCountEvidence;
-            if (count.state != .terminal or count.state.terminal != .counted or
-                !id.sameAttempt(count.id) or count.id.kind != .input_token_count or
-                count.state.terminal.counted != evidence.input_tokens) return error.InvalidProviderOperationCountEvidence;
-            try validateEvidence(count.*, evidence);
-            return assignedRecord(id, .{ .binding_id = count.binding_id, .model_visible_input_id = count.model_visible_input_id });
         },
         .invoke => |invocation| {
             const record = previous orelse return error.ProviderOperationNotFound;

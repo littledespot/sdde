@@ -122,6 +122,11 @@ pub const Runner = struct {
             return .{ .outcome = .failed };
         };
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
+        for (step.capabilities) |capability| {
+            if (std.mem.eql(u8, capability, @import("../domain/workflow_capability.zig").model_provider)) {
+                self.token_accounting.check() catch |err| return .{ .rejected = .{ .token_budget = err } };
+            }
+        }
         if (step.retry_authority) |authority| {
             if (self.retry_execution_counts[index] > @as(u64, authority.limit.value)) return .{ .outcome = .failed };
             self.retry_execution_counts[index] = std.math.add(u64, self.retry_execution_counts[index], 1) catch {

@@ -24,7 +24,7 @@ test "capacity intersection uses every strictest canonical and wire bound" {
     }
 }
 
-test "every absent capacity bound and inconsistent context rejects" {
+test "every absent memory or transport safety bound rejects" {
     inline for (@typeInfo(limits.Limits).@"struct".fields) |field| {
         var invalid = fixture.capacity;
         @field(invalid.canonical, field.name) = 0;
@@ -37,31 +37,25 @@ test "every absent capacity bound and inconsistent context rejects" {
         try std.testing.expect(!invalid.isValid());
         try std.testing.expect(limits.Capacity.intersect(fixture.capacity, invalid) == null);
     }
-    var invalid = fixture.capacity;
-    invalid.canonical.context_window_tokens = invalid.canonical.maximum_output_tokens - 1;
-    try std.testing.expect(!invalid.isValid());
 }
 
-test "exact token capacity allows equality and rejects overflow without wrapping" {
-    const ordinary = fixture.capacity.canonical;
-    try std.testing.expect(ordinary.acceptsInputTokens(1000));
-    try std.testing.expect(!ordinary.acceptsInputTokens(1001));
-    const huge = limits.Limits.init(1, 1, std.math.maxInt(u64), 10, std.math.maxInt(u64)).?;
-    try std.testing.expect(huge.acceptsInputTokens(std.math.maxInt(u64) - 10));
-    try std.testing.expect(!huge.acceptsInputTokens(std.math.maxInt(u64) - 9));
+test "memory safety contract carries no model token ceilings" {
+    try std.testing.expect(!@hasField(limits.Limits, "maximum_input_tokens"));
+    try std.testing.expect(!@hasField(limits.Limits, "maximum_output_tokens"));
+    try std.testing.expect(!@hasField(limits.Limits, "context_window_tokens"));
+    try std.testing.expect(!@hasDecl(limits.Limits, "acceptsInputTokens"));
 }
 
 test "compiled model requirements intersect engine operation and explicit YAML capacities" {
     var engine_capacity = fixture.capacity;
     engine_capacity.canonical.maximum_input_bytes = 2048;
     var operation_capacity = fixture.capacity;
-    operation_capacity.canonical.maximum_input_tokens = 500;
+    operation_capacity.canonical.maximum_input_bytes = 500;
     var values = fixture.compiled_parameters;
-    values[3].value = .{ .integer = 30 };
+    values[1].value = .{ .integer = 30 };
     const resolved = model.resolve(engine_capacity, operation_capacity, &values).?;
-    try std.testing.expectEqual(@as(u32, 2048), resolved.capacity.canonical.maximum_input_bytes);
-    try std.testing.expectEqual(@as(u64, 500), resolved.capacity.canonical.maximum_input_tokens);
-    try std.testing.expectEqual(@as(u64, 30), resolved.capacity.canonical.maximum_output_tokens);
+    try std.testing.expectEqual(@as(u32, 500), resolved.capacity.canonical.maximum_input_bytes);
+    try std.testing.expectEqual(@as(u64, 30), resolved.capacity.canonical.maximum_output_bytes);
     try std.testing.expect(resolved.controls.temperature == null);
     try std.testing.expectEqualDeep(fixture.capacity, fixture.capabilities.capacity);
 }
@@ -81,7 +75,7 @@ test "missing malformed excessive and duplicate model parameters cannot create r
     malformed[0].value = .{ .string = "1024" };
     try std.testing.expect(model.resolve(fixture.capacity, fixture.capacity, &malformed) == null);
     malformed = fixture.compiled_parameters;
-    malformed[4].value = .{ .enumeration = "automatic" };
+    malformed[2].value = .{ .enumeration = "automatic" };
     try std.testing.expect(model.resolve(fixture.capacity, fixture.capacity, &malformed) == null);
     const duplicate = fixture.compiled_parameters ++ .{fixture.compiled_parameters[0]};
     try std.testing.expect(model.resolve(fixture.capacity, fixture.capacity, &duplicate) == null);
@@ -99,7 +93,7 @@ test "model contracts validate capabilities without granting unsupported operati
     try std.testing.expectError(error.InvalidProviderModelContracts, (contracts.Registry{ .entries = &.{contract} }).validate());
     contract.capabilities.exact_token_counter = .unavailable;
     try (contracts.Registry{ .entries = &.{contract} }).validate();
-    try std.testing.expect(!contract.capabilities.supports(.prompt_only, .{}));
+    try std.testing.expect(contract.capabilities.supports(.prompt_only, .{}));
     contract = provider_contract;
     contract.capabilities.inference = false;
     try std.testing.expectError(error.InvalidProviderModelContracts, (contracts.Registry{ .entries = &.{contract} }).validate());
@@ -124,9 +118,9 @@ test "catalogue candidate cannot forge capability or increase trusted limits" {
     const registered: contracts.Registry = .{ .entries = &.{provider_contract} };
     const owner = try provider_registry.createValidated(std.testing.allocator, candidate, registered);
     defer provider_registry.deinitOwner(owner);
-    candidate.entries[0].capabilities.capacity.canonical.maximum_output_tokens += 1;
+    candidate.entries[0].capabilities.capacity.canonical.maximum_output_bytes += 1;
     try std.testing.expectError(error.InvalidLLMProviderRegistry, provider_registry.createValidated(std.testing.allocator, candidate, registered));
-    try std.testing.expectEqual(@as(u64, 200), provider_registry.registry(owner).resolveId(.{ .ordinal = 1 }).?.capabilities.capacity.canonical.maximum_output_tokens);
+    try std.testing.expectEqual(@as(u32, 1024), provider_registry.registry(owner).resolveId(.{ .ordinal = 1 }).?.capabilities.capacity.canonical.maximum_output_bytes);
     candidate.entries[0].capabilities = fixture.capabilities;
     candidate.entries[0].capabilities.temperature = false;
     try std.testing.expectError(error.InvalidLLMProviderRegistry, provider_registry.createValidated(std.testing.allocator, candidate, registered));
@@ -176,10 +170,10 @@ test "provider operations reject request bounds controls and receive budgets out
     try std.testing.expect(!provider.validateCountInvocation(&authorization.provider_binding, &authorization.request, &invoked));
     const evidence = authorization.evidence();
     const inference = try authorization.finishCountAndStartInference(evidence);
-    try std.testing.expect(provider.validateInferenceInvocation(&authorization.provider_binding, &authorization.request, &evidence, inference.invoked));
+    try std.testing.expect(provider.validateInferenceInvocation(&authorization.provider_binding, &authorization.request, inference.invoked));
     invoked = inference.invoked.*;
     invoked.receive_budgets.maximum_header_count = authorization.provider_binding.capacity.wire.maximum_response_header_count + 1;
-    try std.testing.expect(!provider.validateInferenceInvocation(&authorization.provider_binding, &authorization.request, &evidence, &invoked));
+    try std.testing.expect(!provider.validateInferenceInvocation(&authorization.provider_binding, &authorization.request, &invoked));
 }
 
 const provider_contract: contracts.ProviderModelContract = .{

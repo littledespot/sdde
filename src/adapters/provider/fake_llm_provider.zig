@@ -18,12 +18,14 @@ pub const CountPlan = union(enum) {
 
 pub const CompletePlan = struct {
     content: []const u8,
+    input_tokens: u64,
     output_tokens: u64,
     provider_latency_ms: ?u32 = null,
 };
 
 pub const StoppedPlan = struct {
     reason: operation.ProviderNonCandidateStopReason,
+    input_tokens: u64,
     output_tokens: u64,
     provider_latency_ms: ?u32 = null,
 };
@@ -88,7 +90,6 @@ pub const FakeLLMProvider = struct {
         context: *provider_interface.Context,
         provider_binding: *const binding.ValidatedProviderModelBinding,
         request: *const operation.IdentifiedProviderNeutralModelRequest,
-        count_evidence: *const operation.ExactInputTokenCountEvidence,
         authorization: *const operation.ValidatedProviderAuthorizationLeaseRef,
         invoked_operation: *const operation.InvokedProviderOperation,
     ) provider_interface.Error!operation.ProviderInvocationObservation {
@@ -102,7 +103,6 @@ pub const FakeLLMProvider = struct {
         if (!operation.validateInferenceInvocation(
             provider_binding,
             request,
-            count_evidence,
             invoked_operation,
         )) return invalidInvocationCall(invoked_operation.id);
         self.effect_count += 1;
@@ -111,14 +111,12 @@ pub const FakeLLMProvider = struct {
             .complete => |plan| self.complete(
                 provider_binding,
                 request,
-                count_evidence,
                 invoked_operation.id,
                 plan,
             ),
             .stopped => |plan| self.stopped(
                 provider_binding,
                 request,
-                count_evidence,
                 invoked_operation.id,
                 plan,
             ),
@@ -131,18 +129,14 @@ pub const FakeLLMProvider = struct {
         self: *FakeLLMProvider,
         provider_binding: *const binding.ValidatedProviderModelBinding,
         request: *const operation.IdentifiedProviderNeutralModelRequest,
-        count_evidence: *const operation.ExactInputTokenCountEvidence,
         operation_id: operation.ProviderOperationId,
         plan: CompletePlan,
     ) provider_interface.Error!operation.ProviderInvocationObservation {
-        if (plan.output_tokens > request.limits.maximum_output_tokens) {
-            return responseFailure(operation_id, .response_limit_exceeded);
-        }
-        const total_tokens = std.math.add(u64, count_evidence.input_tokens, plan.output_tokens) catch {
+        const total_tokens = std.math.add(u64, plan.input_tokens, plan.output_tokens) catch {
             return responseFailure(operation_id, .response_invalid);
         };
         const usage = operation.ProviderUsage.init(
-            count_evidence.input_tokens,
+            plan.input_tokens,
             plan.output_tokens,
             total_tokens,
         ) orelse return responseFailure(operation_id, .response_invalid);
@@ -172,18 +166,14 @@ pub const FakeLLMProvider = struct {
         _: *FakeLLMProvider,
         provider_binding: *const binding.ValidatedProviderModelBinding,
         request: *const operation.IdentifiedProviderNeutralModelRequest,
-        count_evidence: *const operation.ExactInputTokenCountEvidence,
         operation_id: operation.ProviderOperationId,
         plan: StoppedPlan,
     ) provider_interface.Error!operation.ProviderInvocationObservation {
-        if (plan.output_tokens > request.limits.maximum_output_tokens) {
-            return responseFailure(operation_id, .response_limit_exceeded);
-        }
-        const total_tokens = std.math.add(u64, count_evidence.input_tokens, plan.output_tokens) catch {
+        const total_tokens = std.math.add(u64, plan.input_tokens, plan.output_tokens) catch {
             return responseFailure(operation_id, .response_invalid);
         };
         const usage = operation.ProviderUsage.init(
-            count_evidence.input_tokens,
+            plan.input_tokens,
             plan.output_tokens,
             total_tokens,
         ) orelse return responseFailure(operation_id, .response_invalid);

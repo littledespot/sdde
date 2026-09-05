@@ -54,7 +54,7 @@ flowchart TD
     TID --> TPERSIST[PersistTransactionIdReservationAction<br/>compare-and-swap and fsync the ledger before constructing or exposing a journal path]
     TPERSIST --> STORAGE[BuildTransactionStorageCapabilityAction<br/>bind exact project/feature collection, held lock, current ledger and DurableTransactionKind]
     STORAGE --> BUILD[Transaction-specific builder constructs the candidate with<br/>StateIdentityTransactionMember plus TransactionIdentityMember<br/>as the mandatory DurableTransactionMember]
-    BUILD --> TVALID[Run the transaction-specific validator and<br/>ValidateTransactionIdentityMemberAction]
+    BUILD --> TVALID[Run the transaction-specific validator and<br/>ValidateTransactionIdentityMemberAction;<br/>reruns MUST overwrite existing selected-workflow outputs at the same registered paths;<br/>no separate overwrite approval;<br/>user-closed clarification files MUST remain byte-for-byte unchanged:<br/>preservation preconditions, never write entries]
     TVALID --> SVALID{ValidateTransactionStorageCapabilityAction<br/>owner, kind, path, process, lock-table and sealed transaction all exact}
     SVALID -- Invalid before journal creation --> RETIRE
 

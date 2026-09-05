@@ -24,8 +24,9 @@ flowchart TD
     SEL --> ROOT[Resolve no-follow contained reference root]
     ROOT --> RDIR{Exists, readable directory and regular traversal root}
     RDIR -- No --> INPUTERR
-    RDIR -- Yes --> FID[DeriveFeatureIdentityAction<br/>deterministic identity from canonical selector and naming policy]
-    FID --> SDDSETUP[Selected specify graph invokes diagram 08 SDD feature-context setup;<br/>resolve the fixed project transaction collection, acquire its lock,<br/>and recover the project WAL and transaction-ID ledger before feature ownership reads]
+    RDIR -- Yes --> FID[derive-feature-identity@1<br/>full canonical selector + required YAML max-length 1–255<br/>pinned Unicode folding, ASCII slug, truncation and portable validation]
+    FID -- Empty, invalid or over transformation limit --> INPUTERR
+    FID -- Seed only: selector, policy version, maximum and prospective ID --> SDDSETUP[Later feature-context setup from diagram 08;<br/>resolve the fixed project transaction collection, acquire its lock,<br/>and recover the project WAL and transaction-ID ledger before feature ownership reads]
     SDDSETUP --> FIPATH[ResolveFeatureIdentityRegistryPathAction<br/>sole project-level registry beneath the reserved paths.workflows/features child]
     FIPATH --> FIREAD[ReadFeatureIdentityRegistryAction<br/>bounded no-follow read; absence is valid only before first activation]
     FIREAD --> FIPRESENT{Registry bytes present}
@@ -233,8 +234,11 @@ flowchart TD
     CREFCGATE -- Invalid --> INVALID
     CREFCGATE -- Valid --> CREFKIND{FreshReferenceConflictCorrespondence variant}
     CREFKIND -- current with total selected-option mapping --> CREFDECID[AssignReferenceConflictDecisionIdAction from the refreshed candidate ledger;<br/>BuildReferenceConflictDecisionFromClarificationResponseAction against the mapped<br/>current candidate conflict, claims and citations; never against the prior snapshot]
-    CREFKIND -- stale_same_subject --> CREFSTALE[RefreshReferenceConflictClarificationAction;<br/>record a same-ID open outcome with current snapshot-local conflict/options<br/>and allocate no decision or clarification ID]
-    CEQUAL -- No usable closed response --> CREFUNANSWERED[RefreshReferenceConflictClarificationAction;<br/>record the same-ID open outcome for this directly equal structural key]
+    CREFKIND -- stale_same_subject --> CPROTECTED{Would refresh replace or reopen a user-closed form}
+    CEQUAL -- No usable closed response --> CPROTECTED
+    CPROTECTED -- Yes --> CPROTECTBLOCK[Block for user direction under Section 23.2;<br/>retain file bytes, answer and identity; allocate no duplicate]
+    CPROTECTED -- No; stale unprotected answer --> CREFSTALE[RefreshReferenceConflictClarificationAction;<br/>record a same-ID open outcome with current snapshot-local conflict/options<br/>and allocate no decision or clarification ID]
+    CPROTECTED -- No; unanswered --> CREFUNANSWERED[RefreshReferenceConflictClarificationAction;<br/>record the same-ID open outcome for this directly equal structural key]
     CREFSTALE --> CEQUAL
     CREFUNANSWERED --> CEQUAL
     CREFDECID --> CREFVALID{ValidateReferenceConflictResolutionDecisionAction<br/>subject, conflict and mapped selected claims remain revision-current}
@@ -248,16 +252,18 @@ flowchart TD
     CREFRESOLVE --> CREFREBUILD[Rebuild conflict/decision and claim-disposition ledgers, ReferenceContext<br/>and successor snapshot candidate; rerun complete accounting, reconciliation,<br/>citation, exact-token, source-map, manifest and full-snapshot validation]
     CREFREBUILD --> SVALID
     CEQUAL -- No entries remain --> COBSOLETE{Next canonical P minus C entry}
-    COBSOLETE -- Present --> COBCLOSE[AssignClarificationResolutionIdAction then<br/>BuildObsoleteReferenceConflictAuthorityResolutionAction from the entry's exhaustive<br/>current-set absence correspondence; close only that prior key and name no replacement]
+    COBSOLETE -- Present --> COBCLOSE[Retain an existing user closure and file unchanged;<br/>otherwise AssignClarificationResolutionIdAction then<br/>BuildObsoleteReferenceConflictAuthorityResolutionAction from exhaustive absence proof;<br/>close only that prior key and name no replacement]
     COBCLOSE --> COBSOLETE
     COBSOLETE -- None remain --> CINTRO{Next canonical C minus P entry}
     CINTRO -- Present --> CINEED[BuildReferenceConflictClarificationNeedAction for that exact current conflict;<br/>FindExistingClarificationBySubjectAction and ValidateClarificationSubjectUniquenessAction<br/>perform the global exact full-key lookup across open and closed history]
-    CINEED --> CIIDENT[Reuse and reopen the exact existing identity, or call AssignClarificationIdAction<br/>only after validated global absence; keep a new identity and successor ledger transaction-private<br/>until the complete registry/view/reference/workflow commit, otherwise discard the whole candidate]
+    CINEED --> CIPROTECTED{Existing user-closed subject would need reopening}
+    CIPROTECTED -- Yes --> CPROTECTBLOCK
+    CIPROTECTED -- No --> CIIDENT[Reuse only an unprotected existing identity, or call AssignClarificationIdAction<br/>only after validated global absence; keep a new identity and successor ledger transaction-private<br/>until the complete registry/view/reference/workflow commit, otherwise discard the whole candidate]
     CIIDENT --> CIOPEN[BuildIntroducedReferenceConflictOpeningAction;<br/>bind the current conflict/options without pairing it to any obsolete prior key]
     CIOPEN --> CINTRO
     CINTRO -- None remain --> CSETBUILD[BuildReferenceConflictClarificationSetTransitionAction once from every<br/>same-key decision/reopen outcome, obsolete closure, introduced opening and the fully<br/>threaded successor clarification ID ledger in canonical partition order]
     CSETBUILD --> CSETSTATE[AssignClarificationStateIdAction then call<br/>BuildNextClarificationRegistryAction exactly once with the complete set transition]
-    CSETSTATE --> CVIEWS[RenderClarificationViewAction for the complete clarification view set;<br/>ValidateClarificationViewLifecycleAction per view and ValidateClarificationViewSetAction globally;<br/>only expected-open SNN keys expose submittable forms, while closed historical views remain<br/>read-only for audit; also render the current conflict-bearing reference-context view]
+    CSETSTATE --> CVIEWS[Assemble the complete clarification view set: retain user-closed forms unchanged<br/>and RenderClarificationViewAction only for writable members;<br/>ValidateClarificationViewLifecycleAction per view and ValidateClarificationViewSetAction globally;<br/>only expected-open SNN keys are submittable; render the current reference-context view]
     CVIEWS --> CSETVALID[ValidateReferenceConflictClarificationSetTransitionAction then<br/>ValidateClarificationRegistryAction; reprove complete partition/allocator coverage and exact<br/>equality of unresolved current keys, open registry keys and submittable form-view keys]
     CSETVALID -- Invalid --> INVALID
     CSETVALID -- Valid --> CSETOPEN{expectedOpenCurrentSubjectKeys}

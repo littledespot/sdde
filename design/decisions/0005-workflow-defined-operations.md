@@ -109,7 +109,17 @@ A generic model operation declares in YAML:
 
 The selected workflow policy supplies the one workflow-global consumption
 limit: a positive total model-token budget initialized separately for each
-workflow execution. It supplies no retry count. Any operation instance that
+workflow execution. The accepted actual-usage amendment records API-reported
+input plus output tokens after each inference call. A call may overshoot;
+record its full usage and return a budget error, and prohibit further model
+calls at or above budget. There is no pre-call token reservation or
+budget-derived output allowance. Engine/operation/model token ceilings and
+mandatory pre-call counting are removed; the retired `input-tokens` and
+`output-tokens` parameters reject. Providers report their token/context errors
+or stops. Byte/memory/transport safety remains enforced. Optional count
+observations neither authorize inference nor replace actual usage. This is
+runner-owned accounting/guarding, not a YAML-selectable bypass or hidden model route.
+It supplies no retry count. Any operation instance that
 can take a retry transition must declare its own `retry-limit` in `with`; the
 registered operation contract bounds that value and the compiler rejects a
 missing limit or an unbounded retry cycle. An operation with no retry path does
@@ -117,7 +127,7 @@ not acquire a hidden retry.
 
 The workflow never names a provider or model directly. The selected slot must
 resolve through `ValidatedRepositoryModelAllowlist` to the immutable provider
-registry entry prepared for that invocation. Per-request provider capacity and
+registry entry prepared for that invocation. Per-request byte safety and
 authorization constraints may be stricter, but cannot silently replace the
 YAML's slot, resources, control flow, or requested operation semantics.
 

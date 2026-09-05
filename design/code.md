@@ -400,7 +400,6 @@ NodeContract {
     | { kind: emit_exactly_one,
         transitionKind: increment_model_attempt |
                         increment_atomic_repair_attempt |
-                        reserve_workflow_tokens |
                         reconcile_workflow_tokens |
                         advance_provider_operation |
                         consume_no_invention_replacement },
@@ -411,7 +410,6 @@ NodeContract {
 Runner accounting capability registry:
   AdvanceModelAttemptAccountingAction -> increment_model_attempt
   AdvanceAtomicRepairAttemptAccountingAction -> increment_atomic_repair_attempt
-  ReserveWorkflowTokenBudgetAction -> reserve_workflow_tokens
   ReconcileWorkflowTokenUsageAction -> reconcile_workflow_tokens
   AdvanceProviderOperationLifecycleAction -> advance_provider_operation
   ValidateRepairScopeAction -> consume_no_invention_replacement only when its
@@ -474,8 +472,8 @@ PipelineEnvelope {
     workflowTokenAccounting: {
       totalModelTokenBudget,
       committedTokens,
-      reservedTokens,
-      reservationsByProviderOperationId
+      usageUnavailable,
+      accountedProviderOperationIds
     }
   },
   workspace: {
@@ -535,20 +533,17 @@ RepairAccountingTransition =
       stageRunEpochId, retryOperationInstanceId,
       expectedRetryValue, nextRetryValue, explicitRetryLimit
     }
-  | ReserveWorkflowTokens {
-      workflowExecutionId, providerOperationId,
-      expectedLedgerRevision, exactInputTokens, maximumOutputTokens,
-      reservedTotal
-    }
   | ReconcileWorkflowTokens {
       workflowExecutionId, providerOperationId,
       expectedLedgerRevision,
-      commitExactUsage | releaseNotSent | retainFullReservation
+      recordActualInputAndOutput | provenNotSent | usageUnavailable
     }
   | AdvanceProviderOperation {
       expectedLedger, expectedLedgerRevision,
       providerOperationId, expectedOperationRevision?,
-      assignCount | assignInferenceWithExactCountEvidence | invoke | terminate
+      assignCount | assignInference | invoke | terminate
+      // Either assignment binds the request, model binding and exact input;
+      // inference requires no prior count operation or count evidence.
       // Runner applies one immutable successor after validating request and
       // attempt revisions. Its non-content journal projection is an intent,
       // not proof of persistence or result consumption.
@@ -2605,16 +2600,14 @@ SpecifyInvocation {
 
 FeatureIdentitySeed {
   referenceSelector: RelativeReferenceSelector,
-  canonicalSelectorSegments[],
-  namingPolicyVersion,
+  namingPolicy: { version: unicode17_ascii_v1, maximumLength: 1..255 },
   featureId
 }
 
 FeatureIdentityOwnershipRecord {
   featureId,
   canonicalReferenceSelector: RelativeReferenceSelector,
-  canonicalSelectorSegments[],
-  namingPolicyVersion,
+  namingPolicy: { version: unicode17_ascii_v1, maximumLength: 1..255 },
   lifecycle: active | archived,
   workflowStateId,
   workflowArtifactRegistryStateId,
@@ -5486,6 +5479,7 @@ ClarificationRecord {
 }
 
 ClarificationUserSubmission {
+  submittedFormBytes: RawSourceScalar, // parser-owned bounded capture, not a form field
   clarificationId,
   expectedClarificationStateId,
   expectedClarificationStateRevision,
@@ -5506,6 +5500,7 @@ ClarificationResponse {
   inputClarificationStateId,
   inputClarificationStateRevision,
   inputRecordRevision,
+  submittedFormBytes: RawSourceScalar, // bounded exact validated capture, not rerendered
   answer:
     | { kind: selected_option, optionKey, canonicalLabel: BusinessText }
     | { kind: selected_options,
@@ -5561,13 +5556,18 @@ SameKeyReferenceConflictTransitionOutcome =
       currentConflictId,
       reason: open_or_unanswered | stale_answer,
       currentOpenRecord: ClarificationRecord
+      // Only unprotected records; user-closed protection blocks before this
+      // outcome is constructed when a required answer is no longer applicable.
     }
 
 ObsoletePriorReferenceConflictClosure {
   subjectKey: ReferenceConflictClarificationSubjectKey,
   clarificationId,
   absenceCorrespondence: AbsentReferenceConflictCorrespondence,
-  authorityResolution: ClarificationAuthorityResolution
+  disposition:
+    | { kind: preserved_user_closed, clarificationResponseId }
+    | { kind: authority_closed,
+        authorityResolution: ClarificationAuthorityResolution }
 }
 
 IntroducedCurrentReferenceConflictOpening {
@@ -5584,6 +5584,8 @@ IntroducedCurrentReferenceConflictOpening {
         clarificationId
       },
   currentOpenRecord: ClarificationRecord
+  // A protected user-closed historical key cannot become an opening. Block
+  // for user direction; neither reopen it nor allocate a duplicate ID.
 }
 
 ReferenceConflictClarificationSetTransition {
@@ -5646,9 +5648,9 @@ ClarificationRegistryState {
   authorityResolutions: ClarificationAuthorityResolution[]
   // The full registry survives successful replacement and abandoned executions.
   // Lookup includes open and closed records before allocating any new ID.
-  // A still-applicable answer is reused; changed applicability refreshes or
-  // reopens this same record. Ambiguous correspondence blocks rather than
-  // allocating a duplicate. Reruns never rebuild the ID ledger from zero.
+  // Reuse applicable answers. Refresh/reopen only unprotected records;
+  // preserve user-closed forms and block an unresolved required subject under
+  // design Section 23.2. Never allocate a duplicate or reset the ID ledger.
 }
 
 ClarificationView =
@@ -5674,12 +5676,22 @@ ClarificationView =
       inputClarificationStateId,
       inputClarificationStateRevision,
       inputRecordRevision,
-      recordLifecycleStatus:
-        resolved_by_user | resolved_by_authority | cancelled_by_user,
+      recordLifecycleStatus: resolved_by_authority | cancelled_by_user,
       immutableQuestionProjection,
       immutableResolutionProjection,
       renderedBytes,
       editableRegions: []
+    }
+  | ClarificationUserClosedView {
+      kind: preserved_user_closed,
+      clarificationId,
+      artifactPathId,
+      engineAssignedPath,      // unchanged registered clarification path
+      clarificationResponseId, // sole owner of original binding and submittedFormBytes
+      editableRegions: []
+      // A read/preservation precondition, not a transaction write member.
+      // Old engineStatus/revision fields describe the accepted submission;
+      // current canonical closure is read from the response/registry instead.
     }
 
 SpecificationIdLedger {
@@ -8969,7 +8981,8 @@ StageTransaction = DurableTransactionMember & (
       clarificationViews: ClarificationView[],
       // Complete registered historical view set. Its open_submission subject
       // projection must equal the successor unresolved-current subject set;
-      // the zero-open branch therefore still carries closed_audit views.
+      // the zero-open branch retains closed_audit and preserved_user_closed
+      // views. Preserved members are validated, never emitted as file writes.
       descendantMutation: ReferenceRevisionDescendantMutation,
       referenceContextView: GeneratedView,
       nextWorkflowState: WorkflowState
@@ -9339,7 +9352,6 @@ and every referenced tuple must exist in the separately configured
     "standaloneStageRequiresFeatureId": true,
     "maxContextRequestsPerCall": 1,
     "defaultTaskConcurrency": 1,
-    "featureIdMaxLength": 64,
     "allowRawPathFallback": false
   },
   "review": {
@@ -10486,9 +10498,9 @@ Enter at most 2,000 UTF-8 bytes. To answer, change `requestedStatus` to
 
 For `select_one`, the answer region contains exactly one engine-rendered option
 key. For `select_many`, it contains one option key per nonblank line, with no
-duplicates; the parser enforces the record's minimum/maximum and rewrites the
-accepted response into engine option order, so user ordering cannot create a
-different canonical decision. Conflict forms use only claim-ID option keys from
+duplicates; the parser enforces the record's minimum/maximum and normalizes the
+canonical response value into engine option order without rewriting the user's
+file, so user ordering cannot create a different canonical decision. Conflict forms use only claim-ID option keys from
 the committed conflict. The parser compares every engine-owned scalar/section directly with the
 current registry and imports only `requestedStatus` plus the bounded answer
 region. It does not use hashes. A close with an empty/invalid answer, a stale
@@ -10500,6 +10512,14 @@ once, increments the registry and record revisions, keeps the workflow in the
 same clarification-pending state, and rerenders `requestedStatus: open` with a
 blank answer region. Replaying the prior defer form is therefore stale rather
 than creating a duplicate response.
+
+A user-closed file is retained byte-for-byte under Design Section 23.2, including
+its original open engine status/revision fields and submitted closed status and
+answer. Successful ingestion commits the accepted response and canonical
+closure, not a replacement audit form. Subsequent reads validate the retained
+file against that response's original submission binding. Stale/invalid closes
+block without rewriting; a still-required subject with an inapplicable protected
+answer requires user direction, not automatic reopening or a duplicate ID.
 
 | Prefix | Owning stage | Pending state | Must be closed before |
 |---|---|---|---|

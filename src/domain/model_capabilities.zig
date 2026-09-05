@@ -22,8 +22,7 @@ pub const Capabilities = struct {
     }
 
     pub fn supports(self: Capabilities, mode: @import("model_controls.zig").ResponseGuidanceMode, selected: @import("model_controls.zig").InferenceControls) bool {
-        if (!self.isValid() or !self.input_token_count or !self.inference or
-            self.exact_token_counter != .provider_input_token_count) return false;
+        if (!self.isValid() or !self.inference) return false;
         if (selected.temperature) |temperature| {
             if (!self.temperature or temperature.value > 1000) return false;
         }

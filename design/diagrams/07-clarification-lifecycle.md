@@ -14,7 +14,9 @@ flowchart TD
     LIMIT -- No --> BLOCK[Blocking clarification-capacity diagnostic<br/>no partial stage artifact]
     LIMIT -- Yes --> ALLOC[Allocate S01-S99, P01-P99 or T01-T99<br/>retired IDs are never reused]
     ALLOC --> NEWREC[Build new open canonical record and advance only that stage's ID ledger]
-    REUSE --> EXISTING[Retain the existing ID and ledger; reopen only by a new revision of that same record]
+    REUSE --> PROTECTED{Would refresh or reopen replace a user-closed form}
+    PROTECTED -- Yes --> PBLOCKC[Block for explicit user direction;<br/>retain user-closed bytes, answer and identity; never allocate a duplicate]
+    PROTECTED -- No --> EXISTING[Retain the existing ID and ledger;<br/>only an unprotected record may reopen through a new revision]
     NEWREC --> UNIQUE[Validate one record per exact subject key and one subject per ID]
     EXISTING --> UNIQUE
     UNIQUE --> NREG[AssignClarificationStateIdAction, BuildNextClarificationRegistryAction<br/>and ValidateClarificationRegistryAction for the prospective open/reused record]
@@ -23,7 +25,7 @@ flowchart TD
     VIEW --> PSTAGE{Owning clarification stage}
     PSTAGE -- Plan --> PPINPUT[AssignPlanInputAuthorityStateIdAction then BuildPlanInputAuthorityStateAction<br/>and ValidatePlanInputAuthorityStateAction after the exact next clarification ID/revision exists;<br/>persist all consumed path/research IDs and tombstones, but no candidate records or PlanState]
     PPINPUT --> PAUSE
-    PSTAGE -- Spec or tasks --> PAUSE[Assemble complete stage-specific clarification-pause inputs:<br/>current/staged authority set, next registry, all forms and matching pending state;<br/>the plan variant includes its exact successor PlanInputAuthorityState;<br/>no incomplete SpecificationIR, PlanState or TaskDefinitionState]
+    PSTAGE -- Spec or tasks --> PAUSE[Assemble complete stage-specific clarification-pause inputs:<br/>current/staged authority set, next registry, all forms and matching pending state;<br/>retain protected forms byte-for-byte; the plan variant includes its exact successor<br/>PlanInputAuthorityState; no incomplete SpecificationIR, PlanState or TaskDefinitionState]
     PAUSE --> PVALID[Validate exact paths, revisions, prefixes and open-ID projection]
     PVALID --> PWAL[Invoke diagram 09 feature-storage lifecycle: acquire/recover feature storage,<br/>reserve/fsync transaction ID, build/validate ClarificationPauseStageTransaction<br/>with DurableTransactionMember, journal/mark, commit or retire and release exactly once]
     PWAL --> PLOG{Transaction adopted a successor bootstrap whose<br/>changePlan.obligations.transitionFeatureLogging is true}
@@ -48,14 +50,16 @@ flowchart TD
     PPEND --> RERUN
     TPEND --> RERUN
     WAIT --> RERUN
-    RERUN --> LOAD[Load and validate current registry, all forms, workflow state and passive-literal revision;<br/>retain prior clarification records and answers rather than duplicating them]
-    LOAD --> ANSWERS[Revalidate relevant resolved answers against current authority;<br/>consume supported answers and reopen the same ID when current evidence requires it]
-    ANSWERS --> ORDER[Visit open records in stage-rank then ordinal order]
-    ORDER --> FORM[ParseClarificationViewAction only for a registered open_submission view;<br/>project its two editable fields and immutable form content against the last commit;<br/>closed_audit views have no submission route]
+    RERUN --> LOAD[Load and validate current registry, all forms, workflow state and passive-literal revision;<br/>protect user-closed bytes before ingestion; retain all records and answers]
+    LOAD --> ANSWERS[Revalidate relevant resolved answers against current authority;<br/>consume applicable validated answers before proposing questions]
+    ANSWERS --> APROTECTED{Changed applicability would refresh or reopen a user-closed form}
+    APROTECTED -- Yes --> PBLOCKC
+    APROTECTED -- No --> ORDER[Visit open records in stage-rank then ordinal order;<br/>only unprotected records may refresh or reopen]
+    ORDER --> FORM[ParseClarificationViewAction only for a registered open_submission view;<br/>project its two editable fields and immutable form content against the last commit;<br/>accepted retained user-closed and closed_audit views have no submission route]
     FORM --> PRESENT{Current editable submission present}
     PRESENT -- Yes --> STATIC[ValidateClarificationViewStaticProjectionAction<br/>filename, IDs, revisions and immutable content equal the current record]
     STATIC --> SUBMIT{ValidateClarificationUserSubmissionAction<br/>before authentication: freshness, closed answer, select cardinality/order,<br/>and bounded defer or cancel reason shape}
-    SUBMIT -- Invalid --> UERR[Nonzero user-input error<br/>no authentication lease consumed, evidence ID allocated,<br/>model repair or state mutation]
+    SUBMIT -- Invalid --> UERR[Nonzero user-input error; stale or invalid closed submission stays byte-exact;<br/>no authentication lease consumed, evidence ID allocated,<br/>model repair, form replacement or state mutation]
     SUBMIT -- Valid cancel --> AUTHC[AuthenticateActorAction then ValidateAuthenticationObservationAction,<br/>AssignAuthenticationEvidenceIdAction, BuildAuthenticatedActorEvidenceAction<br/>and ValidateAuthenticatedActorEvidenceAction]
     AUTHC --> BINDC[BindAuthenticatedClarificationSubmissionAction<br/>bind the already valid cancel event to fresh actor evidence]
     BINDC --> CANCEL[AssignClarificationResponseIdAction and assemble the cancelled response,<br/>next actor/clarification registries and immutable resolved form]
@@ -72,7 +76,7 @@ flowchart TD
     SUBMIT -- Valid closed answer --> AUTHA[AuthenticateActorAction then ValidateAuthenticationObservationAction;<br/>assign, build and validate fresh actor evidence without appending its registry yet]
     AUTHA --> BINDA[BindAuthenticatedClarificationSubmissionAction<br/>bind the already schema-valid canonical answer to fresh actor evidence]
     BINDA --> URESP[AssignClarificationResponseIdAction then build response and<br/>next actor/clarification registries with resolved_by_user lifecycle]
-    URESP --> UTX[Invoke diagram 09 feature-storage lifecycle; after transaction-ID reservation<br/>build/validate ClarificationResponseStageTransaction and commit response, actor evidence,<br/>registry, optional passive update, resolved form and next workflow state;<br/>release feature lock; remain pending when another record is open]
+    URESP --> UTX[Invoke diagram 09 feature-storage lifecycle; after transaction-ID reservation<br/>build/validate ClarificationResponseStageTransaction and commit response, actor evidence,<br/>registry, optional passive update and next workflow state while retaining the submitted<br/>form byte-for-byte; release feature lock; remain pending when another record is open]
     UTX --> RESOLVED[Resolution committed before regeneration]
 
     PRESENT -- No --> REFRESH[Refresh stage-authorized sources; compare typed current states directly<br/>no fingerprint and no unsupported model recall]
@@ -128,10 +132,16 @@ flowchart TD
     SCREFRESH --> SCPRIOR[BuildPriorReferenceConflictClarificationSubjectSetAction then<br/>ValidatePriorReferenceConflictClarificationSubjectSetAction for the complete canonical P]
     SCPRIOR --> SCCURRENT[BuildCurrentUnresolvedReferenceConflictSubjectSetAction then<br/>ValidateCurrentUnresolvedReferenceConflictSubjectSetAction for every unresolved<br/>behavior-changing conflict in the complete validated fresh snapshot C]
     SCCURRENT --> SCRECON[ReconcileReferenceConflictSubjectSetsAction then<br/>ValidateReferenceConflictSubjectSetReconciliationAction;<br/>prove the exact disjoint exhaustive P intersection C, P minus C and C minus P partitions]
-    SCRECON --> SCSAME[For each equal-key P intersection C entry only, use<br/>BuildFreshReferenceConflictCorrespondenceAction and ValidateFreshReferenceConflictCorrespondenceAction;<br/>current may allocate/build/validate a decision and rebuild the fresh snapshot;<br/>stale_same_subject or no usable response calls RefreshReferenceConflictClarificationAction<br/>and preserves the same SNN identity]
-    SCSAME --> SCOBSOLETE[For every P minus C entry, AssignClarificationResolutionIdAction then<br/>BuildObsoleteReferenceConflictAuthorityResolutionAction with exhaustive C-absence proof;<br/>close that prior key without naming or pairing any introduced key]
-    SCOBSOLETE --> SCINTRO[For every C minus P entry, BuildReferenceConflictClarificationNeedAction,<br/>FindExistingClarificationBySubjectAction and ValidateClarificationSubjectUniquenessAction;<br/>globally reuse the exact existing key or AssignClarificationIdAction only after exact absence,<br/>then BuildIntroducedReferenceConflictOpeningAction]
-    SCINTRO --> SCSET[BuildReferenceConflictClarificationSetTransitionAction once;<br/>AssignClarificationStateIdAction and BuildNextClarificationRegistryAction once;<br/>render the complete view set, then ValidateReferenceConflictClarificationSetTransitionAction<br/>and ValidateClarificationRegistryAction with exact unresolved-key/open-key/submittable-view-key equality;<br/>closed historical views remain read-only]
+    SCRECON --> SCSAME[For each equal-key P intersection C entry only, use<br/>BuildFreshReferenceConflictCorrespondenceAction and ValidateFreshReferenceConflictCorrespondenceAction]
+    SCSAME --> SCPROTECTED{Stale or unusable answer would refresh a protected user-closed form}
+    SCPROTECTED -- Yes --> PBLOCKC
+    SCPROTECTED -- No --> SCAPPLY[Current answer may allocate/build/validate a decision and rebuild the fresh snapshot;<br/>otherwise RefreshReferenceConflictClarificationAction refreshes only an unprotected form<br/>and preserves the same SNN identity]
+    SCAPPLY --> SCOBSOLETE[For every P minus C entry, retain existing user closure and protected bytes;<br/>otherwise AssignClarificationResolutionIdAction then<br/>BuildObsoleteReferenceConflictAuthorityResolutionAction with exhaustive C-absence proof;<br/>close that prior key without naming or pairing any introduced key]
+    SCOBSOLETE --> SCINTRO[For every C minus P entry, BuildReferenceConflictClarificationNeedAction,<br/>FindExistingClarificationBySubjectAction and ValidateClarificationSubjectUniquenessAction]
+    SCINTRO --> SIPROTECTED{Opening would replace an existing user-closed form}
+    SIPROTECTED -- Yes --> PBLOCKC
+    SIPROTECTED -- No --> SIOPEN[Globally reuse the exact existing key or AssignClarificationIdAction only after<br/>exact absence, then BuildIntroducedReferenceConflictOpeningAction]
+    SIOPEN --> SCSET[BuildReferenceConflictClarificationSetTransitionAction once;<br/>AssignClarificationStateIdAction and BuildNextClarificationRegistryAction once;<br/>assemble the complete view set from retained protected forms and writable rendered views;<br/>ValidateReferenceConflictClarificationSetTransitionAction and ValidateClarificationRegistryAction<br/>require exact unresolved-key/open-key/submittable-view-key equality]
     SCSET --> SOWNED[Diagram 05 owns one atomic clarification-pause transaction when the expected open-key set<br/>is nonempty, or one reference-revision transaction with a validated empty submittable-view projection<br/>otherwise; each commits the complete set transition, complete view set and fresh snapshot with any<br/>bootstrap/logging transition; this lifecycle performs no pairwise subject mutation or second<br/>retained-snapshot transaction]
     RTYPE -- No --> RSTAGE{Owning stage to regenerate}
     RSTAGE -- Spec --> REGENS[Regenerate every specification unit in deterministic order<br/>from current reference and answer authority]
@@ -147,11 +157,11 @@ flowchart TD
     REGENP --> FULL
     REGENT --> FULL
     FULL -- New genuine authority gap --> NEED
-    FULL -- Valid spec --> SPECOK[Commit specified state]
-    FULL -- Valid plan --> PLANOK[Commit read-only PlanState/views then await exact-state approval]
-    FULL -- Valid tasks --> TASKOK[Commit read-only TaskDefinitionState/view then await exact-state approval]
+    FULL -- Valid spec --> SPECOK[Commit specified state and replace its registered outputs;<br/>retain protected clarifications]
+    FULL -- Valid plan --> PLANOK[Commit read-only PlanState and replace its registered views;<br/>retain protected clarifications, then await exact-state approval]
+    FULL -- Valid tasks --> TASKOK[Commit read-only TaskDefinitionState and replace its registered view;<br/>retain protected clarifications, then await exact-state approval]
 
-    TX09REF[Diagram 09 is the sole durable clarification/stage persistence subroutine;<br/>each call acquires/releases the feature collection lock and no lock spans user wait,<br/>authority refresh, model resolution or full-stage regeneration]
+    TX09REF[Diagram 09 is the sole durable clarification/stage persistence subroutine;<br/>reruns MUST overwrite existing selected-workflow outputs at the same registered paths;<br/>no separate overwrite approval and no feature-directory clearing;<br/>user-closed clarification files MUST remain byte-for-byte unchanged;<br/>state/ownership recovery remains required; no feature collection lock spans<br/>user wait, authority refresh, model resolution or regeneration]
     PWAL -. common lifecycle .-> TX09REF
     CTX09 -. common lifecycle .-> TX09REF
     DTX09 -. common lifecycle .-> TX09REF

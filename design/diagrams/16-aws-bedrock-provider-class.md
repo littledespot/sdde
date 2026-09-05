@@ -11,7 +11,7 @@ classDiagram
     class LLMProviderInterface {
         <<implemented provider-neutral port>>
         +countInputTokens(binding, request, authorization, operation) ProviderTokenCountObservation
-        +invoke(binding, request, countEvidence, authorization, operation) ProviderInvocationObservation
+        +invoke(binding, request, authorization, operation) ProviderInvocationObservation
     }
 
     class AWSBedrockProvider {
@@ -153,8 +153,6 @@ classDiagram
         +RegisteredExactTokenCounter exactTokenCounter
         +RegisteredResponseMode responseMode
         +RegisteredBedrockInferenceControlSet supportedControls
-        +PositiveInteger contextWindowTokens
-        +PositiveInteger maximumOutputTokens
         +RegisteredBedrockWireBudgetProof wireBudgets
     }
 
@@ -183,7 +181,6 @@ classDiagram
     AWSBedrockProvider ..> IdentifiedProviderNeutralModelRequest : receives
     AWSBedrockProvider ..> ValidatedProviderAuthorizationLeaseRef : receives
     AWSBedrockProvider ..> InvokedProviderOperation : requires
-    AWSBedrockProvider ..> ExactInputTokenCountEvidence : invoke requires
     AWSBedrockProvider ..> ProviderTokenCountObservation : returns
     AWSBedrockProvider ..> ProviderInvocationObservation : returns
     WorkflowDefinitionRegistry *-- CompiledModelResultSchema : deep-owns exact source and tree
@@ -209,7 +206,7 @@ classDiagram
     note for AWSBedrockProvider "PROPOSED ONLY: no src implementation exists; the environment-only API-key source is accepted"
     note for AWSBedrockEnvironmentAPIKeySource "Reads only AWS_BEARER_TOKEN_BEDROCK; no hardcoded key, fallback, reread, or refresh"
     note for AWSBedrockRuntimePort "No SDK, HTTP library, client fields, or concrete method signature has been selected"
-    note for IdentifiedProviderNeutralModelRequest "The request type requires compiled schema authority; workflow request construction, candidate decoding and native-schema representability remain pending"
+    note for IdentifiedProviderNeutralModelRequest "Pure request construction and static preflight are implemented using exact compiled schema authority; production YAML binding, candidate decoding and native-schema representability remain pending"
     note for ProviderAuthorizationSlot "The authorization adapter can deposit only into this slot; it receives no table lookup or consumption capability"
-    note for ProviderOperationLifecycleRunner "Separate count and inference operations progress assigned to invoked to terminal; inference requires exact count evidence for the same attempt. Effects are journal intent, not durability proof"
+    note for ProviderOperationLifecycleRunner "Separate count and inference operations progress assigned to invoked to terminal; inference binds directly to request/input identity without counting. Effects are journal intent, not durability proof"
 ```
