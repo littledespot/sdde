@@ -10,7 +10,7 @@ pub const Authorized = struct { stream: stream.Stream, cutoff_unix_ms: u64 };
 const Storage = struct {
     backing_allocator: std.mem.Allocator,
     arena: std.heap.ArenaAllocator,
-    current_feature_id: telemetry.Identifier,
+    current_feature_id: @import("feature_identity.zig").FeatureId,
     current_run_id: telemetry.Identifier,
     expected: binding.BindingCandidate,
     stream: stream.Stream,

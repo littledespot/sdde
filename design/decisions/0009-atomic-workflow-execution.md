@@ -57,8 +57,10 @@ task publication, reruns starting at `start`, fresh per-execution provider
 state, clarification preservation/deduplication, and absence of transaction or
 provider-recovery prerequisites, including for unrelated YAML workflows.
 
-This is a documentation amendment, not a claim that the runtime already
-implements it. Existing transaction codecs and lifecycle journal projections
-are superseded implementation to remove, not foundations to extend. Prior
+The transaction-ID modules/codecs, provider lifecycle journal projections, and
+logging transaction stabilization/events have been removed. Regression tests
+cover reruns from `start`, fresh provider state, lease cleanup, and preservation
+of terminal outcomes (`zig build test-atomic-execution`). Whole-workflow output publication and clarification
+preservation/deduplication still require their implementation evidence. Prior
 transaction/checkpoint/recovery contracts in the named documents and samples
 are withdrawn; they must not be used to reintroduce this machinery.

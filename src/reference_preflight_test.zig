@@ -9,16 +9,18 @@ const values = @import("application/pipeline_values.zig");
 const schemas = @import("application/reference_workflow_values.zig");
 const Envelope = @import("application/pipeline_envelope.zig").PipelineEnvelope;
 const unicode = @import("unicode_normalization");
-const normalizer: @import("ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = unicode.nfc, .fold_fn = unicode.fold };
+const normalizer: @import("ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = unicode.nfc };
 
-test "Specify grammar accepts one required reference and rejects every removed input form" {
-    const result = try (validate.Action{}).execute(try (parse.Action{}).execute(&.{ "--reference", "hello-world" }));
+test "Specify grammar requires independent feature and reference inputs" {
+    const result = try (validate.Action{}).execute(try (parse.Action{}).execute(&.{ "--feature", "Chosen/日本語", "--reference", "hello-world" }));
     try std.testing.expectEqualStrings("hello-world", result.raw_reference);
+    try std.testing.expectEqualStrings("Chosen/日本語", result.raw_feature);
     const rejected = [_][]const []const u8{
-        &.{},                                             &.{"--reference"},                   &.{ "--reference", "" },
-        &.{ "--reference", "one", "--reference", "two" }, &.{ "--reference", "one", "extra" }, &.{"description"},
-        &.{ "--feature", "one" },                         &.{ "--description", "one" },        &.{ "--feature-id", "one" },
-        &.{ "-type", "one" },                             &.{ "--ref", "one" },                &.{ "--", "--reference", "one" },
+        &.{},                                             &.{"--reference"},                                              &.{ "--reference", "" },
+        &.{ "--reference", "one", "--reference", "two" }, &.{ "--reference", "one", "extra" },                            &.{"description"},
+        &.{ "--feature", "one" },                         &.{ "--description", "one" },                                   &.{ "--feature-id", "one" },
+        &.{ "-type", "one" },                             &.{ "--ref", "one" },                                           &.{ "--", "--reference", "one" },
+        &.{ "--reference", "one" },                       &.{ "--feature", "a", "--feature", "b", "--reference", "one" }, &.{ "--feature", "a", "--reference", "one", "--reference", "two" },
         &.{"--reference=one"},                            &.{ "--reference", "--" },
     };
     for (rejected) |arguments| {
@@ -38,7 +40,7 @@ test "selector normalization preserves meaning and canonicalizes only NFC separa
         .{ "\u{1100}\u{1161}/reference", "가/reference" },
     };
     inline for (cases) |case| {
-        const normalized = try (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_reference = case[0] });
+        const normalized = try (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = case[0] });
         defer std.testing.allocator.free(normalized.bytes);
         const selector = try (lexical.Action{}).execute(normalized);
         try std.testing.expectEqualStrings(case[1], selector.bytes);
@@ -52,15 +54,15 @@ test "selector safety rejects escape forms controls ambiguous separators and por
         "hello/%2Fworld",       "hello/%5cworld", "hello/con", "hello/bad.",   "hello/bad ",      "hello/bad?",      "hello/..\\world",
     };
     for (rejected) |raw| {
-        const normalized = try (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_reference = raw });
+        const normalized = try (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = raw });
         defer std.testing.allocator.free(normalized.bytes);
         try std.testing.expectError(error.InvalidReferenceSelector, (lexical.Action{}).execute(normalized));
     }
-    try std.testing.expectError(error.InvalidUtf8, (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_reference = "\xed\xa0\x80" }));
+    try std.testing.expectError(error.InvalidUtf8, (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = "\xed\xa0\x80" }));
     const long_segment = [_]u8{'a'} ** (reference.max_segment_bytes + 1);
     try std.testing.expectError(error.InvalidReferenceSelector, (lexical.Action{}).execute(.{ .bytes = &long_segment }));
     const long_path = [_]u8{'a'} ** (reference.max_bytes + 1);
-    try std.testing.expectError(error.NormalizationLimitExceeded, (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_reference = &long_path }));
+    try std.testing.expectError(error.NormalizationLimitExceeded, (normalize.Action{ .normalizer = normalizer }).execute(std.testing.allocator, .{ .raw_feature = "unused", .raw_reference = &long_path }));
 }
 
 test "Unicode reference paths do not weaken the distinct ASCII configured-root contract" {
@@ -70,7 +72,7 @@ test "Unicode reference paths do not weaken the distinct ASCII configured-root c
 }
 
 fn normalizationAllocationCase(allocator: std.mem.Allocator) !void {
-    const result = try (normalize.Action{ .normalizer = normalizer }).execute(allocator, .{ .raw_reference = "./Cafe\u{301}/notes" });
+    const result = try (normalize.Action{ .normalizer = normalizer }).execute(allocator, .{ .raw_feature = "unused", .raw_reference = "./Cafe\u{301}/notes" });
     defer allocator.free(result.bytes);
     try std.testing.expectEqualStrings("Café/notes", result.bytes);
 }
@@ -81,7 +83,7 @@ test "selector normalization cleans up at every allocation failure" {
 
 test "invocation publishes only validated owned context and rejects without output" {
     var binding: runner.Invocation = .{ .allocator = std.testing.allocator };
-    var candidate = try runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{ "--reference", "hello" } } });
+    var candidate = try runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{ "--reference", "hello", "--feature", "chosen" } } });
     var envelope: Envelope = .init(&schemas.schemas);
     defer envelope.deinit();
     defer envelope.discard(&candidate.delta);
@@ -90,7 +92,7 @@ test "invocation publishes only validated owned context and rejects without outp
     try std.testing.expect(envelope.slots[@intFromEnum(schemas.parsed.key)] == null);
     const read_contract: @import("domain/pipeline.zig").NodeContract = .{ .id = "read@1", .kind = .action, .requires = &.{.specify_invocation}, .produces = &.{}, .side_effect = .none };
     const view = try envelope.view(read_contract);
-    try std.testing.expectEqualStrings("hello", (try values.read(&view, schemas.invocation, reference.Invocation)).raw_reference);
+    try std.testing.expectEqualStrings("hello", (try values.read(&view, schemas.invocation, @import("domain/specify_invocation.zig").Invocation)).raw_reference);
     try std.testing.expectError(error.OperationExecutionFailed, runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{} } }));
 }
 
@@ -105,7 +107,7 @@ test "registered bindings derive only their narrow operational capabilities" {
 
 fn invocationAllocationCase(allocator: std.mem.Allocator) !void {
     var binding: runner.Invocation = .{ .allocator = allocator };
-    var candidate = runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{ "--reference", "hello" } } }) catch return error.OutOfMemory;
+    var candidate = runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{ "--reference", "hello", "--feature", "chosen" } } }) catch return error.OutOfMemory;
     var envelope: Envelope = .init(&schemas.schemas);
     defer envelope.deinit();
     defer envelope.discard(&candidate.delta);

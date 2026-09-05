@@ -124,7 +124,7 @@ fn inspectSegment(
         return error.InvalidSegment;
     }
     const header_with_lf = try std.fmt.allocPrint(allocator, "{s}\n", .{header});
-    try format.validateEncodedRow(allocator, header_with_lf, if (stream == .event) 38 else 30);
+    try format.validateEncodedRow(allocator, header_with_lf, if (stream == .event) format.event_column_count else 30);
     try format.validatePersistedIdentityRow(header, binding, ordinal, stream);
     try format.validatePersistedControlRow(header, .segment_header, stream, null);
     var last_sequence: u64 = first_sequence - 1;
@@ -132,7 +132,7 @@ fn inspectSegment(
     while (lines.next()) |line| {
         if (line.len == 0) continue;
         const with_lf = try std.fmt.allocPrint(allocator, "{s}\n", .{line});
-        try format.validateEncodedRow(allocator, with_lf, if (stream == .event) 38 else 30);
+        try format.validateEncodedRow(allocator, with_lf, if (stream == .event) format.event_column_count else 30);
         const kind = format.cellAt(line, 0) orelse return error.InvalidSegment;
         if (std.mem.eql(u8, kind, @tagName(stream))) {
             if (closed) return error.InvalidSegment;

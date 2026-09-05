@@ -88,8 +88,9 @@ fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, p
     var toolchain_source_adapter = toolchain_authority_source.Adapter.init(io, project_root);
     var toolchain_parser_adapter: toolchain_documents.Adapter = .{};
     var reference_adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
+    var feature_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
     var native_bindings: @import("native_workflow_operations.zig").Assembly = undefined;
-    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc, .fold_fn = @import("unicode_normalization").fold }, reference_adapter.inspector());
+    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector());
     var boot = runInProjectWithRegistry(io, allocator, project_root, runtime, &native_bindings.registry);
     if (boot == .ready) native_bindings.bindRoots(boot.ready.roots.registry());
     defer boot.deinit();
@@ -615,8 +616,9 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     var source = toolchain_authority_source.Adapter.init(io, project_root);
     var parser: toolchain_documents.Adapter = .{};
     var reference_adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
+    var feature_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
     var operations: @import("native_workflow_operations.zig").Assembly = undefined;
-    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc, .fold_fn = @import("unicode_normalization").fold }, reference_adapter.inspector());
+    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector());
     var boot = runInProjectWithRegistry(io, std.testing.allocator, project_root, .{}, &operations.registry);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
@@ -674,7 +676,7 @@ test "reference preflight uses ordinary YAML and leaves reference and artifact t
     try project.dir.createDirPath(io, "references/Café/日本語");
     try project.dir.writeFile(io, .{ .sub_path = "references/Café/日本語/stories.md", .data = "Hello, World!\n" });
     for ([_][]const u8{ "Café/日本語", "./Cafe\u{301}\\日本語" }) |selector| {
-        const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", selector });
+        const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", selector });
         try std.testing.expectEqual(workflow.OutcomeTag.ok, result.execution);
     }
     const bytes = try project.dir.readFileAlloc(io, "references/Café/日本語/stories.md", std.testing.allocator, .limited(64));
@@ -691,13 +693,13 @@ test "unrelated workflows never require the installed reference operations to ru
     defer project.cleanup();
     try writeReferencePreflightFixture(io, project.dir);
     try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).execution);
-    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", "missing" }).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "missing" }).execution);
     // The same contracts work under a different workflow ID; no name dispatch.
     const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/reference-preflight.workflow.yaml"), "id: reference-preflight", "id: documentation-check");
     defer std.testing.allocator.free(changed);
     try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
     try project.dir.createDirPath(io, "references/manual");
-    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "documentation-check", "--reference", "manual" }).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "documentation-check", "--feature", "Hello/日本語", "--reference", "manual" }).execution);
 }
 
 test "reference preflight rejects missing arguments files unreadable directories and symlink ancestors" {
@@ -711,16 +713,19 @@ test "reference preflight rejects missing arguments files unreadable directories
     try project.dir.symLink(io, "real", "references/alias", .{ .is_directory = true });
     try project.dir.symLink(io, "../outside", "references/escape", .{ .is_directory = true });
     const arguments = [_][]const []const u8{
-        &.{"reference-preflight"},                                 &.{ "reference-preflight", "--reference", "missing" },
-        &.{ "reference-preflight", "--reference", "file" },        &.{ "reference-preflight", "--reference", "../outside" },
-        &.{ "reference-preflight", "--reference", "alias/child" }, &.{ "reference-preflight", "--reference", "escape/child" },
+        &.{"reference-preflight"},
+        &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "missing" },
+        &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "file" },
+        &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "../outside" },
+        &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "alias/child" },
+        &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "escape/child" },
     };
     for (arguments) |args| try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, args).execution);
     var unreadable = try project.dir.openDir(io, "references/real", .{ .iterate = true });
     defer unreadable.close(io);
     try unreadable.setPermissions(io, .fromMode(0o000));
     defer unreadable.setPermissions(io, .fromMode(0o700)) catch @panic("restore test directory permissions");
-    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", "real" }).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "real" }).execution);
 }
 
 test "reference inspection rejects wrong root capabilities and stale physical roots" {
@@ -758,10 +763,10 @@ test "reference compiler rejects a missing validated selector or read capability
         const changed = if (missing_input)
             try std.mem.replaceOwned(u8, std.testing.allocator, original, "use: validate-reference-selector@1", "use: normalize-reference-selector@1")
         else
-            try std.mem.replaceOwned(u8, std.testing.allocator, original, "policy: core.reference-read@1", "policy: core.capability-free@1");
+            try std.mem.replaceOwned(u8, std.testing.allocator, original, "policy: core.directory-read@1", "policy: core.capability-free@1");
         defer std.testing.allocator.free(changed);
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
-        const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", "anything" });
+        const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "anything" });
         try std.testing.expect(result == .bootstrap_failed);
     }
 }
@@ -774,7 +779,7 @@ test "reference preflight cancellation stops safely at each runtime checkpoint" 
     try project.dir.createDirPath(io, "references/hello");
     for (0..256) |checks| {
         var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
-        const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", "hello" }, control.runtime());
+        const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "hello" }, control.runtime());
         try std.testing.expect(result == .execution);
         if (result.execution == .ok) {
             try std.testing.expect(checks > 3);
@@ -783,80 +788,6 @@ test "reference preflight cancellation stops safely at each runtime checkpoint" 
         try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.execution);
     }
     return error.ReferencePreflightNeverCompleted;
-}
-
-test "identity YAML rejects missing unknown mistyped duplicate and out-of-range parameters" {
-    const io = std.testing.io;
-    const rejected = [_][]const u8{
-        "with: {}",                           "with: { max-length: 0 }",
-        "with: { max-length: -1 }",           "with: { max-length: 256 }",
-        "with: { max-length: true }",         "with: { max-length: \"64\" }",
-        "with: { max-length: 64, other: 1 }", "with: { max-length: 64, max-length: 32 }",
-    };
-    for (rejected) |parameters| {
-        var project = std.testing.tmpDir(.{});
-        defer project.cleanup();
-        try writeReferencePreflightFixture(io, project.dir);
-        const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/reference-preflight.workflow.yaml"), "with: { max-length: 64 }", parameters);
-        defer std.testing.allocator.free(changed);
-        try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
-        const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", "anything" });
-        try std.testing.expect(result == .bootstrap_failed);
-    }
-}
-
-test "identity runs under capability-free YAML and obeys its configured maximum" {
-    const io = std.testing.io;
-    var project = std.testing.tmpDir(.{});
-    defer project.cleanup();
-    try writeReferencePreflightFixture(io, project.dir);
-    const fixture =
-        \\schema: workflow/v1
-        \\id: identity-check
-        \\version: 1
-        \\shortcode: IDEN
-        \\invoke: specify-invocation@1
-        \\policy: core.capability-free@1
-        \\start: normalize
-        \\steps:
-        \\  normalize:
-        \\    use: normalize-reference-selector@1
-        \\    on: { ok: validate, failed: end.failed }
-        \\  validate:
-        \\    use: validate-reference-selector@1
-        \\    on: { ok: identify, failed: end.failed }
-        \\  identify:
-        \\    use: derive-feature-identity@1
-        \\    with: { max-length: 3 }
-        \\    on: { ok: end.ok, failed: end.failed }
-    ;
-    try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = fixture });
-    // "console" truncates to the portable-reserved "con" at 3, but "cons" at 4.
-    const arguments: []const []const u8 = &.{ "identity-check", "--reference", "console" };
-    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, arguments).execution);
-    const changed = try std.mem.replaceOwned(u8, std.testing.allocator, fixture, "max-length: 3", "max-length: 4");
-    defer std.testing.allocator.free(changed);
-    try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
-    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, arguments).execution);
-    // Pure derivation does not require or materialize the selected directory.
-    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "references", .{}));
-    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "specs", .{}));
-}
-
-test "identity failures publish no artifacts and cannot become successful preflight" {
-    const io = std.testing.io;
-    var project = std.testing.tmpDir(.{});
-    defer project.cleanup();
-    try writeReferencePreflightFixture(io, project.dir);
-    for ([_][]const u8{ "日本語", "ＣＯＮ", "---" }) |selector| {
-        const path = try std.fmt.allocPrint(std.testing.allocator, "references/{s}", .{selector});
-        defer std.testing.allocator.free(path);
-        try project.dir.createDirPath(io, path);
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", selector }).execution);
-    }
-    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "specs", .{}));
-    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, ".sdd/workflows/features", .{}));
-    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, ".sdd/workflows/transactions", .{}));
 }
 
 const second_workflow_same_shortcode =
@@ -1062,7 +993,7 @@ test "feature log storage opens only an activated layout from present artifact a
         .log_policy_id = @import("../domain/telemetry.zig").Identifier.validate("LOGPOL-1").?,
         .binding_id = @import("../domain/telemetry.zig").Identifier.validate("LOGBIND-1").?,
         .run_id = @import("../domain/telemetry.zig").Identifier.validate("RUN-1").?,
-        .feature_id = @import("../domain/telemetry.zig").Identifier.validate("F0002").?,
+        .feature_id = @import("../domain/feature_identity.zig").FeatureId.parse("F0002").?,
     };
     const binding_owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(binding_owner);
@@ -1137,7 +1068,7 @@ test "feature log sink neither creates a missing activation layout nor accepts i
             .log_policy_id = @import("../domain/telemetry.zig").Identifier.validate("LOGPOL-1").?,
             .binding_id = @import("../domain/telemetry.zig").Identifier.validate("LOGBIND-1").?,
             .run_id = @import("../domain/telemetry.zig").Identifier.validate("RUN-1").?,
-            .feature_id = @import("../domain/telemetry.zig").Identifier.validate("F0002").?,
+            .feature_id = @import("../domain/feature_identity.zig").FeatureId.parse("F0002").?,
         };
         const binding_owner = try log_binding.createValidated(std.testing.allocator, candidate);
         defer log_binding.deinitOwner(binding_owner);
@@ -1175,7 +1106,7 @@ test "absent optional specs root cannot mint workflow artifact authority" {
         .log_policy_id = @import("../domain/telemetry.zig").Identifier.validate("LOGPOL-1").?,
         .binding_id = @import("../domain/telemetry.zig").Identifier.validate("LOGBIND-1").?,
         .run_id = @import("../domain/telemetry.zig").Identifier.validate("RUN-1").?,
-        .feature_id = @import("../domain/telemetry.zig").Identifier.validate("F0002").?,
+        .feature_id = @import("../domain/feature_identity.zig").FeatureId.parse("F0002").?,
     };
     const binding_owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(binding_owner);
@@ -1380,7 +1311,6 @@ const RuntimeAfterObservations = struct {
         return .active;
     }
 };
-
 
 test "missing exact config returns the public read error" {
     const io = std.testing.io;

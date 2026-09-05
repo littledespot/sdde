@@ -38,9 +38,6 @@ fn terminalEvent(event_type: telemetry.EventType) bool {
         .task_completed,
         .task_blocked,
         .task_failed,
-        .transaction_committed,
-        .transaction_rolled_back,
-        .transaction_recovered,
         => true,
         else => false,
     };

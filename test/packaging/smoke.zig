@@ -89,7 +89,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     const missing_config_directory = b.addTempFiles();
     const reference_command = std.Build.Step.Run.create(b, "run packaged Unicode reference and identity preflight without source or shared Unicode library");
     reference_command.addFileArg(packaged_executable);
-    reference_command.addArgs(&.{ "reference-preflight", "--reference", "./Cafe\u{301}/日本語" });
+    reference_command.addArgs(&.{ "reference-preflight", "--feature", "Selected/日本語", "--reference", "./Cafe\u{301}/日本語" });
     reference_command.setCwd(package_directory.getDirectory());
     reference_command.clearEnvironment();
     reference_command.expectStdOutEqual("");
@@ -97,7 +97,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
 
     const denied_reference = std.Build.Step.Run.create(b, "reject packaged reference traversal");
     denied_reference.addFileArg(packaged_executable);
-    denied_reference.addArgs(&.{ "reference-preflight", "--reference", "../references" });
+    denied_reference.addArgs(&.{ "reference-preflight", "--feature", "Selected/日本語", "--reference", "../references" });
     denied_reference.setCwd(package_directory.getDirectory());
     denied_reference.clearEnvironment();
     denied_reference.expectExitCode(1);

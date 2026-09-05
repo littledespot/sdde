@@ -24,6 +24,13 @@ pub const ConfiguredBaseRootCapability = opaque {
 pub const LLMProviderConfigCapability = opaque {};
 
 pub const BootstrapRootRegistry = opaque {
+    pub fn featureDirectoryRoots(self: *const BootstrapRootRegistry) @import("feature_directory.zig").Roots {
+        return .{
+            .specs = capabilityStorage(self.specsArtifacts()).configured_relative_path,
+            .archive = capabilityStorage(self.archivedSpecs()).configured_relative_path,
+        };
+    }
+
     pub fn specsArtifacts(
         self: *const BootstrapRootRegistry,
     ) *const ConfiguredBaseRootCapability {
@@ -143,6 +150,25 @@ pub const SpecsArtifactAdapterBinding = struct {
     project_relative_path: []const u8,
     physical_identity: roots.PhysicalDirectoryIdentity,
 };
+
+pub const FeatureDirectoryAdapterBinding = struct {
+    paths: @import("feature_directory.zig").Roots,
+    observation: roots.RootObservation,
+};
+
+/// Internal handoff restricted to the read-only feature directory inspector.
+pub fn bindFeatureDirectoryAdapter(specs: *const ConfiguredBaseRootCapability, archive: *const ConfiguredBaseRootCapability) ?FeatureDirectoryAdapterBinding {
+    const active = capabilityStorage(specs);
+    const excluded = capabilityStorage(archive);
+    if (active.path_key != .specs or active.root_role != .specs_artifacts or
+        excluded.path_key != .specs_archive or excluded.root_role != .archived_specs or
+        active.access_class != .engine_only or excluded.access_class != .engine_only or
+        !std.mem.eql(u8, active.canonical_project_root, excluded.canonical_project_root)) return null;
+    return .{
+        .paths = .{ .specs = active.configured_relative_path, .archive = excluded.configured_relative_path },
+        .observation = active.observation,
+    };
+}
 
 /// Internal handoff restricted to the workflow-artifact registry builder.
 pub fn bindSpecsArtifactRegistry(

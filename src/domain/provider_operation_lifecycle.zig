@@ -84,7 +84,6 @@ pub const Transition = struct {
     operation_id: provider.ProviderOperationId,
     expected_operation_revision: ?Revision,
     command: Command,
-
 };
 
 pub const Ledger = opaque {

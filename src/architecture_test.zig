@@ -21,6 +21,18 @@ test "workflow filesystem traversal uses the inventory reserved-child policy" {
     try expectAbsent(source, "\"transactions\"");
 }
 
+test "atomic execution exposes no transaction logging or stabilization capability" {
+    const telemetry = @import("domain/telemetry.zig");
+    inline for (.{ "transaction_prepared", "transaction_applying", "transaction_committed", "transaction_rolled_back", "transaction_recovered" }) |name| {
+        try std.testing.expect(std.meta.stringToEnum(telemetry.EventType, name) == null);
+    }
+    try std.testing.expect(!@hasField(telemetry.TelemetryFields, "transaction_id"));
+    try std.testing.expect(!@hasField(@import("application/feature_log_actions.zig").Set, "stabilize_failure"));
+    try expectAbsent(@embedFile("composition/active_feature_log_runtime.zig"), "stabilizer");
+    try expectAbsent(@embedFile("application/feature_log_runner.zig"), "stabiliz");
+    try expectAbsent(@import("domain/feature_log_format.zig").event_heading, "transaction_id");
+}
+
 test "result schema authority is opaque and compilation remains a kernel concern" {
     const schema = @import("domain/model_result_schema.zig");
     try std.testing.expect(@typeInfo(schema.Schema) == .@"opaque");
@@ -739,8 +751,8 @@ test "provider lifecycle has one pure action and runner-owned immutable ledger" 
     try std.testing.expect(!@hasDecl(lifecycle, "TerminalSummary"));
     try std.testing.expect(!@hasDecl(lifecycle, "projectEffect"));
     try std.testing.expect(!@hasDecl(lifecycle.Transition, "effect"));
-    const runner = @import("application/provider_operation_lifecycle_runner.zig").Runner;
-    try std.testing.expect(@typeInfo(@TypeOf(runner.advance)).@"fn".return_type.? == lifecycle.Error!void);
+    const lifecycle_runner = @import("application/provider_operation_lifecycle_runner.zig").Runner;
+    try std.testing.expect(@typeInfo(@TypeOf(lifecycle_runner.advance)).@"fn".return_type.? == lifecycle.Error!void);
 
     const io = std.testing.io;
     const allocator = std.testing.allocator;
@@ -1221,8 +1233,10 @@ test "reference preflight shares path safety without leaking normalization or re
     const selector = @embedFile("domain/reference_selector.zig");
     try expectAbsent(selector, "@cImport");
     try expectAbsent(selector, "/adapters/");
-    try std.testing.expect(std.mem.indexOf(u8, selector, "path_policy.validateComponent") != null);
-    try std.testing.expect(std.mem.indexOf(u8, selector, "path_policy.hasEncodedDotOrSeparator") != null);
+    try std.testing.expect(std.mem.indexOf(u8, selector, "path.validate") != null);
+    const shared = @embedFile("domain/relative_directory_path.zig");
+    try std.testing.expect(std.mem.indexOf(u8, shared, "policy.validateComponent") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shared, "policy.hasEncodedDotOrSeparator") != null);
     const filesystem = @embedFile("adapters/filesystem/reference_directory_inspector.zig");
     try std.testing.expect(std.mem.indexOf(u8, filesystem, "bindReferenceSourcesAdapter") != null);
     try std.testing.expect(std.mem.indexOf(u8, filesystem, "directories.open") != null);
@@ -1250,21 +1264,27 @@ test "reference root path handoff has one authorized adapter consumer" {
     }
 }
 
-test "feature identity shares portable naming policy and has no operational authority" {
+test "feature directory selection shares path policy and has no generated identity authority" {
     const domain = @embedFile("domain/feature_identity.zig");
     try expectAbsent(domain, "@cImport");
     try expectAbsent(domain, "/adapters/");
-    try std.testing.expect(std.mem.indexOf(u8, domain, "path_policy.validateComponent") != null);
-    const action = @embedFile("actions/specify/derive_feature_identity.zig");
+    try std.testing.expect(std.mem.indexOf(u8, domain, "path.validate") != null);
+    const action = @embedFile("actions/specify/normalize_feature_directory.zig");
     try expectAbsent(action, "std.Io.Dir");
     try expectAbsent(action, "/adapters/");
     try expectAbsent(action, "model_provider");
-    try std.testing.expect(std.mem.indexOf(u8, action, "normalizer.fold") != null);
-    const runner = @embedFile("application/feature_identity_workflow.zig");
+    try std.testing.expect(std.mem.indexOf(u8, action, "normalizer.nfc") != null);
+    const runner = @embedFile("application/feature_directory_workflow.zig");
     try expectAbsent(runner, "std.Io.Dir");
     try expectAbsent(runner, "/adapters/");
     const engine = @embedFile("application/workflow_engine_orchestrator.zig");
     try expectAbsent(engine, "feature_identity");
+    try expectAbsent(engine, "feature_directory");
+    const filesystem = @embedFile("adapters/filesystem/feature_directory_inspector.zig");
+    try std.testing.expect(std.mem.indexOf(u8, filesystem, "bindFeatureDirectoryAdapter") != null);
+    try std.testing.expect(std.mem.indexOf(u8, filesystem, "directories.open") != null);
+    try expectAbsent(filesystem, "createDir");
+    try expectAbsent(filesystem, "writeFile");
 }
 
 test "feature document filenames and headings agree" {

@@ -8,7 +8,6 @@ pub const Field = enum {
     duration_ms,
     diagnostic_code,
     validator_id,
-    transaction_id,
     rule_id,
     model_route_id,
     model_profile_id,
@@ -63,10 +62,6 @@ pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
         .validation_completed => definition(event_type, level(event_type), &.{ .validator_id, .outcome }, &.{ .count, .duration_ms }),
         .validation_failed => definition(event_type, level(event_type), &.{ .validator_id, .diagnostic_code, .outcome }, &.{.count}),
         .repair_requested => definition(event_type, level(event_type), &.{.repair_unit_kind}, &.{}),
-        .transaction_prepared, .transaction_applying => definition(event_type, level(event_type), &.{ .transaction_id, .count }, &.{}),
-        .transaction_committed => definition(event_type, level(event_type), &.{ .transaction_id, .count, .outcome }, &.{}),
-        .transaction_rolled_back => definition(event_type, level(event_type), &.{ .transaction_id, .diagnostic_code, .outcome }, &.{.count}),
-        .transaction_recovered => definition(event_type, level(event_type), &.{ .transaction_id, .outcome }, &.{.count}),
         .command_started => definition(event_type, level(event_type), &.{.command_id}, &.{}),
         .command_completed => definition(event_type, level(event_type), &.{ .command_id, .outcome }, &.{ .exit_code, .duration_ms }),
         .command_failed => definition(event_type, level(event_type), &.{ .command_id, .diagnostic_code, .outcome }, &.{ .exit_code, .duration_ms }),
@@ -112,8 +107,8 @@ fn definition(
 fn level(event_type: telemetry.EventType) telemetry.CanonicalLogLevel {
     return switch (event_type) {
         .run_blocked, .run_failed, .stage_blocked, .stage_failed, .action_failed, .repair_exhausted, .command_failed, .task_failed => .error_level,
-        .action_invalid, .model_protocol_failed, .model_schema_failed, .validation_failed, .repair_rejected, .review_rejected, .transaction_rolled_back, .transaction_recovered, .task_blocked, .security_denied => .warning,
-        .action_started, .action_completed, .model_requested, .model_completed, .validation_completed, .repair_requested, .transaction_prepared, .transaction_applying, .command_started, .command_completed, .model_prompt_fragment => .debug,
+        .action_invalid, .model_protocol_failed, .model_schema_failed, .validation_failed, .repair_rejected, .review_rejected, .task_blocked, .security_denied => .warning,
+        .action_started, .action_completed, .model_requested, .model_completed, .validation_completed, .repair_requested, .command_started, .command_completed, .model_prompt_fragment => .debug,
         else => .info,
     };
 }

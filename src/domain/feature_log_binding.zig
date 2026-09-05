@@ -1,11 +1,12 @@
 const std = @import("std");
+const feature = @import("feature_identity.zig");
 const telemetry = @import("telemetry.zig");
 
 pub const BindingCandidate = struct {
     log_policy_id: telemetry.Identifier,
     binding_id: telemetry.Identifier,
     run_id: telemetry.Identifier,
-    feature_id: telemetry.Identifier,
+    feature_id: feature.FeatureId,
 };
 
 pub const ValidatedFeatureLogBinding = opaque {
@@ -18,7 +19,7 @@ pub const ValidatedFeatureLogBinding = opaque {
     pub fn runId(self: *const ValidatedFeatureLogBinding) telemetry.Identifier {
         return bindingStorage(self).run_id;
     }
-    pub fn featureId(self: *const ValidatedFeatureLogBinding) telemetry.Identifier {
+    pub fn featureId(self: *const ValidatedFeatureLogBinding) feature.FeatureId {
         return bindingStorage(self).feature_id;
     }
 };
@@ -38,7 +39,7 @@ pub fn createValidated(
     candidate: BindingCandidate,
 ) Error!*BindingOwner {
     if (!validPathIdentifier(candidate.log_policy_id) or !validPathIdentifier(candidate.binding_id) or
-        !validPathIdentifier(candidate.run_id) or !validPathIdentifier(candidate.feature_id))
+        !validPathIdentifier(candidate.run_id) or feature.FeatureId.parse(candidate.feature_id.bytes) == null)
     {
         return error.InvalidFeatureLogBinding;
     }
@@ -94,7 +95,7 @@ test "validated feature log binding owns one immutable identity tuple" {
         .log_policy_id = telemetry.Identifier.validate("LOGPOL-1").?,
         .binding_id = telemetry.Identifier.validate("LOGBIND-1").?,
         .run_id = telemetry.Identifier.validate("RUN-1").?,
-        .feature_id = telemetry.Identifier.validate("F0002").?,
+        .feature_id = feature.FeatureId.parse("F0002").?,
     };
     const owner = try createValidated(std.testing.allocator, candidate);
     defer deinitOwner(owner);

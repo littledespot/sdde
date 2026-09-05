@@ -11,10 +11,6 @@ pub fn nfc(allocator: std.mem.Allocator, input: []const u8, maximum_bytes: usize
     return transform(allocator, input, maximum_bytes, c.UTF8PROC_STABLE | c.UTF8PROC_COMPOSE);
 }
 
-pub fn fold(allocator: std.mem.Allocator, input: []const u8, maximum_bytes: usize) Error![]u8 {
-    return transform(allocator, input, maximum_bytes, c.UTF8PROC_STABLE | c.UTF8PROC_DECOMPOSE | c.UTF8PROC_COMPAT | c.UTF8PROC_CASEFOLD | c.UTF8PROC_STRIPMARK);
-}
-
 fn transform(allocator: std.mem.Allocator, input: []const u8, maximum_bytes: usize, options: c.utf8proc_option_t) Error![]u8 {
     if (input.len > maximum_bytes or maximum_bytes > std.math.maxInt(isize) / 4) return error.NormalizationLimitExceeded;
     const required = c.utf8proc_decompose(input.ptr, @intCast(input.len), null, 0, options);
@@ -60,21 +56,7 @@ test "NFC releases every allocation on failure" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
 }
 
-test "folding is pinned and explicit without linguistic transliteration" {
+test "NFC implementation and Unicode data are pinned" {
     try std.testing.expectEqualStrings("2.11.3", std.mem.span(c.utf8proc_version()));
     try std.testing.expectEqualStrings("17.0.0", std.mem.span(c.utf8proc_unicode_version()));
-    const cases = .{
-        .{ "Cafe\u{301}/Straße/①Ａ/ﬃ", "cafe/strasse/1a/ffi" },
-        .{ "日本語", "日本語" },
-        .{ "a\x00b", "a\x00b" },
-    };
-    inline for (cases) |case| {
-        const result = try fold(std.testing.allocator, case[0], 128);
-        defer std.testing.allocator.free(result);
-        try std.testing.expectEqualStrings(case[1], result);
-    }
-    try std.testing.expectError(error.InvalidUtf8, fold(std.testing.allocator, "\xff", 128));
-    try std.testing.expectError(error.NormalizationLimitExceeded, fold(std.testing.allocator, "abc", 2));
-    // Compatibility expansion is bounded after folding, not silently truncated.
-    try std.testing.expectError(error.NormalizationLimitExceeded, fold(std.testing.allocator, "\u{fdfa}", 3));
 }

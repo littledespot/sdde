@@ -38,7 +38,7 @@ test "policy transitions require a new compatible binding in the same run" {
         .log_policy_id = telemetry.Identifier.validate("POLICY-1").?,
         .binding_id = telemetry.Identifier.validate("BINDING-1").?,
         .run_id = telemetry.Identifier.validate("RUN-1").?,
-        .feature_id = telemetry.Identifier.validate("F0002").?,
+        .feature_id = @import("../../domain/feature_identity.zig").FeatureId.parse("F0002").?,
     };
     const next_candidate: binding.BindingCandidate = .{
         .log_policy_id = telemetry.Identifier.validate("POLICY-2").?,

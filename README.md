@@ -32,11 +32,10 @@ zig build
 zig build run
 zig build lint
 zig build test
+zig build test-atomic-execution
 zig build test-model-result-schema
 zig build test-reference-preflight
 zig build test-feature-identity
-zig build test-transaction-id-ledger
-zig build test-transaction-id-ledger-codec
 zig build smoke
 zig build verify
 ```
@@ -60,8 +59,8 @@ is no feature-ownership registry to implement. Full `spec.md` generation remains
 unfinished. Shared NFC uses statically linked utf8proc with packaged license
 notices ([ADR 0007](design/decisions/0007-unicode-normalization.md)).
 
-Existing transaction-ID ledger/codec code is superseded by ADR 0009 and is
-not a persistence foundation to extend. Removing that code is separate from
-this documentation amendment. Only the root `features/` directory is reserved
-during workflow discovery. Rerun output replacement and protected
+Transaction-ID modules, provider journal projections, and logging transaction
+stabilization/events have been removed under ADR 0009. Provider lifecycle and
+authorization remain in memory for one execution. Only the root `features/`
+directory is reserved during workflow discovery. Rerun output replacement and protected
 clarifications follow Design Sections 25 and 23.2.

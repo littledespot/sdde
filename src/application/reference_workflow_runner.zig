@@ -1,5 +1,6 @@
 const std = @import("std");
 const reference = @import("../domain/reference_selector.zig");
+const invocation_types = @import("../domain/specify_invocation.zig");
 const pipeline = @import("../domain/pipeline.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
@@ -21,7 +22,7 @@ pub const ParseInvocation = struct {
             .step => return error.OperationExecutionFailed,
         };
         const result = self.action.execute(arguments) catch return error.OperationExecutionFailed;
-        return publish(self.allocator, schemas.parsed, reference.ParsedInvocation, result);
+        return publish(self.allocator, schemas.parsed, invocation_types.ParsedInvocation, result);
     }
 };
 
@@ -33,9 +34,9 @@ pub const ValidateArguments = struct {
         return context.?.run(input.step.data);
     }
     fn run(self: *@This(), view: @import("../domain/pipeline_data.zig").View) operations.Error!execution.Candidate {
-        const parsed = values.read(&view, schemas.parsed, reference.ParsedInvocation) catch return error.OperationExecutionFailed;
+        const parsed = values.read(&view, schemas.parsed, invocation_types.ParsedInvocation) catch return error.OperationExecutionFailed;
         const result = self.action.execute(parsed.*) catch return error.OperationExecutionFailed;
-        return publish(self.allocator, schemas.invocation, reference.Invocation, result);
+        return publish(self.allocator, schemas.invocation, invocation_types.Invocation, result);
     }
 };
 
@@ -102,7 +103,7 @@ pub const NormalizeSelector = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const invocation = values.read(&input.step.data, schemas.invocation, reference.Invocation) catch return error.OperationExecutionFailed;
+        const invocation = values.read(&input.step.data, schemas.invocation, invocation_types.Invocation) catch return error.OperationExecutionFailed;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
         const result = self.action.execute(scratch.allocator(), invocation.*) catch return error.OperationExecutionFailed;

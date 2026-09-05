@@ -708,7 +708,7 @@ fn bindingCandidate() log_binding.BindingCandidate {
         .log_policy_id = telemetry.Identifier.validate("LOGPOL-1").?,
         .binding_id = telemetry.Identifier.validate("LOGBIND-1").?,
         .run_id = telemetry.Identifier.validate("RUN-1").?,
-        .feature_id = telemetry.Identifier.validate("F0002").?,
+        .feature_id = @import("domain/feature_identity.zig").FeatureId.parse("F0002").?,
     };
 }
 

@@ -171,15 +171,31 @@ pub fn build(b: *std.Build) void {
     reference_step.dependOn(&b.addRunArtifact(reference_tests).step);
     reference_step.dependOn(&run_unicode_tests.step);
 
-    const identity_tests = b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/feature_identity_test.zig"),
+    const feature_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/feature_directory_test.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
     }) });
-    const identity_step = b.step("test-feature-identity", "Test deterministic feature identity derivation");
-    identity_step.dependOn(&b.addRunArtifact(identity_tests).step);
-    identity_step.dependOn(&run_unicode_tests.step);
+    const feature_step = b.step("test-feature-directory", "Test explicit config-root-relative feature directories");
+    feature_step.dependOn(&b.addRunArtifact(feature_tests).step);
+    feature_step.dependOn(&run_unicode_tests.step);
+
+    const atomic_execution_step = b.step("test-atomic-execution", "Test execution isolation, provider lifecycle, authorization and logging cleanup");
+    for ([_][]const u8{
+        "src/provider_operation_lifecycle_test.zig",
+        "src/provider_authorization_test.zig",
+        "src/feature_log_runtime_test.zig",
+        "src/workflow_execution_test.zig",
+        "src/workflow_token_accounting_test.zig",
+    }) |source| {
+        const tests = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path(source),
+            .target = target,
+            .optimize = optimize,
+        }) });
+        atomic_execution_step.dependOn(&b.addRunArtifact(tests).step);
+    }
 
     const smoke_command = packaging_smoke.add(b, executable);
     const smoke_step = b.step("smoke", "Test the packaged executable in a clean directory");

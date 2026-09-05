@@ -1,4 +1,4 @@
-const selector = @import("../../domain/reference_selector.zig");
+const selector = @import("../../domain/specify_invocation.zig");
 const pipeline = @import("../../domain/pipeline.zig");
 
 pub const Action = struct {
@@ -11,9 +11,11 @@ pub const Action = struct {
     };
 
     pub fn execute(_: Action, parsed: selector.ParsedInvocation) selector.Error!selector.Invocation {
-        if (parsed.count != 1) return error.InvalidSpecifyArguments;
         const reference = parsed.reference orelse return error.InvalidSpecifyArguments;
-        if (reference.len == 0 or reference.len > selector.max_bytes or reference[0] == '-') return error.InvalidSpecifyArguments;
-        return .{ .raw_reference = reference };
+        const feature = parsed.feature orelse return error.InvalidSpecifyArguments;
+        for ([_][]const u8{ reference, feature }) |value| {
+            if (value.len == 0 or value.len > @import("../../domain/relative_directory_path.zig").max_bytes or value[0] == '-') return error.InvalidSpecifyArguments;
+        }
+        return .{ .raw_reference = reference, .raw_feature = feature };
     }
 };

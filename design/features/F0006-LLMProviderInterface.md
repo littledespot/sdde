@@ -29,8 +29,8 @@ separately and later attempts require compiler-proven operation-local retry
 authority. The selected policy's positive total-token budget is compiled into
 the graph, and each execution owns a fresh actual-usage ledger.
 `AdvanceProviderOperationLifecycleAction`, its immutable execution-owned ledger,
-and runner application are implemented. Existing journal-intent projections
-are superseded code to remove, not persistence work to complete. Request
+and runner application are implemented. Journal-intent projections have been
+removed; lifecycle advancement updates only the in-memory ledger. Request
 finalization and attempt advancement reject unfinished provider operations.
 `PrepareProviderOperationAuthorizationAction`, its deposit-only preparation
 port, runner-private single-use lease table and fake-provider consumption are

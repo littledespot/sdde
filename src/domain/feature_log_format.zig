@@ -6,7 +6,9 @@ const log_binding = @import("feature_log_binding.zig");
 const log_stream = @import("feature_log_stream.zig");
 const prompt_log = @import("sanitized_prompt_log.zig");
 
-pub const event_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n";
+pub const event_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n";
+pub const event_column_count = std.mem.countScalar(u8, event_heading, '|') + 1;
+
 pub const prompt_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted\n";
 
 pub const Error = error{ InvalidFeatureLogRecord, OutOfMemory };
@@ -21,7 +23,7 @@ pub const EventRecord = struct {
     occurred_at_utc: []const u8,
     monotonic_offset: u64,
     run_id: telemetry.Identifier,
-    feature_id: telemetry.Identifier,
+    feature_id: @import("feature_identity.zig").FeatureId,
     fact: telemetry.TelemetryFact,
 };
 
@@ -34,7 +36,7 @@ pub const PromptRecord = struct {
     occurred_at_utc: []const u8,
     monotonic_offset: u64,
     run_id: telemetry.Identifier,
-    feature_id: telemetry.Identifier,
+    feature_id: @import("feature_identity.zig").FeatureId,
     fragment: prompt_log.SanitizedPromptFragment,
 };
 
@@ -47,7 +49,7 @@ pub const EventControlRecord = struct {
     final_sequence: ?u64 = null,
     occurred_at_utc: []const u8,
     run_id: telemetry.Identifier,
-    feature_id: telemetry.Identifier,
+    feature_id: @import("feature_identity.zig").FeatureId,
 };
 
 pub fn serializeEventControl(
@@ -80,9 +82,9 @@ pub fn serializeEventControl(
     try appendOptional(allocator, &row, &first, null);
     try appendCell(allocator, &row, &first, record.run_id.bytes);
     try appendCell(allocator, &row, &first, record.feature_id.bytes);
-    for (0..21) |_| try appendOptional(allocator, &row, &first, null);
+    for (0..event_column_count - 17) |_| try appendOptional(allocator, &row, &first, null);
     row.append(allocator, '\n') catch return error.OutOfMemory;
-    try validateEncodedRow(allocator, row.items, 38);
+    try validateEncodedRow(allocator, row.items, event_column_count);
     return row.toOwnedSlice(allocator) catch return error.OutOfMemory;
 }
 
@@ -202,7 +204,6 @@ pub fn serializeEvent(
     try appendOptionalUnsigned(allocator, &row, &first, fields.duration_ms, &number_buffer);
     try appendOptional(allocator, &row, &first, if (fields.diagnostic_code) |value| value.bytes else null);
     try appendOptionalId(allocator, &row, &first, fields.validator_id);
-    try appendOptionalId(allocator, &row, &first, fields.transaction_id);
     try appendOptionalId(allocator, &row, &first, fields.rule_id);
     try appendOptionalId(allocator, &row, &first, fields.model_route_id);
     try appendOptionalId(allocator, &row, &first, fields.model_profile_id);
@@ -278,7 +279,7 @@ pub fn validatePersistedControlRow(
 ) Error!void {
     if (!std.mem.eql(u8, cellAt(line, 0) orelse return error.InvalidFeatureLogRecord, @tagName(kind)) or
         parseUtcMs(cellAt(line, 10) orelse return error.InvalidFeatureLogRecord) == null) return error.InvalidFeatureLogRecord;
-    const event_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37 };
+    const event_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36 };
     const prompt_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29 };
     const null_columns: []const usize = if (stream == .event) &event_nulls else &prompt_nulls;
     for (null_columns) |column| {
@@ -442,7 +443,7 @@ fn stageText(value: telemetry.Stage) []const u8 {
 }
 
 test "built-in headings are byte stable and have exact widths" {
-    try std.testing.expectEqual(@as(usize, 38), std.mem.countScalar(u8, event_heading, '|') + 1);
+    try std.testing.expectEqual(@as(usize, 37), std.mem.countScalar(u8, event_heading, '|') + 1);
     try std.testing.expectEqual(@as(usize, 30), std.mem.countScalar(u8, prompt_heading, '|') + 1);
     try std.testing.expect(std.mem.endsWith(u8, event_heading, "|count\n"));
     try std.testing.expect(std.mem.endsWith(u8, prompt_heading, "|redacted\n"));
@@ -465,14 +466,14 @@ test "event rows use fixed columns escaping and reserved nulls" {
         .occurred_at_utc = "2026-08-30T10:15:30Z",
         .monotonic_offset = 42,
         .run_id = telemetry.Identifier.validate("RUN-1").?,
-        .feature_id = telemetry.Identifier.validate("F0002").?,
+        .feature_id = @import("feature_identity.zig").FeatureId.parse("F0002").?,
         .fact = .{
             .event_type = .task_started,
             .fields = .{ .task_id = telemetry.Identifier.validate("TASK-1").? },
         },
     });
     defer allocator.free(row);
-    try validateEncodedRow(allocator, row, 38);
+    try validateEncodedRow(allocator, row, event_column_count);
     try std.testing.expect(std.mem.indexOf(u8, row, "|IMPL|") != null);
     try std.testing.expect(std.mem.indexOf(u8, row, "|info|task.started|task.started/v1|") != null);
 }
@@ -481,6 +482,12 @@ test "dialect rejects unknown dangling escapes and wrong width" {
     try std.testing.expectError(error.InvalidFeatureLogRecord, validateEncodedRow(std.testing.allocator, "a|b\\q\n", 2));
     try std.testing.expectError(error.InvalidFeatureLogRecord, validateEncodedRow(std.testing.allocator, "a|b\\\n", 2));
     try std.testing.expectError(error.InvalidFeatureLogRecord, validateEncodedRow(std.testing.allocator, "a|b\n", 3));
+}
+
+test "event rows reject the obsolete transaction column" {
+    const obsolete_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n";
+    try std.testing.expectError(error.InvalidFeatureLogRecord, validateEncodedRow(std.testing.allocator, obsolete_heading, event_column_count));
+    try std.testing.expect(std.mem.indexOf(u8, event_heading, "transaction_id") == null);
 }
 
 test "event control rows use the same exact heading width" {
@@ -492,10 +499,10 @@ test "event control rows use the same exact heading width" {
         .segment_ordinal = 1,
         .occurred_at_utc = "2026-08-30T10:15:30Z",
         .run_id = telemetry.Identifier.validate("RUN-1").?,
-        .feature_id = telemetry.Identifier.validate("F0002").?,
+        .feature_id = @import("feature_identity.zig").FeatureId.parse("F0002").?,
     });
     defer allocator.free(row);
-    try validateEncodedRow(allocator, row, 38);
+    try validateEncodedRow(allocator, row, event_column_count);
     try std.testing.expect(std.mem.startsWith(u8, row, "segment_header|feature-log/v2|event|"));
 
     try std.testing.expectError(error.InvalidFeatureLogRecord, serializeEventControl(allocator, .{
@@ -505,7 +512,7 @@ test "event control rows use the same exact heading width" {
         .segment_ordinal = 1,
         .occurred_at_utc = "2026-08-30T10:15:30Z",
         .run_id = telemetry.Identifier.validate("RUN-1").?,
-        .feature_id = telemetry.Identifier.validate("F0002").?,
+        .feature_id = @import("feature_identity.zig").FeatureId.parse("F0002").?,
     }));
 }
 
@@ -520,7 +527,7 @@ test "prompt rows are scalar bounded and use the exact prompt schema" {
         .occurred_at_utc = "2026-08-30T10:15:30Z",
         .monotonic_offset = 42,
         .run_id = telemetry.Identifier.validate("RUN-1").?,
-        .feature_id = telemetry.Identifier.validate("F0002").?,
+        .feature_id = @import("feature_identity.zig").FeatureId.parse("F0002").?,
         .fragment = .{
             .workflow_shortcode = try telemetry.WorkflowShortcode.parse("IMPL"),
             .attempt = 1,

@@ -596,12 +596,6 @@ TelemetryFact =
   | ReviewRequestedFact
   | ReviewApprovedFact { outcome }
   | ReviewRejectedFact { outcome }
-  | TransactionPreparedFact { transactionId, count }
-  | TransactionApplyingFact { transactionId, count }
-  | TransactionCommittedFact { transactionId, count, outcome }
-  | TransactionRolledBackFact { transactionId, diagnosticCode,
-                                outcome, count? }
-  | TransactionRecoveredFact { transactionId, outcome, count? }
   | CommandStartedFact { commandId }
   | CommandCompletedFact { commandId, outcome, exitCode?, durationMs? }
   | CommandFailedFact { commandId, diagnosticCode, outcome,
@@ -2705,12 +2699,12 @@ FeatureLogColumnSchema =
         sequence, occurred_at_utc, monotonic_offset, level, event_type,
         message_template_id, run_id, feature_id, stage, node_id,
         parent_event_id, correlation_id, attempt, task_id, duration_ms,
-        diagnostic_code, validator_id, transaction_id, rule_id,
+        diagnostic_code, validator_id, rule_id,
         model_operation_id, model_slot_id, input_tokens, output_tokens,
         repair_unit_kind, command_id, exit_code,
         evidence_status, outcome, count
       ],
-      headerUtf8: "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_operation_id|model_slot_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n"
+      headerUtf8: "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_operation_id|model_slot_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n"
     }
   | BuiltInPromptColumnsV2 {
       columnSchemaId: prompt-columns/v2,
@@ -9774,8 +9768,6 @@ model.schema_failed
 validation.completed | validation.failed
 repair.requested | repair.applied | repair.rejected | repair.exhausted
 review.requested | review.approved | review.rejected
-transaction.prepared | transaction.applying | transaction.committed |
-transaction.rolled_back | transaction.recovered
 command.started | command.completed | command.failed
 task.started | task.completed | task.blocked | task.failed
 security.denied

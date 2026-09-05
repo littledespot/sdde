@@ -411,7 +411,7 @@ or prompt rows follow; a normally closed segment ends with one
 The hard-coded headings are:
 
 ```text
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_operation_id|model_slot_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_operation_id|model_slot_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
 record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|model_operation_id|model_slot_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
 ```
 
@@ -456,9 +456,9 @@ For example, the registered `task.started` event at `info` can produce this
 segment:
 
 ```text
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|transaction_id|rule_id|model_operation_id|model_slot_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
-segment_header|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
-event|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0042|42|2026-08-28T10:15:30Z|1205|info|task.started|task.started/v1|RUN-001|F0002|implement|\N|\N|\N|\N|TASK-001|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_operation_id|model_slot_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
+segment_header|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
+event|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0042|42|2026-08-28T10:15:30Z|1205|info|task.started|task.started/v1|RUN-001|F0002|implement|\N|\N|\N|\N|TASK-001|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
 ```
 
 `IMPL` is illustrative only; the selected compiled workflow's definition
@@ -507,7 +507,7 @@ compiler injects them only after validating the three user choices.
 | Segment | `maxSegmentBytes = 8,388,608`, including heading and control rows |
 | Segment count | `maxSegments = 16` per feature/run/stream lifetime |
 | Retention | `retentionDays = 14`; a closed segment becomes eligible 1,209,600,000 ms after `closed_at_utc` |
-| Flush level | `flushAtOrAbove` is exactly `error`; `error`, `fatal`, and terminal stage/task/transaction events force flush |
+| Flush level | `flushAtOrAbove` is exactly `error`; `error`, `fatal`, and terminal stage/task events force flush |
 | Lower-level flush | flush after 32 records or 1,000 monotonic ms since the last successful flush, whichever occurs first |
 | Failure mode | exactly `block_new_work` |
 | Redaction policy | exactly `redaction/default-v1`; mandatory built-in detectors only, with no configured patterns |

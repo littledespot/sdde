@@ -242,8 +242,8 @@ no separate ownership registry or feature-availability check is required.
 
 [ADR 0009](../decisions/0009-atomic-workflow-execution.md) removes transaction
 storage, checkpoint and provider-recovery prerequisites at every scope.
-Existing transaction-ID codec code is superseded implementation to remove,
-not a foundation to extend. Specify executes atomically; non-success abandons
+The obsolete transaction-ID modules and codecs have been removed.
+Specify executes atomically; non-success abandons
 its candidate output and a later invocation starts at `start`.
 
 Remaining:

@@ -13,22 +13,9 @@ pub const Action = struct {
         .side_effect = .none,
     };
 
-    pub fn execute(self: Action, allocator: std.mem.Allocator, invocation: selector.Invocation) unicode.Error!selector.NormalizedCandidate {
+    pub fn execute(self: Action, allocator: std.mem.Allocator, invocation: @import("../../domain/specify_invocation.zig").Invocation) unicode.Error!selector.NormalizedCandidate {
         const nfc = try self.normalizer.nfc(allocator, invocation.raw_reference, selector.max_bytes);
         defer allocator.free(nfc);
-        for (nfc) |*byte| if (byte.* == '\\') {
-            byte.* = '/';
-        };
-        var normalized: std.Io.Writer.Allocating = .init(allocator);
-        errdefer normalized.deinit();
-        var components = std.mem.splitScalar(u8, nfc, '/');
-        var first = true;
-        while (components.next()) |component| {
-            if (std.mem.eql(u8, component, ".")) continue;
-            if (!first) normalized.writer.writeByte('/') catch return error.OutOfMemory;
-            normalized.writer.writeAll(component) catch return error.OutOfMemory;
-            first = false;
-        }
-        return .{ .bytes = normalized.toOwnedSlice() catch return error.OutOfMemory };
+        return .{ .bytes = try @import("../../domain/relative_directory_path.zig").normalize(allocator, nfc) };
     }
 };
