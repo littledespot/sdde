@@ -1307,6 +1307,52 @@ test "feature inspection root handoff has one narrow consumer and cannot mix con
     }
 }
 
+test "clarification input operations have narrow read-only ports and no workflow-name authority" {
+    const binding = @import("application/workflow_operation_binding.zig");
+    const capture = comptime binding.inspect(@import("application/clarification_input_workflow.zig").Capture, &.{});
+    try std.testing.expect(capture.valid and capture.feature_input_read);
+    try std.testing.expect(!capture.model_provider and !capture.feature_read and !capture.reference_read);
+    const parse = comptime binding.inspect(@import("application/clarification_input_workflow.zig").ParseState, &.{});
+    try std.testing.expect(parse.valid and !parse.feature_input_read);
+    inline for (.{
+        @embedFile("actions/clarification/capture_clarification_inputs.zig"),
+        @embedFile("actions/clarification/parse_clarification_state.zig"),
+        @embedFile("actions/clarification/validate_clarification_state.zig"),
+        @embedFile("actions/clarification/validate_clarification_forms.zig"),
+        @embedFile("actions/specify/resolve_feature_artifact_paths.zig"),
+        @embedFile("application/clarification_input_workflow.zig"),
+    }) |source| {
+        try expectAbsent(source, "std.Io.Dir");
+        try expectAbsent(source, "std.json");
+        try expectAbsent(source, "/adapters/");
+    }
+    const source = @embedFile("adapters/filesystem/feature_input_source.zig");
+    try expectAbsent(source, "writeFile");
+    try expectAbsent(source, "createDir");
+    try expectAbsent(source, "delete");
+    try std.testing.expect(std.mem.indexOf(u8, source, "directories.openObserved") != null);
+    try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "clarification");
+}
+
+test "feature input filesystem handoff has exactly one authorized consumer" {
+    const port = @import("ports/feature_input_source.zig").Capturer;
+    try std.testing.expect(@FieldType(port, "capability") == ?*const @import("domain/bootstrap_root_registry.zig").FeatureInputReadCapability);
+    const io = std.testing.io;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(std.testing.allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.eql(u8, entry.path, "domain/bootstrap_root_registry.zig") or
+            std.mem.eql(u8, entry.path, "adapters/filesystem/feature_input_source.zig") or
+            std.mem.eql(u8, entry.path, "architecture_test.zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, std.testing.allocator, .limited(1024 * 1024));
+        defer std.testing.allocator.free(source);
+        try expectAbsent(source, "bindFeatureInputAdapter");
+    }
+}
+
 test "feature document filenames and headings agree" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;

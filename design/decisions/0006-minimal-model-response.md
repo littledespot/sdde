@@ -110,9 +110,11 @@ are not automatically serialized. Reuse resource aliases in YAML. Avoid
 repeating schema/example text across prompt sections; any provider-required
 duplication must remain explicit and exactly accounted by F0006/F0007.
 
-Count and bound the actual model-visible input and output. Adding trusted
-metadata to the internal decoded value creates no model tokens. Whitespace is
-accepted within byte limits; minification is a token-saving preference, not a
+Account API-reported input and output tokens against the execution budget;
+do not estimate size or enforce model-call byte ceilings
+([ADR 0011](0011-provider-owned-request-limits.md)). Adding trusted metadata to
+the internal decoded value creates no model tokens. JSON whitespace is
+accepted; minification is a token-saving preference, not a
 reason to reject otherwise valid JSON. Keep semantic evidence and safety
 constraints complete—never truncate them to satisfy a token budget.
 
@@ -167,9 +169,10 @@ The compiler reuses the existing 1,048,576-byte workflow-resource ceiling and
 adds structural guards: at most 64 JSON container levels, 16 schema-node levels
 (root is level 1), 4,096 schema nodes including alternative objects and their
 fields, 256 properties per object, and 256 enum values. These are compiler
-safety bounds, not workflow token budgets or retry limits. No schema budget
-overrides the selected operation's later byte-safety checks or the execution's
-actual-usage token budget. Inference requires no token/context preflight.
+safety bounds for compiling the schema resource, not model-call size limits,
+workflow token budgets or retry limits. They cannot be repurposed as request or
+response byte ceilings. Candidate property/item validation and the execution's
+actual-usage token budget remain required; inference has no size preflight.
 
 The existing workflow compiler calls one narrow result-schema compiler port
 only for explicitly referenced resources of that kind. Its adapter checks JSON
@@ -201,8 +204,9 @@ binding and immutable ownership are preserved through graph/registry copies.
   responses reject. Required citations and selections cannot be omitted.
 - Native and prompt-only modes have the same candidate meaning and rejection
   rules; unsupported native schemas fail before any provider call.
-- Tests account for actual input/result bytes and exact model-specific token
-  evidence. No fixed token-saving percentage is assumed.
+- Tests inspect the actual model-visible payload and account for API-reported
+  input/output usage, not size estimates or mandatory pre-call counts. No fixed
+  token-saving percentage is assumed.
 
 No compatibility reader or legacy metadata-emitting prompt is retained.
 Schema compilation adds no workflow operation, hidden transition or provider

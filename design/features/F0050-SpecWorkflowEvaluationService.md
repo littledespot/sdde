@@ -190,10 +190,10 @@ fixture.
 | Feature logging | Policy, records, sinks, rotation, retention, recovery, and composition tests | Subsystem exists, but no Specify activation/state transaction binds it to a feature run. |
 | Workflow authority | Bounded inventory/capture/YAML parse/schema validation, compiler, graph validator, and immutable ID registry | Strong generic foundation exists. The current uncommitted tests strengthen this boundary only. |
 | Generic execution | Exact workflow selection, compiled transitions, owned typed invocation/value flow, declared-input views, and schema-checked delta application | Value-flow foundation exists; Specify generation/commit operations remain missing. |
-| Registered behavior | Core invocation/no-op, nine toolchain operations, and Specify invocation/read-only feature/reference directory preflight | No content generation; naming a definition `specify` adds no behavior. |
+| Registered behavior | Core invocation/no-op, nine toolchain operations, Specify invocation/directory preflight, and five read-only artifact/clarification-input operations | No content generation; naming a definition `specify` adds no behavior. |
 | Toolchain | Closed v1 project/preset package references, inheritance, policy composition, and safety validation through selected YAML operations | F0003 owns one sealed validated result in the workflow envelope. Node/Vitest commands and environment facts remain absent. |
-| Workflow artifact registry | Validated feature-log paths and sink binding | Logging-only; no specification, reference, clarification, workflow-state, or stage-transaction paths. |
-| Specify domain | Invocation and contained-directory preflight implemented; no `SpecificationIR`, reference snapshot, renderer/parser, clarification, or commit implementation | Preflight only; full Specify remains unavailable. |
+| Workflow artifact registry | One fixed path owner for specification/reference views, clarification forms/state, workflow state and logs; existing log sink binding reuses it | Paths do not grant ownership or publication authority. |
+| Specify domain | Invocation, directory and clarification-input preflight implemented; no `SpecificationIR`, reference snapshot, spec renderer/parser, answer acceptance or output publication | Read-only preparation only; full Specify remains unavailable. |
 | Evaluation harness | `TEST_HARNESS.md` only | No build wiring, driver, schemas, suites, reports, fake scripts, or end-to-end cases exist. |
 
 The generic runner now retains owned, versioned native values from invocation

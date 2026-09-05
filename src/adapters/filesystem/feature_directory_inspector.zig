@@ -22,20 +22,10 @@ pub const Adapter = struct {
         };
         defer allocator.free(checked.project_relative_path);
         if (!std.mem.eql(u8, checked.project_relative_path, selector.project_relative_path)) return error.FeatureDirectoryUnavailable;
-        var root = directories.open(self.io, self.project_root, binding.paths.specs) catch |err| return switch (err) {
-            error.DirectoryMissing => if (binding.observation == .absent)
-                .{ .selector = selector, .root_observation = .absent, .observation = .absent }
-            else
-                error.FeatureDirectoryUnavailable,
-            else => error.FeatureDirectoryUnavailable,
-        };
+        const root = (directories.openObserved(self.io, self.project_root, binding.paths.specs, binding.observation) catch return error.FeatureDirectoryUnavailable) orelse
+            return .{ .selector = selector, .root_observation = .absent, .observation = .absent };
         defer root.close(self.io);
-        const root_identity = directories.inspectReadable(self.io, root) catch return error.FeatureDirectoryUnavailable;
-        switch (binding.observation) {
-            .absent => return error.FeatureDirectoryUnavailable,
-            .directory => |expected| if (!root_identity.eql(expected)) return error.FeatureDirectoryUnavailable,
-        }
-        const root_observation: observations.RootObservation = .{ .directory = root_identity };
+        const root_observation: observations.RootObservation = binding.observation;
         var directory = directories.open(self.io, root, selector.feature_id.bytes) catch |err| return switch (err) {
             error.DirectoryMissing => .{ .selector = selector, .root_observation = root_observation, .observation = .absent },
             else => error.FeatureDirectoryUnavailable,

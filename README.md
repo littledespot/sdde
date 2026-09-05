@@ -14,6 +14,12 @@ its candidate output; a new invocation starts at `start`. There are no
 project/feature transactions, provider-effect journals or saved continuations.
 Clarifications and relevant answers survive without duplication.
 
+[Provider APIs own model-call size limits](design/decisions/0011-provider-owned-request-limits.md).
+SDDE adds no request/response byte ceilings or size-estimation gates. It records
+actual API input/output token usage against the workflow execution's total
+budget and stops subsequent calls at or above that budget. Existing capacity
+checks are legacy code to remove, not missing configuration or approval.
+
 Bootstrap loads the exact `.sddtoolkit.json` in the invocation working
 directory, validates configured roots, compiles all concise `workflow/v1`
 definitions, and publishes the immutable workflow registry before selection.
@@ -36,6 +42,7 @@ zig build test-atomic-execution
 zig build test-model-result-schema
 zig build test-reference-preflight
 zig build test-feature-directory
+zig build test-clarification-inputs
 zig build smoke
 zig build verify
 ```
@@ -57,7 +64,12 @@ selects `<paths.specs>/hello-world/`
 ([ADR 0010](design/decisions/0010-explicit-feature-directory.md)). Shared path
 validation rejects traversal, archive targets and filesystem aliases/symlinks.
 Missing targets remain absent; no ownership registry or generated-name operation
-exists. Full `spec.md` generation remains unfinished. Shared NFC uses statically
+exists. YAML-selected feature-input preparation also resolves fixed artifact
+paths and reads bounded clarification state/forms. It preserves closed files,
+rejects stale/malformed submissions, and distinguishes submitted from recorded
+answers without accepting either as current authority. See
+[F0100's input contract](design/features/F0100-SpecWorkflow.md#32-read-only-artifact-and-clarification-inputs).
+Full `spec.md` generation remains unfinished. Shared NFC uses statically
 linked utf8proc with packaged license notices
 ([ADR 0007](design/decisions/0007-unicode-normalization.md)).
 

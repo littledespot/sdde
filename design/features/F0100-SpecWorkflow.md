@@ -6,7 +6,8 @@
 compiler, registry, and transition-runner boundaries are implemented by F0005
 and ADR 0005. The logical Specify flow, `spec.md` section hierarchy, and
 clarification separation are defined below. The explicit feature/reference
-invocation and shared read-only directory preflight in Section 3.1 are implemented.
+invocation, shared directory preflight and read-only clarification inputs in
+Sections 3.1–3.2 are implemented.
 Generated-name code is removed; generation, output publication and the complete
 definition remain unfinished.
 
@@ -156,7 +157,8 @@ envelope. Inspection carries only `feature-read`; `core.directory-read@1`
 permits feature/reference inspection. The fixture selects these steps through
 ordinary YAML, accepts absent targets without creation, and rejects archive
 targets, aliases and symlinks. Generated-name code and parameters are removed.
-State loading, generation and output replacement remain unimplemented.
+The next read-only input steps are implemented below; generation and output
+replacement remain unimplemented.
 
 Specify follows [ADR 0009](../decisions/0009-atomic-workflow-execution.md): each
 execution starts at `start`; no transaction/checkpoint/recovery prerequisite.
@@ -164,6 +166,48 @@ Successful reruns overwrite the selected workflow's known outputs at the same
 paths without separate approval. User-closed clarification files remain
 byte-for-byte unchanged, including stale/invalid submissions; reuse applicable
 validated answers and recheck protection immediately before writing (§23.2).
+
+### 3.2 Read-only artifact and clarification inputs
+
+The shared artifact-path owner resolves the selected feature's `spec.md`,
+`reference-context.md`, `clarify/` and log paths under `paths.specs`, plus
+`state/workflow.json` and `state/clarifications.json` under
+`<paths.workflows>/features/<feature-directory>/`. These are derived paths,
+not configurable filenames, an ownership registry or write permission.
+
+Five registered operations compose through ordinary YAML:
+`resolve-feature-artifact-paths@1`, `capture-clarification-inputs@1`,
+`parse-clarification-state@1`, `validate-clarification-state@1` and
+`validate-clarification-forms@1`. Only capture carries `feature-input-read`;
+`core.feature-input-read@1` explicitly permits that capability alongside
+feature/reference inspection. Existing inspection-only profiles are unchanged.
+The executable test definition is
+[`feature-input-preflight.workflow.yaml`](../../src/test_fixtures/feature-input-preflight.workflow.yaml),
+not the complete Specify workflow.
+
+The single native persisted schema is
+[`clarification_inputs.State`](../../src/domain/clarification_inputs.zig):
+strict JSON tagged `clarification-state/v1`, bound to the selected feature,
+with registry/record revisions, stage ID counters, stable subjects, authority
+bindings, bounded answer schemas and recorded responses. A response owns its
+original form bytes and revision binding. No second persisted byte copy or
+compatibility reader exists. The
+[canonical form renderer](../../src/domain/clarification_form.zig) owns all
+Markdown except `requestedStatus` and the answer region.
+
+Capture reads only this state file and the registered `SNN.md`, `PNN.md` and
+`TNN.md` forms: at most 297 forms of 16 KiB each and 8 MiB of state.
+It does not create directories or read generated views, unrelated features or
+`workflow.json`. Missing state with no forms represents fresh inputs.
+Orphan, malformed, unknown, stale, changed or missing protected forms fail
+without modifying anything. Recorded closures use their original revision
+binding and must match the response's exact saved bytes.
+
+The result distinguishes new submissions from recorded responses and retains
+closed bytes unchanged. Structural validation is not actor authentication or
+current-authority/applicability validation. Response acceptance, source
+reconciliation, clarification transitions/writes and publication-time
+protection checks remain later work; no stage completion is inferred.
 
 ## 4. Required logical coverage
 

@@ -1,9 +1,10 @@
 Proposed generation and repair flow under
 [ADR 0006](../decisions/0006-minimal-model-response.md). Result-schema
-compilation, request/attempt accounting, provider authorization and token-budget
-primitives exist; the complete model-operation graph, request construction and
-candidate decoding/validation remain pending. Every retry/repair branch below
-belongs to the declared YAML graph.
+compilation, request construction, candidate decoding/validation, accounting and
+provider-authorization primitives exist; complete production YAML integration
+remains pending. Every retry/repair branch below belongs to the declared YAML
+graph. [ADR 0011](../decisions/0011-provider-owned-request-limits.md) prohibits
+local model-call size ceilings and guidance-fit gates.
 
 ```mermaid
 flowchart TD
@@ -13,13 +14,11 @@ flowchart TD
     ARECON -- Same-stage clarification required --> GAPNEED[BuildAuthorityGapClarificationNeedAction<br/>registered subject question why and answer schema]
     GAPNEED --> CL
     ARECON -- Earlier owner requires rework --> REWORK[Section 24.5 owner-derived invalidation and regeneration<br/>no local substitute or shallower owner]
-    ARECON -- Administrative block --> STOP
+    ARECON -- Administrative block --> STOP[Blocked, failed or cancelled execution; no candidate publication]
     CTX --> PSTAGE{Declared operation uses technical principles}
     PSTAGE -- Plan tasks or implement --> PSEL[Select every raw principle chunk/span in configured eligible filename categories<br/>free text is never ranked, summarized or omitted by inferred meaning]
-    PSTAGE -- Reference or specify --> GUIDE[Build initial deterministic guidance action<br/>closed schema, allowed IDs, preset rules, limits and minimal example]
-    PSEL --> PFIT{Complete selection fits the compiled operation budget}
-    PFIT -- No --> STOP[Blocked, failed or cancelled unit; no artifact write]
-    PFIT -- Yes --> GUIDE
+    PSTAGE -- Reference or specify --> GUIDE[Build initial deterministic guidance action<br/>closed schema, allowed IDs, preset rules and minimal example]
+    PSEL --> GUIDE
     EPOCH[Trusted stage-run epoch and closed request-purpose registry] --> MLEDGER[BuildInitialModelRequestIdentityLedgerAction<br/>once for the run; initialize no request implicitly]
     GUIDE --> UOWNER[BuildImmutableUnitOwnerIdAction<br/>closed stage-specific owner tuple from current canonical authorities]
     UOWNER --> MID[AssignModelRequestIdAction<br/>allocate one generation-purpose logical request ID from the current run-local ledger]

@@ -6,6 +6,11 @@
 removes durable provider-effect records and restart recovery. The adapter's
 lifecycle and authorization belong only to the current atomic execution.
 
+**Provider-limit amendment:** [ADR 0011](../decisions/0011-provider-owned-request-limits.md)
+removes adapter-side request/response byte ceilings and wire-budget proofs.
+Bedrock reports its API limits; SDDE preserves those failures/stops and accounts
+actual usage. No size-ceiling decision is a prerequisite for this feature.
+
 **Implementation readiness:** Blocked. F0006 and its governing amendments are
 accepted. Production implementation still requires accepted
 compiler-registered Bedrock model contracts, target/region/data-routing policy,
@@ -54,7 +59,7 @@ card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nov
 
 `AWSBedrockProvider` has one responsibility: translate one validated and
 accounted F0006 operation to one registered Amazon Bedrock Runtime operation,
-then normalize its bounded observation to the provider-neutral algebra.
+then normalize its observation to the provider-neutral algebra.
 
 It conforms directly to `LLMProviderInterface`; it does not introduce a second
 AWS gateway or runtime base class. AWS types remain in infrastructure. Domain
@@ -82,8 +87,7 @@ F0007 begins with:
 
 - one immutable `ValidatedProviderModelBinding` tagged `aws_bedrock`;
 - one identified provider-neutral request with exact compiled workflow model-operation identity, full
-  `model-envelope/v1` schema, ordered content, controls, `ModelVisibleInputId`,
-  and effective limits;
+  `model-envelope/v1` schema, ordered content, controls and `ModelVisibleInputId`;
 - one assigned `ProviderOperationId` and, before network I/O, proof of its
   runner-applied in-memory `invoked` transition; and
 - one validated opaque authorization lease reference whose nonserializable
@@ -102,8 +106,8 @@ Responsibilities remain narrow:
 | `PrepareProviderOperationAuthorizationAction` | Call only F0006's provider-neutral preparation port with closed F0006 values and a runner-private lease slot; return only validated opaque reference evidence and import no AWS type. |
 | `AWSBedrockEnvironmentAPIKeySource` | Read only `AWS_BEARER_TOKEN_BEDROCK` once when the selected invocation requires Bedrock, validate it under the secret-byte bound, and return an invocation-owned secret snapshot. |
 | `AWSBedrockOperationAuthorizationAdapter` | Implement the preparation port behind infrastructure and deposit an already loaded, operation-bound API-key capability into the runner-private slot without reading the environment. |
-| `AWSBedrockProvider` | Translate one typed operation and normalize one bounded provider observation. |
-| `AWSBedrockRuntimePort` | Send and receive at most one already authorized Bedrock Runtime request under its deadline, cancellation, and wire budget. |
+| `AWSBedrockProvider` | Translate one typed operation and normalize one provider observation. |
+| `AWSBedrockRuntimePort` | Send and receive at most one already authorized Bedrock Runtime request under its deadline and cancellation contract. |
 | Trusted endpoint resolver | Resolve one registered partition/region and fixed `bedrock-runtime` service to one trusted HTTPS origin. |
 | Composition root | Construct the fixed Bedrock model contracts, endpoint policy, provider adapter, environment source, and narrow infrastructure implementations; it does not read or retain the key itself. |
 | Pipeline runner | Own the execution-local single-use authorization table, apply lifecycle transitions, expose only opaque lease references, and finalize every slot on every path. |
@@ -191,8 +195,7 @@ AWSBedrockModelContract {
   responseMode:
     prompt_only |
     native_model_envelope_v1 { schemaFeatureProfileId },
-  supportedControls: RegisteredBedrockInferenceControlSet,
-  wireBudgets: RegisteredBedrockWireBudgetProof
+  supportedControls: RegisteredBedrockInferenceControlSet
 }
 ```
 
@@ -351,16 +354,13 @@ CountTokens does not accept the Converse output configuration, so the
 guidance mode, and full schema identity shared by the two operations;
 prompt-only schema guidance is included before counting.
 
-Canonical serialization is bounded by `maxCountTokensRequestBytes`, including
-the fixed wrapper and worst-case JSON/URI escaping. Header count and bytes are
-bounded separately. These checks complete before authorization-header
-construction or network I/O; an
-over-limit body is `request_limit_exceeded`/`not_sent`, consumes the already
-reserved full model attempt, and consumes no AWS request.
+Serialization preserves the complete CountTokens request without local size
+estimates, request/header caps or partial transmission. API size rejection is
+normalized as the returned provider failure, never a fabricated `not_sent`
+capacity rejection.
 
-The response uses separate small compiler-registered header-count, header-byte,
-and identity-encoded body caps and is accepted only when complete, well-formed,
-and containing one nonnegative bounded `inputTokens` integer. The observation
+The response is accepted only when complete and well-formed, with one
+nonnegative `inputTokens` integer representable by the common port. The observation
 binds that number to the exact operation ID, binding ID, and
 `ModelVisibleInputId`.
 
@@ -431,13 +431,9 @@ adapter transformations with golden tests. Unsupported content or a control
 such as the current unregistered `reasoningEffort` fails before I/O; no field
 is silently dropped.
 
-Serialization enforces `maxConverseRequestBytes` plus separate header
-count/byte ceilings before authorization-header construction or network I/O.
-The proof includes the fixed wrapper, URI/JSON escaping, and, in native mode,
-the schema's second encoding as a JSON string. `canonicalInputBytes` is not
-substituted for this bound. An over-limit request is
-`request_limit_exceeded`/`not_sent`, consumes the already reserved attempt, and
-is never partially transmitted.
+Serialization adds no request/header size ceiling or pre-call fit proof.
+The API reports a request it cannot handle; the adapter preserves that response
+and its actual delivery classification without silently splitting or retrying.
 
 The first implementation sends none of:
 
@@ -485,44 +481,37 @@ alter them.
 Positive and negative fixtures cover every supported and prohibited schema
 feature. Failure to represent the full schema blocks before the request.
 Provider rejection never triggers an unaccounted prompt-only repeat. In
-`prompt_only`, `outputConfig` is absent and the full schema remains in bounded,
+`prompt_only`, `outputConfig` is absent and the full schema remains in
 engine guidance. Both modes still require authoritative engine decode and
 validation. Native representability does not depend on CountTokens support.
 
-## 8. Converse response normalization and limits
+## 8. Converse response normalization and usage
 
-The transport first enforces registered response header-count and header-byte
-ceilings. Requests send `Accept-Encoding: identity`; a response with any
+Requests send `Accept-Encoding: identity`; a response with any
 `Content-Encoding` other than absent/`identity` is rejected before entity-body
-decoding. No transparent decompressor may bypass accounting.
+decoding. No transparent decompressor is enabled.
 
-It also enforces a total `maxConverseTransportBytes` cap over received HTTP
-framing, headers, and entity-body octets, then enforces
-`maxConverseResponseBodyBytes` while reading the body. These caps are
-derived by the registered `BedrockWireBudgetProof` using checked arithmetic,
-the fixed protocol version and wrapper, bounded usage fields, and worst-case
-JSON escaping for `maxModelEnvelopeBytes`. It is not equated to the content
-limit or left as an unexplained constant. CountTokens has separate, smaller
-transport/header/body caps under the same identity-encoding rule.
+There is no engine-defined header/body/content ceiling or wire-budget proof
+for Converse or CountTokens. A complete response is decoded and validated,
+not rejected against an estimated or configured model-call byte size.
 
-After strict response decoding, the adapter separately enforces:
+After strict response decoding, usage must satisfy:
 
 ```text
-modelEnvelopeContentBytes <= effectiveOperationOutputBytes
 reportedTotalTokens == reportedInputTokens + reportedOutputTokens
 ```
 
 Usage values are nonnegative integers with checked addition. Overflow,
-unsupported cache/accounting fields, inconsistent usage, or a crossed
-header/body/content cap fails closed without truncation. There is no token
+unsupported cache/accounting fields or inconsistent usage fail closed.
+Malformed or stopped output never becomes a truncated candidate. There is no token
 ceiling or comparison with a previous count. The runner records actual input
 plus output usage in the execution ledger, including stopped output; an
 overshoot returns the workflow-budget error and prevents subsequent calls.
 
-Strict bounded decoding reads the known `stopReason` before applying content
+Strict decoding reads the known `stopReason` before applying content
 shape rules. `end_turn` requires exactly one assistant output message and one
 complete UTF-8 text block. A recognized non-candidate stop may legitimately
-carry no text or a non-text provider output; the adapter boundedly parses only
+carry no text or a non-text provider output; the adapter parses only
 the fixed outer shape needed for usage/stop classification, discards all output
 content, and never exposes or executes it. AWS request IDs, headers, trace data,
 provider error bodies, arbitrary additional fields, and raw response JSON never
@@ -532,7 +521,7 @@ Stop normalization is exhaustive:
 
 | Bedrock stop reason | Exact F0006 observation |
 | --- | --- |
-| `end_turn` | `.completed(rawResult = .complete { content, ... })`; bounded text may proceed to envelope decoding. |
+| `end_turn` | `.completed(rawResult = .complete { content, ... })`; complete UTF-8 text may proceed to envelope decoding. |
 | `stop_sequence` | `.failed(cause = response_invalid)`; no workflow operation authorizes provider stop sequences. |
 | `max_tokens` | `.completed(rawResult = .stopped { reason = output_limit, ... })`; content is discarded and no candidate exists. |
 | `tool_use` | `.completed(rawResult = .stopped { reason = unsupported_tool_request, ... })`; no tool is executed. |
@@ -566,9 +555,7 @@ discriminator, not HTTP status alone:
 | `InternalServerException` (500) | `service_unavailable` | `policy_eligible` |
 | `ServiceUnavailableException` (503) | `service_unavailable` | `policy_eligible` |
 | TLS, DNS, connection, send/receive, or transport interruption | `transport_failed` | `policy_eligible` |
-| Serialized request body/path/header cap exceeded before send | `request_limit_exceeded` | `never` |
 | Malformed/unknown success or error body, unknown exception discriminator, invalid response shape/usage | `response_invalid` | `never` |
-| Response header/body or canonical envelope-content cap exceeded | `response_limit_exceeded` | `never` |
 | Missing or malformed successful exact count | `exact_token_count_unavailable` | `never` |
 
 CountTokens retains the same causes with operation kind `input_token_count`;
@@ -592,7 +579,7 @@ a durable provider record or restart gate.
 
 `AWSBedrockProvider` receives an `InvokedProviderOperation` after the runner
 applies its in-memory lifecycle transition. The transport enforces the exact
-single-use authorization, request binding, deadline and byte budgets. It
+single-use authorization, request binding and deadline. It
 requires no journal, persisted send proof, result-consumption marker or
 feature-storage capability.
 
@@ -637,7 +624,7 @@ moves ownership to `AWSBedrockProvider`, which destroys it after the call. If no
 consume occurs, the table finalizes it. The envelope contains only the opaque
 reference, never the capability. Neither the reference backing nor API key
 is persisted or reconstructed by a later workflow execution. Raw bodies remain
-adapter-private until `.complete` text is moved into the bounded F0006 result;
+adapter-private until `.complete` text is moved into the F0006 result;
 all output for `.stopped` is discarded and all AWS storage is destroyed.
 
 The initial engine executes provider work sequentially. F0007 introduces no
@@ -718,9 +705,10 @@ F0007 does not implement:
    without counting.
 10. Nova 2 Lite cannot silently use CountTokens or native structured output;
     an accepted prompt-only contract does not require a tokenizer.
-11. Checked canonical input and serialized CountTokens/Converse request/header
-    byte safety pass at their defined pre-I/O gates. No engine token/context
-    preflight or output-token reservation is imposed.
+11. CountTokens/Converse requests need no engine/operation byte ceilings,
+    size estimates or wire-budget proofs. API size failures retain their typed
+    cause and delivery classification. No token/context preflight or
+    output-token reservation is imposed.
 12. Inference is exactly one synchronous Converse request with SDK/client
     automatic retries disabled.
 13. Only the Section 7 request subset is reachable; unsupported content or
@@ -731,9 +719,9 @@ F0007 does not implement:
     versioned Bedrock schema-feature proof, and requires no count prerequisite.
 15. Native response rejection never triggers an unaccounted prompt-only call;
     every result still passes engine decoding and validation.
-16. Request headers/bodies, response headers/identity-encoded bodies, and
-    canonical envelope caps are separate, proven, and enforced without
-    truncation or transparent decompression.
+16. No local request/header/response/content size gate rejects a model call
+    or complete result. Provider output/context stops are non-candidate outcomes;
+    no truncation, transparent decompression or automatic retry occurs.
 17. Returned Converse usage is internally consistent and accounted from API
     input plus output totals, never from a prior count or output allowance.
 18. Every known stop reason and AWS exception maps to one exact observation;
@@ -783,20 +771,20 @@ Implementation evidence must cover:
   invocation.
 - **Token count:** registered support and Nova unsupported case; exact request
   content/order; zero/boundary/overflow counts; missing/malformed count;
-  AccessDenied, throttle, timeout, service failure, cancellation, wire cap;
+  AccessDenied, throttle, timeout, service failure, cancellation and API rejection;
   optional count association and registered relation; one call per explicit
   count operation; inference without a counter or count evidence.
 - **Request/schema:** golden URI, system/message order, UTF-8/JSON escaping,
-  exact/over request and header caps including schema double-encoding,
+  complete schema double-encoding without a local request/header cap,
   absent `maxTokens`, supported temperature, prompt-only omission, fixed full-envelope
   `outputConfig` structure/name/description omission, every allowed/prohibited
   Bedrock JSON Schema feature, and negative fixtures for every undeclared
   request field/content kind.
-- **Response/limits:** valid complete text; every known and unknown stop;
+- **Response/usage:** valid complete text; every known and unknown stop;
   non-text/nonexistent output on known non-candidate stops; missing/multiple text
   on `end_turn`; invalid UTF-8/JSON; negative/overflow/inconsistent usage and
-  no count prerequisite; exact/exceeded header/body/content caps; provider
-  output/context stops and workflow actual-usage exhaustion; rejected
+  no count prerequisite or local header/body/content caps; provider-reported
+  request-size rejection and output/context stops and workflow actual-usage exhaustion; rejected
   content encoding; short read; cancellation/timeout at each receive boundary;
   deterministic cleanup.
 - **Failures/accounting:** exception-discriminator mapping for representative
@@ -826,8 +814,9 @@ Implementation evidence must cover:
 | Common interface, provider file, registry, and operation algebra | F0006 Sections 1-10 |
 | Provider adapter and dependency boundary | Design Sections 5-6 and 26; ADR 0001 |
 | Request/invoke/decode and operation accounting | Design Sections 12.1-12.4 and 13.4; accepted F0006 Section 7 amendment |
-| Workflow-operation capacity, schema, retry, and repair | Design Sections 12.5-12.7 and 21-22; ADR 0005 |
-| Candidate trust, response limits, and secrets | Design Sections 3-4, 26.1, 26.5, and 27; F0002 |
+| Workflow-operation binding, schema, retry, and repair | Design Sections 12.5-12.7 and 21-22; ADR 0005 |
+| Candidate trust and secrets | Design Sections 3-4, 26.1, 26.5, and 27; F0002 |
+| Provider-owned size limits and actual workflow token accounting | [ADR 0011](../decisions/0011-provider-owned-request-limits.md); F0006 Section 6 |
 | Bedrock request/response/error protocol | AWS Converse, CountTokens, and structured-output references linked above |
 | Bedrock target, endpoint, API-key authorization, and least privilege | AWS Nova model card, endpoint, API-key, and IAM references linked above |
 | Fake-first testing and native packaging | Design Sections 28 and 30-31; F0006 Sections 12-13 |

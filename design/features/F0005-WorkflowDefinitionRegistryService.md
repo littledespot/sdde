@@ -401,20 +401,19 @@ service is published.
 
 ## 7. Registered-operation graph compilation
 
-Contracts requiring model binding additionally require explicit positive `input-bytes`,
-`output-bytes` and `response-mode` parameters. Retired per-operation token-limit
-parameters are rejected; only the execution actual-usage budget limits tokens.
-The compiler projects their typed requirements into each model step using the
-existing registry's engine and operation memory/transport safety facts. Immutable storage
-retains that projection; the runner rejects divergence from its registered
-contract before invoking the step. F0006 owns capability compatibility and the
-final intersection with the selected catalogue model. These per-operation
-capacities add no workflow-global budget, retry authority or registry.
+Contracts requiring model binding declare their typed slot and explicit
+`response-mode`, with optional supported controls. Under
+[ADR 0011](../decisions/0011-provider-owned-request-limits.md), retired
+`input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters
+reject. Registration and compilation require no capacity fields, local size
+ceilings or fit estimates. The compiler retains the typed binding requirements;
+the runner rejects divergence from the registered contract. F0006 owns exact
+slot/model/control/schema compatibility, not provider-size policy.
 
 The existing compiled model projection represents an immutable binding
 requirement independently of operational capabilities (ADR 0004, amended
-2026-09-05). Such a contract has exactly one required typed model slot and valid
-registered capacity. Pure operations may consume the runner-supplied binding
+2026-09-05). Such a contract has exactly one required typed model slot.
+Pure operations may consume the runner-supplied binding
 without holding a provider port. Provider-call operations still require that
 binding and their independently port-derived, policy-permitted capability.
 

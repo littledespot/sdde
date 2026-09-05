@@ -10,10 +10,10 @@ flowchart TD
     FD -->|Invalid or unsafe| PF
     C1 --> C2[validate-reference-selector@1<br/>Lexical safety and bounds]
     C2 --> C3[inspect-reference-directory@1<br/>Bound root identity; no-follow readable directory]
-    C3 --> D[Validate the selected feature's required existing state<br/>and complete reference corpus; no cross-feature scan]
-    D --> CL[Load retained clarification history and forms;<br/>preserve user-closed bytes before ingestion and consume applicable validated answers;<br/>accepted closure commits its response without rerendering the submitted form]
-    CL --> E[Ingest and reconcile complete reference authority]
-    CL -->|Stale or invalid user close, or protected answer requires reconsideration| CB[Block for explicit user direction;<br/>do not overwrite the form or allocate a duplicate clarification]
+    C3 --> D[Resolve fixed artifact paths; capture clarification state and forms;<br/>strict parse and structural/form validation;<br/>implemented read-only: no file or state mutation]
+    D --> CL[Retain exact closed bytes and distinguish submitted from recorded answers;<br/>missing changed stale or malformed forms fail without writes]
+    CL --> E[Ingest and reconcile complete reference authority;<br/>validate answer applicability and authenticate new responses before acceptance;<br/>not implemented by read-only preflight]
+    E -->|Protected answer requires reconsideration| CB[Block for explicit user direction;<br/>do not overwrite the form or allocate a duplicate clarification]
 
     E -->|All required authority resolved| F[Generate and validate reference-grounded feature brief]
     E -->|Specification-owned gap| S[Create or refresh only unprotected clarify/SNN.md forms;<br/>retain protected forms in the complete view set and commit spec_clarification_pending;<br/>no new partial SpecificationIR or spec.md]

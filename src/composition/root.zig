@@ -90,7 +90,8 @@ fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, p
     var reference_adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
     var feature_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
     var native_bindings: @import("native_workflow_operations.zig").Assembly = undefined;
-    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector());
+    var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project_root };
+    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser());
     var boot = runInProjectWithRegistry(io, allocator, project_root, runtime, &native_bindings.registry);
     if (boot == .ready) native_bindings.bindRoots(boot.ready.roots.registry());
     defer boot.deinit();
@@ -618,7 +619,8 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     var reference_adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
     var feature_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
     var operations: @import("native_workflow_operations.zig").Assembly = undefined;
-    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector());
+    var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project_root };
+    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser());
     var boot = runInProjectWithRegistry(io, std.testing.allocator, project_root, .{}, &operations.registry);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
@@ -790,6 +792,220 @@ test "reference preflight cancellation stops safely at each runtime checkpoint" 
     return error.ReferencePreflightNeverCompleted;
 }
 
+fn writeFeatureInputFixture(io: std.Io, project: std.Io.Dir) !void {
+    const allocator = std.testing.allocator;
+    const specs_config = try std.mem.replaceOwned(u8, allocator, valid_config, "\"specs\": \"specs\"", "\"specs\": \"requirements/current\"");
+    defer allocator.free(specs_config);
+    const archive_config = try std.mem.replaceOwned(u8, allocator, specs_config, "specs/archive", "requirements/archive");
+    defer allocator.free(archive_config);
+    const configuration = try std.mem.replaceOwned(u8, allocator, archive_config, ".sdd/workflows", "engine/workflows");
+    defer allocator.free(configuration);
+    try project.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = configuration });
+    try project.createDirPath(io, "engine/workflows");
+    try project.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = @embedFile("../test_fixtures/feature-input-preflight.workflow.yaml") });
+    try project.writeFile(io, .{ .sub_path = "engine/workflows/hello.workflow.yaml", .data = valid_workflow });
+    try project.createDirPath(io, "references/first");
+    try project.createDirPath(io, "references/second");
+}
+
+fn writeClarificationCapture(io: std.Io, project: std.Io.Dir, captures: @import("../domain/clarification_inputs.zig").Captures) !void {
+    try project.createDirPath(io, "engine/workflows/features/Chosen/Café/state");
+    if (captures.state) |bytes| try project.writeFile(io, .{ .sub_path = "engine/workflows/features/Chosen/Café/state/clarifications.json", .data = bytes });
+    try project.createDirPath(io, "requirements/current/Chosen/Café/clarify");
+    var folder = try project.openDir(io, "requirements/current/Chosen/Café/clarify", .{});
+    defer folder.close(io);
+    for (captures.forms) |form| try folder.writeFile(io, .{ .sub_path = &form.id.filename(), .data = form.bytes });
+}
+
+test "feature input YAML is read-only for new targets and unrelated workflows" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    for (0..2) |_| {
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+        try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
+        try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "engine/workflows/features", .{}));
+    }
+    // Unselected invalid content is not read, even though its reader is registered.
+    try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify");
+    try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/unknown.txt", .data = "unrecognized" });
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).execution);
+}
+
+test "feature input reruns retain submitted and recorded closed files with configured roots" {
+    const io = std.testing.io;
+    for ([_]bool{ false, true }) |recorded| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeFeatureInputFixture(io, project.dir);
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const captures = try @import("../test_fixtures/clarification_inputs.zig").closed(arena.allocator(), "S01", recorded);
+        try writeClarificationCapture(io, project.dir, captures);
+        try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/spec.md", .data = "existing user-edited spec\n" });
+        try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/reference-context.md", .data = "existing reference view\n" });
+        // This operation does not import stage state or generated views as authority.
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/features/Chosen/Café/state/workflow.json", .data = "not required by this read-only operation" });
+        for ([_][]const u8{ "first", "second", "first" }) |reference| {
+            try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", reference }).execution);
+            const closed = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", arena.allocator(), .limited(16384));
+            try std.testing.expectEqualSlices(u8, captures.forms[0].bytes, closed);
+            const state = try project.dir.readFileAlloc(io, "engine/workflows/features/Chosen/Café/state/clarifications.json", arena.allocator(), .limited(8 * 1024 * 1024));
+            try std.testing.expectEqualSlices(u8, captures.state.?, state);
+            const spec = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/spec.md", arena.allocator(), .limited(128));
+            try std.testing.expectEqualStrings("existing user-edited spec\n", spec);
+        }
+        // The compiled operations do not depend on the workflow's name.
+        const renamed = try std.mem.replaceOwned(u8, arena.allocator(), @embedFile("../test_fixtures/feature-input-preflight.workflow.yaml"), "id: feature-input-preflight", "id: arbitrary-preparation");
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = renamed });
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "arbitrary-preparation", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+    }
+}
+
+test "feature input failures preserve invalid stale and changed close submissions" {
+    const io = std.testing.io;
+    for ([_]enum { malformed_form, stale_form, changed_answer, missing_form, malformed_state, wrong_feature, orphan_form }{
+        .malformed_form, .stale_form, .changed_answer, .missing_form, .malformed_state, .wrong_feature, .orphan_form,
+    }) |failure| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeFeatureInputFixture(io, project.dir);
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const allocator = arena.allocator();
+        var captures = try @import("../test_fixtures/clarification_inputs.zig").closed(allocator, "S01", failure != .stale_form);
+        const original = captures.forms[0];
+        const bytes = switch (failure) {
+            .malformed_form => "requestedStatus: closed\nAnswer: preserve this invalid submission.\n",
+            .stale_form => try std.mem.replaceOwned(u8, allocator, original.bytes, "recordRevision: 1", "recordRevision: 2"),
+            .changed_answer => try std.mem.replaceOwned(u8, allocator, original.bytes, "Approved Café", "Different Café"),
+            else => original.bytes,
+        };
+        captures.forms = if (failure == .missing_form) &.{} else &.{.{ .id = original.id, .bytes = bytes }};
+        if (failure == .malformed_state) captures.state = "{}";
+        if (failure == .wrong_feature) captures.state = try std.mem.replaceOwned(u8, allocator, captures.state.?, "Chosen/Café", "Unrelated");
+        if (failure == .orphan_form) captures.state = null;
+        try writeClarificationCapture(io, project.dir, captures);
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+        if (failure == .missing_form) {
+            try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/clarify/S01.md", .{}));
+        } else {
+            const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", allocator, .limited(16384));
+            try std.testing.expectEqualSlices(u8, bytes, retained);
+        }
+        try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/spec.md", .{}));
+    }
+}
+
+test "feature input capture rejects unknown entries directories and symlink paths" {
+    const io = std.testing.io;
+    for ([_]enum { unknown, nested, collection_file, collection_link, form_link, dangling_form, state_link, state_parent_link, alias_form }{
+        .unknown, .nested, .collection_file, .collection_link, .form_link, .dangling_form, .state_link, .state_parent_link, .alias_form,
+    }) |failure| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeFeatureInputFixture(io, project.dir);
+        try project.dir.createDirPath(io, "requirements/current/Chosen/Café");
+        try project.dir.createDirPath(io, "engine/workflows/features/Chosen/Café");
+        try project.dir.createDirPath(io, "outside");
+        try project.dir.writeFile(io, .{ .sub_path = "outside/data", .data = "must not be imported" });
+        switch (failure) {
+            .collection_file => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify", .data = "not a directory" }),
+            .collection_link => try project.dir.symLink(io, "../../../../outside", "requirements/current/Chosen/Café/clarify", .{ .is_directory = true }),
+            .state_parent_link => try project.dir.symLink(io, "../../../../../outside", "engine/workflows/features/Chosen/Café/state", .{ .is_directory = true }),
+            .state_link => {
+                try project.dir.createDirPath(io, "engine/workflows/features/Chosen/Café/state");
+                try project.dir.symLink(io, "../../../../../../outside/data", "engine/workflows/features/Chosen/Café/state/clarifications.json", .{});
+            },
+            else => {
+                try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify");
+                switch (failure) {
+                    .unknown => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/notes.txt", .data = "unknown" }),
+                    .nested => try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify/nested"),
+                    .form_link => try project.dir.symLink(io, "../../../../../outside/data", "requirements/current/Chosen/Café/clarify/S01.md", .{}),
+                    .dangling_form => try project.dir.symLink(io, "missing.md", "requirements/current/Chosen/Café/clarify/S01.md", .{}),
+                    .alias_form => try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/s01.md", .data = "alias" }),
+                    else => unreachable,
+                }
+            },
+        }
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+    }
+}
+
+test "feature input capture rechecks target binding paths and physical root observations" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
+    try project.dir.createDirPath(io, ".sdd/workflows");
+    try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/hello.workflow.yaml", .data = valid_workflow });
+    try project.dir.createDirPath(io, "specs/chosen");
+    var boot = runInProject(io, std.testing.allocator, project.dir);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+    const registry = boot.ready.roots.registry();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const selected = try @import("../domain/feature_directory.zig").validate(allocator, .{ .bytes = "chosen" }, registry.featureDirectoryRoots());
+    var inspector_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var inspector = inspector_adapter.inspector();
+    inspector.capability = registry.featureDirectoryRead();
+    const observed = try inspector.inspect(allocator, selected);
+    const artifacts = @import("../domain/workflow_artifact_registry.zig");
+    const paths = try artifacts.resolveFeaturePaths(allocator, registry.featureArtifactRoots(), selected);
+    var adapter: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var source = adapter.capturer();
+    try std.testing.expectError(error.FeatureInputUnavailable, source.capture(allocator, observed, paths));
+    source.capability = registry.featureInputRead();
+    const empty = try source.capture(allocator, observed, paths);
+    try std.testing.expect(empty.state == null and empty.forms.len == 0);
+    var forged = paths;
+    forged.entries[@intFromEnum(artifacts.Artifact.clarification_state)].root_relative = "features/someone-else/state/clarifications.json";
+    try std.testing.expectError(error.FeatureInputUnavailable, source.capture(allocator, observed, forged));
+    var wrong_target = observed;
+    wrong_target.selector.feature_id.bytes = "someone-else";
+    try std.testing.expectError(error.FeatureInputUnavailable, source.capture(allocator, wrong_target, paths));
+    try project.dir.rename("specs/chosen", project.dir, "specs/old-chosen", io);
+    try project.dir.createDirPath(io, "specs/chosen");
+    try std.testing.expectError(error.FeatureInputUnavailable, source.capture(allocator, observed, paths));
+}
+
+test "feature input preparation cancellation never creates artifacts" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    for (0..256) |checks| {
+        var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
+        const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }, control.runtime());
+        try std.testing.expect(result == .execution);
+        try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
+        try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "engine/workflows/features", .{}));
+        if (result.execution == .ok) return;
+        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.execution);
+    }
+    return error.FeatureInputsNeverCompleted;
+}
+
+test "feature input compiler requires declared read capability and predecessor data" {
+    const io = std.testing.io;
+    for ([_][2][]const u8{
+        .{ "policy: core.feature-input-read@1", "policy: core.directory-read@1" },
+        .{ "use: resolve-feature-artifact-paths@1", "use: core.noop@1" },
+    }) |edit| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeFeatureInputFixture(io, project.dir);
+        const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/feature-input-preflight.workflow.yaml"), edit[0], edit[1]);
+        defer std.testing.allocator.free(changed);
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = changed });
+        try std.testing.expect(runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }) == .bootstrap_failed);
+    }
+}
+
 test "feature preflight uses configured specs roots and preserves selected files across reference changes" {
     const io = std.testing.io;
     const feature = @import("../domain/feature_directory.zig");
@@ -828,7 +1044,8 @@ test "feature preflight uses configured specs roots and preserves selected files
         var reference_source: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
         var feature_source: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
         var native: @import("native_workflow_operations.zig").Assembly = undefined;
-        native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector());
+        var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser());
         var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
         defer boot.deinit();
         try std.testing.expect(boot == .ready);
@@ -894,7 +1111,8 @@ test "feature inspection rejects missing authority stale roots and forged resolv
     var reference_source: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
     var feature_source: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
     var native: @import("native_workflow_operations.zig").Assembly = undefined;
-    native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector());
+    var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser());
     var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);

@@ -57,3 +57,15 @@ pub fn inspectReadable(io: std.Io, directory: std.Io.Dir) Error!identity.FileIde
     };
     return file_identity.inspect(directory.handle) catch error.DirectoryUnavailable;
 }
+
+/// Recheck an earlier root/target observation without materializing an absent path.
+pub fn openObserved(io: std.Io, base: std.Io.Dir, relative: []const u8, expected: @import("../../domain/bootstrap_roots.zig").RootObservation) Error!?std.Io.Dir {
+    const directory = open(io, base, relative) catch |err| return switch (err) {
+        error.DirectoryMissing => if (expected == .absent) null else error.DirectoryUnavailable,
+        else => err,
+    };
+    errdefer directory.close(io);
+    const current = try inspectReadable(io, directory);
+    if (expected != .directory or !expected.directory.eql(current)) return error.DirectoryUnavailable;
+    return directory;
+}

@@ -181,6 +181,15 @@ pub fn build(b: *std.Build) void {
     feature_step.dependOn(&b.addRunArtifact(feature_tests).step);
     feature_step.dependOn(&run_unicode_tests.step);
 
+    const clarification_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/clarification_inputs_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const clarification_step = b.step("test-clarification-inputs", "Test fixed artifact paths and read-only clarification inputs");
+    clarification_step.dependOn(&b.addRunArtifact(clarification_tests).step);
+
     const atomic_execution_step = b.step("test-atomic-execution", "Test execution isolation, provider lifecycle, authorization and logging cleanup");
     for ([_][]const u8{
         "src/provider_operation_lifecycle_test.zig",

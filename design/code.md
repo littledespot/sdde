@@ -8,6 +8,10 @@ atomic. Candidate state is execution-local; no sample authorizes independent
 task commits, transaction storage, durable checkpoints or restart recovery.
 Clarifications survive; every new execution begins at `start`.
 
+[ADR 0011](decisions/0011-provider-owned-request-limits.md) leaves model-call
+size limits to the provider API. These samples add no byte/token ceilings or
+size-fit evidence; workflow accounting uses actual API-reported token usage.
+
 Clarification identity is independent of execution identity. Its complete
 registry, forms, and responses persist across successive workflows and are
 consumed after current applicability checks. `implement` cannot execute while
@@ -968,7 +972,7 @@ ApplicablePrincipleSelection {
   selectedChunkIds[],
   requiredRawSpans: PrincipleSourceSpan[]
   // Selection is deterministic from configured filename category hints. Every
-  // selected raw span must fit; the engine never substitutes a model summary.
+  // selected raw span is included completely; no model summary or size-fit gate.
 }
 
 SemanticText {
@@ -1620,7 +1624,7 @@ FileKindPolicy {
   extensionCaseSensitive,
   pathTemplateIds[],
   placementRule?,
-  contentLimits: { modelCompleteFileBytes, copiedSourceBytes },
+  contentLimits: { copiedSourceBytes },
   contentReferencePolicy: {
     extractorIds[], fallbackScannerId, resolverId,
     requireCompleteCoverage: true
@@ -2222,7 +2226,7 @@ BootstrapAuthorityState =
     }
 
 BootstrapComponentImpact =
-  logging_threshold | logging_retention | model_slot_capacity |
+  logging_threshold | logging_retention | model_slot_binding |
   reference_ingestion | specification_contract | principle |
   technical_planning | administrative_migration
 
@@ -2254,7 +2258,7 @@ BootstrapAuthorityChangePlan =
       earliestOwner: runtime_only,
       obligations: BootstrapChangeObligations,
       allowedImpacts:
-        (logging_threshold | logging_retention | model_slot_capacity)[]
+        (logging_threshold | logging_retention | model_slot_binding)[]
     }
   | SpecificationOwningBootstrapChangePlan {
       assignments: BootstrapComponentImpactAssignment[],
@@ -2456,8 +2460,6 @@ CompiledWorkflowModelOperation {
   contextRequestSchemaResourceId?,
   guidanceResourceId,
   minimalExampleResourceId,
-  inputCeiling: { bytes, tokens },
-  outputCeiling: { bytes, tokens },
   repairAuthorizationSchemaId?
 }
 
@@ -3652,9 +3654,7 @@ ReferenceReconciliationPartition {
   level: within_source | cross_source | global,
   ordinal,
   memberClaimIds[],
-  memberSummaryIds[],
-  estimatedInputBytes,
-  estimatedInputTokens
+  memberSummaryIds[]
 }
 
 ReferenceReconciliationSummaryProposal {
@@ -4103,9 +4103,7 @@ ObligationCluster {
   ordinal,
   projectId?,
   phaseHint,
-  obligationIds[],
-  estimatedInputBytes,
-  estimatedInputTokens
+  obligationIds[]
 }
 
 ObligationPartition {
@@ -4134,9 +4132,7 @@ TaskEdgePartition {
   edgePartitionId,
   ordinal,
   visibleInternalKeys[],
-  requiredPairKeys[],
-  estimatedInputBytes,
-  estimatedInputTokens
+  requiredPairKeys[]
 }
 
 TaskDependencyPartitionState {
@@ -8617,7 +8613,7 @@ fileKinds:
     plannedIntents: [read, create, update]
     capabilities: [read, create, patch, replace, copy_destination]
     copyDestination: { create: allowed, overwrite: forbidden }
-    contentLimits: { modelCompleteFileBytes: 8192, copiedSourceBytes: 1048576 }
+    contentLimits: { copiedSourceBytes: 1048576 }
     contentReferencePolicy:
       extractorIds: [typescript-imports@1, jsx-resource-links@1]
       fallbackScannerId: conservative-path-token-scan@1
@@ -8657,7 +8653,7 @@ fileKinds:
     plannedIntents: [read, create, update]
     capabilities: [read, create, patch, replace, copy_destination]
     copyDestination: { create: allowed, overwrite: forbidden }
-    contentLimits: { modelCompleteFileBytes: 8192, copiedSourceBytes: 1048576 }
+    contentLimits: { copiedSourceBytes: 1048576 }
     contentReferencePolicy:
       extractorIds: [typescript-imports@1, jsx-resource-links@1]
       fallbackScannerId: conservative-path-token-scan@1
@@ -8698,7 +8694,7 @@ fileKinds:
     inferencePriority: 100
     plannedIntents: [read, update]
     capabilities: [read, patch, replace]
-    contentLimits: { modelCompleteFileBytes: 4096, copiedSourceBytes: 0 }
+    contentLimits: { copiedSourceBytes: 0 }
     contentReferencePolicy:
       extractorIds: [ecmascript-imports@1, ecmascript-static-path-literals@1]
       fallbackScannerId: conservative-path-token-scan@1
@@ -8949,7 +8945,7 @@ MechanicalGuidance =
       }[],                       // configured targets plus active host
       inaccessibleRoots: PathPattern[],
       generatedReadOnlyRoots: PathPattern[],
-      completeWithinOperationBudget: true
+      complete: true
     }
   | PassiveLiteralGuidance {
       fieldPointers[],
@@ -8984,7 +8980,7 @@ MechanicalGuidance =
     }
   | CommandGuidance { availableCommandIds[], typedArgumentSchemaIds[] }
   | IdentifierGuidance { namespaceId, allowedIds[] }
-  | ContentGuidance { applicableRuleIds[], byteLimit, tokenLimit, requiredValidatorIds[] }
+  | ContentGuidance { applicableRuleIds[], requiredValidatorIds[] }
 ```
 
 ---
@@ -9291,8 +9287,7 @@ RepairRuleBinding {
         packageNameGrammarId, versionConstraintGrammarId, allowedScopes[] }
     | { kind: command_selection, commandRegistryId, allowedCommandIds[],
         typedArgumentSchemaIds[] }
-    | { kind: content_policy, validatorIds[], parserIds[], resolverIds[],
-        byteLimit?, tokenLimit? }
+    | { kind: content_policy, validatorIds[], parserIds[], resolverIds[] }
     | { kind: exact_value, expectedValue }
 }
 

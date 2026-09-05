@@ -23,8 +23,18 @@ pub const ConfiguredBaseRootCapability = opaque {
 
 pub const LLMProviderConfigCapability = opaque {};
 pub const FeatureDirectoryReadCapability = opaque {};
+pub const FeatureInputReadCapability = opaque {};
 
 pub const BootstrapRootRegistry = opaque {
+    pub fn featureInputRead(self: *const BootstrapRootRegistry) *const FeatureInputReadCapability {
+        return @ptrCast(self);
+    }
+
+    pub fn featureArtifactRoots(self: *const BootstrapRootRegistry) @import("workflow_artifact_registry.zig").FeatureRoots {
+        const paths = self.featureDirectoryRoots();
+        return .{ .specs = paths.specs, .archive = paths.archive, .workflows = capabilityStorage(self.workflowAuthority()).configured_relative_path };
+    }
+
     pub fn featureDirectoryRead(self: *const BootstrapRootRegistry) *const FeatureDirectoryReadCapability {
         return @ptrCast(self);
     }
@@ -160,6 +170,22 @@ pub const FeatureDirectoryAdapterBinding = struct {
     paths: @import("feature_directory.zig").Roots,
     observation: roots.RootObservation,
 };
+
+pub const FeatureInputAdapterBinding = struct {
+    paths: @import("workflow_artifact_registry.zig").FeatureRoots,
+    specs_observation: roots.RootObservation,
+    workflows_identity: roots.PhysicalDirectoryIdentity,
+};
+
+/// Internal handoff restricted to the bounded selected-feature input reader.
+pub fn bindFeatureInputAdapter(capability: *const FeatureInputReadCapability) FeatureInputAdapterBinding {
+    const registry_value: *const BootstrapRootRegistry = @ptrCast(capability);
+    return .{
+        .paths = registry_value.featureArtifactRoots(),
+        .specs_observation = capabilityStorage(registry_value.specsArtifacts()).observation,
+        .workflows_identity = capabilityStorage(registry_value.workflowAuthority()).observation.directory,
+    };
+}
 
 /// Internal handoff restricted to the read-only feature directory inspector.
 pub fn bindFeatureDirectoryAdapter(capability: *const FeatureDirectoryReadCapability) FeatureDirectoryAdapterBinding {

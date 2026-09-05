@@ -9,6 +9,10 @@
 - **Amends:** ADR 0003 and the proposed F0005/F0006 workflow and model-operation
   contracts
 
+**Size-policy amendment:** [ADR 0011](0011-provider-owned-request-limits.md)
+removes model-call size ceilings and estimates; provider APIs report their own
+limits and the workflow accounts actual token usage.
+
 ## Context
 
 A fixed engine-owned list such as `spec.section.generate` or
@@ -103,7 +107,7 @@ A generic model operation declares in YAML:
 
 - the repository model slot from `.sddtoolkit.json`;
 - the prompt/guidance and request/result schema resource references;
-- the bounded inputs, outputs, controls, and allowed context behavior required
+- the typed inputs, outputs, controls, and allowed context behavior required
   by that operation; and
 - every outcome transition, including repair, failure, and cancellation.
 
@@ -115,8 +119,9 @@ record its full usage and return a budget error, and prohibit further model
 calls at or above budget. There is no pre-call token reservation or
 budget-derived output allowance. Engine/operation/model token ceilings and
 mandatory pre-call counting are removed; the retired `input-tokens` and
-`output-tokens` parameters reject. Providers report their token/context errors
-or stops. Byte/memory/transport safety remains enforced. Optional count
+`output-tokens`, `input-bytes` and `output-bytes` parameters reject. Providers
+report their request/output/context errors or stops. No byte ceiling or size
+estimate is substituted as a pre-call gate. Optional count
 observations neither authorize inference nor replace actual usage. This is
 runner-owned accounting/guarding, not a YAML-selectable bypass or hidden model route.
 It supplies no retry count. Any operation instance that
@@ -127,9 +132,9 @@ not acquire a hidden retry.
 
 The workflow never names a provider or model directly. The selected slot must
 resolve through `ValidatedRepositoryModelAllowlist` to the immutable provider
-registry entry prepared for that invocation. Per-request byte safety and
-authorization constraints may be stricter, but cannot silently replace the
-YAML's slot, resources, control flow, or requested operation semantics.
+registry entry prepared for that invocation. Authorization cannot silently
+replace the YAML's slot, resources, control flow, or requested operation
+semantics.
 
 The stable model-operation identity is derived from the compiled workflow ID,
 workflow version, and step ID. Logging, request identity, persistence, and

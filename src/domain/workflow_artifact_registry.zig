@@ -2,6 +2,58 @@ const std = @import("std");
 const bootstrap = @import("bootstrap_root_registry.zig");
 const log_binding = @import("feature_log_binding.zig");
 const feature_identity = @import("feature_identity.zig");
+const relative = @import("relative_directory_path.zig");
+const directory = @import("feature_directory.zig");
+
+pub const FeatureRoots = struct { specs: []const u8, archive: []const u8, workflows: []const u8 };
+pub const Artifact = enum { specification, reference_context, clarification_forms, clarification_state, workflow_state, event_logs, prompt_logs };
+pub const Root = enum { specs, workflows };
+pub const ArtifactPath = struct { root: Root, root_relative: []const u8, project_relative: []const u8 };
+/// A deterministic path projection, not an ownership registry or write grant.
+pub const FeaturePaths = struct {
+    feature: directory.Selector,
+    entries: [@typeInfo(Artifact).@"enum".fields.len]ArtifactPath,
+
+    pub fn get(self: FeaturePaths, artifact: Artifact) ArtifactPath {
+        return self.entries[@intFromEnum(artifact)];
+    }
+};
+
+pub fn resolveFeaturePaths(allocator: std.mem.Allocator, configured: FeatureRoots, selected: directory.Selector) (std.mem.Allocator.Error || error{InvalidFeatureArtifactPath})!FeaturePaths {
+    const checked = directory.validate(allocator, .{ .bytes = selected.feature_id.bytes }, .{ .specs = configured.specs, .archive = configured.archive }) catch |err| return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.InvalidFeatureDirectory => error.InvalidFeatureArtifactPath,
+    };
+    defer allocator.free(checked.project_relative_path);
+    if (!std.mem.eql(u8, checked.project_relative_path, selected.project_relative_path)) return error.InvalidFeatureArtifactPath;
+    var result: FeaturePaths = .{ .feature = selected, .entries = undefined };
+    var initialized: usize = 0;
+    errdefer for (result.entries[0..initialized]) |entry| {
+        allocator.free(entry.root_relative);
+        allocator.free(entry.project_relative);
+    };
+    inline for (.{
+        .{ Artifact.specification, Root.specs, "spec.md" },
+        .{ Artifact.reference_context, Root.specs, "reference-context.md" },
+        .{ Artifact.clarification_forms, Root.specs, "clarify" },
+        .{ Artifact.clarification_state, Root.workflows, "state/clarifications.json" },
+        .{ Artifact.workflow_state, Root.workflows, "state/workflow.json" },
+        .{ Artifact.event_logs, Root.specs, "logs/events" },
+        .{ Artifact.prompt_logs, Root.specs, "logs/prompts" },
+    }) |item| {
+        const root = if (item[1] == .specs) configured.specs else configured.workflows;
+        const prefix = if (item[1] == .specs) "" else "features/";
+        const child = try std.mem.concat(allocator, u8, &.{ prefix, selected.feature_id.bytes, "/", item[2] });
+        errdefer allocator.free(child);
+        const project = try std.mem.concat(allocator, u8, &.{ root, "/", child });
+        errdefer allocator.free(project);
+        relative.validate(project) catch return error.InvalidFeatureArtifactPath;
+        if (!relative.contains(root, project) or relative.contains(configured.archive, project)) return error.InvalidFeatureArtifactPath;
+        result.entries[@intFromEnum(item[0])] = .{ .root = item[1], .root_relative = child, .project_relative = project };
+        initialized += 1;
+    }
+    return result;
+}
 
 /// Canonical feature-state tuple; the namespace is fixed by this type.
 /// A well-formed ID alone proves neither allocation nor committed authority.
@@ -54,8 +106,11 @@ pub fn createValidated(
     const feature = binding.featureId().bytes;
     const run = binding.runId().bytes;
     const binding_id = binding.bindingId().bytes;
-    const event_run = std.fmt.allocPrint(allocator, "{s}/logs/events/{s}", .{ feature, run }) catch return error.InvalidWorkflowArtifactRegistry;
-    const prompt_run = std.fmt.allocPrint(allocator, "{s}/logs/prompts/{s}", .{ feature, run }) catch return error.InvalidWorkflowArtifactRegistry;
+    const configured = roots.featureArtifactRoots();
+    const selected = directory.validate(allocator, .{ .bytes = feature }, .{ .specs = configured.specs, .archive = configured.archive }) catch return error.InvalidWorkflowArtifactRegistry;
+    const paths = resolveFeaturePaths(allocator, configured, selected) catch return error.InvalidWorkflowArtifactRegistry;
+    const event_run = std.fmt.allocPrint(allocator, "{s}/{s}", .{ paths.get(.event_logs).root_relative, run }) catch return error.InvalidWorkflowArtifactRegistry;
+    const prompt_run = std.fmt.allocPrint(allocator, "{s}/{s}", .{ paths.get(.prompt_logs).root_relative, run }) catch return error.InvalidWorkflowArtifactRegistry;
     owner.registry = .{
         .binding = .{
             .log_policy_id = .{ .bytes = allocator.dupe(u8, binding.logPolicyId().bytes) catch return error.InvalidWorkflowArtifactRegistry },

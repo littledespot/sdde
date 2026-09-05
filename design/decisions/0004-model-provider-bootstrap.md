@@ -7,6 +7,10 @@
 - **Amends:** ADR 0003's rule that setup beyond the startup graph appears only
   as project-graph setup nodes, solely for model-provider run preparation
 
+**Size-policy amendment:** [ADR 0011](0011-provider-owned-request-limits.md)
+removes capacity fields and size-ceiling prerequisites; binding/call separation
+and conditional bootstrap remain unchanged.
+
 ## Context
 
 The fixed startup graph must load and compile workflow definitions before a
@@ -40,16 +44,17 @@ preserve only capabilities supplied by registered node contracts and allowed
 by the selected policy.
 
 The model-binding requirement is the existing typed `CompiledStep.model`
-projection, not a second flag or registry. A registered contract with model
-capacity requires exactly one typed model-slot parameter and the existing
-explicit capacity/control parameters. Pure preparation and validation operations
+projection, not a second flag or registry. Its registered contract declares
+exactly one typed model-slot parameter and explicit response controls, without
+capacity fields or size parameters. Pure preparation and validation operations
 may require this binding without holding a provider port. The runner supplies
 only the active step's immutable validated binding after catalogue bootstrap.
 `model-provider` still derives only from the concrete provider-call port, remains
 policy-gated, and requires a model binding. Binding data never grants that port.
 This amendment supersedes capability-only bootstrap derivation and the former
 equivalence between model-slot access and provider-call capability. It adds no
-YAML fields, hidden operations, production capacity defaults or provider calls.
+hidden operations or provider calls. Capacity values are not needed for
+registration, compilation, bootstrap or pure preparation.
 
 The orchestrator may branch only on that typed requirement through
 runner-owned child bindings. The `not_required` branch performs no provider

@@ -6,6 +6,11 @@
 removes provider-effect persistence, durable handoff and cross-execution
 recovery. The whole workflow is atomic; an abandoned execution is never resumed.
 
+**Provider-limit amendment:** [ADR 0011](../decisions/0011-provider-owned-request-limits.md)
+removes all additional model-call size ceilings and capacity gates. Provider
+APIs report their limits; the runner accounts actual usage against the workflow
+token budget. This is accepted, not a pending configuration or approval decision.
+
 **Implementation readiness:** The configured provider-document path and
 read-only byte service are accepted and implemented by F0001/F0004/F0008. The
 strict common decoder, compiler-contract registry join, immutable
@@ -42,19 +47,22 @@ actions, production provider composition/contracts and integration into the
 atomic workflow execution remain implementation work. No transaction store or
 provider-effect journal is a prerequisite.
 
-The provider-neutral capability/capacity contract and effective-limit binding
-are implemented. The accepted token-policy amendment removes per-operation token ceilings and
-mandatory pre-call counting. The compiler retains byte-safety parameters and
-response mode. Inference binds directly to its request and operation identity;
-optional counting provides observations only, never inference authority. Binding
-intersects those requirements with the exact catalogue contract. The closed
+Provider-neutral capability and model-slot binding are implemented. Existing
+capacity fields, intersections, byte parameters and
+`ValidateStaticModelRequestCapacityAction` are superseded implementation to
+remove under ADR 0011, not prerequisites for production registration.
+Response mode and supported controls remain explicit. Inference binds directly
+to its request and operation identity; optional counting provides observations
+only, never inference authority. Binding
+checks those requirements against the exact catalogue contract. The closed
 `model-result-schema/v1` resource compiler now implements the compact schema
 profile in [ADR 0006](../decisions/0006-minimal-model-response.md#closed-result-schema-profile).
 Graph compilation rejects malformed, unsupported or unbounded schemas and the
 registry owns their immutable typed contracts. The pure `BuildModelRequestAction`
-and `ValidateStaticModelRequestCapacityAction` are implemented and tested through
-the fake provider. `ValidateProviderInvocationObservationAction` now validates
-the retained call association, usage and content safety and exposes sealed
+is implemented and tested through the fake provider. Its existing identity,
+schema and control validators remain; capacity-only checks do not.
+`ValidateProviderInvocationObservationAction` validates
+the retained call association, usage and UTF-8 content and exposes sealed
 complete-candidate evidence. `DecodeModelEnvelopeAction` now parses that sealed
 input into an owned, read-only JSON object retaining the same association and
 compiled schema. `ValidateModelPayloadSchemaAction` now checks that tree against
@@ -325,7 +333,7 @@ implementation exists; it does not enable an adapter or provide a fallback.
 
 ## 4. Registered contracts and immutable registry
 
-Capabilities and limits come only from immutable contracts compiled into the
+Capabilities come only from immutable contracts compiled into the
 native executable. A representative contract is:
 
 ```text
@@ -337,15 +345,14 @@ ProviderModelContract {
   operationSet: RegisteredProviderOperationSet,
   exactTokenCounter: RegisteredExactTokenCounter,
   structuredResponse: RegisteredStructuredResponseContract,
-  supportedControls: RegisteredInferenceControlSet,
-  providerWireBudgets: RegisteredProviderWireBudgets
+  supportedControls: RegisteredInferenceControlSet
 }
 ```
 
 Provider-specific versions may add only closed typed facts. Project
 configuration can select a deployment fact such as a registered source region,
-and may narrow accepted choices where its variant says so. It cannot increase a
-limit or claim model support for an operation, tokenizer, control, structured
+and may narrow accepted choices where its variant says so. It cannot
+claim model support for an operation, tokenizer, control, structured
 schema, endpoint, region, partition, or data-routing policy.
 
 Registry ownership is separated as follows:
@@ -382,10 +389,11 @@ F0007 or another accepted provider feature must add a production contract,
 configuration variant, implementation discriminator, and later dispatch branch
 together.
 
-The current neutral contract carries count/inference support, an exact-count
-mechanism (`unavailable | provider_input_token_count`), response support,
-temperature support, canonical byte safety, and separate request/response wire
-budgets. These are required compiler-supplied facts, not configuration fields.
+The neutral contract carries count/inference support, an exact-count
+mechanism (`unavailable | provider_input_token_count`), response support and
+temperature support. These are compiler-supplied capability facts, not
+configuration fields or provider-size policy. Legacy canonical/wire capacity
+fields must be removed rather than populated.
 The catalogue validator proves exact equality with the registered contract;
 even a narrower candidate cannot substitute different contract facts. An
 internally consistent but insufficient contract may remain catalogued, but
@@ -462,7 +470,7 @@ identity comparison or refresh is performed after capture; the next invocation
 performs a new conditional capture. There is no stale fallback because no
 prior invocation's bytes, registry, or allowlist are retained.
 
-## 6. Provider/model binding and limits
+## 6. Provider/model binding and workflow token accounting
 
 F0001 remains the sole owner of `.sddtoolkit.json` decoding. The complete
 `models.slots` map defines the repository's candidate allowlist. Before any
@@ -488,45 +496,28 @@ facts. Decoded strings alone grant no provider authority.
    and representable rather than silently ignored;
 5. the complete `model-envelope/v1` response schema and YAML-declared result schema are
    the same compact result-object contract under ADR 0006 and are representable
-   by the registered response mode; and
-6. effective memory/transport safety bounds intersect the registered engine,
-   operation and provider byte bounds; no token/context ceiling is imposed.
+   by the registered response mode.
 
-Operation contracts requiring model binding use the shared `with` parameters
-`input-bytes`, `output-bytes`, and `response-mode` (`prompt-only | native-schema`). All are explicit and required.
-Optional `temperature` is an integer in thousandths (`0..1000`); omission
-sends no temperature control. Resource aliases, slot selection and outcomes
-remain in the existing concise workflow structure.
+Model-binding contracts declare one repository slot and explicit `response-mode`
+(`prompt-only | native-schema`). Optional `temperature` is an integer in
+thousandths (`0..1000`); omission sends no temperature control. Resources and
+outcomes remain in the existing concise workflow structure.
 
-The registered operation's model capacity and exact slot descriptor compile
-into the existing typed model requirements. They authorize immutable binding
-data, not provider calls. Pure request preparation and static validation require
-no provider port; actual provider-call capabilities remain independently derived
-from narrow ports and constrained by the selected policy. No additional flag,
-registry or YAML field duplicates this authority.
+The typed slot and response-control requirements compile into the existing
+model-binding projection. They grant immutable binding data, not a provider
+port. Provider-call capabilities remain independently derived from narrow ports
+and constrained by the selected policy. No capacity field, second flag or
+registry is needed to derive binding requirements.
 
-The existing generic operation registry owns engine memory/transport safety
-bounds, and each registered model operation owns its byte-safety ceilings. A missing or
-invalid ceiling rejects registration; there is no production default. The
-compiler intersects those ceilings with the positive YAML values; values above
-a trusted ceiling narrow to that ceiling, while malformed or unrepresentable
-values reject. Binding further intersects every canonical and wire bound with
-the model contract. Wire budgets are not YAML headers, URLs or transport knobs,
-and resolving them does not claim a provider serialization-size proof.
+Under ADR 0011, registration, compilation and preparation require no byte
+ceilings or size estimates. Retired `input-bytes`, `output-bytes`, `input-tokens`
+and `output-tokens` parameters reject; do not replace them with another size
+knob. The runner checks identity, slot, schema, response mode and supported
+controls against the compiled contract and retains those facts for exact
+single-use authorization. Providers report oversized requests, output stops
+and context errors through the ordinary typed observation path.
 
-The runner checks the compiled projection against its registered operation
-before invocation. Provider-operation validation requires request controls,
-response mode and canonical limits to match that binding; receive budgets
-cannot exceed its wire bounds. A prepared authorization lease also retains
-those bound facts for exact consumption checks. None of these projections
-creates a second catalogue, repository allowlist, workflow budget or retry
-authority.
-
-Canonical input and response bytes stay bounded for memory safety. Token and
-context restrictions are reported by the provider as typed failures/stops, not
-duplicated by engine preflight. Retired `input-tokens` and `output-tokens` YAML
-parameters are rejected. Byte safety is separate from workflow consumption. The
-selected workflow policy contributes one `totalModelTokenBudget` to each
+The selected workflow policy contributes one `totalModelTokenBudget` to each
 workflow execution. Its sole accounting authority records actual API-reported
 input plus output tokens. A pre-call check reads the current total without
 changing it; total usage at or above the budget rejects further model calls.
@@ -540,32 +531,18 @@ no charge. Unavailable usage blocks further model calls with
 The count operation supplies evidence and is not charged again as inference
 usage. Ordinary non-model cleanup is not prohibited by an exhausted budget.
 
-Before signing or network I/O, the provider serializer also proves the exact
-serialized CountTokens/inference request body, path, and bounded headers fit
-the separate registered request-wire budgets. These budgets account for fixed
-wrappers, URI/JSON escaping, and any schema encoded inside a provider string;
-`canonicalInputBytes` is not used as a wire-size approximation.
+Provider serialization performs the protocol's exact escaping and shape
+translation without an engine-defined body, header, path or response-size cap.
+A provider rejection is an API observation, not a locally fabricated
+`not_sent` size failure. Transport, allocation, cancellation and deadline
+failures remain distinct and retain their actual delivery disposition.
 
-This provider-specific serialization proof runs inside the already invoked
-provider operation. Failure returns `request_limit_exceeded` with delivery
-`not_sent`; the previously reserved full attempt remains consumed. There is no
-implementation choice to move the failure outside accounting.
-
-After a response, before envelope decoding:
-
-```text
-canonicalModelEnvelopeBytes <= effectiveOperationOutputBytes
-reportedOutputTokens <= effectiveOperationOutputTokens
-reportedTotalTokens >= reportedInputTokens
-reportedTotalTokens >= reportedOutputTokens
-```
-
-Any stronger usage relation declared by the registered provider/model contract
-must also hold. The provider's wire-response ceiling is distinct from the
-canonical model-envelope content ceiling. Its registered wire-budget proof
-must account for bounded header count/bytes, the fixed protocol wrapper,
-content-encoding policy, and worst-case encoding overhead; crossing any ceiling
-aborts without truncation.
+Reported usage must be internally consistent under the registered provider
+protocol. Complete output is validated as UTF-8 and against its exact compiled
+schema; neither serialization nor decoding compares its length against a
+request/output byte ceiling. Invalid or stopped output never becomes a
+truncated candidate. Reported usage remains accounted even when content fails
+validation.
 
 There is no implicit default, nearest match, first entry, provider-owned
 selection, or silent fallback. Only the compiled YAML `on` mapping may choose
@@ -588,13 +565,13 @@ ProviderOperationId {
 
 One ordinal represents one provider attempt. Inference has no count prerequisite:
 
-1. validate binding, controls, schema and canonical byte safety;
+1. validate request identity, binding, supported controls and schema;
 2. reserve the initial ordinal, or a later ordinal only under the YAML-selected
    operation's explicit compiler-validated `retry-limit`;
 3. assign the chosen operation from its exact binding/input identity and prepare
    its single-use authorization;
 4. check actual execution token usage, apply the in-memory invoked transitions,
-   then perform that one API call under byte/transport guards;
+   then perform that one API call under cancellation and deadline guards;
 5. record reported input/output usage once and close the operation, retaining
    any overshoot before returning the budget error; and
 6. follow explicit YAML transitions for retry or logical-request closure.
@@ -717,8 +694,8 @@ generic capability bag, provider-client type, credential material, or
 unrestricted infrastructure capability across the port. The authorization
 argument is only a typed single-use lease reference; concrete infrastructure
 consumes its private backing through the narrow lease port. Operation context
-otherwise contains only typed identity, cancellation, absolute deadline, and
-registered receive budgets. It contains no filesystem, process, state,
+otherwise contains only typed identity, cancellation and absolute deadline.
+It contains no filesystem, process, state,
 transaction, logger, command, completion, child-node, or unrestricted tool
 capability.
 
@@ -742,9 +719,9 @@ requested count operation; inference neither accepts nor requires count evidence
 
 `IdentifiedProviderNeutralModelRequest` contains only engine-assigned request,
 workflow-operation identity, binding, request-schema, result-schema, and `ModelVisibleInputId`;
-ordered bounded system/guidance and user/evidence content; the exact complete
-`model-envelope/v1` response schema; supported engine-selected controls; and
-effective limits. It contains no provider URL, arbitrary provider map,
+ordered system/guidance and user/evidence content; the exact complete
+`model-envelope/v1` response schema; and supported engine-selected controls.
+It contains no provider URL, arbitrary provider map,
 credential, path capability, command, logger, state writer, transaction, or
 tool definition.
 
@@ -763,11 +740,11 @@ content and transient IDs without adding guidance, duplicating schema text, or
 allocating execution identities. Canonical request identity, binding identity
 and the exact compiled schema remain borrowed execution authorities; their
 owners outlive the prepared request. Its arena has one explicit cleanup owner.
-Static preflight reuses the shared request and binding validators and checks
-the exact identity/schema association. Its opaque evidence borrows that request
-and grants no send authority, token allowance, or provider-wire size proof.
-These pure actions do not reserve attempts, change ledgers, prepare leases or
-call a provider. Their production YAML bindings remain a separate increment.
+Prepared-request checks reuse the shared identity, binding, control and schema
+validators. They grant no send authority or token allowance and enforce no
+request/response size ceiling. These pure checks do not reserve attempts,
+prepare leases or call a provider. Production YAML bindings remain a separate
+increment; a static-capacity action is not required.
 
 Provider observations are closed tagged unions:
 
@@ -793,7 +770,7 @@ RawProviderModelResult =
   | complete {
       requestId,
       bindingId,
-      content: CompleteBoundedOwnedUtf8,
+      content: CompleteOwnedUtf8,
       usage,
       providerLatencyMs?
     }
@@ -808,8 +785,7 @@ RawProviderModelResult =
 ProviderFailureCause =
   authentication_failed | authorization_denied | request_rejected |
   model_unavailable | throttled | timeout | service_unavailable |
-  transport_failed | request_limit_exceeded | response_invalid |
-  response_limit_exceeded |
+  transport_failed | response_invalid |
   exact_token_count_unavailable
 
 ProviderRetryClass = never | policy_eligible
@@ -867,16 +843,18 @@ observation/request association, then decodes and validates the complete compact
 result, semantic assertions and no-invention requirements. It never correlates
 from echoed IDs or attaches unbound bytes to the latest request.
 
-The observation validator joins the retained preflight request to its immutable
+The observation validator joins the retained prepared request to its immutable
 invoked-operation ledger record, including binding and input identity. The
 exact input and compiled schema remain request-owned authority, never model
-echoes. Shared invocation, usage and UTF-8/byte validators supply the checks;
-no token/context ceiling, JSON parsing, wire-size proof or accounting mutation
-is introduced. Identity/usage rejection returns a typed error without evidence.
-Valid usage survives content rejection as `response_invalid` or
-`response_limit_exceeded`, with `response_received` delivery and no candidate.
+echoes. Shared invocation, usage and UTF-8 validators supply the checks;
+no size ceiling, JSON parsing, size proof or accounting mutation is introduced.
+Identity/usage rejection returns a typed error without evidence. Valid usage
+survives content rejection as `response_invalid`, with `response_received`
+delivery and no candidate. Provider-reported size rejection uses the existing
+API-failure mapping; a provider output/context stop stays a stopped result.
+No local `request_limit_exceeded` or `response_limit_exceeded` cause remains.
 Other provider failures retain their exact cause/retry/delivery facts and have
-no fabricated usage. `request_limit_exceeded` must remain `not_sent`.
+no fabricated usage.
 
 One owned immutable evidence object retains the validated metadata and borrows
 the request and complete response bytes; those owners must outlive it. Only its
@@ -889,8 +867,8 @@ not prove budget reconciliation or candidate schema validity.
 the strict JSON syntax boundary with result-schema transport, accepts one object
 with optional JSON whitespace, and rejects duplicate decoded keys at every
 depth, malformed JSON, non-object roots, fences and trailing content. Parsing
-uses the request's existing output-byte bound and the schema profile's 64-level
-JSON nesting guard. Numeric lexemes remain exact; no rounding, coercion, JSON
+uses the schema profile's 64-level JSON nesting guard, not an output-byte
+ceiling. Numeric lexemes remain exact; no rounding, coercion, JSON
 extraction, wrapper insertion or schema validation occurs here.
 
 The decoded candidate owns one parse tree and exposes only read-only object,
@@ -944,13 +922,12 @@ the runner only validates/applies it and never chooses `blocked`, `failed`,
 | `ModelProviderBootstrapBinding` | Give the invocation runner one typed post-selection child boundary without exposing filesystem or provider capabilities. |
 | Provider-bootstrap composition assembly | Construct the concrete F0008 adapter and config/provider runners, then invoke the fixed orchestrator; perform no selection or branching. |
 | Engine invocation runner | Invoke provider preparation after exact selection, preserve its typed outcome, retain `ready` services through workflow execution, and make workflow execution unreachable after failure or cancellation. |
-| `ResolveProviderModelBindingAction` | Resolve one compiled workflow operation's YAML-declared slot through `ValidatedRepositoryModelAllowlist` to its registry entry and effective limits; never accept a raw provider/model tuple or hidden route as authority. |
+| `ResolveProviderModelBindingAction` | Resolve one compiled workflow operation's YAML-declared slot through `ValidatedRepositoryModelAllowlist` to its registry entry and supported controls; never accept a raw provider/model tuple or hidden route as authority. |
 | `BuildImmutableUnitOwnerIdAction` | Validate one closed stage-specific unit-owner descriptor built only from canonical authority IDs; accept no model identity. |
 | `BuildInitialModelRequestIdentityLedgerAction` | Produce the sole empty immutable request ledger for one trusted stage-run epoch and closed purpose registry. |
 | `AssignModelRequestIdAction` | Allocate one purpose-bound ordinal from the current ledger revision and return an immutable successor; never mutate the current ledger or reassign a protocol retry. |
 | `ValidateModelRequestBindingAction` | Prove exact ledger membership and epoch/unit/workflow-operation/purpose/ordinal binding without changing the ledger. |
-| `BuildModelRequestAction` | Build one identified bounded provider-neutral request; keep execution identity internal and project only needed guidance/evidence and the exact compact result schema. |
-| `ValidateStaticModelRequestCapacityAction` | Prove every provider-neutral deterministic binding/control/schema/input-byte/output-byte safety bound before attempt reservation or authorization; it does not serialize a provider wire request. |
+| `BuildModelRequestAction` | Build one identified provider-neutral request; keep execution identity internal and project only needed guidance/evidence and the exact compact result schema. |
 | `AdvanceModelAttemptAccountingAction` | Reserve the initial complete provider-attempt ordinal, or a later ordinal only under the YAML-selected operation instance's explicit compiler-validated `retry-limit`; it applies no workflow-global attempt ceiling. |
 | `CheckWorkflowTokenBudgetAction` | Read the execution's actual-usage ledger and reject further provider calls when the total is at or above budget or usage is unavailable; reserve nothing. |
 | `ReconcileWorkflowTokenUsageAction` | Propose once-only recording of validated API input/output usage or a proven not-sent/unavailable disposition; the runner retains an overshoot before returning the budget error. |
@@ -960,7 +937,7 @@ the runner only validates/applies it and never chooses `blocked`, `failed`,
 | `CountModelInputTokensAction` | Make exactly one interface count call for an already invoked count operation. |
 | `ValidateModelTokenCountObservationAction` | Validate a separately requested count observation against its operation, binding and input; impose no token/context ceiling or inference prerequisite. |
 | `InvokeModelAction` | Make exactly one interface inference call for an already invoked inference operation. |
-| `ValidateProviderInvocationObservationAction` | Validate the exact runner-bound operation/request/input/schema/model association, delivery, stop, usage, wire/content ceilings, and complete-candidate eligibility before decoding. |
+| `ValidateProviderInvocationObservationAction` | Validate the exact runner-bound operation/request/input/schema/model association, delivery, stop, usage, UTF-8 content, and complete-candidate eligibility before decoding. |
 | `DecodeModelEnvelopeAction` | Parse one complete compact JSON object and retain its bound schema and validated invocation association; never invoke a provider or recover IDs from model content. |
 | `ValidateModelPayloadSchemaAction` | Validate the decoded result against only its bound closed schema; do not repeat parsing or trusted call-association checks. |
 | Pipeline runner | Invoke bound children; own the per-execution token ledger, private authorization-lease table; validate/apply deltas, lifecycle compare-and-swap transitions, explicit operation-local retry accounting, actual token-usage reconciliation and pre-call budget guards, deadlines, and cleanup; choose no workflow branch. |
@@ -1042,7 +1019,7 @@ F0006 does not:
 3. The document has exactly the bounded
    `providers[] -> { provider, models[] -> { model, config } }` shape, and every
    common object and resolved provider variant is closed at its owning boundary.
-4. Capabilities, limits, operations, tokenization, structured response, target,
+4. Capabilities, operations, tokenization, structured response, target,
    endpoint, and data-routing facts come only from compiled model contracts.
 5. The repository example is never a runtime default or fallback. Its common
    shape can decode, but its OpenAI entries make whole-registry build fail until
@@ -1064,10 +1041,11 @@ F0006 does not:
    registry or pipeline data.
 9. Project configuration contains no secret, executable behavior, arbitrary
    endpoint, retry policy, header, wire parameter, or capability claim.
-10. Effective canonical, serialized request, header, encoded/decoded response,
-    and provider-wire byte bounds use the strictest applicable registered
-    safety limits and checked arithmetic. No engine token/context ceiling or
-    pre-call token reservation is imposed.
+10. Registration and request preparation require no capacity configuration.
+    There are no additional canonical, serialized request/header, response or
+    provider-wire byte ceilings, size estimates, token/context preflight or
+    pre-call reservations. Reject retired size parameters. Provider APIs own
+    their size limits and the engine propagates their errors/stops.
     Model-request IDs are engine-assigned from one immutable run-local ledger by
     exact revision; their unit, compiled workflow operation, purpose owner, and
     ordinal must all validate before request construction.
@@ -1077,14 +1055,13 @@ F0006 does not:
 11. Inference works without a count operation or count capability. Optional
     count observations remain bound to their operation, binding and input, but
     do not authorize or prohibit inference.
-12. Provider-neutral static preflight precedes one reserved full-attempt
-    ordinal. The initial ordinal is unconditional after preflight; every later
-    ordinal requires a YAML-selected retry operation with its own explicit
-    compiler-validated `retry-limit`. Exact provider serialization/wire-cap checks occur only inside an
-    already invoked operation; `request_limit_exceeded` is `not_sent` but
-    terminally consumes that attempt. Every count and inference operation has a
-    distinct execution-local runner-applied identity/lifecycle transition,
-    and every attempted operation closes without a hidden retry or count prerequisite.
+12. Request identity, binding, schema and control validation precede one
+    reserved full-attempt ordinal. Every later ordinal requires a YAML-selected
+    retry operation with its explicit compiler-validated `retry-limit`.
+    Provider size rejection consumes the attempted operation and retains its
+    response delivery classification. Count and inference operations each have
+    a distinct execution-local identity/lifecycle transition; no hidden retry,
+    size preflight or count prerequisite exists.
 13. Each call performs zero or one provider request with no hidden retry,
     fallback, backoff, credential acquisition/refresh, or second operation;
     any permitted credential I/O has separate accepted accounting.
@@ -1102,7 +1079,7 @@ F0006 does not:
     runner supplies a retry default. Every retry uses a new ordinal, and an
     accepted-or-unknown delivery never auto-replays.
 17. Provider failures never enter model-content repair or become `invalid`.
-18. Only `complete` bounded UTF-8 content reaches envelope decoding, where the
+18. Only `complete` UTF-8 content reaches envelope decoding, where the
     complete compact result remains untrusted and authoritatively validated
     under ADR 0006. Execution metadata is runner-owned; unbound observations,
     undeclared/mixed variants, unknown/duplicate fields and the superseded
@@ -1137,23 +1114,21 @@ Implementation evidence must cover:
   collections; duplicate keys/identities; unknown provider/config/field;
   malformed UTF-8/JSON; unimplemented OpenAI entries; invalid sibling with no
   partial registry; exact ownership and cleanup.
-- **Binding/limits:** all-catalogue and strict-subset slot selections, one slot
-  tuple absent from the catalogue rejecting the complete binding set,
-  unreferenced catalogue entries remaining unauthorized, exact and ambiguous
-  tuples, unsupported options, target and data-policy rejection,
-  workflow-operation/model/engine limit intersection, byte and token boundaries, request
-  URI/JSON/schema amplification, request/body/header and encoded/decoded
-  response caps, checked context equality/overflow, response wire/content
-  separation, and structured-schema incompatibility.
+- **Binding and provider-owned size limits:** all-catalogue and strict-subset
+  slot selections; missing or ambiguous tuples; one invalid slot rejecting the
+  complete allowlist; unauthorized unreferenced models; unsupported
+  options, targets, data policy and structured schemas; registration without
+  capacity fields; rejected legacy size parameters; exact serialization and
+  complete valid responses beyond former byte ceilings; provider-reported oversized-request failures and
+  output/context stops; no truncation or hidden fallback.
 - **Request and operation accounting:** closed request-purpose registries;
   malformed unit owners; duplicate purpose entries; unregistered or mismatched
   purposes; independent monotonic ordinals; stale ledger revisions; foreign or
   altered request IDs; exact canonical binding evidence; distinct
   count/inference IDs and operation records
-  beneath one attempt record, lifecycle CAS, provider-neutral static-preflight
-  ordering, operation-scoped wire-cap rejection that consumes the reserved
-  attempt, direct inference without counting support, optional count outcomes
-  and association without token-capacity policy, every assigned-branch close,
+  beneath one attempt record, lifecycle CAS, request-validation ordering,
+  provider rejection consuming the attempted operation, direct inference without
+  counting support, optional count outcomes and exact association, every assigned-branch close,
   abandonment before send, after send and after response, and a new execution
   starting at `start` rather than restoring the old operation. No provider
   record, recovery lock or result marker is read or written. Every within-run
@@ -1167,13 +1142,15 @@ Implementation evidence must cover:
   count-token non-duplication, and independence between two executions of the
   same workflow.
 - **Port conformance:** identical golden provider-neutral cases through fake
-  and real adapters; closed stop/failure mapping; bounded reads; malformed and
+  and real adapters; closed stop/failure mapping; complete response reads with
+  cancellation/deadline enforcement; malformed and
   partial observations; complete cleanup on every terminal branch.
 - **Compact response:** ADR 0006 single-shape and discriminated results,
   bound-identity swaps, strict whole-object parsing, required selections,
-  keyed repair groups and clarification/context alternatives. Count actual
-  model-visible bytes/tokens, not reattached engine metadata; test identical
-  semantics in prompt-only and supported native mode without silent fallback.
+  keyed repair groups and clarification/context alternatives. Inspect actual
+  model-visible payloads without reattached engine metadata and account for
+  API-reported input/output usage; test identical semantics in prompt-only and
+  supported native mode without silent fallback.
 - **Architecture/security:** dependency-import tests, fact-only registry,
   composition-injected common port, exhaustive private adapter
   dispatch, pipeline containing only authorization lease references, runner-
@@ -1197,6 +1174,7 @@ Implementation evidence must cover:
 | Request/invoke/decode separation | Design Sections 12.1-12.4 and 13.4; `design/code.md` Sections 21-24 |
 | Compact response and runner-owned correlation | [ADR 0006](../decisions/0006-minimal-model-response.md); Design Sections 12.3 and 22.4 |
 | Workflow-operation limits, retry, fallback, and repair authority | ADR 0005; Design Sections 12.5-12.7 and 21-22 |
+| Provider-owned size limits and actual workflow token accounting | [ADR 0011](../decisions/0011-provider-owned-request-limits.md); Section 6 |
 | Atomic execution and fresh reruns; no provider recovery | ADR 0009; Design Sections 24–25 |
 | Secret-safe logging | Design Sections 26.5 and 27; F0002 |
 | Fake-first testing and native packaging | Design Sections 28 and 30-31 |

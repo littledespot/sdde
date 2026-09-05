@@ -37,6 +37,11 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     _ = package_directory.add(".sddtoolkit/workflows/transactions/hello.workflow.yaml", hello_workflow);
     _ = package_directory.add(".sddtoolkit/workflows/toolchain.workflow.yaml", @embedFile("../../src/test_fixtures/toolchain.workflow.yaml"));
     _ = package_directory.add(".sddtoolkit/workflows/preflight.workflow.yaml", @embedFile("../../src/test_fixtures/reference-preflight.workflow.yaml"));
+    _ = package_directory.add(".sddtoolkit/workflows/feature-input.workflow.yaml", @embedFile("../../src/test_fixtures/feature-input-preflight.workflow.yaml"));
+    const clarification = @import("../../src/test_fixtures/clarification_inputs.zig").closed(b.allocator, "P01", true) catch @panic("allocate packaging clarification fixture");
+    _ = package_directory.add(".sddtoolkit/workflows/features/Chosen/Café/state/clarifications.json", clarification.state.?);
+    _ = package_directory.add("requirements/current/Chosen/Café/clarify/P01.md", clarification.forms[0].bytes);
+    _ = package_directory.add("requirements/current/Orphan/clarify/P01.md", clarification.forms[0].bytes);
     _ = package_directory.add("references/Café/日本語/stories.md", "Hello, World!\n");
     // A hard-coded specs root would select this non-directory and fail.
     _ = package_directory.add("specs/Selected/日本語", "not a directory\n");
@@ -119,6 +124,21 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     missing_config_command.step.dependOn(&toolchain_command.step);
     missing_config_command.step.dependOn(&reference_command.step);
     missing_config_command.step.dependOn(&denied_reference.step);
+    for ([_]struct { feature: []const u8, rejected: bool }{
+        .{ .feature = "Selected/日本語", .rejected = false },
+        .{ .feature = "Chosen/Café", .rejected = false },
+        .{ .feature = "Orphan", .rejected = true },
+    }) |case| {
+        const check = std.Build.Step.Run.create(b, "run packaged read-only clarification preflight");
+        check.addFileArg(packaged_executable);
+        check.addArgs(&.{ "feature-input-preflight", "--feature", case.feature, "--reference", "Café/日本語" });
+        check.setCwd(package_directory.getDirectory());
+        check.clearEnvironment();
+        check.expectExitCode(if (case.rejected) 1 else 0);
+        check.expectStdOutEqual("");
+        check.expectStdErrEqual(if (case.rejected) "failed\n" else "");
+        missing_config_command.step.dependOn(&check.step);
+    }
     for ([_][]const []const u8{
         &.{ "reference-preflight", "--reference", "Café/日本語" },
         &.{ "reference-preflight", "--feature", "../escape", "--reference", "Café/日本語" },

@@ -17,6 +17,9 @@ const normalizer = @import("../ports/unicode_normalizer.zig");
 const reference_source = @import("../ports/reference_directory_inspector.zig");
 const feature = @import("../application/feature_directory_workflow.zig");
 const feature_source = @import("../ports/feature_directory_inspector.zig");
+const clarification = @import("../application/clarification_input_workflow.zig");
+const input_source = @import("../ports/feature_input_source.zig");
+const input_parser = @import("../ports/clarification_input_parser.zig");
 
 /// Composition of native implementations, not a workflow graph. No setup action
 /// executes until the selected YAML reaches its registered operation.
@@ -39,10 +42,15 @@ pub const Assembly = struct {
     normalize_feature: feature.Normalize,
     validate_feature: feature.Validate,
     inspect_feature: feature.Inspect,
-    entries: [core.entries.len + 18]operations.Entry,
+    resolve_feature_paths: clarification.ResolvePaths,
+    capture_clarifications: clarification.Capture,
+    parse_clarification_state: clarification.ParseState,
+    validate_clarification_state: clarification.ValidateState,
+    validate_clarification_forms: clarification.ValidateForms,
+    entries: [core.entries.len + 23]operations.Entry,
     registry: operations.Registry,
 
-    pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector) void {
+    pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser) void {
         self.* = .{
             .capture_project = .{ .allocator = allocator, .action = .{ .source = project_source } },
             .inventory_presets = .{ .allocator = allocator, .action = .{ .source = preset_source } },
@@ -62,6 +70,11 @@ pub const Assembly = struct {
             .normalize_feature = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .validate_feature = .{ .allocator = allocator },
             .inspect_feature = .{ .allocator = allocator, .action = .{ .inspector = feature_inspector } },
+            .resolve_feature_paths = .{ .allocator = allocator },
+            .capture_clarifications = .{ .allocator = allocator, .action = .{ .source = input_capture } },
+            .parse_clarification_state = .{ .allocator = allocator, .action = .{ .parser = state_parser } },
+            .validate_clarification_state = .{ .allocator = allocator },
+            .validate_clarification_forms = .{ .allocator = allocator, .action = .{ .parser = form_parser } },
             .entries = undefined,
             .registry = undefined,
         };
@@ -84,6 +97,11 @@ pub const Assembly = struct {
             entry(feature.Normalize, &self.normalize_feature),
             entry(feature.Validate, &self.validate_feature),
             entry(feature.Inspect, &self.inspect_feature),
+            entry(clarification.ResolvePaths, &self.resolve_feature_paths),
+            entry(clarification.Capture, &self.capture_clarifications),
+            entry(clarification.ParseState, &self.parse_clarification_state),
+            entry(clarification.ValidateState, &self.validate_clarification_state),
+            entry(clarification.ValidateForms, &self.validate_clarification_forms),
         };
         self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{} };
     }
@@ -95,10 +113,12 @@ pub const Assembly = struct {
         self.inspect_directory.action.inspector.capability = registry.referenceSources();
         self.validate_feature.action.roots = registry.featureDirectoryRoots();
         self.inspect_feature.action.inspector.capability = registry.featureDirectoryRead();
+        self.resolve_feature_paths.action.roots = registry.featureArtifactRoots();
+        self.capture_clarifications.action.source.capability = registry.featureInputRead();
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.toolchain@1",
     .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },
@@ -112,6 +132,11 @@ const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig")
 }, .{
     .id = "core.directory-read@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read },
+    .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
+    .total_model_token_budget = .{ .value = 100_000 },
+}, .{
+    .id = "core.feature-input-read@1",
+    .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read },
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
     .total_model_token_budget = .{ .value = 100_000 },
 } };
