@@ -14,12 +14,14 @@ pub fn run(children: bindings.ChildBindings) run_outcome.Outcome {
 
     const graph = children.selectedGraph();
     const invocation = children.invokeInvocation();
+    if (invocation == .rejected) return .{ .execution = invocation.status() };
     if (invocation.outcome != .ok) return .{ .execution = invocation.outcome };
 
     var current = graph.authority.start_step_id;
     var visited: usize = 0;
     while (visited < graph.authority.maximum_step_executions) : (visited += 1) {
         const applied = children.invokeStep(current);
+        if (applied == .rejected) return .{ .execution = applied.status() };
         const target = resolveTransition(graph.authority.transitions, current, applied.outcome) orelse {
             return .{ .execution = if (applied.outcome == .ok) .failed else applied.outcome };
         };

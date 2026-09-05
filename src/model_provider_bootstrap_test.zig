@@ -148,7 +148,7 @@ fn compileOne(
     const model_parameters = [_]workflow.ParameterBinding{.{
         .id = workflow.WorkflowParameterId.parse("slot").?,
         .value = .{ .string = "implementation" },
-    }};
+    }} ++ @import("model_contract_test_fixture.zig").declared_parameters;
     steps[0] = .{
         .id = workflow.WorkflowStepId.parse("run").?,
         .operation_id = workflow.RegisteredRef.parse(contract_id).?,
@@ -338,6 +338,7 @@ fn testRootRegistry(allocator: std.mem.Allocator) !*bootstrap_root_registry.Owne
 }
 
 const operation_registry: operations.Registry = .{
+    .model_capacity = @import("model_contract_test_fixture.zig").capacity,
     .operations = &.{
         .{
             .contract = .{
@@ -346,23 +347,23 @@ const operation_registry: operations.Registry = .{
                 .outcomes = &.{.ok},
                 .side_effect = .none,
             },
-            .invoke_fn = unusedOperation,
+            .binding = @import("application/workflow_operation_binding.zig").bind(void, null, unusedOperation),
         },
         .{
             .contract = .{
                 .id = "test.model@1",
                 .kind = .step,
-                .parameters = &.{.{
+                .model_capacity = @import("model_contract_test_fixture.zig").capacity,
+                .parameters = &([_]@import("domain/workflow_operation.zig").ParameterDescriptor{.{
                     .id = "slot",
                     .kind = .model_slot,
                     .required = true,
                     .workflow_definition_safe = true,
-                }},
+                }} ++ @import("domain/workflow_model.zig").parameters),
                 .outcomes = &.{.ok},
                 .side_effect = .none,
-                .capabilities = &.{requirement.capability_id},
             },
-            .invoke_fn = unusedOperation,
+            .binding = @import("application/workflow_operation_binding.zig").bind(@import("workflow_binding_test_fixture.zig").ModelContext, &@import("workflow_binding_test_fixture.zig").model_context, @import("workflow_binding_test_fixture.zig").unusedModel),
         },
         .{
             .contract = .{
@@ -371,7 +372,7 @@ const operation_registry: operations.Registry = .{
                 .outcomes = &.{.ok},
                 .side_effect = .none,
             },
-            .invoke_fn = unusedOperation,
+            .binding = @import("application/workflow_operation_binding.zig").bind(void, null, unusedOperation),
         },
     },
     .policies = &.{.{
@@ -381,10 +382,9 @@ const operation_registry: operations.Registry = .{
         .total_model_token_budget = .{ .value = 1000 },
     }},
     .gates = &.{},
-    .capabilities = &.{requirement.capability_id},
 };
 
-fn unusedOperation(_: ?*anyopaque, _: operations.Input) operations.Error!execution.Candidate {
+fn unusedOperation(_: ?*void, _: operations.Input) operations.Error!execution.Candidate {
     return error.OperationExecutionFailed;
 }
 
@@ -394,6 +394,7 @@ const compiled_provider_contracts: contracts.Registry = .{ .entries = &.{.{
     .model = identity.ModelId.parse("model-a").?,
     .implementation_id = contracts.RegisteredProviderImplementationId.init(1).?,
     .config_schema = .empty_object,
+    .capabilities = @import("model_contract_test_fixture.zig").capabilities,
     .supported_reasoning_efforts = &.{"low"},
 }} };
 

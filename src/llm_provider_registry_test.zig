@@ -33,6 +33,7 @@ const compiled_contracts: contracts.Registry = .{ .entries = &.{
         .model = identity.ModelId.parse("model-a").?,
         .implementation_id = implementation_id,
         .config_schema = .empty_object,
+        .capabilities = @import("model_contract_test_fixture.zig").capabilities,
         .supported_reasoning_efforts = &.{ "low", "high" },
     },
     .{
@@ -40,6 +41,7 @@ const compiled_contracts: contracts.Registry = .{ .entries = &.{
         .model = identity.ModelId.parse("model-b").?,
         .implementation_id = implementation_id,
         .config_schema = .empty_object,
+        .capabilities = @import("model_contract_test_fixture.zig").capabilities,
     },
 } };
 

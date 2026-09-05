@@ -44,7 +44,7 @@ pub const Runner = struct {
             error.OutOfMemory => return error.OutOfMemory,
             else => return rejected(facts.operation_id, error.AuthorizationDenied),
         };
-        envelope.apply(input_contract, &input_delta) catch return rejected(facts.operation_id, error.AuthorizationDenied);
+        envelope.apply(input_contract, &input_delta, .ok) catch return rejected(facts.operation_id, error.AuthorizationDenied);
         const input_view = envelope.view(action.Action.contract) catch return rejected(facts.operation_id, error.AuthorizationDenied);
         const bound_id = values.read(&input_view, binding_schema, binding.ProviderModelBindingId) catch return rejected(facts.operation_id, error.AuthorizationDenied);
         if (!bound_id.eql(facts.request.binding_id)) return rejected(facts.operation_id, error.AuthorizationDenied);
@@ -62,7 +62,7 @@ pub const Runner = struct {
         };
         defer envelope.discard(&delta);
         self.check(facts.deadline_monotonic_ms) catch |err| return rejected(facts.operation_id, err);
-        envelope.apply(action.Action.contract, &delta) catch return rejected(facts.operation_id, error.AuthorizationDenied);
+        envelope.apply(action.Action.contract, &delta, .ok) catch return rejected(facts.operation_id, error.AuthorizationDenied);
         const view: data.View = .{ .slots = envelope.slots };
         const value = values.read(&view, preparation.value_schema, operation.ValidatedProviderAuthorizationLeaseRef) catch return rejected(facts.operation_id, error.AuthorizationDenied);
         const reference = self.table.canonicalReference(value.*) catch |err| return rejected(facts.operation_id, err);

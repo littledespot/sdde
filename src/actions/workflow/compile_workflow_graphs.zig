@@ -45,9 +45,7 @@ pub const Action = struct {
             for (item.steps, steps) |declared, *compiled| {
                 const entry = self.registry.resolveOperation(declared.operation_id) orelse return invalid();
                 if (entry.contract.kind != .step) return invalid();
-                for (entry.contract.capabilities) |capability| {
-                    if (!containsString(policy.allowed_capabilities, capability)) return invalid();
-                }
+                if (!@import("../../domain/workflow_capability.zig").permits(policy.allowed_capabilities, entry.binding.capabilities())) return invalid();
                 const parameters = try compileParameters(allocator, entry.contract, declared.parameters, resources);
                 const retry_authority = try resolveRetryAuthority(item, declared.id, entry.contract, parameters);
                 transition_count = std.math.add(usize, transition_count, declared.outcomes.len) catch return invalid();
@@ -63,9 +61,13 @@ pub const Action = struct {
                     .invalidates = entry.contract.invalidates,
                     .outcomes = entry.contract.outcomes,
                     .side_effect = entry.contract.side_effect,
-                    .gates = entry.contract.gates,
-                    .capabilities = entry.contract.capabilities,
+                    .gates = try compileGates(allocator, self.registry, entry.contract.gates),
+                    .capabilities = entry.binding.capabilities(),
                     .retry_authority = retry_authority,
+                    .model = if (entry.contract.model_capacity) |capacity|
+                        @import("../../domain/workflow_model.zig").resolve(self.registry.model_capacity orelse return invalid(), capacity, parameters) orelse return invalid()
+                    else
+                        null,
                 };
             }
 
@@ -80,6 +82,7 @@ pub const Action = struct {
                 .source_ordinal = item.source_ordinal,
                 .shortcode = item.shortcode,
                 .authority = .{
+                    .allowed_capabilities = policy.allowed_capabilities,
                     .data_schemas = try compileDataSchemas(allocator, self.registry.data_schemas, invocation.contract.produces, steps),
                     .workflow_id = item.workflow_id,
                     .workflow_version = item.workflow_version,
@@ -108,6 +111,10 @@ fn compileDataSchemas(
     var used = [_]bool{false} ** data.key_count;
     for (invocation_outputs) |key| used[@intFromEnum(key)] = true;
     for (steps) |step| {
+        for (step.gates) |gate| {
+            used[@intFromEnum(gate.evidence)] = true;
+            for (gate.authority) |key| used[@intFromEnum(key)] = true;
+        }
         inline for (.{ step.requires, step.optional, step.produces, step.replaces, step.invalidates }) |keys| {
             for (keys) |key| used[@intFromEnum(key)] = true;
         }
@@ -123,6 +130,12 @@ fn compileDataSchemas(
         result[index] = data.find(schemas, @enumFromInt(key_index)) orelse return invalid();
         index += 1;
     }
+    return result;
+}
+
+fn compileGates(allocator: std.mem.Allocator, registry: *const operation_registry.Registry, ids: []const []const u8) Error![]const @import("../../domain/workflow_gate.zig").Contract {
+    const result = allocator.alloc(@import("../../domain/workflow_gate.zig").Contract, ids.len) catch return invalid();
+    for (result, ids) |*destination, id| destination.* = (registry.resolveGate(.{ .bytes = id }) orelse return invalid()).*;
     return result;
 }
 

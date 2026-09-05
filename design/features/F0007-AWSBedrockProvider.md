@@ -470,9 +470,12 @@ The first implementation sends none of:
 Native structured output is registered per exact model and schema feature
 profile. Bedrock supports a subset of JSON Schema Draft 2020-12, so a versioned
 compiler-owned `BedrockJSONSchemaFeatureProfile` must prove representability.
-The projected schema is the entire exact `model-envelope/v1` object, including
-request, compiled model-operation, unit, and revision identities plus the workflow-declared result;
-project/model output is not allowed to return only the inner result.
+The projected schema is the complete compact result object defined by
+[ADR 0006](../decisions/0006-minimal-model-response.md) and the workflow's
+declared result schema. `model-envelope/v1` is selected by the engine, not
+echoed in model output. Request, operation, unit, revision and binding identities
+remain in the trusted call context; the model returns only result fields and,
+when alternatives exist, one root `kind`. There is no outer result wrapper.
 
 The exact native projection is:
 
@@ -482,7 +485,7 @@ The exact native projection is:
     "type": "json_schema",
     "structure": {
       "jsonSchema": {
-        "schema": <canonical full model-envelope/v1 schema JSON string>,
+        "schema": <canonical complete compact-result schema JSON string>,
         "name": "sdde_model_envelope_v1"
       }
     }
@@ -747,7 +750,8 @@ F0007 does not implement:
 13. Only the Section 7 request subset is reachable; unsupported content or
     controls fail before I/O and are never silently omitted.
 14. Native response schema, when registered, covers the complete exact
-    `model-envelope/v1`, uses the fixed Section 7 projection, passes the
+    compact result under `model-envelope/v1` (not engine-only identity fields),
+    uses the fixed Section 7 projection, passes the
     versioned Bedrock schema-feature proof, and has an accepted CountTokens
     neutrality/accounting proof.
 15. Native response rejection never triggers an unaccounted prompt-only call;

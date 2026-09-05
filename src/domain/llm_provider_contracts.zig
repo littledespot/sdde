@@ -33,6 +33,7 @@ pub const ProviderModelContract = struct {
     model: identity.ModelId,
     implementation_id: RegisteredProviderImplementationId,
     config_schema: ProviderConfigSchema,
+    capabilities: @import("model_capabilities.zig").Capabilities,
     supported_reasoning_efforts: []const []const u8 = &.{},
 };
 
@@ -47,7 +48,7 @@ pub const Registry = struct {
             if (identity.ProviderId.parse(entry.provider.bytes) == null or
                 identity.ModelId.parse(entry.model.bytes) == null or
                 RegisteredProviderImplementationId.init(entry.implementation_id.ordinal) == null or
-                entry.supported_reasoning_efforts.len > max_reasoning_efforts)
+                entry.supported_reasoning_efforts.len > max_reasoning_efforts or !entry.capabilities.isValid())
             {
                 return error.InvalidProviderModelContracts;
             }
@@ -103,12 +104,24 @@ pub fn supportsReasoningEffort(
 }
 
 test "contract registry is exact unique and provider consistent" {
+    const capabilities: @import("model_capabilities.zig").Capabilities = .{
+        .input_token_count = true,
+        .inference = true,
+        .exact_token_counter = .provider_input_token_count,
+        .structured_response = .prompt_only,
+        .temperature = false,
+        .capacity = .{
+            .canonical = @import("model_limits.zig").Limits.init(100, 100, 100, 20, 120).?,
+            .wire = .{ .maximum_request_body_bytes = 1000, .maximum_request_path_bytes = 100, .maximum_request_header_count = 10, .maximum_request_header_bytes = 100, .maximum_response_header_count = 10, .maximum_response_header_bytes = 100, .maximum_response_body_bytes = 1000 },
+        },
+    };
     const provider = identity.ProviderId.parse("compiled-provider").?;
     const first = ProviderModelContract{
         .provider = provider,
         .model = identity.ModelId.parse("model-a").?,
         .implementation_id = RegisteredProviderImplementationId.init(1).?,
         .config_schema = .empty_object,
+        .capabilities = capabilities,
         .supported_reasoning_efforts = &.{ "low", "high" },
     };
     const second = ProviderModelContract{
@@ -116,6 +129,7 @@ test "contract registry is exact unique and provider consistent" {
         .model = identity.ModelId.parse("model-b").?,
         .implementation_id = RegisteredProviderImplementationId.init(1).?,
         .config_schema = .empty_object,
+        .capabilities = capabilities,
     };
     const registry: Registry = .{ .entries = &.{ first, second } };
     try registry.validate();

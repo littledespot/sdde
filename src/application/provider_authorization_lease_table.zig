@@ -17,6 +17,9 @@ const Entry = struct {
     operation_id: operation.ProviderOperationId,
     registry_entry: *const registry.Entry,
     binding_id: binding.ProviderModelBindingId,
+    capacity: @import("../domain/model_limits.zig").Capacity,
+    response_mode: @import("../domain/model_controls.zig").ResponseGuidanceMode,
+    controls: @import("../domain/model_controls.zig").InferenceControls,
     input_id: operation.ModelVisibleInputId,
     deadline: u64,
     state: State = .allocated,
@@ -75,6 +78,9 @@ pub const Table = struct {
             .operation_id = facts.operation_id,
             .registry_entry = facts.provider_binding.registry_entry,
             .binding_id = record.binding_id,
+            .capacity = facts.provider_binding.capacity,
+            .response_mode = facts.provider_binding.response_mode,
+            .controls = facts.provider_binding.controls,
             .input_id = record.model_visible_input_id,
             .deadline = facts.deadline_monotonic_ms,
         };
@@ -111,7 +117,7 @@ pub const Table = struct {
         facts.request.validate() catch return error.AuthorizationDenied;
         if (facts.deadline_monotonic_ms == 0 or
             facts.operation_id.model_request_id != facts.request.model_request_id or
-            !facts.request.binding_id.eql(facts.provider_binding.bindingId())) return error.AuthorizationDenied;
+            !facts.request.matchesBinding(facts.provider_binding.*)) return error.AuthorizationDenied;
         const record = self.operations.record(facts.operation_id) orelse return error.AuthorizationDenied;
         if (record.state != .assigned or !record.binding_id.eql(facts.request.binding_id) or
             !record.model_visible_input_id.eql(facts.request.model_visible_input_id)) return error.AuthorizationDenied;
@@ -176,6 +182,10 @@ pub const Table = struct {
 
 fn matches(entry: *const Entry, provider_binding: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, deadline: u64) bool {
     return entry.registry_entry == provider_binding.registry_entry and
+        std.meta.eql(entry.capacity, provider_binding.capacity) and
+        entry.response_mode == provider_binding.response_mode and
+        std.meta.eql(entry.controls, provider_binding.controls) and
+        request.matchesBinding(provider_binding.*) and
         entry.binding_id.eql(provider_binding.bindingId()) and entry.binding_id.eql(request.binding_id) and
         entry.input_id.eql(request.model_visible_input_id) and entry.deadline == deadline;
 }

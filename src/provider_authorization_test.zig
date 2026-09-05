@@ -139,6 +139,35 @@ test "deadline is checked again at consume including exact equality" {
     try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
 }
 
+test "prepared lease cannot be reused with altered resolved capacity or controls" {
+    for (0..4) |variant| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const authorized = try fixture.startCount();
+        var selected = fixture.provider_binding;
+        var request = fixture.request;
+        switch (variant) {
+            0 => {
+                selected.capacity.canonical.maximum_input_bytes += 1;
+                request.limits = selected.capacity.canonical;
+            },
+            1 => selected.capacity.wire.maximum_request_body_bytes -= 1,
+            2 => {
+                selected.controls.temperature = .{ .value = 200 };
+                request.controls = selected.controls;
+            },
+            3 => {
+                selected.response_mode = .native_schema;
+                request.response_guidance_mode = .native_schema;
+            },
+            else => unreachable,
+        }
+        try std.testing.expectError(error.AuthorizationDenied, fixture.leasePort().consume(authorized.reference, &selected, &request, authorized.invoked));
+        try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
+    }
+}
+
 test "cancellation and clock failure release unconsumed capabilities" {
     for (0..2) |variant| {
         var fixture: Fixture = undefined;

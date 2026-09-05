@@ -2,6 +2,8 @@ const std = @import("std");
 const binding = @import("llm_provider_binding.zig");
 const request_identity = @import("model_request_identity.zig");
 const execution_reference = @import("execution_reference.zig");
+const model_limits = @import("model_limits.zig");
+const model_controls = @import("model_controls.zig");
 
 pub const ProviderOperationKind = enum {
     input_token_count,
@@ -130,53 +132,6 @@ pub const ModelVisibleContent = union(enum) {
     }
 };
 
-pub const ResponseGuidanceMode = enum {
-    prompt_only,
-    native_schema,
-};
-
-pub const TemperaturePermille = struct {
-    value: u16,
-
-    pub fn init(value: u16) ?TemperaturePermille {
-        return if (value <= 1000) .{ .value = value } else null;
-    }
-};
-
-pub const InferenceControls = struct {
-    temperature: ?TemperaturePermille = null,
-};
-
-pub const EffectiveModelLimits = struct {
-    maximum_input_bytes: u32,
-    maximum_output_bytes: u32,
-    maximum_input_tokens: u64,
-    maximum_output_tokens: u64,
-    context_window_tokens: u64,
-
-    pub fn init(
-        maximum_input_bytes: u32,
-        maximum_output_bytes: u32,
-        maximum_input_tokens: u64,
-        maximum_output_tokens: u64,
-        context_window_tokens: u64,
-    ) ?EffectiveModelLimits {
-        if (maximum_input_bytes == 0 or maximum_output_bytes == 0 or
-            maximum_input_tokens == 0 or maximum_output_tokens == 0 or
-            context_window_tokens == 0 or maximum_output_tokens > context_window_tokens)
-        {
-            return null;
-        }
-        return .{
-            .maximum_input_bytes = maximum_input_bytes,
-            .maximum_output_bytes = maximum_output_bytes,
-            .maximum_input_tokens = maximum_input_tokens,
-            .maximum_output_tokens = maximum_output_tokens,
-            .context_window_tokens = context_window_tokens,
-        };
-    }
-};
-
 pub const IdentifiedProviderNeutralModelRequest = struct {
     model_request_id: *const request_identity.ModelRequestId,
     model_operation_id: binding.WorkflowModelOperationId,
@@ -186,9 +141,9 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     model_visible_input_id: ModelVisibleInputId,
     content: []const ModelVisibleContent,
     response_schema: []const u8,
-    response_guidance_mode: ResponseGuidanceMode,
-    controls: InferenceControls,
-    limits: EffectiveModelLimits,
+    response_guidance_mode: model_controls.ResponseGuidanceMode,
+    controls: model_controls.InferenceControls,
+    limits: model_limits.Limits,
 
     pub fn init(value: IdentifiedProviderNeutralModelRequest) Error!IdentifiedProviderNeutralModelRequest {
         try value.validate();
@@ -204,7 +159,7 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
             ModelVisibleInputId.parse(self.model_visible_input_id.bytes) == null or
             self.content.len == 0 or self.response_schema.len == 0 or
             !std.unicode.utf8ValidateSlice(self.response_schema) or
-            EffectiveModelLimits.init(
+            model_limits.Limits.init(
                 self.limits.maximum_input_bytes,
                 self.limits.maximum_output_bytes,
                 self.limits.maximum_input_tokens,
@@ -212,7 +167,7 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
                 self.limits.context_window_tokens,
             ) == null or
             (self.controls.temperature != null and
-                TemperaturePermille.init(self.controls.temperature.?.value) == null))
+                model_controls.TemperaturePermille.init(self.controls.temperature.?.value) == null))
         {
             return error.InvalidProviderNeutralModelRequest;
         }
@@ -230,6 +185,17 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
         if (canonical_bytes > self.limits.maximum_input_bytes) {
             return error.InvalidProviderNeutralModelRequest;
         }
+    }
+
+    pub fn matchesBinding(self: IdentifiedProviderNeutralModelRequest, selected: binding.ValidatedProviderModelBinding) bool {
+        const supported = selected.registry_entry.capabilities;
+        const bounded = model_limits.Capacity.intersect(selected.capacity, supported.capacity) orelse return false;
+        return supported.supports(selected.response_mode, selected.controls) and
+            self.binding_id.eql(selected.bindingId()) and
+            std.meta.eql(bounded, selected.capacity) and
+            std.meta.eql(self.limits, selected.capacity.canonical) and
+            self.response_guidance_mode == selected.response_mode and
+            std.meta.eql(self.controls, selected.controls);
     }
 };
 
@@ -293,6 +259,7 @@ pub const ExactInputTokenCountEvidence = struct {
         request: IdentifiedProviderNeutralModelRequest,
         provider_binding: binding.ValidatedProviderModelBinding,
     ) Error!ExactInputTokenCountEvidence {
+        if (!request.matchesBinding(provider_binding)) return error.InvalidExactTokenCountEvidence;
         const counted = switch (observation) {
             .counted => |value| value,
             .failed => return error.ExactTokenCountEvidenceUnavailable,
@@ -319,17 +286,11 @@ pub const ExactInputTokenCountEvidence = struct {
             self.count_operation_id.model_request_id != request.model_request_id or
             !self.binding_id.eql(expected_binding) or
             !self.binding_id.eql(request.binding_id) or
-            !self.model_visible_input_id.eql(request.model_visible_input_id) or
-            self.input_tokens > request.limits.maximum_input_tokens)
+            !self.model_visible_input_id.eql(request.model_visible_input_id))
         {
             return false;
         }
-        const reserved_total = std.math.add(
-            u64,
-            self.input_tokens,
-            request.limits.maximum_output_tokens,
-        ) catch return false;
-        return reserved_total <= request.limits.context_window_tokens;
+        return request.limits.acceptsInputTokens(self.input_tokens);
     }
 };
 
@@ -428,11 +389,11 @@ pub fn validateCountInvocation(
     operation: *const InvokedProviderOperation,
 ) bool {
     request.validate() catch return false;
-    const binding_id = provider_binding.bindingId();
     return operation.id.kind == .input_token_count and
+        receiveBudgetsFit(operation.receive_budgets, provider_binding.capacity.wire) and
         operation.isValid() and
         operation.id.model_request_id == request.model_request_id and
-        request.binding_id.eql(binding_id);
+        request.matchesBinding(provider_binding.*);
 }
 
 pub fn validateInferenceInvocation(
@@ -444,10 +405,19 @@ pub fn validateInferenceInvocation(
     request.validate() catch return false;
     const binding_id = provider_binding.bindingId();
     return operation.id.kind == .inference and
+        receiveBudgetsFit(operation.receive_budgets, provider_binding.capacity.wire) and
+        request.matchesBinding(provider_binding.*) and
         operation.isValid() and
         operation.id.model_request_id == request.model_request_id and
         operation.id.sameAttempt(count_evidence.count_operation_id) and
         count_evidence.isValidFor(request.*, binding_id);
+}
+
+fn receiveBudgetsFit(receive: ProviderReceiveBudgets, capacity: model_limits.WireBudgets) bool {
+    return receive.isValid() and capacity.isValid() and
+        receive.maximum_header_count <= capacity.maximum_response_header_count and
+        receive.maximum_header_bytes <= capacity.maximum_response_header_bytes and
+        receive.maximum_body_bytes <= capacity.maximum_response_body_bytes;
 }
 
 pub const Error = error{

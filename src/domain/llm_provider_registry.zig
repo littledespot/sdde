@@ -17,6 +17,7 @@ pub const CandidateEntry = struct {
     model: identity.ModelId,
     implementation_id: contracts.RegisteredProviderImplementationId,
     config: contracts.ValidatedProviderConfig,
+    capabilities: @import("model_capabilities.zig").Capabilities,
     supported_reasoning_efforts: []const []const u8,
 };
 
@@ -45,6 +46,7 @@ pub const Entry = struct {
     model: identity.ModelId,
     implementation_id: contracts.RegisteredProviderImplementationId,
     config: contracts.ValidatedProviderConfig,
+    capabilities: @import("model_capabilities.zig").Capabilities,
     supported_reasoning_efforts: []const []const u8,
 };
 
@@ -117,6 +119,7 @@ pub fn createValidated(
             } },
             .implementation_id = source.implementation_id,
             .config = source.config,
+            .capabilities = source.capabilities,
             .supported_reasoning_efforts = cloneStrings(
                 owner.arena.allocator(),
                 source.supported_reasoning_efforts,
@@ -162,6 +165,7 @@ fn validateCandidate(
             return error.InvalidLLMProviderRegistry;
         };
         if (!entry.implementation_id.eql(registered.implementation_id) or
+            !std.meta.eql(entry.capabilities, registered.capabilities) or
             !config_schema.matches(registered.config_schema, entry.config) or
             !sameStrings(entry.supported_reasoning_efforts, registered.supported_reasoning_efforts))
         {

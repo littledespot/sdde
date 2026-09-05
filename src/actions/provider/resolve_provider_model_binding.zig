@@ -27,6 +27,7 @@ pub const Action = struct {
         allowlist: *const repository_allowlist.ValidatedRepositoryModelAllowlist,
     ) Error!binding.ValidatedProviderModelBinding {
         const step = findStep(graph.authority.steps, step_id) orelse return invalid();
+        if (!@import("../../domain/workflow_model.zig").validProjection(step.*)) return invalid();
         if (!containsString(step.capabilities, "model-provider")) return invalid();
 
         var selected_slot: ?identity.ModelSlotId = null;
@@ -38,6 +39,13 @@ pub const Action = struct {
         const slot_id = selected_slot orelse return invalid();
         const allowed = allowlist.resolveSlot(slot_id) orelse return invalid();
         const entry = registry.resolveId(allowed.registry_entry_id) orelse return invalid();
+        const required = step.model orelse return invalid();
+        const supported = entry.capabilities;
+        if (!supported.supports(required.response_mode, required.controls)) return invalid();
+        const capacity = @import("../../domain/model_limits.zig").Capacity.intersect(
+            required.capacity,
+            supported.capacity,
+        ) orelse return invalid();
         if (!contracts.supportsReasoningEffort(
             entry.supported_reasoning_efforts,
             allowed.reasoning_effort,
@@ -52,6 +60,9 @@ pub const Action = struct {
             .slot_id = allowed.slot_id,
             .registry_entry = entry,
             .reasoning_effort = allowed.reasoning_effort,
+            .capacity = capacity,
+            .response_mode = required.response_mode,
+            .controls = required.controls,
         };
     }
 };

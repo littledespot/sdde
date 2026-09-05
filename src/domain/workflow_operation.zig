@@ -35,8 +35,8 @@ pub const Contract = struct {
     outcomes: []const workflow.OutcomeTag,
     side_effect: pipeline.SideEffect,
     gates: []const []const u8 = &.{},
-    capabilities: []const []const u8 = &.{},
     retry_limit: ?RetryLimitDescriptor = null,
+    model_capacity: ?@import("model_limits.zig").Capacity = null,
 };
 
 pub const PolicyProfile = struct {

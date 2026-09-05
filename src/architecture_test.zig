@@ -281,6 +281,32 @@ test "provider catalogue and repository allowlist have one immutable authority e
     try expectAbsent(allowlist, "/ports/");
 }
 
+test "model capability facts and effective limits have no configuration or operational authority" {
+    const contracts = @import("domain/llm_provider_contracts.zig");
+    const limits = @import("domain/model_limits.zig");
+    const operation_contract = @import("domain/workflow_operation.zig");
+    const provider_operation = @import("domain/llm_provider_operation.zig");
+    try std.testing.expect(@FieldType(contracts.ProviderModelContract, "capabilities") == @import("domain/model_capabilities.zig").Capabilities);
+    try std.testing.expect(@FieldType(provider_operation.IdentifiedProviderNeutralModelRequest, "limits") == limits.Limits);
+    try std.testing.expect(!@hasDecl(provider_operation, "EffectiveModelLimits"));
+    try std.testing.expect(!@hasField(operation_contract.PolicyProfile, "model_capacity"));
+    try std.testing.expect(!@hasField(@import("domain/config.zig").ModelsConfig, "model_capacity"));
+    inline for (.{
+        @embedFile("domain/model_capabilities.zig"),
+        @embedFile("domain/model_limits.zig"),
+        @embedFile("domain/workflow_model.zig"),
+        @embedFile("actions/provider/resolve_provider_model_binding.zig"),
+    }) |source| {
+        try expectAbsent(source, "anyopaque");
+        try expectAbsent(source, "/adapters/");
+        try expectAbsent(source, "std.Io");
+        try expectAbsent(source, "std.http");
+        try expectAbsent(source, "std.process");
+    }
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("actions/workflow/compile_workflow_graphs.zig"), "self.registry.model_capacity") != null);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("application/workflow_pipeline_runner.zig"), "step.model orelse") != null);
+}
+
 test "model request identity has one opaque ledger and runner applied mutation boundary" {
     switch (@typeInfo(model_request_identity.ModelRequestIdentityLedger)) {
         .@"opaque" => {},
@@ -937,6 +963,28 @@ test "workflow values have one runner-owned store and no key-only candidate API"
     try expectAbsent(envelope, "@ptrCast");
     try expectAbsent(envelope, "/adapters/");
     try expectAbsent(@embedFile("domain/pipeline_data.zig"), "@ptrCast");
+}
+
+test "workflow operation capabilities have one typed binding authority" {
+    const operations = @import("ports/workflow_operation_registry.zig");
+    try std.testing.expect(!@hasField(@import("domain/workflow_operation.zig").Contract, "capabilities"));
+    try std.testing.expect(!@hasField(operations.Registry, "capabilities"));
+    try std.testing.expect(!@hasField(operations.Entry, "invoke_fn"));
+    try std.testing.expect(!@hasField(operations.Entry, "context"));
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.eql(u8, entry.path, "application/workflow_operation_binding.zig") or
+            std.mem.eql(u8, entry.path, "architecture_test.zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
+        defer allocator.free(source);
+        try expectAbsent(source, ".implementation =");
+    }
 }
 
 test "feature document filenames and headings agree" {

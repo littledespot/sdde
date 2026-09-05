@@ -135,6 +135,7 @@ fn graphProjectsDefinition(
     }
     var transition_count: usize = 0;
     for (graph.authority.steps, declared.steps) |compiled, step| {
+        if (!@import("workflow_model.zig").validProjection(compiled)) return false;
         if (!std.mem.eql(u8, compiled.id.bytes, step.id.bytes) or
             !std.mem.eql(u8, compiled.operation_id.bytes, step.operation_id.bytes) or
             compiled.parameters.len != step.parameters.len or compiled.outcomes.len != step.outcomes.len) return false;
@@ -211,7 +212,13 @@ fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow
         destination.replaces = try allocator.dupe(pipeline.DataKey, step.replaces);
         destination.invalidates = try allocator.dupe(pipeline.DataKey, step.invalidates);
         destination.outcomes = try allocator.dupe(workflow.OutcomeTag, step.outcomes);
-        destination.gates = try cloneStrings(allocator, step.gates);
+        const gates = try allocator.dupe(@import("workflow_gate.zig").Contract, step.gates);
+        for (gates) |*gate| {
+            gate.id.bytes = try allocator.dupe(u8, gate.id.bytes);
+            gate.issuer.bytes = try allocator.dupe(u8, gate.issuer.bytes);
+            gate.authority = try allocator.dupe(pipeline.DataKey, gate.authority);
+        }
+        destination.gates = gates;
         destination.capabilities = try cloneStrings(allocator, step.capabilities);
         if (step.retry_authority) |authority| {
             destination.retry_authority = authority;
@@ -229,6 +236,7 @@ fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow
         .source_ordinal = source.source_ordinal,
         .shortcode = source.shortcode,
         .authority = .{
+            .allowed_capabilities = try cloneStrings(allocator, source.authority.allowed_capabilities),
             .data_schemas = try cloneDataSchemas(allocator, source.authority.data_schemas),
             .workflow_id = .{ .bytes = try allocator.dupe(u8, source.authority.workflow_id.bytes) },
             .workflow_version = source.authority.workflow_version,

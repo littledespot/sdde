@@ -219,11 +219,14 @@ An accepted ADR 0003 setup contract remains incomplete:
 Owned workflow value flow is implemented, with regression coverage in
 `src/pipeline_data_test.zig` and `src/workflow_value_flow_test.zig` for unrelated
 YAML workflows, branch merges, schema drift, restricted inputs, replacement,
-invalidation, cancellation, and allocation-failure cleanup. Remaining work:
+invalidation, cancellation, and allocation-failure cleanup. Registered gates now
+require successful, current, runner-recorded evidence; capability ceilings are
+checked against typed native operation bindings. Guard rejection cannot route
+through YAML to success. Registry, compiler, and runner regression tests cover
+these shared contracts without workflow-name branches.
 
-- execute/validate registered gates and effective capability ceilings; and
-- move selected target/toolchain/principle setup out of fixed startup and into
-  reusable registered setup nodes selected by compiled topology.
+Remaining work: move selected target/toolchain/principle setup out of fixed
+startup and into reusable registered setup nodes selected by compiled topology.
 
 Regression evidence must include unrelated multi-node workflows, real value
 flow, branch merges, failure propagation, cancellation, cleanup, and proof that
@@ -263,8 +266,8 @@ another encountered media type.
 - YAML-declared model operations and captured response-schema resources;
 - deterministic request/unit identity and total attempt accounting;
 - bounded guidance/context selection and production fake-model bindings;
-- raw response capture, envelope decode, identity checks, and closed payload
-  validation;
+- raw response capture, exact runner-owned call association, and compact
+  response decoding/validation under ADR 0006; no model-echoed execution IDs;
 - one shared authority-requiredness/reconciliation ledger with earliest-owner
   routing;
 - no-invention conversion to clarification;

@@ -21,6 +21,7 @@ fn refAllDeclsRecursive(comptime T: type) void {
 }
 
 test {
+    _ = @import("model_capabilities_test.zig");
     refAllDeclsRecursive(@This());
     _ = @import("llm_provider_registry_test.zig");
     _ = @import("llm_provider_binding_test.zig");

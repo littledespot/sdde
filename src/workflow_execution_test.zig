@@ -5,6 +5,7 @@ const workflow = @import("domain/workflow.zig");
 const compilation = @import("domain/workflow_compilation.zig");
 const telemetry = @import("domain/telemetry.zig");
 const operations = @import("ports/workflow_operation_registry.zig");
+const operation_bindings = @import("application/workflow_operation_binding.zig");
 const barrier_port = @import("ports/telemetry_barrier.zig");
 const runner_module = @import("application/workflow_pipeline_runner.zig");
 const engine = @import("application/workflow_engine_orchestrator.zig");
@@ -12,7 +13,7 @@ const engine_bindings = @import("application/workflow_engine_child_bindings.zig"
 
 test "generic engine preserves every YAML-compiled terminal outcome" {
     inline for (std.meta.tags(workflow.OutcomeTag)) |expected| {
-        var control: OperationControl = .{ .outcome = expected };
+        var control: OperationControl = .{ .state = .{ .outcome = expected } };
         var barrier: FakeBarrier = .{};
         var graph = try testGraph();
         var registry = testRegistry(&control);
@@ -32,7 +33,7 @@ test "generic engine preserves every YAML-compiled terminal outcome" {
 }
 
 test "runner applies an operation delta before the telemetry barrier" {
-    var control: OperationControl = .{ .outcome = .ok };
+    var control: OperationControl = .{ .state = .{ .outcome = .ok } };
     var barrier: FakeBarrier = .{ .block = true };
     var graph = try testGraph();
     var registry = testRegistry(&control);
@@ -68,7 +69,7 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
         .{ .from = .{ .bytes = "run" }, .outcome = .invalid, .target = .{ .step = .{ .bytes = "run" } } },
     };
 
-    var completes: OperationControl = .{ .outcome = .invalid, .scripted = &.{ .invalid, .ok } };
+    var completes: OperationControl = .{ .state = .{ .outcome = .invalid, .scripted = &.{ .invalid, .ok } } };
     var complete_barrier: FakeBarrier = .{};
     var complete_graph = try testGraph();
     complete_graph.authority.steps = &loop_steps;
@@ -77,24 +78,26 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     var complete_registry = testRegistry(&completes);
     completes.entries[1].contract.outcomes = &.{ .ok, .invalid };
     completes.entries[1].contract.retry_limit = .{ .maximum = 2 };
+    completes.entries[1].contract.parameters = &retry_parameters;
     var complete_runner = runner_module.Runner.init(std.testing.allocator, selected(&complete_graph), &complete_registry, complete_barrier.port(), .{}, null);
     defer complete_runner.deinit();
     var complete_children: TestEngineBindings = .{ .graph = &complete_graph, .runner = &complete_runner };
     try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(complete_children.bindings()).execution);
-    try std.testing.expectEqual(@as(usize, 2), completes.calls);
+    try std.testing.expectEqual(@as(usize, 2), completes.state.calls);
     try std.testing.expectEqual(@as(usize, 2), complete_barrier.calls);
 
-    var exhausts: OperationControl = .{ .outcome = .invalid };
+    var exhausts: OperationControl = .{ .state = .{ .outcome = .invalid } };
     var exhausted_barrier: FakeBarrier = .{};
     var exhausted_graph = complete_graph;
     var exhausted_registry = testRegistry(&exhausts);
     exhausts.entries[1].contract.outcomes = &.{ .ok, .invalid };
     exhausts.entries[1].contract.retry_limit = .{ .maximum = 2 };
+    exhausts.entries[1].contract.parameters = &retry_parameters;
     var exhausted_runner = runner_module.Runner.init(std.testing.allocator, selected(&exhausted_graph), &exhausted_registry, exhausted_barrier.port(), .{}, null);
     defer exhausted_runner.deinit();
     var exhausted_children: TestEngineBindings = .{ .graph = &exhausted_graph, .runner = &exhausted_runner };
     try std.testing.expectEqual(workflow.OutcomeTag.failed, engine.run(exhausted_children.bindings()).execution);
-    try std.testing.expectEqual(@as(usize, 3), exhausts.calls);
+    try std.testing.expectEqual(@as(usize, 3), exhausts.state.calls);
     try std.testing.expectEqual(@as(usize, 3), exhausted_barrier.calls);
 
     var zero_steps = loop_steps;
@@ -103,20 +106,21 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     zero_graph.authority.steps = &zero_steps;
     zero_graph.authority.transitions = &loop_transitions;
     zero_graph.authority.maximum_step_executions = 1;
-    var zero_control: OperationControl = .{ .outcome = .ok };
+    var zero_control: OperationControl = .{ .state = .{ .outcome = .ok } };
     var zero_barrier: FakeBarrier = .{};
     var zero_registry = testRegistry(&zero_control);
     zero_control.entries[1].contract.outcomes = &.{ .ok, .invalid };
     zero_control.entries[1].contract.retry_limit = .{ .maximum = 2 };
+    zero_control.entries[1].contract.parameters = &retry_parameters;
     var zero_runner = runner_module.Runner.init(std.testing.allocator, selected(&zero_graph), &zero_registry, zero_barrier.port(), .{}, null);
     defer zero_runner.deinit();
     var zero_children: TestEngineBindings = .{ .graph = &zero_graph, .runner = &zero_runner };
     try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(zero_children.bindings()).execution);
-    try std.testing.expectEqual(@as(usize, 1), zero_control.calls);
+    try std.testing.expectEqual(@as(usize, 1), zero_control.state.calls);
 }
 
 test "each workflow runner owns a fresh token ledger" {
-    var control: OperationControl = .{ .outcome = .ok };
+    var control: OperationControl = .{ .state = .{ .outcome = .ok } };
     var barrier: FakeBarrier = .{};
     var graph = try testGraph();
     var registry = testRegistry(&control);
@@ -145,18 +149,18 @@ test "runner exposes only resources referenced by the active compiled step" {
     var graph = try testGraph();
     graph.authority.steps = &steps;
     graph.authority.resources = &resources;
-    var control: OperationControl = .{ .outcome = .ok, .expected_resource_id = "prompt" };
+    var control: OperationControl = .{ .state = .{ .outcome = .ok, .expected_resource_id = "prompt" } };
     var barrier: FakeBarrier = .{};
     var registry = testRegistry(&control);
     var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).execution);
-    try std.testing.expectEqual(@as(usize, 1), control.calls);
+    try std.testing.expectEqual(@as(usize, 1), control.state.calls);
 }
 
 test "runner rejects an operation binding that differs from compiled authority" {
-    var control: OperationControl = .{ .outcome = .ok };
+    var control: OperationControl = .{ .state = .{ .outcome = .ok } };
     var barrier: FakeBarrier = .{};
     var graph = try testGraph();
     var registry = testRegistry(&control);
@@ -165,7 +169,7 @@ test "runner rejects an operation binding that differs from compiled authority" 
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     try std.testing.expectEqual(workflow.OutcomeTag.failed, engine.run(children.bindings()).execution);
-    try std.testing.expectEqual(@as(usize, 0), control.calls);
+    try std.testing.expectEqual(@as(usize, 0), control.state.calls);
     try std.testing.expectEqual(@as(usize, 0), barrier.calls);
 }
 
@@ -214,11 +218,23 @@ const test_engine_vtable: engine_bindings.ChildBindings.VTable = .{
 };
 
 const OperationControl = struct {
+    state: OperationState,
+    entries: [2]operations.Entry = undefined,
+};
+
+const retry_parameters = [_]@import("domain/workflow_operation.zig").ParameterDescriptor{.{
+    .id = "retry-limit",
+    .kind = .integer,
+    .required = true,
+    .workflow_definition_safe = true,
+    .integer_min = 0,
+    .integer_max = 2,
+}};
+const OperationState = struct {
     outcome: workflow.OutcomeTag,
     scripted: []const workflow.OutcomeTag = &.{},
     expected_resource_id: ?[]const u8 = null,
     calls: usize = 0,
-    entries: [2]operations.Entry = undefined,
 };
 const FakeBarrier = struct {
     calls: usize = 0,
@@ -238,7 +254,7 @@ fn testRegistry(control: *OperationControl) operations.Registry {
     control.entries = .{
         .{
             .contract = .{ .id = "test.empty@1", .kind = .invocation, .outcomes = &.{.ok}, .side_effect = .none },
-            .invoke_fn = invokeOperation,
+            .binding = operation_bindings.bind(OperationState, &control.state, invokeOperation),
         },
         .{
             .contract = .{
@@ -254,23 +270,21 @@ fn testRegistry(control: *OperationControl) operations.Registry {
                 .outcomes = test_outcomes,
                 .side_effect = .none,
             },
-            .context = control,
-            .invoke_fn = invokeOperation,
+            .binding = operation_bindings.bind(OperationState, &control.state, invokeOperation),
         },
     };
     return .{
         .operations = &control.entries,
         .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = test_outcomes, .total_model_token_budget = .{ .value = 1000 } }},
         .gates = &.{},
-        .capabilities = &.{},
     };
 }
 
-fn invokeOperation(context: ?*anyopaque, input: operations.Input) operations.Error!execution.Candidate {
+fn invokeOperation(context: ?*OperationState, input: operations.Input) operations.Error!execution.Candidate {
     return switch (input) {
         .invocation => .{ .outcome = .ok, .delta = .{} },
         .step => |step_input| step: {
-            const control: *OperationControl = @ptrCast(@alignCast(context.?));
+            const control = context.?;
             if (control.expected_resource_id) |expected| {
                 if (step_input.resources.len != 1 or
                     !std.mem.eql(u8, step_input.resources[0].id.bytes, expected))

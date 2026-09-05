@@ -94,9 +94,10 @@ flowchart TD
     NEXT -- Delete --> DELETE[Build body-free delete operation]
     NEXT -- Unchanged successor replay entry --> REPLAYOP[Resolve prior immutable replay binding and execution-owned bytes<br/>never mutate or reuse the prior authorization, savepoint or journal entry]
 
-    GEN --> RSCHEMA[Validate response schema, task ID, intent ID and exact file-ID binding]
+    GEN --> RSCHEMA[Validate runner-bound task, intent and file association;<br/>validate compact result schema and any candidate-selected IDs]
     RSCHEMA --> BODY[Validate real body bytes, encoding, budget, patch format and preset content rules]
     RSCHEMA -- Repairable model defect --> PREPAIR[Atomic repair of one authorized payload pointer]
+    RSCHEMA -- Invalid trusted association --> OUTCOME
     BODY -- Repairable model defect --> PREPAIR
     PREPAIR --> RSCHEMA
     PREPAIR -- Exhausted or non-repairable --> OUTCOME[Seal state-only TaskOutcomeTransaction]

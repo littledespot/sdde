@@ -7,6 +7,8 @@ const operation = @import("../domain/workflow_operation.zig");
 const provider_binding = @import("../domain/llm_provider_binding.zig");
 const workflow_retry = @import("../domain/workflow_retry.zig");
 const data = @import("../domain/pipeline_data.zig");
+const gate = @import("../domain/workflow_gate.zig");
+const capability_contract = @import("../domain/workflow_capability.zig");
 
 pub const Error = error{OperationExecutionFailed};
 
@@ -27,22 +29,40 @@ pub const Input = union(enum) {
     step: StepInput,
 };
 
+pub const Binding = struct {
+    context: ?*anyopaque = null,
+    implementation: *const Implementation,
+
+    pub const Implementation = struct {
+        invoke_fn: *const fn (?*anyopaque, Input) Error!execution.Candidate,
+        capabilities: []const []const u8,
+        context_required: bool,
+    };
+
+    pub fn capabilities(self: Binding) []const []const u8 {
+        return self.implementation.capabilities;
+    }
+
+    pub fn invoke(self: Binding, input: Input) Error!execution.Candidate {
+        return self.implementation.invoke_fn(self.context, input);
+    }
+};
+
 pub const Entry = struct {
     contract: operation.Contract,
-    context: ?*anyopaque = null,
-    invoke_fn: *const fn (?*anyopaque, Input) Error!execution.Candidate,
+    binding: Binding,
 
     pub fn invoke(self: Entry, input: Input) Error!execution.Candidate {
-        return self.invoke_fn(self.context, input);
+        return self.binding.invoke(input);
     }
 };
 
 pub const Registry = struct {
+    model_capacity: ?@import("../domain/model_limits.zig").Capacity = null,
     operations: []const Entry,
     data_schemas: []const data.Schema = &.{},
     policies: []const operation.PolicyProfile,
-    gates: []const []const u8,
-    capabilities: []const []const u8,
+    gates: []const gate.Contract,
 
     pub fn resolveOperation(self: *const Registry, id: workflow.RegisteredRef) ?*const Entry {
         var found: ?*const Entry = null;
@@ -64,23 +84,35 @@ pub const Registry = struct {
         return found;
     }
 
+    pub fn resolveGate(self: *const Registry, id: workflow.RegisteredRef) ?*const gate.Contract {
+        var found: ?*const gate.Contract = null;
+        for (self.gates) |*contract| {
+            if (!std.mem.eql(u8, contract.id.bytes, id.bytes)) continue;
+            if (found != null) return null;
+            found = contract;
+        }
+        return found;
+    }
+
     pub fn validate(self: *const Registry) bool {
-        if (!uniqueStrings(self.gates) or !uniqueStrings(self.capabilities)) return false;
+        if (self.model_capacity) |capacity| if (!capacity.isValid()) return false;
+        if (!self.validGates()) return false;
         for (self.data_schemas, 0..) |schema, index| {
             if (!schema.valid()) return false;
             for (self.data_schemas[0..index]) |prior| if (schema.key == prior.key) return false;
         }
         for (self.operations, 0..) |entry, index| {
+            if (entry.binding.implementation.context_required and entry.binding.context == null) return false;
+            if (entry.contract.model_capacity != null and self.model_capacity == null) return false;
             if (workflow.RegisteredRef.parse(entry.contract.id) == null or
-                !validContract(entry.contract)) return false;
+                !validContract(entry.contract, entry.binding.capabilities())) return false;
             inline for (.{ entry.contract.requires, entry.contract.optional, entry.contract.produces, entry.contract.replaces, entry.contract.invalidates }) |keys| {
                 for (keys) |key| if (data.find(self.data_schemas, key) == null) return false;
             }
             for (self.operations[0..index]) |prior| {
                 if (std.mem.eql(u8, prior.contract.id, entry.contract.id)) return false;
             }
-            for (entry.contract.gates) |gate| if (!containsExactlyOnce(self.gates, gate)) return false;
-            for (entry.contract.capabilities) |capability| if (!containsExactlyOnce(self.capabilities, capability)) return false;
+            for (entry.contract.gates) |id| if (self.resolveGate(.{ .bytes = id }) == null) return false;
         }
         for (self.policies, 0..) |profile, index| {
             if (workflow.RegisteredRef.parse(profile.id) == null or
@@ -90,20 +122,43 @@ pub const Registry = struct {
             for (self.policies[0..index]) |prior| {
                 if (std.mem.eql(u8, prior.id, profile.id)) return false;
             }
-            for (profile.allowed_capabilities) |capability| if (!containsExactlyOnce(self.capabilities, capability)) return false;
+            for (profile.allowed_capabilities) |capability| if (!capability_contract.known(capability)) return false;
+        }
+        return true;
+    }
+
+    fn validGates(self: *const Registry) bool {
+        for (self.gates, 0..) |contract, index| {
+            if (workflow.RegisteredRef.parse(contract.id.bytes) == null or
+                contract.authority.len == 0 or !uniqueKeys(contract.authority) or
+                containsKey(contract.authority, contract.evidence)) return false;
+            for (self.gates[0..index]) |prior| {
+                if (prior.evidence == contract.evidence or std.mem.eql(u8, prior.id.bytes, contract.id.bytes)) return false;
+            }
+            const issuer = self.resolveOperation(contract.issuer) orelse return false;
+            if (issuer.contract.kind != .step or issuer.binding.capabilities().len != 0 or issuer.contract.side_effect != .none or
+                (!containsKey(issuer.contract.produces, contract.evidence) and !containsKey(issuer.contract.replaces, contract.evidence))) return false;
+            for (contract.authority) |key| if (!containsKey(issuer.contract.requires, key)) return false;
+            const schema = data.find(self.data_schemas, contract.evidence) orelse return false;
+            if (schema.version != 1 or !std.mem.eql(u8, schema.type_name, @typeName(gate.Decision))) return false;
+            for (self.operations) |entry| {
+                if (std.mem.eql(u8, entry.contract.id, contract.issuer.bytes)) continue;
+                if (containsKey(entry.contract.produces, contract.evidence) or containsKey(entry.contract.replaces, contract.evidence)) return false;
+            }
         }
         return true;
     }
 };
 
-fn validContract(contract: operation.Contract) bool {
+fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
     if (contract.outcomes.len == 0 or !uniqueOutcomes(contract.outcomes) or
-        !uniqueStrings(contract.gates) or !uniqueStrings(contract.capabilities) or
+        !uniqueStrings(contract.gates) or !uniqueStrings(capabilities) or
         !validDataContract(contract)) return false;
+    for (capabilities) |capability| if (!capability_contract.known(capability)) return false;
     if (contract.kind == .invocation and
         (contract.parameters.len != 0 or contract.requires.len != 0 or contract.optional.len != 0 or contract.replaces.len != 0 or
             contract.invalidates.len != 0 or contract.side_effect != .none or contract.gates.len != 0 or
-            contract.capabilities.len != 0 or contract.retry_limit != null or
+            capabilities.len != 0 or contract.retry_limit != null or
             contract.outcomes.len != 1 or contract.outcomes[0] != .ok)) return false;
     for (contract.parameters, 0..) |descriptor, index| {
         if (workflow.WorkflowParameterId.parse(descriptor.id) == null or
@@ -115,7 +170,7 @@ fn validContract(contract: operation.Contract) bool {
             if (std.mem.eql(u8, prior.id, descriptor.id)) return false;
         }
     }
-    const model_capable = containsExactlyOnce(contract.capabilities, "model-provider");
+    const model_capable = containsExactlyOnce(capabilities, "model-provider");
     var model_slot_count: usize = 0;
     for (contract.parameters) |descriptor| {
         if (descriptor.kind != .model_slot) continue;
@@ -123,6 +178,10 @@ fn validContract(contract: operation.Contract) bool {
         model_slot_count += 1;
     }
     if (model_capable != (model_slot_count == 1)) return false;
+    if (model_capable != (contract.model_capacity != null)) return false;
+    if (contract.model_capacity) |capacity| {
+        if (!capacity.isValid() or !@import("../domain/workflow_model.zig").validDescriptors(contract.parameters)) return false;
+    }
     if (contract.retry_limit) |limit| {
         if (contract.kind != .step or limit.maximum == 0) return false;
         const descriptor = findParameter(contract.parameters, workflow_retry.parameter_id) orelse return false;
@@ -184,122 +243,4 @@ fn containsExactlyOnce(values: []const []const u8, expected: []const u8) bool {
         if (std.mem.eql(u8, value, expected)) count += 1;
     }
     return count == 1;
-}
-
-test "one registry rejects duplicate and structurally invalid operations" {
-    try std.testing.expect(!@hasField(operation.PolicyProfile, "retry_limit"));
-    try std.testing.expect(!@hasField(operation.PolicyProfile, "attempts"));
-    const noop: Entry = .{
-        .contract = .{ .id = "core.noop@1", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none },
-        .invoke_fn = testInvoke,
-    };
-    const valid: Registry = .{
-        .operations = &.{noop},
-        .policies = &.{.{
-            .id = "core.safe@1",
-            .allowed_capabilities = &.{},
-            .allowed_terminal_outcomes = &.{.ok},
-            .total_model_token_budget = .{ .value = 1 },
-        }},
-        .gates = &.{},
-        .capabilities = &.{},
-    };
-    try std.testing.expect(valid.validate());
-    var duplicate = valid;
-    duplicate.operations = &.{ noop, noop };
-    try std.testing.expect(!duplicate.validate());
-
-    const hidden_invocation: Entry = .{
-        .contract = .{ .id = "core.hidden@1", .kind = .invocation, .outcomes = &.{ .ok, .failed }, .side_effect = .none },
-        .invoke_fn = testInvoke,
-    };
-    duplicate.operations = &.{hidden_invocation};
-    try std.testing.expect(!duplicate.validate());
-
-    const model_without_slot: Entry = .{
-        .contract = .{
-            .id = "model.invalid@1",
-            .kind = .step,
-            .outcomes = &.{.ok},
-            .side_effect = .none,
-            .capabilities = &.{"model-provider"},
-        },
-        .invoke_fn = testInvoke,
-    };
-    var invalid_model_registry = valid;
-    invalid_model_registry.operations = &.{model_without_slot};
-    invalid_model_registry.capabilities = &.{"model-provider"};
-    try std.testing.expect(!invalid_model_registry.validate());
-
-    const hidden_slot: Entry = .{
-        .contract = .{
-            .id = "model.hidden-slot@1",
-            .kind = .step,
-            .parameters = &.{.{
-                .id = "slot",
-                .kind = .model_slot,
-                .required = true,
-                .workflow_definition_safe = true,
-            }},
-            .outcomes = &.{.ok},
-            .side_effect = .none,
-        },
-        .invoke_fn = testInvoke,
-    };
-    invalid_model_registry.operations = &.{hidden_slot};
-    invalid_model_registry.capabilities = &.{};
-    try std.testing.expect(!invalid_model_registry.validate());
-
-    var zero_budget = valid;
-    zero_budget.policies = &.{.{
-        .id = "core.safe@1",
-        .allowed_capabilities = &.{},
-        .allowed_terminal_outcomes = &.{.ok},
-        .total_model_token_budget = .{ .value = 0 },
-    }};
-    try std.testing.expect(!zero_budget.validate());
-
-    const hidden_retry: Entry = .{
-        .contract = .{
-            .id = "core.hidden-retry@1",
-            .kind = .step,
-            .parameters = &.{.{
-                .id = "retry-limit",
-                .kind = .integer,
-                .required = true,
-                .workflow_definition_safe = true,
-                .integer_min = 0,
-                .integer_max = 2,
-            }},
-            .outcomes = &.{.ok},
-            .side_effect = .none,
-        },
-        .invoke_fn = testInvoke,
-    };
-    var invalid_retry_registry = valid;
-    invalid_retry_registry.operations = &.{hidden_retry};
-    try std.testing.expect(!invalid_retry_registry.validate());
-
-    var declared_retry = hidden_retry;
-    declared_retry.contract.retry_limit = .{ .maximum = 2 };
-    try std.testing.expect((Registry{
-        .operations = &.{declared_retry},
-        .policies = valid.policies,
-        .gates = &.{},
-        .capabilities = &.{},
-    }).validate());
-    declared_retry.contract.parameters = &.{.{
-        .id = "retry-limit",
-        .kind = .integer,
-        .required = true,
-        .workflow_definition_safe = true,
-        .integer_min = 0,
-        .integer_max = 3,
-    }};
-    invalid_retry_registry.operations = &.{declared_retry};
-    try std.testing.expect(!invalid_retry_registry.validate());
-}
-
-fn testInvoke(_: ?*anyopaque, _: Input) Error!execution.Candidate {
-    return error.OperationExecutionFailed;
 }

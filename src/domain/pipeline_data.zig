@@ -3,6 +3,15 @@ const pipeline = @import("pipeline.zig");
 
 pub const key_count = @typeInfo(pipeline.DataKey).@"enum".fields.len;
 
+/// Runner-recorded, same-envelope provenance; never a model-supplied fact.
+/// The producer identity borrows the compiled contract's envelope-long lifetime.
+pub const Origin = struct {
+    generation: u64,
+    producer: []const u8,
+    outcome: @import("workflow.zig").OutcomeTag,
+    inputs: [key_count]?u64,
+};
+
 /// Compiled native value schema. Workflows reference keys, never supply schemas
 /// or executable serializers. The operation registry owns these descriptors.
 pub const Schema = struct {

@@ -39,12 +39,14 @@ pub const CompiledStep = struct {
     invalidates: []const pipeline.DataKey,
     outcomes: []const workflow.OutcomeTag,
     side_effect: pipeline.SideEffect,
-    gates: []const []const u8,
+    gates: []const @import("workflow_gate.zig").Contract,
     capabilities: []const []const u8,
     retry_authority: ?workflow_retry.CompiledAuthority,
+    model: ?@import("workflow_model.zig").Requirements = null,
 };
 
 pub const SemanticAuthority = struct {
+    allowed_capabilities: []const []const u8 = &.{},
     data_schemas: []const @import("pipeline_data.zig").Schema = &.{},
     workflow_id: workflow.WorkflowId,
     workflow_version: u32,

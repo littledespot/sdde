@@ -88,7 +88,7 @@ test "envelope references outlive the originating owner without identity reuse" 
     var delta: pipeline.NodeDelta = .{};
     defer envelope.discard(&delta);
     delta.data_writes[index] = try values.create(std.testing.allocator, descriptor, reference.Ref, original);
-    try envelope.apply(produce, &delta);
+    try envelope.apply(produce, &delta, .ok);
     original.release();
     source_live = false;
 
@@ -150,7 +150,7 @@ fn allocationExercise(allocator: std.mem.Allocator) !void {
         .identity = first,
         .nested = &.{ .{ .identity = second, .bytes = "second" }, .{ .identity = first, .bytes = "first" } },
     });
-    try envelope.apply(produce, &delta);
+    try envelope.apply(produce, &delta, .ok);
     const view = try envelope.view(consume);
     const stored = try values.read(&view, descriptor, Payload);
     try std.testing.expect(stored.identity.eql(first));

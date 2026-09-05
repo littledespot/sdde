@@ -10,6 +10,10 @@ const workflow = @import("domain/workflow.zig");
 const inventory = @import("domain/workflow_inventory.zig");
 const filesystem_identity = @import("domain/filesystem_identity.zig");
 const operation_registry = @import("ports/workflow_operation_registry.zig");
+const operation_bindings = @import("application/workflow_operation_binding.zig");
+const binding_fixture = @import("workflow_binding_test_fixture.zig");
+const values = @import("application/pipeline_values.zig");
+const gate_module = @import("domain/workflow_gate.zig");
 
 test "concise resources and native parameters compile into immutable operation authority" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -38,14 +42,21 @@ test "concise resources and native parameters compile into immutable operation a
     try std.testing.expectEqualStrings("Generate one result.", graph.authority.resources[0].bytes);
     try std.testing.expectEqual(@as(u32, 2), graph.authority.steps[0].retry_authority.?.limit.value);
     try std.testing.expectEqual(@as(u64, 1000), graph.authority.total_model_token_budget.value);
-    try std.testing.expectEqual(@as(usize, 3), graph.authority.maximum_step_executions);
-    try std.testing.expect(graph.authority.steps[0].parameters[1].value == .resource);
-    try std.testing.expect(graph.authority.steps[0].parameters[3].value == .model_slot);
-    try std.testing.expectEqualStrings(
-        "spec-generation",
-        graph.authority.steps[0].parameters[3].value.model_slot.bytes,
-    );
-    try std.testing.expectEqualStrings("model-ready@1", graph.authority.steps[0].gates[0]);
+    try std.testing.expectEqual(@as(usize, 6), graph.authority.maximum_step_executions);
+    var slots: usize = 0;
+    var resource_parameters: usize = 0;
+    for (graph.authority.steps[0].parameters) |parameter| switch (parameter.value) {
+        .model_slot => |slot| {
+            slots += 1;
+            try std.testing.expectEqualStrings("spec-generation", slot.bytes);
+        },
+        .resource => resource_parameters += 1,
+        else => {},
+    };
+    try std.testing.expectEqual(@as(usize, 1), slots);
+    try std.testing.expectEqual(@as(usize, 2), resource_parameters);
+    try std.testing.expectEqual(@as(u64, 200), graph.authority.steps[0].model.?.capacity.canonical.maximum_output_tokens);
+    try std.testing.expectEqualStrings("model-ready@1", graph.authority.steps[0].gates[0].id.bytes);
     try std.testing.expectEqualStrings("model-provider", graph.authority.steps[0].capabilities[0]);
 }
 
@@ -82,6 +93,48 @@ test "unknown operations and unguarded cycles reject the complete graph" {
         error.WorkflowGraphCompileInvalid,
         (validate_graphs.Action{}).execute(arena.allocator(), graphs),
     );
+}
+
+test "YAML model bounds reject omissions invalid scalars unknown modes and policy authority" {
+    const substitutions = [_][2][]const u8{
+        .{ "input-bytes: 4096, ", "" },
+        .{ "output-bytes: 1024, ", "" },
+        .{ "input-tokens: 1000, ", "" },
+        .{ "output-tokens: 200, ", "" },
+        .{ ", response-mode: prompt-only", "" },
+        .{ "input-bytes: 4096", "input-bytes: 0" },
+        .{ "output-tokens: 200", "output-tokens: -1" },
+        .{ "input-bytes: 4096", "input-bytes: 4294967296" },
+        .{ "input-tokens: 1000", "input-tokens: many" },
+        .{ "response-mode: prompt-only", "response-mode: automatic" },
+        .{ "response-mode: prompt-only", "response-mode: prompt-only, temperature: 1001" },
+    };
+    for (substitutions) |replacement| {
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+        const yaml = try std.mem.replaceOwned(u8, arena.allocator(), resource_workflow, replacement[0], replacement[1]);
+        try std.testing.expect(!std.mem.eql(u8, yaml, resource_workflow));
+        var yaml_parser: parser_adapter.Adapter = .{};
+        const raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
+        const definitions = try (validate_schema.Action{}).execute(arena.allocator(), raw);
+        const manifest = try (resolve_resources.Action{}).execute(arena.allocator(), testInventory(), definitions);
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (compile.Action{ .registry = &operations }).execute(
+            arena.allocator(),
+            definitions,
+            testInventory(),
+            manifest,
+            &.{
+                .{ .ordinal = 3, .bytes = "Generate one result." },
+                .{ .ordinal = 5, .bytes = "{\"type\":\"object\"}" },
+            },
+        ));
+    }
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var yaml_parser: parser_adapter.Adapter = .{};
+    const yaml = try std.mem.replaceOwned(u8, arena.allocator(), resource_workflow, "policy: test.model-policy@1", "policy: { id: test.model-policy@1, input-tokens: 1000 }");
+    const raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
+    try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, (validate_schema.Action{}).execute(arena.allocator(), raw));
 }
 
 test "compiler rejects parameter outcome gate and capability violations" {
@@ -126,6 +179,7 @@ test "compiler rejects parameter outcome gate and capability violations" {
     const accepted = try (validate_schema.Action{}).execute(arena.allocator(), accepted_raw);
     const accepted_manifest = try (resolve_resources.Action{}).execute(arena.allocator(), inventory_value, accepted);
     const restrictive: operation_registry.Registry = .{
+        .model_capacity = @import("model_contract_test_fixture.zig").capacity,
         .operations = &operation_entries,
         .policies = &.{.{
             .id = "test.model-policy@1",
@@ -133,9 +187,10 @@ test "compiler rejects parameter outcome gate and capability violations" {
             .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
             .total_model_token_budget = .{ .value = 1000 },
         }},
-        .gates = &.{"model-ready@1"},
-        .capabilities = &.{"model-provider"},
+        .gates = operations.gates,
+        .data_schemas = operations.data_schemas,
     };
+    try std.testing.expect(restrictive.validate());
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
         (compile.Action{ .registry = &restrictive }).execute(
@@ -183,15 +238,16 @@ const resource_workflow =
     \\shortcode: CSTM
     \\invoke: test.empty@1
     \\policy: test.model-policy@1
-    \\start: generate
+    \\start: validate
     \\resources:
     \\  prompt: prompts/generate.md
     \\  result-schema: schemas/result.json
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2 }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
+    \\  validate: { use: test.validate@1, on: { ok: generate } }
 ;
 
 const unknown_operation_workflow =
@@ -220,7 +276,7 @@ const wrong_parameter_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: two }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: two, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -236,7 +292,7 @@ const missing_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -252,7 +308,7 @@ const negative_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: -1 }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: -1, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -268,7 +324,7 @@ const excessive_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 4 }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 4, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -284,7 +340,7 @@ const missing_outcome_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate@1
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2 }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, input-bytes: 4096, output-bytes: 1024, input-tokens: 1000, output-tokens: 200, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed }
 ;
 
@@ -353,43 +409,48 @@ fn emptyInventory() inventory.Inventory {
 
 const operation_entries = [_]operation_registry.Entry{
     .{
-        .contract = .{ .id = "test.empty@1", .kind = .invocation, .outcomes = &.{.ok}, .side_effect = .none },
-        .invoke_fn = unusedOperation,
+        .contract = .{ .id = "test.empty@1", .kind = .invocation, .produces = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none },
+        .binding = operation_bindings.bind(void, null, unusedOperation),
     },
     .{
         .contract = .{
             .id = "model.generate@1",
             .kind = .step,
-            .parameters = &.{
+            .model_capacity = @import("model_contract_test_fixture.zig").capacity,
+            .parameters = &([_]@import("domain/workflow_operation.zig").ParameterDescriptor{
                 .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
                 .{ .id = "prompt", .kind = .resource, .required = true, .workflow_definition_safe = true, .resource_kind = .prompt },
                 .{ .id = "result-schema", .kind = .resource, .required = true, .workflow_definition_safe = true, .resource_kind = .result_schema },
                 .{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 3 },
-            },
+            } ++ @import("domain/workflow_model.zig").parameters),
             .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
             .side_effect = .none,
             .gates = &.{"model-ready@1"},
-            .capabilities = &.{"model-provider"},
             .retry_limit = .{ .maximum = 3 },
         },
-        .invoke_fn = unusedOperation,
+        .binding = operation_bindings.bind(binding_fixture.ModelContext, &binding_fixture.model_context, binding_fixture.unusedModel),
     },
     .{
         .contract = .{ .id = "test.retry@1", .kind = .step, .outcomes = &.{ .ok, .invalid }, .side_effect = .none },
-        .invoke_fn = unusedOperation,
+        .binding = operation_bindings.bind(void, null, unusedOperation),
+    },
+    .{
+        .contract = .{ .id = "test.validate@1", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{.ok}, .side_effect = .none },
+        .binding = operation_bindings.bind(void, null, unusedOperation),
     },
 };
 
 const operations: operation_registry.Registry = .{
+    .model_capacity = @import("model_contract_test_fixture.zig").capacity,
     .operations = &operation_entries,
     .policies = &.{
         .{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok}, .total_model_token_budget = .{ .value = 1000 } },
         .{ .id = "test.model-policy@1", .allowed_capabilities = &.{"model-provider"}, .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled }, .total_model_token_budget = .{ .value = 1000 } },
     },
-    .gates = &.{"model-ready@1"},
-    .capabilities = &.{"model-provider"},
+    .gates = &.{.{ .id = .{ .bytes = "model-ready@1" }, .issuer = .{ .bytes = "test.validate@1" }, .evidence = .workflow_operation_registry_evidence, .authority = &.{.workflow_invocation} }},
+    .data_schemas = &.{ values.schema(.workflow_invocation, u32, 1, 32), values.schema(.workflow_operation_registry_evidence, gate_module.Decision, 1, 32) },
 };
 
-fn unusedOperation(_: ?*anyopaque, _: operation_registry.Input) operation_registry.Error!execution.Candidate {
+fn unusedOperation(_: ?*void, _: operation_registry.Input) operation_registry.Error!execution.Candidate {
     return error.OperationExecutionFailed;
 }

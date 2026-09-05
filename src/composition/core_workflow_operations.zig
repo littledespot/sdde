@@ -1,5 +1,6 @@
 const execution = @import("../domain/workflow_execution.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
+const bindings = @import("../application/workflow_operation_binding.zig");
 
 const empty_invocation_id = "core.empty-invocation@1";
 const noop_id = "core.noop@1";
@@ -14,7 +15,7 @@ const entries = [_]operations.Entry{
             .outcomes = &.{.ok},
             .side_effect = .none,
         },
-        .invoke_fn = emptyInvocation,
+        .binding = bindings.bind(void, null, emptyInvocation),
     },
     .{
         .contract = .{
@@ -23,7 +24,7 @@ const entries = [_]operations.Entry{
             .outcomes = &.{.ok},
             .side_effect = .none,
         },
-        .invoke_fn = noop,
+        .binding = bindings.bind(void, null, noop),
     },
 };
 
@@ -36,10 +37,9 @@ pub const registry: operations.Registry = .{
         .total_model_token_budget = .{ .value = 100_000 },
     }},
     .gates = &.{},
-    .capabilities = &.{},
 };
 
-fn emptyInvocation(_: ?*anyopaque, input: operations.Input) operations.Error!execution.Candidate {
+fn emptyInvocation(_: ?*void, input: operations.Input) operations.Error!execution.Candidate {
     const invocation = switch (input) {
         .invocation => |value| value,
         .step => return error.OperationExecutionFailed,
@@ -48,7 +48,7 @@ fn emptyInvocation(_: ?*anyopaque, input: operations.Input) operations.Error!exe
     return .{ .outcome = .ok, .delta = .{} };
 }
 
-fn noop(_: ?*anyopaque, input: operations.Input) operations.Error!execution.Candidate {
+fn noop(_: ?*void, input: operations.Input) operations.Error!execution.Candidate {
     switch (input) {
         .step => {},
         .invocation => return error.OperationExecutionFailed,

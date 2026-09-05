@@ -426,21 +426,21 @@ test "invocation runner handles every provider preparation outcome before workfl
         switch (mode) {
             .not_required, .ready => {
                 try std.testing.expectEqual(workflow_execution.Outcome.ok, outcome.execution);
-                try std.testing.expectEqual(@as(usize, 1), probe.invocation_calls);
-                try std.testing.expectEqual(@as(usize, 1), probe.step_calls);
+                try std.testing.expectEqual(@as(usize, 1), probe.observation.invocation_calls);
+                try std.testing.expectEqual(@as(usize, 1), probe.observation.step_calls);
             },
             .failed => {
                 try std.testing.expectEqual(
                     @import("../domain/bootstrap_error.zig").PublicError.LLM_PROVIDER_CONFIG_PARSE_ERROR,
                     outcome.bootstrap_failed,
                 );
-                try std.testing.expectEqual(@as(usize, 0), probe.invocation_calls);
-                try std.testing.expectEqual(@as(usize, 0), probe.step_calls);
+                try std.testing.expectEqual(@as(usize, 0), probe.observation.invocation_calls);
+                try std.testing.expectEqual(@as(usize, 0), probe.observation.step_calls);
             },
             .cancelled => {
                 try std.testing.expectEqual(workflow_execution.Outcome.cancelled, outcome.execution);
-                try std.testing.expectEqual(@as(usize, 0), probe.invocation_calls);
-                try std.testing.expectEqual(@as(usize, 0), probe.step_calls);
+                try std.testing.expectEqual(@as(usize, 0), probe.observation.invocation_calls);
+                try std.testing.expectEqual(@as(usize, 0), probe.observation.step_calls);
             },
         }
     }
@@ -601,6 +601,7 @@ const test_provider_contracts: llm_provider_contracts.Registry = .{ .entries = &
     .model = llm_provider_identity.ModelId.parse("model-a").?,
     .implementation_id = llm_provider_contracts.RegisteredProviderImplementationId.init(1).?,
     .config_schema = .empty_object,
+    .capabilities = @import("../model_contract_test_fixture.zig").capabilities,
 }} };
 const test_provider_document =
     \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{}}]}]}
@@ -940,8 +941,7 @@ const PreparationMode = enum { not_required, ready, failed, cancelled };
 const InvocationPreparationProbe = struct {
     mode: PreparationMode,
     prepare_calls: usize = 0,
-    invocation_calls: usize = 0,
-    step_calls: usize = 0,
+    observation: OperationObservation = .{},
     selected_workflow_id: ?[]const u8 = null,
     prepared_registry: ?*const llm_provider_registry.ValidatedLLMProviderRegistry = null,
     operation_entries: [2]workflow_operation_registry.Entry = undefined,
@@ -952,6 +952,7 @@ const InvocationPreparationProbe = struct {
     }
 
     fn registry(self: *InvocationPreparationProbe) *const workflow_operation_registry.Registry {
+        self.observation.requires_provider = self.mode == .ready;
         self.operation_entries[0] = .{
             .contract = .{
                 .id = "core.empty-invocation@1",
@@ -959,8 +960,7 @@ const InvocationPreparationProbe = struct {
                 .outcomes = &.{.ok},
                 .side_effect = .none,
             },
-            .context = self,
-            .invoke_fn = invokeOperation,
+            .binding = @import("../application/workflow_operation_binding.zig").bind(OperationObservation, &self.observation, invokeOperation),
         };
         self.operation_entries[1] = .{
             .contract = .{
@@ -969,14 +969,12 @@ const InvocationPreparationProbe = struct {
                 .outcomes = &.{.ok},
                 .side_effect = .none,
             },
-            .context = self,
-            .invoke_fn = invokeOperation,
+            .binding = @import("../application/workflow_operation_binding.zig").bind(OperationObservation, &self.observation, invokeOperation),
         };
         self.operation_registry = .{
             .operations = &self.operation_entries,
             .policies = core_workflow_operations.registry.policies,
             .gates = &.{},
-            .capabilities = &.{},
         };
         return &self.operation_registry;
     }
@@ -1011,6 +1009,7 @@ const InvocationPreparationProbe = struct {
                     unreachable;
                 };
                 self.prepared_registry = llm_provider_registry.registry(registry_owner);
+                self.observation.provider_ready = self.prepared_registry.?.count() == 0;
                 break :ready .{ .ready = model_provider_bootstrap_services.ModelProviderBootstrapServices.init(
                     llm_provider_registry_service.LLMProviderRegistryService.init(registry_owner),
                     allowlist_owner,
@@ -1020,23 +1019,28 @@ const InvocationPreparationProbe = struct {
     }
 
     fn invokeOperation(
-        context: ?*anyopaque,
+        context: ?*OperationObservation,
         input: workflow_operation_registry.Input,
     ) workflow_operation_registry.Error!workflow_execution.Candidate {
-        const self: *InvocationPreparationProbe = @ptrCast(@alignCast(context.?));
+        const self = context.?;
         switch (input) {
             .invocation => self.invocation_calls += 1,
             .step => {
                 self.step_calls += 1;
-                if (self.mode == .ready and
-                    (self.prepared_registry == null or self.prepared_registry.?.count() != 0))
-                {
+                if (self.requires_provider and !self.provider_ready) {
                     return error.OperationExecutionFailed;
                 }
             },
         }
         return .{ .outcome = .ok, .delta = .{} };
     }
+};
+
+const OperationObservation = struct {
+    invocation_calls: usize = 0,
+    step_calls: usize = 0,
+    requires_provider: bool = false,
+    provider_ready: bool = false,
 };
 
 const RuntimeAfterObservations = struct {

@@ -18,6 +18,13 @@ an unchecked heterogeneous map or runtime reflection. Target-project YAML/JSON
 examples may still mention TypeScript, JavaScript, or Node because those are
 environments the Zig engine governs.
 
+Result carriers in `text` blocks are engine-side types, not automatic JSON
+schemas. For example, `{kind, proposal}` does not require a wire `proposal`
+wrapper. Under [ADR 0006](decisions/0006-minimal-model-response.md), the selected
+response schema omits fixed unit tags already bound by the engine and exposes
+the candidate fields directly. Meaningful nested objects, discriminators and
+collections remain; there is no generic flattening of arbitrary model JSON.
+
 ## Contents
 
 1. [Pipeline node contracts](#pipeline-node-interfaces)
@@ -9912,52 +9919,32 @@ MechanicalGuidance =
 
 ## 22. Model response envelope
 
+Under [ADR 0006](decisions/0006-minimal-model-response.md), the model returns
+only the closed result object. `model-envelope/v1` and the exact request,
+attempt, workflow/unit, binding and result-schema identities stay with the
+runner's immutable invocation context; they are not echoed by the model.
+
+For a schema allowing only a task-edge proposal:
+
 ```json
 {
-  "schemaVersion": "model-envelope/v1",
-  "requestId": {
-    "purpose": "initial_generation",
-    "stageRunEpochId": "epoch-42",
-    "immutableUnitOwnerId": {
-      "kind": "task_cluster",
-      "planStateId": "state:feature:plan:7",
-      "obligationClusterId": "cluster-4"
-    },
-    "modelOperationId": {
-      "workflowId": "tasks",
-      "workflowVersion": 1,
-      "workflowStepId": "reconcile-dependencies"
-    },
-    "requestOrdinal": 3
-  },
-  "stage": "tasks",
-  "modelOperationId": {
-    "workflowId": "tasks",
-    "workflowVersion": 1,
-    "workflowStepId": "reconcile-dependencies"
-  },
-  "unit": {
-    "type": "task-edge-candidate/v1",
-    "id": "edge-unit-7"
-  },
-  "resultSchemaId": "result.task-edge/v1",
-  "result": {
-    "kind": "task-edge",
-    "payload": {
-      "predecessorInternalKey": "verify-login",
-      "successorInternalKey": "implement-login",
-      "reason": {
-        "nodes": [
-          {
-            "kind": "literal",
-            "value": "Implementation must make the intended-red verification pass."
-          }
-        ]
+  "predecessorInternalKey": "verify-login",
+  "successorInternalKey": "implement-login",
+  "reason": {
+    "nodes": [
+      {
+        "kind": "literal",
+        "value": "Implementation must make the intended-red verification pass."
       }
-    }
+    ]
   }
 }
 ```
+
+The selected task keys and typed reason are meaningful candidate data and
+remain. A schema permitting alternative results adds one root `kind` to
+distinguish them; it does not add another wrapper. Exact field schemas remain
+workflow-declared and bounded. The example defines no built-in model route.
 
 ---
 
@@ -9965,19 +9952,20 @@ MechanicalGuidance =
 
 ## 23. Model context request
 
+For an operation whose declared alternatives include this excerpt request,
+one discriminator selects the allowed context-result variant. The excerpt
+schema is already bound by the engine; there is no echoed `schemaId` or outer
+`needs-context` wrapper. The request grants no read authority by itself.
+
 ```json
 {
-  "kind": "needs-context",
-  "schemaId": "authorized-file-excerpt/v1",
-  "request": {
-    "kind": "authorized-file-excerpt",
-    "fileId": "file-17",
-    "selector": {
-      "kind": "exported-symbol-signature",
-      "symbolId": "symbol-4"
-    },
-    "reasonCode": "NEED_EXPORTED_SIGNATURE"
-  }
+  "kind": "authorized-file-excerpt",
+  "fileId": "file-17",
+  "selector": {
+    "kind": "exported-symbol-signature",
+    "symbolId": "symbol-4"
+  },
+  "reasonCode": "NEED_EXPORTED_SIGNATURE"
 }
 ```
 
@@ -10321,22 +10309,27 @@ RepairAuthorization =
     }
 
 RepairResponse =
-  | ReplaceResponse { authorizationId, candidateRevision, diagnosticId, replacement }
-  | InsertResponse { authorizationId, candidateRevision, diagnosticId, element }
-  | DeleteResponse { authorizationId, candidateRevision, diagnosticId, confirmDelete: true }
-  | ReplaceGroupResponse {
-      authorizationId,
-      candidateRevision,
-      diagnosticId,
-      replacementsByTargetId
-    }
+  | ReplaceResponse { replacement }
+  | InsertResponse { element }
+  | DeleteResponse { confirmDelete: true }
+  | ReplaceGroupResponse { replacementsByTargetId }
 ```
+
+The engine selects exactly one response schema from its bound authorization;
+the model cannot select a repair operation. Authorization, diagnostic and
+revision checks use the existing runner-owned context, not model echoes.
 
 ---
 
 <a id="repair-request"></a>
 
 ## 29. Repair request
+
+The sample below is model-visible guidance plus its response schema. The
+engine retains authorization, candidate revision, diagnostic identity and
+compiled-policy identity separately; complete applicable rule bindings remain
+in guidance. This does not remove authorization or old-value checks.
+The sample response's 256-character limit is illustrative, not an engine default.
 
 This filename-shaped repair is a fallback-only example for a specialized preset
 that explicitly enables `allowRawPathFallback`. In the normal flow the model
@@ -10348,11 +10341,7 @@ filename exists to repair.
 ```json
 {
   "repairRequest": {
-    "authorizationId": "repair-auth-9",
-    "candidateRevision": 4,
-    "diagnosticId": "diag-41",
     "code": "PATH_FILENAME_PATTERN_INVALID",
-    "compiledEnginePolicyStateId": "compiled-policy-1",
     "targetPointer": "/rawPathFallbacks/file-3/repoRelativePath",
     "actual": "src/components/login-form.tsx",
     "expected": {
@@ -10427,10 +10416,10 @@ filename exists to repair.
     }
   },
   "responseSchema": {
-    "authorizationId": "repair-auth-9",
-    "candidateRevision": 4,
-    "diagnosticId": "diag-41",
-    "replacement": "string"
+    "type": "object",
+    "properties": { "replacement": { "type": "string", "maxLength": 256 } },
+    "required": ["replacement"],
+    "additionalProperties": false
   }
 }
 ```
@@ -10443,9 +10432,6 @@ filename exists to repair.
 
 ```json
 {
-  "authorizationId": "repair-auth-9",
-  "candidateRevision": 4,
-  "diagnosticId": "diag-41",
   "replacement": "src/components/LoginForm.tsx"
 }
 ```

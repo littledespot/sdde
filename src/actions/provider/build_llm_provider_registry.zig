@@ -73,6 +73,7 @@ pub const Action = struct {
                         return error.LLMProviderRegistryInvalid;
                     },
                     .supported_reasoning_efforts = registered.supported_reasoning_efforts,
+                    .capabilities = registered.capabilities,
                 };
                 entry_index += 1;
             }

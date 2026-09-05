@@ -19,8 +19,32 @@ pub const Candidate = struct {
     delta: pipeline.NodeDelta,
 };
 
-pub const Applied = struct {
+pub const Applied = union(enum) {
     outcome: workflow.OutcomeTag,
+    rejected: Rejection,
+
+    pub fn status(self: Applied) workflow.OutcomeTag {
+        return switch (self) {
+            .outcome => |tag| tag,
+            .rejected => |reason| reason.status(),
+        };
+    }
+};
+
+pub const Rejection = union(enum) {
+    gate: @import("workflow_gate.zig").Rejection,
+    authority,
+    logging: @import("feature_log_stream.zig").FailureCode,
+    cancelled,
+    deadline_exhausted,
+
+    pub fn status(self: Rejection) workflow.OutcomeTag {
+        return switch (self) {
+            .gate, .logging => .blocked,
+            .authority, .deadline_exhausted => .failed,
+            .cancelled => .cancelled,
+        };
+    }
 };
 
 pub const Outcome = workflow.OutcomeTag;

@@ -36,6 +36,8 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
         !graph.authority.total_model_token_budget.isValid() or
         graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return invalid())) return invalid();
     for (steps) |step| {
+        if (!@import("../../domain/workflow_capability.zig").permits(graph.authority.allowed_capabilities, step.capabilities)) return invalid();
+        if (!@import("../../domain/workflow_model.zig").validProjection(step)) return invalid();
         const retry_parameter = findParameter(step.parameters, workflow_retry.parameter_id);
         if (step.retry_authority) |authority| {
             if (!authority.isValid() or
@@ -63,6 +65,10 @@ fn validateDataSchemas(authority: compilation.SemanticAuthority) Error!void {
     var required: KeyState = @splat(false);
     for (authority.invocation_outputs) |key| required[@intFromEnum(key)] = true;
     for (authority.steps) |step| {
+        for (step.gates) |gate| {
+            required[@intFromEnum(gate.evidence)] = true;
+            for (gate.authority) |key| required[@intFromEnum(key)] = true;
+        }
         inline for (.{ step.requires, step.optional, step.produces, step.replaces, step.invalidates }) |keys| {
             for (keys) |key| required[@intFromEnum(key)] = true;
         }
@@ -199,6 +205,10 @@ fn validateDataFlow(allocator: std.mem.Allocator, graph: compilation.CompiledWor
 
 fn applyDataContract(input: KeyState, step: compilation.CompiledStep) Error!KeyState {
     var result = input;
+    for (step.gates) |gate| {
+        if (!input[@intFromEnum(gate.evidence)]) return invalid();
+        for (gate.authority) |key| if (!input[@intFromEnum(key)]) return invalid();
+    }
     for (step.requires) |key| if (!input[@intFromEnum(key)]) return invalid();
     for (step.produces) |key| {
         if (result[@intFromEnum(key)]) return invalid();

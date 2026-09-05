@@ -180,7 +180,7 @@ flowchart TD
     FACTS --> ALLOW
 
     ALLOW --> EXTRACT[reference.extract returns only closed claim/citation proposals]
-    EXTRACT --> XSCHEMA[Validate envelope, request identity and positive extraction outcome]
+    EXTRACT --> XSCHEMA[Validate runner-bound call association,<br/>compact result schema and positive extraction outcome]
     XSCHEMA --> CITE[Validate every citation against immutable source bytes, source map and chunk]
     CITE --> CID[Assign canonical citation and claim IDs; validate typed claims]
     FACTS --> TOK[Validate one preserve/irrelevant disposition per structured candidate]

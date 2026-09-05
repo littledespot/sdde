@@ -11,21 +11,24 @@ flowchart TD
     PSTAGE -- Plan tasks or implement --> PSEL[Select every raw principle chunk/span in configured eligible filename categories<br/>free text is never ranked, summarized or omitted by inferred meaning]
     PSTAGE -- Reference or specify --> GUIDE[Build initial deterministic guidance action<br/>closed schema, allowed IDs, preset rules, limits and minimal example]
     PSEL --> PFIT{Complete selection fits the compiled operation budget}
-    PFIT -- No --> STOP[Blocked or failed unit; no artifact write]
+    PFIT -- No --> STOP[Blocked, failed or cancelled unit; no artifact write]
     PFIT -- Yes --> GUIDE
     EPOCH[Trusted stage-run epoch and closed request-purpose registry] --> MLEDGER[BuildInitialModelRequestIdentityLedgerAction<br/>once for the run; initialize no request implicitly]
     GUIDE --> UOWNER[BuildImmutableUnitOwnerIdAction<br/>closed stage-specific owner tuple from current canonical authorities]
     UOWNER --> MID[AssignModelRequestIdAction<br/>allocate one generation-purpose logical request ID from the current run-local ledger]
     MLEDGER --> MID
     MID --> MBIND[ValidateModelRequestBindingAction<br/>prove epoch, unit, compiled operation, purpose, ordinal and ledger membership]
-    MBIND --> REQ[BuildModelRequestAction<br/>versioned request carrying only the validated engine-owned request identity]
+    MBIND --> REQ[BuildModelRequestAction<br/>retain engine identity internally;<br/>send needed guidance, evidence and compact result schema]
     REQ --> MADV[AdvanceModelAttemptAccountingAction<br/>reserve initial attempt ordinal; no global attempt ceiling]
     MADV --> MINVOKED[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to invoked exactly once]
     MINVOKED --> MTOKEN{ReserveWorkflowTokenBudgetAction<br/>exact input plus maximum output against this execution's total token budget}
     MTOKEN -- Insufficient --> MTTERM[Compiled YAML terminal outcome; invoke nothing]
     MTTERM --> STOP
     MTOKEN -- Reserved --> CALL[InvokeModelAction]
-    CALL --> DECODE[Decode model envelope action]
+    CALL --> OBS{ValidateProviderInvocationObservationAction<br/>exact runner-owned call association and complete-result eligibility}
+    OBS -- Invalid trusted association --> STOP
+    OBS -- Complete candidate --> DECODE[DecodeModelEnvelopeAction<br/>parse one compact JSON object and retain trusted binding]
+    OBS -- Failure, stopped or cancelled --> POUT[Compiled YAML provider outcome;<br/>no candidate decode or protocol repair]
 
     DECODE -- No typed result --> PROTO[YAML-declared protocol-retry operation]
     PROTO --> PG[Build protocol-only retry guidance action]
@@ -36,11 +39,11 @@ flowchart TD
     PMADV -- Reserved --> PTOKEN{ReserveWorkflowTokenBudgetAction<br/>against the same workflow-execution ledger}
     PTOKEN -- Insufficient --> PTERM
     PTOKEN -- Reserved --> PCALL[InvokeModelAction]
-    PCALL --> DECODE
+    PCALL --> OBS
 
-    DECODE -- Typed result --> IDENT[Validate request identity and workflow-declared result schema actions]
-    IDENT -- Invalid envelope identity/schema --> PROTO
-    IDENT -- Valid --> ROUTE{Closed operation-result discriminator}
+    DECODE -- Parsed result --> SCHEMA[ValidateModelPayloadSchemaAction<br/>exact bound compact result schema]
+    SCHEMA -- Invalid result schema --> PROTO
+    SCHEMA -- Valid --> ROUTE{Declared result variant;<br/>root kind only for alternatives}
 
     ROUTE -- clarification_needed --> NEED[ValidateClarificationNeedProposalAction]
     NEED -- Valid genuine current authority gap; no operation retry consumed --> NACCEPT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with needs_user]
@@ -98,12 +101,17 @@ flowchart TD
     RINVOKED -- already invoked; protocol retry --> RTOKEN
     RTOKEN -- Insufficient --> RABORT
     RTOKEN -- Reserved --> RCALL[InvokeModelAction]
-    RCALL --> RDECODE[Decode repair envelope]
+    RCALL --> ROBS{ValidateProviderInvocationObservationAction<br/>exact repair-call association and complete-result eligibility}
+    ROBS -- Invalid trusted association --> STOP
+    ROBS -- Complete candidate --> RDECODE[DecodeModelEnvelopeAction then ValidateModelPayloadSchemaAction<br/>compact repair result and bound schema]
+    ROBS -- Failure, stopped or cancelled --> POUT
     RDECODE -- No typed repair --> RPROTO[YAML-declared protocol-retry operation]
     RPROTO --> RPG[Build repair-protocol retry guidance]
     RPG --> RPREQ[ValidateModelRequestBindingAction then BuildModelRequestAction<br/>protocol-only retry retaining the same repair request ID;<br/>do not allocate or repeat assigned-to-invoked]
     RPREQ --> RMADV
-    RDECODE -- Typed repair --> RSCOPE[ValidateRepairEnvelopeAction then ValidateRepairScopeAction<br/>prove identity, authorization, pointer and one-operation scope;<br/>consume the unit-local one-shot only for no-invention replacement]
+    RDECODE -- Typed repair --> RBOUND{ValidateRepairEnvelopeAction<br/>retained authorization, diagnostic and current candidate revision}
+    RBOUND -- Invalid or stale authority --> STOP
+    RBOUND -- Valid --> RSCOPE[ValidateRepairScopeAction<br/>prove authorized pointer/key set and one-operation scope;<br/>consume the unit-local one-shot only for no-invention replacement]
     RSCOPE -- Invalid --> RPROTO
     RSCOPE -- Valid --> MERGE[MergeAtomicRepairAction]
     MERGE --> IMPACT[Run producing and dependent validators]

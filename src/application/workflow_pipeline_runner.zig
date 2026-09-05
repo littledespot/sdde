@@ -59,22 +59,22 @@ pub const Runner = struct {
     }
 
     fn invokeInvocation(self: *Runner) execution.Applied {
-        if (runtimeTerminal(self.runtime)) |outcome| return .{ .outcome = outcome };
-        if (!self.schemasMatch()) return .{ .outcome = .failed };
+        if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
+        if (!self.authorityMatches()) return .{ .rejected = .authority };
         const authority = self.selected.graph.authority;
         const entry = self.operation_registry.resolveOperation(authority.invocation_operation_id) orelse {
-            return .{ .outcome = .failed };
+            return .{ .rejected = .authority };
         };
         if (entry.contract.kind != .invocation or
             !std.mem.eql(pipeline.DataKey, entry.contract.produces, authority.invocation_outputs))
         {
-            return .{ .outcome = .failed };
+            return .{ .rejected = .authority };
         }
         var candidate = entry.invoke(.{ .invocation = .{ .arguments = self.selected.invocation.arguments } }) catch {
             return .{ .outcome = .failed };
         };
         defer self.envelope.discard(&candidate.delta);
-        if (runtimeTerminal(self.runtime)) |outcome| return .{ .outcome = outcome };
+        if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!containsOutcome(entry.contract.outcomes, candidate.outcome)) return .{ .outcome = .failed };
         const contract: pipeline.NodeContract = .{
             .id = authority.invocation_operation_id.bytes,
@@ -87,19 +87,30 @@ pub const Runner = struct {
     }
 
     fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
-        if (runtimeTerminal(self.runtime)) |outcome| return .{ .outcome = outcome };
-        if (!self.schemasMatch()) return .{ .outcome = .failed };
-        const index = findStepIndex(self.selected.graph.authority.steps, id) orelse return .{ .outcome = .failed };
-        if (index >= self.retry_execution_counts.len) return .{ .outcome = .failed };
+        if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
+        if (!self.authorityMatches()) return .{ .rejected = .authority };
+        const index = findStepIndex(self.selected.graph.authority.steps, id) orelse return .{ .rejected = .authority };
+        if (index >= self.retry_execution_counts.len) return .{ .rejected = .authority };
         const step = &self.selected.graph.authority.steps[index];
-        if (step.retry_authority) |authority| {
-            if (self.retry_execution_counts[index] > @as(u64, authority.limit.value)) return .{ .outcome = .failed };
-            self.retry_execution_counts[index] = std.math.add(u64, self.retry_execution_counts[index], 1) catch {
-                return .{ .outcome = .failed };
-            };
+        const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .rejected = .authority };
+        if (!contractMatchesStep(entry.contract, step.*) or
+            !equalStrings(entry.binding.capabilities(), step.capabilities) or
+            !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .authority };
+        for (step.gates) |gate| {
+            if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
+            const current = self.operation_registry.resolveGate(gate.id) orelse return .{ .rejected = .authority };
+            if (!gate.eql(current.*)) return .{ .rejected = .authority };
+            if (self.envelope.checkGate(gate)) |reason| return .{ .rejected = .{ .gate = reason } };
         }
-        const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .outcome = .failed };
-        if (!contractMatchesStep(entry.contract, step.*)) return .{ .outcome = .failed };
+        if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
+        if (entry.contract.model_capacity) |capacity| {
+            const expected = @import("../domain/workflow_model.zig").resolve(
+                self.operation_registry.model_capacity orelse return .{ .outcome = .failed },
+                capacity,
+                step.parameters,
+            ) orelse return .{ .outcome = .failed };
+            if (!std.meta.eql(expected, step.model orelse return .{ .outcome = .failed })) return .{ .outcome = .failed };
+        } else if (step.model != null) return .{ .outcome = .failed };
         const input_data = self.envelope.view(stepPipelineContract(step.*)) catch return .{ .outcome = .invalid };
         var resource_buffer: [definition.max_parameters]compilation.CompiledResource = undefined;
         const resources = bindStepResources(
@@ -110,6 +121,13 @@ pub const Runner = struct {
         var resolved_binding = self.resolveModelBinding(step.*) catch {
             return .{ .outcome = .failed };
         };
+        if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
+        if (step.retry_authority) |authority| {
+            if (self.retry_execution_counts[index] > @as(u64, authority.limit.value)) return .{ .outcome = .failed };
+            self.retry_execution_counts[index] = std.math.add(u64, self.retry_execution_counts[index], 1) catch {
+                return .{ .outcome = .failed };
+            };
+        }
         var candidate = entry.invoke(.{ .step = .{
             .data = input_data,
             .step = step,
@@ -118,7 +136,7 @@ pub const Runner = struct {
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
         } }) catch return .{ .outcome = .failed };
         defer self.envelope.discard(&candidate.delta);
-        if (runtimeTerminal(self.runtime)) |outcome| return .{ .outcome = outcome };
+        if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .outcome = .failed };
         return self.applyCandidate(stepPipelineContract(step.*), &candidate);
     }
@@ -157,7 +175,12 @@ pub const Runner = struct {
         return resolved;
     }
 
-    fn schemasMatch(self: *const Runner) bool {
+    fn authorityMatches(self: *const Runner) bool {
+        if (!self.operation_registry.validate()) return false;
+        const authority = self.selected.graph.authority;
+        const policy = self.operation_registry.resolvePolicy(authority.policy_profile_id) orelse return false;
+        if (!equalStrings(policy.allowed_capabilities, authority.allowed_capabilities) or
+            policy.total_model_token_budget.value != authority.total_model_token_budget.value) return false;
         for (self.selected.graph.authority.data_schemas) |schema| {
             const current = data.find(self.operation_registry.data_schemas, schema.key) orelse return false;
             if (!schema.eql(current)) return false;
@@ -166,10 +189,10 @@ pub const Runner = struct {
     }
 
     fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: *execution.Candidate) execution.Applied {
-        self.envelope.apply(contract, &candidate.delta) catch return .{ .outcome = .invalid };
+        self.envelope.apply(contract, &candidate.delta, candidate.outcome) catch return .{ .outcome = .invalid };
         for (candidate.delta.addedTelemetryFacts()) |fact| {
             const logging_result = self.barrier.process(fact);
-            if (logging_result == .blocked) return .{ .outcome = .blocked };
+            if (logging_result == .blocked) return .{ .rejected = .{ .logging = logging_result.blocked } };
         }
         return .{ .outcome = candidate.outcome };
     }
@@ -199,9 +222,13 @@ fn contractMatchesStep(
         std.mem.eql(pipeline.DataKey, contract.invalidates, step.invalidates) and
         std.mem.eql(workflow.OutcomeTag, contract.outcomes, step.outcomes) and
         contract.side_effect == step.side_effect and
-        equalStrings(contract.gates, step.gates) and
-        equalStrings(contract.capabilities, step.capabilities) and
+        gateIdsMatch(contract.gates, step.gates) and
         retryContractMatches(contract, step);
+}
+fn gateIdsMatch(ids: []const []const u8, gates: []const @import("../domain/workflow_gate.zig").Contract) bool {
+    if (ids.len != gates.len) return false;
+    for (ids, gates) |id, gate| if (!std.mem.eql(u8, id, gate.id.bytes)) return false;
+    return true;
 }
 fn retryContractMatches(contract: operation.Contract, step: compilation.CompiledStep) bool {
     if (contract.retry_limit == null or step.retry_authority == null) {
@@ -272,10 +299,10 @@ fn hasModelSlot(parameters: []const compilation.CompiledParameter) bool {
     for (parameters) |parameter| if (parameter.value == .model_slot) return true;
     return false;
 }
-fn runtimeTerminal(runtime: pipeline.NodeRuntime) ?workflow.OutcomeTag {
+fn runtimeTerminal(runtime: pipeline.NodeRuntime) ?execution.Rejection {
     return switch (runtime.status()) {
         .active => null,
         .cancelled => .cancelled,
-        .deadline_exhausted => .failed,
+        .deadline_exhausted => .deadline_exhausted,
     };
 }

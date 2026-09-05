@@ -49,6 +49,9 @@ pub const ValidatedProviderModelBinding = struct {
     slot_id: identity.ModelSlotId,
     registry_entry: *const provider_registry.Entry,
     reasoning_effort: ?[]const u8,
+    capacity: @import("model_limits.zig").Capacity,
+    response_mode: @import("model_controls.zig").ResponseGuidanceMode,
+    controls: @import("model_controls.zig").InferenceControls,
 
     pub fn bindingId(self: ValidatedProviderModelBinding) ProviderModelBindingId {
         return .{

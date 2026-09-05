@@ -398,6 +398,51 @@ service is published.
 
 ## 7. Registered-operation graph compilation
 
+Model-capable contracts additionally require explicit positive `input-bytes`,
+`output-bytes`, `input-tokens`, `output-tokens`, and `response-mode` parameters.
+The compiler projects their typed requirements into each model step using the
+existing registry's engine and operation capacity facts. Immutable storage
+retains that projection; the runner rejects divergence from its registered
+contract before invoking the step. F0006 owns capability compatibility and the
+final intersection with the selected catalogue model. These per-operation
+capacities add no workflow-global budget, retry authority or registry.
+
+The selected result-schema resource describes the entire compact model result
+under [ADR 0006](../decisions/0006-minimal-model-response.md), not an inner
+payload or repeated execution metadata. The protocol version and exact resource
+identity stay in compiled authority; no new envelope field is needed in YAML.
+
+### Execution guards
+
+A gate is a versioned native contract in the existing operation registry: its
+ID, issuing operation ID, evidence key, and nonempty authority-key set. The
+issuer is an ordinary YAML-visible validation operation. It must require those
+authority keys and produce or replace the gate's closed accepted/rejected
+evidence value. It is side-effect-free and holds no operational ports. No other
+operation may write that evidence key.
+
+The runner records each applied value's local generation, producer, outcome,
+and input generations in its envelope. Before a protected operation, a gate
+requires accepted evidence from a successful execution of its exact issuer,
+bound to the still-present, unchanged authority generations. Missing, rejected,
+foreign, or stale evidence blocks execution. Refresh and domain validation
+remain explicit YAML operations; guards perform no I/O or hidden validation
+workflow. Evidence cannot be imported from a prior envelope as authority.
+
+Capabilities are derived from the concrete narrow-port types held by each
+registered operation binding, not a second asserted list. The compiler captures
+that set and the selected policy ceiling; the runner checks the current binding
+against both before invoking it. A binding cannot expose an undeclared erased
+capability or service locator. Kernel rejection is terminal, not a YAML outcome
+that can route around the guard. Cancellation is checked before and after guard
+evaluation. These contracts add no workflow-YAML fields.
+
+The current registered operational port is `LLMProviderInterface`
+(`model-provider`). Further port types require explicit native registration;
+unknown erased contexts or callback fields are rejected, not inferred as pure.
+
+### Compilation checks
+
 `CompileWorkflowGraphAction` is a pure deterministic compiler over one
 schema-valid definition and immutable registered contracts. It resolves every
 reference exactly and version-exactly once, binds the invocation contract,

@@ -62,6 +62,7 @@ pub const Fixture = struct {
             .model = .{ .bytes = "fake-model" },
             .implementation_id = .{ .ordinal = 1 },
             .config = .empty_object,
+            .capabilities = @import("model_contract_test_fixture.zig").capabilities,
             .supported_reasoning_efforts = &.{"low"},
         };
         self.provider_binding = .{
@@ -69,6 +70,12 @@ pub const Fixture = struct {
             .slot_id = .{ .bytes = "generation" },
             .registry_entry = &self.registry_entry,
             .reasoning_effort = "low",
+            .capacity = .{
+                .canonical = @import("domain/model_limits.zig").Limits.init(256, 40, 100, 20, 100).?,
+                .wire = @import("model_contract_test_fixture.zig").capacity.wire,
+            },
+            .response_mode = .prompt_only,
+            .controls = .{ .temperature = @import("domain/model_controls.zig").TemperaturePermille.init(100) },
         };
         self.request = try operation.IdentifiedProviderNeutralModelRequest.init(.{
             .model_request_id = self.model_request_id,
@@ -80,8 +87,8 @@ pub const Fixture = struct {
             .content = &.{ .{ .system = "Return the declared result." }, .{ .user = "Generate the bounded candidate." } },
             .response_schema = "{}",
             .response_guidance_mode = .prompt_only,
-            .controls = .{ .temperature = operation.TemperaturePermille.init(100) },
-            .limits = operation.EffectiveModelLimits.init(256, 40, 100, 20, 100).?,
+            .controls = self.provider_binding.controls,
+            .limits = self.provider_binding.capacity.canonical,
         });
         self.preloader = .{ .allocator = allocator };
         self.clock = .{};
