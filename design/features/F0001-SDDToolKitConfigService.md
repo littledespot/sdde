@@ -129,7 +129,7 @@ Semantic ownership remains outside F0001:
 | Consumer | Owned semantic work |
 | --- | --- |
 | Logging-policy compiler | Canonicalize `config.logs.level` once, validate console/prompt choices, inject every F0002 operational constant, and produce the persisted logging-policy fragment. |
-| F0006 repository-model allowlist boundary | Validate every `config.models.slots` tuple against the complete provider catalogue, publish immutable slot-to-catalogue-entry references without copying provider configuration, and resolve the slot explicitly selected by each compiled YAML model operation. |
+| F0006 repository-model allowlist boundary | Validate every `config.models.slots` tuple against the complete provider catalogue, publish immutable slot-to-catalogue-entry references without copying provider configuration, and resolve the slot selected by each originating YAML request step; consumers retain that binding under ADR 0012. |
 | [F0004 bootstrap-root path-policy boundary](F0004-BootstrapRootRegistryService.md) | Validate the seven configured directory roots plus `config.paths.providers`, reserve their distinct typed roles, and construct the `BootstrapRootRegistry`; F0001 does not resolve a path itself. |
 | [F0008 provider-config reader](F0008-LLMProviderConfigService.md) | Consume only F0004's opaque provider-document capability and capture its bytes; it does not reread F0001 or resolve the raw string. |
 

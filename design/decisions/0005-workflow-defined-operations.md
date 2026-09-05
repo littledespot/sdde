@@ -103,10 +103,10 @@ other hidden default. Inline bounded values may be supported where concise.
 
 ### Model operations
 
-A generic model operation declares in YAML:
+An originating generic model-request step declares in YAML:
 
 - the repository model slot from `.sddtoolkit.json`;
-- the prompt/guidance and request/result schema resource references;
+- the prompt/guidance and result-schema resource references;
 - the typed inputs, outputs, controls, and allowed context behavior required
   by that operation; and
 - every outcome transition, including repair, failure, and cancellation.
@@ -130,17 +130,21 @@ registered operation contract bounds that value and the compiler rejects a
 missing limit or an unbounded retry cycle. An operation with no retry path does
 not acquire a hidden retry.
 
-The workflow never names a provider or model directly. The selected slot must
+The workflow never names a provider or model directly. The originating step's selected slot must
 resolve through `ValidatedRepositoryModelAllowlist` to the immutable provider
 registry entry prepared for that invocation. Authorization cannot silently
 replace the YAML's slot, resources, control flow, or requested operation
 semantics.
 
-The stable model-operation identity is derived from the compiled workflow ID,
-workflow version, and step ID. Logging, request identity, persistence, and
-recovery use that identity instead of a built-in route ID. A workflow-resource
-change is a workflow-authority change and is handled by the same compilation,
-state-binding, and recovery rules as a graph change.
+Under [ADR 0012](0012-workflow-owned-model-request.md), the stable model-operation
+identity is derived from the compiled workflow ID, version and originating step.
+Separate YAML consumers retain the same request through typed pipeline data;
+they do not repeat slot/resource controls or substitute their own step ID.
+The internal request contract is `model-request/v1`, not a YAML resource.
+Logging and request identity use the originating identity instead of a built-in
+route ID. A workflow-resource change is a workflow-authority change, handled by
+the same compilation and state-binding rules as a graph change. Request state
+remains execution-local; ADR 0009 permits no interrupted-workflow resumption.
 
 ## Consequences
 

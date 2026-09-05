@@ -38,6 +38,11 @@ size estimates or static-capacity gates apply to model calls. The sole cumulativ
 consumption limit is actual API-reported token usage per workflow execution.
 This decision is settled; obsolete capacity requirements are not approval gates.
 
+**Workflow-request amendment:** [ADR 0012](decisions/0012-workflow-owned-model-request.md)
+accepts generic execution-owned requests and one immutable identity/binding/resource
+handoff between explicit YAML operations. SDD-specific ownership validation remains
+required for SDD work, but is not a prerequisite for a generic model request.
+
 **Primary inputs:** The historical prompts, templates, and flow documentation cited throughout this design, plus `design/paths.md`, `design/schemas/sddtoolkit-config.schema.json`, and the current source examples under `design/toolchainPresets/`, `design/examples/.sddtoolkit.json`, and `design/templates/`.
 
 **Out of scope:** Editing the current prompts/scripts; defining the domain
@@ -557,7 +562,7 @@ output. No durable reservation/retirement transaction or checkpoint is
 required before a model or command call. Clarification identity follows its
 separate preservation contract. Models never assign state IDs.
 
-Logical model requests have the same discipline. `BuildImmutableUnitOwnerIdAction` constructs one closed stage-specific owner tuple from already canonical authorities. `AssignModelRequestIdAction` consumes the current run-local `ModelRequestIdentityLedger` and returns the next ordinal plus successor ledger. The tuple fixes stage epoch, unit owner, compiled model-operation identity, purpose, purpose owner, and ordinal; the model supplies none of them. Protocol-format retries retain the same logical request ID and advance its attempt count only through that retry operation instance's explicit limit. A new repair, semantic review, clarification resolution, or context follow-up receives a distinct purpose-bound request ID. It cannot reset either an operation instance's local retry counter or the workflow execution's total-token ledger.
+Logical model requests follow [ADR 0012](decisions/0012-workflow-owned-model-request.md): one process-local execution identity, originating compiled YAML step and request ordinal identify a generic request without inventing SDD ownership. `BuildInitialModelRequestIdentityLedgerAction` creates the fresh epoch and sole run-local ledger. `AssignModelRequestIdAction` returns the next ordinal and immutable successor. The originating step selects slot, controls and resources once; separate validation, preparation and consumer steps retain the exact request association through typed pipeline data rather than rebinding to their own step. `BuildImmutableUnitOwnerIdAction` still validates the required canonical SDD owner tuple for SDD-specific work; generic ownership grants no repair, semantic-review or clarification authority. Protocol-format retries retain the same logical request ID and advance its attempt count only through that retry operation instance's explicit limit. A new repair, semantic review, clarification resolution, or context follow-up receives a distinct purpose-bound request ID. It cannot reset either an operation instance's local retry counter or the workflow execution's total-token ledger.
 
 ---
 
@@ -811,10 +816,11 @@ when:
   or command adapter is missing;
 - an environment's `targetPlatforms` set is empty, contains duplicates, or cannot be resolved completely before path-policy compilation;
 - the active workspace filesystem policy cannot be detected/resolved, or any candidate collides/fails under that policy even though it passes the configured deployment targets;
-- a model operation omits its YAML-declared repository slot, prompt/guidance,
-  request/result schema, supported controls, or outcome transitions; a named slot does not
+- a request-origin operation omits its YAML-declared repository slot, prompt/guidance,
+  result schema, supported controls, or outcome transitions; a named slot does not
   resolve through the validated repository allowlist; or an operation attempts
-  to use an undeclared packaged/default resource;
+  to use an undeclared packaged/default resource; a consumer lacks the typed
+  retained-request dependency or attempts to reselect its binding/resources;
 - a numeric limit is negative, zero where prohibited, or above an engine safety maximum;
 - `references.followSymlinks` is anything other than the required v1 constant `false`; followed reference symlinks are deliberately unsupported until a separate version defines containment, loop, depth, deduplication, and accounting semantics;
 - a reference traversal/decoder limit (`maxEntries`, directory depth, source/decoded byte totals, blocks, pages, cells, decoder time/memory, or archive expansion limits when applicable) is absent or exceeds the engine hard maximum;
@@ -1335,13 +1341,18 @@ Some current gates—testability, ambiguity, minimality, unsupported behavior, a
 
 ### 12.7 Workflow-defined model operations
 
-The engine ships no model-route registry. Each model-capable workflow step
-calls the registered generic model operation and declares its model slot,
-prompt/guidance resources, request and result schemas, supported controls, allowed
+The engine ships no model-route registry. The originating model-request step
+calls a registered generic operation and declares its model slot,
+prompt/guidance resources, result schema, supported controls, allowed
 context behavior, and outcome transitions in the workflow definition. Large
 resources are declared once and referenced by concise local IDs. The compiler
 captures and validates every declared resource before execution; there is no
 packaged route descriptor, prompt, schema, slot assignment, or fallback.
+Under ADR 0012, later YAML operations consume the same immutable request through
+their typed data dependencies. They retain its slot, resources, controls and
+identity; they do not declare replacement selections for their own step.
+The internal `model-request/v1` content contract is not a YAML resource; the
+workflow supplies prompt content and its closed result-schema resource.
 
 The workflow-selected slot must resolve through `.sddtoolkit.json`
 `models.slots`, `ValidatedRepositoryModelAllowlist`, the validated
@@ -1354,8 +1365,8 @@ context-size limits under ADR 0011. The engine, operation, slot and model
 contract add no byte/token ceilings, capacity intersections or size-fit gates.
 
 Model-operation identity is the compiled `(workflowId, workflowVersion,
-workflowStepId)` tuple. Request identity, logging, persistence, evaluation, and
-recovery use that identity; no independent route ID or route-registry version
+originatingWorkflowStepId)` tuple retained across consumer steps. Request
+identity, logging and evaluation use that identity; no independent route ID or route-registry version
 exists. A resource or model-operation declaration change changes the compiled
 workflow authority. ADR 0005 governs the concise YAML representation and
 prohibits any hidden workflow-specific behavior.
@@ -1381,7 +1392,7 @@ Specification-section, plan-unit, and task-cluster workflows declare discriminat
 
 The workflow-declared clarification-resolution result schema may only select one existing open clarification and existing current-authority IDs. It is used on a subsequent stage run when exact deterministic lookup cannot decide semantic sufficiency. The engine—not the model—checks the subject key, authority provenance, non-conflict, current revisions, and required-field coverage before closing the record. Failure to establish support leaves the same record open; it never creates an answer.
 
-A reference-extraction workflow step additionally declares its partition-contract resource. `ReferenceSnapshot.extractionContract` stores the exact compiled workflow ID/version/node identity, request/result schema resource identities, and partition contract. Recovery/re-extraction must resolve that closed compiled authority and blocks with `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE` rather than silently using a newer schema, resource, or chunk boundary contract.
+A reference-extraction workflow step additionally declares its partition-contract resource. `ReferenceSnapshot.extractionContract` stores the exact compiled workflow ID/version/node identity, internal request-contract identity, selected result-schema resource identity, and partition contract. Recovery/re-extraction must resolve that closed compiled authority and blocks with `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE` rather than silently using a newer schema, resource, or chunk boundary contract.
 
 ### 12.8 Closed authority-reconciliation boundary
 
@@ -1898,8 +1909,8 @@ Semantic extraction and reconciliation use the common LLM actions; there is no s
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SelectContextAction`                                          | unit plus indexed facts                                                                                                                                                                                         | bounded context set                                                  | Select relevant known context.                                                                                                                                                                                                                                                                            |
 | `BuildInitialGuidanceAction`                                   | unit, context, compiled policy                                                                                                                                                                                  | guidance packet                                                      | Generate deterministic initial guidance.                                                                                                                                                                                                                                                                  |
-| `BuildImmutableUnitOwnerIdAction`                              | one closed route-unit descriptor and exact current canonical input authorities                                                                                                                                  | immutable unit-owner tuple                                           | Construct only the matching reference/specification/plan/task/implementation/semantic-review owner variant; reject missing or extra owner fields and accept no model identity.                                                                                                                            |
-| `BuildInitialModelRequestIdentityLedgerAction`                 | trusted stage-run epoch and closed request-purpose registry                                                                                                                                                     | empty run-local `model.request_identity_ledger/v1` DataKey           | Initialize ordinal/accounting state once for the epoch without assigning a request; it is the sole producer of this compiler-owned key.                                                                                                                                                                   |
+| `BuildImmutableUnitOwnerIdAction`                              | one compiled-step descriptor or required SDD canonical owner tuple                                                                                                                                  | immutable unit-owner tuple                                           | Validate the generic workflow-step owner or matching canonical SDD owner variant; reject missing/extra fields. Generic ownership supplies no SDD repair/review/clarification authority.                                                                                                                            |
+| `BuildInitialModelRequestIdentityLedgerAction`                 | closed request-purpose registry                                                                                                                                                     | empty run-local `model.request_identity_ledger/v1` DataKey           | Create a fresh process-local execution epoch and initialize its ordinal/accounting state without assigning a request; it is the sole producer of this compiler-owned key.                                                                                                                                                                   |
 | `AssignModelRequestIdAction`                                   | immutable unit owner, exact compiled model-operation identity, one closed discriminated purpose binding, and current model-request identity-ledger DataKey revision                                              | one typed model-request ID plus successor-ledger DataKey replacement | Allocate one logical request ordinal and enforce the purpose variant's required owner fields; protocol retries do not invoke this action, and runner CAS is the only mutation.                                                                                                                            |
 | `AdvanceModelRequestLifecycleAction`                           | exact request ID, expected status, typed invocation/terminal fact, and current model-request identity-ledger DataKey revision                                                                                   | successor-ledger DataKey replacement                                 | Apply one runner-enforced compare-and-swap `assigned -> invoked`, `invoked -> terminal`, or the approved `assigned -> terminal` not-invoked transition for authorization failure; protocol retries remain invoked and never reassign identity.                                                               |
 | `ValidateModelRequestBindingAction`                            | request ID, immutable unit, compiled workflow model-operation declaration, discriminated purpose authority, and current request ledger                                                                          | model-request binding evidence                                       | Prove epoch/unit/workflow-operation/purpose/ordinal and ledger membership, including required/forbidden purpose-owner fields.                                                                                                                                                                             |
@@ -1913,7 +1924,7 @@ Semantic extraction and reconciliation use the common LLM actions; there is no s
 | `ValidateProviderInvocationObservationAction` | provider observation and exact runner-owned invoked-operation binding | validated observation or provider diagnostic | Prove call association, delivery, stop, usage and wire/content bounds before any candidate decode. |
 | `DecodeModelEnvelopeAction` | validated complete provider observation with exact request/schema binding | parsed compact result or protocol diagnostic | Parse the complete JSON object only, preserving its trusted association. |
 | `BuildProtocolRetryGuidanceAction`                             | decoder/schema diagnostic and original workflow-declared result schema                                                                                                                                           | protocol-retry guidance                                              | Build decoder-only retry guidance without semantic instructions.                                                                                                                                                                                                                                          |
-| `AdvanceModelAttemptAccountingAction`                          | exact stage-run epoch/request/unit identity, current runner model-attempt accounting, initial-or-retry classification, and the compiler-validated explicit `retry-limit` of the YAML-selected retry-capable operation instance                                                   | request-keyed compare-and-swap model-attempt transition              | Reserve the initial attempt once. Reserve a later attempt only after an explicit YAML retry transition and while that operation instance's local retry counter remains below its declared limit. Assign monotonic ordinals for identity and recovery; impose no workflow-global attempt ceiling.          |
+| `AdvanceModelAttemptAccountingAction`                          | exact stage-run epoch/request/unit identity, current runner model-attempt accounting, initial-or-retry classification, and the compiler-validated explicit `retry-limit` of the YAML-selected retry-capable operation instance                                                   | request-keyed compare-and-swap model-attempt transition              | Reserve the initial attempt once. Reserve a later attempt only after an explicit YAML retry transition and while that operation instance's local retry counter remains below its declared limit. Assign monotonic ordinals for execution-local identity; impose no workflow-global attempt ceiling.          |
 | `CheckWorkflowTokenBudgetAction` | current workflow-execution actual-usage ledger | read-only budget check | Reject a subsequent provider call when actual usage is at or above the selected policy budget; reserve no tokens and derive no output allowance. |
 | `ReconcileWorkflowTokenUsageAction` | current execution token ledger, exact inference operation ID, validated reported input/output usage or delivery disposition | actual-usage compare-and-swap transition | Account the operation once. Retain all reported usage before returning an overshoot error; exact equality blocks later calls. Unknown usage blocks without an estimate. |
 | `ValidateModelPayloadSchemaAction` | parsed compact result and its bound workflow-declared result schema | schema-valid candidate result | Apply only the bound closed result schema; do not repeat parsing or call-association validation. |

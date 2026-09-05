@@ -18,10 +18,10 @@ pub const Schema = struct {
     key: pipeline.DataKey,
     version: u32,
     type_name: []const u8,
-    maximum_bytes: u32,
+    maximum_bytes: ?u32,
 
     pub fn valid(self: Schema) bool {
-        return self.version != 0 and self.type_name.len != 0 and self.maximum_bytes != 0;
+        return self.version != 0 and self.type_name.len != 0 and (self.maximum_bytes == null or self.maximum_bytes.? != 0);
     }
 
     pub fn eql(self: Schema, other: Schema) bool {

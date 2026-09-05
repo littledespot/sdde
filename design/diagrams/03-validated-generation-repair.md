@@ -1,7 +1,9 @@
 Proposed generation and repair flow under
 [ADR 0006](../decisions/0006-minimal-model-response.md). Result-schema
 compilation, request construction, candidate decoding/validation, accounting and
-provider-authorization primitives exist; complete production YAML integration
+provider-authorization primitives exist. Native YAML request preparation now
+retains one originating request under [ADR 0012](../decisions/0012-workflow-owned-model-request.md);
+complete provider-call and SDD production integration
 remains pending. Every retry/repair branch below belongs to the declared YAML
 graph. [ADR 0011](../decisions/0011-provider-owned-request-limits.md) prohibits
 local model-call size ceilings and guidance-fit gates.
@@ -19,12 +21,12 @@ flowchart TD
     PSTAGE -- Plan tasks or implement --> PSEL[Select every raw principle chunk/span in configured eligible filename categories<br/>free text is never ranked, summarized or omitted by inferred meaning]
     PSTAGE -- Reference or specify --> GUIDE[Build initial deterministic guidance action<br/>closed schema, allowed IDs, preset rules and minimal example]
     PSEL --> GUIDE
-    EPOCH[Trusted stage-run epoch and closed request-purpose registry] --> MLEDGER[BuildInitialModelRequestIdentityLedgerAction<br/>once for the run; initialize no request implicitly]
-    GUIDE --> UOWNER[BuildImmutableUnitOwnerIdAction<br/>closed stage-specific owner tuple from current canonical authorities]
+    EPOCH[Closed request-purpose registry] --> MLEDGER[BuildInitialModelRequestIdentityLedgerAction<br/>fresh process-local epoch and empty ledger;<br/>initialize no request implicitly]
+    GUIDE --> UOWNER[BuildImmutableUnitOwnerIdAction<br/>compiled-step owner for generic work;<br/>canonical SDD owner tuple where required]
     UOWNER --> MID[AssignModelRequestIdAction<br/>allocate one generation-purpose logical request ID from the current run-local ledger]
     MLEDGER --> MID
     MID --> MBIND[ValidateModelRequestBindingAction<br/>prove epoch, unit, compiled operation, purpose, ordinal and ledger membership]
-    MBIND --> REQ[BuildModelRequestAction<br/>retain engine identity internally;<br/>send needed guidance, evidence and the already compiled compact result schema]
+    MBIND --> REQ[BuildModelRequestAction<br/>retain originating identity, binding and resources across steps;<br/>send needed guidance, evidence and the already compiled compact result schema]
     RSCHEMA[Workflow-registry-owned model-result-schema/v1 authority<br/>opaque closed tree and exact captured resource bytes;<br/>invalid schema rejects during workflow compilation] -. borrowed schema; no second parser .-> REQ
     REQ --> MADV[AdvanceModelAttemptAccountingAction<br/>reserve initial attempt ordinal; no global attempt ceiling]
     MADV --> MINVOKED[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to invoked exactly once]

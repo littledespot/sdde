@@ -28,7 +28,13 @@ pub fn validProjection(step: compilation.CompiledStep) bool {
     }
     if (capability_count > 1 or slot_count > 1 or
         (step.model != null) != (slot_count == 1) or
-        (capability_count == 1 and step.model == null)) return false;
+        (capability_count == 1 and step.model == null and !consumesPreparedRequest(step.requires)) or
+        (slot_count != 0 and consumesPreparedRequest(step.requires))) return false;
+    if (consumesPreparedRequest(step.requires)) {
+        for (step.parameters) |parameter| {
+            if (parameter.value == .resource or parameter.value == .model_slot or requestOverride(parameter.id.bytes)) return false;
+        }
+    }
     const model = step.model orelse return true;
     const expected = resolve(step.parameters) orelse return false;
     return std.meta.eql(model, expected);
@@ -74,6 +80,29 @@ pub fn resolve(
         selected.temperature = controls.TemperaturePermille.init(@intCast(temperature.integer)) orelse return null;
     }
     return .{ .response_mode = response_mode, .controls = selected };
+}
+
+pub fn consumesPreparedRequest(keys: []const @import("pipeline.zig").DataKey) bool {
+    var request = false;
+    var ledger = false;
+    for (keys) |key| {
+        request = request or key == .prepared_model_request;
+        ledger = ledger or key == .model_request_identity_ledger;
+    }
+    return request and ledger;
+}
+
+pub fn validConsumerDescriptors(descriptors: []const operation.ParameterDescriptor) bool {
+    for (descriptors) |descriptor| {
+        if (descriptor.kind == .model_slot or descriptor.kind == .resource or requestOverride(descriptor.id)) return false;
+    }
+    return true;
+}
+
+fn requestOverride(id: []const u8) bool {
+    if (retiredSizeParameter(id)) return true;
+    for (parameters) |parameter| if (std.mem.eql(u8, parameter.id, id)) return true;
+    return false;
 }
 
 fn retiredSizeParameter(id: []const u8) bool {

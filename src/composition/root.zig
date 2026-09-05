@@ -796,6 +796,175 @@ test "reference preflight cancellation stops safely at each runtime checkpoint" 
     return error.ReferencePreflightNeverCompleted;
 }
 
+fn writeReferenceIngestionFixture(io: std.Io, project: std.Io.Dir) !void {
+    try writeFeatureInputFixture(io, project);
+    const existing = try project.readFileAlloc(io, ".sddtoolkit.json", std.testing.allocator, .limited(16384));
+    defer std.testing.allocator.free(existing);
+    const changed = try std.mem.replaceOwned(u8, std.testing.allocator, existing, "\"references\": \"references\"", "\"references\": \"source-material\"");
+    defer std.testing.allocator.free(changed);
+    try project.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = changed });
+    try project.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = @embedFile("../test_fixtures/reference-ingestion.workflow.yaml") });
+    try project.createDirPath(io, "source-material/first");
+    const stories = try std.Io.Dir.cwd().readFileAlloc(io, "test/evaluation/wf-001-hello-world/reference/stories.md", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(stories);
+    try project.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = stories });
+}
+
+test "reference ingestion YAML reads configured source content without creating outputs" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeReferenceIngestionFixture(io, project.dir);
+    try project.dir.createDirPath(io, "source-material/first/nested");
+    try project.dir.writeFile(io, .{ .sub_path = "source-material/first/nested/Café.md", .data = "# Other evidence\nKeep exact bytes.\n" });
+    try project.dir.writeFile(io, .{ .sub_path = "source-material/first/.hidden.md", .data = "Hidden reference evidence.\n" });
+    for (0..2) |_| {
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+        try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
+        try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "engine/workflows/features", .{}));
+    }
+    const renamed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/reference-ingestion.workflow.yaml"), "id: reference-ingestion", "id: document-evidence");
+    defer std.testing.allocator.free(renamed);
+    try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = renamed });
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "document-evidence", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+}
+
+test "reference failures are not skipped and cannot change closed clarification files" {
+    const io = std.testing.io;
+    for ([_]enum { unsupported, malformed, disguised, symlink, hidden, oversized, unreadable }{
+        .unsupported, .malformed, .disguised, .symlink, .hidden, .oversized, .unreadable,
+    }) |failure| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeReferenceIngestionFixture(io, project.dir);
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const allocator = arena.allocator();
+        const clarifications = try @import("../test_fixtures/clarification_inputs.zig").closed(allocator, "S01", true);
+        try writeClarificationCapture(io, project.dir, clarifications);
+        const oversized = try allocator.alloc(u8, if (failure == .oversized) 1024 * 1024 + 1 else 0);
+        @memset(oversized, 'x');
+        const invalid_bytes = switch (failure) {
+            .malformed => "\xff",
+            .disguised => "%PDF-1.7",
+            .oversized => oversized,
+            else => "not supported",
+        };
+        if (failure == .symlink) {
+            try project.dir.symLink(io, "missing", "source-material/first/alias.md", .{});
+        } else if (failure == .hidden) {
+            // A non-Markdown hidden entry must also be accounted, never filtered.
+            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/.unknown", .data = invalid_bytes });
+        } else {
+            try project.dir.writeFile(io, .{ .sub_path = if (failure == .unsupported) "source-material/first/data.json" else "source-material/first/other.md", .data = invalid_bytes });
+        }
+        var inaccessible = try project.dir.openDir(io, "source-material/first", .{});
+        defer inaccessible.close(io);
+        var locked: ?std.Io.Dir = null;
+        if (failure == .unreadable) {
+            try inaccessible.createDir(io, "locked", .default_dir);
+            locked = try inaccessible.openDir(io, "locked", .{});
+            try locked.?.setPermissions(io, .fromMode(0o000));
+        }
+        defer if (locked) |directory| {
+            directory.setPermissions(io, .fromMode(0o700)) catch @panic("restore test directory permissions");
+            directory.close(io);
+        };
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).execution);
+        const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", allocator, .limited(16384));
+        try std.testing.expectEqualSlices(u8, clarifications.forms[0].bytes, retained);
+        try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/spec.md", .{}));
+    }
+}
+
+test "reference capture is immutable and rejects corpus changes after inventory" {
+    const io = std.testing.io;
+    const ingestion = @import("../domain/reference_ingestion.zig");
+    for ([_]enum { content, addition, directory, immutable }{ .content, .addition, .directory, .immutable }) |change| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
+        try project.dir.createDirPath(io, ".sdd/workflows");
+        try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/hello.workflow.yaml", .data = valid_workflow });
+        try project.dir.createDirPath(io, "references/chosen/nested");
+        try project.dir.writeFile(io, .{ .sub_path = "references/chosen/nested/source.md", .data = "Original\r\nCafé\n" });
+        var boot = runInProject(io, std.testing.allocator, project.dir);
+        defer boot.deinit();
+        try std.testing.expect(boot == .ready);
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const allocator = arena.allocator();
+        const registry = boot.ready.roots.registry();
+        var inspector_adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var inspector = inspector_adapter.inspector();
+        inspector.capability = registry.referenceSources();
+        const selected = try inspector.inspect(allocator, .{ .bytes = "chosen" });
+        var adapter: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var enumerator = adapter.enumerator();
+        try std.testing.expectError(error.ReferenceUnavailable, enumerator.enumerate(allocator, selected));
+        enumerator.capability = registry.referenceContentRead();
+        const inventory = try (@import("../actions/reference/validate_reference_inventory.zig").Action{
+            .normalizer = .{ .normalize_fn = @import("unicode_normalization").nfc },
+            .case_folder = .{ .fold_fn = @import("unicode_normalization").caseFold },
+        }).execute(allocator, try enumerator.enumerate(allocator, selected));
+        var capture = adapter.capturer();
+        capture.capability = registry.referenceContentRead();
+        switch (change) {
+            .content => try project.dir.writeFile(io, .{ .sub_path = "references/chosen/nested/source.md", .data = "Changed\n" }),
+            .addition => try project.dir.writeFile(io, .{ .sub_path = "references/chosen/added.md", .data = "New\n" }),
+            .directory => {
+                try project.dir.rename("references/chosen/nested", project.dir, "references/chosen/old", io);
+                try project.dir.createDirPath(io, "references/chosen/nested");
+            },
+            .immutable => {
+                const captured = try capture.capture(allocator, inventory);
+                try project.dir.writeFile(io, .{ .sub_path = "references/chosen/nested/source.md", .data = "Replaced after capture\n" });
+                var decoder: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
+                const decoded = try (@import("../actions/reference/decode_reference_markdown.zig").Action{ .decoder = decoder.decoderPort() }).execute(allocator, captured);
+                const result: ingestion.Inputs = try (@import("../actions/reference/validate_reference_accounting.zig").Action{}).execute(allocator, decoded);
+                try std.testing.expectEqualStrings("Original\r\nCafé\n", result.documents[0].bytes);
+                try std.testing.expectEqualStrings("nested/source.md", result.documents[0].path.bytes);
+                continue;
+            },
+        }
+        try std.testing.expectError(error.ReferenceInventoryChanged, capture.capture(allocator, inventory));
+    }
+}
+
+test "reference ingestion compiler enforces inputs and content-read capability" {
+    const io = std.testing.io;
+    for ([_][2][]const u8{
+        .{ "policy: core.reference-ingestion@1", "policy: core.feature-input-read@1" },
+        .{ "use: capture-reference-sources@1", "use: core.noop@1" },
+        .{ "use: validate-reference-inventory@1", "use: core.noop@1" },
+    }) |edit| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeReferenceIngestionFixture(io, project.dir);
+        const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/reference-ingestion.workflow.yaml"), edit[0], edit[1]);
+        defer std.testing.allocator.free(changed);
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = changed });
+        try std.testing.expect(runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }) == .bootstrap_failed);
+    }
+}
+
+test "reference ingestion cancellation does not create artifacts" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeReferenceIngestionFixture(io, project.dir);
+    for (0..512) |checks| {
+        var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
+        const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, control.runtime());
+        try std.testing.expect(result == .execution);
+        try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
+        if (result.execution == .ok) return;
+        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.execution);
+    }
+    return error.ReferenceIngestionNeverCompleted;
+}
+
 fn writeFeatureInputFixture(io: std.Io, project: std.Io.Dir) !void {
     const allocator = std.testing.allocator;
     const specs_config = try std.mem.replaceOwned(u8, allocator, valid_config, "\"specs\": \"specs\"", "\"specs\": \"requirements/current\"");

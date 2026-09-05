@@ -39,6 +39,10 @@ pub const Contract = struct {
 
     // The typed slot is the sole binding declaration, not permission to call
     // a provider. Operational capabilities derive independently from ports.
+    pub fn consumesPreparedRequest(self: Contract) bool {
+        return @import("workflow_model.zig").consumesPreparedRequest(self.requires);
+    }
+
     pub fn requiresModelBinding(self: Contract) bool {
         for (self.parameters) |parameter| if (parameter.kind == .model_slot) return true;
         return false;

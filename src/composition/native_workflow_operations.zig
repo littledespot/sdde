@@ -6,6 +6,7 @@ const runners = @import("../application/toolchain_workflow_runner.zig");
 const values = @import("../application/toolchain_workflow_values.zig");
 const binding = @import("../application/workflow_operation_binding.zig");
 const core = @import("core_workflow_operations.zig");
+const model_request = @import("model_request_operations.zig");
 const toolchain = @import("../domain/toolchain.zig");
 const roots = @import("../domain/bootstrap_root_registry.zig");
 const capabilities = @import("../domain/workflow_capability.zig");
@@ -55,7 +56,8 @@ pub const Assembly = struct {
     capture_references: ingestion.Capture,
     decode_references: ingestion.Decode,
     validate_reference_accounting: ingestion.ValidateAccounting,
-    entries: [core.entries.len + 28]operations.Entry,
+    model_requests: model_request.Assembly,
+    entries: [core.entries.len + 28 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder) void {
@@ -88,10 +90,12 @@ pub const Assembly = struct {
             .capture_references = .{ .allocator = allocator, .action = .{ .source = reference_capture } },
             .decode_references = .{ .allocator = allocator, .action = .{ .decoder = reference_decoder } },
             .validate_reference_accounting = .{ .allocator = allocator },
+            .model_requests = undefined,
             .entries = undefined,
             .registry = undefined,
         };
-        self.entries = core.entries ++ [_]operations.Entry{
+        self.model_requests.init(allocator);
+        self.entries = core.entries ++ self.model_requests.entries ++ [_]operations.Entry{
             entry(runners.CaptureProject, &self.capture_project),
             entry(runners.InventoryPresets, &self.inventory_presets),
             entry(runners.CapturePresets, &self.capture_presets),
@@ -138,7 +142,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ model_request.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.toolchain@1",
     .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },

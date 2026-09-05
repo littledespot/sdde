@@ -712,6 +712,7 @@ StateIdentityMutation =
     }
 
 ImmutableUnitOwnerId =
+  | WorkflowStepOwner { kind: workflow_step }
   | ReferenceChunkOwner { kind: reference_chunk, referenceStateId, chunkId }
   | ReferenceGlobalOwner { kind: reference_global, referenceStateId, unitSlotId }
   | SpecificationUnitOwner {
@@ -725,8 +726,14 @@ ImmutableUnitOwnerId =
     }
   | SemanticReviewOwner {
       kind: semantic_review,
-      parentUnitOwnerId: ImmutableUnitOwnerId, reviewSlotId
+      parentUnitOwnerId: ContentUnitOwnerId, reviewSlotId
     }
+
+// ContentUnitOwnerId retains only the six canonical SDD content-owner variants.
+// A generic workflow_step owner does not authorize SDD repair/review/clarification.
+// Its origin tuple is the existing ModelRequestId.modelOperationId, not a copy.
+// stageRunEpochId is a fresh retained process-local identity, not a caller string.
+// Consumers retain the originating request/binding/resources across YAML steps.
 
 ModelRequestId =
   | InitialGenerationModelRequestId {
@@ -2455,7 +2462,7 @@ CompiledWorkflowModelOperation {
   modelSlotId,
   unitTypeId,
   unitPartitionContractId?,
-  requestSchemaResourceId,
+  requestSchemaId, // internal model-request/v1, not a YAML resource
   resultSchemaResourceId,
   contextRequestSchemaResourceId?,
   guidanceResourceId,
@@ -3516,7 +3523,7 @@ ReferenceSnapshot {
   extractionContract: {
     compiledWorkflowAuthorityId,
     modelOperationId,
-    requestSchemaResourceId,
+    requestSchemaId,
     resultSchemaResourceId,
     unitPartitionContractId
   },
@@ -5347,7 +5354,7 @@ ClarificationAuthorityResolution {
     | { mode: semantic_authority_interpretation,
         compiledWorkflowAuthorityId,
         modelOperationId,
-        requestSchemaResourceId,
+        requestSchemaId,
         resultSchemaResourceId,
         validatorRuleIds[] },
   resolvedAt

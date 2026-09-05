@@ -116,6 +116,13 @@ pub const Runner = struct {
             self.selected.graph.authority.resources,
             &resource_buffer,
         ) orelse return .{ .outcome = .failed };
+        const retained_request = if (entry.contract.consumesPreparedRequest())
+            @import("model_request_workflow.zig").readCurrent(&input_data, @import("model_request_workflow.zig").prepared_schema) catch return .{ .rejected = .authority }
+        else
+            null;
+        if (retained_request) |request| {
+            if (request.prepared() == null) return .{ .rejected = .authority };
+        }
         var resolved_binding = self.resolveModelBinding(step.*) catch {
             return .{ .outcome = .failed };
         };
@@ -135,7 +142,7 @@ pub const Runner = struct {
             .data = input_data,
             .step = step,
             .resources = resources,
-            .model_binding = if (resolved_binding) |*value| value else null,
+            .model_binding = if (retained_request) |request| request.binding() else if (resolved_binding) |*value| value else null,
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
         } }) catch return .{ .outcome = .failed };
         defer self.envelope.discard(&candidate.delta);

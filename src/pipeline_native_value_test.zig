@@ -50,6 +50,18 @@ test "native ownership transfer releases every allocation on allocation failures
     try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
 }
 
+test "uncapped sealed ownership does not disable declared bounds or ordinary copy limits" {
+    var destroyed: usize = 0;
+    const owner = try Owner.create(std.testing.allocator, &destroyed);
+    const bounded = values.schema(.valid_toolchain, SealA, 1, @sizeOf(Owner));
+    try std.testing.expectError(error.DataValueLimitExceeded, values.adopt(std.testing.allocator, bounded, SealA, Owner, owner, Access(SealA).get, Owner.destroy, null));
+    const uncapped = values.schema(.valid_toolchain, SealA, 1, null);
+    const native = try values.adopt(std.testing.allocator, uncapped, SealA, Owner, owner, Access(SealA).get, Owner.destroy, null);
+    values.destroy(native);
+    try std.testing.expectEqual(@as(usize, 1), destroyed);
+    try std.testing.expectError(error.InvalidDataSchema, values.create(std.testing.allocator, values.schema(.valid_toolchain, u32, 1, null), u32, 42));
+}
+
 fn allocationCase(allocator: std.mem.Allocator) !void {
     var destroyed: usize = 0;
     const owner = try Owner.create(allocator, &destroyed);

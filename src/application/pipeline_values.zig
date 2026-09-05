@@ -29,7 +29,7 @@ const RetainedReference = struct {
     next: ?*RetainedReference,
 };
 
-pub fn schema(comptime key: pipeline.DataKey, comptime T: type, version: u32, maximum_bytes: u32) data.Schema {
+pub fn schema(comptime key: pipeline.DataKey, comptime T: type, version: u32, maximum_bytes: ?u32) data.Schema {
     return .{ .key = key, .version = version, .maximum_bytes = maximum_bytes, .type_name = @typeName(T) };
 }
 
@@ -39,7 +39,7 @@ pub fn schema(comptime key: pipeline.DataKey, comptime T: type, version: u32, ma
 pub fn create(allocator: std.mem.Allocator, descriptor: data.Schema, comptime T: type, value: T) Error!*data.Value {
     if (!descriptor.valid()) return error.InvalidDataSchema;
     if (!std.mem.eql(u8, descriptor.type_name, @typeName(T))) return error.DataSchemaMismatch;
-    var budget: Budget = .{ .remaining = descriptor.maximum_bytes };
+    var budget: Budget = .{ .remaining = descriptor.maximum_bytes orelse return error.InvalidDataSchema };
     try budget.consume(@sizeOf(T));
     const owner = try allocator.create(Owned);
     errdefer allocator.destroy(owner);
@@ -69,12 +69,15 @@ pub fn adopt(
     owner: *Owner,
     comptime get: *const fn (*const Owner) *const T,
     comptime destroy_owner: *const fn (*Owner) void,
-    retained_bytes: usize,
+    retained_bytes: ?usize,
 ) Error!*data.Value {
     if (@typeInfo(T) != .@"opaque") @compileError("ordinary pipeline data must use the immutable copying constructor");
     if (!descriptor.valid()) return error.InvalidDataSchema;
     if (!std.mem.eql(u8, descriptor.type_name, @typeName(T))) return error.DataSchemaMismatch;
-    if (retained_bytes == 0 or retained_bytes > descriptor.maximum_bytes) return error.DataValueLimitExceeded;
+    if (descriptor.maximum_bytes) |maximum| {
+        const retained = retained_bytes orelse return error.DataValueLimitExceeded;
+        if (retained == 0 or retained > maximum) return error.DataValueLimitExceeded;
+    }
     const finalizer = struct {
         fn destroy(context: *anyopaque) void {
             destroy_owner(@ptrCast(@alignCast(context)));

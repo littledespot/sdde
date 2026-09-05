@@ -129,6 +129,14 @@ pub fn build(b: *std.Build) void {
     const request_preparation_step = b.step("test-model-request-preparation", "Test provider-neutral request construction and binding validation");
     request_preparation_step.dependOn(&b.addRunArtifact(request_preparation_tests).step);
 
+    const request_workflow_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/model_request_workflow_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module }},
+    }) });
+    b.step("test-model-request-workflow", "Test native YAML request preparation and immutable handoff").dependOn(&b.addRunArtifact(request_workflow_tests).step);
+
     const invocation_validation_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/provider_invocation_validation_test.zig"),
         .target = target,

@@ -35,9 +35,26 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\    on: { ok: end.ok }
     ;
     _ = package_directory.add(".sddtoolkit/workflows/transactions/hello.workflow.yaml", hello_workflow);
+    _ = package_directory.add(".sddtoolkit/workflows/request-ledger.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: request-ledger
+        \\version: 1
+        \\shortcode: MREQ
+        \\invoke: core.empty-invocation@1
+        \\policy: core.capability-free@1
+        \\start: initialize
+        \\steps:
+        \\  initialize:
+        \\    use: build-initial-model-request-identity-ledger@1
+        \\    on: { ok: end.ok, failed: end.failed }
+    );
     _ = package_directory.add(".sddtoolkit/workflows/toolchain.workflow.yaml", @embedFile("../../src/test_fixtures/toolchain.workflow.yaml"));
     _ = package_directory.add(".sddtoolkit/workflows/preflight.workflow.yaml", @embedFile("../../src/test_fixtures/reference-preflight.workflow.yaml"));
     _ = package_directory.add(".sddtoolkit/workflows/feature-input.workflow.yaml", @embedFile("../../src/test_fixtures/feature-input-preflight.workflow.yaml"));
+    _ = package_directory.add(".sddtoolkit/workflows/reference-ingestion.workflow.yaml", @embedFile("../../src/test_fixtures/reference-ingestion.workflow.yaml"));
+    _ = package_directory.addCopyFile(b.path("test/evaluation/wf-001-hello-world/reference/stories.md"), "references/Hello/stories.md");
+    _ = package_directory.add("references/Unsupported/story.md", "# Valid sibling\n");
+    _ = package_directory.add("references/Unsupported/.hidden.json", "{}");
     const clarification = @import("../../src/test_fixtures/clarification_inputs.zig").closed(b.allocator, "P01", true) catch @panic("allocate packaging clarification fixture");
     _ = package_directory.add(".sddtoolkit/workflows/features/Chosen/Café/state/clarifications.json", clarification.state.?);
     _ = package_directory.add("requirements/current/Chosen/Café/clarify/P01.md", clarification.forms[0].bytes);
@@ -55,6 +72,14 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     valid_command.clearEnvironment();
     valid_command.expectStdOutEqual("");
     valid_command.expectStdErrEqual("");
+
+    const request_ledger_command = std.Build.Step.Run.create(b, "run packaged YAML request initialization without providers or development assets");
+    request_ledger_command.addFileArg(packaged_executable);
+    request_ledger_command.addArg("request-ledger");
+    request_ledger_command.setCwd(package_directory.getDirectory());
+    request_ledger_command.clearEnvironment();
+    request_ledger_command.expectStdOutEqual("");
+    request_ledger_command.expectStdErrEqual("");
 
     const unregistered_directory = b.addTempFiles();
     const unregistered_executable = unregistered_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
@@ -119,11 +144,26 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         "reject packaged SDDE invocation without target config",
     );
     missing_config_command.step.dependOn(&valid_command.step);
+    missing_config_command.step.dependOn(&request_ledger_command.step);
     missing_config_command.step.dependOn(&denied_unregistered.step);
     missing_config_command.step.dependOn(&denied_toolchain.step);
     missing_config_command.step.dependOn(&toolchain_command.step);
     missing_config_command.step.dependOn(&reference_command.step);
     missing_config_command.step.dependOn(&denied_reference.step);
+    for ([_]struct { selector: []const u8, rejected: bool }{
+        .{ .selector = "Hello", .rejected = false },
+        .{ .selector = "Unsupported", .rejected = true },
+    }) |case| {
+        const check = std.Build.Step.Run.create(b, "run packaged read-only Markdown reference ingestion");
+        check.addFileArg(packaged_executable);
+        check.addArgs(&.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", case.selector });
+        check.setCwd(package_directory.getDirectory());
+        check.clearEnvironment();
+        check.expectExitCode(if (case.rejected) 1 else 0);
+        check.expectStdOutEqual("");
+        check.expectStdErrEqual(if (case.rejected) "failed\n" else "");
+        missing_config_command.step.dependOn(&check.step);
+    }
     for ([_]struct { feature: []const u8, rejected: bool }{
         .{ .feature = "Selected/日本語", .rejected = false },
         .{ .feature = "Chosen/Café", .rejected = false },

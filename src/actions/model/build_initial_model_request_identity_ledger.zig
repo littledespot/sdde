@@ -14,9 +14,8 @@ pub const Action = struct {
     pub fn execute(
         _: Action,
         allocator: std.mem.Allocator,
-        stage_run_epoch_id: identity.StageRunEpochId,
         purpose_registry: identity.RequestPurposeRegistry,
     ) identity.Error!*identity.Owner {
-        return identity.createInitial(allocator, stage_run_epoch_id, purpose_registry);
+        return identity.createInitial(allocator, purpose_registry);
     }
 };

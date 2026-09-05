@@ -2,15 +2,10 @@ const std = @import("std");
 const provider_binding = @import("llm_provider_binding.zig");
 
 pub const StageRunEpochId = struct {
-    bytes: []const u8,
-
-    pub fn isValid(self: StageRunEpochId) bool {
-        validateAuthorityId(self.bytes, error.InvalidStageRunEpochId) catch return false;
-        return true;
-    }
+    reference: @import("execution_reference.zig").Ref,
 
     pub fn eql(left: StageRunEpochId, right: StageRunEpochId) bool {
-        return authorityIdEql(left.bytes, right.bytes);
+        return left.reference.eql(right.reference);
     }
 };
 pub const ReferenceStateId = struct { bytes: []const u8 };
@@ -84,6 +79,7 @@ pub const ContentUnitOwnerId = union(enum) {
 };
 
 pub const ImmutableUnitOwnerId = union(enum) {
+    workflow_step,
     reference_chunk: ReferenceChunkOwner,
     reference_global: ReferenceGlobalOwner,
     specification_unit: SpecificationUnitOwner,
@@ -252,7 +248,6 @@ pub const Assignment = struct {
 };
 
 pub const ValidationError = error{
-    InvalidStageRunEpochId,
     InvalidRequestPurposeRegistry,
     InvalidImmutableUnitOwnerId,
     InvalidWorkflowModelOperationId,
@@ -295,10 +290,8 @@ const OwnerStorage = struct {
 
 pub fn createInitial(
     allocator: std.mem.Allocator,
-    stage_run_epoch_id: StageRunEpochId,
     purpose_registry: RequestPurposeRegistry,
 ) Error!*Owner {
-    if (!stage_run_epoch_id.isValid()) return error.InvalidStageRunEpochId;
     if (!purpose_registry.hasAny()) return error.InvalidRequestPurposeRegistry;
 
     const value = try allocator.create(OwnerStorage);
@@ -311,11 +304,11 @@ pub fn createInitial(
         .ledger = undefined,
     };
     errdefer value.arena.deinit();
-    const epoch_bytes = try value.arena.allocator().dupe(u8, stage_run_epoch_id.bytes);
+    const epoch = try @import("execution_reference.zig").create(allocator);
     const owner: *Owner = @ptrCast(value);
     value.ledger = .{
         .owner = owner,
-        .stage_run_epoch_id = .{ .bytes = epoch_bytes },
+        .stage_run_epoch_id = .{ .reference = epoch },
         .purpose_registry = purpose_registry,
         .revision = .initial,
         .record_count = 0,
@@ -455,6 +448,7 @@ pub fn deinitOwner(owner: *Owner) void {
         value.reference_count -= 1;
         if (value.reference_count != 0) return;
         const previous = value.previous_owner;
+        if (previous == null) value.ledger.stage_run_epoch_id.reference.release();
         const allocator = value.backing_allocator;
         value.arena.deinit();
         allocator.destroy(value);
@@ -464,6 +458,7 @@ pub fn deinitOwner(owner: *Owner) void {
 
 pub fn validateUnitOwner(owner: ImmutableUnitOwnerId) ValidationError!void {
     switch (owner) {
+        .workflow_step => {}, // The request's model_operation_id owns the origin tuple.
         .reference_chunk => |value| try validateContentOwner(.{ .reference_chunk = value }),
         .reference_global => |value| try validateContentOwner(.{ .reference_global = value }),
         .specification_unit => |value| try validateContentOwner(.{ .specification_unit = value }),
@@ -490,7 +485,7 @@ pub fn validateBinding(
         return error.ModelRequestBindingInvalid;
     };
     if (!current_storage.revision.eql(expected_revision) or
-        !authorityIdEql(canonical_request_id.stage_run_epoch_id.bytes, current_storage.stage_run_epoch_id.bytes) or
+        !canonical_request_id.stage_run_epoch_id.eql(current_storage.stage_run_epoch_id) or
         !unitOwnerEql(canonical_request_id.immutable_unit_owner_id, unit_owner_id) or
         !canonical_request_id.model_operation_id.eql(model_operation_id) or
         !purposeEqlBounded(canonical_request_id.purpose, purpose, current_storage.record_count + 1))
@@ -508,6 +503,7 @@ pub fn validateBinding(
 pub fn unitOwnerEql(left: ImmutableUnitOwnerId, right: ImmutableUnitOwnerId) bool {
     if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
     return switch (left) {
+        .workflow_step => true,
         .reference_chunk => |value| contentOwnerEql(.{ .reference_chunk = value }, .{ .reference_chunk = right.reference_chunk }),
         .reference_global => |value| contentOwnerEql(.{ .reference_global = value }, .{ .reference_global = right.reference_global }),
         .specification_unit => |value| contentOwnerEql(.{ .specification_unit = value }, .{ .specification_unit = right.specification_unit }),
@@ -525,6 +521,8 @@ fn validatePurpose(
     purpose: RequestPurposeBinding,
 ) ValidationError!void {
     const kind = std.meta.activeTag(purpose);
+    if (unit_owner_id == .workflow_step and kind != .initial_generation and kind != .context_followup)
+        return error.InvalidRequestPurposeBinding;
     if (!current.purpose_registry.allows(kind)) return error.RequestPurposeNotRegistered;
     switch (purpose) {
         .initial_generation => {},
@@ -663,6 +661,7 @@ fn validateContentOwner(owner: ContentUnitOwnerId) ValidationError!void {
 
 fn cloneUnitOwner(allocator: std.mem.Allocator, owner: ImmutableUnitOwnerId) std.mem.Allocator.Error!ImmutableUnitOwnerId {
     return switch (owner) {
+        .workflow_step => .workflow_step,
         .reference_chunk => |value| .{ .reference_chunk = (try cloneContentOwner(allocator, .{ .reference_chunk = value })).reference_chunk },
         .reference_global => |value| .{ .reference_global = (try cloneContentOwner(allocator, .{ .reference_global = value })).reference_global },
         .specification_unit => |value| .{ .specification_unit = (try cloneContentOwner(allocator, .{ .specification_unit = value })).specification_unit },
@@ -764,7 +763,7 @@ fn contentOwnerEql(left: ContentUnitOwnerId, right: ContentUnitOwnerId) bool {
 fn modelRequestIdEql(left: *const ModelRequestId, right: *const ModelRequestId, remaining_depth: usize) bool {
     if (left == right) return true;
     if (remaining_depth == 0) return false;
-    return authorityIdEql(left.stage_run_epoch_id.bytes, right.stage_run_epoch_id.bytes) and
+    return left.stage_run_epoch_id.eql(right.stage_run_epoch_id) and
         unitOwnerEql(left.immutable_unit_owner_id, right.immutable_unit_owner_id) and
         left.model_operation_id.eql(right.model_operation_id) and
         left.request_ordinal.value == right.request_ordinal.value and
@@ -800,7 +799,7 @@ fn authorityIdEql(left: []const u8, right: []const u8) bool {
     return std.mem.eql(u8, left, right);
 }
 
-fn retainOwner(owner: *Owner) ValidationError!void {
+pub fn retainOwner(owner: *Owner) ValidationError!void {
     const value = ownerStorage(owner);
     std.debug.assert(value.reference_count > 0);
     value.reference_count = std.math.add(usize, value.reference_count, 1) catch {

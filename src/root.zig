@@ -28,6 +28,7 @@ test {
     _ = @import("llm_provider_binding_test.zig");
     _ = @import("model_request_identity_test.zig");
     _ = @import("model_request_preparation_test.zig");
+    _ = @import("model_request_workflow_test.zig");
     _ = @import("provider_invocation_validation_test.zig");
     _ = @import("model_envelope_test.zig");
     _ = @import("model_payload_schema_test.zig");

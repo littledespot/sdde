@@ -401,7 +401,7 @@ service is published.
 
 ## 7. Registered-operation graph compilation
 
-Contracts requiring model binding declare their typed slot and explicit
+Request-origin contracts selecting a model binding declare their typed slot and explicit
 `response-mode`, with optional supported controls. Under
 [ADR 0011](../decisions/0011-provider-owned-request-limits.md), retired
 `input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters
@@ -410,14 +410,18 @@ ceilings or fit estimates. The compiler retains the typed binding requirements;
 the runner rejects divergence from the registered contract. F0006 owns exact
 slot/model/control/schema compatibility, not provider-size policy. This
 capacity-free projection is implemented through the registry, compiler and
-runner; the typed slot is its only binding declaration.
+runner; the typed slot is the only new-binding selection.
 
 The existing compiled model projection represents an immutable binding
 requirement independently of operational capabilities (ADR 0004, amended
-2026-09-05). Such a contract has exactly one required typed model slot.
-Pure operations may consume the runner-supplied binding
-without holding a provider port. Provider-call operations still require that
-binding and their independently port-derived, policy-permitted capability.
+2026-09-05, further amended by [ADR 0012](../decisions/0012-workflow-owned-model-request.md)).
+A request origin has exactly one required typed model slot. Pure operations may
+receive immutable bindings without a provider port. Registered consumers of the
+prepared-request/ledger data contracts retain the originating binding; they
+cannot repeat slot, resource or response-control selection. The existing dataflow
+compiler proves the producer/consumer handoff without new YAML syntax or a
+second model projection. Provider calls still require an independently
+port-derived, policy-permitted capability and the existing token-budget guard.
 
 The selected result-schema resource describes the entire compact model result
 under [ADR 0006](../decisions/0006-minimal-model-response.md), not an inner

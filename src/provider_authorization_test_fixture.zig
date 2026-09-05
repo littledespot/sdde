@@ -49,12 +49,12 @@ pub const Fixture = struct {
     pub fn init(self: *Fixture, allocator: std.mem.Allocator) !void {
         self.requests = requests_module.Runner.init(allocator);
         errdefer self.requests.deinit();
-        try self.requests.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+        try self.requests.initialize(identity.RequestPurposeRegistry.all());
         self.model_request_id = try self.requests.assign(.initial, .{ .task_cluster = .{
             .plan_state_id = .{ .bytes = "plan-1" },
             .obligation_cluster_id = .{ .bytes = "cluster-1" },
         } }, modelOperation(), .initial_generation);
-        self.attempts = try attempts_module.Runner.init(allocator, .{ .bytes = "epoch-1" });
+        self.attempts = try attempts_module.Runner.init(allocator, self.requests.ledger().?.stageRunEpochId());
         errdefer self.attempts.deinit();
         _ = try self.attempts.reserve(.initial, self.requests.ledger().?, self.ledger(), self.requests.ledger().?.revision(), self.model_request_id, .initial);
         self.registry_entry = .{

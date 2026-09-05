@@ -540,6 +540,22 @@ test "model request identity has one opaque ledger and runner applied mutation b
     try std.testing.expectEqual(@as(usize, 3), countOccurrences(runner, "envelope.apply("));
 }
 
+test "workflow request handoff retains authority without introducing operations or capabilities" {
+    const handoff = @import("domain/model_request_handoff.zig");
+    try std.testing.expect(@typeInfo(handoff.Request) == .@"opaque");
+    try std.testing.expect(!@hasField(model_request_identity.StageRunEpochId, "bytes"));
+    try std.testing.expect(@hasField(model_request_identity.ImmutableUnitOwnerId, "workflow_step"));
+    try std.testing.expect(!@hasField(model_request_identity.ContentUnitOwnerId, "workflow_step"));
+    const source = @embedFile("domain/model_request_handoff.zig");
+    inline for (.{ "/application/", "/actions/", "/ports/", "/adapters/", "anyopaque", "@constCast", "std.Io", "std.http", "std.process" }) |forbidden| try expectAbsent(source, forbidden);
+    const preparation = @embedFile("application/model_request_workflow.zig");
+    inline for (.{ "LLMProviderInterface", "invoke_model", "count_input_tokens", "authorization_lease", "retry_limit", "std.Io", "/adapters/" }) |forbidden| try expectAbsent(preparation, forbidden);
+    const assembly = @embedFile("composition/model_request_operations.zig");
+    inline for (.{ "requests.Initialize", "requests.Assign", "requests.Validate", "requests.Build" }) |name| try std.testing.expect(std.mem.indexOf(u8, assembly, name) != null);
+    try expectAbsent(assembly, "operations.Registry");
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "self.model_requests.entries") != null);
+}
+
 test "model invocation forwards one call through the sole provider port without hidden work" {
     const action = @import("actions/model/invoke_model.zig").Action;
     try std.testing.expectEqual(@as(usize, 1), @typeInfo(action).@"struct".fields.len);

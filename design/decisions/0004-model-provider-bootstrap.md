@@ -43,12 +43,17 @@ A project definition cannot author a capability; the workflow compiler can
 preserve only capabilities supplied by registered node contracts and allowed
 by the selected policy.
 
-The model-binding requirement is the existing typed `CompiledStep.model`
-projection, not a second flag or registry. Its registered contract declares
+For a new request, the model-binding requirement is the existing typed
+`CompiledStep.model` projection, not a second flag or registry. Its registered contract declares
 exactly one typed model-slot parameter and explicit response controls, without
 capacity fields or size parameters. Pure preparation and validation operations
-may require this binding without holding a provider port. The runner supplies
-only the active step's immutable validated binding after catalogue bootstrap.
+may require this binding without holding a provider port. Under accepted
+[ADR 0012](0012-workflow-owned-model-request.md), the originating step selects
+that binding once after catalogue bootstrap. Consumers declare the typed
+prepared-request/ledger dependencies and receive its retained immutable binding,
+not a selection rebound to the consumer step. They cannot override its slot,
+resources or controls. Existing graph dataflow proves the required producer;
+there is no second binding registry.
 `model-provider` still derives only from the concrete provider-call port, remains
 policy-gated, and requires a model binding. Binding data never grants that port.
 This amendment supersedes capability-only bootstrap derivation and the former

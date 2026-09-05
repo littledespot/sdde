@@ -46,11 +46,13 @@ as model-call size ceilings.
 
 Implemented across operation registration, workflow compilation, binding,
 request construction, authorization, provider observations and decoding. The
-typed model-slot parameter is the sole binding declaration; capacity fields,
+typed model-slot parameter is the sole new-binding selection; ADR 0012 allows
+consumers to retain that request through typed data dependencies. Capacity fields,
 intersections, wire budgets and the static-capacity action/evidence are removed.
 Request construction reuses existing identity/schema/control validators, and
 observation validation retains the exact prepared request. No replacement
-capacity service or authority exists. Production YAML model-call integration
+capacity service or authority exists. Native YAML request preparation is now
+implemented under ADR 0012. Production YAML model-call integration
 and the real Bedrock adapter remain separate work.
 
 Fake-provider and compiler tests cover rejected retired size parameters,

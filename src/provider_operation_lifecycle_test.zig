@@ -275,7 +275,7 @@ test "foreign forged and unreserved operation identities fail closed" {
         id.model_attempt_ordinal.value = ordinal;
         try std.testing.expectError(error.ProviderOperationAttemptUnavailable, lifecycle.propose(fixture.ledger(), fixture.authority(), .initial, id, null, .{ .assign_count = facts() }));
     }
-    var foreign_epoch = try lifecycle_runner.Runner.init(std.testing.allocator, .{ .bytes = "other-epoch" });
+    var foreign_epoch = try lifecycle_runner.Runner.init(std.testing.allocator, other.requests.ledger().?.stageRunEpochId());
     defer foreign_epoch.deinit();
     try std.testing.expectError(error.ProviderOperationEpochConflict, foreign_epoch.advance(fixture.authority(), .initial, fixture.id(.input_token_count), null, .{ .assign_count = facts() }));
     inline for (0..3) |variant| {
@@ -367,12 +367,12 @@ const Fixture = struct {
     fn init(allocator: std.mem.Allocator) !Fixture {
         var requests = requests_module.Runner.init(allocator);
         errdefer requests.deinit();
-        try requests.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+        try requests.initialize(identity.RequestPurposeRegistry.all());
         const request = try requests.assign(.initial, .{ .task_cluster = .{
             .plan_state_id = .{ .bytes = "plan-1" },
             .obligation_cluster_id = .{ .bytes = "cluster-1" },
         } }, facts().binding_id.operation_id, .initial_generation);
-        var attempts = try attempts_module.Runner.init(allocator, .{ .bytes = "epoch-1" });
+        var attempts = try attempts_module.Runner.init(allocator, requests.ledger().?.stageRunEpochId());
         errdefer attempts.deinit();
         _ = try attempts.reserve(.initial, requests.ledger().?, requests.providerOperations().current(), requests.ledger().?.revision(), request, .initial);
         return .{ .requests = requests, .attempts = attempts, .request = request };

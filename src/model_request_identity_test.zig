@@ -1,4 +1,20 @@
 const std = @import("std");
+
+test "workflow-owned requests retain their origin without accepting SDD authority substitutes" {
+    var runner = @import("application/model_request_identity_runner.zig").Runner.init(std.testing.allocator);
+    defer runner.deinit();
+    try runner.initialize(@import("domain/model_request_identity.zig").RequestPurposeRegistry.all());
+    const origin = modelOperation("origin");
+    const owner: identity.ImmutableUnitOwnerId = .workflow_step;
+    const request = try runner.assign(.initial, owner, origin, .initial_generation);
+    const current = runner.ledger().?;
+    _ = try runner.validate(current.revision(), request, owner, origin, .initial_generation);
+    try std.testing.expectError(error.ModelRequestBindingInvalid, runner.validate(current.revision(), request, owner, modelOperation("another-step"), .initial_generation));
+    try std.testing.expectError(error.InvalidRequestPurposeBinding, runner.assign(current.revision(), owner, origin, .{ .atomic_repair = .{ .bytes = "repair-1" } }));
+    try std.testing.expectError(error.InvalidRequestPurposeBinding, runner.assign(current.revision(), owner, origin, .{ .semantic_review = .{ .bytes = "review-1" } }));
+    try std.testing.expectError(error.InvalidImmutableUnitOwnerId, runner.assign(current.revision(), .{ .task_cluster = .{ .plan_state_id = .{ .bytes = "" }, .obligation_cluster_id = .{ .bytes = "cluster" } } }, origin, .initial_generation));
+    try std.testing.expectError(error.InvalidImmutableUnitOwnerId, runner.assign(current.revision(), .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = "reference" }, .chunk_id = .{ .bytes = "" } } }, origin, .initial_generation));
+}
 const advance_lifecycle = @import("actions/model/advance_model_request_lifecycle.zig");
 const assign_request = @import("actions/model/assign_model_request_id.zig");
 const build_ledger = @import("actions/model/build_initial_model_request_identity_ledger.zig");
@@ -44,7 +60,7 @@ test "immutable unit owner builder validates the complete typed descriptor" {
 test "runner assigns monotonic request identities by unit operation and purpose" {
     var runner = runner_module.Runner.init(std.testing.allocator);
     defer runner.deinit();
-    try runner.initialize(.{ .bytes = "epoch-42" }, identity.RequestPurposeRegistry.all());
+    try runner.initialize(identity.RequestPurposeRegistry.all());
 
     const owner = unitOwner("cluster-1");
     const operation = modelOperation("generate");
@@ -86,7 +102,7 @@ test "runner assigns monotonic request identities by unit operation and purpose"
 test "every closed request purpose binds its required authority" {
     var runner = runner_module.Runner.init(std.testing.allocator);
     defer runner.deinit();
-    try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    try runner.initialize(identity.RequestPurposeRegistry.all());
     const parent: identity.ContentUnitOwnerId = .{ .task_cluster = .{
         .plan_state_id = .{ .bytes = "plan-state-1" },
         .obligation_cluster_id = .{ .bytes = "cluster-1" },
@@ -122,7 +138,7 @@ test "every closed request purpose binds its required authority" {
 test "request assignment owns copied identity bytes for the run lifetime" {
     var runner = runner_module.Runner.init(std.testing.allocator);
     defer runner.deinit();
-    try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    try runner.initialize(identity.RequestPurposeRegistry.all());
 
     var cluster = [_]u8{ 'c', 'l', 'u', 's', 't', 'e', 'r', '-', '1' };
     const first = try runner.assign(
@@ -149,7 +165,7 @@ test "stale revisions and unregistered or mismatched purpose bindings are reject
     var runner = runner_module.Runner.init(std.testing.allocator);
     defer runner.deinit();
     const registry = try identity.RequestPurposeRegistry.init(&.{.initial_generation});
-    try runner.initialize(.{ .bytes = "epoch-1" }, registry);
+    try runner.initialize(registry);
     const owner = unitOwner("cluster-1");
     const operation = modelOperation("generate");
     _ = try runner.assign(.initial, owner, operation, .initial_generation);
@@ -178,7 +194,7 @@ test "stale revisions and unregistered or mismatched purpose bindings are reject
 
     var semantic_runner = runner_module.Runner.init(std.testing.allocator);
     defer semantic_runner.deinit();
-    try semantic_runner.initialize(.{ .bytes = "epoch-2" }, identity.RequestPurposeRegistry.all());
+    try semantic_runner.initialize(identity.RequestPurposeRegistry.all());
     try std.testing.expectError(
         error.InvalidRequestPurposeBinding,
         semantic_runner.assign(
@@ -195,8 +211,8 @@ test "ledger initialization rejects malformed epoch authority" {
     var runner = runner_module.Runner.init(std.testing.allocator);
     defer runner.deinit();
     try std.testing.expectError(
-        error.InvalidStageRunEpochId,
-        runner.initialize(.{ .bytes = "epoch with spaces" }, identity.RequestPurposeRegistry.all()),
+        error.InvalidRequestPurposeRegistry,
+        runner.initialize(.{}),
     );
     try std.testing.expect(runner.ledger() == null);
 }
@@ -204,7 +220,7 @@ test "ledger initialization rejects malformed epoch authority" {
 test "context followup requires an exact current-ledger parent and retains that parent" {
     var runner = runner_module.Runner.init(std.testing.allocator);
     defer runner.deinit();
-    try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    try runner.initialize(identity.RequestPurposeRegistry.all());
     const owner = unitOwner("cluster-1");
     const first = try runner.assign(.initial, owner, modelOperation("generate"), .initial_generation);
     const followup = try runner.assign(
@@ -220,7 +236,7 @@ test "context followup requires an exact current-ledger parent and retains that 
 
     var other = runner_module.Runner.init(std.testing.allocator);
     defer other.deinit();
-    try other.initialize(.{ .bytes = "epoch-2" }, identity.RequestPurposeRegistry.all());
+    try other.initialize(identity.RequestPurposeRegistry.all());
     const foreign = try other.assign(.initial, owner, modelOperation("generate"), .initial_generation);
     try std.testing.expectError(
         error.InvalidRequestPurposeBinding,
@@ -239,7 +255,7 @@ test "context followup requires an exact current-ledger parent and retains that 
 test "binding validation requires exact ledger membership and every bound field" {
     var runner = runner_module.Runner.init(std.testing.allocator);
     defer runner.deinit();
-    try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    try runner.initialize(identity.RequestPurposeRegistry.all());
     const owner = unitOwner("cluster-1");
     const operation = modelOperation("generate");
     const request = try runner.assign(.initial, owner, operation, .initial_generation);
@@ -278,7 +294,7 @@ test "binding validation requires exact ledger membership and every bound field"
 test "runner advances one request through the closed lifecycle" {
     var runner = runner_module.Runner.init(std.testing.allocator);
     defer runner.deinit();
-    try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    try runner.initialize(identity.RequestPurposeRegistry.all());
     const request = try runner.assign(
         .initial,
         unitOwner("cluster-1"),
@@ -306,7 +322,7 @@ test "terminal reason legality is exhaustive for assigned and invoked requests" 
         {
             var runner = runner_module.Runner.init(std.testing.allocator);
             defer runner.deinit();
-            try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+            try runner.initialize(identity.RequestPurposeRegistry.all());
             const request = try runner.assign(
                 .initial,
                 unitOwner("cluster-1"),
@@ -326,7 +342,7 @@ test "terminal reason legality is exhaustive for assigned and invoked requests" 
         {
             var runner = runner_module.Runner.init(std.testing.allocator);
             defer runner.deinit();
-            try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+            try runner.initialize(identity.RequestPurposeRegistry.all());
             const request = try runner.assign(
                 .initial,
                 unitOwner("cluster-1"),
@@ -350,7 +366,7 @@ test "terminal reason legality is exhaustive for assigned and invoked requests" 
 test "lifecycle CAS rejects stale illegal duplicate and foreign transitions atomically" {
     var runner = runner_module.Runner.init(std.testing.allocator);
     defer runner.deinit();
-    try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    try runner.initialize(identity.RequestPurposeRegistry.all());
     const request = try runner.assign(
         .initial,
         unitOwner("cluster-1"),
@@ -395,7 +411,7 @@ test "lifecycle CAS rejects stale illegal duplicate and foreign transitions atom
 
     var foreign_runner = runner_module.Runner.init(std.testing.allocator);
     defer foreign_runner.deinit();
-    try foreign_runner.initialize(.{ .bytes = "epoch-2" }, identity.RequestPurposeRegistry.all());
+    try foreign_runner.initialize(identity.RequestPurposeRegistry.all());
     const foreign = try foreign_runner.assign(
         .initial,
         unitOwner("cluster-1"),
@@ -413,7 +429,7 @@ test "lifecycle CAS rejects stale illegal duplicate and foreign transitions atom
 test "lifecycle history cannot reuse a lower request ordinal" {
     var runner = runner_module.Runner.init(std.testing.allocator);
     defer runner.deinit();
-    try runner.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    try runner.initialize(identity.RequestPurposeRegistry.all());
     const owner = unitOwner("cluster-1");
     const model_operation = modelOperation("generate");
     const first = try runner.assign(.initial, owner, model_operation, .initial_generation);

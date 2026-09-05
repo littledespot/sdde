@@ -31,7 +31,6 @@ pub const Runner = struct {
 
     pub fn initialize(
         self: *Runner,
-        stage_run_epoch_id: identity.StageRunEpochId,
         purpose_registry: identity.RequestPurposeRegistry,
     ) (identity.Error || provider_lifecycle.Error)!void {
         self.envelope.validateInvocation(build_ledger.Action.contract) catch {
@@ -39,11 +38,10 @@ pub const Runner = struct {
         };
         const owner = try self.build_action.execute(
             self.allocator,
-            stage_run_epoch_id,
             purpose_registry,
         );
         errdefer identity.deinitOwner(owner);
-        var operations = try provider_runner.Runner.init(self.allocator, stage_run_epoch_id);
+        var operations = try provider_runner.Runner.init(self.allocator, identity.ledger(owner).stageRunEpochId());
         errdefer operations.deinit();
         self.envelope = self.envelope.apply(
             build_ledger.Action.contract,

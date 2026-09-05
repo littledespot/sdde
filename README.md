@@ -26,6 +26,11 @@ definitions, and publishes the immutable workflow registry before selection.
 Provider configuration is read only after selection when the compiled graph
 requires model binding or provider calls. Pure preparation steps receive only
 immutable binding data; provider calls require a separate policy-permitted port.
+[Workflow-owned requests](design/decisions/0012-workflow-owned-model-request.md)
+now have native YAML initialization, assignment, binding-validation and building
+operations. One request retains its originating slot/resources across steps;
+generic preparation needs no SDD feature or task. Inference integration and
+Bedrock remain separate work.
 
 ## Requirements
 

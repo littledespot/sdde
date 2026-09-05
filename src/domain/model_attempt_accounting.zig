@@ -73,7 +73,6 @@ const OwnerStorage = struct {
 };
 
 pub const ValidationError = error{
-    InvalidStageRunEpochId,
     InvalidAttemptClassification,
     ModelAttemptAccountingRevisionConflict,
     ModelAttemptValueConflict,
@@ -97,7 +96,6 @@ pub fn createInitial(
     allocator: std.mem.Allocator,
     stage_run_epoch_id: request_identity.StageRunEpochId,
 ) Error!*Owner {
-    if (!stage_run_epoch_id.isValid()) return error.InvalidStageRunEpochId;
     const value = try allocator.create(OwnerStorage);
     errdefer allocator.destroy(value);
     value.* = .{
@@ -108,11 +106,11 @@ pub fn createInitial(
         .accounting = undefined,
     };
     errdefer value.arena.deinit();
-    const epoch_bytes = try value.arena.allocator().dupe(u8, stage_run_epoch_id.bytes);
+    const epoch = stage_run_epoch_id.reference.retain();
     const owner: *Owner = @ptrCast(value);
     value.accounting = .{
         .owner = owner,
-        .stage_run_epoch_id = .{ .bytes = epoch_bytes },
+        .stage_run_epoch_id = .{ .reference = epoch },
         .revision = .initial,
         .latest_record = null,
     };
@@ -214,6 +212,7 @@ pub fn deinitOwner(owner: *Owner) void {
         value.reference_count -= 1;
         if (value.reference_count != 0) return;
         const previous = value.previous_owner;
+        if (previous == null) value.accounting.stage_run_epoch_id.reference.release();
         const allocator = value.backing_allocator;
         value.arena.deinit();
         allocator.destroy(value);

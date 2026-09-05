@@ -176,7 +176,9 @@ fn validContract(contract: operation.Contract, capabilities: []const []const u8)
     }
     const requires_model_binding = contract.requiresModelBinding();
     if (model_slot_count > 1) return false;
-    if (model_capable and !requires_model_binding) return false;
+    const consumes_request = contract.consumesPreparedRequest();
+    if (model_capable and !requires_model_binding and !consumes_request) return false;
+    if (consumes_request and !@import("../domain/workflow_model.zig").validConsumerDescriptors(contract.parameters)) return false;
     if (requires_model_binding and !@import("../domain/workflow_model.zig").validDescriptors(contract.parameters)) return false;
     if (contract.retry_limit) |limit| {
         if (contract.kind != .step or limit.maximum == 0) return false;

@@ -50,7 +50,7 @@ provider-effect journal is a prerequisite.
 Provider-neutral capability and model-slot binding are implemented. ADR 0011's
 capacity removal is implemented across registration, compilation, binding,
 request preparation, authorization, observations and decoding. The typed slot
-alone declares a model-binding requirement. Capacity fields, intersections,
+alone selects a new binding; ADR 0012's consumers retain that request binding. Capacity fields, intersections,
 wire budgets, byte parameters and `ValidateStaticModelRequestCapacityAction`
 with its separate evidence have been deleted; no replacement gate exists.
 Response mode and supported controls remain explicit. Inference binds directly
@@ -69,25 +69,51 @@ complete-candidate evidence. `DecodeModelEnvelopeAction` now parses that sealed
 input into an owned, read-only JSON object retaining the same association and
 compiled schema. `ValidateModelPayloadSchemaAction` now checks that tree against
 only its retained schema and returns allocation-free candidate evidence or a
-closed rejection reason. Production YAML registration and provider-native
-schema representability remain work.
+closed rejection reason. Provider-call/response-operation YAML registration and
+provider-native schema representability remain work.
 
-**YAML preparation integration dependency:** The existing actions are not yet
-wired into the production workflow registry. Design Section 7.3 currently
-requires a closed SDD-specific unit owner, and ADR 0004 supplies only the active
-step's binding. Separate identity, preparation and invocation steps therefore
-cannot simply substitute their own step identities for one logical request.
-Production sources for the execution epoch and canonical unit/purpose inputs
-also remain unwired; test-fixture values are not runtime defaults.
+**Accepted and implemented YAML preparation:** [ADR 0012](../decisions/0012-workflow-owned-model-request.md)
+replaces mandatory SDD ownership for generic requests and per-consumer binding
+selection. The native registry exposes `build-initial-model-request-identity-ledger@1`,
+`assign-model-request-id@1`, `validate-model-request-binding@1` and
+`build-model-request@1` as separate YAML operations. Initialization creates a
+fresh process-local execution identity; assignment owns the originating
+compiled step, ordinal, slot, controls, prompt/result-schema resources and
+optional data resource. Validation and construction retain that same identity
+through sealed, execution-owned pipeline values without copying canonical
+ledger or registry authority. The native assignment operation creates initial
+generation requests; SDD-specific owners and other purpose bindings remain
+validated by their existing contracts, not fabricated by generic preparation.
+Provider calls, counting and retries are not part of these operations.
 
-The proposed next amendment is an execution-local, workflow-step-owned request
-identity and one typed retained request reference shared by its explicit YAML
-consumers. The originating step would own slot/resource selection; later steps
-would retain that exact association rather than independently select a binding.
-SDD-specific operations would still validate their required canonical unit and
-purpose authorities. This proposal is **not accepted**: it must amend Section
-7.3 and ADR 0004 before implementation. It introduces no provider calls, size
-limits, persistence, hidden transitions or automatic retries.
+A consumer declares the prepared-request and request-ledger data dependencies;
+the runner supplies the retained binding, not a new selection for the consumer
+step. Slot/resource/control overrides reject. The existing compiler proves the
+handoff and the runner rejects foreign execution references. No new YAML
+syntax, route registry, provider port, byte cap or persisted state is added.
+
+For example, this preparation-only workflow uses one repository-authorized slot
+and two captured resources. It makes no provider call; response operations are
+separate integration work. The prompt and closed result schema remain in files.
+
+```yaml
+schema: workflow/v1
+id: prepare-request
+version: 1
+shortcode: PREP
+invoke: core.empty-invocation@1
+policy: core.capability-free@1
+start: initialize
+resources: { prompt: prompt.md, result: result.json }
+steps:
+  initialize: { use: build-initial-model-request-identity-ledger@1, on: { ok: assign, failed: end.failed } }
+  assign:
+    use: assign-model-request-id@1
+    with: { slot: generation, response-mode: prompt-only, prompt: prompt, result-schema: result }
+    on: { ok: validate, failed: end.failed }
+  validate: { use: validate-model-request-binding@1, on: { ok: build, failed: end.failed } }
+  build: { use: build-model-request@1, on: { ok: end.ok, failed: end.failed } }
+```
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -191,8 +217,8 @@ runtime evidence; the remaining items define subsequent implementation work:
    `(provider, model)` tuple must resolve to exactly one validated catalogue
    entry. Slots may select some or all catalogue entries, never an additional
    model; unused catalogue entries gain no repository authority. ADR 0005
-   removes built-in routes: each YAML-declared generic model operation names
-   one repository slot explicitly;
+   removes built-in routes: each originating YAML model-request step names
+   one repository slot explicitly; consumers retain its binding under ADR 0012;
 7. **Accepted, partially implemented:** amends
    `AdvanceModelAttemptAccountingAction`, design Sections 12.1 and 13.4, and
    `ModelRequestLifecycle` for the Section 7 full-attempt semantics:
@@ -428,7 +454,7 @@ validity: those remain the request/schema validators' responsibilities.
 Every union variant conforms directly to `LLMProviderInterface`; dispatch
 forwards exactly one operation and introduces no second port. Adding a provider
 therefore requires a source change and architecture tests. Unused entries do
-not become callable: only a compiled YAML model operation whose declared slot
+not become callable: only a compiled YAML model operation whose originating request slot
 resolves to a validated fact-only binding can reach the composition-injected
 common port.
 
@@ -517,13 +543,14 @@ facts. Decoded strings alone grant no provider authority.
    the same compact result-object contract under ADR 0006 and are representable
    by the registered response mode.
 
-Model-binding contracts declare one repository slot and explicit `response-mode`
+Request-origin contracts declare one repository slot and explicit `response-mode`
 (`prompt-only | native-schema`). Optional `temperature` is an integer in
 thousandths (`0..1000`); omission sends no temperature control. Resources and
 outcomes remain in the existing concise workflow structure.
 
-The typed slot and response-control requirements compile into the existing
-model-binding projection. They grant immutable binding data, not a provider
+The originating step's typed slot and response-control requirements compile into
+the existing model-binding projection. Registered request consumers use the
+prepared request's typed data dependencies and cannot select a replacement. They grant immutable binding data, not a provider
 port. Provider-call capabilities remain independently derived from narrow ports
 and constrained by the selected policy. No capacity field, second flag or
 registry is needed to derive binding requirements.
@@ -762,8 +789,11 @@ owners outlive the prepared request. Its arena has one explicit cleanup owner.
 Prepared-request checks reuse the shared identity, binding, control and schema
 validators. They grant no send authority or token allowance and enforce no
 request/response size ceiling. These pure checks do not reserve attempts,
-prepare leases or call a provider. Production YAML bindings remain a separate
-increment; a static-capacity action is not required.
+prepare leases or call a provider. Native YAML preparation bindings implement
+this handoff under ADR 0012; provider invocation/response bindings remain a
+separate increment. The fixed internal content contract is `model-request/v1`:
+the selected prompt is guidance and an optional declared data resource is user
+content. The builder adds no instruction text or metadata echoes.
 
 Provider observations are closed tagged unions:
 
@@ -942,8 +972,8 @@ the runner only validates/applies it and never chooses `blocked`, `failed`,
 | Provider-bootstrap composition assembly | Construct the concrete F0008 adapter and config/provider runners, then invoke the fixed orchestrator; perform no selection or branching. |
 | Engine invocation runner | Invoke provider preparation after exact selection, preserve its typed outcome, retain `ready` services through workflow execution, and make workflow execution unreachable after failure or cancellation. |
 | `ResolveProviderModelBindingAction` | Resolve one compiled workflow operation's YAML-declared slot through `ValidatedRepositoryModelAllowlist` to its registry entry and supported controls; never accept a raw provider/model tuple or hidden route as authority. |
-| `BuildImmutableUnitOwnerIdAction` | Validate one closed stage-specific unit-owner descriptor built only from canonical authority IDs; accept no model identity. |
-| `BuildInitialModelRequestIdentityLedgerAction` | Produce the sole empty immutable request ledger for one trusted stage-run epoch and closed purpose registry. |
+| `BuildImmutableUnitOwnerIdAction` | Validate a generic compiled-step owner or the required closed SDD unit-owner tuple; generic ownership never supplies SDD repair/review/clarification authority. |
+| `BuildInitialModelRequestIdentityLedgerAction` | Create a fresh process-local execution epoch and the sole empty immutable request ledger for its closed purpose registry. |
 | `AssignModelRequestIdAction` | Allocate one purpose-bound ordinal from the current ledger revision and return an immutable successor; never mutate the current ledger or reassign a protocol retry. |
 | `ValidateModelRequestBindingAction` | Prove exact ledger membership and epoch/unit/workflow-operation/purpose/ordinal binding without changing the ledger. |
 | `BuildModelRequestAction` | Build one identified provider-neutral request; keep execution identity internal and project only needed guidance/evidence and the exact compact result schema. |
@@ -1066,8 +1096,10 @@ F0006 does not:
     pre-call reservations. Reject retired size parameters. Provider APIs own
     their size limits and the engine propagates their errors/stops.
     Model-request IDs are engine-assigned from one immutable run-local ledger by
-    exact revision; their unit, compiled workflow operation, purpose owner, and
-    ordinal must all validate before request construction.
+    exact revision; execution, originating compiled step, unit/purpose authority
+    where required, and ordinal validate before construction. Generic requests
+    need no SDD owner. Explicit consumer steps retain one immutable request
+    association; they cannot rebind its model or resources.
     The selected workflow policy contributes the only workflow-global limit:
     one positive total model-token budget initialized independently for each
     workflow execution.

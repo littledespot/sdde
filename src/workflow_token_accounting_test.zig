@@ -132,7 +132,7 @@ const Fixture = struct {
     fn init() !Fixture {
         var requests = request_runner.Runner.init(std.testing.allocator);
         errdefer requests.deinit();
-        try requests.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+        try requests.initialize(identity.RequestPurposeRegistry.all());
         const request = try requests.assign(
             .initial,
             .{ .task_cluster = .{

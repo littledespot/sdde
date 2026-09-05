@@ -138,7 +138,6 @@ const OwnerStorage = struct {
 };
 
 pub const ValidationError = error{
-    InvalidStageRunEpochId,
     ProviderOperationEpochConflict,
     ProviderOperationRevisionConflict,
     ProviderOperationRevisionExhausted,
@@ -156,14 +155,13 @@ pub const ValidationError = error{
 pub const Error = std.mem.Allocator.Error || ValidationError;
 
 pub fn createInitial(allocator: std.mem.Allocator, epoch: identity.StageRunEpochId) Error!*Owner {
-    if (!epoch.isValid()) return error.InvalidStageRunEpochId;
     const value = try allocator.create(OwnerStorage);
     errdefer allocator.destroy(value);
     value.* = .{ .allocator = allocator, .arena = .init(allocator), .initial = undefined };
     errdefer value.arena.deinit();
-    const owned_epoch = try value.arena.allocator().dupe(u8, epoch.bytes);
+    const owned_epoch = epoch.reference.retain();
     const owner: *Owner = @ptrCast(value);
-    value.initial = .{ .owner = owner, .epoch = .{ .bytes = owned_epoch }, .revision = .initial, .latest = null };
+    value.initial = .{ .owner = owner, .epoch = .{ .reference = owned_epoch }, .revision = .initial, .latest = null };
     return owner;
 }
 
@@ -175,6 +173,7 @@ pub fn initial(owner: *const Owner) *const Ledger {
 pub fn deinitOwner(owner: *Owner) void {
     const value = ownerStorage(owner);
     const allocator = value.allocator;
+    value.initial.epoch.reference.release();
     value.arena.deinit();
     allocator.destroy(value);
 }

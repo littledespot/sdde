@@ -12,7 +12,7 @@ const workflow_retry = @import("domain/workflow_retry.zig");
 test "initial attempt is separate from explicitly bounded retries" {
     var requests = request_runner.Runner.init(std.testing.allocator);
     defer requests.deinit();
-    try requests.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    try requests.initialize(identity.RequestPurposeRegistry.all());
     const request = try requests.assign(
         .initial,
         unitOwner("cluster-1"),
@@ -20,7 +20,7 @@ test "initial attempt is separate from explicitly bounded retries" {
         .initial_generation,
     );
 
-    var attempts = try attempt_runner.Runner.init(std.testing.allocator, .{ .bytes = "epoch-1" });
+    var attempts = try attempt_runner.Runner.init(std.testing.allocator, requests.ledger().?.stageRunEpochId());
     defer attempts.deinit();
     try expectOrdinal(1, try attempts.reserve(.initial, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .initial));
     try expectOrdinal(2, try attempts.reserve(.{ .value = 1 }, requests.ledger().?, requests.providerOperations().current(), .{ .value = 1 }, request, .{ .retry = retryAuthority(2) }));
@@ -35,14 +35,14 @@ test "initial attempt is separate from explicitly bounded retries" {
 test "attempt classification rejects hidden retry and repeated initial" {
     var requests = request_runner.Runner.init(std.testing.allocator);
     defer requests.deinit();
-    try requests.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    try requests.initialize(identity.RequestPurposeRegistry.all());
     const request = try requests.assign(
         .initial,
         unitOwner("cluster-1"),
         modelOperation("generate"),
         .initial_generation,
     );
-    var attempts = try attempt_runner.Runner.init(std.testing.allocator, .{ .bytes = "epoch-1" });
+    var attempts = try attempt_runner.Runner.init(std.testing.allocator, requests.ledger().?.stageRunEpochId());
     defer attempts.deinit();
 
     try std.testing.expectError(
@@ -77,14 +77,14 @@ test "attempt classification rejects hidden retry and repeated initial" {
 test "attempt and request revisions plus lifecycle reject stale or terminal reservations" {
     var requests = request_runner.Runner.init(std.testing.allocator);
     defer requests.deinit();
-    try requests.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    try requests.initialize(identity.RequestPurposeRegistry.all());
     const request = try requests.assign(
         .initial,
         unitOwner("cluster-1"),
         modelOperation("generate"),
         .initial_generation,
     );
-    var attempts = try attempt_runner.Runner.init(std.testing.allocator, .{ .bytes = "epoch-1" });
+    var attempts = try attempt_runner.Runner.init(std.testing.allocator, requests.ledger().?.stageRunEpochId());
     defer attempts.deinit();
 
     try std.testing.expectError(
@@ -111,14 +111,14 @@ test "attempt and request revisions plus lifecycle reject stale or terminal rese
 test "attempt action proposes one runner-applied transition" {
     var requests = request_runner.Runner.init(std.testing.allocator);
     defer requests.deinit();
-    try requests.initialize(.{ .bytes = "epoch-1" }, identity.RequestPurposeRegistry.all());
+    try requests.initialize(identity.RequestPurposeRegistry.all());
     const request = try requests.assign(
         .initial,
         unitOwner("cluster-1"),
         modelOperation("generate"),
         .initial_generation,
     );
-    const owner = try accounting.createInitial(std.testing.allocator, .{ .bytes = "epoch-1" });
+    const owner = try accounting.createInitial(std.testing.allocator, requests.ledger().?.stageRunEpochId());
     defer accounting.deinitOwner(owner);
     const current = accounting.accounting(owner);
     const delta = try (advance_attempt.Action{}).execute(
@@ -146,16 +146,19 @@ test "attempt action proposes one runner-applied transition" {
 }
 
 test "attempt reservation rejects a request from another stage epoch" {
+    var requests = request_runner.Runner.init(std.testing.allocator);
+    defer requests.deinit();
+    try requests.initialize(identity.RequestPurposeRegistry.all());
     var foreign_requests = request_runner.Runner.init(std.testing.allocator);
     defer foreign_requests.deinit();
-    try foreign_requests.initialize(.{ .bytes = "epoch-2" }, identity.RequestPurposeRegistry.all());
+    try foreign_requests.initialize(identity.RequestPurposeRegistry.all());
     const foreign = try foreign_requests.assign(
         .initial,
         unitOwner("cluster-1"),
         modelOperation("generate"),
         .initial_generation,
     );
-    var attempts = try attempt_runner.Runner.init(std.testing.allocator, .{ .bytes = "epoch-1" });
+    var attempts = try attempt_runner.Runner.init(std.testing.allocator, requests.ledger().?.stageRunEpochId());
     defer attempts.deinit();
     try std.testing.expectError(
         error.ModelRequestUnavailableForAttempt,

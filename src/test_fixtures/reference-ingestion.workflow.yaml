@@ -1,0 +1,56 @@
+schema: workflow/v1
+id: reference-ingestion
+version: 1
+shortcode: RING
+invoke: specify-invocation@1
+policy: core.reference-ingestion@1
+start: normalize-feature
+steps:
+  normalize-feature:
+    use: normalize-feature-directory@1
+    on: { ok: validate-feature, failed: end.failed }
+  validate-feature:
+    use: validate-feature-directory@1
+    on: { ok: inspect-feature, failed: end.failed }
+  inspect-feature:
+    use: inspect-feature-directory@1
+    on: { ok: normalize-reference, failed: end.failed }
+  normalize-reference:
+    use: normalize-reference-selector@1
+    on: { ok: validate-reference, failed: end.failed }
+  validate-reference:
+    use: validate-reference-selector@1
+    on: { ok: inspect-reference, failed: end.failed }
+  inspect-reference:
+    use: inspect-reference-directory@1
+    on: { ok: resolve-paths, failed: end.failed }
+  resolve-paths:
+    use: resolve-feature-artifact-paths@1
+    on: { ok: capture, failed: end.failed }
+  capture:
+    use: capture-clarification-inputs@1
+    on: { ok: parse-state, failed: end.failed }
+  parse-state:
+    use: parse-clarification-state@1
+    on: { ok: validate-state, failed: end.failed }
+  validate-state:
+    use: validate-clarification-state@1
+    on: { ok: validate-forms, failed: end.failed }
+  validate-forms:
+    use: validate-clarification-forms@1
+    on: { ok: inventory-references, failed: end.failed }
+  inventory-references:
+    use: inventory-reference-sources@1
+    on: { ok: validate-inventory, failed: end.failed }
+  validate-inventory:
+    use: validate-reference-inventory@1
+    on: { ok: capture-references, failed: end.failed }
+  capture-references:
+    use: capture-reference-sources@1
+    on: { ok: decode-references, failed: end.failed }
+  decode-references:
+    use: decode-reference-markdown@1
+    on: { ok: validate-accounting, failed: end.failed }
+  validate-accounting:
+    use: validate-reference-accounting@1
+    on: { ok: end.ok, failed: end.failed }

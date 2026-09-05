@@ -5,7 +5,7 @@ const Observation = @import("../../domain/filesystem_identity.zig").FileObservat
 pub const Error = std.mem.Allocator.Error || error{ FileUnavailable, Cancelled };
 
 pub fn observe(io: std.Io, parent: std.Io.Dir, name: []const u8) Error!Observation {
-    var file = parent.openFile(io, name, .{ .mode = .read_only, .path_only = true, .allow_directory = false, .follow_symlinks = false, .resolve_beneath = true }) catch return error.FileUnavailable;
+    var file = try openLeaf(parent, name);
     defer file.close(io);
     return inspect(io, file);
 }
@@ -26,7 +26,7 @@ pub fn capture(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, nam
         else => error.FileUnavailable,
     };
     if (named.kind != .file or named.size > maximum) return error.FileUnavailable;
-    var file = parent.openFile(io, name, .{ .mode = .read_only, .allow_directory = false, .follow_symlinks = false, .resolve_beneath = true }) catch return error.FileUnavailable;
+    var file = try openLeaf(parent, name);
     defer file.close(io);
     const before = try inspect(io, file);
     if (expected) |prior| if (!same(prior, before)) return error.FileUnavailable;
@@ -47,4 +47,38 @@ pub fn capture(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, nam
     const wanted = @import("unicode_normalization").nfc(fixed.allocator(), name, std.Io.Dir.max_name_bytes) catch return error.FileUnavailable;
     if (!std.mem.eql(u8, actual, wanted)) return error.FileUnavailable;
     return bytes;
+}
+
+/// NONBLOCK prevents a raced-in FIFO/device from hanging before fstat rejects
+/// its kind. A single validated leaf and NOFOLLOW keep lookup under this parent.
+fn openLeaf(parent: std.Io.Dir, name: []const u8) Error!std.Io.File {
+    @import("../../domain/relative_directory_path.zig").validate(name) catch return error.FileUnavailable;
+    if (std.mem.indexOfScalar(u8, name, '/') != null) return error.FileUnavailable;
+    const handle = std.posix.openat(parent.handle, name, .{
+        .ACCMODE = .RDONLY,
+        .CLOEXEC = true,
+        .NOFOLLOW = true,
+        .NOCTTY = true,
+        .NONBLOCK = true,
+    }, 0) catch return error.FileUnavailable;
+    return .{ .handle = handle, .flags = .{ .nonblocking = true } };
+}
+
+test "regular-file capture rejects missing aliases special nodes and stale observations" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try project.dir.writeFile(io, .{ .sub_path = "source.md", .data = "first" });
+    const observed = try observe(io, project.dir, "source.md");
+    const bytes = (try capture(io, std.testing.allocator, project.dir, "source.md", observed, 5)).?;
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqualStrings("first", bytes);
+    try std.testing.expect((try capture(io, std.testing.allocator, project.dir, "missing.md", null, 5)) == null);
+    try std.testing.expectError(error.FileUnavailable, capture(io, std.testing.allocator, project.dir, "missing.md", observed, 5));
+    try project.dir.symLink(io, "source.md", "alias.md", .{});
+    try std.testing.expectError(error.FileUnavailable, capture(io, std.testing.allocator, project.dir, "alias.md", null, 5));
+    try project.dir.writeFile(io, .{ .sub_path = "source.md", .data = "other" });
+    try std.testing.expectError(error.FileUnavailable, capture(io, std.testing.allocator, project.dir, "source.md", observed, 5));
+    try std.testing.expectError(error.FileUnavailable, capture(io, std.testing.allocator, project.dir, "source.md", null, 4));
+    try std.testing.expectError(error.FileUnavailable, observe(io, project.dir, "../source.md"));
 }
