@@ -60,11 +60,24 @@ and have one cleanup owner. Rejected deltas publish neither accounting changes
 nor attempt evidence. No provider call, lifecycle advancement, lease preparation
 or token charge is hidden in this integration.
 
+## Operation assignment integration (implemented 2026-09-06)
+
+`assign-provider-operation@1` consumes the same prepared request and applied
+attempt; `kind` explicitly selects `inference` or `input-token-count`. The existing
+lifecycle action proposes one assignment. The runner validates the exact retained
+association and publishes sealed evidence from the applied canonical record with
+the envelope delta. The evidence retains the operation and request owners.
+Rejected deltas publish neither; consuming evidence does not remove an open
+operation. No authorization preparation, API call, retry, token charge or
+persistence is implicit. Later lifecycle phases remain separate integration work.
+
 ## Acceptance
 
 Compile and execute arbitrary YAML using the native preparation bindings and
 test-only provider contracts. Prove exact identity/resource retention across
 different steps, missing-input and rebinding rejection, malformed SDD owners,
 cancellation, allocation cleanup and isolation between executions. Test-only
+assignment cases also cover duplicate/open operations, both kinds, stale/foreign
+evidence, forged transitions and compiler-permission tampering. Test-only
 provider contracts do not enter production composition. Provider invocation
 integration and Bedrock remain separate increments.

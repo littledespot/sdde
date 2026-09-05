@@ -9,7 +9,8 @@ lifecycle and authorization belong only to the current atomic execution.
 **Provider-limit amendment:** [ADR 0011](../decisions/0011-provider-owned-request-limits.md)
 removes adapter-side request/response byte ceilings and wire-budget proofs.
 Bedrock reports its API limits; SDDE preserves those failures/stops and accounts
-actual usage. F0006's capacity-free boundary and native YAML request-preparation handoff
+actual usage. F0006's capacity-free boundary and native YAML request preparation,
+attempt accounting and operation-assignment handoff
 (ADR 0012) are implemented; no size-ceiling
 decision is a prerequisite for this feature. The Bedrock adapter remains proposed.
 

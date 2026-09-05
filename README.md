@@ -34,6 +34,9 @@ Bedrock remain separate work.
 `advance-model-attempt-accounting@1` now accounts that prepared request through
 the same YAML runner. Its explicit `retry-limit` permits retries after the
 initial execution; applied attempt evidence and ledgers remain execution-local.
+`assign-provider-operation@1` then explicitly selects `inference` or
+`input-token-count` and publishes sealed assignment evidence for that attempt.
+Assignment makes no API call, prepares no authorization and charges no tokens.
 
 ## Requirements
 
@@ -51,6 +54,7 @@ zig build test-model-result-schema
 zig build test-reference-preflight
 zig build test-reference-ingestion
 zig build test-reference-evidence
+zig build test-reference-extraction
 zig build test-feature-directory
 zig build test-clarification-inputs
 zig build smoke
@@ -84,8 +88,11 @@ reference identities and builds source-mapped extraction chunks. Citation checks
 reject foreign states/IDs, out-of-chunk spans and altered quotations against the
 captured bytes. The [ingestion YAML fixture](src/test_fixtures/reference-ingestion.workflow.yaml)
 tests these read-only preparation steps; it is not an additional required user
-workflow. Claim extraction/reconciliation and snapshot publication remain future
-work. See [F0100](design/features/F0100-SpecWorkflow.md#34-citable-reference-inputs).
+workflow. Native extraction-result parsing, citation-backed candidate validation,
+engine-assigned claim/citation IDs and complete chunk accounting are also tested
+through YAML with scripted results. Model extraction, semantic reconciliation
+and snapshot publication remain future work. See
+[F0100](design/features/F0100-SpecWorkflow.md#35-extraction-candidate-accounting).
 Full `spec.md` generation remains unfinished. Shared NFC uses statically
 linked utf8proc with packaged license notices
 ([ADR 0007](design/decisions/0007-unicode-normalization.md)).

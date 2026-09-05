@@ -137,6 +137,7 @@ fn graphProjectsDefinition(
     for (graph.authority.steps, declared.steps) |compiled, step| {
         if (!@import("workflow_operation.zig").validAccounting(compiled.runner_accounting, compiled.requires, compiled.produces, compiled.side_effect, compiled.retry_authority != null)) return false;
         if (!@import("workflow_model.zig").validProjection(compiled)) return false;
+        if (!@import("workflow_provider_operation.zig").validProjection(compiled)) return false;
         if (!std.mem.eql(u8, compiled.id.bytes, step.id.bytes) or
             !std.mem.eql(u8, compiled.operation_id.bytes, step.operation_id.bytes) or
             compiled.parameters.len != step.parameters.len or compiled.outcomes.len != step.outcomes.len) return false;

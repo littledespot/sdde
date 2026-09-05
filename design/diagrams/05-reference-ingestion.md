@@ -12,11 +12,17 @@ flowchart TD
     DECODE --> IDENTIFY["assign-reference-identities@1<br/>Fresh reference state; total source/block identity mappings"]
     IDENTIFY --> CHUNKS["build-reference-chunks@1<br/>One identified chunk per source block; no source reread"]
     CHUNKS --> CITABLE["validate-reference-chunks@1<br/>Prove exact source mappings and complete chunk coverage"]
-    CITABLE --> EXTRACT[Run YAML-declared extraction operations<br/>not implemented in the read-only increment]
-    EXTRACT --> CITE["validate-source-citations@1<br/>Check exact call scope, source spans and optional quotations"]
-    CITE --> VALIDATE[Validate complete extraction coverage and candidate facts;<br/>semantic support is not deterministic citation proof]
+    CITABLE --> EXTRACT["YAML-declared model extraction - future<br/>Tests supply engine-scoped scripted results"]
+    EXTRACT --> PARSE["parse-reference-extraction-results@1<br/>Closed claims or positive no-feature-claim body"]
+    PARSE --> CITE["validate-reference-claims@1<br/>Reuse the shared source-citation validator; complete chunk joins"]
+    CITE --> IDS["assign-reference-claim-identities@1<br/>Engine-owned state-local claim and citation IDs"]
+    IDS --> LEDGER["build-reference-extraction-ledger@1<br/>In-memory unreviewed claims and chunk outcomes"]
+    LEDGER --> ACCOUNT["validate-reference-extraction-accounting@1<br/>Exact chunk, claim and citation coverage"]
+    ACCOUNT -- Complete --> VALIDATE["Future semantic validation and reconciliation;<br/>citation integrity is not proof of meaning"]
+    ACCOUNT -- Blocked chunk --> BLOCKED["End blocked; no specification publication"]
+    ACCOUNT -- Invalid coverage --> ABANDON
     VALIDATE -- Invalid candidate --> REPAIR[Only declared bounded repair or failure transition]
-    REPAIR --> CITE
+    REPAIR --> VALIDATE
     VALIDATE -- Required authority missing --> CLARIFY[Preserve one clarification per stable subject<br/>end execution without partial workflow output]
     VALIDATE -- Valid --> CANDIDATE[Retain complete reference candidate for subsequent YAML steps]
     CANDIDATE --> FINAL[Whole-workflow validation and successful output]
@@ -25,14 +31,17 @@ flowchart TD
     DECODE -- Failure --> ABANDON
     IDENTIFY -- Failure --> ABANDON
     CITABLE -- Invalid --> ABANDON
+    PARSE -- Failed --> ABANDON
     CITE -- Failed --> ABANDON
     REPAIR -- Unresolved or exhausted --> ABANDON
 ```
 
-Implemented: Markdown capture/accounting, reference identities, chunk preparation
-and citation validation. The test-only ingestion YAML stops at `CITABLE`;
-citation tests supply typed proposals. Extraction, reconciliation, persistent
-snapshots and downstream output publication remain unfinished.
+Implemented: Markdown capture/accounting, citable inputs and extraction-candidate
+parsing, structural validation, ID assignment and total accounting. The base
+test-only ingestion YAML stops at `CITABLE`; scripted-result tests extend it
+through `ACCOUNT`. Model extraction, token/passive-literal handling, semantic
+reconciliation, snapshots and publication remain unfinished. See
+[F0100 §3.5](../features/F0100-SpecWorkflow.md#35-extraction-candidate-accounting).
 
 No reference-stage transaction or durable extraction checkpoint is created.
 An interrupted execution is abandoned; a later invocation starts at the

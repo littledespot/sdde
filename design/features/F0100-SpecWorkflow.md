@@ -7,7 +7,8 @@ compiler, registry, and transition-runner boundaries are implemented by F0005
 and ADR 0005. The logical Specify flow, `spec.md` section hierarchy, and
 clarification separation are defined below. The explicit feature/reference
 invocation, shared directory preflight, read-only clarification inputs, Markdown
-ingestion and citable reference preparation in Sections 3.1–3.4 are implemented.
+ingestion, citable reference preparation and scripted extraction-candidate
+accounting in Sections 3.1–3.5 are implemented.
 Generated-name code is removed; semantic extraction/reconciliation, generation,
 output publication and the complete definition remain unfinished.
 
@@ -261,10 +262,54 @@ Models cannot choose the call scope or assign citation IDs.
 [`reference-ingestion.workflow.yaml`](../../src/test_fixtures/reference-ingestion.workflow.yaml)
 is an executable **test fixture**, ending at validated chunk preparation. Tests
 also inject typed citation proposals to exercise the registered validator through
-the native runner. No production proposal producer, model call, claim ledger,
-persistent snapshot, clarification acceptance or `spec.md` publication is added.
+the native runner. Section 3.5 extends those tests with scripted extraction
+results. No production proposal producer, model call, persistent snapshot,
+clarification acceptance or `spec.md` publication is added.
 The complete Specify YAML will compose these same operations, not invoke a
 second required user workflow. Closed clarification files remain untouched.
+
+### 3.5 Extraction-candidate accounting
+
+Five registered operations keep this boundary explicit in the selected YAML:
+
+| Operation | Contract |
+| --- | --- |
+| `parse-reference-extraction-results@1` | Engine-scoped raw observations → closed parsed candidates. |
+| `validate-reference-claims@1` | Citable inputs and parsed candidates → structurally validated claims, ordered by engine chunk order. Reuses the same citation validator as §3.4. |
+| `assign-reference-claim-identities@1` | Validated candidates → state-local claim/citation ordinals; no model-selected IDs. |
+| `build-reference-extraction-ledger@1` | Assigned identities → in-memory claims, citations and chunk outcomes. |
+| `validate-reference-extraction-accounting@1` | Citable inputs and ledger → exact total chunk/claim/citation coverage, with explicit `ok` or `blocked`; malformed coverage fails. |
+
+The current lossless-Markdown candidate body is exactly one JSON object:
+`{kind: claims, claims: [...], token_classifications: []}` or
+`{kind: no_feature_claim, reason: nonempty-text, token_classifications: []}`.
+These are shape descriptions, not literal JSON examples. Each claim has only
+`content: {kind, text}` and a nonempty `citations` collection using §3.4's typed
+proposal shape. Content kinds are `business`, `design`, `technical`,
+`validation`, `implementation_assumption`, `open_question` and `scope_guard`.
+Text remains unreviewed interpretation, **not validated BusinessText or accepted
+requirements**. Unknown/duplicate fields, unsupported kinds, forged IDs,
+missing fields and nonempty token classifications are rejected.
+
+State/chunk scope and `blocked: extraction_failed` are engine observations,
+never model body fields. Every supplied chunk needs exactly one claims,
+positive `no_feature_claim`, or engine-blocked result. Missing/duplicate/foreign
+chunks fail; any blocked chunk makes total accounting blocked, even when other
+chunks contain claims. `source_blocks_v1` has one chunk per block, so exact chunk
+coverage also proves block coverage. Claim/citation IDs start at one in each
+fresh reference state and follow chunk/claim/citation order; response arrival
+order cannot change them. No ID counters or ledgers are persisted.
+
+This is not the complete `result.reference-claims/v1` production contract:
+structured-token candidate generation/classification, passive-literal and
+business-text validation, semantic support, reconciliation and publication are
+still required before these candidates can become reference authority. The
+current reader supplies no structured-token candidates; empty classifications
+are explicit, not an invitation to ignore future candidates. There is no live
+model producer or hidden prompt/schema resource. Native values own their data
+and retain only execution-local predecessors; they impose no model-call byte
+ceiling. The test-only YAML path runs the five operations with scripted results
+and does not write artifacts, accept clarifications or mark a stage complete.
 
 ## 4. Required logical coverage
 
@@ -508,11 +553,13 @@ YAML definition.
 
 ## 8. Verification
 
-- `zig build test-reference-ingestion test-reference-evidence` covers source
+- `zig build test-reference-ingestion test-reference-evidence test-reference-extraction` covers source
   accounting, deterministic identity mappings, complete chunks, Unicode/CRLF,
-  exact quotations, foreign scopes and allocation failures. `zig build verify`
-  additionally covers native YAML dependencies, failed-citation continuation
-  rejection, cancellation and the packaged read-only ingestion path;
+  exact quotations, foreign scopes, closed extraction bodies, engine IDs,
+  total chunk/claim/citation joins, blocked results and allocation/ownership
+  failures. `zig build verify` additionally covers native YAML dependencies,
+  rejection before continuation, cancellation and the packaged read-only
+  ingestion path;
 - closed YAML fixtures reject missing, unknown, duplicate, and wrong-kind
   fields and every prohibited operational value;
 - compiler tests cover exact reference resolution, complete outcomes, graph

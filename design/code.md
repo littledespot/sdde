@@ -574,6 +574,13 @@ RepairAccountingTransition =
 // accounted_model_attempt is a sealed view of the applied canonical record.
 // Envelope publication and accounting installation succeed together or neither
 // becomes visible. The value retains its request and accounting owners.
+// assign-provider-operation@1 selects only inference or input-token-count and
+// calls AdvanceProviderOperationLifecycleAction for assignment. The runner
+// compares the proposal to the retained prepared request and applied attempt.
+// assigned_provider_operation is a sealed view of the canonical assigned Record;
+// the current lifecycle ledger, not envelope presence, owns operation status.
+// Publishing this view and its ledger successor is one runner application.
+// Its value retains operation/request owners; no lease or provider call occurs.
 
 TelemetryFact =
   | RunStartedFact

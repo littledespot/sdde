@@ -429,6 +429,11 @@ author them. The implemented attempt-accounting binding consumes the retained
 request, requires an explicit operation-local `retry-limit`, and publishes only
 runner-applied typed attempt evidence. Its next visit requires the previous
 evidence to have been consumed/invalidated through declared data effects.
+The native provider-assignment binding additionally requires applied attempt
+evidence and one closed `kind` selection. Only runner application creates its
+sealed assigned-operation value. Missing dependencies, hidden accounting
+permissions, undeclared kind parameters and forged/stale handoffs reject; no
+new YAML fields, resource overrides or provider capability are introduced.
 
 The selected result-schema resource describes the entire compact model result
 under [ADR 0006](../decisions/0006-minimal-model-response.md), not an inner

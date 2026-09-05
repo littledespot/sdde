@@ -27,6 +27,10 @@ pub const StepInput = struct {
         operations: *const @import("../domain/provider_operation_lifecycle.zig").Ledger,
         attempt: @import("../domain/model_attempt_accounting.zig").Attempt,
     } = null,
+    provider_operation: ?struct {
+        ledger: *const @import("../domain/provider_operation_lifecycle.zig").Ledger,
+        authority: @import("../domain/provider_operation_lifecycle.zig").Authority,
+    } = null,
 };
 
 pub const Input = union(enum) {
@@ -154,6 +158,7 @@ pub const Registry = struct {
 
 fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
     if (!operation.validAccounting(contract.runner_accounting, contract.requires, contract.produces, contract.side_effect, contract.retry_limit != null)) return false;
+    if (contract.runner_accounting == .advance_provider_operation and !@import("../domain/workflow_provider_operation.zig").validDescriptors(contract.parameters)) return false;
     if (contract.outcomes.len == 0 or !uniqueOutcomes(contract.outcomes) or
         !uniqueStrings(contract.gates) or !uniqueStrings(capabilities) or
         !validDataContract(contract)) return false;
@@ -198,6 +203,9 @@ fn validContract(contract: operation.Contract, capabilities: []const []const u8)
 }
 
 fn validDataContract(contract: operation.Contract) bool {
+    if (containsKey(contract.replaces, .assigned_provider_operation) or
+        ((containsKey(contract.requires, .assigned_provider_operation) or containsKey(contract.optional, .assigned_provider_operation)) and
+            (!contract.consumesPreparedRequest() or !containsKey(contract.requires, .accounted_model_attempt)))) return false;
     if (containsKey(contract.replaces, .accounted_model_attempt) or
         ((containsKey(contract.requires, .accounted_model_attempt) or containsKey(contract.optional, .accounted_model_attempt)) and !contract.consumesPreparedRequest())) return false;
     if (!uniqueKeys(contract.requires) or !uniqueKeys(contract.optional) or !uniqueKeys(contract.produces) or

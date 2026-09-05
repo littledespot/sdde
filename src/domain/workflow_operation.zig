@@ -60,11 +60,14 @@ pub const PolicyProfile = struct {
 pub fn validAccounting(capability: pipeline.RunnerAccountingCapability, requires: []const pipeline.DataKey, produces: []const pipeline.DataKey, effect: pipeline.SideEffect, retry: bool) bool {
     return switch (capability) {
         .none => for (produces) |key| {
-            if (key == .accounted_model_attempt) break false;
+            if (key == .accounted_model_attempt or key == .assigned_provider_operation) break false;
         } else true,
         .increment_model_attempt => @import("workflow_model.zig").consumesPreparedRequest(requires) and
             std.mem.eql(pipeline.DataKey, produces, &.{.accounted_model_attempt}) and effect == .none and retry,
-        // These lifecycle primitives are not yet integrated into YAML execution.
-        .advance_provider_operation, .reconcile_workflow_tokens => false,
+        .advance_provider_operation => @import("workflow_model.zig").consumesPreparedRequest(requires) and
+            std.mem.indexOfScalar(pipeline.DataKey, requires, .accounted_model_attempt) != null and
+            std.mem.eql(pipeline.DataKey, produces, &.{.assigned_provider_operation}) and effect == .none and !retry,
+        // Token reconciliation is not yet integrated into YAML execution.
+        .reconcile_workflow_tokens => false,
     };
 }

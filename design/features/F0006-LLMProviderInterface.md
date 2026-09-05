@@ -98,14 +98,23 @@ as retry policy. Consumers invalidate used attempt evidence before a YAML retry.
 Missing/foreign/stale evidence, forged transitions and rejected deltas cannot
 publish or reset accounting. No provider call, lease or token charge occurs.
 
+**Implemented YAML operation assignment:** `assign-provider-operation@1` requires
+`kind: inference` or `kind: input-token-count`, the retained prepared request and
+applied attempt evidence. It calls the existing lifecycle action once; only the
+runner applies the proposal and publishes sealed `assigned_provider_operation`
+evidence referencing that canonical record. Exact request, attempt, kind, binding,
+input and current revisions must match. Duplicate assignments, unfinished
+operations and stale/foreign evidence reject. Assignment performs no provider
+call, authorization preparation, counting, token charge or persistence.
+
 A consumer declares the prepared-request and request-ledger data dependencies;
 the runner supplies the retained binding, not a new selection for the consumer
 step. Slot/resource/control overrides reject. The existing compiler proves the
 handoff and the runner rejects foreign execution references. No new YAML
 syntax, route registry, provider port, byte cap or persisted state is added.
 
-For example, this preparation/accounting workflow uses one repository-authorized slot
-and two captured resources. It makes no provider call; response operations are
+For example, this preparation and assignment workflow uses one repository-authorized
+slot and two captured resources. It makes no provider call; response operations are
 separate integration work. The prompt and closed result schema remain in files.
 
 ```yaml
@@ -125,7 +134,8 @@ steps:
     on: { ok: validate, failed: end.failed }
   validate: { use: validate-model-request-binding@1, on: { ok: build, failed: end.failed } }
   build: { use: build-model-request@1, on: { ok: account, failed: end.failed } }
-  account: { use: advance-model-attempt-accounting@1, with: { retry-limit: 0 }, on: { ok: end.ok, failed: end.failed } }
+  account: { use: advance-model-attempt-accounting@1, with: { retry-limit: 0 }, on: { ok: operation, failed: end.failed } }
+  operation: { use: assign-provider-operation@1, with: { kind: inference }, on: { ok: end.ok, failed: end.failed } }
 ```
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
@@ -646,14 +656,24 @@ operation may remain assigned when its attempt or request terminates. A provider
 action requires proof that its `invoked` transition is already applied.
 
 The implementation retains immutable ledger snapshots under one execution
-owner. The request runner owns that lifetime and destroys it before canonical
-request identities. Every change checks the exact ledger, request, attempt, and
-operation revisions; count and inference reference the existing reserved
+owner. Sealed pipeline evidence retains that owner and the canonical request
+owner until destroyed; it does not copy operation authority. Every change checks
+the exact ledger, request, attempt, and operation revisions; count and inference reference the existing reserved
 attempt rather than reserving it again. Either assignment owns immutable
 binding and input-identity facts; inference does not join a count record.
 The action emits one declared runner transition, and only the runner publishes
 the successor. Request terminalization and a later attempt are rejected while
 an operation remains assigned or invoked.
+
+The native assignment binding accepts only the two assignment commands. The
+registry/compiler require its closed `kind` parameter and prepared-request/
+applied-attempt dependencies. The runner supplies read-only lifecycle authority,
+checks the proposal against the retained request, and publishes the successor
+and evidence together only after envelope validation. Removing evidence cannot
+erase an open operation or reset an attempt. Assignment is not invocation or a
+lease: YAML integration of authorization, invocation and terminalization remains
+separate work. Execution cleanup discards its in-memory records, never resumes
+or persists them.
 
 The applied invocation record belongs only to the current execution. No
 persisted send marker or result-consumption record is required. The runner's
@@ -1130,6 +1150,9 @@ F0006 does not:
     ledgers, initial/retry classification, compiler-permitted delta application,
     sealed applied evidence, explicit retry exhaustion, cancellation, allocation
     cleanup, and rejection of forged/stale/cross-execution associations are tested.
+    Native assignment is also implemented for both operation kinds: exact
+    retained associations, immutable applied evidence, duplicate/open-operation
+    rejection, compiled permission checks, cancellation and allocation cleanup.
 13. Each call performs zero or one provider request with no hidden retry,
     fallback, backoff, credential acquisition/refresh, or second operation;
     any permitted credential I/O has separate accepted accounting.

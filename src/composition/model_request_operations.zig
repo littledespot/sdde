@@ -3,9 +3,11 @@ const requests = @import("../application/model_request_workflow.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const binding = @import("../application/workflow_operation_binding.zig");
 const attempts = @import("../application/model_attempt_workflow.zig");
+const provider_operations = @import("../application/provider_operation_workflow.zig");
+const accounting = @import("../application/workflow_model_accounting.zig");
 
-pub const count = 5;
-pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{@import("../application/workflow_model_accounting.zig").schema};
+pub const count = 6;
+pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
 pub const Assembly = struct {
@@ -14,6 +16,7 @@ pub const Assembly = struct {
     validate: requests.Validate,
     build: requests.Build,
     advance_attempt: attempts.Advance,
+    assign_operation: provider_operations.Assign,
     entries: [count]operations.Entry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator) void {
@@ -23,6 +26,7 @@ pub const Assembly = struct {
             .validate = .{ .allocator = allocator },
             .build = .{ .allocator = allocator },
             .advance_attempt = .{},
+            .assign_operation = .{},
             .entries = undefined,
         };
         self.entries = .{
@@ -31,6 +35,7 @@ pub const Assembly = struct {
             entry(requests.Validate, &self.validate),
             entry(requests.Build, &self.build),
             entry(attempts.Advance, &self.advance_attempt),
+            entry(provider_operations.Assign, &self.assign_operation),
         };
     }
 };

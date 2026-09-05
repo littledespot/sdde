@@ -118,6 +118,30 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_accounting.expectStdOutEqual("");
     denied_accounting.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
 
+    const missing_attempt_directory = b.addTempFiles();
+    const missing_attempt_executable = missing_attempt_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_attempt_directory.add(".sddtoolkit.json", configuration);
+    _ = missing_attempt_directory.add(".sddtoolkit/workflows/assign.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: assign
+        \\version: 1
+        \\shortcode: ASGN
+        \\invoke: core.empty-invocation@1
+        \\policy: core.capability-free@1
+        \\start: assign
+        \\steps:
+        \\  assign: { use: assign-provider-operation@1, with: { kind: inference }, on: { ok: end.ok, failed: end.failed } }
+    );
+    const denied_assignment = std.Build.Step.Run.create(b, "reject packaged provider assignment without prepared request and attempt evidence");
+    denied_assignment.addFileArg(missing_attempt_executable);
+    denied_assignment.addArg("assign");
+    denied_assignment.setCwd(missing_attempt_directory.getDirectory());
+    denied_assignment.clearEnvironment();
+    denied_assignment.expectExitCode(1);
+    denied_assignment.expectStdOutEqual("");
+    denied_assignment.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_accounting.step.dependOn(&denied_assignment.step);
+
     const denied_toolchain = std.Build.Step.Run.create(b, "reject invalid toolchain only when selected");
     denied_toolchain.addFileArg(packaged_executable);
     denied_toolchain.addArg("toolchain-check");

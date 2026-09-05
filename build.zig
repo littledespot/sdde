@@ -204,6 +204,15 @@ pub fn build(b: *std.Build) void {
     const evidence_step = b.step("test-reference-evidence", "Test reference identities chunks and citation boundaries");
     evidence_step.dependOn(&b.addRunArtifact(evidence_tests).step);
 
+    const extraction_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/reference_extraction_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const extraction_step = b.step("test-reference-extraction", "Test closed reference claim candidates and complete chunk accounting");
+    extraction_step.dependOn(&b.addRunArtifact(extraction_tests).step);
+
     const feature_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/feature_directory_test.zig"),
         .target = target,

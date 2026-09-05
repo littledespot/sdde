@@ -1391,6 +1391,15 @@ foreign/stale evidence and another initial attempt cannot reset accounting.
 This operation prepares no lease, advances no provider operation, performs no
 provider call and charges no tokens. All its owners are destroyed with execution.
 
+Native `assign-provider-operation@1` consumes that prepared request and applied
+attempt with one explicit `kind` (`inference` or `input-token-count`). The existing
+provider-operation lifecycle action proposes assignment; the runner validates
+its exact request/attempt/binding/input association and current revisions, then
+publishes the immutable ledger successor and sealed `assigned_provider_operation`
+view together. Consuming evidence cannot erase an unfinished operation or permit
+a retry. This step neither invokes a provider nor prepares authorization, counts
+tokens or persists records. Those operations remain explicit separate YAML work.
+
 Each workflow-declared result schema defines the entire compact response;
 there is no generic open payload or repeated engine metadata. Repair operations
 do not recursively repair semantic failures: malformed responses may receive

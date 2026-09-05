@@ -71,6 +71,13 @@ pub const Record = struct {
     state: State,
 };
 
+/// Sealed view of an applied assignment, never a second operation record.
+pub const AssignedOperation = opaque {
+    pub fn record(self: *const AssignedOperation) *const Record {
+        return @ptrCast(@alignCast(self));
+    }
+};
+
 pub const Authority = struct {
     requests: *const identity.ModelRequestIdentityLedger,
     expected_request_revision: identity.LedgerRevision,
@@ -110,6 +117,12 @@ pub const Ledger = opaque {
         };
     }
 
+    pub fn requireAssigned(self: *const Ledger, id: provider.ProviderOperationId) ValidationError!*const AssignedOperation {
+        const found = self.record(id) orelse return error.ProviderOperationNotFound;
+        if (found.state != .assigned) return error.InvalidProviderOperationTransition;
+        return @ptrCast(found);
+    }
+
     pub fn validateRequestClosure(self: *const Ledger, request: *const identity.ModelRequestId) ValidationError!void {
         if (!self.stageRunEpochId().eql(request.stage_run_epoch_id)) return error.ProviderOperationEpochConflict;
         var node = storage(self).latest;
@@ -121,8 +134,8 @@ pub const Ledger = opaque {
     }
 };
 
-// One execution owner retains immutable snapshots. Canonical request IDs are
-// borrowed from the request runner, which destroys this owner before its ledger.
+// One execution owner retains immutable snapshots. Retained pipeline views must
+// also retain the canonical request owner; records borrow its request IDs.
 pub const Owner = opaque {};
 const Node = struct { previous: ?*const Node, record: Record };
 const Storage = struct {
@@ -133,6 +146,7 @@ const Storage = struct {
 };
 const OwnerStorage = struct {
     allocator: std.mem.Allocator,
+    reference_count: usize = 1,
     arena: std.heap.ArenaAllocator,
     initial: Storage,
 };
@@ -151,6 +165,7 @@ pub const ValidationError = error{
     InvalidProviderOperationTransition,
     InvalidProviderOperationBinding,
     InvalidProviderOperationCountEvidence,
+    ProviderOperationReferenceExhausted,
 };
 pub const Error = std.mem.Allocator.Error || ValidationError;
 
@@ -172,10 +187,19 @@ pub fn initial(owner: *const Owner) *const Ledger {
 
 pub fn deinitOwner(owner: *Owner) void {
     const value = ownerStorage(owner);
+    std.debug.assert(value.reference_count > 0);
+    value.reference_count -= 1;
+    if (value.reference_count != 0) return;
     const allocator = value.allocator;
     value.initial.epoch.reference.release();
     value.arena.deinit();
     allocator.destroy(value);
+}
+
+pub fn retainOwner(owner: *Owner) ValidationError!void {
+    const value = ownerStorage(owner);
+    std.debug.assert(value.reference_count > 0);
+    value.reference_count = std.math.add(usize, value.reference_count, 1) catch return error.ProviderOperationReferenceExhausted;
 }
 
 pub fn propose(

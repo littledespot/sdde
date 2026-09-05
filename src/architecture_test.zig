@@ -802,6 +802,14 @@ test "provider lifecycle has one pure action and runner-owned immutable ledger" 
     }
     const action_source = @embedFile("actions/model/advance_provider_operation_lifecycle.zig");
     try expectAbsent(action_source, "lifecycle.apply(");
+    try std.testing.expect(@typeInfo(lifecycle.AssignedOperation) == .@"opaque");
+    const native = @embedFile("application/provider_operation_workflow.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(native, "self.action.execute("));
+    inline for (.{ "lifecycle.apply(", "LLMProviderInterface", "ProviderAuthorization", "std.Io", "reconcile(" }) |forbidden| try expectAbsent(native, forbidden);
+    const workflow_runner = @embedFile("application/workflow_pipeline_runner.zig");
+    try expectAbsent(workflow_runner, "initial(state.operations)");
+    try std.testing.expect(std.mem.indexOf(u8, workflow_runner, "pending = state.prepareAssignment(").? < std.mem.indexOf(u8, workflow_runner, "self.envelope.apply(").?);
+    try std.testing.expect(std.mem.indexOf(u8, workflow_runner, "self.envelope.apply(").? < std.mem.indexOf(u8, workflow_runner, "self.model_accounting.?.commit(").?);
     const runner = @embedFile("application/provider_operation_lifecycle_runner.zig");
     try std.testing.expect(std.mem.indexOf(u8, runner, "envelope.applyDelta(").? < std.mem.indexOf(u8, runner, "lifecycle.apply(").?);
     const request_runner = @embedFile("application/model_request_identity_runner.zig");
@@ -1404,6 +1412,29 @@ test "reference evidence has shared identity types and pure chunk citation bound
     try std.testing.expect(!@hasField(evidence.CitationProposal, "state_id"));
     try std.testing.expect(!@hasField(evidence.CitationProposal, "chunk_id"));
     try std.testing.expect(!@hasField(evidence.CitationProposal, "citation_id"));
+}
+
+test "extraction candidates reuse citation and identity owners without gaining capabilities" {
+    const extraction = @import("domain/reference_extraction.zig");
+    const identity = @import("domain/reference_identity.zig");
+    const operations = @import("application/reference_extraction_workflow.zig");
+    const binding = @import("application/workflow_operation_binding.zig");
+    try std.testing.expect(extraction.ClaimId == identity.ClaimId);
+    try std.testing.expect(extraction.CitationId == identity.CitationId);
+    inline for (.{ operations.Parse, operations.Validate, operations.Assign, operations.Build, operations.Account }) |T| {
+        try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
+        try std.testing.expectEqual(@as(usize, 0), @typeInfo(T.Action).@"struct".fields.len);
+        try std.testing.expect(T.Action.contract.side_effect == .none);
+    }
+    for (operations.schemas) |schema| try std.testing.expect(schema.maximum_bytes == null);
+    for ([_][]const u8{ "state_id", "chunk_id", "claim_id", "citation_id", "disposition" }) |field| {
+        inline for (@typeInfo(extraction.Proposal).@"struct".fields) |proposal_field| try std.testing.expect(!std.mem.eql(u8, field, proposal_field.name));
+    }
+    inline for (.{ @embedFile("actions/reference/validate_source_citations.zig"), @embedFile("actions/reference/validate_reference_claims.zig") }) |source| {
+        try std.testing.expect(std.mem.indexOf(u8, source, "domain/source_citations.zig") != null);
+        try expectAbsent(source, "reference.advance");
+    }
+    try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "reference_extraction");
 }
 
 test "feature document filenames and headings agree" {

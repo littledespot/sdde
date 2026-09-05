@@ -20,6 +20,8 @@ const contracts = @import("domain/llm_provider_contracts.zig");
 const roots = @import("domain/bootstrap_root_registry.zig");
 const attempt_accounting = @import("domain/model_attempt_accounting.zig");
 const attempt_values = @import("application/workflow_model_accounting.zig");
+const lifecycle = @import("domain/provider_operation_lifecycle.zig");
+const provider = @import("domain/llm_provider_operation.zig");
 
 const yaml =
     \\schema: workflow/v1
@@ -226,7 +228,13 @@ fn allocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const
     defer runner.deinit();
     var harness: Harness = .{ .runner = &runner };
     const outcome = harness.run();
-    if (outcome == .failed) return error.OutOfMemory;
+    if (outcome == .failed) {
+        if (runner.model_accounting) |state| {
+            try std.testing.expectEqual(@as(u64, 0), state.current_operations.revision().value);
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.assigned_provider_operation)] == null);
+        }
+        return error.OutOfMemory;
+    }
     try std.testing.expectEqual(.ok, outcome);
 }
 
@@ -245,7 +253,7 @@ test "YAML accounting publishes applied attempt evidence without rebinding or pr
     try std.testing.expectEqual(@as(u32, 1), evidence.ordinal().value);
     try std.testing.expectEqualStrings("origin", request.id().model_operation_id.workflow_step_id.bytes);
     try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
-    try std.testing.expectEqual(@as(u64, 0), @import("domain/provider_operation_lifecycle.zig").initial(runner.model_accounting.?.operations).revision().value);
+    try std.testing.expectEqual(@as(u64, 0), runner.model_accounting.?.current_operations.revision().value);
     for (graph.authority.steps) |step| if (step.runner_accounting == .increment_model_attempt) {
         try std.testing.expectEqualStrings("account", step.retry_authority.?.operation_instance_id.bytes);
         try std.testing.expectEqual(@as(usize, 0), step.capabilities.len);
@@ -443,11 +451,280 @@ const FaultyAdvance = struct {
     }
 };
 
+test "YAML assigns either provider operation to the existing attempt without external effects" {
+    for ([_][]const u8{ "inference", "input-token-count" }) |kind| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try assignmentYaml(&fixture, kind, false));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.ok, harness.run());
+        try std.testing.expectEqual(@as(usize, 1), fixture.observer.calls);
+        const evidence = try assignedOperation(&runner);
+        const record = evidence.record();
+        try std.testing.expectEqual(@as(provider.ProviderOperationKind, if (std.mem.eql(u8, kind, "inference")) .inference else .input_token_count), record.id.kind);
+        try std.testing.expectEqual(@as(u32, 1), record.id.model_attempt_ordinal.value);
+        try std.testing.expectEqual(@as(u64, 1), runner.model_accounting.?.current_operations.revision().value);
+        try std.testing.expect(evidence == try runner.model_accounting.?.current_operations.requireAssigned(record.id));
+        try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+        for (graph.authority.steps) |step| try std.testing.expectEqual(@as(usize, 0), step.capabilities.len);
+    }
+}
+
+test "assignment rejects missing dependencies and hidden or invalid kind parameters" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const source = try assignmentYaml(&fixture, "inference", false);
+    for ([_][2][]const u8{
+        .{ "with: {kind: inference}, ", "" },
+        .{ "kind: inference", "kind: true" },
+        .{ "kind: inference", "kind: automatic" },
+        .{ "kind: inference", "kind: inference, retry-limit: 1" },
+        .{ "kind: inference", "kind: inference, slot: selected" },
+        .{ "kind: inference", "kind: inference, prompt: prompt" },
+        .{ "use: advance-model-attempt-accounting@1, with: {retry-limit: 0}, on: {ok: assign-operation, failed: end.failed}", "use: core.noop@1, on: {ok: assign-operation}" },
+        .{ "use: build-model-request@1", "use: core.noop@1" },
+        .{ "assign-provider-operation@1", "hidden-provider-operation@1" },
+    }) |change| {
+        const invalid = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, change[0], change[1]);
+        try std.testing.expect(!std.mem.eql(u8, source, invalid));
+        if (fixture.compile(invalid)) |_| return error.ExpectedRejection else |err| switch (err) {
+            error.WorkflowGraphCompileInvalid, error.WorkflowDefinitionSchemaInvalid => {},
+            else => return err,
+        }
+    }
+}
+
+test "an assigned operation blocks a YAML retry even after its pipeline evidence is consumed" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try assignmentYaml(&fixture, "inference", true));
+    fixture.observer.retry_until = 2;
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.failed, harness.run());
+    try std.testing.expectEqual(@as(usize, 1), fixture.observer.calls);
+    try std.testing.expectEqual(@as(u64, 1), attempt_accounting.accounting(runner.model_accounting.?.attempts).revision().value);
+    try std.testing.expectEqual(@as(u64, 1), runner.model_accounting.?.current_operations.revision().value);
+    try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.assigned_provider_operation)] == null);
+}
+
+test "foreign attempt and assignment evidence never reach an assignment or consumer" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try assignmentYaml(&fixture, "input-token-count", false));
+    var first = fixture.runner(graph, std.testing.allocator);
+    defer first.deinit();
+    var second = fixture.runner(graph, std.testing.allocator);
+    defer second.deinit();
+    var one: Harness = .{ .runner = &first };
+    var two: Harness = .{ .runner = &second };
+    try std.testing.expectEqual(.ok, one.run());
+    try std.testing.expectEqual(.ok, two.run());
+    for ([_]pipeline.DataKey{ .accounted_model_attempt, .assigned_provider_operation }) |key| {
+        const index = @intFromEnum(key);
+        std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[index], &second.envelope.slots[index]);
+        defer std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[index], &second.envelope.slots[index]);
+        try std.testing.expectEqual(.authority, second.bindings().invokeStep(.{ .bytes = "observe" }).rejected);
+        if (key == .accounted_model_attempt) try std.testing.expectEqual(.authority, second.bindings().invokeStep(.{ .bytes = "assign-operation" }).rejected);
+    }
+    try std.testing.expectEqual(@as(usize, 2), fixture.observer.calls);
+    // Consuming an envelope value cannot authorize assigning the same operation again.
+    const key = @intFromEnum(pipeline.DataKey.assigned_provider_operation);
+    const saved = second.envelope.slots[key].?;
+    second.envelope.slots[key] = null;
+    defer second.envelope.slots[key] = saved;
+    try std.testing.expectEqual(.failed, second.bindings().invokeStep(.{ .bytes = "assign-operation" }).outcome);
+    try std.testing.expectEqual(@as(u64, 1), second.model_accounting.?.current_operations.revision().value);
+}
+
+test "assignment cancellation and allocation failures publish no partial ledger or evidence" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try assignmentYaml(&fixture, "inference", false));
+    for (0..7) |boundary| {
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var harness: Harness = .{ .runner = &runner, .cancel_at = boundary };
+        runner.runtime = .{ .context = &harness, .status_fn = Harness.status };
+        try std.testing.expectEqual(.cancelled, harness.run());
+        if (boundary <= 5) {
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.assigned_provider_operation)] == null);
+            if (runner.model_accounting) |state| try std.testing.expectEqual(@as(u64, 0), state.current_operations.revision().value);
+        }
+    }
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ &fixture, graph });
+}
+
+test "assignment registration and compiled graphs reject hidden authority" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try assignmentYaml(&fixture, "inference", false));
+    const entry = for (&fixture.entries) |*entry| {
+        if (entry.contract.runner_accounting == .advance_provider_operation) break entry;
+    } else return error.MissingAssignment;
+    const original = entry.*;
+    entry.contract.parameters = &.{};
+    try std.testing.expect(!fixture.registry.validate());
+    entry.* = original;
+    entry.contract.runner_accounting = .none;
+    try std.testing.expect(!fixture.registry.validate());
+    entry.* = original;
+    entry.contract.requires = &.{ .model_request_identity_ledger, .prepared_model_request };
+    try std.testing.expect(!fixture.registry.validate());
+    entry.* = original;
+    entry.contract.produces = &.{};
+    entry.contract.replaces = &.{.assigned_provider_operation};
+    try std.testing.expect(!fixture.registry.validate());
+    entry.* = original;
+
+    for ([_]bool{ false, true }) |remove_permission| {
+        var tampered = graph.*;
+        const steps = try fixture.arena.allocator().dupe(compilation.CompiledStep, graph.authority.steps);
+        for (steps) |*step| if (step.runner_accounting == .advance_provider_operation) {
+            if (remove_permission) step.runner_accounting = .none else step.parameters = &.{};
+        };
+        tampered.authority.steps = steps;
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        var runner = fixture.runner(&tampered, std.testing.allocator);
+        defer runner.deinit();
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.failed, harness.run());
+        try std.testing.expectEqual(@as(u64, 0), runner.model_accounting.?.current_operations.revision().value);
+    }
+}
+
+test "a terminal operation makes retained assignment evidence stale" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try assignmentYaml(&fixture, "input-token-count", false));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.ok, harness.run());
+    const evidence = try assignedOperation(&runner);
+    const request = try currentRequest(&runner);
+    const state = &runner.model_accounting.?;
+    const authority = state.operationAuthority(request.ledger());
+    const delta = try (@import("actions/model/advance_provider_operation_lifecycle.zig").Action{}).execute(state.current_operations, authority, state.current_operations.revision(), evidence.record().id, evidence.record().revision, .{ .terminate = .{ .cancelled = .not_sent } });
+    state.current_operations = try lifecycle.apply(state.current_operations, authority, delta.runner_accounting_transition.?.advance_provider_operation);
+    try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "observe" }).rejected);
+    try std.testing.expectEqual(@as(usize, 1), fixture.observer.calls);
+}
+
+test "forged assignment proposals and rejected deltas cannot publish an operation" {
+    for (std.enums.values(FaultyAssignment.Fault)) |fault| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try assignmentYaml(&fixture, "inference", false));
+        var faulty: FaultyAssignment = .{ .fault = fault };
+        for (&fixture.entries) |*entry| if (entry.contract.runner_accounting == .advance_provider_operation) {
+            entry.binding = bindings.bind(FaultyAssignment, &faulty, FaultyAssignment.invoke);
+        };
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        runner.runtime = .{ .context = &faulty, .status_fn = FaultyAssignment.status };
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(@as(workflow.OutcomeTag, if (fault == .cancel_after_action) .cancelled else .invalid), harness.run());
+        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        try std.testing.expectEqual(@as(u64, 0), runner.model_accounting.?.current_operations.revision().value);
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.assigned_provider_operation)] == null);
+    }
+}
+
+test "assigned evidence retains its canonical record and request until destroyed" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try assignmentYaml(&fixture, "inference", false));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    var alive = true;
+    defer if (alive) runner.deinit();
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.ok, harness.run());
+    const evidence = try assignedOperation(&runner);
+    const key = @intFromEnum(pipeline.DataKey.assigned_provider_operation);
+    const retained = runner.envelope.slots[key].?;
+    runner.envelope.slots[key] = null;
+    defer values.destroy(retained);
+    runner.deinit();
+    alive = false;
+    try std.testing.expectEqualStrings("origin", evidence.record().id.model_request_id.model_operation_id.workflow_step_id.bytes);
+    try std.testing.expectEqualStrings("selected", evidence.record().binding_id.slot_id.bytes);
+    try std.testing.expectEqual(.assigned, evidence.record().state);
+}
+
+fn assignmentYaml(fixture: *Fixture, kind: []const u8, cycle: bool) ![]const u8 {
+    const source = try accountingYaml(fixture, if (cycle) 1 else 0, cycle);
+    const consumer = &fixture.entries[fixture.entries.len - 1];
+    consumer.contract.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .assigned_provider_operation };
+    if (cycle) consumer.contract.invalidates = &.{ .accounted_model_attempt, .assigned_provider_operation };
+    fixture.observer.consume_operation = cycle;
+    const replaced = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "ok: observe", "ok: assign-operation");
+    return std.fmt.allocPrint(fixture.arena.allocator(), "{s}\n  assign-operation: {{ use: assign-provider-operation@1, with: {{kind: {s}}}, on: {{ok: observe, failed: end.failed}} }}\n", .{ replaced, kind });
+}
+
+fn assignedOperation(runner: *const runner_module.Runner) !*const lifecycle.AssignedOperation {
+    return values.read(&.{ .slots = runner.envelope.slots }, attempt_values.operation_schema, lifecycle.AssignedOperation);
+}
+
+const FaultyAssignment = struct {
+    const Fault = enum { missing_transition, wrong_ordinal, wrong_kind, wrong_binding, wrong_input, stale_revision, unassigned_invoke, undeclared_write, forged_evidence, cancel_after_action };
+    action: @import("actions/model/advance_provider_operation_lifecycle.zig").Action = .{},
+    fault: Fault,
+    cancelled: bool = false,
+
+    fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
+        const prepared = request.prepared().?;
+        const evidence = values.read(&input.step.data, attempt_values.schema, attempt_accounting.AccountedAttempt) catch return error.OperationExecutionFailed;
+        const facts = input.step.provider_operation.?;
+        var delta = self.action.execute(facts.ledger, facts.authority, facts.ledger.revision(), .{ .model_request_id = request.id(), .model_attempt_ordinal = evidence.ordinal(), .kind = .inference }, null, .{ .assign_inference = .{ .binding_id = prepared.binding_id, .model_visible_input_id = prepared.model_visible_input_id } }) catch return error.OperationExecutionFailed;
+        const transition = &delta.runner_accounting_transition.?.advance_provider_operation;
+        switch (self.fault) {
+            .missing_transition => delta.runner_accounting_transition = null,
+            .wrong_ordinal => transition.operation_id.model_attempt_ordinal.value += 1,
+            .wrong_kind => {
+                const assigned = transition.command.assign_inference;
+                transition.operation_id.kind = .input_token_count;
+                transition.command = .{ .assign_count = assigned };
+            },
+            .wrong_binding => transition.command.assign_inference.binding_id.slot_id.bytes = "other-slot",
+            .wrong_input => transition.command.assign_inference.model_visible_input_id.bytes = "other-input",
+            .stale_revision => transition.expected_revision.value += 1,
+            .unassigned_invoke => transition.command = .{ .invoke = .{ .deadline_monotonic_ms = 100 } },
+            .undeclared_write, .forged_evidence => {
+                const key: pipeline.DataKey = if (self.fault == .undeclared_write) .raw_engine_config else .assigned_provider_operation;
+                delta.data_writes[@intFromEnum(key)] = values.create(std.testing.allocator, values.schema(.raw_engine_config, bool, 1, 1), bool, true) catch return error.OperationExecutionFailed;
+            },
+            .cancel_after_action => self.cancelled = true,
+        }
+        return .{ .outcome = .ok, .delta = delta };
+    }
+
+    fn status(context: ?*anyopaque) pipeline.RuntimeStatus {
+        const self: *const FaultyAssignment = @ptrCast(@alignCast(context.?));
+        return if (self.cancelled) .cancelled else .active;
+    }
+};
+
 const Observer = struct {
     calls: usize = 0,
     last_attempt: u32 = 0,
     retry_until: u32 = 1,
     consume_attempt: bool = false,
+    consume_operation: bool = false,
     fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
@@ -459,6 +736,13 @@ const Observer = struct {
             if (evidence.requestId() != request.id()) return error.OperationExecutionFailed;
             self.last_attempt = evidence.ordinal().value;
             if (self.consume_attempt) delta.data_invalidations.insert(.accounted_model_attempt);
+        }
+        if (input.step.data.contains(.assigned_provider_operation)) {
+            const evidence = values.read(&input.step.data, attempt_values.operation_schema, lifecycle.AssignedOperation) catch return error.OperationExecutionFailed;
+            const record = evidence.record();
+            if (record.id.model_request_id != request.id() or record.id.model_attempt_ordinal.value != self.last_attempt or
+                !record.binding_id.eql(request.prepared().?.binding_id) or !record.model_visible_input_id.eql(request.prepared().?.model_visible_input_id) or record.state != .assigned) return error.OperationExecutionFailed;
+            if (self.consume_operation) delta.data_invalidations.insert(.assigned_provider_operation);
         }
         return .{ .outcome = if (self.last_attempt != 0 and self.last_attempt < self.retry_until) .invalid else .ok, .delta = delta };
     }

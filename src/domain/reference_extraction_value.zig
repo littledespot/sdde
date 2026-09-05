@@ -1,0 +1,70 @@
+//! Execution-local ownership only. No filesystem, counters persisted to disk,
+//! model capabilities or model-call byte ceilings.
+const std = @import("std");
+const extraction = @import("reference_extraction.zig");
+pub const Payload = union(enum) {
+    raw: extraction.Raw,
+    parsed: extraction.Parsed,
+    validated: extraction.Validated,
+    assigned: extraction.Assignments,
+    ledger: extraction.Ledger,
+    accounted: extraction.Accounted,
+};
+pub const Value = opaque {
+    pub fn payload(self: *const Value) *const Payload {
+        return &storage(self).payload;
+    }
+};
+pub const Owner = struct {
+    allocator: std.mem.Allocator,
+    arena: std.heap.ArenaAllocator,
+    references: usize = 1,
+    parent: ?*const Value,
+    payload: Payload,
+    handle: Handle,
+};
+const Handle = struct { owner: *Owner };
+
+/// A result may borrow its one preceding immutable candidate, never a runner
+/// input's unretained allocation. The chain has the six closed payload stages.
+pub fn create(allocator: std.mem.Allocator, parent: ?*const Value) std.mem.Allocator.Error!*Owner {
+    const owner = try allocator.create(Owner);
+    owner.* = .{ .allocator = allocator, .arena = .init(allocator), .parent = parent, .payload = .{ .raw = .{ .entries = &.{} } }, .handle = .{ .owner = owner } };
+    if (parent) |value| storage(value).references = std.math.add(usize, storage(value).references, 1) catch @panic("reference value count exhausted");
+    return owner;
+}
+pub fn view(owner: *const Owner) *const Value {
+    return @ptrCast(&owner.handle);
+}
+pub fn destroy(owner: *Owner) void {
+    std.debug.assert(owner.references > 0);
+    owner.references -= 1;
+    if (owner.references != 0) return;
+    if (owner.parent) |parent| destroy(storage(parent));
+    const allocator = owner.allocator;
+    owner.arena.deinit();
+    allocator.destroy(owner);
+}
+fn storage(value: *const Value) *Owner {
+    const handle: *const Handle = @ptrCast(@alignCast(value));
+    return handle.owner;
+}
+
+/// Test/provider adapters transfer engine-bound observations, not model IDs.
+pub fn capture(allocator: std.mem.Allocator, raw: extraction.Raw) std.mem.Allocator.Error!*Owner {
+    const owner = try create(allocator, null);
+    errdefer destroy(owner);
+    const arena = owner.arena.allocator();
+    const entries = try arena.alloc(extraction.RawResult, raw.entries.len);
+    for (raw.entries, entries) |input, *entry| {
+        entry.* = .{
+            .scope = .{ .state_id = .{ .bytes = try arena.dupe(u8, input.scope.state_id.bytes) }, .chunk_id = .{ .bytes = try arena.dupe(u8, input.scope.chunk_id.bytes) } },
+            .result = switch (input.result) {
+                .response => |bytes| .{ .response = try arena.dupe(u8, bytes) },
+                .blocked => |reason| .{ .blocked = reason },
+            },
+        };
+    }
+    owner.payload = .{ .raw = .{ .entries = entries } };
+    return owner;
+}

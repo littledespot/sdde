@@ -10,6 +10,8 @@ pub const StateId = struct {
 };
 pub const SourceId = struct { ordinal: u32 };
 pub const BlockId = struct { ordinal: u32 };
+pub const ClaimId = struct { ordinal: u32 };
+pub const CitationId = struct { ordinal: u32 };
 pub const ChunkId = struct {
     bytes: []const u8,
 

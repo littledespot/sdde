@@ -8,7 +8,7 @@ const cite = @import("actions/reference/validate_source_citations.zig");
 const read = @import("reference_ingestion_test.zig").read;
 const feature: @import("domain/feature_identity.zig").FeatureId = .{ .bytes = "Chosen/Café" };
 
-const IdSource = struct {
+pub const IdSource = struct {
     calls: u8 = 0,
     fail: bool = false,
     fn port(self: *IdSource) @import("ports/reference_state_identity.zig").Source {
@@ -21,7 +21,7 @@ const IdSource = struct {
         return @splat(self.calls);
     }
 };
-fn prepare(allocator: std.mem.Allocator, source: *IdSource, inputs: reference.Inputs) !evidence.Inputs {
+pub fn prepare(allocator: std.mem.Allocator, source: *IdSource, inputs: reference.Inputs) !evidence.Inputs {
     const corpus = try (assign.Action{ .identities = source.port() }).execute(allocator, inputs, feature);
     const chunks = try (build.Action{}).execute(allocator, corpus);
     return (validate.Action{}).execute(inputs, feature, corpus, chunks);

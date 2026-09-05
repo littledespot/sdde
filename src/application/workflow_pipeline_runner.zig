@@ -19,6 +19,14 @@ const attempt = @import("../domain/model_attempt_accounting.zig");
 const requests = @import("model_request_workflow.zig");
 const identity = @import("../domain/model_request_identity.zig");
 const values = @import("pipeline_values.zig");
+const lifecycle = @import("../domain/provider_operation_lifecycle.zig");
+const operation_selection = @import("../domain/workflow_provider_operation.zig");
+
+const ExpectedAccounting = union(enum) {
+    none,
+    attempt: attempt.Attempt,
+    assignment: @import("../domain/llm_provider_operation.zig").ProviderOperationKind,
+};
 
 pub const Runner = struct {
     allocator: std.mem.Allocator,
@@ -92,7 +100,7 @@ pub const Runner = struct {
             .produces = authority.invocation_outputs,
             .side_effect = .none,
         };
-        return self.applyCandidate(contract, &candidate, null);
+        return self.applyCandidate(contract, &candidate, .none);
     }
 
     fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
@@ -140,6 +148,12 @@ pub const Runner = struct {
             if (evidence.requestId() != request.id() or current.attemptsReserved(request.id()) != evidence.ordinal().value or
                 !current.stageRunEpochId().eql(request.id().stage_run_epoch_id)) return .{ .rejected = .authority };
         }
+        if (input_data.slots[@intFromEnum(pipeline.DataKey.assigned_provider_operation)] != null) {
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
+            const evidence = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
+            const request = retained_request orelse return .{ .rejected = .authority };
+            state.validateAssignment(evidence, request.prepared().?) catch return .{ .rejected = .authority };
+        }
         var resolved_binding = self.resolveModelBinding(step.*) catch {
             return .{ .outcome = .failed };
         };
@@ -150,6 +164,8 @@ pub const Runner = struct {
             }
         }
         var attempt_input: @FieldType(operations.StepInput, "model_attempt") = null;
+        var provider_input: @FieldType(operations.StepInput, "provider_operation") = null;
+        var expected: ExpectedAccounting = .none;
         if (step.runner_accounting == .increment_model_attempt) {
             const current_requests = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
             if (self.model_accounting == null) self.model_accounting = model_accounting.State.init(self.allocator, current_requests) catch return .{ .outcome = .failed };
@@ -160,9 +176,17 @@ pub const Runner = struct {
             const executions = self.retry_execution_counts[index];
             attempt_input = .{
                 .accounting = current,
-                .operations = @import("../domain/provider_operation_lifecycle.zig").initial(state.operations),
+                .operations = state.current_operations,
                 .attempt = if (executions == 0) .initial else .{ .retry = .{ .authority = authority, .completed_retries = executions - 1 } },
             };
+            expected = .{ .attempt = attempt_input.?.attempt };
+        }
+        if (step.runner_accounting == .advance_provider_operation) {
+            const current_requests = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
+            const kind = operation_selection.resolve(step.parameters) orelse return .{ .rejected = .authority };
+            provider_input = .{ .ledger = state.current_operations, .authority = state.operationAuthority(current_requests) };
+            expected = .{ .assignment = kind };
         }
         if (step.retry_authority) |authority| {
             if (self.retry_execution_counts[index] > @as(u64, authority.limit.value)) return .{ .outcome = .failed };
@@ -177,11 +201,12 @@ pub const Runner = struct {
             .model_binding = if (retained_request) |request| request.binding() else if (resolved_binding) |*value| value else null,
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
             .model_attempt = attempt_input,
+            .provider_operation = provider_input,
         } }) catch return .{ .outcome = .failed };
         defer self.envelope.discard(&candidate.delta);
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .outcome = .failed };
-        return self.applyCandidate(stepPipelineContract(step.*), &candidate, if (attempt_input) |input| input.attempt else null);
+        return self.applyCandidate(stepPipelineContract(step.*), &candidate, expected);
     }
 
     pub fn tokenLedger(self: *const Runner) *const @import("../domain/workflow_token_accounting.zig").Ledger {
@@ -232,21 +257,34 @@ pub const Runner = struct {
         return true;
     }
 
-    fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: *execution.Candidate, expected_attempt: ?attempt.Attempt) execution.Applied {
+    fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: *execution.Candidate, expected: ExpectedAccounting) execution.Applied {
         var pending: ?model_accounting.Pending = null;
         defer if (pending) |unapplied| unapplied.discard();
-        if (contract.runner_accounting == .increment_model_attempt) {
+        if (expected != .none) {
             if (candidate.outcome != .ok) return .{ .outcome = .invalid };
             const transition = candidate.delta.runner_accounting_transition orelse return .{ .outcome = .invalid };
-            if (transition != .increment_model_attempt) return .{ .outcome = .invalid };
-            const key = @intFromEnum(pipeline.DataKey.accounted_model_attempt);
-            // Only application of the accounting transition creates evidence.
+            const key = @intFromEnum(@as(pipeline.DataKey, switch (expected) {
+                .attempt => .accounted_model_attempt,
+                .assignment => .assigned_provider_operation,
+                .none => unreachable,
+            }));
+            // Only application of the declared runner transition creates evidence.
             if (candidate.delta.data_writes[key] != null or candidate.delta.data_replacements[key] != null) return .{ .outcome = .invalid };
             const view = self.envelope.view(contract) catch return .{ .outcome = .invalid };
             const request = requests.readCurrent(&view, requests.prepared_schema) catch return .{ .rejected = .authority };
             const current = values.read(&view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
             const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
-            pending = state.prepare(current, request.id(), expected_attempt orelse return .{ .rejected = .authority }, transition.increment_model_attempt) catch |err| return .{ .outcome = if (err == error.OutOfMemory) .failed else .invalid };
+            switch (expected) {
+                .attempt => |classification| {
+                    if (transition != .increment_model_attempt) return .{ .outcome = .invalid };
+                    pending = state.prepare(current, request.id(), classification, transition.increment_model_attempt) catch |err| return .{ .outcome = if (err == error.OutOfMemory) .failed else .invalid };
+                },
+                .assignment => |kind| {
+                    if (transition != .advance_provider_operation) return .{ .outcome = .invalid };
+                    pending = state.prepareAssignment(current, request.prepared().?, kind, transition.advance_provider_operation) catch |err| return .{ .outcome = if (err == error.OutOfMemory) .failed else .invalid };
+                },
+                .none => unreachable,
+            }
             candidate.delta.data_writes[key] = pending.?.value;
         }
         self.envelope.apply(contract, &candidate.delta, candidate.outcome) catch return .{ .outcome = .invalid };
