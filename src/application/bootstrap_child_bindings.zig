@@ -41,15 +41,6 @@ pub const ChildBindings = struct {
         validate_workflow_graphs: *const fn (*anyopaque) StepOutcome,
         build_workflow_registry: *const fn (*anyopaque) StepOutcome,
         validate_workflow_registry: *const fn (*anyopaque) StepOutcome,
-        capture_project_toolchain: *const fn (*anyopaque) StepOutcome,
-        inventory_toolchain_presets: *const fn (*anyopaque) StepOutcome,
-        capture_toolchain_presets: *const fn (*anyopaque) StepOutcome,
-        parse_toolchain_documents: *const fn (*anyopaque) StepOutcome,
-        validate_project_toolchain_schema: *const fn (*anyopaque) StepOutcome,
-        validate_toolchain_preset_registry: *const fn (*anyopaque) StepOutcome,
-        resolve_toolchain_inheritance: *const fn (*anyopaque) StepOutcome,
-        compose_toolchain: *const fn (*anyopaque) StepOutcome,
-        validate_toolchain_safety: *const fn (*anyopaque) StepOutcome,
         take_services: *const fn (*anyopaque) bootstrap_services.BootstrapServices,
     };
 
@@ -150,33 +141,6 @@ pub const ChildBindings = struct {
     }
     pub fn invokeValidateWorkflowRegistry(self: ChildBindings) StepOutcome {
         return self.vtable.validate_workflow_registry(self.context);
-    }
-    pub fn invokeCaptureProjectToolchain(self: ChildBindings) StepOutcome {
-        return self.vtable.capture_project_toolchain(self.context);
-    }
-    pub fn invokeInventoryToolchainPresets(self: ChildBindings) StepOutcome {
-        return self.vtable.inventory_toolchain_presets(self.context);
-    }
-    pub fn invokeCaptureToolchainPresets(self: ChildBindings) StepOutcome {
-        return self.vtable.capture_toolchain_presets(self.context);
-    }
-    pub fn invokeParseToolchainDocuments(self: ChildBindings) StepOutcome {
-        return self.vtable.parse_toolchain_documents(self.context);
-    }
-    pub fn invokeValidateProjectToolchainSchema(self: ChildBindings) StepOutcome {
-        return self.vtable.validate_project_toolchain_schema(self.context);
-    }
-    pub fn invokeValidateToolchainPresetRegistry(self: ChildBindings) StepOutcome {
-        return self.vtable.validate_toolchain_preset_registry(self.context);
-    }
-    pub fn invokeResolveToolchainInheritance(self: ChildBindings) StepOutcome {
-        return self.vtable.resolve_toolchain_inheritance(self.context);
-    }
-    pub fn invokeComposeToolchain(self: ChildBindings) StepOutcome {
-        return self.vtable.compose_toolchain(self.context);
-    }
-    pub fn invokeValidateToolchainSafety(self: ChildBindings) StepOutcome {
-        return self.vtable.validate_toolchain_safety(self.context);
     }
 
     pub fn takeServices(self: ChildBindings) bootstrap_services.BootstrapServices {

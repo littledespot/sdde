@@ -44,6 +44,7 @@ pub const Fixture = struct {
     preloader: fake_authorization.FakeProviderAuthorization,
     clock: TestClock,
     request_invoked: bool,
+    schema_arena: std.heap.ArenaAllocator,
 
     pub fn init(self: *Fixture, allocator: std.mem.Allocator) !void {
         self.requests = requests_module.Runner.init(allocator);
@@ -77,6 +78,10 @@ pub const Fixture = struct {
             .response_mode = .prompt_only,
             .controls = .{ .temperature = @import("domain/model_controls.zig").TemperaturePermille.init(100) },
         };
+        self.schema_arena = .init(allocator);
+        errdefer self.schema_arena.deinit();
+        var schema_adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+        const response_schema = try schema_adapter.compiler().compile(self.schema_arena.allocator(), "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}");
         self.request = try operation.IdentifiedProviderNeutralModelRequest.init(.{
             .model_request_id = self.model_request_id,
             .model_operation_id = modelOperation(),
@@ -85,7 +90,7 @@ pub const Fixture = struct {
             .result_schema_id = .{ .bytes = "result.test/v1" },
             .model_visible_input_id = .{ .bytes = "input-1" },
             .content = &.{ .{ .system = "Return the declared result." }, .{ .user = "Generate the bounded candidate." } },
-            .response_schema = "{}",
+            .response_schema = response_schema,
             .response_guidance_mode = .prompt_only,
             .controls = self.provider_binding.controls,
             .limits = self.provider_binding.capacity.canonical,
@@ -98,6 +103,7 @@ pub const Fixture = struct {
     pub fn deinit(self: *Fixture) void {
         self.attempts.deinit();
         self.requests.deinit();
+        self.schema_arena.deinit();
     }
 
     pub fn operations(self: *Fixture) *lifecycle_runner.Runner {

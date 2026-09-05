@@ -24,8 +24,33 @@ pub const CompiledParameter = struct {
 
 pub const CompiledResource = struct {
     id: workflow.WorkflowResourceId,
-    kind: operation.ResourceKind,
-    bytes: []const u8,
+    content: union(operation.ResourceKind) {
+        prompt: []const u8,
+        result_schema: *const @import("model_result_schema.zig").Schema,
+        example: []const u8,
+        data: []const u8,
+    },
+
+    pub fn kind(self: CompiledResource) operation.ResourceKind {
+        return std.meta.activeTag(self.content);
+    }
+
+    pub fn bytes(self: CompiledResource) []const u8 {
+        return switch (self.content) {
+            .result_schema => |schema| schema.bytes(),
+            inline else => |value| value,
+        };
+    }
+
+    pub fn clone(self: CompiledResource, allocator: std.mem.Allocator) std.mem.Allocator.Error!CompiledResource {
+        return .{
+            .id = .{ .bytes = try allocator.dupe(u8, self.id.bytes) },
+            .content = switch (self.content) {
+                .result_schema => |schema| .{ .result_schema = try schema.clone(allocator) },
+                inline else => |value, tag| @unionInit(@FieldType(CompiledResource, "content"), @tagName(tag), try allocator.dupe(u8, value)),
+            },
+        };
+    }
 };
 
 pub const CompiledStep = struct {
@@ -42,6 +67,8 @@ pub const CompiledStep = struct {
     gates: []const @import("workflow_gate.zig").Contract,
     capabilities: []const []const u8,
     retry_authority: ?workflow_retry.CompiledAuthority,
+    // Compiler-proven immutable model-binding requirements, including for pure
+    // preparation steps without a provider-call capability.
     model: ?@import("workflow_model.zig").Requirements = null,
 };
 

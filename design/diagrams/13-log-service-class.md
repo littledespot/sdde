@@ -12,6 +12,12 @@ classDiagram
         +takeServices() BootstrapServices
     }
 
+    class BootstrapConfigRunner {
+        <<runner-owned config actions>>
+        +invokeValidateLoggingPolicy() StepOutcome
+        +takeLoggingPolicy() LoggingOwner
+    }
+
     class BootstrapServices {
         <<invocation aggregate>>
         +LogService logs
@@ -24,11 +30,11 @@ classDiagram
         +init(owner) LogService
         +policy() CompiledLoggingPolicy
         +barrier() TelemetryBarrier
-        +activate(active, shortcode) PolicyTransitionOutcome
-        +transition(next, shortcode) PolicyTransitionOutcome
-        +finalizeActive(shortcode) FinalizationOutcome
-        +finalizeHistorical(historical, shortcode) FinalizationOutcome
-        +retainHistorical(sink, historical, authorization, shortcode) RetentionOutcome
+        +activate(activeBindings, shortcode) PolicyTransitionOutcome
+        +transition(transitionBindings) PolicyTransitionOutcome
+        +finalizeActive(finalizationBindings) FinalizationOutcome
+        +finalizeHistorical(finalizationBindings) FinalizationOutcome
+        +retainHistorical(retentionBindings, shortcode) RetentionOutcome
         +deinit() void
     }
 
@@ -50,27 +56,57 @@ classDiagram
 
     class FeatureLogRuntimeLifecycle {
         <<Lifecycle>>
-        -optional FeatureLogRunner active
+        -optional FeatureLogChildBindings active
         +barrier() TelemetryBarrier
-        +activate(next, shortcode) PolicyTransitionOutcome
-        +transition(next, shortcode) PolicyTransitionOutcome
-        +finalizeActive(shortcode) FinalizationOutcome
-        +finalizeHistorical(historical, shortcode) FinalizationOutcome
-        +retainHistorical(sink, historical, authorization, shortcode) RetentionOutcome
-        -process(context, fact) BarrierOutcome
+        +activate(nextBindings, shortcode) PolicyTransitionOutcome
+        +transition(transitionBindings) PolicyTransitionOutcome
+        +finalizeActive(finalizationBindings) FinalizationOutcome
+        +finalizeHistorical(finalizationBindings) FinalizationOutcome
+        +retainHistorical(retentionBindings, shortcode) RetentionOutcome
+        -process(context, fact) FeatureLogOutcome
+    }
+
+    class FeatureLogChildBindings {
+        <<runner-owned bindings>>
+        +identity() RuntimeIdentity
+        +retired() bool
+        +invokePrepare(shortcode) FeatureLogOutcome
+        +invokeClose(shortcode) FeatureLogOutcome
+        +invokeReportFailure(shortcode, failure) FailureCode
+    }
+
+    class PolicyTransitionChildBindings {
+        <<runner-owned transition children>>
+    }
+
+    class FinalizationChildBindings {
+        <<runner-owned finalization children>>
+    }
+
+    class RetentionChildBindings {
+        <<runner-owned retention children>>
+    }
+
+    class LoggingCoordinators {
+        <<capability-free coordination>>
+        +transition(children) PolicyTransitionOutcome
+        +finalize(children) FinalizationOutcome
+        +retain(children) RetentionOutcome
     }
 
     class FeatureLogRunner {
         <<logging runtime>>
         +CompiledLoggingPolicy policy
         +ValidatedFeatureLogBinding binding
-        +FeatureLogSink sink
+        +FeatureLogActions actions
         +bool prepared
         +bool retired
-        +process(fact) BarrierOutcome
-        +processPrompt(fragment) BarrierOutcome
-        +prepare(shortcode) BarrierOutcome
-        +close(shortcode) BarrierOutcome
+        +childBindings() FeatureLogChildBindings
+        +process(fact) FeatureLogOutcome
+        +processPrompt(fragment) FeatureLogOutcome
+        +processPromptBatch(owner) FeatureLogOutcome
+        +prepare(shortcode) FeatureLogOutcome
+        +close(shortcode) FeatureLogOutcome
         +reportFailure(shortcode, failure) FailureCode
     }
 
@@ -78,7 +114,7 @@ classDiagram
         <<callback port value>>
         -context
         -process_fn
-        +process(fact) BarrierOutcome
+        +process(fact) FeatureLogOutcome
     }
 
     class WorkflowPipelineRunner {
@@ -103,8 +139,15 @@ classDiagram
         <<opaque authority>>
     }
 
-    class RetentionAuthorizationOwner {
-        <<opaque authorization>>
+    class FeatureLogActions {
+        <<single-responsibility actions>>
+    }
+
+    class FeatureLogOutcome {
+        <<feature_log_stream.Outcome>>
+        dropped
+        persisted
+        blocked
     }
 
     class PolicyTransitionOutcome {
@@ -128,12 +171,23 @@ classDiagram
     }
 
     ValidateLoggingPolicyAction ..> LoggingOwner : creates validated owner
+    BootstrapRunner --> BootstrapConfigRunner : delegates config children
+    BootstrapConfigRunner ..> ValidateLoggingPolicyAction : invokes
     BootstrapRunner ..> LogService : transfers owner
     BootstrapServices *-- LogService : owns for invocation
     LogService *-- LoggingOwner : owns and deinitializes
     LoggingOwner *-- CompiledLoggingPolicy : stores
     LogService *-- FeatureLogRuntimeLifecycle : contains by value
-    FeatureLogRuntimeLifecycle o-- "0..1" FeatureLogRunner : active borrowed binding
+    FeatureLogRuntimeLifecycle o-- "0..1" FeatureLogChildBindings : active binding
+    FeatureLogRunner ..> FeatureLogChildBindings : exposes
+    LogService ..> FeatureLogChildBindings : activation argument
+    LogService ..> PolicyTransitionChildBindings : transition argument
+    LogService ..> FinalizationChildBindings : finalization argument
+    LogService ..> RetentionChildBindings : retention argument
+    FeatureLogRuntimeLifecycle ..> LoggingCoordinators : delegates with child bindings
+    LoggingCoordinators --> PolicyTransitionChildBindings : coordinates
+    LoggingCoordinators --> FinalizationChildBindings : coordinates
+    LoggingCoordinators --> RetentionChildBindings : coordinates
     LogService ..> TelemetryBarrier : returns
     TelemetryBarrier ..> WorkflowTelemetryFact : accepts
     WorkflowPipelineRunner --> TelemetryBarrier : consumes after delta apply
@@ -141,13 +195,13 @@ classDiagram
     WorkflowLog ..> WorkflowTelemetryFact : adds to candidate delta
     FeatureLogRunner --> CompiledLoggingPolicy : borrows
     FeatureLogRunner --> ValidatedFeatureLogBinding : borrows
-    FeatureLogRunner --> FeatureLogSink : uses
-    LogService ..> FeatureLogSink : retention argument only
-    LogService ..> ValidatedFeatureLogBinding : historical argument
-    LogService ..> RetentionAuthorizationOwner : consumes authorization
+    FeatureLogRunner *-- FeatureLogActions : binds and invokes
+    FeatureLogActions --> FeatureLogSink : narrow operation ports
+    TelemetryBarrier ..> FeatureLogOutcome : returns
     LogService ..> PolicyTransitionOutcome : returns
     LogService ..> FinalizationOutcome : returns
     LogService ..> RetentionOutcome : returns
 
-    note for LogService "Facade only: it delegates to Lifecycle and implements neither TelemetryBarrier nor FeatureLogSink"
+    note for LogService "Read-only policy facade and lifecycle delegation; callers supply runner-owned child bindings, never sinks or raw runners"
+    note for LoggingCoordinators "Represents the separate policy-transition, finalization and retention coordinators; each receives only its own child-binding type"
 ```

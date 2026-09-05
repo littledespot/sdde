@@ -121,6 +121,55 @@ test "validation action rejects a duplicate operation identity" {
     try std.testing.expectError(error.WorkflowOperationRegistryInvalid, (@import("actions/workflow/validate_workflow_operation_registry.zig").Action{}).execute(&registry));
 }
 
+test "pure model-binding contracts require one slot and complete trusted capacity authority" {
+    const capacity = @import("model_contract_test_fixture.zig").capacity;
+    const parameters = [_]operation.ParameterDescriptor{
+        .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
+    } ++ @import("domain/workflow_model.zig").parameters;
+    const entry: Entry = .{
+        .contract = .{
+            .id = "test.prepare@1",
+            .kind = .step,
+            .parameters = &parameters,
+            .model_capacity = capacity,
+            .outcomes = &.{.ok},
+            .side_effect = .none,
+        },
+        .binding = bindings.bind(void, null, fixture.unused),
+    };
+    const valid: Registry = .{ .model_capacity = capacity, .operations = &.{entry}, .policies = &.{}, .gates = &.{} };
+    try std.testing.expect(valid.validate());
+    try std.testing.expectEqual(@as(usize, 0), entry.binding.capabilities().len);
+
+    for (0..9) |variant| {
+        var changed = entry;
+        var descriptors = parameters ++ [_]operation.ParameterDescriptor{
+            .{ .id = "other-slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
+        };
+        var registry = valid;
+        switch (variant) {
+            0 => registry.model_capacity = null,
+            1 => changed.contract.model_capacity = null,
+            2 => changed.contract.parameters = parameters[1..],
+            3 => changed.contract.parameters = &descriptors,
+            4 => {
+                descriptors[0].required = false;
+                changed.contract.parameters = descriptors[0..parameters.len];
+            },
+            5 => changed.contract.model_capacity.?.canonical.maximum_input_bytes = 0,
+            6 => changed.contract.parameters = parameters[0..1],
+            7 => {
+                changed.contract.model_capacity = null;
+                changed.contract.parameters = &descriptors;
+            },
+            8 => changed.contract.kind = .invocation,
+            else => unreachable,
+        }
+        registry.operations = &.{changed};
+        try std.testing.expect(!registry.validate());
+    }
+}
+
 test "bindings derive reachable port capabilities and reject erased or executable contexts" {
     const Pure = struct { text: []const u8, count: usize };
     const Nested = struct { providers: [2]?*fixture.ModelContext, data: Pure };

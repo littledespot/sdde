@@ -141,8 +141,8 @@ test "runner exposes only resources referenced by the active compiled step" {
         .value = .{ .resource = .{ .bytes = "prompt" } },
     }};
     const resources = [_]compilation.CompiledResource{
-        .{ .id = .{ .bytes = "prompt" }, .kind = .prompt, .bytes = "visible" },
-        .{ .id = .{ .bytes = "other" }, .kind = .prompt, .bytes = "not visible" },
+        .{ .id = .{ .bytes = "prompt" }, .content = .{ .prompt = "visible" } },
+        .{ .id = .{ .bytes = "other" }, .content = .{ .prompt = "not visible" } },
     };
     var steps = test_steps;
     steps[0].parameters = &parameters;

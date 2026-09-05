@@ -1,3 +1,35 @@
+Fixed startup owns configuration, logging-policy compilation, configured roots
+and workflow compilation. Toolchain loading is implemented as nine separate
+YAML-addressable operations. This first diagram shows their data dependencies;
+the selected YAML determines their execution order and failure transitions.
+Each binding invokes one action, and the pipeline envelope owns its result.
+
+```mermaid
+flowchart TD
+    ROOTS[Validated startup root capabilities<br/>bound by composition; no toolchain content read] --> PROJECT["capture-project-toolchain@1<br/>exact paths.principles/toolchain.yaml"]
+    ROOTS --> INVENTORY["inventory-toolchain-presets@1<br/>complete paths.toolchainPreset inventory"]
+    PROJECT --> CAPTURE["capture-toolchain-presets@1<br/>bounded captures using project capture and preset inventory"]
+    INVENTORY --> CAPTURE
+    PROJECT --> PARSE["parse-toolchain-documents@1<br/>bounded closed YAML transport"]
+    CAPTURE --> PARSE
+    PARSE --> PSCHEMA["validate-project-toolchain-schema@1"]
+    PARSE --> REGISTRY["validate-toolchain-preset-registry@1<br/>complete registry validates independently of selection"]
+    PSCHEMA --> INHERIT["resolve-toolchain-inheritance@1"]
+    REGISTRY --> INHERIT
+    PSCHEMA --> COMPOSE["compose-toolchain@1"]
+    INHERIT --> COMPOSE
+    COMPOSE --> SAFETY["validate-toolchain-safety@1<br/>effective policy preserves compiler locks"]
+    SAFETY --> VALUE[PipelineEnvelope adopts original opaque ToolchainOwner<br/>publishes valid_toolchain only after complete delta validation]
+    VALUE --> SERVICE[ToolChainService<br/>borrowed read-only ValidToolchain facade]
+```
+
+The lifecycle below combines fixed startup with the **proposed** SDD feature,
+preset-asset, principle and durable-authority setup from
+[design §15](../design.md#15-bootstrap-flow). That richer lifecycle is not all
+implemented by the current toolchain actions. After startup and fixed provider
+preparation, domain setup occurs only through operations in the selected YAML
+graph; it is never a continuation hidden inside `BootstrapOrchestrator`.
+
 ```mermaid
 flowchart TD
     START[Invocation working directory] --> RUNNER[PipelineRunner executes BootstrapOrchestrator's<br/>bound actions/orchestrators through ChildNodeBinding]
@@ -5,28 +37,38 @@ flowchart TD
     LOCATE -- Cannot resolve safe file --> READFAIL[ENGINE_CONFIG_READ_ERROR<br/>terminal failed outcome and nonzero exit;<br/>no workflow/model/log/write starts]
     LOCATE --> READ[ReadEngineConfigAction<br/>compiler-owned maximum 1 MiB / 1,048,576 bytes]
     READ -- Cannot read or over guard --> READFAIL
-    READ --> SCHEMACFG[DecodeSDDToolKitConfigAction<br/>parse directly to the closed reader-facing shape and supported version;<br/>immutable config value; no generic JSON tree or domain-policy compilation]
-    SCHEMACFG -- Invalid JSON, version or shape --> PARSEFAIL[ENGINE_CONFIG_PARSE_ERROR<br/>terminal failed outcome and nonzero exit;<br/>no workflow/model/log/write starts]
-    LOCATE --> HOST[DetectWorkspaceFilesystemPolicyAction]
-    SCHEMACFG --> BASES[For each required directory key exactly once:<br/>specs, references, specsArchive, workflows, toolchainPreset,<br/>principles and templates]
-    SCHEMACFG --> PROVIDERPATH[Validate and resolve paths.providers exactly once;<br/>project-relative file with basename .sddproviders.json;<br/>reserve only, do not read]
-    HOST --> BASES
+    READ --> SCHEMACFG[DecodeSDDToolKitConfigAction<br/>parse directly to the single unversioned closed shape;<br/>immutable config value; semantic policy belongs to section compilers]
+    SCHEMACFG -- Invalid JSON or shape --> PARSEFAIL[ENGINE_CONFIG_PARSE_ERROR<br/>terminal failed outcome and nonzero exit;<br/>no workflow/model/log/write starts]
+    SCHEMACFG --> LOGPOLICY[CanonicalizeLogLevelAction then ValidateLoggingPolicyAction<br/>compile logs into the invocation-owned LogService]
+    LOGPOLICY -- Invalid --> FAIL[Typed startup or setup failure<br/>no partial registry or policy publication]
+    HOST[Composition-bound workspace filesystem policy] --> BASES
+    LOGPOLICY --> BASES[ValidateConfiguredRootPathPolicyAction<br/>for specs, references, specsArchive, workflows, toolchainPreset,<br/>principles and templates]
+    BASES --> PROVIDERPATH[ValidateLLMProviderConfigPathPolicyAction and ResolveLLMProviderConfigPathAction<br/>project-relative file with basename .sddproviders.json;<br/>reserve location only, do not read]
     BASES --> RESOLVEBASE[ResolveConfiguredBaseRootAction<br/>join one configured relative base to the exact project root]
     RESOLVEBASE --> VALIDBASE[ValidateConfiguredBaseRootAction<br/>containment, normalization, access and portability capability]
     PROVIDERPATH --> ROOTID
     VALIDBASE --> ROOTID[BuildBootstrapRootRegistryIdAction<br/>self-validating canonical project-root and contract-version tuple;<br/>consume no state ledger and inspect no content]
     ROOTID --> BUILDROOTS[BuildBootstrapRootRegistryAction<br/>identity, exact config/project descriptors plus complete configured-root capabilities]
     BUILDROOTS --> VALIDROOTS{ValidateBootstrapRootRegistryAction<br/>all seven directory roots plus provider file exactly once; no escape, alias, duplicate or illegal overlap;<br/>only specsArchive may nest beneath specs}
-    VALIDROOTS -- Invalid --> FAIL[Bootstrap fails with typed diagnostic<br/>no model call and no partial registry or compiled policy]
-    VALIDROOTS -- Valid --> WLAYOUT[BuildWorkflowAuthorityLayoutAction then<br/>ValidateWorkflowAuthorityLayoutAction;<br/>include features/ and transactions/ root entries for ownership accounting<br/>but exclude every descendant in both reserved subtrees]
+    VALIDROOTS -- Invalid --> FAIL
+    VALIDROOTS -- Valid --> WLAYOUT[BuildWorkflowAuthorityLayoutAction<br/>reserve features/ and transactions/ for ownership accounting;<br/>exclude descendants of both reserved subtrees]
     WLAYOUT --> WINVENTORY[Enumerate and normalize every in-scope entry;<br/>validate the complete portability collision set, sort by Unicode-scalar path,<br/>then bind contiguous one-based inventory ordinals]
-    WINVENTORY --> WCLASSIFY[Classify every ordinal-bound entry as directory, exact reserved child,<br/>definition candidate or blocking; capture/parse/schema-validate each definition candidate;<br/>accept WorkflowId only from validated content, never filename inference]
+    WINVENTORY --> WCLASSIFY[BuildWorkflowAuthorityEntryAccountsAction<br/>classify directories, reserved children, definition candidates and resource candidates;<br/>reject unsupported entries and retain resource candidates for declaration accounting]
     WCLASSIFY --> WACCOUNT[Build exactly one terminal entry account then<br/>BuildWorkflowAuthorityInventoryAction and<br/>ValidateWorkflowAuthorityInventoryAction;<br/>no blocking/unaccounted entry or reserved-child definition is legal]
-    WACCOUNT --> WCOMPILE[CompileWorkflowGraphAction then ValidateCompiledWorkflowGraphAction<br/>for every schema-valid definition; resolve only registered invocation-contract and graph PipelineNodes,<br/>outcome, gate and workflow-policy contracts; invoke no node]
-    WCOMPILE --> WVALID{BuildWorkflowDefinitionRegistryAction then<br/>ValidateWorkflowDefinitionRegistryAction;<br/>arbitrary bounded definition count; unique WorkflowIds, logging shortcodes and source ordinals;<br/>complete graph/outcome closure; no executable payload, infrastructure selection,<br/>capability addition, gate weakening or runner bypass}
+    WACCOUNT --> WDECODE[CaptureWorkflowDefinitionsAction, ParseWorkflowDefinitionsAction and<br/>ValidateWorkflowDefinitionSchemaAction<br/>compact YAML mappings and native scalar parameters; WorkflowId comes from content]
+    WDECODE --> WRESOURCES[ResolveWorkflowResourcesAction then CaptureWorkflowResourcesAction<br/>exact YAML-declared aliases and bounded project-owned bytes;<br/>unreferenced or missing resources reject]
+    WRESOURCES --> WCOMPILE[ValidateWorkflowOperationRegistryAction then CompileWorkflowGraphsAction<br/>registered operations, closed parameters, data schemas, capabilities and retry bounds;<br/>compile result-schema resources through the narrow compiler port]
+    WCOMPILE --> WSCHEMA{model-result-schema/v1 compilation<br/>JSON adapter plus domain-owned closed finite schema profile;<br/>opaque immutable tree bound to exact captured bytes}
+    WSCHEMA -- Invalid --> WSCHEMAFAIL[WORKFLOW_GRAPH_COMPILE_INVALID<br/>reject before provider preparation; publish no partial registry]
+    WSCHEMAFAIL --> FAIL
+    WSCHEMA -- Valid or no result-schema resources --> WVALID{ValidateCompiledWorkflowGraphsAction then BuildWorkflowDefinitionRegistryAction<br/>and ValidateWorkflowDefinitionRegistryAction;<br/>unique IDs, shortcodes and source ordinals; complete graph/outcome closure;<br/>registry deep-owns resources, schema trees and exact source bytes}
     WVALID -- Invalid --> FAIL
-    WVALID -- Valid --> PREFLIGHT[Return validated roots/config/portability and the complete workflow registry;<br/>acquire no project or feature transaction lock; workflow selection remains outside bootstrap]
-    PREFLIGHT -. only after a selected SDD invocation-contract node produces valid typed context;<br/>unrelated workflows and selection/invocation failures do not enter this branch .-> PTXPATH[ResolveProjectTransactionCollectionAction<br/>fixed reserved paths.workflows/transactions collection<br/>for SDD preownership recovery and activation]
+    WVALID -- Valid --> PREFLIGHT[Return BootstrapServices: config, roots, logs and workflows;<br/>fixed startup reads no toolchain, principle or provider documents;<br/>acquire no project or feature transaction lock]
+    PREFLIGHT --> SELECT[ParseWorkflowInvocationAction then SelectCompiledWorkflowAction<br/>exact registry selection outside startup]
+    SELECT --> PREP[Fixed ModelProviderBootstrapOrchestrator<br/>DeriveProviderRequirementAction checks exact compiled model-provider capability;<br/>required: one provider capture, registry and allowlist; not_required: no provider probe]
+    PREP -- Failed or cancelled --> PREPSTOP[Terminal preparation outcome]
+    PREP -- Ready or not_required --> INVOCATION[Runner invokes YAML-named invocation operation once;<br/>then follows only the selected graph's compiled transitions]
+    INVOCATION -. proposed SDD graphs explicitly select these setup operations<br/>after their invocation arguments validate .-> PTXPATH[ResolveProjectTransactionCollectionAction<br/>fixed reserved paths.workflows/transactions collection<br/>for SDD preownership recovery and activation]
     PTXPATH --> PTXLOCK[AcquireProjectTransactionCollectionLockAction<br/>runner retains the opaque capability while project TransactionIdLedger recovery<br/>and FeatureIdentityRegistry ownership resolution are performed]
     PTXLOCK --> PTXSCAN[ScanTransactionJournalInventoryAction<br/>bounded raw journal/header/marker and transaction-ledger inventory<br/>before any FeatureIdentityRegistry read]
     PTXSCAN --> TLPATH[ResolveTransactionIdLedgerPathAction then ReadTransactionIdLedgerAction]
@@ -69,7 +111,7 @@ flowchart TD
 
     PROOT --> LAYERREAD[Resolve and bounded-capture the exact root child toolchain.yaml;<br/>it is a typed project principle, never free-text or model authority]
     LAYERREAD --> LAYERPARSE[ParseProjectToolchainLayerAction then<br/>ValidateProjectToolchainLayerSchemaAction;<br/>closed inheritance and project-layer data only]
-    PROOT --> PRINCIPLES[PipelineRunner continues BootstrapOrchestrator<br/>with free-text Markdown principle-ingestion actions;<br/>the exact toolchain.yaml child is excluded]
+    PROOT --> PRINCIPLES[Selected YAML graph invokes registered<br/>free-text Markdown principle-ingestion actions;<br/>the exact toolchain.yaml child is excluded]
     PRINCIPLES --> PJOIN[Join the validated root capability with the optional<br/>validated prior registry and PrincipleIdLedger]
     PPRIOR --> PJOIN
     PJOIN --> PLEDGER[BuildPrincipleIdLedgerAction<br/>retain prior ordinals and tombstones or initialize every namespace]

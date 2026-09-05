@@ -20,11 +20,11 @@ pub const Capture = struct { name: []const u8, bytes: []const u8 };
 
 pub const RawNode = union(enum) {
     scalar: []const u8,
-    sequence: []const *RawNode,
+    sequence: []const *const RawNode,
     mapping: []const Pair,
 };
-pub const Pair = struct { key: *RawNode, value: *RawNode };
-pub const RawDocument = struct { name: []const u8, root: *RawNode };
+pub const Pair = struct { key: *const RawNode, value: *const RawNode };
+pub const RawDocument = struct { name: []const u8, root: *const RawNode };
 
 pub const Layer = enum { language, runtime, framework, build, @"test", environment };
 pub const Project = struct { presets: []const []const u8, policies: []const []const u8 };

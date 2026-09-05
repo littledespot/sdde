@@ -36,6 +36,8 @@ pub const Contract = struct {
     side_effect: pipeline.SideEffect,
     gates: []const []const u8 = &.{},
     retry_limit: ?RetryLimitDescriptor = null,
+    // A binding requirement, not permission to call a provider. Operational
+    // capabilities are independently derived from the binding's narrow ports.
     model_capacity: ?@import("model_limits.zig").Capacity = null,
 };
 

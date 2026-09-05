@@ -24,7 +24,7 @@ const provider_source = @import("ports/llm_provider_config_source.zig");
 const operations = @import("ports/workflow_operation_registry.zig");
 const workflow_inventory = @import("domain/workflow_inventory.zig");
 
-test "compiler-owned model-provider capability alone activates the requirement" {
+test "compiled binding requirements activate bootstrap without granting provider-call capability" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
@@ -33,6 +33,12 @@ test "compiler-owned model-provider capability alone activates the requirement" 
 
     const capability_free = try compileOne(arena.allocator(), &operation_registry, "test.noop@1");
     try std.testing.expectEqual(requirement.Requirement.not_required, deriveGraph(&capability_free));
+
+    const binding_only = try compileOne(arena.allocator(), &binding_only_registry, "test.model@1");
+    try std.testing.expect(binding_only.authority.steps[0].model != null);
+    try std.testing.expectEqual(@as(usize, 0), binding_only.authority.steps[0].capabilities.len);
+    try std.testing.expectEqual(@as(usize, 0), binding_only.authority.allowed_capabilities.len);
+    try std.testing.expectEqual(requirement.Requirement.required, deriveGraph(&binding_only));
 
     var denied = operation_registry;
     denied.policies = &.{.{
@@ -84,49 +90,51 @@ test "conditional runner skips F0008 for a capability-free selected workflow" {
 }
 
 test "conditional runner captures once and publishes one immutable run authority" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const graph = try compileOne(arena.allocator(), &operation_registry, "test.model@1");
-    const selected = selectedWorkflow(&graph);
+    for ([_]*const operations.Registry{ &operation_registry, &binding_only_registry }) |registered| {
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+        const graph = try compileOne(arena.allocator(), registered, "test.model@1");
+        const selected = selectedWorkflow(&graph);
 
-    var toolkit = try decodeToolkit(model_config);
-    defer toolkit.deinit();
-    const root_owner = try testRootRegistry(std.testing.allocator);
-    defer bootstrap_root_registry.deinitOwner(root_owner);
-    var source: FakeProviderConfigSource = .{ .bytes = provider_document };
-    var config_child_runner = provider_config_runner.Runner.init(
-        std.testing.allocator,
-        .{},
-        bootstrap_root_registry.registry(root_owner).llmProviderConfig(),
-        locate_provider_config.Action{ .locator = source.locator() },
-        read_provider_config.Action{},
-    );
-    defer config_child_runner.deinit();
-    var runner = provider_bootstrap_runner.Runner.init(
-        std.testing.allocator,
-        .{},
-        &selected,
-        &toolkit.value().models,
-        &config_child_runner,
-        &compiled_provider_contracts,
-    );
-    defer runner.deinit();
-    var outcome = provider_bootstrap.run(runner.childBindings());
-    defer outcome.deinit();
+        var toolkit = try decodeToolkit(model_config);
+        defer toolkit.deinit();
+        const root_owner = try testRootRegistry(std.testing.allocator);
+        defer bootstrap_root_registry.deinitOwner(root_owner);
+        var source: FakeProviderConfigSource = .{ .bytes = provider_document };
+        var config_child_runner = provider_config_runner.Runner.init(
+            std.testing.allocator,
+            .{},
+            bootstrap_root_registry.registry(root_owner).llmProviderConfig(),
+            locate_provider_config.Action{ .locator = source.locator() },
+            read_provider_config.Action{},
+        );
+        defer config_child_runner.deinit();
+        var runner = provider_bootstrap_runner.Runner.init(
+            std.testing.allocator,
+            .{},
+            &selected,
+            &toolkit.value().models,
+            &config_child_runner,
+            &compiled_provider_contracts,
+        );
+        defer runner.deinit();
+        var outcome = provider_bootstrap.run(runner.childBindings());
+        defer outcome.deinit();
 
-    try std.testing.expect(outcome == .ready);
-    try std.testing.expectEqual(@as(usize, 1), source.locate_calls);
-    try std.testing.expectEqual(@as(usize, 1), source.read_calls);
-    source.bytes = "changed after capture";
+        try std.testing.expect(outcome == .ready);
+        try std.testing.expectEqual(@as(usize, 1), source.locate_calls);
+        try std.testing.expectEqual(@as(usize, 1), source.read_calls);
+        source.bytes = "changed after capture";
 
-    const entry = outcome.ready.registry().resolve(
-        provider_id,
-        identity.ModelId.parse("model-a").?,
-    ).?;
-    try std.testing.expect(outcome.ready.allowlist().resolveSlot(identity.ModelSlotId.parse("implementation").?).?.registry_entry_id.eql(
-        entry.id,
-    ));
-    try std.testing.expectEqual(@as(usize, 1), source.read_calls);
+        const entry = outcome.ready.registry().resolve(
+            provider_id,
+            identity.ModelId.parse("model-a").?,
+        ).?;
+        try std.testing.expect(outcome.ready.allowlist().resolveSlot(identity.ModelSlotId.parse("implementation").?).?.registry_entry_id.eql(
+            entry.id,
+        ));
+        try std.testing.expectEqual(@as(usize, 1), source.read_calls);
+    }
 }
 
 test "conditional runner maps each provider preparation boundary exactly" {
@@ -152,7 +160,7 @@ fn compileOne(
     steps[0] = .{
         .id = workflow.WorkflowStepId.parse("run").?,
         .operation_id = workflow.RegisteredRef.parse(contract_id).?,
-        .parameters = if (std.mem.eql(u8, contract_id, "test.model@1")) &model_parameters else &.{},
+        .parameters = if (registry.resolveOperation(.{ .bytes = contract_id }).?.contract.model_capacity != null) &model_parameters else &.{},
         .outcomes = &.{.{ .outcome = .ok, .target = .{ .terminal = .ok } }},
     };
     const definitions = try allocator.alloc(definition.Definition, 1);
@@ -174,7 +182,8 @@ fn compileOne(
         .definition_ordinals = &.{},
         .resource_ordinals = &.{},
     };
-    const graphs = try (compile.Action{ .registry = registry }).execute(
+    var result_schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const graphs = try (compile.Action{ .registry = registry, .result_schema_compiler = result_schema_parser.compiler() }).execute(
         allocator,
         definitions,
         empty_inventory,
@@ -201,36 +210,38 @@ fn expectPreparationFailure(
     toolkit_bytes: []const u8,
     expected: bootstrap_error.PublicError,
 ) !void {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const graph = try compileOne(arena.allocator(), &operation_registry, "test.model@1");
-    const selected = selectedWorkflow(&graph);
-    var toolkit = try decodeToolkit(toolkit_bytes);
-    defer toolkit.deinit();
-    const root_owner = try testRootRegistry(std.testing.allocator);
-    defer bootstrap_root_registry.deinitOwner(root_owner);
-    var source: FakeProviderConfigSource = .{ .bytes = document_bytes };
-    var config_child_runner = provider_config_runner.Runner.init(
-        std.testing.allocator,
-        .{},
-        bootstrap_root_registry.registry(root_owner).llmProviderConfig(),
-        locate_provider_config.Action{ .locator = source.locator() },
-        read_provider_config.Action{},
-    );
-    defer config_child_runner.deinit();
-    var runner = provider_bootstrap_runner.Runner.init(
-        std.testing.allocator,
-        .{},
-        &selected,
-        &toolkit.value().models,
-        &config_child_runner,
-        &compiled_provider_contracts,
-    );
-    defer runner.deinit();
-    var outcome = provider_bootstrap.run(runner.childBindings());
-    defer outcome.deinit();
+    for ([_]*const operations.Registry{ &operation_registry, &binding_only_registry }) |registered| {
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+        const graph = try compileOne(arena.allocator(), registered, "test.model@1");
+        const selected = selectedWorkflow(&graph);
+        var toolkit = try decodeToolkit(toolkit_bytes);
+        defer toolkit.deinit();
+        const root_owner = try testRootRegistry(std.testing.allocator);
+        defer bootstrap_root_registry.deinitOwner(root_owner);
+        var source: FakeProviderConfigSource = .{ .bytes = document_bytes };
+        var config_child_runner = provider_config_runner.Runner.init(
+            std.testing.allocator,
+            .{},
+            bootstrap_root_registry.registry(root_owner).llmProviderConfig(),
+            locate_provider_config.Action{ .locator = source.locator() },
+            read_provider_config.Action{},
+        );
+        defer config_child_runner.deinit();
+        var runner = provider_bootstrap_runner.Runner.init(
+            std.testing.allocator,
+            .{},
+            &selected,
+            &toolkit.value().models,
+            &config_child_runner,
+            &compiled_provider_contracts,
+        );
+        defer runner.deinit();
+        var outcome = provider_bootstrap.run(runner.childBindings());
+        defer outcome.deinit();
 
-    try std.testing.expectEqual(expected, outcome.failed);
+        try std.testing.expectEqual(expected, outcome.failed);
+    }
 }
 
 fn decodeToolkit(bytes: []const u8) !@import("domain/config.zig").Owned {
@@ -378,6 +389,23 @@ const operation_registry: operations.Registry = .{
     .policies = &.{.{
         .id = "test.safe@1",
         .allowed_capabilities = &.{requirement.capability_id},
+        .allowed_terminal_outcomes = &.{.ok},
+        .total_model_token_budget = .{ .value = 1000 },
+    }},
+    .gates = &.{},
+};
+
+const binding_only_entries = blk: {
+    var entries = operation_registry.operations[0..3].*;
+    entries[1].binding = @import("application/workflow_operation_binding.zig").bind(void, null, unusedOperation);
+    break :blk entries;
+};
+const binding_only_registry: operations.Registry = .{
+    .model_capacity = operation_registry.model_capacity,
+    .operations = &binding_only_entries,
+    .policies = &.{.{
+        .id = "test.safe@1",
+        .allowed_capabilities = &.{},
         .allowed_terminal_outcomes = &.{.ok},
         .total_model_token_budget = .{ .value = 1000 },
     }},

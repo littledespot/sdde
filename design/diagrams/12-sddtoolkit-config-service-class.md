@@ -12,6 +12,12 @@ classDiagram
         +takeServices() BootstrapServices
     }
 
+    class BootstrapConfigRunner {
+        <<runner-owned config actions>>
+        +invokeDecode() StepOutcome
+        +takeConfig() ConfigOwned
+    }
+
     class BootstrapServices {
         <<invocation aggregate>>
         +SDDToolKitConfigService config
@@ -77,9 +83,10 @@ classDiagram
         +string providers
     }
 
-    BootstrapRunner ..> DecodeSDDToolKitConfigAction : executes once
+    BootstrapRunner --> BootstrapConfigRunner : delegates config children
+    BootstrapConfigRunner ..> DecodeSDDToolKitConfigAction : executes once
     DecodeSDDToolKitConfigAction ..> ConfigOwned : creates
-    BootstrapRunner ..> SDDToolKitConfigService : transfers owned value
+    BootstrapRunner ..> SDDToolKitConfigService : transfers takeConfig result
     BootstrapServices *-- SDDToolKitConfigService : owns for invocation
     SDDToolKitConfigService *-- ConfigOwned : owns by value
     ConfigOwned *-- SDDToolKitConfig : arena-owned
@@ -90,4 +97,5 @@ classDiagram
     ModelsConfig o-- "0..*" ModelSlotConfig : slot values
 
     note for SDDToolKitConfigService "config() returns the same borrowed immutable value; deinit() releases its arena once"
+    note for SDDToolKitConfig "Single unversioned closed configuration shape; semantic compilers consume their typed sections"
 ```

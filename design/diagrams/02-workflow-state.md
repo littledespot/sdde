@@ -1,7 +1,7 @@
 ```mermaid
 stateDiagram-v2
     [*] --> new
-    new --> specifying: sdd specify --reference &lt;relative-selector&gt; passes preactivation and feature activation
+    new --> specifying: sdd specify --reference selector passes preactivation and feature activation
 
     specifying --> spec_clarification_pending: commit open or reused SNN; no partial spec
     spec_clarification_pending --> spec_clarification_pending: rerun still unresolved or deferred; same SNN

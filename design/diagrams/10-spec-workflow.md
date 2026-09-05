@@ -2,9 +2,13 @@
 %% Logical Specify behavior from design Section 17.
 %% Exact serializable node boundaries and registered contract IDs remain registry-owned.
 flowchart TD
-    A[Resolve workflowId specify] --> B[Registered Specify invocation contract]
-    B --> C[Parse and validate --reference selector]
-    C --> D[Deterministic feature, recovery, and reference preflight]
+    A[Resolve workflowId specify] --> P[Fixed model-provider preparation from selected graph capabilities<br/>ready or not_required continues; failure or cancellation terminates]
+    P --> B[Registered Specify invocation contract]
+    B --> C[specify-invocation@1<br/>Runner-bound argument parser and validator]
+    C --> C1[normalize-reference-selector@1<br/>Shared pinned NFC; separators and literal dots]
+    C1 --> C2[validate-reference-selector@1<br/>Lexical safety and bounds]
+    C2 --> C3[inspect-reference-directory@1<br/>Bound root identity; no-follow readable directory]
+    C3 --> D[Deterministic feature, recovery, and complete corpus preflight<br/>Not implemented by selector inspection]
     D --> E[Ingest and reconcile complete reference authority]
 
     E -->|All required authority resolved| F[Generate and validate reference-grounded feature brief]
@@ -16,7 +20,7 @@ flowchart TD
     Q -->|Feature involves data| EN[Generate and validate EN records]
     Q -->|Validated not applicable| V
     Q -->|Missing or ambiguous| S
-    EN --> V[Run deterministic unit and complete-candidate validation;<br/>bounded retry and atomic repair remain inside registered orchestrators]
+    EN --> V[Run deterministic unit and complete-candidate validation;<br/>retry and atomic-repair operations and transitions are explicit in YAML;<br/>each retry-capable operation declares its own retry-limit]
 
     V -->|Clarification required| S
     V -->|Valid complete content| I[Assign record IDs and build complete SpecificationIR]
@@ -27,7 +31,10 @@ flowchart TD
     N --> O[Workflow state specified]
 
     S --> NU[Terminal needs_user;<br/>a later invocation resumes through the ordinary selection and preflight path]
-    C -->|Invalid invocation| IV[Terminal invalid]
+    C -->|Rejected invocation| PF[Terminal failed; no feature or artifact writes]
+    C1 -->|Failed| PF
+    C2 -->|Failed| PF
+    C3 -->|Failed| PF
     D -->|Blocked| BL[Terminal blocked]
     D -->|Failed| FL[Terminal failed]
     V -->|Repair exhausted or blocked| BL

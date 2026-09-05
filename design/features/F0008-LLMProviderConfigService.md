@@ -112,7 +112,8 @@ locate or capture rejection returns `failed`; F0006's conditional
 model-provider bootstrap runner maps it to the already accepted
 `LLM_PROVIDER_CONFIG_READ_ERROR`. No partial service is published.
 
-F0008 does not decide whether a selected workflow needs model capability.
+F0008 does not decide whether a selected workflow needs model binding or
+provider calls.
 F0006's accepted capability-free model-provider bootstrap orchestrator owns
 that branch. A workflow whose derived requirement is `not_required` must not
 probe or read the provider document merely because `paths.providers` is
@@ -136,8 +137,8 @@ no-follow physical checks when the file is requested.
    source example, packaged asset, fixed root filename, or cached value.
 9. All handles and owned bytes are released once on every terminal branch.
 10. Provider-document loading remains unreachable for a selected compiled
-    workflow without model-provider capability; ordinary bootstrap only
-    reserves the path and never invokes the F0008 entry point. A required
+    workflow without model-binding requirements or provider-call capability;
+    ordinary bootstrap only reserves the path and never invokes the F0008 entry point. A required
     provider-bootstrap branch invokes it once and never refreshes that capture.
 
 ## 7. Verification

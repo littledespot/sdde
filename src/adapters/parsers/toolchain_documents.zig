@@ -29,7 +29,7 @@ fn convert(allocator: std.mem.Allocator, source: *const syntax.Node) toolchain.E
     destination.* = switch (source.*) {
         .scalar => |value| .{ .scalar = allocator.dupe(u8, value.value) catch return error.InvalidToolchain },
         .sequence => |sequence| blk: {
-            const items = allocator.alloc(*toolchain.RawNode, sequence.items.len) catch return error.InvalidToolchain;
+            const items = allocator.alloc(*const toolchain.RawNode, sequence.items.len) catch return error.InvalidToolchain;
             for (sequence.items, items) |item, *converted| converted.* = try convert(allocator, item);
             break :blk .{ .sequence = items };
         },

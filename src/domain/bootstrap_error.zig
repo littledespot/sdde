@@ -14,7 +14,6 @@ pub const PublicError = enum {
     WORKFLOW_REGISTRY_INVALID,
     BOOTSTRAP_ROOT_RESOLUTION_ERROR,
     BOOTSTRAP_ROOT_REGISTRY_INVALID,
-    TOOLCHAIN_INVALID,
 
     pub fn text(self: PublicError) []const u8 {
         return @tagName(self);

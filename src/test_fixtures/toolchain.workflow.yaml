@@ -1,0 +1,17 @@
+schema: workflow/v1
+id: toolchain-check
+version: 1
+shortcode: TOOL
+invoke: core.empty-invocation@1
+policy: core.toolchain@1
+start: capture-project
+steps:
+  capture-project: { use: capture-project-toolchain@1, on: { ok: inventory-presets, failed: end.failed } }
+  inventory-presets: { use: inventory-toolchain-presets@1, on: { ok: capture-presets, failed: end.failed } }
+  capture-presets: { use: capture-toolchain-presets@1, on: { ok: parse, failed: end.failed } }
+  parse: { use: parse-toolchain-documents@1, on: { ok: validate-project, failed: end.failed } }
+  validate-project: { use: validate-project-toolchain-schema@1, on: { ok: validate-registry, failed: end.failed } }
+  validate-registry: { use: validate-toolchain-preset-registry@1, on: { ok: inherit, failed: end.failed } }
+  inherit: { use: resolve-toolchain-inheritance@1, on: { ok: compose, failed: end.failed } }
+  compose: { use: compose-toolchain@1, on: { ok: validate-safety, failed: end.failed } }
+  validate-safety: { use: validate-toolchain-safety@1, on: { ok: end.ok, failed: end.failed } }

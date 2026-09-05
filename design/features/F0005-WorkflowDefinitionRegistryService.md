@@ -398,7 +398,7 @@ service is published.
 
 ## 7. Registered-operation graph compilation
 
-Model-capable contracts additionally require explicit positive `input-bytes`,
+Contracts requiring model binding additionally require explicit positive `input-bytes`,
 `output-bytes`, `input-tokens`, `output-tokens`, and `response-mode` parameters.
 The compiler projects their typed requirements into each model step using the
 existing registry's engine and operation capacity facts. Immutable storage
@@ -407,10 +407,25 @@ contract before invoking the step. F0006 owns capability compatibility and the
 final intersection with the selected catalogue model. These per-operation
 capacities add no workflow-global budget, retry authority or registry.
 
+The existing compiled model projection represents an immutable binding
+requirement independently of operational capabilities (ADR 0004, amended
+2026-09-05). Such a contract has exactly one required typed model slot and valid
+registered capacity. Pure operations may consume the runner-supplied binding
+without holding a provider port. Provider-call operations still require that
+binding and their independently port-derived, policy-permitted capability.
+
 The selected result-schema resource describes the entire compact model result
 under [ADR 0006](../decisions/0006-minimal-model-response.md), not an inner
 payload or repeated execution metadata. The protocol version and exact resource
 identity stay in compiled authority; no new envelope field is needed in YAML.
+Compilation implements ADR 0006's [closed result-schema
+profile](../decisions/0006-minimal-model-response.md#closed-result-schema-profile)
+through one narrow compiler port bound at composition. Only result-schema
+resources are decoded; their tagged compiled values carry an opaque immutable
+schema and exact captured bytes. The registry owns deep copies of this same
+authority. Missing, malformed, unsupported or unbounded schema declarations
+reject the graph with `WORKFLOW_GRAPH_COMPILE_INVALID`, without publishing a
+partial registry or reading any provider file. Other resource kinds stay bytes.
 
 ### Execution guards
 
@@ -437,9 +452,19 @@ capability or service locator. Kernel rejection is terminal, not a YAML outcome
 that can route around the guard. Cancellation is checked before and after guard
 evaluation. These contracts add no workflow-YAML fields.
 
-The current registered operational port is `LLMProviderInterface`
-(`model-provider`). Further port types require explicit native registration;
+Registered operational ports include `LLMProviderInterface` (`model-provider`),
+the three root-bound toolchain source ports (`toolchain-read`), the toolchain
+document parser (`toolchain-parser`), and reference directory inspection
+(`reference-read`). The pure bounded Unicode normalizer grants no operational
+capability. Further port types require explicit native registration;
 unknown erased contexts or callback fields are rejected, not inferred as pure.
+
+The shared value owner copies ordinary immutable data. A sealed native result
+may instead transfer its original owner through a typed native accessor and
+destructor with a bounded retained-byte count. These hooks stay inside the
+runner's value owner, never YAML or model data. Rejected transfers remain with
+their producer; accepted transfers are destroyed exactly once on replacement,
+invalidation, or cleanup. No second service registry or copied authority exists.
 
 ### Compilation checks
 

@@ -123,7 +123,14 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     const resource_name = try scratch.allocator().dupe(u8, "prompt.md");
     const resource_bytes = try scratch.allocator().dupe(u8, "immutable prompt");
     const resource_id = workflow.WorkflowResourceId.parse("prompt").?;
-    const declared_resources = [_]workflow.ResourceDeclaration{.{ .id = resource_id, .name = resource_name }};
+    const schema_id = workflow.WorkflowResourceId.parse("result").?;
+    const schema_bytes = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":64}},\"required\":[\"answer\"],\"additionalProperties\":false}";
+    var schema_adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const compiled_schema = try schema_adapter.compiler().compile(scratch.allocator(), schema_bytes);
+    const declared_resources = [_]workflow.ResourceDeclaration{
+        .{ .id = resource_id, .name = resource_name },
+        .{ .id = schema_id, .name = "result.json" },
+    };
     const retry_parameters = [_]workflow.ParameterBinding{.{
         .id = workflow.WorkflowParameterId.parse("retry-limit").?,
         .value = .{ .integer = 2 },
@@ -138,7 +145,10 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     declared.resources = &declared_resources;
     declared.start_step_id = local_declared_steps[0].id;
     declared.steps = &local_declared_steps;
-    const compiled_resources = [_]compilation.CompiledResource{.{ .id = resource_id, .kind = .prompt, .bytes = resource_bytes }};
+    const compiled_resources = [_]compilation.CompiledResource{
+        .{ .id = resource_id, .content = .{ .prompt = resource_bytes } },
+        .{ .id = schema_id, .content = .{ .result_schema = compiled_schema } },
+    };
     const compiled_parameters = [_]compilation.CompiledParameter{.{
         .id = retry_parameters[0].id,
         .value = .{ .integer = 2 },
@@ -175,25 +185,33 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     const descriptors = [_]inventory.InventoryDescriptor{
         descriptor("arbitrary.workflow.yaml", .file, 1, 3),
         descriptor(resource_name, .file, 2, resource_bytes.len),
+        descriptor("result.json", .file, 3, schema_bytes.len),
     };
     const accounts = [_]inventory.InventoryAccount{
         .{ .ordinal = 1, .path = descriptors[0].path, .disposition = .definition },
         .{ .ordinal = 2, .path = descriptors[1].path, .disposition = .resource },
+        .{ .ordinal = 3, .path = descriptors[2].path, .disposition = .resource },
     };
     const captures = [_]inventory.Capture{.{ .ordinal = 1, .bytes = "abc" }};
-    const resource_captures = [_]inventory.Capture{.{ .ordinal = 2, .bytes = resource_bytes }};
+    const resource_captures = [_]inventory.Capture{
+        .{ .ordinal = 2, .bytes = resource_bytes },
+        .{ .ordinal = 3, .bytes = schema_bytes },
+    };
     const owner = try registry.createValidated(std.testing.allocator, .{
         .inventory = .{
             .capability = capability,
             .descriptors = &descriptors,
             .accounts = &accounts,
             .definition_ordinals = &.{1},
-            .resource_ordinals = &.{2},
+            .resource_ordinals = &.{ 2, 3 },
         },
         .definition_captures = &captures,
         .resource_manifest = .{
-            .bindings = &.{.{ .definition_ordinal = 1, .resource_id = resource_id, .resource_ordinal = 2 }},
-            .resource_ordinals = &.{2},
+            .bindings = &.{
+                .{ .definition_ordinal = 1, .resource_id = resource_id, .resource_ordinal = 2 },
+                .{ .definition_ordinal = 1, .resource_id = schema_id, .resource_ordinal = 3 },
+            },
+            .resource_ordinals = &.{ 2, 3 },
         },
         .resource_captures = &resource_captures,
         .definitions = &.{declared},
@@ -206,7 +224,11 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     defer service.deinit();
     const resolved = service.registry().resolve(workflow.WorkflowId.parse("hello").?).?;
     try std.testing.expectEqualStrings("core.noop@1", resolved.authority.steps[0].operation_id.bytes);
-    try std.testing.expectEqualStrings("immutable prompt", resolved.authority.resources[0].bytes);
+    try std.testing.expectEqualStrings("immutable prompt", resolved.authority.resources[0].bytes());
+    const retained_schema = resolved.authority.resources[1].content.result_schema;
+    try std.testing.expectEqualStrings(schema_bytes, retained_schema.bytes());
+    try std.testing.expectEqualStrings("answer", retained_schema.root().object[0].name);
+    try std.testing.expectEqual(@as(u32, 64), retained_schema.root().object[0].schema.string.maximum);
     try std.testing.expectEqual(@as(u64, 1000), resolved.authority.total_model_token_budget.value);
     const retry_authority = resolved.authority.steps[0].retry_authority.?;
     try std.testing.expectEqualStrings("hello", retry_authority.workflow_id.bytes);

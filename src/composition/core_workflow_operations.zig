@@ -6,7 +6,7 @@ const empty_invocation_id = "core.empty-invocation@1";
 const noop_id = "core.noop@1";
 const capability_free_policy_id = "core.capability-free@1";
 
-const entries = [_]operations.Entry{
+pub const entries = [_]operations.Entry{
     .{
         .contract = .{
             .id = empty_invocation_id,
@@ -28,14 +28,16 @@ const entries = [_]operations.Entry{
     },
 };
 
+pub const profiles = [_]@import("../domain/workflow_operation.zig").PolicyProfile{.{
+    .id = capability_free_policy_id,
+    .allowed_capabilities = &.{},
+    .allowed_terminal_outcomes = &.{ .ok, .needs_user, .invalid, .blocked, .failed, .cancelled },
+    .total_model_token_budget = .{ .value = 100_000 },
+}};
+
 pub const registry: operations.Registry = .{
     .operations = &entries,
-    .policies = &.{.{
-        .id = capability_free_policy_id,
-        .allowed_capabilities = &.{},
-        .allowed_terminal_outcomes = &.{ .ok, .needs_user, .invalid, .blocked, .failed, .cancelled },
-        .total_model_token_budget = .{ .value = 100_000 },
-    }},
+    .policies = &profiles,
     .gates = &.{},
 };
 

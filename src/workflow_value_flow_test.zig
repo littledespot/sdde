@@ -440,7 +440,8 @@ const Fixture = struct {
         var parser: parser_adapter.Adapter = .{};
         const raw = try (parse.Action{ .parser = parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
         const definitions = try (validate_schema.Action{}).execute(arena.allocator(), raw);
-        const graphs = try (compile.Action{ .registry = &registry }).execute(arena.allocator(), definitions, .{ .capability = undefined, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{}, .resource_ordinals = &.{} }, .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
+        var result_schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+        const graphs = try (compile.Action{ .registry = &registry, .result_schema_compiler = result_schema_parser.compiler() }).execute(arena.allocator(), definitions, .{ .capability = undefined, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{}, .resource_ordinals = &.{} }, .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
         _ = try (validate_graphs.Action{}).execute(arena.allocator(), graphs);
         return .{ .arena = arena, .graph = &graphs[0], .registry = registry };
     }

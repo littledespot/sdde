@@ -1,9 +1,12 @@
 # ADR 0006: Minimal model responses with runner-owned correlation
 
-- **Status:** Accepted design amendment; implementation pending
+- **Status:** Accepted design amendment; schema compilation implemented;
+  request/response execution pending
 - **Date:** 2026-09-05
 - **Decision authority:** User direction to derive a token-efficient response
   standard and update documentation without code changes
+- **Implementation authority:** Subsequent user request to define and implement
+  the closed result-schema subset, immutable compilation and negative tests
 - **Amends:** Design Sections 12.3, 12.7 and 22.4; F0006; F0007 Section 7
 - **Supersedes:** The metadata-bearing model response and repair-response
   examples in `design/code.md`, and F0007's requirement to echo those identities
@@ -121,6 +124,70 @@ from prose or convert a stopped response into a candidate. Schema validity
 still proves neither semantic correctness nor authority; ordinary validators,
 clarification handling and compiled YAML transitions remain mandatory.
 
+## Closed result-schema profile
+
+The accepted implementation increment fixes `model-result-schema/v1` as the
+engine-selected, provider-neutral schema profile. This profile name is not a
+new YAML property or model-output field. Each `result-schema` resource is one
+complete UTF-8 JSON object using only the following forms. This is a closed
+subset with JSON Schema meanings, not a general JSON Schema implementation.
+
+| Form | Exact fields and constraints |
+| --- | --- |
+| Object | `type: "object"`, `properties` mapping, `required` name array, and `additionalProperties: false`, all required. Required names must be unique declared properties. Other declared properties are optional, never filled with defaults. |
+| String | `type: "string"` and required `maxLength`; optional `minLength` means zero when absent. Lengths count Unicode scalar values, not UTF-8 bytes. |
+| Integer | `type: "integer"`, required `minimum` and `maximum`, both signed 64-bit JSON integer literals. |
+| Boolean / null | Only `type: "boolean"` or `type: "null"`. |
+| Constant | Only `const`, containing a string, signed 64-bit integer, boolean or null. |
+| Enumeration | Only `enum`, containing a nonempty list of distinct strings. Constants/enumerations are already finite and need no redundant type or length declaration. |
+| Array | `type: "array"`, one `items` schema and required `maxItems`; optional `minItems` means zero when absent. |
+| Alternatives | Only `oneOf`, containing 2–32 closed object schemas. Each requires `kind` with a distinct nonempty string `const`; no inferred or overlapping branch is allowed. |
+
+The root must be an object or the alternatives form. A single root object
+cannot require a constant result-kind echo: a `kind` property with `const` or
+a singleton `enum` rejects. Necessary nested domain discriminators remain
+allowed. Domain field names are not globally banned, and compilation does not
+infer business meaning or automatically insert/flatten wrappers. The exact
+workflow schema still determines the permitted candidate fields.
+
+All length/item bounds are integers in `0..4294967295`, with minimum no greater
+than maximum. Integer bounds must also be ordered. Empty closed objects and
+explicit zero upper bounds are valid. Every nested value is constrained by one
+of the forms above; open maps and unconstrained leaves are prohibited.
+
+Unknown, duplicate or mixed-form keywords reject, including `$schema`, `$id`,
+`$ref`, definitions, recursive schemas, `anyOf`, `allOf`, `not`, conditionals,
+type arrays, `number`, regex/pattern/format rules, annotations and defaults.
+No schema fetch, coercion, ignored keyword or provider fallback is permitted.
+Guidance and examples remain explicitly declared workflow resources, not
+implicit schema annotations. Decoded duplicate property names and duplicate
+required/enum/kind values also reject, including equivalent JSON escapes.
+
+The compiler reuses the existing 1,048,576-byte workflow-resource ceiling and
+adds structural guards: at most 64 JSON container levels, 16 schema-node levels
+(root is level 1), 4,096 schema nodes including alternative objects and their
+fields, 256 properties per object, and 256 enum values. These are compiler
+safety bounds, not workflow token budgets or retry limits. No schema budget
+overrides the selected operation's later byte/token capacity checks.
+
+The existing workflow compiler calls one narrow result-schema compiler port
+only for explicitly referenced resources of that kind. Its adapter checks JSON
+transport; the domain compiler owns this profile's semantic rules. A compiled
+resource is tagged: `result_schema` carries an opaque immutable schema with
+its exact captured bytes and typed tree, not an optional proof beside an
+unchecked schema string. The registry deep-owns that same authority through
+execution. The existing provider-neutral request also references this compiled
+schema; its unchecked raw-schema constructor path is removed. Other resource
+kinds remain byte captures and are not parsed as
+schemas. Any invalid schema rejects graph construction with
+`WORKFLOW_GRAPH_COMPILE_INVALID`; no partial registry is published.
+
+This increment implements schema compilation, not request construction,
+candidate decoding/validation, native-provider schema representability or
+provider calls. Those consumers must reuse the compiled contract rather than
+introducing another schema reader or registry. Byte-identical source/tree
+binding and immutable ownership are preserved through graph/registry copies.
+
 ## Acceptance evidence for implementation
 
 - Single-shape and multi-variant results use only schema-required candidate
@@ -136,6 +203,6 @@ clarification handling and compiled YAML transitions remain mandatory.
 - Tests account for actual input/result bytes and exact model-specific token
   evidence. No fixed token-saving percentage is assumed.
 
-No compatibility reader or legacy metadata-emitting prompt is retained when
-implemented. This documentation amendment adds no runtime operation, provider
-support, workflow branch or code change.
+No compatibility reader or legacy metadata-emitting prompt is retained.
+Schema compilation adds no workflow operation, hidden transition or provider
+support; it is part of the existing workflow-compilation kernel.

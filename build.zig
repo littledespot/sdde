@@ -12,6 +12,17 @@ comptime {
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const unicode_dependency = b.dependency("utf8proc", .{});
+    const unicode_module = b.createModule(.{
+        .root_source_file = b.path("src/adapters/text/unicode_nfc.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    unicode_module.addIncludePath(unicode_dependency.path(""));
+    unicode_module.addCMacro("UTF8PROC_STATIC", "1");
+    unicode_module.addCSourceFile(.{ .file = unicode_dependency.path("utf8proc.c"), .flags = &.{"-DUTF8PROC_STATIC"} });
+    b.getInstallStep().dependOn(&b.addInstallFileWithDir(unicode_dependency.path("LICENSE.md"), .prefix, "share/licenses/utf8proc/LICENSE.md").step);
     const yaml_dependency = b.dependency("yaml", .{
         .target = target,
         .optimize = optimize,
@@ -32,6 +43,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_nfc", .module = unicode_module },
         },
     });
 
@@ -95,6 +107,29 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_yaml_safety_tests.step);
     test_step.dependOn(&run_version_policy_tests.step);
     test_step.dependOn(&run_architecture_tests.step);
+    const unicode_tests = b.addTest(.{ .root_module = unicode_module });
+    const run_unicode_tests = b.addRunArtifact(unicode_tests);
+    test_step.dependOn(&run_unicode_tests.step);
+
+    const result_schema_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/model_result_schema_test.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const result_schema_step = b.step("test-model-result-schema", "Test the closed model result-schema boundary");
+    result_schema_step.dependOn(&b.addRunArtifact(result_schema_tests).step);
+
+    const reference_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/reference_preflight_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_nfc", .module = unicode_module }},
+    }) });
+    const reference_step = b.step("test-reference-preflight", "Test Specify arguments and reference selector contracts");
+    reference_step.dependOn(&b.addRunArtifact(reference_tests).step);
+    reference_step.dependOn(&run_unicode_tests.step);
 
     const smoke_command = packaging_smoke.add(b, executable);
     const smoke_step = b.step("smoke", "Test the packaged executable in a clean directory");

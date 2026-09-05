@@ -20,6 +20,7 @@ pub const Action = struct {
         selected: *const execution.SelectedWorkflow,
     ) requirement.Requirement {
         for (selected.graph.authority.steps) |step| {
+            if (step.model != null) return .required;
             for (step.capabilities) |capability| {
                 if (std.mem.eql(u8, capability, requirement.capability_id)) {
                     return .required;
@@ -30,7 +31,7 @@ pub const Action = struct {
     }
 };
 
-test "derives only the exact compiler-owned model-provider capability" {
+test "provider-call requirement uses the exact capability and ignores workflow names" {
     try std.testing.expectEqual(
         requirement.Requirement.required,
         deriveFor("arbitrary-flow", &.{requirement.capability_id}),

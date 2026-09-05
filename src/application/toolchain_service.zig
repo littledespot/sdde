@@ -1,15 +1,11 @@
 const safety = @import("../domain/toolchain_safety.zig");
 pub const ToolChainService = struct {
-    owner: *safety.Owner,
-    pub fn init(owner: *safety.Owner) ToolChainService {
-        return .{ .owner = owner };
+    value: *const safety.ValidToolchain,
+    pub fn init(value: *const safety.ValidToolchain) ToolChainService {
+        return .{ .value = value };
     }
     pub fn toolchain(self: *const ToolChainService) *const safety.ValidToolchain {
-        return safety.value(self.owner);
-    }
-    pub fn deinit(self: *ToolChainService) void {
-        safety.deinitOwner(self.owner);
-        self.* = undefined;
+        return self.value;
     }
 };
 
@@ -21,8 +17,8 @@ test "exposes only the same borrowed safety-valid toolchain" {
             .{ .id = "core.safety@1", .project_selectable = false, .locked_required = true },
         } },
     );
-    var service = ToolChainService.init(owner);
-    defer service.deinit();
+    defer safety.deinitOwner(owner);
+    const service = ToolChainService.init(safety.value(owner));
     try @import("std").testing.expect(service.toolchain() == service.toolchain());
     try @import("std").testing.expectEqualStrings("core.safety@1", service.toolchain().policies()[0].id);
 }

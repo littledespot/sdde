@@ -16,6 +16,12 @@ const Owned = struct {
     schema: data.Schema,
     payload: *const anyopaque,
     retained_refs: ?*RetainedReference = null,
+    native_owner: ?NativeOwner = null,
+};
+
+const NativeOwner = struct {
+    context: *anyopaque,
+    destroy_fn: *const fn (*anyopaque) void,
 };
 
 const RetainedReference = struct {
@@ -44,12 +50,47 @@ pub fn create(allocator: std.mem.Allocator, descriptor: data.Schema, comptime T:
     errdefer releaseReferences(owner);
     const payload = try owner.arena.allocator().create(T);
     payload.* = try clone(T, value, owner, &budget);
-    owner.payload = payload;
+    owner.payload = @ptrCast(payload);
     return @ptrCast(owner);
 }
 
 pub fn valueSchema(value: *const data.Value) data.Schema {
     return owned(value).schema;
+}
+
+/// Transfers an independently owned, sealed immutable native result on success.
+/// Native bindings supply its typed owner, accessor, destructor and retained
+/// byte count. Neither workflow data nor model output can supply these hooks.
+pub fn adopt(
+    allocator: std.mem.Allocator,
+    descriptor: data.Schema,
+    comptime T: type,
+    comptime Owner: type,
+    owner: *Owner,
+    comptime get: *const fn (*const Owner) *const T,
+    comptime destroy_owner: *const fn (*Owner) void,
+    retained_bytes: usize,
+) Error!*data.Value {
+    if (@typeInfo(T) != .@"opaque") @compileError("ordinary pipeline data must use the immutable copying constructor");
+    if (!descriptor.valid()) return error.InvalidDataSchema;
+    if (!std.mem.eql(u8, descriptor.type_name, @typeName(T))) return error.DataSchemaMismatch;
+    if (retained_bytes == 0 or retained_bytes > descriptor.maximum_bytes) return error.DataValueLimitExceeded;
+    const finalizer = struct {
+        fn destroy(context: *anyopaque) void {
+            destroy_owner(@ptrCast(@alignCast(context)));
+        }
+    };
+    const storage = try allocator.create(Owned);
+    var canonical_schema = descriptor;
+    canonical_schema.type_name = @typeName(T);
+    storage.* = .{
+        .allocator = allocator,
+        .arena = .init(allocator),
+        .schema = canonical_schema,
+        .payload = get(owner),
+        .native_owner = .{ .context = @ptrCast(owner), .destroy_fn = finalizer.destroy },
+    };
+    return @ptrCast(storage);
 }
 
 pub fn read(view: *const data.View, expected: data.Schema, comptime T: type) Error!*const T {
@@ -66,6 +107,7 @@ pub fn destroy(value: *data.Value) void {
     const owner: *Owned = @ptrCast(@alignCast(value));
     const allocator = owner.allocator;
     releaseReferences(owner);
+    if (owner.native_owner) |native| native.destroy_fn(native.context);
     owner.arena.deinit();
     allocator.destroy(owner);
 }

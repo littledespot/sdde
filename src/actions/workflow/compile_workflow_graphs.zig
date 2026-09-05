@@ -14,6 +14,7 @@ pub const Error = error{WorkflowGraphCompileInvalid};
 
 pub const Action = struct {
     registry: *const operation_registry.Registry,
+    result_schema_compiler: @import("../../ports/model_result_schema_compiler.zig").Compiler,
 
     pub const contract: pipeline.NodeContract = .{
         .id = "compile-workflow-graphs@1",
@@ -39,7 +40,7 @@ pub const Action = struct {
             const policy = self.registry.resolvePolicy(item.policy_profile_id) orelse return invalid();
             if (!hasStep(item.steps, item.start_step_id.bytes)) return invalid();
 
-            const resources = try compileResources(allocator, self.registry, item, inventory_value, manifest, captures);
+            const resources = try compileResources(allocator, self.registry, self.result_schema_compiler, item, inventory_value, manifest, captures);
             const steps = allocator.alloc(compilation.CompiledStep, item.steps.len) catch return invalid();
             var transition_count: usize = 0;
             for (item.steps, steps) |declared, *compiled| {
@@ -142,6 +143,7 @@ fn compileGates(allocator: std.mem.Allocator, registry: *const operation_registr
 fn compileResources(
     allocator: std.mem.Allocator,
     registry: *const operation_registry.Registry,
+    result_schema_compiler: @import("../../ports/model_result_schema_compiler.zig").Compiler,
     item: definition.Definition,
     inventory_value: inventory.Inventory,
     manifest: inventory.ResourceManifest,
@@ -156,7 +158,13 @@ fn compileResources(
         const capture = findCapture(captures, binding.resource_ordinal) orelse return invalid();
         if (!std.mem.eql(u8, descriptor.path, declared.name) or descriptor.size == null or
             descriptor.size.? != capture.bytes.len) return invalid();
-        compiled.* = .{ .id = declared.id, .kind = kind, .bytes = capture.bytes };
+        compiled.* = .{ .id = declared.id, .content = switch (kind) {
+            .result_schema => .{ .result_schema = result_schema_compiler.compile(allocator, capture.bytes) catch return invalid() },
+            .prompt => .{ .prompt = capture.bytes },
+            .example => .{ .example = capture.bytes },
+            .data => .{ .data = capture.bytes },
+        } };
+        if (!std.mem.eql(u8, compiled.bytes(), capture.bytes)) return invalid();
     }
     return resources;
 }
@@ -226,7 +234,7 @@ fn compileParameter(
         .resource => if (value == .string) resource: {
             const id = workflow.WorkflowResourceId.parse(value.string) orelse return invalid();
             const resource_value = findCompiledResource(resources, id.bytes) orelse return invalid();
-            if (resource_value.kind != descriptor.resource_kind.?) return invalid();
+            if (resource_value.kind() != descriptor.resource_kind.?) return invalid();
             break :resource .{ .resource = id };
         } else invalid(),
         .model_slot => if (value == .string and value.string.len <= descriptor.string_max_bytes)

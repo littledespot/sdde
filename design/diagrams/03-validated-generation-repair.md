@@ -1,3 +1,10 @@
+Proposed generation and repair flow under
+[ADR 0006](../decisions/0006-minimal-model-response.md). Result-schema
+compilation, request/attempt accounting, provider authorization and token-budget
+primitives exist; the complete model-operation graph, request construction and
+candidate decoding/validation remain pending. Every retry/repair branch below
+belongs to the declared YAML graph.
+
 ```mermaid
 flowchart TD
     VG[Compiled YAML model-operation subgraph] --> AREQ[Build and validate complete AuthorityRequirementLedger<br/>from closed schemas obligations policies and accepted authority]
@@ -18,7 +25,8 @@ flowchart TD
     UOWNER --> MID[AssignModelRequestIdAction<br/>allocate one generation-purpose logical request ID from the current run-local ledger]
     MLEDGER --> MID
     MID --> MBIND[ValidateModelRequestBindingAction<br/>prove epoch, unit, compiled operation, purpose, ordinal and ledger membership]
-    MBIND --> REQ[BuildModelRequestAction<br/>retain engine identity internally;<br/>send needed guidance, evidence and compact result schema]
+    MBIND --> REQ[BuildModelRequestAction<br/>retain engine identity internally;<br/>send needed guidance, evidence and the already compiled compact result schema]
+    RSCHEMA[Workflow-registry-owned model-result-schema/v1 authority<br/>opaque closed tree and exact captured resource bytes;<br/>invalid schema rejects during workflow compilation] -. borrowed schema; no second parser .-> REQ
     REQ --> MADV[AdvanceModelAttemptAccountingAction<br/>reserve initial attempt ordinal; no global attempt ceiling]
     MADV --> MINVOKED[AdvanceModelRequestLifecycleAction<br/>compare-and-swap assigned to invoked exactly once]
     MINVOKED --> MTOKEN{ReserveWorkflowTokenBudgetAction<br/>exact input plus maximum output against this execution's total token budget}
@@ -43,7 +51,7 @@ flowchart TD
 
     DECODE -- Parsed result --> SCHEMA[ValidateModelPayloadSchemaAction<br/>exact bound compact result schema]
     SCHEMA -- Invalid result schema --> PROTO
-    SCHEMA -- Valid --> ROUTE{Declared result variant;<br/>root kind only for alternatives}
+    SCHEMA -- Valid --> ROUTE{Declared result variant;<br/>single object has no constant kind echo;<br/>oneOf alternatives require distinct root kind constants}
 
     ROUTE -- clarification_needed --> NEED[ValidateClarificationNeedProposalAction]
     NEED -- Valid genuine current authority gap; no operation retry consumed --> NACCEPT[AdvanceModelRequestLifecycleAction<br/>terminalize the current invoked producing request with needs_user]

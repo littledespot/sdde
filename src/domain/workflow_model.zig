@@ -26,7 +26,15 @@ pub fn validProjection(step: compilation.CompiledStep) bool {
     for (step.capabilities) |capability| {
         if (std.mem.eql(u8, capability, "model-provider")) capability_count += 1;
     }
-    if (capability_count > 1 or (capability_count == 1) != (step.model != null)) return false;
+    var slot_count: usize = 0;
+    for (step.parameters) |parameter| {
+        if (parameter.value != .model_slot) continue;
+        if (@import("llm_provider_identity.zig").ModelSlotId.parse(parameter.value.model_slot.bytes) == null) return false;
+        slot_count += 1;
+    }
+    if (capability_count > 1 or slot_count > 1 or
+        (step.model != null) != (slot_count == 1) or
+        (capability_count == 1 and step.model == null)) return false;
     const model = step.model orelse return true;
     const expected = resolve(model.capacity, model.capacity, step.parameters) orelse return false;
     return std.meta.eql(model, expected);

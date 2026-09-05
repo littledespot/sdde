@@ -2,19 +2,16 @@ const child_bindings = @import("bootstrap_child_bindings.zig");
 const config_runner = @import("bootstrap_config_runner.zig");
 const root_runner = @import("bootstrap_root_runner.zig");
 const workflow_runner = @import("bootstrap_workflow_runner.zig");
-const toolchain_runner = @import("bootstrap_toolchain_runner.zig");
 const bootstrap_services = @import("bootstrap_services.zig");
 const config_service = @import("sddtoolkit_config_service.zig");
 const root_service = @import("bootstrap_root_registry_service.zig");
 const log_service = @import("log_service.zig");
 const workflow_service = @import("workflow_definition_registry_service.zig");
-const toolchain_service = @import("toolchain_service.zig");
 
 pub const Runner = struct {
     config: *config_runner.Runner,
     roots: *root_runner.Runner,
     workflows: *workflow_runner.Runner,
-    toolchain: *toolchain_runner.Runner,
 
     pub fn bindings(self: *Runner) child_bindings.ChildBindings {
         return .{ .context = self, .vtable = &vtable };
@@ -110,33 +107,6 @@ pub const Runner = struct {
     fn validateWorkflowRegistry(context: *anyopaque) child_bindings.StepOutcome {
         return cast(context).workflows.invokeValidateRegistry();
     }
-    fn captureProjectToolchain(context: *anyopaque) child_bindings.StepOutcome {
-        return cast(context).toolchain.invokeCaptureProject();
-    }
-    fn inventoryToolchainPresets(context: *anyopaque) child_bindings.StepOutcome {
-        return cast(context).toolchain.invokeInventoryPresets();
-    }
-    fn captureToolchainPresets(context: *anyopaque) child_bindings.StepOutcome {
-        return cast(context).toolchain.invokeCapturePresets();
-    }
-    fn parseToolchainDocuments(context: *anyopaque) child_bindings.StepOutcome {
-        return cast(context).toolchain.invokeParseDocuments();
-    }
-    fn validateProjectToolchainSchema(context: *anyopaque) child_bindings.StepOutcome {
-        return cast(context).toolchain.invokeValidateProjectSchema();
-    }
-    fn validateToolchainPresetRegistry(context: *anyopaque) child_bindings.StepOutcome {
-        return cast(context).toolchain.invokeValidatePresetRegistry();
-    }
-    fn resolveToolchainInheritance(context: *anyopaque) child_bindings.StepOutcome {
-        return cast(context).toolchain.invokeResolveInheritance();
-    }
-    fn composeToolchain(context: *anyopaque) child_bindings.StepOutcome {
-        return cast(context).toolchain.invokeCompose();
-    }
-    fn validateToolchainSafety(context: *anyopaque) child_bindings.StepOutcome {
-        return cast(context).toolchain.invokeValidateSafety();
-    }
 
     fn takeServices(context: *anyopaque) bootstrap_services.BootstrapServices {
         const self = cast(context);
@@ -145,7 +115,6 @@ pub const Runner = struct {
             .roots = root_service.BootstrapRootRegistryService.init(self.roots.takeRegistry()),
             .logs = log_service.LogService.init(self.config.takeLoggingPolicy()),
             .workflows = workflow_service.WorkflowDefinitionRegistryService.init(self.workflows.takeRegistry()),
-            .toolchain = toolchain_service.ToolChainService.init(self.toolchain.takeToolchain()),
         };
     }
 };
@@ -180,14 +149,5 @@ const vtable: child_bindings.ChildBindings.VTable = .{
     .validate_workflow_graphs = Runner.validateWorkflowGraphs,
     .build_workflow_registry = Runner.buildWorkflowRegistry,
     .validate_workflow_registry = Runner.validateWorkflowRegistry,
-    .capture_project_toolchain = Runner.captureProjectToolchain,
-    .inventory_toolchain_presets = Runner.inventoryToolchainPresets,
-    .capture_toolchain_presets = Runner.captureToolchainPresets,
-    .parse_toolchain_documents = Runner.parseToolchainDocuments,
-    .validate_project_toolchain_schema = Runner.validateProjectToolchainSchema,
-    .validate_toolchain_preset_registry = Runner.validateToolchainPresetRegistry,
-    .resolve_toolchain_inheritance = Runner.resolveToolchainInheritance,
-    .compose_toolchain = Runner.composeToolchain,
-    .validate_toolchain_safety = Runner.validateToolchainSafety,
     .take_services = Runner.takeServices,
 };

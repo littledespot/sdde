@@ -14,6 +14,26 @@ const llm_provider_registry_service = @import("application/llm_provider_registry
 const derive_provider_requirement = @import("actions/provider/derive_provider_requirement.zig");
 const workflow_execution = @import("domain/workflow_execution.zig");
 
+test "result schema authority is opaque and compilation remains a kernel concern" {
+    const schema = @import("domain/model_result_schema.zig");
+    try std.testing.expect(@typeInfo(schema.Schema) == .@"opaque");
+    const resource = @import("domain/workflow_compilation.zig").CompiledResource;
+    const content = @typeInfo(@FieldType(resource, "content")).@"union";
+    try std.testing.expect(content.tag_type.? == @import("domain/workflow_operation.zig").ResourceKind);
+    try std.testing.expect(@FieldType(@FieldType(resource, "content"), "result_schema") == *const schema.Schema);
+    try std.testing.expect(@FieldType(llm_provider_operation.IdentifiedProviderNeutralModelRequest, "response_schema") == *const schema.Schema);
+    const compiler = @embedFile("actions/workflow/compile_workflow_graphs.zig");
+    try std.testing.expect(std.mem.indexOf(u8, compiler, "result_schema_compiler.compile") != null);
+    try expectAbsent(compiler, "std.json");
+    try expectAbsent(compiler, "/adapters/");
+    const schema_domain = @embedFile("domain/model_result_schema.zig");
+    try expectAbsent(schema_domain, "parseFromSlice");
+    try expectAbsent(schema_domain, "std.Io");
+    const runner = @embedFile("application/workflow_pipeline_runner.zig");
+    try expectAbsent(runner, "model_result_schema_compiler");
+    try expectAbsent(runner, "parseFromSlice");
+}
+
 test "every action imports only standard domain and port modules" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
@@ -305,6 +325,20 @@ test "model capability facts and effective limits have no configuration or opera
     }
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("actions/workflow/compile_workflow_graphs.zig"), "self.registry.model_capacity") != null);
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("application/workflow_pipeline_runner.zig"), "step.model orelse") != null);
+}
+
+test "model-binding requirement is immutable data not a provider-call capability" {
+    const compilation = @import("domain/workflow_compilation.zig");
+    const operation = @import("domain/workflow_operation.zig");
+    const registry = @import("ports/workflow_operation_registry.zig");
+    try std.testing.expect(@FieldType(compilation.CompiledStep, "model") == ?@import("domain/workflow_model.zig").Requirements);
+    try std.testing.expect(@FieldType(operation.Contract, "model_capacity") == ?@import("domain/model_limits.zig").Capacity);
+    try std.testing.expect(@FieldType(registry.StepInput, "model_binding") == ?*const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding);
+    try std.testing.expect(!@hasField(registry.StepInput, "provider"));
+    const derive = @embedFile("actions/provider/derive_provider_requirement.zig");
+    try std.testing.expect(std.mem.indexOf(u8, derive, "step.model != null") != null);
+    try expectAbsent(derive, "step.parameters");
+    try expectAbsent(@embedFile("actions/provider/resolve_provider_model_binding.zig"), "LLMProviderInterface");
 }
 
 test "model request identity has one opaque ledger and runner applied mutation boundary" {
@@ -811,7 +845,7 @@ test "bootstrap dispatcher delegates to focused runners" {
     try expectAbsent(workflow_runner, "/actions/bootstrap/");
     try expectAbsent(workflow_runner, "/actions/toolchain/");
 
-    const toolchain_runner = @embedFile("application/bootstrap_toolchain_runner.zig");
+    const toolchain_runner = @embedFile("application/toolchain_workflow_runner.zig");
     try expectAbsent(toolchain_runner, "/actions/config/");
     try expectAbsent(toolchain_runner, "/actions/bootstrap/");
     try expectAbsent(toolchain_runner, "/actions/workflow/");
@@ -984,6 +1018,56 @@ test "workflow operation capabilities have one typed binding authority" {
         const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
         defer allocator.free(source);
         try expectAbsent(source, ".implementation =");
+    }
+}
+
+test "toolchain setup has no unconditional startup path or second result owner" {
+    try std.testing.expect(!@hasField(@import("application/bootstrap_services.zig").BootstrapServices, "toolchain"));
+    try expectAbsent(@embedFile("application/bootstrap_orchestrator.zig"), "Toolchain");
+    try expectAbsent(@embedFile("application/bootstrap_runner.zig"), "toolchain");
+    const service = @import("application/toolchain_service.zig").ToolChainService;
+    try std.testing.expect(!@hasField(service, "owner"));
+    try std.testing.expect(!@hasDecl(service, "deinit"));
+    const bindings = @embedFile("application/toolchain_workflow_runner.zig");
+    try expectAbsent(bindings, "successor");
+    try expectAbsent(bindings, "bootstrap_root_registry");
+    try std.testing.expect(std.mem.indexOf(u8, bindings, "values.adopt(") != null);
+}
+
+test "reference preflight shares path safety without leaking normalization or read capabilities" {
+    const actions = @embedFile("application/reference_workflow_runner.zig");
+    try expectAbsent(actions, "std.Io.Dir");
+    try expectAbsent(actions, "/adapters/");
+    try expectAbsent(actions, "bootstrap_root_registry");
+    const selector = @embedFile("domain/reference_selector.zig");
+    try expectAbsent(selector, "@cImport");
+    try expectAbsent(selector, "/adapters/");
+    try std.testing.expect(std.mem.indexOf(u8, selector, "path_policy.validateComponent") != null);
+    try std.testing.expect(std.mem.indexOf(u8, selector, "path_policy.hasEncodedDotOrSeparator") != null);
+    const filesystem = @embedFile("adapters/filesystem/reference_directory_inspector.zig");
+    try std.testing.expect(std.mem.indexOf(u8, filesystem, "bindReferenceSourcesAdapter") != null);
+    try std.testing.expect(std.mem.indexOf(u8, filesystem, "directories.open") != null);
+    try expectAbsent(filesystem, "createDir");
+    try expectAbsent(filesystem, "writeFile");
+    const engine = @embedFile("application/workflow_engine_orchestrator.zig");
+    try expectAbsent(engine, "specify");
+    try expectAbsent(engine, "reference");
+}
+
+test "reference root path handoff has one authorized adapter consumer" {
+    const io = std.testing.io;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(std.testing.allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.eql(u8, entry.path, "domain/bootstrap_root_registry.zig") or
+            std.mem.eql(u8, entry.path, "adapters/filesystem/reference_directory_inspector.zig") or
+            std.mem.eql(u8, entry.path, "architecture_test.zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, std.testing.allocator, .limited(1024 * 1024));
+        defer std.testing.allocator.free(source);
+        try expectAbsent(source, "bindReferenceSourcesAdapter");
     }
 }
 

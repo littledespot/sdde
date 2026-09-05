@@ -3,7 +3,7 @@
 const std = @import("std");
 const bootstrap_roots = @import("../../domain/bootstrap_roots.zig");
 const root_inspector = @import("../../ports/bootstrap_root_inspector.zig");
-const file_identity = @import("file_identity.zig");
+const directories = @import("directory_access.zig");
 
 const Io = std.Io;
 
@@ -27,60 +27,15 @@ pub const Adapter = struct {
         normalized_relative_path: []const u8,
     ) root_inspector.Error!bootstrap_roots.RootObservation {
         const self: *Adapter = @ptrCast(@alignCast(context));
-        if (normalized_relative_path.len == 0) {
-            return error.BootstrapRootInspectionFailure;
-        }
-
-        var current = self.invocation_working_directory;
-        var current_is_owned = false;
-        defer if (current_is_owned) current.close(self.io);
-
-        var component_start: usize = 0;
-        while (component_start < normalized_relative_path.len) {
-            const component_end = std.mem.indexOfScalarPos(
-                u8,
-                normalized_relative_path,
-                component_start,
-                '/',
-            ) orelse normalized_relative_path.len;
-            const is_leaf = component_end == normalized_relative_path.len;
-            const component = normalized_relative_path[component_start..component_end];
-
-            const next = current.openDir(self.io, component, .{
-                .access_sub_paths = true,
-                .iterate = is_leaf,
-                .follow_symlinks = false,
-            }) catch |open_error| switch (open_error) {
-                error.FileNotFound => return .absent,
-                error.Canceled => return error.Cancelled,
-                else => return error.BootstrapRootInspectionFailure,
-            };
-
-            if (current_is_owned) current.close(self.io);
-            current = next;
-            current_is_owned = true;
-            component_start = component_end + 1;
-        }
-
-        const stat = current.stat(self.io) catch |stat_error| {
-            return switch (stat_error) {
-                error.Canceled => error.Cancelled,
-                else => error.BootstrapRootInspectionFailure,
-            };
+        var current = directories.open(self.io, self.invocation_working_directory, normalized_relative_path) catch |err| return switch (err) {
+            error.DirectoryMissing => .absent,
+            error.Cancelled => error.Cancelled,
+            error.DirectoryUnavailable => error.BootstrapRootInspectionFailure,
         };
-        if (stat.kind != .directory) {
-            return error.BootstrapRootInspectionFailure;
-        }
-        current.access(self.io, ".", .{
-            .follow_symlinks = false,
-            .read = true,
-            .execute = true,
-        }) catch |access_error| return switch (access_error) {
-            error.Canceled => error.Cancelled,
+        defer current.close(self.io);
+        const identity = directories.inspectReadable(self.io, current) catch |err| return switch (err) {
+            error.Cancelled => error.Cancelled,
             else => error.BootstrapRootInspectionFailure,
-        };
-        const identity = file_identity.inspect(current.handle) catch {
-            return error.BootstrapRootInspectionFailure;
         };
         return .{ .directory = identity };
     }

@@ -47,15 +47,6 @@ pub fn run(children: child_bindings.ChildBindings) Outcome {
     if (terminal(children.invokeValidateWorkflowGraphs())) |outcome| return outcome;
     if (terminal(children.invokeBuildWorkflowRegistry())) |outcome| return outcome;
     if (terminal(children.invokeValidateWorkflowRegistry())) |outcome| return outcome;
-    if (terminal(children.invokeCaptureProjectToolchain())) |outcome| return outcome;
-    if (terminal(children.invokeInventoryToolchainPresets())) |outcome| return outcome;
-    if (terminal(children.invokeCaptureToolchainPresets())) |outcome| return outcome;
-    if (terminal(children.invokeParseToolchainDocuments())) |outcome| return outcome;
-    if (terminal(children.invokeValidateProjectToolchainSchema())) |outcome| return outcome;
-    if (terminal(children.invokeValidateToolchainPresetRegistry())) |outcome| return outcome;
-    if (terminal(children.invokeResolveToolchainInheritance())) |outcome| return outcome;
-    if (terminal(children.invokeComposeToolchain())) |outcome| return outcome;
-    if (terminal(children.invokeValidateToolchainSafety())) |outcome| return outcome;
 
     return .{ .ready = children.takeServices() };
 }
@@ -149,33 +140,6 @@ test "preserves explicit cancellation and stops later children" {
     );
 }
 
-test "toolchain actions remain separate ordered child bindings" {
-    var spy: SpyBindings = .{ .fail_at = .parse_toolchain_documents };
-    var outcome = run(spy.bindings());
-    defer outcome.deinit();
-
-    try std.testing.expectEqual(bootstrap_error.PublicError.TOOLCHAIN_INVALID, outcome.failed);
-    try std.testing.expectEqualSlices(
-        Step,
-        &.{
-            .capture_project_toolchain,
-            .inventory_toolchain_presets,
-            .capture_toolchain_presets,
-            .parse_toolchain_documents,
-        },
-        spy.calls[29..spy.call_count],
-    );
-}
-
-test "toolchain cancellation stops before later safety publication" {
-    var spy: SpyBindings = .{ .cancel_at = .resolve_toolchain_inheritance };
-    var outcome = run(spy.bindings());
-    defer outcome.deinit();
-
-    try std.testing.expect(outcome == .cancelled);
-    try std.testing.expectEqual(Step.resolve_toolchain_inheritance, spy.calls[spy.call_count - 1]);
-}
-
 const Step = enum {
     locate,
     read,
@@ -206,15 +170,6 @@ const Step = enum {
     validate_workflow_graphs,
     build_workflow_registry,
     validate_workflow_registry,
-    capture_project_toolchain,
-    inventory_toolchain_presets,
-    capture_toolchain_presets,
-    parse_toolchain_documents,
-    validate_project_toolchain_schema,
-    validate_toolchain_preset_registry,
-    resolve_toolchain_inheritance,
-    compose_toolchain,
-    validate_toolchain_safety,
 };
 
 const SpyBindings = struct {
@@ -259,16 +214,6 @@ const SpyBindings = struct {
             .validate_workflow_schema => .WORKFLOW_DEFINITION_SCHEMA_INVALID,
             .validate_workflow_operations, .compile_workflows, .validate_workflow_graphs => .WORKFLOW_GRAPH_COMPILE_INVALID,
             .build_workflow_registry, .validate_workflow_registry => .WORKFLOW_REGISTRY_INVALID,
-            .capture_project_toolchain,
-            .inventory_toolchain_presets,
-            .capture_toolchain_presets,
-            .parse_toolchain_documents,
-            .validate_project_toolchain_schema,
-            .validate_toolchain_preset_registry,
-            .resolve_toolchain_inheritance,
-            .compose_toolchain,
-            .validate_toolchain_safety,
-            => .TOOLCHAIN_INVALID,
         } };
     }
 };
@@ -303,15 +248,6 @@ const spy_vtable: child_bindings.ChildBindings.VTable = .{
     .validate_workflow_graphs = spyValidateWorkflowGraphs,
     .build_workflow_registry = spyBuildWorkflowRegistry,
     .validate_workflow_registry = spyValidateWorkflowRegistry,
-    .capture_project_toolchain = spyCaptureProjectToolchain,
-    .inventory_toolchain_presets = spyInventoryToolchainPresets,
-    .capture_toolchain_presets = spyCaptureToolchainPresets,
-    .parse_toolchain_documents = spyParseToolchainDocuments,
-    .validate_project_toolchain_schema = spyValidateProjectToolchainSchema,
-    .validate_toolchain_preset_registry = spyValidateToolchainPresetRegistry,
-    .resolve_toolchain_inheritance = spyResolveToolchainInheritance,
-    .compose_toolchain = spyComposeToolchain,
-    .validate_toolchain_safety = spyValidateToolchainSafety,
     .take_services = spyTakeServices,
 };
 
@@ -425,33 +361,6 @@ fn spyBuildWorkflowRegistry(context: *anyopaque) child_bindings.StepOutcome {
 }
 fn spyValidateWorkflowRegistry(context: *anyopaque) child_bindings.StepOutcome {
     return castSpy(context).record(.validate_workflow_registry);
-}
-fn spyCaptureProjectToolchain(context: *anyopaque) child_bindings.StepOutcome {
-    return castSpy(context).record(.capture_project_toolchain);
-}
-fn spyInventoryToolchainPresets(context: *anyopaque) child_bindings.StepOutcome {
-    return castSpy(context).record(.inventory_toolchain_presets);
-}
-fn spyCaptureToolchainPresets(context: *anyopaque) child_bindings.StepOutcome {
-    return castSpy(context).record(.capture_toolchain_presets);
-}
-fn spyParseToolchainDocuments(context: *anyopaque) child_bindings.StepOutcome {
-    return castSpy(context).record(.parse_toolchain_documents);
-}
-fn spyValidateProjectToolchainSchema(context: *anyopaque) child_bindings.StepOutcome {
-    return castSpy(context).record(.validate_project_toolchain_schema);
-}
-fn spyValidateToolchainPresetRegistry(context: *anyopaque) child_bindings.StepOutcome {
-    return castSpy(context).record(.validate_toolchain_preset_registry);
-}
-fn spyResolveToolchainInheritance(context: *anyopaque) child_bindings.StepOutcome {
-    return castSpy(context).record(.resolve_toolchain_inheritance);
-}
-fn spyComposeToolchain(context: *anyopaque) child_bindings.StepOutcome {
-    return castSpy(context).record(.compose_toolchain);
-}
-fn spyValidateToolchainSafety(context: *anyopaque) child_bindings.StepOutcome {
-    return castSpy(context).record(.validate_toolchain_safety);
 }
 
 fn castSpy(context: *anyopaque) *SpyBindings {

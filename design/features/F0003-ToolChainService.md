@@ -9,6 +9,9 @@ of the same runtime-validated YAML shapes; runtime code does not load them.
 
 **Classification:** Core, read-only mechanical toolchain provider
 
+**Execution:** Selected-workflow setup under ADR 0003, not fixed startup.
+Configuration/root/workflow loading and provider preparation remain kernel work.
+
 **Scope:** SDDE engine development. This document does not authorize running
 SDDE against a target project.
 
@@ -39,16 +42,43 @@ F0003 names the resulting nominal value `ValidToolchain`. It is the canonical
 immutable post-inheritance, post-composition, safety-valid result, not a wrapper
 around raw YAML or another projection of the same authority. Captured bytes,
 decoded values, schema-valid layers, registry candidates, and merged pre-safety
-candidates remain runner-private bootstrap intermediates passed only through
-the exact child bindings that consume them. None can construct
+candidates remain runner-owned workflow intermediates exposed only to
+operations declaring their typed input keys. None can construct
 `ToolChainService`.
 
-After the safety gate succeeds, the runner constructs one `ToolChainService`
-with the canonical `ValidToolchain`. Declared consumers may borrow only
+After the safety gate succeeds, the runner's envelope owns the original sealed
+`ValidToolchain` allocation. `ToolChainService` is its non-owning read-only facade.
+Declared consumers may borrow only
 `*const ValidToolchain` through one concrete read-only accessor. No service
-registry, generic or string-key query, typed-key publication of intermediate
-states, cache, copied projection, reread, or second authority is introduced.
-The runner owns the service for the invocation lifetime.
+registry, generic or string-key service query, cache, copied projection, reread,
+or second authority is introduced. A borrowed service cannot outlive its
+envelope value; replacement, invalidation, rejection, and execution cleanup
+release native owners through the shared value lifecycle.
+
+### Workflow bindings
+
+The single operation registry exposes the existing action IDs below. Each has
+`ok` and `failed` transitions, no parameters, and one action responsibility.
+The YAML graph owns ordering; no combined setup operation hides this sequence.
+
+| Operation | Output key |
+| --- | --- |
+| `capture-project-toolchain@1` | `project_toolchain_capture` |
+| `inventory-toolchain-presets@1` | `toolchain_preset_inventory` |
+| `capture-toolchain-presets@1` | `toolchain_preset_captures` |
+| `parse-toolchain-documents@1` | `raw_toolchain_documents` |
+| `validate-project-toolchain-schema@1` | `schema_valid_project_toolchain` |
+| `validate-toolchain-preset-registry@1` | `schema_valid_toolchain_registry` |
+| `resolve-toolchain-inheritance@1` | `resolved_toolchain_inheritance` |
+| `compose-toolchain@1` | `composed_toolchain` |
+| `validate-toolchain-safety@1` | `valid_toolchain` |
+
+Composition binds each source port to its exact F0004 root capability after
+startup, before invocation. Roots are not copied into workflow data or supplied
+by YAML. The source ports derive `toolchain-read`; the parser port derives
+`toolchain-parser`. The registered `core.toolchain@1` profile allows those two
+capabilities only. Unreferenced setup operations perform no reads. Cancellation
+and cleanup remain runner-owned.
 
 ## 2. Path authority and the requested upstream service
 
@@ -171,11 +201,12 @@ invalidation. Those remain runner, transaction, bootstrap, and policy-compiler
 responsibilities. F0003 neither duplicates nor hides them behind a service
 method.
 
-F0003 publishes no raw YAML, decoded/raw value, schema-valid layer, registry
+`ToolChainService` publishes no raw YAML, decoded/raw value, schema-valid layer, registry
 candidate, mutable map, source path, preset bytes, partially merged candidate,
 or pre-safety policy. Its sole consumer-visible value is the borrowed immutable
 `ValidToolchain` constructed after post-composition safety validation. There is
-no internal-consumer exception. Persistence of validated bootstrap authority
+no service-consumer exception; intermediate workflow keys are not service authority.
+Persistence of validated bootstrap authority
 remains runner/transaction work outside this read-only boundary.
 
 ## 4. Read-only and logging boundary
@@ -289,7 +320,7 @@ design inputs.
    remains the only owner that turns its raw path strings into capabilities.
    F0003 receives those capabilities only through F0004's
    `projectPrinciples()` and `toolchainPresetRegistry()` accessors.
-3. Bootstrap reads only exact `<paths.principles>/toolchain.yaml` and direct
+3. Selected toolchain operations read only exact `<paths.principles>/toolchain.yaml` and direct
    children of the `paths.toolchainPreset` registry. Neither uses an alternate,
    template, source, packaged, ancestor, descendant, or current-directory
    fallback.
@@ -316,12 +347,14 @@ design inputs.
    and pre-binding work uses no competing logger.
 10. Source examples are never searched or used as runtime authority or
     fallback. If a legacy-shaped document is installed beneath the configured
-    registry and encountered, bootstrap rejects it rather than upgrading it.
+    registry and encountered by selected setup, it rejects rather than upgrades it.
 11. Equal complete validated inputs and equal prior authority produce a
     direct-equal `ValidToolchain`; any failure before its safety gate publishes
     neither a service nor a partial authority.
 12. The packaged executable requires no SDDE source tree, design examples,
     legacy TypeScript engine, development cache, or Zig toolchain at runtime.
+13. Workflows without toolchain operations do not read toolchain documents,
+    including when another installed workflow references those operations.
 
 ## 8. Verification
 

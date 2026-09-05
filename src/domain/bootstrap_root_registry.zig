@@ -100,6 +100,22 @@ pub fn bindWorkflowAuthorityAdapter(
 }
 
 pub const ToolchainAuthorityKind = enum { principles, preset_registry };
+pub const ReferenceSourcesAdapterBinding = struct {
+    project_relative_path: []const u8,
+    physical_identity: roots.PhysicalDirectoryIdentity,
+};
+
+/// Internal handoff restricted to the read-only reference directory adapter.
+pub fn bindReferenceSourcesAdapter(capability: *const ConfiguredBaseRootCapability) ?ReferenceSourcesAdapterBinding {
+    const stored = capabilityStorage(capability);
+    if (stored.path_key != .references or stored.root_role != .reference_sources or
+        stored.access_class != .reference_read_only or stored.existence_policy != .optional_directory) return null;
+    return switch (stored.observation) {
+        .absent => null,
+        .directory => |identity| .{ .project_relative_path = stored.configured_relative_path, .physical_identity = identity },
+    };
+}
+
 pub const ToolchainAuthorityAdapterBinding = struct {
     kind: ToolchainAuthorityKind,
     project_relative_path: []const u8,

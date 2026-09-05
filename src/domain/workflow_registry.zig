@@ -131,7 +131,7 @@ fn graphProjectsDefinition(
         const binding = findBinding(candidate.resource_manifest.bindings, declared.source_ordinal, resource.id) orelse return false;
         const capture = findCapture(candidate.resource_captures, binding.resource_ordinal) orelse return false;
         if (!std.mem.eql(u8, compiled.id.bytes, resource.id.bytes) or
-            !std.mem.eql(u8, compiled.bytes, capture.bytes)) return false;
+            !std.mem.eql(u8, compiled.bytes(), capture.bytes)) return false;
     }
     var transition_count: usize = 0;
     for (graph.authority.steps, declared.steps) |compiled, step| {
@@ -196,9 +196,7 @@ fn sameTarget(left: workflow.TransitionTarget, right: workflow.TransitionTarget)
 fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow) !compilation.CompiledWorkflow {
     const resources = try allocator.alloc(compilation.CompiledResource, source.authority.resources.len);
     for (resources, source.authority.resources) |*destination, item| {
-        destination.* = item;
-        destination.id.bytes = try allocator.dupe(u8, item.id.bytes);
-        destination.bytes = try allocator.dupe(u8, item.bytes);
+        destination.* = try item.clone(allocator);
     }
     const steps = try allocator.alloc(compilation.CompiledStep, source.authority.steps.len);
     for (steps, source.authority.steps) |*destination, step| {

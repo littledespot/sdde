@@ -140,7 +140,7 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     result_schema_id: ResultSchemaId,
     model_visible_input_id: ModelVisibleInputId,
     content: []const ModelVisibleContent,
-    response_schema: []const u8,
+    response_schema: *const @import("model_result_schema.zig").Schema,
     response_guidance_mode: model_controls.ResponseGuidanceMode,
     controls: model_controls.InferenceControls,
     limits: model_limits.Limits,
@@ -157,8 +157,7 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
             RequestSchemaId.parse(self.request_schema_id.bytes) == null or
             ResultSchemaId.parse(self.result_schema_id.bytes) == null or
             ModelVisibleInputId.parse(self.model_visible_input_id.bytes) == null or
-            self.content.len == 0 or self.response_schema.len == 0 or
-            !std.unicode.utf8ValidateSlice(self.response_schema) or
+            self.content.len == 0 or
             model_limits.Limits.init(
                 self.limits.maximum_input_bytes,
                 self.limits.maximum_output_bytes,
@@ -172,7 +171,7 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
             return error.InvalidProviderNeutralModelRequest;
         }
 
-        var canonical_bytes: u64 = self.response_schema.len;
+        var canonical_bytes: u64 = self.response_schema.bytes().len;
         for (self.content) |part| {
             const bytes = part.bytes();
             if (bytes.len == 0 or !std.unicode.utf8ValidateSlice(bytes)) {

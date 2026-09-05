@@ -1,9 +1,15 @@
+The provider-neutral port, request contract, authorization action and lease
+table are implemented and tested with fake adapters. AWS Bedrock transport,
+production dispatch and concrete model contracts remain proposed. The request
+now borrows the workflow-compiled result schema accepted by
+[ADR 0006](../decisions/0006-minimal-model-response.md).
+
 ```mermaid
 classDiagram
     direction LR
 
     class LLMProviderInterface {
-        <<proposed provider-neutral port>>
+        <<implemented provider-neutral port>>
         +countInputTokens(binding, request, authorization, operation) ProviderTokenCountObservation
         +invoke(binding, request, countEvidence, authorization, operation) ProviderInvocationObservation
     }
@@ -27,6 +33,17 @@ classDiagram
 
     class IdentifiedProviderNeutralModelRequest {
         <<bounded request>>
+        +CompiledModelResultSchema response_schema
+    }
+
+    class CompiledModelResultSchema {
+        <<opaque immutable authority>>
+        +bytes() exact captured bytes
+        +root() closed typed schema tree
+    }
+
+    class WorkflowDefinitionRegistry {
+        <<immutable graph and resource owner>>
     }
 
     class ValidatedProviderAuthorizationLeaseRef {
@@ -35,6 +52,21 @@ classDiagram
 
     class InvokedProviderOperation {
         <<invocation proof>>
+        +ProviderOperationId id
+        +deadline_monotonic_ms
+        +ProviderReceiveBudgets receive_budgets
+    }
+
+    class ProviderOperationId {
+        +ModelRequestId model_request_id
+        +ModelAttemptOrdinal model_attempt_ordinal
+        +ProviderOperationKind kind
+    }
+
+    class ProviderOperationKind {
+        <<enumeration>>
+        input_token_count
+        inference
     }
 
     class ExactInputTokenCountEvidence {
@@ -54,11 +86,11 @@ classDiagram
     }
 
     class ProviderOperationAuthorizationPort {
-        <<proposed provider-neutral port>>
+        <<implemented provider-neutral port>>
     }
 
     class PrepareProviderOperationAuthorizationAction {
-        <<proposed action>>
+        <<implemented action>>
     }
 
     class AWSBedrockOperationAuthorizationAdapter {
@@ -78,8 +110,27 @@ classDiagram
         <<runner-private owner>>
     }
 
+    class ProviderAuthorizationSlot {
+        <<deposit-only port>>
+        +deposit(facts, capability) void
+    }
+
+    class ProviderAuthorizationRunner {
+        <<runner-owned authorization binding>>
+        +prepare(facts) AuthorizationOutcome
+    }
+
+    class ProviderOperationLifecycleRunner {
+        <<runner-owned accounting>>
+        +advance(authority, revisions, operationId, command) Effect
+    }
+
+    class AdvanceProviderOperationLifecycleAction {
+        <<implemented action>>
+    }
+
     class ProviderAuthorizationLeasePort {
-        <<proposed runner-owned port>>
+        <<implemented runner-owned port>>
     }
 
     class AWSBedrockRuntimePort {
@@ -135,18 +186,30 @@ classDiagram
     AWSBedrockProvider ..> ExactInputTokenCountEvidence : invoke requires
     AWSBedrockProvider ..> ProviderTokenCountObservation : returns
     AWSBedrockProvider ..> ProviderInvocationObservation : returns
+    WorkflowDefinitionRegistry *-- CompiledModelResultSchema : deep-owns exact source and tree
+    IdentifiedProviderNeutralModelRequest --> CompiledModelResultSchema : borrows compiled authority
     ValidatedProviderModelBinding o-- AWSBedrockModelContract : carries registered facts
     AWSBedrockModelContract *-- BedrockInferenceTarget
     AWSBedrockModelContract *-- RegisteredBedrockDestinationScope
     PrepareProviderOperationAuthorizationAction ..> ProviderOperationAuthorizationPort : uses
+    ProviderAuthorizationRunner --> ProviderAuthorizationLeaseTable : allocates and cancels slots
+    ProviderOperationLifecycleRunner *-- ProviderAuthorizationLeaseTable : owns and updates lifecycle authority
+    ProviderOperationLifecycleRunner ..> AdvanceProviderOperationLifecycleAction : validates and applies transition
+    ProviderAuthorizationRunner ..> PrepareProviderOperationAuthorizationAction : invokes and validates reference delta
+    ProviderAuthorizationLeaseTable ..> ProviderAuthorizationSlot : exposes one allocated slot
     AWSBedrockOperationAuthorizationAdapter ..|> ProviderOperationAuthorizationPort : implements
     CompositionRoot ..> AWSBedrockEnvironmentAPIKeySource : constructs
     AWSBedrockEnvironmentAPIKeySource ..> APIKeySnapshot : creates once when required
     AWSBedrockOperationAuthorizationAdapter ..> APIKeySnapshot : consumes preloaded source
-    AWSBedrockOperationAuthorizationAdapter ..> ProviderAuthorizationLeaseTable : deposits move-only capability
+    AWSBedrockOperationAuthorizationAdapter ..> ProviderAuthorizationSlot : deposits move-only capability
     ProviderAuthorizationLeasePort ..> ProviderAuthorizationLeaseTable : consumes runner-private capability
+    InvokedProviderOperation *-- ProviderOperationId
+    ProviderOperationId --> ProviderOperationKind
 
     note for AWSBedrockProvider "PROPOSED ONLY: no src implementation exists; the environment-only API-key source is accepted"
     note for AWSBedrockEnvironmentAPIKeySource "Reads only AWS_BEARER_TOKEN_BEDROCK; no hardcoded key, fallback, reread, or refresh"
     note for AWSBedrockRuntimePort "No SDK, HTTP library, client fields, or concrete method signature has been selected"
+    note for IdentifiedProviderNeutralModelRequest "The request type requires compiled schema authority; workflow request construction, candidate decoding and native-schema representability remain pending"
+    note for ProviderAuthorizationSlot "The authorization adapter can deposit only into this slot; it receives no table lookup or consumption capability"
+    note for ProviderOperationLifecycleRunner "Separate count and inference operations progress assigned to invoked to terminal; inference requires exact count evidence for the same attempt. Effects are journal intent, not durability proof"
 ```

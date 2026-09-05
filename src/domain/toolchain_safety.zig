@@ -59,6 +59,11 @@ pub fn value(owner: *const Owner) *const ValidToolchain {
     return @ptrCast(&ownerStorageConst(owner).value);
 }
 
+pub fn retainedBytes(owner: *const Owner) usize {
+    const storage = ownerStorageConst(owner);
+    return @sizeOf(OwnerStorage) + storage.arena.queryCapacity();
+}
+
 pub fn deinitOwner(owner: *Owner) void {
     const storage = ownerStorage(owner);
     const allocator = storage.backing_allocator;

@@ -12,7 +12,8 @@ Bootstrap loads the exact `.sddtoolkit.json` in the invocation working
 directory, validates configured roots, compiles all concise `workflow/v1`
 definitions, and publishes the immutable workflow registry before selection.
 Provider configuration is read only after selection when the compiled graph
-requires model capability.
+requires model binding or provider calls. Pure preparation steps receive only
+immutable binding data; provider calls require a separate policy-permitted port.
 
 ## Requirements
 
@@ -25,6 +26,8 @@ zig build
 zig build run
 zig build lint
 zig build test
+zig build test-model-result-schema
+zig build test-reference-preflight
 zig build smoke
 zig build verify
 ```
@@ -38,3 +41,8 @@ after a successful build.
 
 Concrete domain operations and the full initial SDD workflow suite remain
 incremental work under `design/design.md` and their feature contracts.
+
+Specify's registered invocation and read-only reference-selector preflight are
+implemented; they do not yet generate `spec.md`. Unicode NFC uses pinned
+utf8proc compiled into the executable; `zig build` installs its license under
+`zig-out/share/licenses/utf8proc/` (see [ADR 0007](design/decisions/0007-unicode-normalization.md)).

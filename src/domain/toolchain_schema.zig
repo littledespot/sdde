@@ -39,14 +39,14 @@ pub fn lessPreset(_: void, left: toolchain.Preset, right: toolchain.Preset) bool
     return if (left.layer != right.layer) layer else std.mem.order(u8, left.package, right.package) == .lt;
 }
 
-fn mapping(node: *toolchain.RawNode) ?[]const toolchain.Pair {
+fn mapping(node: *const toolchain.RawNode) ?[]const toolchain.Pair {
     return switch (node.*) {
         .mapping => |value| value,
         else => null,
     };
 }
 
-fn scalar(node: ?*toolchain.RawNode) ?[]const u8 {
+fn scalar(node: ?*const toolchain.RawNode) ?[]const u8 {
     const present = node orelse return null;
     return switch (present.*) {
         .scalar => |value| value,
@@ -54,11 +54,11 @@ fn scalar(node: ?*toolchain.RawNode) ?[]const u8 {
     };
 }
 
-fn scalarEquals(node: ?*toolchain.RawNode, expected: []const u8) bool {
+fn scalarEquals(node: ?*const toolchain.RawNode, expected: []const u8) bool {
     return if (scalar(node)) |actual| std.mem.eql(u8, actual, expected) else false;
 }
 
-fn field(map: []const toolchain.Pair, name: []const u8) ?*toolchain.RawNode {
+fn field(map: []const toolchain.Pair, name: []const u8) ?*const toolchain.RawNode {
     for (map) |pair| {
         const key = scalar(pair.key) orelse return null;
         if (std.mem.eql(u8, key, name)) return pair.value;
@@ -68,7 +68,7 @@ fn field(map: []const toolchain.Pair, name: []const u8) ?*toolchain.RawNode {
 
 fn refList(
     allocator: std.mem.Allocator,
-    node: ?*toolchain.RawNode,
+    node: ?*const toolchain.RawNode,
     maximum: usize,
     validator: *const fn ([]const u8) bool,
 ) toolchain.Error![]const []const u8 {

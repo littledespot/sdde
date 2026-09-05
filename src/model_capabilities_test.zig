@@ -151,10 +151,6 @@ test "model operation registry requires explicit engine and operation ceilings w
     entry.contract.parameters = model_operation.contract.parameters[0..1];
     registry.operations = &.{entry};
     try std.testing.expect(!registry.validate());
-    entry = model_operation;
-    entry.binding = @import("application/workflow_operation_binding.zig").bind(void, null, @import("workflow_binding_test_fixture.zig").unused);
-    registry.operations = &.{entry};
-    try std.testing.expect(!registry.validate());
     try std.testing.expect(!@hasField(operation.PolicyProfile, "model_capacity"));
     try std.testing.expect(!@hasField(@import("domain/config.zig").ModelsConfig, "model_capacity"));
 }

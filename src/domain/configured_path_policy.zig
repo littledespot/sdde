@@ -22,7 +22,7 @@ pub fn normalize(
     const normalized = raw_path[0..normalized_length];
 
     var iterator = std.mem.splitScalar(u8, normalized, '/');
-    while (iterator.next()) |component| try validateComponent(policy, component);
+    while (iterator.next()) |component| try validateComponent(policy.max_component_bytes, component, .ascii);
     if (hasEncodedDotOrSeparator(normalized)) return error.InvalidConfiguredPath;
     return allocator.dupe(u8, normalized) catch error.InvalidConfiguredPath;
 }
@@ -32,15 +32,18 @@ fn isAbsoluteOrDrivePath(path: []const u8) bool {
     return path.len >= 2 and std.ascii.isAlphabetic(path[0]) and path[1] == ':';
 }
 
-fn validateComponent(policy: roots.WorkspacePathPolicy, component: []const u8) Error!void {
-    if (component.len == 0 or component.len > policy.max_component_bytes or
+pub const CharacterSet = enum { ascii, unicode };
+
+/// Shared portable segment safety; each path contract chooses its character set.
+pub fn validateComponent(max_component_bytes: usize, component: []const u8, characters: CharacterSet) Error!void {
+    if (component.len == 0 or component.len > max_component_bytes or
         std.mem.eql(u8, component, ".") or std.mem.eql(u8, component, "..") or
         component[component.len - 1] == '.' or component[component.len - 1] == ' ')
     {
         return error.InvalidConfiguredPath;
     }
     for (component) |byte| {
-        if (byte < 0x20 or byte == 0x7f or byte >= 0x80) return error.InvalidConfiguredPath;
+        if (byte < 0x20 or byte == 0x7f or (characters == .ascii and byte >= 0x80)) return error.InvalidConfiguredPath;
         switch (byte) {
             '\\', '<', '>', ':', '"', '|', '?', '*' => return error.InvalidConfiguredPath,
             else => {},
@@ -59,7 +62,7 @@ fn isReservedPortableName(component: []const u8) bool {
         stem[3] >= '1' and stem[3] <= '9';
 }
 
-fn hasEncodedDotOrSeparator(path: []const u8) bool {
+pub fn hasEncodedDotOrSeparator(path: []const u8) bool {
     var index: usize = 0;
     while (index < path.len) : (index += 1) {
         if (path[index] != '%') continue;

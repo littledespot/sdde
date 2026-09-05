@@ -1,13 +1,23 @@
+Proposed SDD reference lifecycle. Fixed startup and conditional provider
+preparation are implemented engine boundaries; the feature/reference actions
+below remain the proposed design. Selection and preparation follow
+[ADR 0004](../decisions/0004-model-provider-bootstrap.md).
+
 ```mermaid
 flowchart TD
-    START[sdd specify --reference &lt;relative-selector&gt;] --> RUNNER[PipelineRunner<br/>sole node invocation and delta application owner]
-    RUNNER --> ENGINE[WorkflowEngineOrchestrator<br/>no workflow-name branch;<br/>coordinate only through runner-owned ChildNodeBinding values]
-    ENGINE -. bootstrap child binding .-> RUNNER
+    START[sdd specify --reference &lt;relative-selector&gt;] --> COMPOSE[Composition root assembles fixed startup and invocation bindings]
+    COMPOSE --> RUNNER[PipelineRunner<br/>sole node invocation and delta application owner]
     RUNNER --> BOOT[Invoke the fixed startup BootstrapOrchestrator through its runner-owned binding;<br/>diagram 08 loads and compiles the variable-size workflow registry without selecting a workflow<br/>and returns without acquiring a project or feature transaction lock]
     BOOT --> CONFIG[Engine startup only: use the invocation working directory as project root;<br/>read/directly decode only its exact .sddtoolkit.json or fail the invocation if missing;<br/>validate seven configured directory roots plus paths.providers and every discovered workflow definition;<br/>do not read provider config or inventory presets/toolchain.yaml/principles yet]
-    CONFIG --> WSELECT[Runner invokes ParseWorkflowSelectionAction then ValidateWorkflowIdAction;<br/>extract exactly WorkflowId specify and preserve the remaining arguments]
-    WSELECT --> WRESOLVE[Runner invokes ResolveSelectedWorkflowAction;<br/>exactly one match in the validated registry; no default or filename inference]
-    WRESOLVE --> CLI[Registered specify invocation-contract node;<br/>runner invokes its ParseSpecifyInvocationAction child]
+    CONFIG --> ENGINE[WorkflowEngineOrchestrator<br/>no workflow-name branch;<br/>coordinate only through runner-owned ChildNodeBinding values]
+    ENGINE --> WSELECT[Runner invokes ParseWorkflowInvocationAction;<br/>validate WorkflowId specify and preserve the remaining arguments]
+    WSELECT --> WRESOLVE[Runner invokes SelectCompiledWorkflowAction;<br/>exactly one match in the validated registry; no default or filename inference]
+    WRESOLVE --> PREP[Fixed ModelProviderBootstrapOrchestrator<br/>runner-bound DeriveProviderRequirementAction checks compiled capabilities]
+    PREP --> REQUIRED{Exact model-provider capability present}
+    REQUIRED -- No provider probe or read --> CLI
+    REQUIRED -- Yes --> PROVIDERS[Capture paths.providers once; decode and validate complete provider registry;<br/>validate repository models.slots against that immutable catalogue]
+    PROVIDERS -- Ready --> CLI[Registered specify invocation-contract node;<br/>runner invokes its ParseSpecifyInvocationAction child]
+    PROVIDERS -- Failed or cancelled --> PREPSTOP[Terminal preparation outcome; no invocation operation or graph entry]
     CLI --> COK{Runner invokes its ValidateSpecifyArgumentsAction child:<br/>exactly one non-empty --reference value<br/>and no -feature, --feature, --description, positional or unknown input}
     COK -- No --> INPUTERR[Nonzero user-input error<br/>no feature directory, feature log, model call or artifact write]
     COK -- Yes; return validated specify invocation context --> SEL[Normalize required relative selector beneath configured paths.references]

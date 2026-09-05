@@ -50,16 +50,6 @@ const bootstrap_execution = @import("../application/bootstrap_execution.zig");
 const bootstrap_config_runner = @import("../application/bootstrap_config_runner.zig");
 const bootstrap_root_runner = @import("../application/bootstrap_root_runner.zig");
 const bootstrap_workflow_runner = @import("../application/bootstrap_workflow_runner.zig");
-const bootstrap_toolchain_runner = @import("../application/bootstrap_toolchain_runner.zig");
-const capture_project_toolchain = @import("../actions/toolchain/capture_project_toolchain.zig");
-const inventory_toolchain_presets = @import("../actions/toolchain/inventory_toolchain_presets.zig");
-const capture_toolchain_presets = @import("../actions/toolchain/capture_toolchain_presets.zig");
-const parse_toolchain_documents = @import("../actions/toolchain/parse_toolchain_documents.zig");
-const validate_project_toolchain_schema = @import("../actions/toolchain/validate_project_toolchain_schema.zig");
-const validate_toolchain_preset_registry = @import("../actions/toolchain/validate_toolchain_preset_registry.zig");
-const resolve_toolchain_inheritance = @import("../actions/toolchain/resolve_toolchain_inheritance.zig");
-const compose_toolchain = @import("../actions/toolchain/compose_toolchain.zig");
-const validate_toolchain_safety = @import("../actions/toolchain/validate_toolchain_safety.zig");
 const llm_provider_contracts = @import("../domain/llm_provider_contracts.zig");
 const llm_provider_registry = @import("../domain/llm_provider_registry.zig");
 const repository_model_allowlist = @import("../domain/repository_model_allowlist.zig");
@@ -92,7 +82,17 @@ fn runInvocationInProject(
     project_root: std.Io.Dir,
     arguments: []const []const u8,
 ) run_outcome.Outcome {
-    var boot = runInProject(io, allocator, project_root);
+    return runInvocationInProjectWithRuntime(io, allocator, project_root, arguments, .{});
+}
+
+fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, project_root: std.Io.Dir, arguments: []const []const u8, runtime: pipeline.NodeRuntime) run_outcome.Outcome {
+    var toolchain_source_adapter = toolchain_authority_source.Adapter.init(io, project_root);
+    var toolchain_parser_adapter: toolchain_documents.Adapter = .{};
+    var reference_adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
+    var native_bindings: @import("native_workflow_operations.zig").Assembly = undefined;
+    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_nfc").normalize }, reference_adapter.inspector());
+    var boot = runInProjectWithRegistry(io, allocator, project_root, runtime, &native_bindings.registry);
+    if (boot == .ready) native_bindings.bindRoots(boot.ready.roots.registry());
     defer boot.deinit();
     var provider_bootstrap = model_provider_bootstrap.Assembly.init(
         io,
@@ -105,8 +105,9 @@ fn runInvocationInProject(
         allocator,
         &boot,
         arguments,
-        &core_workflow_operations.registry,
+        &native_bindings.registry,
         provider_bootstrap.bind(),
+        runtime,
     );
 }
 
@@ -116,6 +117,7 @@ fn runBootstrappedInvocation(
     arguments: []const []const u8,
     operation_registry: *const workflow_operation_registry.Registry,
     provider_bootstrap: model_provider_bootstrap_binding.Binding,
+    runtime: pipeline.NodeRuntime,
 ) run_outcome.Outcome {
     return switch (boot.*) {
         .failed => |failure| .{ .bootstrap_failed = failure },
@@ -127,7 +129,7 @@ fn runBootstrappedInvocation(
                 arguments,
                 operation_registry,
                 provider_bootstrap,
-                .{},
+                runtime,
             );
             defer invocation.deinit();
             break :execute workflow_engine.run(invocation.bindings());
@@ -149,12 +151,21 @@ fn runInProjectWithRuntime(
     project_root: std.Io.Dir,
     runtime: pipeline.NodeRuntime,
 ) bootstrap_orchestrator.Outcome {
+    return runInProjectWithRegistry(io, allocator, project_root, runtime, &core_workflow_operations.registry);
+}
+
+fn runInProjectWithRegistry(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    project_root: std.Io.Dir,
+    runtime: pipeline.NodeRuntime,
+    operation_registry: *const workflow_operation_registry.Registry,
+) bootstrap_orchestrator.Outcome {
     var source_adapter = engine_config_source.Adapter.init(io, project_root);
     var root_adapter = bootstrap_root_inspector.Adapter.init(io, project_root);
     var workflow_source_adapter = workflow_authority_source.Adapter.init(io, project_root);
     var workflow_parser_adapter: workflow_definitions.Adapter = .{};
-    var toolchain_source_adapter = toolchain_authority_source.Adapter.init(io, project_root);
-    var toolchain_parser_adapter: toolchain_documents.Adapter = .{};
+    var result_schema_adapter: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const policy_resolver = workspace_path_policy.Resolver.init(io, project_root);
     const active_path_policy = policy_resolver.resolve(allocator) catch {
         return .{ .failed = .BOOTSTRAP_ROOT_RESOLUTION_ERROR };
@@ -200,33 +211,17 @@ fn runInProjectWithRuntime(
         resolve_workflow_resources.Action{},
         capture_workflow_resources.Action{ .source = workflow_source_adapter.capturer() },
         validate_workflow_operations.Action{},
-        compile_workflows.Action{ .registry = &core_workflow_operations.registry },
+        compile_workflows.Action{ .registry = operation_registry, .result_schema_compiler = result_schema_adapter.compiler() },
         validate_workflow_graphs.Action{},
         build_workflow_registry.Action{},
         validate_workflow_registry.Action{},
     );
     defer workflow_pipeline.deinit();
-    var toolchain_pipeline = bootstrap_toolchain_runner.Runner.init(
-        allocator,
-        &execution_state,
-        &root_pipeline,
-        capture_project_toolchain.Action{ .source = toolchain_source_adapter.projectCapturer() },
-        inventory_toolchain_presets.Action{ .source = toolchain_source_adapter.presetEnumerator() },
-        capture_toolchain_presets.Action{ .source = toolchain_source_adapter.presetCapturer() },
-        parse_toolchain_documents.Action{ .parser = toolchain_parser_adapter.parser() },
-        validate_project_toolchain_schema.Action{},
-        validate_toolchain_preset_registry.Action{},
-        resolve_toolchain_inheritance.Action{},
-        compose_toolchain.Action{},
-        validate_toolchain_safety.Action{ .registry = policy_registry },
-    );
-    defer toolchain_pipeline.deinit();
 
     var runner: bootstrap_runner.Runner = .{
         .config = &config_pipeline,
         .roots = &root_pipeline,
         .workflows = &workflow_pipeline,
-        .toolchain = &toolchain_pipeline,
     };
 
     return bootstrap_orchestrator.run(runner.bindings());
@@ -260,7 +255,6 @@ test "publishes config and the validated root registry together" {
         .data = valid_config,
     });
     try project_root.dir.createDirPath(io, ".sdd/workflows");
-    try writeValidToolchain(io, project_root.dir);
 
     var outcome = runInProject(io, std.testing.allocator, project_root.dir);
     defer outcome.deinit();
@@ -274,8 +268,7 @@ test "publishes config and the validated root registry together" {
     try std.testing.expect(first_config == outcome.ready.config.config());
     try std.testing.expect(outcome.ready.roots.registry().workflowAuthority().isPresent());
     try std.testing.expectEqual(@as(usize, 0), outcome.ready.workflows.registry().count());
-    try std.testing.expectEqual(@as(usize, 0), outcome.ready.toolchain.toolchain().packages().len);
-    try std.testing.expectEqualStrings("core.safety@1", outcome.ready.toolchain.toolchain().policies()[0].id);
+    try std.testing.expect(!@hasField(@TypeOf(outcome.ready), "toolchain"));
     try std.testing.expect(
         outcome.ready.roots.registry() == outcome.ready.roots.registry(),
     );
@@ -314,7 +307,6 @@ test "provider bootstrap assembly loads only the configured F0008 path" {
         .sub_path = "configuration/.sddproviders.json",
         .data = test_provider_document,
     });
-    try writeValidToolchain(io, project_root.dir);
 
     var boot = runInProject(io, std.testing.allocator, project_root.dir);
     defer boot.deinit();
@@ -376,7 +368,6 @@ test "capability-free invocation does not probe a missing provider document" {
         .sub_path = ".sdd/workflows/hello.workflow.yaml",
         .data = valid_workflow,
     });
-    try writeValidToolchain(io, project_root.dir);
 
     const outcome = runInvocationInProject(
         io,
@@ -400,7 +391,6 @@ test "invocation runner handles every provider preparation outcome before workfl
         .sub_path = ".sdd/workflows/hello.workflow.yaml",
         .data = valid_workflow,
     });
-    try writeValidToolchain(io, project_root.dir);
 
     var boot = runInProject(io, std.testing.allocator, project_root.dir);
     defer boot.deinit();
@@ -419,6 +409,7 @@ test "invocation runner handles every provider preparation outcome before workfl
             &.{"hello"},
             probe.registry(),
             probe.providerBinding(),
+            .{},
         );
 
         try std.testing.expectEqual(@as(usize, 1), probe.prepare_calls);
@@ -452,6 +443,7 @@ test "invocation runner handles every provider preparation outcome before workfl
         &.{"absent-workflow"},
         invalid_probe.registry(),
         invalid_probe.providerBinding(),
+        .{},
     );
     try std.testing.expect(invalid == .invocation_invalid);
     try std.testing.expectEqual(@as(usize, 0), invalid_probe.prepare_calls);
@@ -468,13 +460,60 @@ test "loads exact preset inheritance and publishes the safety-valid toolchain" {
     try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: [app@1.0.0]\npolicies: []\n" });
     try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/presets/base.toolchain-preset.yaml", .data = "schema: toolchain-preset/v1\npackage: base@1.0.0\nlayer: language\nextends: []\npolicies: [project.zig@1]\n" });
     try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/presets/app.toolchain-preset.yaml", .data = "schema: toolchain-preset/v1\npackage: app@1.0.0\nlayer: framework\nextends: [base@1.0.0]\npolicies: []\n" });
-    var outcome = runInProject(io, std.testing.allocator, project_root.dir);
-    defer outcome.deinit();
-    try std.testing.expect(outcome == .ready);
-    const valid = outcome.ready.toolchain.toolchain();
-    try std.testing.expectEqualStrings("base@1.0.0", valid.packages()[0]);
-    try std.testing.expectEqualStrings("app@1.0.0", valid.packages()[1]);
-    try std.testing.expectEqual(@as(usize, 2), valid.policies().len);
+    try expectToolchainRun(io, project_root.dir, .ok, &.{ "base@1.0.0", "app@1.0.0" }, 2);
+}
+
+test "unrelated workflows do not load toolchain documents even with a toolchain workflow installed" {
+    const io = std.testing.io;
+    inline for (.{ false, true }) |malformed| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
+        try project.dir.createDirPath(io, ".sdd/workflows");
+        try project.dir.createDirPath(io, ".sdd/principles");
+        try project.dir.createDirPath(io, ".sdd/presets");
+        try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/hello.workflow.yaml", .data = valid_workflow });
+        try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/toolchain.workflow.yaml", .data = @embedFile("../test_fixtures/toolchain.workflow.yaml") });
+        const audit = try std.mem.replaceOwned(u8, std.testing.allocator, valid_workflow, "hello", "independent-audit");
+        defer std.testing.allocator.free(audit);
+        const unique = try std.mem.replaceOwned(u8, std.testing.allocator, audit, "HELO", "AUDT");
+        defer std.testing.allocator.free(unique);
+        try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/audit.workflow.yaml", .data = unique });
+        if (malformed) {
+            try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "not a toolchain" });
+            try project.dir.writeFile(io, .{ .sub_path = ".sdd/presets/invalid.toolchain-preset.yaml", .data = "not a preset" });
+        }
+        inline for (.{ "hello", "independent-audit" }) |id| {
+            try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{id}).execution);
+        }
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"toolchain-check"}).execution);
+    }
+}
+
+test "toolchain YAML rejects denied capabilities and missing data predecessors before execution" {
+    const io = std.testing.io;
+    inline for (.{ false, true }) |missing_input| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
+        try project.dir.createDirPath(io, ".sdd/workflows");
+        const fixture = @embedFile("../test_fixtures/toolchain.workflow.yaml");
+        const yaml = if (missing_input)
+            try std.mem.replaceOwned(u8, std.testing.allocator, fixture, "capture-project: { use: capture-project-toolchain@1", "capture-project: { use: core.noop@1")
+        else
+            try std.mem.replaceOwned(u8, std.testing.allocator, fixture, "policy: core.toolchain@1", "policy: core.capability-free@1");
+        defer std.testing.allocator.free(yaml);
+        // Keep the replacement operation's outcome set exact so this case
+        // specifically exercises the missing project-capture input.
+        const exact = if (missing_input)
+            try std.mem.replaceOwned(u8, std.testing.allocator, yaml, "capture-project: { use: core.noop@1, on: { ok: inventory-presets, failed: end.failed } }", "capture-project: { use: core.noop@1, on: { ok: inventory-presets } }")
+        else
+            try std.testing.allocator.dupe(u8, yaml);
+        defer std.testing.allocator.free(exact);
+        try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/toolchain.workflow.yaml", .data = exact });
+        const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{"toolchain-check"});
+        try std.testing.expectEqual(@import("../domain/bootstrap_error.zig").PublicError.WORKFLOW_GRAPH_COMPILE_INVALID, result.bootstrap_failed);
+    }
 }
 
 test "one invalid unselected preset blocks complete toolchain publication" {
@@ -488,9 +527,7 @@ test "one invalid unselected preset blocks complete toolchain publication" {
         .sub_path = ".sdd/presets/invalid.toolchain-preset.yaml",
         .data = "schema: toolchain-preset/v1\npackage: unused@1.0.0\nlayer: runtime\nextends: []\npolicies: []\nunknown: rejected\n",
     });
-    var outcome = runInProject(io, std.testing.allocator, project_root.dir);
-    defer outcome.deinit();
-    try std.testing.expectEqual(@import("../domain/bootstrap_error.zig").PublicError.TOOLCHAIN_INVALID, outcome.failed);
+    try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
 }
 
 test "one unselected preset with an unresolved dependency blocks the complete registry" {
@@ -504,9 +541,7 @@ test "one unselected preset with an unresolved dependency blocks the complete re
         .sub_path = ".sdd/presets/unused.toolchain-preset.yaml",
         .data = "schema: toolchain-preset/v1\npackage: unused@1.0.0\nlayer: runtime\nextends: [missing@1.0.0]\npolicies: []\n",
     });
-    var outcome = runInProject(io, std.testing.allocator, project_root.dir);
-    defer outcome.deinit();
-    try std.testing.expectEqual(@import("../domain/bootstrap_error.zig").PublicError.TOOLCHAIN_INVALID, outcome.failed);
+    try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
 }
 
 test "toolchain loading rejects alternate project filenames and unsupported preset siblings" {
@@ -533,12 +568,7 @@ test "toolchain loading rejects alternate project filenames and unsupported pres
                 .data = "schema: project-toolchain/v1\npresets: []\npolicies: []\n",
             });
         }
-        var outcome = runInProject(io, std.testing.allocator, project_root.dir);
-        defer outcome.deinit();
-        try std.testing.expectEqual(
-            @import("../domain/bootstrap_error.zig").PublicError.TOOLCHAIN_INVALID,
-            outcome.failed,
-        );
+        try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
     }
 }
 
@@ -560,12 +590,7 @@ test "toolchain loading rejects a linked exact project document" {
         ".sdd/principles/toolchain.yaml",
         .{},
     );
-    var outcome = runInProject(io, std.testing.allocator, project_root.dir);
-    defer outcome.deinit();
-    try std.testing.expectEqual(
-        @import("../domain/bootstrap_error.zig").PublicError.TOOLCHAIN_INVALID,
-        outcome.failed,
-    );
+    try expectToolchainRun(io, project_root.dir, .failed, &.{}, 0);
 }
 
 const valid_workflow =
@@ -581,6 +606,186 @@ const valid_workflow =
     \\    use: core.noop@1
     \\    on: { ok: end.ok }
 ;
+
+fn expectToolchainRun(io: std.Io, project_root: std.Io.Dir, expected: workflow.OutcomeTag, expected_packages: []const []const u8, expected_policies: usize) !void {
+    try std.testing.expectEqual(expected, try inspectToolchainRun(io, project_root, .{}, expected_packages, expected_policies));
+}
+
+fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.NodeRuntime, expected_packages: []const []const u8, expected_policies: usize) !workflow.OutcomeTag {
+    try project_root.writeFile(io, .{ .sub_path = ".sdd/workflows/toolchain.workflow.yaml", .data = @embedFile("../test_fixtures/toolchain.workflow.yaml") });
+    var source = toolchain_authority_source.Adapter.init(io, project_root);
+    var parser: toolchain_documents.Adapter = .{};
+    var reference_adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
+    var operations: @import("native_workflow_operations.zig").Assembly = undefined;
+    operations.init(std.testing.allocator, source.projectCapturer(), source.presetEnumerator(), source.presetCapturer(), parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_nfc").normalize }, reference_adapter.inspector());
+    var boot = runInProjectWithRegistry(io, std.testing.allocator, project_root, .{}, &operations.registry);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+    operations.bindRoots(boot.ready.roots.registry());
+    var provider = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project_root, .{}, &llm_provider_contracts.Registry.empty);
+    var invocation = engine_invocation.Assembly.init(std.testing.allocator, &boot.ready, &.{"toolchain-check"}, &operations.registry, provider.bind(), runtime);
+    defer invocation.deinit();
+    const result = workflow_engine.run(invocation.bindings()).execution;
+    const read_contract: pipeline.NodeContract = .{ .id = "test-toolchain-consumer@1", .kind = .action, .requires = &.{.valid_toolchain}, .produces = &.{}, .side_effect = .none };
+    if (result != .ok) {
+        if (invocation.pipeline_runner) |*runner| try std.testing.expectError(error.MissingRequiredData, runner.envelope.view(read_contract));
+        return result;
+    }
+    const view = try invocation.pipeline_runner.?.envelope.view(read_contract);
+    const valid = try @import("../application/pipeline_values.zig").read(&view, @import("../application/toolchain_workflow_values.zig").valid, @import("../domain/toolchain_safety.zig").ValidToolchain);
+    const service = @import("../application/toolchain_service.zig").ToolChainService.init(valid);
+    try std.testing.expect(service.toolchain() == valid);
+    try std.testing.expectEqual(expected_packages.len, valid.packages().len);
+    for (expected_packages, valid.packages()) |expected_package, package| try std.testing.expectEqualStrings(expected_package, package);
+    try std.testing.expectEqual(expected_policies, valid.policies().len);
+    try std.testing.expectEqualStrings("core.safety@1", valid.policies()[0].id);
+    return result;
+}
+
+test "selected toolchain cancellation stops at every runtime boundary without publishing a partial result" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
+    try project.dir.createDirPath(io, ".sdd/workflows");
+    try writeValidToolchain(io, project.dir);
+    for (0..256) |checks| {
+        var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
+        const result = try inspectToolchainRun(io, project.dir, control.runtime(), &.{}, 1);
+        if (result == .ok) {
+            try std.testing.expect(checks > 9);
+            return;
+        }
+        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result);
+    }
+    return error.ToolchainNeverCompleted;
+}
+fn writeReferencePreflightFixture(io: std.Io, project: std.Io.Dir) !void {
+    try project.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
+    try project.createDirPath(io, ".sdd/workflows");
+    try project.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = @embedFile("../test_fixtures/reference-preflight.workflow.yaml") });
+    try project.writeFile(io, .{ .sub_path = ".sdd/workflows/hello.workflow.yaml", .data = valid_workflow });
+}
+
+test "reference preflight uses ordinary YAML and leaves reference and artifact trees unchanged" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeReferencePreflightFixture(io, project.dir);
+    try project.dir.createDirPath(io, "references/Café/日本語");
+    try project.dir.writeFile(io, .{ .sub_path = "references/Café/日本語/stories.md", .data = "Hello, World!\n" });
+    for ([_][]const u8{ "Café/日本語", "./Cafe\u{301}\\日本語" }) |selector| {
+        const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", selector });
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, result.execution);
+    }
+    const bytes = try project.dir.readFileAlloc(io, "references/Café/日本語/stories.md", std.testing.allocator, .limited(64));
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqualStrings("Hello, World!\n", bytes);
+    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "specs", .{}));
+    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, ".sdd/workflows/features", .{}));
+    try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, ".sdd/workflows/transactions", .{}));
+}
+
+test "unrelated workflows never require the installed reference operations to run" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeReferencePreflightFixture(io, project.dir);
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", "missing" }).execution);
+    // The same contracts work under a different workflow ID; no name dispatch.
+    const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/reference-preflight.workflow.yaml"), "id: reference-preflight", "id: documentation-check");
+    defer std.testing.allocator.free(changed);
+    try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
+    try project.dir.createDirPath(io, "references/manual");
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "documentation-check", "--reference", "manual" }).execution);
+}
+
+test "reference preflight rejects missing arguments files unreadable directories and symlink ancestors" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeReferencePreflightFixture(io, project.dir);
+    try project.dir.createDirPath(io, "references/real/child");
+    try project.dir.createDirPath(io, "outside/child");
+    try project.dir.writeFile(io, .{ .sub_path = "references/file", .data = "not a directory" });
+    try project.dir.symLink(io, "real", "references/alias", .{ .is_directory = true });
+    try project.dir.symLink(io, "../outside", "references/escape", .{ .is_directory = true });
+    const arguments = [_][]const []const u8{
+        &.{"reference-preflight"},                                 &.{ "reference-preflight", "--reference", "missing" },
+        &.{ "reference-preflight", "--reference", "file" },        &.{ "reference-preflight", "--reference", "../outside" },
+        &.{ "reference-preflight", "--reference", "alias/child" }, &.{ "reference-preflight", "--reference", "escape/child" },
+    };
+    for (arguments) |args| try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, args).execution);
+    var unreadable = try project.dir.openDir(io, "references/real", .{ .iterate = true });
+    defer unreadable.close(io);
+    try unreadable.setPermissions(io, .fromMode(0o000));
+    defer unreadable.setPermissions(io, .fromMode(0o700)) catch @panic("restore test directory permissions");
+    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", "real" }).execution);
+}
+
+test "reference inspection rejects wrong root capabilities and stale physical roots" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
+    try project.dir.createDirPath(io, ".sdd/workflows");
+    try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/hello.workflow.yaml", .data = valid_workflow });
+    try project.dir.createDirPath(io, "references/hello");
+    var boot = runInProject(io, std.testing.allocator, project.dir);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+    var adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var inspector = adapter.inspector();
+    try std.testing.expectError(error.ReferenceDirectoryUnavailable, inspector.inspect(std.testing.allocator, .{ .bytes = "hello" }));
+    inspector.capability = boot.ready.roots.registry().workflowAuthority();
+    try std.testing.expectError(error.ReferenceDirectoryUnavailable, inspector.inspect(std.testing.allocator, .{ .bytes = "hello" }));
+    inspector.capability = boot.ready.roots.registry().referenceSources();
+    const observed = try inspector.inspect(std.testing.allocator, .{ .bytes = "hello" });
+    defer std.testing.allocator.free(observed.project_relative_path);
+    try std.testing.expectEqualStrings("references/hello", observed.project_relative_path);
+    try project.dir.rename("references", project.dir, "old-references", io);
+    try project.dir.createDirPath(io, "references/hello");
+    try std.testing.expectError(error.ReferenceDirectoryUnavailable, inspector.inspect(std.testing.allocator, .{ .bytes = "hello" }));
+}
+
+test "reference compiler rejects a missing validated selector or read capability" {
+    const io = std.testing.io;
+    for ([_]bool{ false, true }) |missing_input| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeReferencePreflightFixture(io, project.dir);
+        const original = @embedFile("../test_fixtures/reference-preflight.workflow.yaml");
+        const changed = if (missing_input)
+            try std.mem.replaceOwned(u8, std.testing.allocator, original, "use: validate-reference-selector@1", "use: normalize-reference-selector@1")
+        else
+            try std.mem.replaceOwned(u8, std.testing.allocator, original, "policy: core.reference-read@1", "policy: core.capability-free@1");
+        defer std.testing.allocator.free(changed);
+        try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
+        const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", "anything" });
+        try std.testing.expect(result == .bootstrap_failed);
+    }
+}
+
+test "reference preflight cancellation stops safely at each runtime checkpoint" {
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeReferencePreflightFixture(io, project.dir);
+    try project.dir.createDirPath(io, "references/hello");
+    for (0..256) |checks| {
+        var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
+        const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--reference", "hello" }, control.runtime());
+        try std.testing.expect(result == .execution);
+        if (result.execution == .ok) {
+            try std.testing.expect(checks > 3);
+            return;
+        }
+        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.execution);
+    }
+    return error.ReferencePreflightNeverCompleted;
+}
+
 const second_workflow_same_shortcode =
     \\schema: workflow/v1
     \\id: goodbye
@@ -688,7 +893,6 @@ test "loads and resolves a generic workflow definition from the configured root"
     defer project_root.cleanup();
     try project_root.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
     try project_root.dir.createDirPath(io, ".sdd/workflows/nested");
-    try writeValidToolchain(io, project_root.dir);
     try project_root.dir.writeFile(io, .{
         .sub_path = ".sdd/workflows/nested/arbitrary-name.workflow.yaml",
         .data = valid_workflow,
@@ -710,7 +914,6 @@ test "duplicate workflow shortcodes reject the complete registry" {
     defer project_root.cleanup();
     try project_root.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
     try project_root.dir.createDirPath(io, ".sdd/workflows");
-    try writeValidToolchain(io, project_root.dir);
     try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/hello.workflow.yaml", .data = valid_workflow });
     try project_root.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/goodbye.workflow.yaml", .data = second_workflow_same_shortcode });
     var outcome = runInProject(io, std.testing.allocator, project_root.dir);
@@ -727,7 +930,6 @@ test "feature log storage opens only an activated layout from present artifact a
     defer project_root.cleanup();
     try project_root.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
     try project_root.dir.createDirPath(io, ".sdd/workflows");
-    try writeValidToolchain(io, project_root.dir);
     try createFeatureLogLayout(io, project_root.dir, std.Io.File.Permissions.fromMode(0o700));
     var boot = runInProject(io, std.testing.allocator, project_root.dir);
     defer boot.deinit();
@@ -801,7 +1003,6 @@ test "feature log sink neither creates a missing activation layout nor accepts i
         defer project_root.cleanup();
         try project_root.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
         try project_root.dir.createDirPath(io, ".sdd/workflows");
-        try writeValidToolchain(io, project_root.dir);
         if (insecure_layout) {
             try createFeatureLogLayout(io, project_root.dir, std.Io.File.Permissions.fromMode(0o755));
         } else {
@@ -845,7 +1046,6 @@ test "absent optional specs root cannot mint workflow artifact authority" {
     defer project_root.cleanup();
     try project_root.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
     try project_root.dir.createDirPath(io, ".sdd/workflows");
-    try writeValidToolchain(io, project_root.dir);
     var boot = runInProject(io, std.testing.allocator, project_root.dir);
     defer boot.deinit();
     try std.testing.expect(boot == .ready);

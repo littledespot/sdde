@@ -11,7 +11,10 @@ pub fn bind(comptime T: type, context: ?*T, comptime invoke: *const fn (?*T, ope
         const implementation: operations.Binding.Implementation = .{
             .invoke_fn = call,
             .context_required = T != void,
-            .capabilities = if (derived.model_provider) &.{@import("../domain/workflow_capability.zig").model_provider} else &.{},
+            .capabilities = &(if (derived.model_provider) [_][]const u8{@import("../domain/workflow_capability.zig").model_provider} else [_][]const u8{}) ++
+                (if (derived.toolchain_read) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_read} else [_][]const u8{}) ++
+                (if (derived.toolchain_parser) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_parser} else [_][]const u8{}) ++
+                (if (derived.reference_read) [_][]const u8{@import("../domain/workflow_capability.zig").reference_read} else [_][]const u8{}),
         };
         fn call(erased: ?*anyopaque, input: operations.Input) operations.Error!@import("../domain/workflow_execution.zig").Candidate {
             const typed: ?*T = if (erased) |pointer| @ptrCast(@alignCast(pointer)) else null;
@@ -21,10 +24,15 @@ pub fn bind(comptime T: type, context: ?*T, comptime invoke: *const fn (?*T, ope
     return .{ .context = @ptrCast(context), .implementation = &compiled.implementation };
 }
 
-pub const Inspection = struct { valid: bool = true, model_provider: bool = false };
+pub const Inspection = struct { valid: bool = true, model_provider: bool = false, toolchain_read: bool = false, toolchain_parser: bool = false, reference_read: bool = false };
 
 pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
     if (T == provider.LLMProviderInterface) return .{ .model_provider = true };
+    if (T == @import("../ports/unicode_normalizer.zig").Normalizer) return .{};
+    if (T == @import("../ports/reference_directory_inspector.zig").Inspector) return .{ .reference_read = true };
+    const toolchain_source = @import("../ports/toolchain_authority_source.zig");
+    if (T == toolchain_source.ProjectCapturer or T == toolchain_source.PresetEnumerator or T == toolchain_source.PresetCapturer) return .{ .toolchain_read = true };
+    if (T == @import("../ports/toolchain_document_parser.zig").Parser) return .{ .toolchain_parser = true };
     if (T == std.mem.Allocator) return .{}; // Allocation is runner-local, not an operational port.
     inline for (ancestors) |ancestor| if (T == ancestor) return .{};
     const next = ancestors ++ &[_]type{T};
@@ -38,6 +46,9 @@ pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
                 const child = inspect(field.type, next);
                 result.valid = result.valid and child.valid;
                 result.model_provider = result.model_provider or child.model_provider;
+                result.toolchain_read = result.toolchain_read or child.toolchain_read;
+                result.toolchain_parser = result.toolchain_parser or child.toolchain_parser;
+                result.reference_read = result.reference_read or child.reference_read;
             }
             break :result result;
         },

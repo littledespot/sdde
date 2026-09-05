@@ -6,7 +6,10 @@
 read-only byte service are accepted and implemented by F0001/F0004/F0008. The
 strict common decoder, compiler-contract registry join, immutable
 `LLMProviderRegistryService`, repository-slot allowlist, and YAML-declared typed
-slot binding are accepted and implemented. The fixed conditional bootstrap owner
+slot binding are accepted and implemented. The accepted 2026-09-05 ADR 0004
+amendment separates immutable model-binding requirements from provider-call
+capabilities: pure operations can receive a binding without a provider port.
+The fixed conditional bootstrap owner
 and exact provider-requirement derivation, immutable per-invocation provider
 snapshot, orchestrator, runner bindings, and ordinary post-selection invocation
 composition are accepted and implemented. Immutable unit-owner validation,
@@ -36,10 +39,13 @@ The provider-neutral capability/capacity contract and effective-limit binding
 are implemented. The workflow compiler requires explicit model byte/token
 parameters and response mode, intersects them with registered engine/operation
 ceilings, and retains typed requirements in the immutable graph. Binding
-intersects those requirements with the exact catalogue contract. Request
-construction and complete schema/static preflight remain subsequent work.
-The compact response protocol is now fixed by [ADR 0006](../decisions/0006-minimal-model-response.md);
-this documentation decision does not implement request construction or decode.
+intersects those requirements with the exact catalogue contract. The closed
+`model-result-schema/v1` resource compiler now implements the compact schema
+profile in [ADR 0006](../decisions/0006-minimal-model-response.md#closed-result-schema-profile).
+Graph compilation rejects malformed, unsupported or unbounded schemas and the
+registry owns their immutable typed contracts. Request construction, static
+request preflight, provider-native schema representability and response
+decoding/validation remain subsequent work.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -80,8 +86,8 @@ does not select a workflow operation, slot, or model, read configuration, acquir
 authority, interpret model content, or validate an SDDE candidate.
 
 The F0006 feature also defines the separate bootstrap path that makes the port
-usable. When the exactly selected compiled workflow requires model capability,
-the engine consumes F0008's immutable bytes from the project-owned location
+usable. When the exactly selected compiled workflow requires model binding or
+provider calls, the engine consumes F0008's immutable bytes from the project-owned location
 selected by `.sddtoolkit.json` `paths.providers`, decodes its one closed shape,
 joins every entry to compiler-registered provider/model contracts, and
 constructs one immutable `LLMProviderRegistryService`. Providers receive only
@@ -395,8 +401,8 @@ loading will be skipped. Reservation grants no provider capability and does not
 probe file existence or content.
 
 After the validated workflow registry has resolved the selected graph,
-`DeriveProviderRequirementAction` derives whether its effective capability set
-contains the exact compiler-owned `model-provider` capability. It reads no
+`DeriveProviderRequirementAction` derives whether any step has compiled model
+requirements or the exact compiler-owned `model-provider` capability. It reads no
 workflow/node name, parameter, policy allowance alone, configuration, slot, or
 provider content. A project workflow cannot manufacture that capability by
 naming a provider node or field; it can receive it only through an accepted
@@ -405,11 +411,11 @@ registered node contract under an allowing workflow policy.
 The fixed `ModelProviderBootstrapOrchestrator` then branches only on that typed
 outcome through runner-owned child bindings:
 
-- If the selected compiled graph's effective capability set contains no
-  exact `model-provider` capability, file existence probing, opening, reading,
+- If the selected compiled graph has neither model-binding requirements nor
+  the exact `model-provider` capability, file existence probing, opening, reading,
   decoding, and registry construction are unreachable. A missing or malformed
   file is not observed and has no effect on that run.
-- If it contains the exact `model-provider` capability, F0008 must successfully
+- If it has either requirement, F0008 must successfully
   capture the exact configured provider file, and the complete document must
   build and validate before `ValidateRepositoryModelAllowlistAction` joins the
   complete `models.slots` map to that catalogue. Both the complete catalogue and complete
@@ -471,12 +477,19 @@ facts. Decoded strings alone grant no provider authority.
 6. effective limits are the strict minimum of engine, compiled workflow operation, and registered
    model-contract limits.
 
-Model-capable operation contracts use the shared `with` parameters
+Operation contracts requiring model binding use the shared `with` parameters
 `input-bytes`, `output-bytes`, `input-tokens`, `output-tokens`, and
 `response-mode` (`prompt-only | native-schema`). All are explicit and required.
 Optional `temperature` is an integer in thousandths (`0..1000`); omission
 sends no temperature control. Resource aliases, slot selection and outcomes
 remain in the existing concise workflow structure.
+
+The registered operation's model capacity and exact slot descriptor compile
+into the existing typed model requirements. They authorize immutable binding
+data, not provider calls. Pure request preparation and static validation require
+no provider port; actual provider-call capabilities remain independently derived
+from narrow ports and constrained by the selected policy. No additional flag,
+registry or YAML field duplicates this authority.
 
 The existing generic operation registry owns the engine capacity facts, and
 each registered model operation owns its operation ceilings. A missing or
@@ -890,7 +903,7 @@ the runner only validates/applies it and never chooses `blocked`, `failed`,
 
 | Owner | Sole responsibility |
 | --- | --- |
-| `DeriveProviderRequirementAction` | Return `required` only when the selected compiled graph contains the exact compiler-owned `model-provider` capability; otherwise return `not_required`. |
+| `DeriveProviderRequirementAction` | Return `required` when the selected compiled graph contains typed model-binding requirements or the exact compiler-owned `model-provider` capability; otherwise return `not_required`. |
 | `LocateLLMProviderConfigAction` (F0008) | Open only the exact F0004-authorized no-follow regular file. |
 | `ReadLLMProviderConfigAction` (F0008) | Capture that already-opened file completely under its fixed bound. |
 | `LLMProviderConfigService` (F0008) | Own the complete capture and expose immutable untrusted bytes without I/O or parsing. |
@@ -1010,9 +1023,9 @@ F0006 does not:
 5. The repository example is never a runtime default or fallback. Its common
    shape can decode, but its OpenAI entries make whole-registry build fail until
    an OpenAI feature is compiled and accepted.
-6. If the selected compiled graph's effective capability set has no exact
-   `model-provider` capability, file probing/loading is unreachable; otherwise
-   the entire exact file must validate before selected-workflow execution. A
+6. If the selected compiled graph has neither model-binding requirements nor
+   the exact `model-provider` capability, file probing/loading is unreachable;
+   otherwise the entire exact file must validate before selected-workflow execution. A
    required branch captures it once; no active invocation rereads or refreshes
    that snapshot, and no prior invocation supplies a fallback. Provider
    failure or cancellation makes every selected-workflow child unreachable;
@@ -1084,7 +1097,9 @@ F0006 does not:
 Implementation evidence must cover:
 
 - **File boundary:** unconditional configured-path registration; exact
-  F0004-capability lookup; no-model-provider-capability graph bypass;
+  F0004-capability lookup; graph bypass only with neither binding requirements
+  nor provider-call capability; pure binding-only graph preparation without a
+  provider port; provider calls still denied by a capability-free policy;
   exactly one capture for a required branch; immutable registry/allowlist after
   capture despite a later backing-source change; no active-run reread, refresh,
   monitoring, last-known fallback, or cross-invocation cache;

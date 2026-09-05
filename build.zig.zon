@@ -2,6 +2,10 @@
     .name = .sdde,
     .version = "0.0.0",
     .dependencies = .{
+        .utf8proc = .{
+            .url = "https://github.com/JuliaStrings/utf8proc/archive/refs/tags/v2.11.3.tar.gz",
+            .hash = "N-V-__8AACywKABFCj0r_Y-jIWsk9ahy10zlk78hjn6S-39g",
+        },
         .yaml = .{
             .url = "https://github.com/ncode/yaml/archive/refs/tags/v0.2.1.tar.gz",
             .hash = "yaml-0.0.0-J3O1ExZjHgBlLWwLwvVDMaxW027GdqwlH5gmWscq_YKg",

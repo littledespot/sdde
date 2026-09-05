@@ -1,0 +1,17 @@
+schema: workflow/v1
+id: reference-preflight
+version: 1
+shortcode: REFP
+invoke: specify-invocation@1
+policy: core.reference-read@1
+start: normalize
+steps:
+  normalize:
+    use: normalize-reference-selector@1
+    on: { ok: validate, failed: end.failed }
+  validate:
+    use: validate-reference-selector@1
+    on: { ok: inspect, failed: end.failed }
+  inspect:
+    use: inspect-reference-directory@1
+    on: { ok: end.ok, failed: end.failed }

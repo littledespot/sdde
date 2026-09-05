@@ -11,8 +11,9 @@ test-only changes in `compile_workflow_graphs.zig`,
 
 **Implementation readiness:** There is no executable harness path for the full
 `specify` workflow. The native engine can load, compile, select, and traverse a
-generic no-op workflow, but it has no registered Specify contracts, typed
-Specify data path, reference/model/specification runtime, durable Specify
+generic workflows including YAML-selected toolchain setup and read-only reference
+preflight, but it has no Specify generation/commit contracts, complete typed
+Specify data path, reference-content/specification runtime, durable Specify
 transaction, or implemented evaluation harness. The named fixture is source
 material, not a runnable target project.
 
@@ -117,9 +118,9 @@ An implementation or golden fixture must not choose one side locally.
 
 ### 3.2 Define the exact registered Specify contracts
 
-F0100 intentionally contains placeholders. The exact registered invocation,
-operation, outcome, parameter, gate, capability, state, and workflow-policy
-contracts do not exist. They must be defined before a concrete
+F0100 Section 3.1 now fixes the registered invocation and read-only selector
+preflight contracts. Remaining operation, outcome, parameter, gate, state, and
+full-workflow policy contracts must be defined before a concrete
 `spec.workflow.yaml` can be valid. The YAML must remain ordinary declarative
 topology. Under ADR 0005 it explicitly selects generic operations, model slots,
 and bounded workflow-owned resources; it cannot contain raw operational paths,
@@ -183,16 +184,16 @@ fixture.
 
 | Boundary | Implemented evidence | Readiness for this goal |
 | --- | --- | --- |
-| Native build and packaging | Zig 0.16.0 pin, native executable, lint/test/smoke/verify build steps, clean temporary-directory smoke | Foundation exists. The smoke proves only a packaged generic no-op workflow. |
+| Native build and packaging | Zig 0.16.0 pin, native executable, lint/test/smoke/verify build steps, clean temporary-directory smoke | Foundation exists. Smoke covers no-op execution without valid toolchain documents and selected toolchain success/failure. |
 | Exact configuration | Exact-CWD `.sddtoolkit.json` location/read/decode and closed `logs`, `models.slots`, and eight-path shape | Strict provider-catalogue decoding, immutable registry construction, slot subset allowlist, and exact selected-graph provider-requirement derivation are implemented; production provider contracts and YAML-declared model-operation binding remain missing. |
 | Bootstrap roots | Normalization, active-filesystem checks, root roles, separation, and root registry | Foundation exists. The named fixture has no runtime config or roots. |
 | Feature logging | Policy, records, sinks, rotation, retention, recovery, and composition tests | Subsystem exists, but no Specify activation/state transaction binds it to a feature run. |
 | Workflow authority | Bounded inventory/capture/YAML parse/schema validation, compiler, graph validator, and immutable ID registry | Strong generic foundation exists. The current uncommitted tests strengthen this boundary only. |
-| Generic execution | Exact workflow selection, compiled transitions, owned typed invocation/value flow, declared-input views, and schema-checked delta application | Value-flow foundation exists; concrete Specify operations remain missing. |
-| Registered behavior | `core.empty-invocation@1`, `core.noop@1`, and `core.capability-free@1` | A definition named `specify` would still reject `--reference` and perform no work. |
-| Toolchain | Closed v1 project/preset package references, inheritance, policy composition, and safety validation | Narrow F0003 boundary exists. It does not provide Node/Vitest commands or environment facts. |
+| Generic execution | Exact workflow selection, compiled transitions, owned typed invocation/value flow, declared-input views, and schema-checked delta application | Value-flow foundation exists; Specify generation/commit operations remain missing. |
+| Registered behavior | Core invocation/no-op, nine toolchain operations, and Specify invocation/read-only selector preflight | No content generation; naming a definition `specify` adds no behavior. |
+| Toolchain | Closed v1 project/preset package references, inheritance, policy composition, and safety validation through selected YAML operations | F0003 owns one sealed validated result in the workflow envelope. Node/Vitest commands and environment facts remain absent. |
 | Workflow artifact registry | Validated feature-log paths and sink binding | Logging-only; no specification, reference, clarification, workflow-state, or stage-transaction paths. |
-| Specify domain | No `SpecificationIR`, reference snapshot, Specify invocation, YAML model operation, validator, renderer/parser, clarification, or commit implementation | Missing. |
+| Specify domain | Invocation and contained-directory preflight implemented; no `SpecificationIR`, reference snapshot, renderer/parser, clarification, or commit implementation | Preflight only; full Specify remains unavailable. |
 | Evaluation harness | `TEST_HARNESS.md` only | No build wiring, driver, schemas, suites, reports, fake scripts, or end-to-end cases exist. |
 
 The generic runner now retains owned, versioned native values from invocation
@@ -204,13 +205,10 @@ registry, not project YAML. Fixed kernel bindings still have their existing
 concrete typed owners and structural `DataShape` checks; this increment does
 not claim that every kernel binding has migrated to the owned-value envelope.
 
-An accepted ADR 0003 setup contract remains incomplete:
-
-- the fixed startup orchestrator currently loads the project toolchain before
-  workflow selection. ADR 0003 requires project/feature/toolchain setup beyond
-  minimal startup to run only when the selected workflow graph references its
-  registered setup contracts. This must be corrected at the shared ownership
-  boundary, not retained as a Specify convenience.
+The existing toolchain pipeline now follows ADR 0003: its nine registered
+operations run only when reached by selected YAML. Startup publishes no
+toolchain service; the shared envelope owns the sole safety-valid result.
+Target/feature and semantic-principle setup remain separate unfinished work.
 
 ## 5. Production work remaining, in dependency order
 
@@ -225,8 +223,10 @@ checked against typed native operation bindings. Guard rejection cannot route
 through YAML to success. Registry, compiler, and runner regression tests cover
 these shared contracts without workflow-name branches.
 
-Remaining work: move selected target/toolchain/principle setup out of fixed
-startup and into reusable registered setup nodes selected by compiled topology.
+Toolchain setup is implemented through reusable registered operations, with
+selected-only reads, failure/cancellation, native ownership, and packaging tests.
+Remaining work: implement selected target/feature and semantic-principle setup
+as reusable registered nodes, following the foundations below.
 
 Regression evidence must include unrelated multi-node workflows, real value
 flow, branch merges, failure propagation, cancellation, cleanup, and proof that
@@ -234,8 +234,13 @@ adding an unrelated definition changes neither execution nor authority.
 
 ### 5.2 Complete deterministic feature/state foundations
 
-- Specify invocation parsing and validation for the exact one-selector grammar;
-- contained reference-selector resolution and deterministic feature identity;
+Implemented: exact one-selector invocation, Unicode NFC/lexical validation, and
+read-only contained-directory inspection through registered operations (F0100
+Section 3.1). These allocate no feature and read no reference contents.
+
+Remaining:
+
+- deterministic feature identity;
 - feature ownership/inventory, artifact authority, state-ID and transaction-ID
   ledgers;
 - project and feature WAL, locks, failpoints, recovery, and all-or-nothing stage

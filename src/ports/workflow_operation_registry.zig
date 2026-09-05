@@ -177,8 +177,9 @@ fn validContract(contract: operation.Contract, capabilities: []const []const u8)
         if (!descriptor.required or descriptor.allowed_values.len != 0 or descriptor.resource_kind != null) return false;
         model_slot_count += 1;
     }
-    if (model_capable != (model_slot_count == 1)) return false;
-    if (model_capable != (contract.model_capacity != null)) return false;
+    const requires_model_binding = contract.model_capacity != null;
+    if (model_slot_count > 1 or requires_model_binding != (model_slot_count == 1)) return false;
+    if (model_capable and !requires_model_binding) return false;
     if (contract.model_capacity) |capacity| {
         if (!capacity.isValid() or !@import("../domain/workflow_model.zig").validDescriptors(contract.parameters)) return false;
     }

@@ -44,6 +44,12 @@ classDiagram
         +takeServices() BootstrapServices
     }
 
+    class BootstrapRootRunner {
+        <<runner-owned root actions>>
+        +registry() BootstrapRootRegistry
+        +takeRegistry() BootstrapRootRegistryOwner
+    }
+
     class BootstrapServices {
         <<invocation aggregate>>
         +BootstrapRootRegistryService roots
@@ -114,6 +120,11 @@ classDiagram
     BootstrapRootRegistryCandidate *-- "1" NormalizedLLMProviderConfigPath : configured file
     ValidateBootstrapRootRegistryAction ..> BootstrapRootRegistryCandidate : validates
     ValidateBootstrapRootRegistryAction ..> BootstrapRootRegistryOwner : creates
+    BootstrapRunner --> BootstrapRootRunner : delegates root children
+    BootstrapRootRunner ..> BuildBootstrapRootRegistryIdAction : invokes
+    BootstrapRootRunner ..> BuildBootstrapRootRegistryAction : invokes
+    BootstrapRootRunner ..> ValidateBootstrapRootRegistryAction : invokes
+    BootstrapRootRunner ..> BootstrapRootRegistryOwner : transfers through takeRegistry
     BootstrapRunner ..> BootstrapRootRegistryService : transfers validated owner
     BootstrapServices *-- BootstrapRootRegistryService : owns for invocation
     BootstrapRootRegistryService *-- BootstrapRootRegistryOwner : owns and deinitializes

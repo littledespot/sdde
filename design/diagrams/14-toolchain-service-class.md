@@ -57,22 +57,22 @@ classDiagram
         +PolicyContract list contracts
     }
 
-    class BootstrapRunner {
+    class WorkflowRunner {
         <<application>>
-        +takeServices() BootstrapServices
+        +invoke selected YAML operation
     }
 
-    class BootstrapServices {
-        <<invocation aggregate>>
-        +ToolChainService toolchain
+    class PipelineEnvelope {
+        <<sole workflow value owner>>
+        +apply validated delta
+        +destroy rejected or retired values
     }
 
     class ToolChainService {
         <<application service>>
-        -ToolchainOwner owner
-        +init(owner) ToolChainService
+        -ValidToolchain borrowedValue
+        +init(validatedValue) ToolChainService
         +toolchain() ValidToolchain
-        +deinit() void
     }
 
     class ToolchainOwner {
@@ -101,9 +101,9 @@ classDiagram
     ValidateToolchainSafetyAction --> ToolchainSafety : delegates safety validation
     ToolchainSafety ..> ToolchainOwner : creates only after safety passes
     ToolchainSafety ..> ValidToolchain : owns immutable storage
-    BootstrapRunner ..> ToolChainService : transfers validated owner
-    BootstrapServices *-- ToolChainService : owns for invocation
-    ToolChainService *-- ToolchainOwner : owns and deinitializes
+    WorkflowRunner ..> ValidateToolchainSafetyAction : invokes when YAML reaches it
+    WorkflowRunner --> PipelineEnvelope : applies delta or discards candidate
+    PipelineEnvelope *-- ToolchainOwner : owns and deinitializes original result
     ToolchainOwner *-- ValidToolchain : owns hidden storage
     ToolChainService ..> ValidToolchain : returns borrowed const
     ValidToolchain o-- "0..*" PolicyContract : exposes compiled policies
@@ -112,3 +112,8 @@ classDiagram
     note for ToolchainContracts "Shared types and limits only; no parsing, accounting, inheritance, composition or publication"
     note for ToolChainService "Read-only facade: toolchain() performs no I/O, parsing, merge, validation or allocation"
 ```
+
+Fixed startup loads configuration, roots, and workflow definitions only. The
+selected YAML graph explicitly orders the separate capture, inventory, parsing,
+schema-validation, inheritance, composition, and safety operations. A workflow
+without those operations never reads toolchain documents.

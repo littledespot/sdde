@@ -5,8 +5,9 @@
 **Implementation readiness:** The generic concise YAML, declared-resource,
 compiler, registry, and transition-runner boundaries are implemented by F0005
 and ADR 0005. The logical Specify flow, `spec.md` section hierarchy, and
-clarification separation are defined below; its exact registered operations
-and executable definition remain to be supplied by this feature.
+clarification separation are defined below. Invocation and read-only selector
+preflight are implemented in Section 3.1; generation, activation, persistence,
+and the complete executable definition remain unfinished.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -73,15 +74,15 @@ when it crosses a registered monotonic budget operation with a finite ceiling.
 
 ## 3. Structural outline
 
-The placeholders below are deliberate: the governing design has not yet fixed
-the exact registered Specify contract IDs or their definition-safe parameters.
+The remaining placeholders are deliberate: generation and completion contracts
+are not yet fixed. The implemented invocation contract is explicit.
 
 ```yaml
 schema: workflow/v1
 id: specify
 version: <positive-u32>
 shortcode: "<validated-unique-four-character-shortcode>"
-invoke: "<registered-ref@version>"
+invoke: specify-invocation@1
 policy: "<registered-ref@version>"
 start: generate
 
@@ -104,6 +105,50 @@ valid only after every placeholder is replaced by a registered or captured
 workflow-owned value and every selected operation outcome has exactly one
 mapping. `validate` and `repair` are illustrative local steps and must also be
 declared in a complete definition.
+
+### 3.1 Registered invocation and read-only selector preflight
+
+These native contracts take no YAML parameters and use the existing runner,
+owned value envelope, and registry. Any workflow may select them.
+
+| Contract | Kind | Input → output |
+| --- | --- | --- |
+| `specify-invocation@1` | Invocation | Remaining arguments → validated `specify_invocation` |
+| `parse-specify-invocation@1` | Invocation | Remaining arguments → `parsed_specify_invocation` |
+| `validate-specify-arguments@1` | Step | Parsed invocation → validated invocation |
+| `normalize-reference-selector@1` | Step | Validated invocation → `normalized_reference_selector` |
+| `validate-reference-selector@1` | Step | Normalized candidate → `relative_reference_selector` |
+| `inspect-reference-directory@1` | Step | Relative selector → read-only `reference_directory` observation |
+
+`specify-invocation@1` atomically coordinates the same parser and validator
+through runner-owned child bindings; only its validated result leaves that
+boundary. Invocation accepts exactly `--reference <non-empty-value>`; removed,
+unknown, duplicate, positional, missing, and `--` forms fail. Invocation success
+is `ok`; rejection uses the existing operation-failure boundary. Steps declare
+`ok` and `failed`; runner cancellation remains `cancelled`.
+
+Selector policy `reference-selector/v1` bounds raw and normalized UTF-8 to
+4,096 bytes and each normalized segment to 255 bytes. The shared
+[ADR 0007](../decisions/0007-unicode-normalization.md) adapter performs NFC.
+Normalization maps literal backslashes to `/` and removes only literal `.`
+segments. Validation rejects empty/dot-only, absolute/drive/UNC/URI, traversal,
+encoded dot/separator, controls/NUL, empty segments, trailing separators, and
+portable-invalid segment names. Unicode remains supported; configured-root
+ASCII policy is unchanged. Bounds are engine contracts, not YAML overrides.
+
+Only directory inspection carries `reference-read`; the other operations are
+capability-free. `core.reference-read@1` permits that read capability and
+`ok`/`failed`/`cancelled` terminals; it authorizes no provider or write.
+The inspector rechecks the bound configured-root identity and opens each
+descendant component without following symlinks. It requires a readable
+directory and publishes repository-relative metadata and physical identities,
+not a reusable filesystem capability. Future readers must revalidate them.
+
+The [preflight fixture](../../src/test_fixtures/reference-preflight.workflow.yaml)
+proves these operations without claiming `specified`. It reads no reference
+contents and creates no feature, log, clarification, transaction, or artifact.
+Feature identity/recovery/activation and complete corpus validation remain later
+work; selector success alone cannot authorize them.
 
 ## 4. Required logical coverage
 

@@ -28,7 +28,6 @@ pub const Action = struct {
     ) Error!binding.ValidatedProviderModelBinding {
         const step = findStep(graph.authority.steps, step_id) orelse return invalid();
         if (!@import("../../domain/workflow_model.zig").validProjection(step.*)) return invalid();
-        if (!containsString(step.capabilities, "model-provider")) return invalid();
 
         var selected_slot: ?identity.ModelSlotId = null;
         for (step.parameters) |parameter| {
@@ -78,11 +77,6 @@ fn findStep(
         found = step;
     }
     return found;
-}
-
-fn containsString(values: []const []const u8, expected: []const u8) bool {
-    for (values) |value| if (std.mem.eql(u8, value, expected)) return true;
-    return false;
 }
 
 fn invalid() Error {

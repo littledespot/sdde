@@ -149,7 +149,8 @@ pub const Runner = struct {
         self: *Runner,
         step: compilation.CompiledStep,
     ) resolve_provider_binding.Error!?provider_binding.ValidatedProviderModelBinding {
-        if (!hasModelSlot(step.parameters)) return null;
+        if (!@import("../domain/workflow_model.zig").validProjection(step)) return error.ProviderModelBindingInvalid;
+        if (step.model == null) return null;
         const services = self.model_provider_services orelse {
             return error.ProviderModelBindingInvalid;
         };
@@ -293,10 +294,6 @@ fn findResource(resources: []const compilation.CompiledResource, id: workflow.Wo
 }
 fn containsOutcome(outcomes: []const workflow.OutcomeTag, outcome: workflow.OutcomeTag) bool {
     for (outcomes) |allowed| if (allowed == outcome) return true;
-    return false;
-}
-fn hasModelSlot(parameters: []const compilation.CompiledParameter) bool {
-    for (parameters) |parameter| if (parameter.value == .model_slot) return true;
     return false;
 }
 fn runtimeTerminal(runtime: pipeline.NodeRuntime) ?execution.Rejection {
