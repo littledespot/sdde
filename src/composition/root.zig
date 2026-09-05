@@ -905,6 +905,8 @@ test "feature inspection rejects missing authority stale roots and forged resolv
     var inspector = adapter.inspector();
     try std.testing.expectError(error.FeatureDirectoryUnavailable, inspector.inspect(std.testing.allocator, selected));
     inspector.capability = registry.featureDirectoryRead();
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, inspector.inspect(failing.allocator(), selected));
     _ = try inspector.inspect(std.testing.allocator, selected);
     try std.testing.expectError(error.FeatureDirectoryUnavailable, inspector.inspect(std.testing.allocator, .{ .feature_id = selected.feature_id, .project_relative_path = "elsewhere/chosen" }));
     try project.dir.rename("specs", project.dir, "previous-specs", io);

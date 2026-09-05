@@ -16,7 +16,10 @@ pub const Adapter = struct {
     fn inspect(context: *anyopaque, capability: *const roots.FeatureDirectoryReadCapability, allocator: std.mem.Allocator, selector: feature.Selector) source.Error!feature.Directory {
         const self: *Adapter = @ptrCast(@alignCast(context));
         const binding = roots.bindFeatureDirectoryAdapter(capability);
-        const checked = feature.validate(allocator, .{ .bytes = selector.feature_id.bytes }, binding.paths) catch return error.FeatureDirectoryUnavailable;
+        const checked = feature.validate(allocator, .{ .bytes = selector.feature_id.bytes }, binding.paths) catch |err| return switch (err) {
+            error.OutOfMemory => error.OutOfMemory,
+            error.InvalidFeatureDirectory => error.FeatureDirectoryUnavailable,
+        };
         defer allocator.free(checked.project_relative_path);
         if (!std.mem.eql(u8, checked.project_relative_path, selector.project_relative_path)) return error.FeatureDirectoryUnavailable;
         var root = directories.open(self.io, self.project_root, binding.paths.specs) catch |err| return switch (err) {

@@ -36,7 +36,9 @@ pub fn open(io: std.Io, base: std.Io.Dir, relative: []const u8) Error!std.Io.Dir
 fn requireExactName(io: std.Io, directory: std.Io.Dir, expected: []const u8) Error!void {
     var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const length = directory.realPathFile(io, ".", &path_buffer) catch return error.DirectoryUnavailable;
-    var scratch: [std.Io.Dir.max_name_bytes * 24]u8 = undefined;
+    // Two bounded NFC calls: each needs at most 4 scalars/byte of i32
+    // workspace plus its owned UTF-8 output; reserve alignment/terminators too.
+    var scratch: [std.Io.Dir.max_name_bytes * 34 + 16]u8 = undefined;
     var fixed: std.heap.FixedBufferAllocator = .init(&scratch);
     const actual = @import("unicode_normalization").nfc(fixed.allocator(), std.fs.path.basename(path_buffer[0..length]), std.Io.Dir.max_name_bytes) catch return error.DirectoryUnavailable;
     const canonical_expected = @import("unicode_normalization").nfc(fixed.allocator(), expected, std.Io.Dir.max_name_bytes) catch return error.DirectoryUnavailable;
