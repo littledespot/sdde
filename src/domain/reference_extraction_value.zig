@@ -5,6 +5,7 @@ const extraction = @import("reference_extraction.zig");
 pub const Payload = union(enum) {
     raw: extraction.Raw,
     parsed: extraction.Parsed,
+    text_validated: extraction.TextValidated,
     validated: extraction.Validated,
     assigned: extraction.Assignments,
     ledger: extraction.Ledger,
@@ -26,7 +27,7 @@ pub const Owner = struct {
 const Handle = struct { owner: *Owner };
 
 /// A result may borrow its one preceding immutable candidate, never a runner
-/// input's unretained allocation. The chain has the six closed payload stages.
+/// input's unretained allocation. The chain has seven closed payload stages.
 pub fn create(allocator: std.mem.Allocator, parent: ?*const Value) std.mem.Allocator.Error!*Owner {
     const owner = try allocator.create(Owner);
     owner.* = .{ .allocator = allocator, .arena = .init(allocator), .parent = parent, .payload = .{ .raw = .{ .entries = &.{} } }, .handle = .{ .owner = owner } };

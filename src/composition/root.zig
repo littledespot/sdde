@@ -986,6 +986,10 @@ test "reference ingestion compiler enforces inputs and content-read capability" 
         .{ "use: build-reference-chunks@1", "use: core.noop@1" },
         .{ "use: validate-reference-chunks@1", "use: validate-source-citations@1" },
         .{ "use: validate-reference-chunks@1", "use: parse-reference-extraction-results@1" },
+        .{ "use: validate-reference-chunks@1", "use: scan-reference-passive-literals@1" },
+        .{ "use: validate-reference-chunks@1", "use: assign-passive-literal-identities@1" },
+        .{ "use: validate-reference-chunks@1", "use: validate-reference-passive-literals@1" },
+        .{ "use: validate-reference-chunks@1", "use: validate-reference-extraction-text@1" },
         .{ "use: validate-reference-chunks@1", "use: validate-reference-claims@1" },
         .{ "use: validate-reference-chunks@1", "use: assign-reference-claim-identities@1" },
         .{ "use: validate-reference-chunks@1", "use: build-reference-extraction-ledger@1" },
@@ -1047,7 +1051,7 @@ const ReferenceCitationTestProducer = struct {
 };
 
 const ReferenceExtractionTestProducer = struct {
-    mode: enum { claims, no_claim, blocked, malformed, missing, duplicate, invalid_citation },
+    mode: enum { claims, no_claim, blocked, malformed, missing, duplicate, invalid_citation, unbound, passive, unknown_literal, legacy },
     observed: usize = 0,
     const bindings = @import("../application/reference_extraction_workflow.zig");
     const extraction = @import("../domain/reference_extraction.zig");
@@ -1069,6 +1073,19 @@ const ReferenceExtractionTestProducer = struct {
                     .blocked => .{ .blocked = .extraction_failed },
                     .malformed => .{ .response = "{\"kind\":\"claims\",\"claim_id\":1}" },
                     .no_claim => .{ .response = @import("../reference_extraction_test.zig").no_claim },
+                    .unbound => .{ .response = @import("../reference_extraction_test.zig").reply(scratch, citation_chunk, "Read src/main.zig.") catch return error.OperationExecutionFailed },
+                    .passive, .unknown_literal => response: {
+                        const registry = ReferenceCitationTestProducer.values.read(&input.step.data, @import("../application/passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch return error.OperationExecutionFailed;
+                        var ordinal: u32 = if (context.?.mode == .unknown_literal) std.math.maxInt(u32) else 0;
+                        if (context.?.mode == .passive) for (registry.occurrences) |occurrence| {
+                            if (occurrence.origin == .reference_name and occurrence.origin.reference_name.ordinal == chunk.source_id.ordinal) {
+                                ordinal = occurrence.id.ordinal;
+                                break;
+                            }
+                        };
+                        break :response .{ .response = @import("../reference_extraction_test.zig").passiveReply(scratch, citation_chunk, ordinal) catch return error.OperationExecutionFailed };
+                    },
+                    .legacy => .{ .response = "{\"kind\":\"no_feature_claim\",\"reason\":\"Old raw text\",\"token_classifications\":[]}" },
                     .claims, .missing, .duplicate, .invalid_citation => .{ .response = @import("../reference_extraction_test.zig").reply(scratch, citation_chunk, "Scripted unreviewed claim.") catch return error.OperationExecutionFailed },
                 },
             };
@@ -1088,15 +1105,16 @@ const ReferenceExtractionTestProducer = struct {
 test "native YAML validates citations and accounts every extraction chunk before continuation" {
     const io = std.testing.io;
     const binding = @import("../application/workflow_operation_binding.zig");
-    const scenarios = [_]?@FieldType(ReferenceExtractionTestProducer, "mode"){ null, null, .claims, .no_claim, .blocked, .malformed, .missing, .duplicate, .invalid_citation };
+    const scenarios = [_]?@FieldType(ReferenceExtractionTestProducer, "mode"){ null, null, .claims, .no_claim, .blocked, .malformed, .missing, .duplicate, .invalid_citation, .unbound, .passive, .unknown_literal, .legacy };
     for (scenarios, 0..) |mode, scenario| {
         const invalid = scenario == 1;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
-        const suffix = if (mode != null) "use: validate-reference-chunks@1\n    on: { ok: propose-extraction, failed: end.failed }\n" ++
+        const suffix = if (mode != null) "use: validate-reference-passive-literals@1, on: { ok: propose-extraction, failed: end.failed } }\n" ++
             "  propose-extraction: { use: test.propose-extraction@1, on: { ok: parse-extraction } }\n" ++
-            "  parse-extraction: { use: parse-reference-extraction-results@1, on: { ok: validate-claims, failed: end.failed } }\n" ++
+            "  parse-extraction: { use: parse-reference-extraction-results@1, on: { ok: validate-text, failed: end.failed } }\n" ++
+            "  validate-text: { use: validate-reference-extraction-text@1, on: { ok: validate-claims, failed: end.failed } }\n" ++
             "  validate-claims: { use: validate-reference-claims@1, on: { ok: assign-claims, failed: end.failed } }\n" ++
             "  assign-claims: { use: assign-reference-claim-identities@1, on: { ok: build-ledger, failed: end.failed } }\n" ++
             "  build-ledger: { use: build-reference-extraction-ledger@1, on: { ok: account-extraction, failed: end.failed } }\n" ++
@@ -1105,9 +1123,16 @@ test "native YAML validates citations and accounts every extraction chunk before
             "  propose-citations: { use: test.propose-citations@1, on: { ok: validate-citations } }\n" ++
             "  validate-citations: { use: validate-source-citations@1, on: { ok: observe-citations, failed: end.failed } }\n" ++
             "  observe-citations: { use: test.observe-citations@1, on: { ok: end.ok } }";
-        const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/reference-ingestion.workflow.yaml"), "use: validate-reference-chunks@1\n    on: { ok: end.ok, failed: end.failed }", suffix);
+        const preparation = try @import("../test_fixtures/reference_text_workflow.zig").yaml(std.testing.allocator);
+        defer std.testing.allocator.free(preparation);
+        const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, if (mode != null) preparation else @embedFile("../test_fixtures/reference-ingestion.workflow.yaml"), if (mode != null) "use: validate-reference-passive-literals@1, on: { ok: end.ok, failed: end.failed } }" else "use: validate-reference-chunks@1\n    on: { ok: end.ok, failed: end.failed }", suffix);
         defer std.testing.allocator.free(yaml);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = yaml });
+        if (mode != null) {
+            try project.dir.createDirPath(io, ".sdd/principles");
+            try project.dir.createDirPath(io, ".sdd/presets");
+            try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
+        }
         if (mode == .duplicate) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/second.md", .data = "Another independent requirement.\n" });
         var project_source = toolchain_authority_source.Adapter.init(io, project.dir);
         var document_parser: toolchain_documents.Adapter = .{};
@@ -1121,10 +1146,14 @@ test "native YAML validates citations and accounts every extraction chunk before
         native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
         var producer: ReferenceCitationTestProducer = .{ .invalid = invalid };
         var extraction_producer: ReferenceExtractionTestProducer = .{ .mode = mode orelse .claims };
+        var protected_arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer protected_arena.deinit();
+        const closed = try @import("../test_fixtures/clarification_inputs.zig").closed(protected_arena.allocator(), "S01", true);
+        try writeClarificationCapture(io, project.dir, closed);
         const entries = native.entries ++ [_]workflow_operation_registry.Entry{
             .{ .contract = .{ .id = "test.propose-citations@1", .kind = .step, .requires = &.{.citable_reference_inputs}, .produces = &.{.reference_citation_proposals}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.propose) },
             .{ .contract = .{ .id = "test.observe-citations@1", .kind = .step, .requires = &.{.validated_source_citations}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.observe) },
-            .{ .contract = .{ .id = "test.propose-extraction@1", .kind = .step, .requires = &.{.citable_reference_inputs}, .produces = &.{.raw_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.propose) },
+            .{ .contract = .{ .id = "test.propose-extraction@1", .kind = .step, .requires = &.{ .citable_reference_inputs, .reference_passive_literals }, .produces = &.{.raw_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.propose) },
             .{ .contract = .{ .id = "test.observe-extraction@1", .kind = .step, .requires = &.{.accounted_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.observe) },
         };
         native.registry.operations = &entries;
@@ -1135,13 +1164,15 @@ test "native YAML validates citations and accounts every extraction chunk before
         var providers = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project.dir, .{}, &llm_provider_contracts.Registry.empty);
         const result = runBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{}, null);
         const expected: workflow.OutcomeTag = if (mode) |selected| switch (selected) {
-            .claims, .no_claim => .ok,
+            .claims, .no_claim, .passive => .ok,
             .blocked => .blocked,
-            .malformed, .missing, .duplicate, .invalid_citation => .failed,
+            .malformed, .missing, .duplicate, .invalid_citation, .unbound, .unknown_literal, .legacy => .failed,
         } else if (invalid) .failed else .ok;
         try std.testing.expectEqual(expected, result.execution);
         try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), if (mode != null) extraction_producer.observed else producer.observed);
-        try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
+        const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", protected_arena.allocator(), .limited(16384));
+        try std.testing.expectEqualSlices(u8, closed.forms[0].bytes, retained);
+        try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/spec.md", .{}));
     }
 }
 

@@ -2,6 +2,37 @@ const std = @import("std");
 const operation = @import("workflow_operation.zig");
 const compilation = @import("workflow_compilation.zig");
 const provider = @import("llm_provider_operation.zig");
+const pipeline = @import("pipeline.zig");
+
+pub const invocation_requires = @import("workflow_provider_authorization.zig").requires ++ [_]pipeline.DataKey{.provider_authorization_result};
+pub const invocation_parameter: operation.ParameterDescriptor = .{
+    .id = "transition",
+    .kind = .enumeration,
+    .required = true,
+    .workflow_definition_safe = true,
+    .allowed_values = &.{"invoked"},
+};
+
+pub fn invokes(produces: []const pipeline.DataKey) bool {
+    return std.mem.indexOfScalar(pipeline.DataKey, produces, .invoked_provider_operation) != null;
+}
+
+pub fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
+    if (contract.runner_accounting != .advance_provider_operation) return true;
+    if (!invokes(contract.produces)) return validDescriptors(contract.parameters);
+    if (!validInvocationEffects(contract.requires, contract.produces, contract.optional, contract.replaces, contract.invalidates) or
+        contract.side_effect != .none or contract.retry_limit != null or capabilities.len != 0 or contract.parameters.len != 1) return false;
+    const value = contract.parameters[0];
+    return std.mem.eql(u8, value.id, invocation_parameter.id) and value.kind == .enumeration and
+        value.required and value.workflow_definition_safe and value.allowed_values.len == 1 and
+        std.mem.eql(u8, value.allowed_values[0], "invoked");
+}
+
+fn validInvocationEffects(inputs: []const pipeline.DataKey, produces: []const pipeline.DataKey, optional: []const pipeline.DataKey, replaces: []const pipeline.DataKey, invalidates: []const pipeline.DataKey) bool {
+    for (invocation_requires) |key| if (std.mem.indexOfScalar(pipeline.DataKey, inputs, key) == null) return false;
+    return std.mem.eql(pipeline.DataKey, produces, &.{.invoked_provider_operation}) and optional.len == 0 and replaces.len == 0 and
+        std.mem.eql(pipeline.DataKey, invalidates, &.{.assigned_provider_operation});
+}
 
 /// Explicit YAML selection only; counting is never an inference prerequisite.
 pub const kind_parameter: operation.ParameterDescriptor = .{
@@ -22,7 +53,17 @@ pub fn validDescriptors(parameters: []const operation.ParameterDescriptor) bool 
 }
 
 pub fn validProjection(step: compilation.CompiledStep) bool {
-    return step.runner_accounting != .advance_provider_operation or resolve(step.parameters) != null;
+    if (step.runner_accounting != .advance_provider_operation) return true;
+    if (!invokes(step.produces)) return resolve(step.parameters) != null;
+    return validInvocationEffects(step.requires, step.produces, step.optional, step.replaces, step.invalidates) and
+        step.side_effect == .none and step.retry_authority == null and step.capabilities.len == 0 and invokesTransition(step.parameters);
+}
+
+pub fn invokesTransition(parameters: []const compilation.CompiledParameter) bool {
+    if (parameters.len != 1) return false;
+    const value = parameters[0];
+    return std.mem.eql(u8, value.id.bytes, invocation_parameter.id) and value.value == .enumeration and
+        std.mem.eql(u8, value.value.enumeration, "invoked");
 }
 
 pub fn resolve(parameters: []const compilation.CompiledParameter) ?provider.ProviderOperationKind {

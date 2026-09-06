@@ -222,6 +222,15 @@ pub fn build(b: *std.Build) void {
     const path_token_step = b.step("test-path-tokens", "Test shared naming-policy compilation and inert path-token detection");
     path_token_step.dependOn(&b.addRunArtifact(path_token_tests).step);
 
+    const typed_text_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/typed_text_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const typed_text_step = b.step("test-typed-text", "Test source-backed display literals and shared extraction text validation");
+    typed_text_step.dependOn(&b.addRunArtifact(typed_text_tests).step);
+
     const feature_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/feature_directory_test.zig"),
         .target = target,

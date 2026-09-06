@@ -602,6 +602,13 @@ ProviderAuthorizationResult = opaque {
 // request, attempt, operation and lease values remain unchanged. The provider
 // operation is still assigned. No API call or delivery claim is made here.
 
+// advance-provider-operation-lifecycle@1 with transition: invoked consumes that
+// assignment under the already-invoked request. The runner supplies the original
+// prepared lease deadline, validates the proposal, and publishes a sealed view
+// of the canonical InvokedProviderOperation while invalidating assignment
+// evidence. Rejection publishes neither change. The lease is still unconsumed;
+// no API call, token charge, new timeout or persisted state is introduced.
+
 TelemetryFact =
   | RunStartedFact
   | RunCompletedFact { outcome, durationMs? }

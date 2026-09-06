@@ -180,6 +180,25 @@ test "basename glob matching is whole-token Unicode-aware and has no regex fallb
     for ([_][]const u8{ "file1", "xfile1a", "filea1", "file[0-9]a" }) |value| try std.testing.expect(!rules.matches(rule, value));
 }
 
+test "multi-token filenames share exact policy matching and retain Unicode raw spans" {
+    const policies: toolchain.PolicyRegistry = .{ .contracts = &.{.{ .id = "names@1", .project_selectable = true, .locked_required = false, .naming = &.{
+        .{ .id = .{ .bytes = "names.manifest" }, .kind = .manifest, .value = "Build Notes", .case_sensitive = false },
+        .{ .id = .{ .bytes = "names.exact" }, .kind = .exact, .value = "(Guide).cfg", .case_sensitive = true },
+    } }} };
+    const owner = try safety.validate(std.testing.allocator, .{ .packages = &.{}, .policies = &.{"names@1"} }, policies);
+    defer safety.deinitOwner(owner);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var ids: fixture.IdSource = .{};
+    const inputs = try fixture.prepare(arena.allocator(), &ids, try ingest(arena.allocator(), "Café Notes.md", "source\n"));
+    const compiled = try build_action.execute(arena.allocator(), try compile_action.execute(arena.allocator(), safety.value(owner)), safety.value(owner), inputs);
+    const result = try scan_action.execute(std.testing.allocator, compiled, safety.value(owner), inputs, "Read BUILD NOTES, (Guide).cfg and «Cafe\u{301} Notes.md». NotBuild NotesExtra.");
+    defer scanning.destroy(result);
+    const expected = [_][]const u8{ "BUILD NOTES", "(Guide).cfg", "Cafe\u{301} Notes.md" };
+    try std.testing.expectEqual(expected.len, result.matches.len);
+    for (expected, result.matches) |value, match| try std.testing.expectEqualStrings(value, result.text[match.start_byte..match.end_byte]);
+}
+
 test "path-token preparation and scanning clean up after every allocation failure" {
     try allocationCase(std.testing.allocator);
     try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});

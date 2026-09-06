@@ -78,6 +78,13 @@ pub const AssignedOperation = opaque {
     }
 };
 
+/// Sealed pipeline view of the canonical invocation, not a copied call record.
+pub const InvokedOperation = opaque {
+    pub fn operation(self: *const InvokedOperation) *const provider.InvokedProviderOperation {
+        return @ptrCast(@alignCast(self));
+    }
+};
+
 pub const Authority = struct {
     requests: *const identity.ModelRequestIdentityLedger,
     expected_request_revision: identity.LedgerRevision,
@@ -121,6 +128,10 @@ pub const Ledger = opaque {
         const found = self.record(id) orelse return error.ProviderOperationNotFound;
         if (found.state != .assigned) return error.InvalidProviderOperationTransition;
         return @ptrCast(found);
+    }
+
+    pub fn requireInvocation(self: *const Ledger, id: provider.ProviderOperationId) ValidationError!*const InvokedOperation {
+        return @ptrCast(try self.requireInvoked(id));
     }
 
     pub fn validateRequestClosure(self: *const Ledger, request: *const identity.ModelRequestId) ValidationError!void {

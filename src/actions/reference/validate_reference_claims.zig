@@ -7,17 +7,17 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "validate-reference-claims@1",
         .kind = .action,
-        .requires = &.{ .citable_reference_inputs, .parsed_reference_extraction },
+        .requires = &.{ .citable_reference_inputs, .text_validated_reference_extraction },
         .produces = &.{.validated_reference_claims},
         .side_effect = .none,
     };
     /// Structural validation only. Results are ordered by engine chunk order;
     /// model response arrival order cannot change canonical ID assignment.
-    pub fn execute(_: Action, allocator: std.mem.Allocator, inputs: evidence.Inputs, parsed: extraction.Parsed) extraction.Error!extraction.Validated {
+    pub fn execute(_: Action, allocator: std.mem.Allocator, inputs: evidence.Inputs, parsed: extraction.TextValidated) extraction.Error!extraction.Validated {
         if (parsed.entries.len != inputs.chunks.entries.len) return error.InvalidReferenceExtraction;
         const entries = try allocator.alloc(extraction.ValidatedResult, parsed.entries.len);
         for (inputs.chunks.entries, entries) |chunk, *entry| {
-            var selected: ?extraction.ParsedResult = null;
+            var selected: ?extraction.TextValidatedResult = null;
             for (parsed.entries) |candidate| {
                 if (!candidate.scope.state_id.eql(inputs.corpus.state_id)) return error.InvalidReferenceExtraction;
                 if (!candidate.scope.chunk_id.eql(chunk.id)) continue;
@@ -29,15 +29,11 @@ pub const Action = struct {
             entry.scope = candidate.scope;
             entry.outcome = switch (candidate.outcome) {
                 .blocked => |reason| .{ .blocked = reason },
-                .no_feature_claim => |reason| no_claim: {
-                    if (!extraction.nonempty(reason)) return error.InvalidReferenceExtraction;
-                    break :no_claim .{ .no_feature_claim = reason };
-                },
+                .no_feature_claim => |reason| .{ .no_feature_claim = reason },
                 .claims => |proposals| claims: {
                     if (proposals.len == 0) return error.InvalidReferenceExtraction;
                     const values = try allocator.alloc(extraction.ValidatedClaim, proposals.len);
                     for (proposals, values) |proposal, *value| {
-                        if (!extraction.nonempty(proposal.content.text)) return error.InvalidReferenceExtraction;
                         const checked = try citations.validate(allocator, inputs, .{ .scope = candidate.scope, .entries = proposal.citations });
                         // The returned pipeline value retains parsed candidates,
                         // not the independently owned captured-input allocation.

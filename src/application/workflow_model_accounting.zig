@@ -9,6 +9,7 @@ const leases = @import("provider_authorization_lease_table.zig");
 
 pub const schema = values.schema(.accounted_model_attempt, accounting.AccountedAttempt, 1, null);
 pub const operation_schema = values.schema(.assigned_provider_operation, lifecycle.AssignedOperation, 1, null);
+pub const invoked_schema = values.schema(.invoked_provider_operation, lifecycle.InvokedOperation, 1, null);
 pub const Error = accounting.Error || accounting.RequestError || identity.Error || lifecycle.Error || values.Error || error{InvalidAccountingTransition};
 
 /// Execution-owned accounting only. No action dispatch, retry counter or I/O.
@@ -79,26 +80,48 @@ pub const State = struct {
         };
         if (!facts.binding_id.eql(request.binding_id) or !facts.model_visible_input_id.eql(request.model_visible_input_id)) return error.InvalidAccountingTransition;
         const successor = try lifecycle.apply(self.current_operations, self.operationAuthority(requests), transition);
-        const evidence = try successor.requireAssigned(id);
+        return self.retainOperation(lifecycle.AssignedOperation, operation_schema, requests, successor, try successor.requireAssigned(id));
+    }
+
+    pub fn prepareInvocation(self: *const State, requests: *const identity.ModelRequestIdentityLedger, request: *const provider.IdentifiedProviderNeutralModelRequest, assigned: *const lifecycle.AssignedOperation, invocation: lifecycle.Invocation, transition: lifecycle.Transition) Error!Pending {
+        try self.validateAssignment(assigned, request);
+        if (!transition.operation_id.eql(assigned.record().id) or transition.command != .invoke or
+            transition.command.invoke.deadline_monotonic_ms != invocation.deadline_monotonic_ms) return error.InvalidAccountingTransition;
+        const successor = try lifecycle.apply(self.current_operations, self.operationAuthority(requests), transition);
+        return self.retainOperation(lifecycle.InvokedOperation, invoked_schema, requests, successor, try successor.requireInvocation(transition.operation_id));
+    }
+
+    fn retainOperation(self: *const State, comptime T: type, comptime value_schema: data.Schema, requests: *const identity.ModelRequestIdentityLedger, successor: *const lifecycle.Ledger, evidence: *const T) Error!Pending {
+        const Retained = RetainedOperation(T);
         const retained = try identity.retainLedger(requests);
         errdefer identity.deinitOwner(retained);
-        const owner = try self.allocator.create(RetainedOperation);
+        const owner = try self.allocator.create(Retained);
         errdefer self.allocator.destroy(owner);
         try lifecycle.retainOwner(self.operations);
         errdefer lifecycle.deinitOwner(self.operations);
         try identity.retainOwner(retained);
         errdefer identity.deinitOwner(retained);
         owner.* = .{ .allocator = self.allocator, .operations = self.operations, .requests = retained, .evidence = evidence };
-        const value = try values.adopt(self.allocator, operation_schema, lifecycle.AssignedOperation, RetainedOperation, owner, RetainedOperation.get, RetainedOperation.destroy, null);
+        const value = try values.adopt(self.allocator, value_schema, T, Retained, owner, Retained.get, Retained.destroy, null);
         return .{ .successor = .{ .operations = successor }, .requests = retained, .value = value };
     }
 
     pub fn validateAssignment(self: *const State, evidence: *const lifecycle.AssignedOperation, request: *const provider.IdentifiedProviderNeutralModelRequest) Error!void {
         const record = evidence.record();
+        try self.validateOperation(record, request);
+        if (try self.current_operations.requireAssigned(record.id) != evidence) return error.InvalidAccountingTransition;
+    }
+
+    pub fn validateInvocation(self: *const State, evidence: *const provider.InvokedProviderOperation, request: *const provider.IdentifiedProviderNeutralModelRequest) Error!void {
+        const record = self.current_operations.record(evidence.id) orelse return error.InvalidAccountingTransition;
+        try self.validateOperation(record, request);
+        if (try self.current_operations.requireInvoked(record.id) != evidence) return error.InvalidAccountingTransition;
+    }
+
+    fn validateOperation(self: *const State, record: *const lifecycle.Record, request: *const provider.IdentifiedProviderNeutralModelRequest) Error!void {
         if (record.id.model_request_id != request.model_request_id or
             !record.binding_id.eql(request.binding_id) or !record.model_visible_input_id.eql(request.model_visible_input_id) or
-            record.id.model_attempt_ordinal.value != accounting.accounting(self.attempts).attemptsReserved(request.model_request_id) or
-            try self.current_operations.requireAssigned(record.id) != evidence) return error.InvalidAccountingTransition;
+            record.id.model_attempt_ordinal.value != accounting.accounting(self.attempts).attemptsReserved(request.model_request_id)) return error.InvalidAccountingTransition;
     }
 
     pub fn commit(self: *State, pending: Pending) void {
@@ -132,22 +155,25 @@ pub const Pending = struct {
     }
 };
 
-const RetainedOperation = struct {
-    allocator: std.mem.Allocator,
-    operations: *lifecycle.Owner,
-    requests: *identity.Owner,
-    evidence: *const lifecycle.AssignedOperation,
+fn RetainedOperation(comptime T: type) type {
+    if (T != lifecycle.AssignedOperation and T != lifecycle.InvokedOperation) @compileError("operation evidence only");
+    return struct {
+        allocator: std.mem.Allocator,
+        operations: *lifecycle.Owner,
+        requests: *identity.Owner,
+        evidence: *const T,
 
-    fn get(self: *const RetainedOperation) *const lifecycle.AssignedOperation {
-        return self.evidence;
-    }
+        fn get(self: *const @This()) *const T {
+            return self.evidence;
+        }
 
-    fn destroy(self: *RetainedOperation) void {
-        lifecycle.deinitOwner(self.operations);
-        identity.deinitOwner(self.requests);
-        self.allocator.destroy(self);
-    }
-};
+        fn destroy(self: *@This()) void {
+            lifecycle.deinitOwner(self.operations);
+            identity.deinitOwner(self.requests);
+            self.allocator.destroy(self);
+        }
+    };
+}
 
 const RetainedAttempt = struct {
     allocator: std.mem.Allocator,

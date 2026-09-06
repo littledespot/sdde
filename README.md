@@ -47,6 +47,10 @@ separate, and an unbound authorization adapter fails closed.
 advances the logical request through its existing immutable ledger. It requires
 that same prepared authorization and changes no request content, attempt, lease
 or provider-operation state. No API call occurs in this step.
+`advance-provider-operation-lifecycle@1` with `transition: invoked` advances the
+assigned operation next. It retains the prepared lease's original deadline;
+only the runner publishes sealed invoked-operation evidence and removes the
+assignment evidence. It does not consume the lease, call an API or charge tokens.
 
 ## Requirements
 
@@ -66,6 +70,7 @@ zig build test-reference-ingestion
 zig build test-reference-evidence
 zig build test-reference-extraction
 zig build test-path-tokens
+zig build test-typed-text
 zig build test-feature-directory
 zig build test-clarification-inputs
 zig build smoke
@@ -105,9 +110,11 @@ through YAML with scripted results. Model extraction, semantic reconciliation
 and snapshot publication remain future work. See
 [F0100](design/features/F0100-SpecWorkflow.md#35-extraction-candidate-accounting).
 Registered toolchain naming rules now feed a shared, YAML-addressable path-token
-grammar and detector, including current reference basenames. Detection grants
-no file authority; typed extraction text and passive-literal validation remain
-unfinished. See [F0100's lexical boundary](design/features/F0100-SpecWorkflow.md#36-shared-naming-policy-and-path-token-grammar).
+grammar and detector, including current reference basenames. Source-backed
+display IDs and shared typed-text validation now gate extraction candidates;
+raw-string extraction text is rejected. These are read-only, execution-local
+values, not file authority or semantic proof. See
+[F0100's text contract](design/features/F0100-SpecWorkflow.md#37-typed-reference-text-and-source-backed-display-literals).
 Full `spec.md` generation remains unfinished. Shared NFC uses statically
 linked utf8proc with packaged license notices
 ([ADR 0007](design/decisions/0007-unicode-normalization.md)).

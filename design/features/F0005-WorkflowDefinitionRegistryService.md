@@ -454,6 +454,15 @@ assignment. Neither writer can hide another kind of ledger change. Publication
 updates the runner's retained snapshot with the envelope, so an old snapshot
 cannot reset invocation. This is state advancement, not a provider call.
 
+`advance-provider-operation-lifecycle@1` also requires explicit
+`transition: invoked`. Its closed accounting contract consumes the assigned
+operation and requires the same request, attempt and prepared authorization.
+The runner checks the already-invoked request and original lease deadline,
+applies the proposal and publishes sealed invoked-operation evidence while
+invalidating assignment evidence. No consumer may fabricate, replace or reuse
+stale operation evidence. The step has no provider capability, new timeout,
+retry or token charge; cancellation/rejection publishes neither change.
+
 The selected result-schema resource describes the entire compact model result
 under [ADR 0006](../decisions/0006-minimal-model-response.md), not an inner
 payload or repeated execution metadata. The protocol version and exact resource

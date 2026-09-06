@@ -114,8 +114,9 @@ pub const Table = struct {
     }
 
     /// Checks without consuming; rejection destroys the unused capability. The
-    /// private table remains the sole deadline and lease-association authority.
-    pub fn validateReference(self: *Table, reference: operation.ValidatedProviderAuthorizationLeaseRef, provider_binding: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId, now: lease.Error!u64) lease.Error!void {
+    /// private table returns its original deadline and remains the sole lease
+    /// association authority before and after invocation-state advancement.
+    pub fn validateReference(self: *Table, reference: operation.ValidatedProviderAuthorizationLeaseRef, provider_binding: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId, now: lease.Error!u64) lease.Error!u64 {
         var next = self.first;
         while (next) |entry| : (next = entry.next) {
             if (!reference.identity.eql(entry.reference.identity)) continue;
@@ -123,9 +124,14 @@ pub const Table = struct {
             errdefer finalize(entry);
             if (try now >= entry.deadline) return error.AuthorizationExpired;
             const record = self.operations.record(id) orelse return error.AuthorizationDenied;
-            if (record.state != .assigned or !entry.operation_id.eql(id) or request.model_request_id != id.model_request_id or
+            const deadline = switch (record.state) {
+                .assigned => entry.deadline,
+                .invoked => |invoked| invoked.deadline_monotonic_ms,
+                .terminal => return error.AuthorizationDenied,
+            };
+            if (!entry.operation_id.eql(id) or request.model_request_id != id.model_request_id or deadline != entry.deadline or
                 !matches(entry, provider_binding, request, entry.deadline)) return error.AuthorizationDenied;
-            return;
+            return entry.deadline;
         }
         return error.AuthorizationDenied;
     }

@@ -96,7 +96,20 @@ all request/binding/resource/attempt/lease references stay unchanged. Prepared
 authorization is required and rechecked; cancellation or rejected publication
 leaves the prior ledger current. The provider operation stays assigned and no
 API call, token charge, new limit or persistence occurs. Request terminalization
-and provider invocation remain separate work.
+and actual provider calls remain separate work.
+
+## Provider-operation invocation-state integration (implemented 2026-09-06)
+
+`advance-provider-operation-lifecycle@1` with `transition: invoked` reuses the
+existing action for one assigned operation under an already-invoked request.
+The runner supplies the existing prepared lease's original deadline, checks
+the exact transition and authorization before publication, then publishes
+sealed invoked-operation evidence and invalidates assignment evidence together.
+The evidence references the canonical invocation and retains its owners.
+Failed, expired, cancelled, foreign, stale, duplicate or deadline-altered inputs
+reject without publication. The lease is not consumed; API calls, terminalization
+and response integration remain separate work. No additional capability,
+timeout, retry, token charge, persistence or recovery mechanism is introduced.
 
 ## Acceptance
 
@@ -109,5 +122,8 @@ evidence, forged transitions and compiler-permission tampering. Authorization
 cases cover both operation kinds, missing/invalid deadlines, denied capability,
 failed preparation, forged/mismatched deposits and results, duplicate use,
 expiration, cancellation and allocation-failure cleanup. Test-only
-provider contracts do not enter production composition. Provider invocation
-integration and Bedrock remain separate increments.
+provider contracts do not enter production composition. Invocation-state cases
+also prove exact canonical evidence, the unchanged lease deadline, one-use
+consumption through the existing adapter port, rejected-delta atomicity and
+execution isolation. Actual API-call integration and Bedrock remain separate
+increments.

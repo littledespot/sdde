@@ -28,6 +28,7 @@ const evidence = @import("../application/reference_evidence_workflow.zig");
 const identity_source = @import("../ports/reference_state_identity.zig");
 const extraction = @import("../application/reference_extraction_workflow.zig");
 const path_tokens = @import("../application/path_token_workflow.zig");
+const passive_literals = @import("../application/passive_literal_workflow.zig");
 
 /// Composition of native implementations, not a workflow graph. No setup action
 /// executes until the selected YAML reaches its registered operation.
@@ -65,6 +66,7 @@ pub const Assembly = struct {
     validate_reference_chunks: evidence.ValidateChunks,
     validate_source_citations: evidence.ValidateCitations,
     parse_reference_extraction: extraction.Parse,
+    validate_extraction_text: extraction.ValidateText,
     validate_reference_claims: extraction.Validate,
     assign_reference_claims: extraction.Assign,
     build_reference_extraction: extraction.Build,
@@ -72,8 +74,11 @@ pub const Assembly = struct {
     compile_naming: path_tokens.Compile,
     build_path_grammar: path_tokens.Build,
     scan_path_tokens: path_tokens.Scan,
+    scan_passive_literals: passive_literals.Scan,
+    assign_passive_literals: passive_literals.Assign,
+    validate_passive_literals: passive_literals.Validate,
     model_requests: model_request.Assembly,
-    entries: [core.entries.len + 40 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 44 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -111,6 +116,7 @@ pub const Assembly = struct {
             .validate_reference_chunks = .{ .allocator = allocator },
             .validate_source_citations = .{ .allocator = allocator },
             .parse_reference_extraction = .{ .allocator = allocator },
+            .validate_extraction_text = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
             .validate_reference_claims = .{ .allocator = allocator },
             .assign_reference_claims = .{ .allocator = allocator },
             .build_reference_extraction = .{ .allocator = allocator },
@@ -118,6 +124,9 @@ pub const Assembly = struct {
             .compile_naming = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder } },
             .build_path_grammar = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder } },
             .scan_path_tokens = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } },
+            .scan_passive_literals = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } },
+            .assign_passive_literals = .{ .allocator = allocator },
+            .validate_passive_literals = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } },
             .model_requests = undefined,
             .entries = undefined,
             .registry = undefined,
@@ -157,6 +166,7 @@ pub const Assembly = struct {
             entry(evidence.ValidateChunks, &self.validate_reference_chunks),
             entry(evidence.ValidateCitations, &self.validate_source_citations),
             entry(extraction.Parse, &self.parse_reference_extraction),
+            entry(extraction.ValidateText, &self.validate_extraction_text),
             entry(extraction.Validate, &self.validate_reference_claims),
             entry(extraction.Assign, &self.assign_reference_claims),
             entry(extraction.Build, &self.build_reference_extraction),
@@ -164,6 +174,9 @@ pub const Assembly = struct {
             entry(path_tokens.Compile, &self.compile_naming),
             entry(path_tokens.Build, &self.build_path_grammar),
             entry(path_tokens.Scan, &self.scan_path_tokens),
+            entry(passive_literals.Scan, &self.scan_passive_literals),
+            entry(passive_literals.Assign, &self.assign_passive_literals),
+            entry(passive_literals.Validate, &self.validate_passive_literals),
         };
         self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{} };
     }
@@ -182,7 +195,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ model_request.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ model_request.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.toolchain@1",
     .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },

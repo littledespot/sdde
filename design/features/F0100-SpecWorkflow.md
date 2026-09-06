@@ -270,26 +270,29 @@ second required user workflow. Closed clarification files remain untouched.
 
 ### 3.5 Extraction-candidate accounting
 
-Five registered operations keep this boundary explicit in the selected YAML:
+Six registered operations keep this boundary explicit in the selected YAML:
 
 | Operation | Contract |
 | --- | --- |
 | `parse-reference-extraction-results@1` | Engine-scoped raw observations → closed parsed candidates. |
-| `validate-reference-claims@1` | Citable inputs and parsed candidates → structurally validated claims, ordered by engine chunk order. Reuses the same citation validator as §3.4. |
+| `validate-reference-extraction-text@1` | Parsed candidates, current toolchain, citable inputs and source-backed literal registry → text-validated candidates (§3.7). |
+| `validate-reference-claims@1` | Citable inputs and text-validated candidates → structurally validated claims, ordered by engine chunk order. Reuses the same citation validator as §3.4. |
 | `assign-reference-claim-identities@1` | Validated candidates → state-local claim/citation ordinals; no model-selected IDs. |
 | `build-reference-extraction-ledger@1` | Assigned identities → in-memory claims, citations and chunk outcomes. |
 | `validate-reference-extraction-accounting@1` | Citable inputs and ledger → exact total chunk/claim/citation coverage, with explicit `ok` or `blocked`; malformed coverage fails. |
 
 The current lossless-Markdown candidate body is exactly one JSON object:
 `{kind: claims, claims: [...], token_classifications: []}` or
-`{kind: no_feature_claim, reason: nonempty-text, token_classifications: []}`.
+`{kind: no_feature_claim, reason: ReferenceSemanticText, token_classifications: []}`.
 These are shape descriptions, not literal JSON examples. Each claim has only
 `content: {kind, text}` and a nonempty `citations` collection using §3.4's typed
 proposal shape. Content kinds are `business`, `design`, `technical`,
 `validation`, `implementation_assumption`, `open_question` and `scope_guard`.
-Text remains unreviewed interpretation, **not validated BusinessText or accepted
-requirements**. Unknown/duplicate fields, unsupported kinds, forged IDs,
-missing fields and nonempty token classifications are rejected.
+`business` and `scope_guard` use `BusinessText`; other kinds use
+`ReferenceSemanticText`. Text validation establishes syntax and permitted
+references, **not accepted meaning or requirements**. Unknown/duplicate fields,
+unsupported kinds, forged IDs, missing fields, legacy raw strings and nonempty
+token classifications are rejected.
 
 State/chunk scope and `blocked: extraction_failed` are engine observations,
 never model body fields. Every supplied chunk needs exactly one claims,
@@ -301,20 +304,20 @@ fresh reference state and follow chunk/claim/citation order; response arrival
 order cannot change them. No ID counters or ledgers are persisted.
 
 This is not the complete `result.reference-claims/v1` production contract:
-structured-token candidate generation/classification, passive-literal and
-business-text validation, semantic support, reconciliation and publication are
+structured-token candidate generation/classification, semantic support,
+business-boundary review, reconciliation and publication are
 still required before these candidates can become reference authority. The
 current reader supplies no structured-token candidates; empty classifications
 are explicit, not an invitation to ignore future candidates. There is no live
 model producer or hidden prompt/schema resource. Native values own their data
 and retain only execution-local predecessors; they impose no model-call byte
-ceiling. The test-only YAML path runs the five operations with scripted results
+ceiling. The test-only YAML path runs the six operations with scripted results
 and does not write artifacts, accept clarifications or mark a stage complete.
 
 ### 3.6 Shared naming-policy and path-token grammar
 
-Replacing the temporary claim strings requires the shared `BusinessText` /
-`ReferenceSemanticText` and passive-literal contracts in Design §7.1. Their
+The shared `BusinessText` / `ReferenceSemanticText` and passive-literal
+contracts follow Design §7.1. Their
 inline-literal validator must use §11's `SupersetPathTokenGrammar`, compiled
 from all resolved environment naming/extension rules, reserved/manifest names
 and current reference basenames. A unit allowlist cannot narrow that detector.
@@ -336,6 +339,8 @@ path/drive/UNC/URI forms, encoded separators/dots and policy/reference filename
 tokens. Unicode punctuation separates lexemes while path/URI punctuation stays
 internal. Matches retain end-exclusive byte spans into the owned original text;
 NFC/case folding never changes those offsets. No unit allowlist narrows scanning.
+Exact registered/reference names containing spaces or punctuation are also
+detected in full; directory tokens ending in a separator remain path-shaped.
 
 `ok` means scanning succeeded, **not** that matched text is valid or any path is
 authorized. The YAML registry remains generic. `core.reference-ingestion@1`
@@ -346,11 +351,48 @@ workflow, model calls or artifact writes.
 
 This is the native registered-rule lexical slice, not the full proposed
 environment/repository-bound grammar: RE2 rules and repository discovery remain
-unimplemented. Source examples cannot supply missing runtime authority. Next,
-replace the temporary extraction strings with shared typed text, register
-source-backed inert literals, validate exact unit-local IDs and remove the
-temporary reader. Scanning alone does not implement those validation gates or
-permit specification publication.
+unimplemented. Source examples cannot supply missing runtime authority.
+Scanning alone does not validate text or permit specification publication;
+§3.7 owns the implemented text gate.
+
+### 3.7 Typed reference text and source-backed display literals
+
+Three pure YAML operations prepare the execution-local literal registry:
+
+| Operation | Required inputs → output |
+| --- | --- |
+| `scan-reference-passive-literals@1` | Current grammar/toolchain and citable inputs → ordered source-name/block-span candidates |
+| `assign-passive-literal-identities@1` | Candidates → source-ordered IDs, deduplicated by `(kind, NFC bytes)` |
+| `validate-reference-passive-literals@1` | Assigned candidates and current inputs → `reference_passive_literals` |
+
+Validation reuses the shared detector to prove complete exact origins, values
+and allocations. Models and workflow data resources cannot register literals.
+The initial registry is an immutable in-memory reference candidate, not a
+persisted `PassiveLiteralRegistryState`; authenticated edits/answers and
+append-only persisted revisions remain outside this read-only increment.
+
+The native JSON text shapes are closed:
+
+```json
+{"segments":[{"literal":{"value":"Display "}},{"passive":{"passive_literal_id":{"ordinal":1}}}]}
+```
+
+`BusinessText` uses `segments` and permits only `literal` and `passive`.
+`ReferenceSemanticText` uses `nodes` and additionally permits
+`{"source":{"source_id":{"ordinal":1}}}`. Neither permits a project-file
+node. A passive node contains only its ID, never model-provided display bytes.
+
+`validate-reference-extraction-text@1` normalizes literal runs to NFC and rejects
+empty/control-invalid text and inline path/filename/URI matches. Adjacent literal
+segments are joined before scanning so splitting a token cannot bypass it.
+Passive IDs require an occurrence inside the exact chunk, or that chunk's source
+manifest name; source IDs must identify that same source. Unknown, stale and
+cross-unit references fail. Claim text and no-feature-claim reasons share this
+gate. Citation validation and total accounting remain separate responsibilities.
+
+The raw-string format is removed, with no dual reader. No file/network grant,
+model call, output write, clarification modification or completion transition is
+introduced. Semantic review, reconciliation and publication remain required.
 
 ## 4. Required logical coverage
 
@@ -605,6 +647,11 @@ YAML definition.
   coverage, NFC/case folding, original-byte spans, stale bindings, ownership
   and allocation failures. `zig build verify` also exercises these operations
   through renamed YAML and the packaged executable, without artifact writes;
+- `zig build test-typed-text test-reference-extraction` covers exact passive
+  origins, deduplication, stale/cross-chunk IDs, closed node shapes, legacy-string
+  rejection, split-token bypasses and allocation cleanup. Native YAML tests
+  prove the text gate cannot be skipped and preserve closed clarification bytes
+  on accepted and rejected candidates;
 - closed YAML fixtures reject missing, unknown, duplicate, and wrong-kind
   fields and every prohibited operational value;
 - compiler tests cover exact reference resolution, complete outcomes, graph

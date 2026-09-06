@@ -8,22 +8,29 @@ const validate = @import("actions/reference/validate_reference_claims.zig").Acti
 const assign = @import("actions/reference/assign_reference_claim_identities.zig").Action{};
 const build = @import("actions/reference/build_reference_extraction_ledger.zig").Action{};
 const account = @import("actions/reference/validate_reference_extraction_accounting.zig").Action{};
+const text_fixture = @import("test_fixtures/reference_text.zig");
 
-pub const no_claim = "{\"kind\":\"no_feature_claim\",\"reason\":\"This chunk contains no feature claims.\",\"token_classifications\":[]}";
+pub const no_claim = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"literal\":{\"value\":\"This chunk contains no feature claims.\"}}]},\"token_classifications\":[]}";
 
 pub fn reply(allocator: std.mem.Allocator, chunk: evidence.Chunk, text: []const u8) ![]const u8 {
-    const claim: extraction.Proposal = .{
-        .content = .{ .kind = .business, .text = text },
-        .citations = &.{.{ .source_id = chunk.source_id, .block_id = chunk.block_id, .location = chunk.span, .verbatim = null }},
+    const claim = .{
+        .content = .{ .kind = "business", .text = extraction.text.BusinessText{ .segments = &.{.{ .literal = .{ .value = text } }} } },
+        .citations = [_]evidence.CitationProposal{.{ .source_id = chunk.source_id, .block_id = chunk.block_id, .location = chunk.span, .verbatim = null }},
     };
     return std.json.Stringify.valueAlloc(allocator, .{ .kind = "claims", .claims = &.{claim}, .token_classifications = [0]struct {}{} }, .{});
+}
+pub fn passiveReply(allocator: std.mem.Allocator, chunk: evidence.Chunk, ordinal: u32) ![]const u8 {
+    return std.json.Stringify.valueAlloc(allocator, .{ .kind = "claims", .claims = &.{.{
+        .content = .{ .kind = "business", .text = extraction.text.BusinessText{ .segments = &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = ordinal } } }} } },
+        .citations = [_]evidence.CitationProposal{.{ .source_id = chunk.source_id, .block_id = chunk.block_id, .location = chunk.span, .verbatim = null }},
+    }}, .token_classifications = [0]struct {}{} }, .{});
 }
 fn raw(inputs: evidence.Inputs, index: usize, bytes: []const u8) extraction.RawResult {
     return .{ .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[index].id }, .result = .{ .response = bytes } };
 }
 fn finish(allocator: std.mem.Allocator, inputs: evidence.Inputs, results: []const extraction.RawResult) !extraction.Accounted {
     const parsed = try parse.execute(allocator, .{ .entries = results });
-    const valid = try validate.execute(allocator, inputs, parsed);
+    const valid = try validate.execute(allocator, inputs, try text_fixture.check(allocator, inputs, parsed));
     return account.execute(inputs, try build.execute(allocator, try assign.execute(allocator, valid)));
 }
 
@@ -76,10 +83,10 @@ test "every chunk needs exactly one result and engine order owns assignments" {
     for ([_][]const extraction.RawResult{ &.{}, &.{first}, &.{ first, first }, &.{ first, second, second } }) |results| try std.testing.expectError(error.InvalidReferenceExtraction, finish(allocator, inputs, results));
     var foreign = second;
     foreign.scope.state_id.bytes = "another-state";
-    try std.testing.expectError(error.InvalidReferenceExtraction, finish(allocator, inputs, &.{ first, foreign }));
+    try std.testing.expectError(error.InvalidSourceCitation, finish(allocator, inputs, &.{ first, foreign }));
     foreign = second;
     foreign.scope.chunk_id.bytes = "chunk-999";
-    try std.testing.expectError(error.InvalidReferenceExtraction, finish(allocator, inputs, &.{ first, foreign }));
+    try std.testing.expectError(error.InvalidSourceCitation, finish(allocator, inputs, &.{ first, foreign }));
     const empty = raw(inputs, 1, no_claim);
     try std.testing.expectEqual(.complete, (try finish(allocator, inputs, &.{ first, empty })).outcome);
     var blocked = second;
@@ -95,10 +102,9 @@ test "positive no claim evidence and valid citations are mandatory" {
     const allocator = arena.allocator();
     var ids: fixture.IdSource = .{};
     const inputs = try fixture.prepare(allocator, &ids, try ingest(allocator, "unicode.md", "Café\r\n"));
-    for ([_][]const u8{
-        "{\"kind\":\"claims\",\"claims\":[],\"token_classifications\":[]}",
-        "{\"kind\":\"no_feature_claim\",\"reason\":\"  \",\"token_classifications\":[]}",
-    }) |bytes| try std.testing.expectError(error.InvalidReferenceExtraction, finish(allocator, inputs, &.{raw(inputs, 0, bytes)}));
+    try std.testing.expectError(error.InvalidReferenceExtraction, finish(allocator, inputs, &.{raw(inputs, 0, "{\"kind\":\"claims\",\"claims\":[],\"token_classifications\":[]}")}));
+    const empty_reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"literal\":{\"value\":\"  \"}}]},\"token_classifications\":[]}";
+    try std.testing.expectError(error.InvalidTypedText, finish(allocator, inputs, &.{raw(inputs, 0, empty_reason)}));
     const parsed = try parse.execute(allocator, .{ .entries = &.{raw(inputs, 0, try reply(allocator, inputs.chunks.entries[0], "claim"))} });
     var entry = parsed.entries[0];
     var claim = entry.outcome.claims[0];
@@ -106,13 +112,13 @@ test "positive no claim evidence and valid citations are mandatory" {
     citation.verbatim = "Cafe\r\n";
     claim.citations = &.{citation};
     entry.outcome = .{ .claims = &.{claim} };
-    try std.testing.expectError(error.InvalidSourceCitation, validate.execute(allocator, inputs, .{ .entries = &.{entry} }));
+    try std.testing.expectError(error.InvalidSourceCitation, validate.execute(allocator, inputs, try text_fixture.check(allocator, inputs, .{ .entries = &.{entry} })));
     claim.citations = &.{};
     entry.outcome = .{ .claims = &.{claim} };
-    try std.testing.expectError(error.InvalidSourceCitation, validate.execute(allocator, inputs, .{ .entries = &.{entry} }));
-    claim.content.text = " \t";
+    try std.testing.expectError(error.InvalidSourceCitation, validate.execute(allocator, inputs, try text_fixture.check(allocator, inputs, .{ .entries = &.{entry} })));
+    claim.content.business = .{ .segments = &.{.{ .literal = .{ .value = " \t" } }} };
     entry.outcome = .{ .claims = &.{claim} };
-    try std.testing.expectError(error.InvalidReferenceExtraction, validate.execute(allocator, inputs, .{ .entries = &.{entry} }));
+    try std.testing.expectError(error.InvalidTypedText, text_fixture.check(allocator, inputs, .{ .entries = &.{entry} }));
 }
 
 test "final accounting rejects omitted orphan duplicate and foreign identity joins" {
@@ -181,7 +187,14 @@ fn ownershipCase(allocator: std.mem.Allocator) !void {
     {
         const next = try owned.create(allocator, owned.view(current));
         errdefer owned.destroy(next);
-        next.payload = .{ .validated = try validate.execute(next.arena.allocator(), inputs, current.payload.parsed) };
+        next.payload = .{ .text_validated = try text_fixture.check(next.arena.allocator(), inputs, current.payload.parsed) };
+        owned.destroy(current);
+        current = next;
+    }
+    {
+        const next = try owned.create(allocator, owned.view(current));
+        errdefer owned.destroy(next);
+        next.payload = .{ .validated = try validate.execute(next.arena.allocator(), inputs, current.payload.text_validated) };
         owned.destroy(current);
         current = next;
     }
@@ -216,7 +229,7 @@ fn ownershipCase(allocator: std.mem.Allocator) !void {
     var view: @import("domain/pipeline_data.zig").View = .{};
     view.slots[@intFromEnum(bindings.accounted_schema.key)] = value;
     const retained = try bindings.read(&view, bindings.accounted_schema, .accounted);
-    try std.testing.expectEqualStrings("Retained claim", retained.payload().accounted.ledger.claims[0].content.text);
+    try std.testing.expectEqualStrings("Retained claim", retained.payload().accounted.ledger.claims[0].content.business.value.segments[0].literal.value);
     try std.testing.expectEqualStrings("chunk-1", retained.payload().accounted.ledger.claims[0].chunk_id.bytes);
     try std.testing.expectEqualStrings("A quoted requirement.\r\n", retained.payload().accounted.ledger.citations[0].value.verbatim.?);
 }

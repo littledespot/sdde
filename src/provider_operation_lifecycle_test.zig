@@ -6,7 +6,7 @@ const identity = @import("domain/model_request_identity.zig");
 const pipeline = @import("domain/pipeline.zig");
 const requests_module = @import("model_request_identity_runner_test_fixture.zig");
 const attempts_module = @import("model_attempt_test_fixture.zig");
-const lifecycle_runner = @import("application/provider_operation_lifecycle_runner.zig");
+const lifecycle_runner = @import("provider_operation_lifecycle_runner_test_fixture.zig");
 const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
 const AuthorizationFixture = @import("provider_authorization_test_fixture.zig").Fixture;
 

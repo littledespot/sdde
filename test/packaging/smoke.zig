@@ -190,6 +190,30 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_request_lifecycle.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
     denied_authorization.step.dependOn(&denied_request_lifecycle.step);
 
+    const missing_invocation_directory = b.addTempFiles();
+    const missing_invocation_executable = missing_invocation_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_invocation_directory.add(".sddtoolkit.json", configuration);
+    _ = missing_invocation_directory.add(".sddtoolkit/workflows/advance-operation.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: advance-operation
+        \\version: 1
+        \\shortcode: AOPR
+        \\invoke: core.empty-invocation@1
+        \\policy: core.capability-free@1
+        \\start: advance
+        \\steps:
+        \\  advance: { use: advance-provider-operation-lifecycle@1, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
+    );
+    const denied_operation_lifecycle = std.Build.Step.Run.create(b, "reject packaged provider invocation without its prepared lease and assigned operation");
+    denied_operation_lifecycle.addFileArg(missing_invocation_executable);
+    denied_operation_lifecycle.addArg("advance-operation");
+    denied_operation_lifecycle.setCwd(missing_invocation_directory.getDirectory());
+    denied_operation_lifecycle.clearEnvironment();
+    denied_operation_lifecycle.expectExitCode(1);
+    denied_operation_lifecycle.expectStdOutEqual("");
+    denied_operation_lifecycle.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_request_lifecycle.step.dependOn(&denied_operation_lifecycle.step);
+
     const denied_toolchain = std.Build.Step.Run.create(b, "reject invalid toolchain only when selected");
     denied_toolchain.addFileArg(packaged_executable);
     denied_toolchain.addArg("toolchain-check");
@@ -224,6 +248,18 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     path_token_command.expectStdOutEqual("");
     path_token_command.expectStdErrEqual("");
 
+    const literal_yaml = @import("../../src/test_fixtures/reference_text_workflow.zig").yaml(b.allocator) catch @panic("build passive-literal fixture");
+    const named_literal_yaml = std.mem.replaceOwned(u8, b.allocator, literal_yaml, "id: reference-ingestion", "id: display-literals") catch @panic("name passive-literal fixture");
+    const distinct_literal_yaml = std.mem.replaceOwned(u8, b.allocator, named_literal_yaml, "shortcode: RING", "shortcode: LITR") catch @panic("name passive-literal log scope");
+    _ = toolchain_directory.add(".sddtoolkit/workflows/display-literals.workflow.yaml", distinct_literal_yaml);
+    const literal_command = std.Build.Step.Run.create(b, "run packaged source-backed passive-literal preparation");
+    literal_command.addFileArg(toolchain_executable);
+    literal_command.addArgs(&.{ "display-literals", "--feature", "Literal/Example", "--reference", "Hello" });
+    literal_command.setCwd(toolchain_directory.getDirectory());
+    literal_command.clearEnvironment();
+    literal_command.expectStdOutEqual("");
+    literal_command.expectStdErrEqual("");
+
     const missing_config_directory = b.addTempFiles();
     const reference_command = std.Build.Step.Run.create(b, "run packaged config-root-relative feature and Unicode reference preflight");
     reference_command.addFileArg(packaged_executable);
@@ -256,6 +292,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     missing_config_command.step.dependOn(&denied_toolchain.step);
     missing_config_command.step.dependOn(&toolchain_command.step);
     missing_config_command.step.dependOn(&path_token_command.step);
+    missing_config_command.step.dependOn(&literal_command.step);
     missing_config_command.step.dependOn(&reference_command.step);
     missing_config_command.step.dependOn(&denied_reference.step);
     for ([_]struct { selector: []const u8, rejected: bool }{

@@ -1,10 +1,10 @@
 const std = @import("std");
-const advance_action = @import("../actions/model/advance_provider_operation_lifecycle.zig");
-const lifecycle = @import("../domain/provider_operation_lifecycle.zig");
-const identity = @import("../domain/model_request_identity.zig");
-const provider = @import("../domain/llm_provider_operation.zig");
-const pipeline = @import("../domain/pipeline.zig");
-const authorization = @import("provider_authorization_lease_table.zig");
+const advance_action = @import("actions/model/advance_provider_operation_lifecycle.zig");
+const lifecycle = @import("domain/provider_operation_lifecycle.zig");
+const identity = @import("domain/model_request_identity.zig");
+const provider = @import("domain/llm_provider_operation.zig");
+const pipeline = @import("domain/pipeline.zig");
+const authorization = @import("application/provider_authorization_lease_table.zig");
 
 pub const Runner = struct {
     owner: *lifecycle.Owner,

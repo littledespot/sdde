@@ -21,16 +21,14 @@ pub const Action = struct {
             if (!entry.scope.state_id.eql(ledger.state_id) or !entry.scope.chunk_id.eql(chunk.id)) return error.InvalidReferenceExtraction;
             switch (entry.outcome) {
                 .blocked => blocked = true,
-                .no_feature_claim => |reason| if (!extraction.nonempty(reason)) {
-                    return error.InvalidReferenceExtraction;
-                },
+                .no_feature_claim => {},
                 .claims => |ids| {
                     if (ids.len == 0) return error.InvalidReferenceExtraction;
                     for (ids) |id| {
                         if (claim_index >= ledger.claims.len or id.ordinal != claim_index + 1) return error.InvalidReferenceExtraction;
                         const claim = ledger.claims[claim_index];
                         claim_index += 1;
-                        if (claim.id.ordinal != id.ordinal or !claim.chunk_id.eql(chunk.id) or claim.citation_ids.len == 0 or !extraction.nonempty(claim.content.text)) return error.InvalidReferenceExtraction;
+                        if (claim.id.ordinal != id.ordinal or !claim.chunk_id.eql(chunk.id) or claim.citation_ids.len == 0) return error.InvalidReferenceExtraction;
                         for (claim.citation_ids) |citation_id| {
                             if (citation_index >= ledger.citations.len or citation_id.ordinal != citation_index + 1) return error.InvalidReferenceExtraction;
                             const citation = ledger.citations[citation_index];

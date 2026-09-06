@@ -138,6 +138,21 @@ unchanged. Provider-operation state remains `assigned`; this in-memory change
 is not an API call or evidence of delivery. No new ledger, capability, timeout,
 retry, token charge or persistence is introduced.
 
+**Implemented YAML provider-operation invocation state:**
+`advance-provider-operation-lifecycle@1` requires `transition: invoked`, an
+already-invoked logical request, its applied attempt, assigned operation and
+prepared authorization. It reuses the existing lifecycle action; the runner
+binds the lease's original deadline, validates the exact proposal, and publishes
+sealed `invoked_provider_operation` evidence while invalidating the consumed
+assignment evidence. This view retains the canonical `InvokedProviderOperation`
+and its owners; it copies no operation authority. Failed, cancelled, expired,
+foreign, stale, duplicate or deadline-altered proposals cannot publish state or
+evidence. Cancellation and authorization are rechecked after candidate-evidence
+allocation and before publication.
+The lease remains unconsumed for the later explicit provider call. This step
+makes no API call or delivery claim, charges no tokens, and adds no timeout,
+retry, persistence or recovery mechanism. Terminalization remains separate work.
+
 A consumer declares the prepared-request and request-ledger data dependencies;
 the runner supplies the retained binding, not a new selection for the consumer
 step. Slot/resource/control overrides reject. The existing compiler proves the
@@ -168,7 +183,8 @@ steps:
   account: { use: advance-model-attempt-accounting@1, with: { retry-limit: 0 }, on: { ok: operation, failed: end.failed } }
   operation: { use: assign-provider-operation@1, with: { kind: inference }, on: { ok: authorize, failed: end.failed } }
   authorize: { use: prepare-provider-operation-authorization@1, with: { timeout-ms: 1000 }, on: { ok: advance-request, failed: end.failed, cancelled: end.cancelled } }
-  advance-request: { use: advance-model-request-lifecycle@1, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
+  advance-request: { use: advance-model-request-lifecycle@1, with: { transition: invoked }, on: { ok: advance-operation, failed: end.failed } }
+  advance-operation: { use: advance-provider-operation-lifecycle@1, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
 ```
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
@@ -705,8 +721,8 @@ checks the proposal against the retained request, and publishes the successor
 and evidence together only after envelope validation. Removing evidence cannot
 erase an open operation or reset an attempt. Assignment is not invocation or a
 lease: authorization preparation is a separate implemented YAML operation;
-Logical-request invocation state is also YAML-integrated; provider-operation
-invocation and terminalization integration remain separate work.
+Logical-request and provider-operation invocation state are also YAML-integrated;
+terminalization and actual provider calls remain separate integration work.
 Execution cleanup discards its in-memory records, never resumes
 or persists them.
 
@@ -1193,6 +1209,13 @@ F0006 does not:
     ledger successor, with prepared-lease guards before execution/publication;
     stale snapshots, wrong requests, disguised assignments and skipped revisions
     reject without publishing an invocation state or performing a provider call.
+    YAML provider-operation invocation requires that applied logical-request
+    state and the original prepared lease deadline. Only runner application
+    publishes canonical invoked evidence and invalidates assignment evidence.
+    Forged transitions, deadline replacement, stale/foreign evidence, duplicate
+    invocation, rejected deltas and cancellation cannot publish a successor.
+    Both operation kinds retain the unconsumed lease and zero token usage;
+    allocation failures and retained-evidence destruction release owners once.
 13. Each call performs zero or one provider request with no hidden retry,
     fallback, backoff, credential acquisition/refresh, or second operation;
     any permitted credential I/O has separate accepted accounting.

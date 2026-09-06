@@ -8,9 +8,11 @@ flowchart TD
     DECODE --> CHUNKS["Prepare bounded, citable chunks"]
     NAMING["Compile every selected toolchain naming rule"] --> GRAMMAR["Build shared path-token grammar;<br/>include every captured reference basename"]
     CHUNKS --> GRAMMAR
-    GRAMMAR -. "Typed-text validation input" .-> ACCOUNT
+    GRAMMAR --> LITERALS["Scan source-backed display literals;<br/>assign IDs and validate exact origins"]
+    LITERALS --> TEXT["Validate typed extraction text;<br/>reject inline paths and out-of-scope IDs"]
     CHUNKS --> EXTRACT["Extract candidate claims, context and exact values"]
-    EXTRACT --> ACCOUNT["Validate citations and source coverage;<br/>account for chunks containing no relevant claims"]
+    EXTRACT --> TEXT
+    TEXT --> ACCOUNT["Validate citations and source coverage;<br/>account for chunks containing no relevant claims"]
     ACCOUNT -->|Valid| RECONCILE["Reconcile meaning across the complete reference set;<br/>apply current validated clarification answers"]
     RECONCILE --> CHECK{"Required meaning supported and conflicts resolved?"}
     CHECK -->|Yes| CANDIDATE["Retain validated reference inputs<br/>for subsequent workflow steps"]
@@ -22,6 +24,8 @@ flowchart TD
     CAPTURE -->|Failed| FAILED
     DECODE -->|Incomplete or invalid| FAILED
     ACCOUNT -->|Invalid| FAILED
+    TEXT -->|Invalid| FAILED
+    LITERALS -->|Invalid or stale| FAILED
 ```
 
 Citation checks establish where content came from. Semantic interpretation is
@@ -31,5 +35,6 @@ clarifications are retained when a new run is needed.
 
 The registered naming compiler, grammar builder and detector are implemented.
 Scanning returns byte spans, not file authority or validated business text.
-Typed-text/passive-literal validation and full environment/repository bindings
-remain separate work. See [F0100 §3.6](../features/F0100-SpecWorkflow.md#36-shared-naming-policy-and-path-token-grammar).
+Typed-text/passive-literal validation is implemented for execution-local
+reference candidates; full environment/repository bindings, semantic review and
+publication remain separate work. See [F0100 §§3.6–3.7](../features/F0100-SpecWorkflow.md#36-shared-naming-policy-and-path-token-grammar).

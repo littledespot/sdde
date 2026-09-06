@@ -4,8 +4,10 @@ const json = @import("strict_json.zig");
 
 // Native candidate decoding for the lossless Markdown reader, which currently
 // supplies no structured-token candidates. Never silently discard classifications.
-const Claims = struct { kind: enum { claims }, claims: []const extraction.Proposal, token_classifications: [0]struct {} };
-const NoClaim = struct { kind: enum { no_feature_claim }, reason: []const u8, token_classifications: [0]struct {} };
+const Content = struct { kind: std.meta.Tag(extraction.ProposalContent), text: std.json.Value };
+const Claim = struct { content: Content, citations: []const @import("reference_evidence.zig").CitationProposal };
+const Claims = struct { kind: enum { claims }, claims: []const Claim, token_classifications: [0]struct {} };
+const NoClaim = struct { kind: enum { no_feature_claim }, reason: extraction.text.ReferenceSemanticText, token_classifications: [0]struct {} };
 
 /// Caller arena owns all decoded strings/collections; no partial value escapes.
 pub fn parse(allocator: std.mem.Allocator, raw: extraction.Raw) extraction.Error!extraction.Parsed {
@@ -25,7 +27,14 @@ pub fn parse(allocator: std.mem.Allocator, raw: extraction.Raw) extraction.Error
                 if (kind != .string) return error.InvalidReferenceExtraction;
                 if (std.mem.eql(u8, kind.string, "claims")) {
                     const decoded = std.json.parseFromSliceLeaky(Claims, allocator, bytes, .{ .allocate = .alloc_always, .max_value_len = bytes.len }) catch |err| return mapError(err);
-                    break :outcome .{ .claims = decoded.claims };
+                    const claims = try allocator.alloc(extraction.Proposal, decoded.claims.len);
+                    for (decoded.claims, claims) |claim, *proposal| {
+                        proposal.citations = claim.citations;
+                        proposal.content = switch (claim.content.kind) {
+                            inline else => |tag| @unionInit(extraction.ProposalContent, @tagName(tag), std.json.parseFromValueLeaky(@FieldType(extraction.ProposalContent, @tagName(tag)), allocator, claim.content.text, .{ .allocate = .alloc_always, .max_value_len = bytes.len }) catch |err| return mapError(err)),
+                        };
+                    }
+                    break :outcome .{ .claims = claims };
                 } else if (std.mem.eql(u8, kind.string, "no_feature_claim")) {
                     const decoded = std.json.parseFromSliceLeaky(NoClaim, allocator, bytes, .{ .allocate = .alloc_always, .max_value_len = bytes.len }) catch |err| return mapError(err);
                     break :outcome .{ .no_feature_claim = decoded.reason };

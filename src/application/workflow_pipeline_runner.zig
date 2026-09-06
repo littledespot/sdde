@@ -28,11 +28,13 @@ const authorization_result = @import("../domain/provider_authorization_result.zi
 const lease = @import("../ports/provider_authorization_lease.zig");
 const request_lifecycle_selection = @import("../domain/workflow_model_request_lifecycle.zig");
 const request_lifecycle_binding = @import("workflow_model_request_lifecycle.zig");
+const provider = @import("../domain/llm_provider_operation.zig");
 
 const ExpectedAccounting = union(enum) {
     none,
     attempt: attempt.Attempt,
-    assignment: @import("../domain/llm_provider_operation.zig").ProviderOperationKind,
+    assignment: provider.ProviderOperationKind,
+    invocation: lifecycle.Invocation,
 };
 
 pub const Runner = struct {
@@ -136,6 +138,7 @@ pub const Runner = struct {
         } else if (step.model != null) return .{ .outcome = .failed };
         const input_data = self.envelope.view(stepPipelineContract(step.*)) catch return .{ .outcome = .invalid };
         const advances_request = request_lifecycle_selection.advances(step.replaces, step.produces);
+        const invokes_operation = operation_selection.invokes(step.produces);
         if (self.model_accounting) |state| {
             if (input_data.contains(.model_request_identity_ledger)) {
                 const current = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
@@ -163,16 +166,27 @@ pub const Runner = struct {
             if (evidence.requestId() != request.id() or current.attemptsReserved(request.id()) != evidence.ordinal().value or
                 !current.stageRunEpochId().eql(request.id().stage_run_epoch_id)) return .{ .rejected = .authority };
         }
-        if (input_data.slots[@intFromEnum(pipeline.DataKey.assigned_provider_operation)] != null) {
+        var operation_id: ?provider.ProviderOperationId = null;
+        var authorization_deadline: ?u64 = null;
+        if (input_data.contains(.assigned_provider_operation)) {
             const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
             const evidence = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
             const request = retained_request orelse return .{ .rejected = .authority };
             state.validateAssignment(evidence, request.prepared().?) catch return .{ .rejected = .authority };
-            if (input_data.contains(.provider_authorization_result)) {
-                const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
-                authorization_binding.validateConsumer(&state.authorization_leases, result, request, evidence.record().id, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return authorizationRejected(err);
-                if (advances_request) authorization_binding.requirePrepared(result) catch |err| return authorizationRejected(err);
-            }
+            operation_id = evidence.record().id;
+        }
+        if (input_data.contains(.invoked_provider_operation)) {
+            if (operation_id != null) return .{ .rejected = .authority };
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
+            const evidence = (values.read(&input_data, model_accounting.invoked_schema, lifecycle.InvokedOperation) catch return .{ .rejected = .authority }).operation();
+            state.validateInvocation(evidence, (retained_request orelse return .{ .rejected = .authority }).prepared().?) catch return .{ .rejected = .authority };
+            operation_id = evidence.id;
+        }
+        if (input_data.contains(.provider_authorization_result)) {
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
+            const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
+            authorization_deadline = authorization_binding.validateConsumer(&state.authorization_leases, result, retained_request orelse return .{ .rejected = .authority }, operation_id orelse return .{ .rejected = .authority }, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return authorizationRejected(err);
+            if (advances_request or invokes_operation) authorization_binding.requirePrepared(result) catch |err| return authorizationRejected(err);
         }
         var resolved_binding = self.resolveModelBinding(step.*) catch {
             return .{ .outcome = .failed };
@@ -204,9 +218,15 @@ pub const Runner = struct {
         if (step.runner_accounting == .advance_provider_operation) {
             const current_requests = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
             const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
-            const kind = operation_selection.resolve(step.parameters) orelse return .{ .rejected = .authority };
             provider_input = .{ .ledger = state.current_operations, .authority = state.operationAuthority(current_requests) };
-            expected = .{ .assignment = kind };
+            if (invokes_operation) {
+                if (!operation_selection.invokesTransition(step.parameters)) return .{ .rejected = .authority };
+                const invocation: lifecycle.Invocation = .{ .deadline_monotonic_ms = authorization_deadline orelse return .{ .rejected = .authority } };
+                provider_input.?.invocation = invocation;
+                expected = .{ .invocation = invocation };
+            } else {
+                expected = .{ .assignment = operation_selection.resolve(step.parameters) orelse return .{ .rejected = .authority } };
+            }
         }
         if (step.retry_authority) |authority| {
             if (self.retry_execution_counts[index] > @as(u64, authority.limit.value)) return .{ .outcome = .failed };
@@ -244,7 +264,8 @@ pub const Runner = struct {
         if (advances_request) {
             const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
             const assigned = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
-            authorization_binding.validateConsumer(&self.model_accounting.?.authorization_leases, result, retained_request.?, assigned.record().id, self.provider_clock.?, self.runtime) catch |err| return authorizationRejected(err);
+            const deadline = authorization_binding.validateConsumer(&self.model_accounting.?.authorization_leases, result, retained_request.?, assigned.record().id, self.provider_clock.?, self.runtime) catch |err| return authorizationRejected(err);
+            if (deadline != authorization_deadline) return .{ .rejected = .authority };
         }
         const prepared = if (authorization) |bound| prepared: {
             const result = values.read(&.{ .slots = candidate.delta.data_writes }, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
@@ -320,6 +341,7 @@ pub const Runner = struct {
             const key = @intFromEnum(@as(pipeline.DataKey, switch (expected) {
                 .attempt => .accounted_model_attempt,
                 .assignment => .assigned_provider_operation,
+                .invocation => .invoked_provider_operation,
                 .none => unreachable,
             }));
             // Only application of the declared runner transition creates evidence.
@@ -337,10 +359,22 @@ pub const Runner = struct {
                     if (transition != .advance_provider_operation) return .{ .outcome = .invalid };
                     pending = state.prepareAssignment(current, request.prepared().?, kind, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .outcome = .invalid };
                 },
+                .invocation => |invocation| {
+                    if (transition != .advance_provider_operation or !candidate.delta.data_invalidations.contains(.assigned_provider_operation)) return .{ .outcome = .invalid };
+                    const assigned = values.read(&view, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
+                    pending = state.prepareInvocation(current, request.prepared().?, assigned, invocation, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .outcome = .invalid };
+                },
                 .none => unreachable,
             }
             candidate.delta.data_writes[key] = pending.?.value;
+            if (expected == .invocation) {
+                const result = values.read(&view, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
+                const assigned = values.read(&view, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
+                const deadline = authorization_binding.validateConsumer(&state.authorization_leases, result, request, assigned.record().id, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return authorizationRejected(err);
+                if (deadline != expected.invocation.deadline_monotonic_ms) return .{ .rejected = .authority };
+            }
         }
+        if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         self.envelope.apply(contract, &candidate.delta, candidate.outcome) catch return .{ .outcome = .invalid };
         if (request_owner) |owner| {
             self.model_accounting.?.replaceRequests(owner);

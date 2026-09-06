@@ -1424,7 +1424,16 @@ rejects stale, foreign, duplicate, skipped or assignment-disguised updates.
 Authorization is rechecked before publication; rejection preserves the prior
 ledger. The prepared request, attempt and lease are unchanged and the provider
 operation remains assigned. This step performs no API call or token accounting;
-provider-operation invocation and request closure remain separate YAML work.
+actual API calls and request closure remain separate YAML work.
+
+Native `advance-provider-operation-lifecycle@1` with `transition: invoked`
+advances the assigned operation under that invoked request. The runner binds
+the existing prepared lease's original deadline and validates the lifecycle
+proposal before publishing canonical invoked-operation evidence and invalidating
+assignment evidence together. Stale/foreign/duplicate evidence, altered
+deadlines, cancellation and rejected deltas cannot publish a successor. The
+lease remains unconsumed; no API call, token charge, new timeout or persistence
+occurs. Provider-operation terminalization remains separate integration work.
 
 Each workflow-declared result schema defines the entire compact response;
 there is no generic open payload or repeated engine metadata. Repair operations

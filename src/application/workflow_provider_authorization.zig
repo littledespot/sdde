@@ -34,7 +34,7 @@ pub const Binding = struct {
             .prepared => |reference| {
                 if (outcome != .ok) return error.AuthorizationDenied;
                 try self.table.validatePublication(self.slot, reference);
-                try self.table.validateReference(reference, self.facts.provider_binding, self.facts.request, self.facts.operation_id, currentTime(self.clock, self.runtime));
+                _ = try self.table.validateReference(reference, self.facts.provider_binding, self.facts.request, self.facts.operation_id, currentTime(self.clock, self.runtime));
                 return true;
             },
             .failed => |failure| {
@@ -50,12 +50,13 @@ pub const Binding = struct {
     }
 };
 
-pub fn validateConsumer(table: *table_module.Table, value: *const result.Result, request: *const handoff.Request, id: provider.ProviderOperationId, clock: lease.Clock, runtime: pipeline.NodeRuntime) lease.Error!void {
+pub fn validateConsumer(table: *table_module.Table, value: *const result.Result, request: *const handoff.Request, id: provider.ProviderOperationId, clock: lease.Clock, runtime: pipeline.NodeRuntime) lease.Error!?u64 {
     switch (value.outcome().*) {
-        .prepared => |reference| try table.validateReference(reference, request.binding(), request.prepared().?, id, currentTime(clock, runtime)),
+        .prepared => |reference| return try table.validateReference(reference, request.binding(), request.prepared().?, id, currentTime(clock, runtime)),
         .failed => |failure| try validateFailure(failure, id),
         .cancelled => |operation_id| if (!operation_id.eql(id)) return error.AuthorizationDenied,
     }
+    return null;
 }
 
 pub fn requirePrepared(value: *const result.Result) lease.Error!void {

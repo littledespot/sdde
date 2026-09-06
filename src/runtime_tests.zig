@@ -8,6 +8,7 @@ test {
     _ = @import("reference_evidence_test.zig");
     _ = @import("reference_extraction_test.zig");
     _ = @import("path_token_test.zig");
+    _ = @import("typed_text_test.zig");
     _ = @import("feature_directory_test.zig");
     _ = @import("clarification_inputs_test.zig");
     _ = @import("application/specify_invocation_orchestrator.zig");

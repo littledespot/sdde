@@ -22,10 +22,19 @@ pub fn hasInputs(keys: []const pipeline.DataKey) bool {
     return true;
 }
 
+fn hasConsumerInputs(keys: []const pipeline.DataKey) bool {
+    for (requires) |key| {
+        if (key == .assigned_provider_operation) continue;
+        if (std.mem.indexOfScalar(pipeline.DataKey, keys, key) == null) return false;
+    }
+    return (std.mem.indexOfScalar(pipeline.DataKey, keys, .assigned_provider_operation) != null) !=
+        (std.mem.indexOfScalar(pipeline.DataKey, keys, .invoked_provider_operation) != null);
+}
+
 pub fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
     if (std.mem.indexOfScalar(pipeline.DataKey, contract.replaces, .provider_authorization_result) != null) return false;
     if ((std.mem.indexOfScalar(pipeline.DataKey, contract.requires, .provider_authorization_result) != null or
-        std.mem.indexOfScalar(pipeline.DataKey, contract.optional, .provider_authorization_result) != null) and !hasInputs(contract.requires)) return false;
+        std.mem.indexOfScalar(pipeline.DataKey, contract.optional, .provider_authorization_result) != null) and !hasConsumerInputs(contract.requires)) return false;
     if (!prepares(contract.produces)) return !containsCapability(capabilities);
     if (!hasInputs(contract.requires) or !std.mem.eql(pipeline.DataKey, contract.produces, &.{.provider_authorization_result}) or
         contract.runner_accounting != .none or contract.side_effect != .none or contract.retry_limit != null or

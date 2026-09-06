@@ -26,6 +26,7 @@ const authorization_workflow = @import("application/provider_authorization_workf
 const authorization_result = @import("domain/provider_authorization_result.zig");
 const authorization_port = @import("ports/provider_operation_authorization.zig");
 const request_lifecycle_workflow = @import("application/model_request_lifecycle_workflow.zig");
+const operation_lifecycle_workflow = @import("application/provider_operation_lifecycle_workflow.zig");
 
 const yaml =
     \\schema: workflow/v1
@@ -236,7 +237,8 @@ fn allocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const
     const outcome = harness.run();
     if (outcome == .failed) {
         if (runner.model_accounting) |state| {
-            try std.testing.expectEqual(state.current_operations.revision().value != 0, runner.envelope.slots[@intFromEnum(pipeline.DataKey.assigned_provider_operation)] != null);
+            try std.testing.expectEqual(state.current_operations.revision().value != 0, runner.envelope.slots[@intFromEnum(pipeline.DataKey.assigned_provider_operation)] != null or
+                runner.envelope.slots[@intFromEnum(pipeline.DataKey.invoked_provider_operation)] != null);
             if (runner.envelope.slots[@intFromEnum(pipeline.DataKey.provider_authorization_result)] != null) {
                 const authorization = (try authorizationResult(&runner)).outcome();
                 try std.testing.expect(authorization.* == .prepared);
@@ -1338,6 +1340,397 @@ fn alwaysCancelled(_: ?*anyopaque) pipeline.RuntimeStatus {
     return .cancelled;
 }
 
+test "YAML provider invocation publishes canonical evidence with the original lease deadline for both kinds" {
+    for ([_][]const u8{ "inference", "input-token-count" }) |kind| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try operationLifecycleYaml(&fixture, kind));
+        {
+            var runner = fixture.runner(graph, std.testing.allocator);
+            defer runner.deinit();
+            try prepareInvocable(&runner);
+            const before = runner.envelope.slots;
+            const assigned = (try assignedOperation(&runner)).record().*;
+            const previous = runner.model_accounting.?.current_operations;
+            fixture.clock.now_ms = 250;
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+            const invoked = (try invokedOperation(&runner)).operation();
+            const current = runner.model_accounting.?.current_operations;
+            try std.testing.expect(invoked == try current.requireInvoked(assigned.id));
+            try std.testing.expectEqual(@as(u64, 1001), invoked.deadline_monotonic_ms);
+            try std.testing.expectEqual(previous.revision().value + 1, current.revision().value);
+            try std.testing.expectEqual(assigned.revision.value + 1, current.record(assigned.id).?.revision.value);
+            try std.testing.expectEqual(.assigned, std.meta.activeTag(previous.record(assigned.id).?.state));
+            try std.testing.expect(runner.model_accounting.?.authorization_leases.operations == current);
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.assigned_provider_operation)] == null);
+            for (before, runner.envelope.slots, 0..) |old, new, index| {
+                if (index != @intFromEnum(pipeline.DataKey.assigned_provider_operation) and index != @intFromEnum(pipeline.DataKey.invoked_provider_operation)) try std.testing.expect(old == new);
+            }
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "observe" }).outcome);
+            try std.testing.expectEqual(.invalid, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+            try std.testing.expect(current == runner.model_accounting.?.current_operations);
+            try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+            try std.testing.expectEqual(@as(usize, 1), fixture.authorization.prepare_count);
+            try std.testing.expectEqual(@as(usize, 0), fixture.authorization.destroyed_count);
+
+            // Invocation-state advancement did not consume the capability. The
+            // existing adapter port can consume this exact canonical proof once.
+            const request = try currentRequest(&runner);
+            const reference = &(try authorizationResult(&runner)).outcome().prepared;
+            const port = runner.model_accounting.?.authorization_leases.port(fixture.clock.port(), .{});
+            var capability = try port.consume(reference, request.binding(), request.prepared().?, invoked);
+            defer capability.deinit();
+            try std.testing.expectError(error.AuthorizationDenied, port.consume(reference, request.binding(), request.prepared().?, invoked));
+            try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "observe" }).rejected);
+        }
+        try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
+        fixture.clock.now_ms = 1;
+        var fresh = fixture.runner(graph, std.testing.allocator);
+        defer fresh.deinit();
+        var harness: Harness = .{ .runner = &fresh };
+        try std.testing.expectEqual(.ok, harness.run());
+        try std.testing.expectEqual(@as(u128, 0), fresh.tokenLedger().committed());
+    }
+}
+
+test "provider invocation YAML rejects missing unknown hidden and replacement parameters" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const source = try operationLifecycleYaml(&fixture, "inference");
+    const valid = "use: advance-provider-operation-lifecycle@1, with: {transition: invoked}";
+    const invalid = [_][]const u8{
+        "use: advance-provider-operation-lifecycle@1",
+        "use: advance-provider-operation-lifecycle@1, with: {transition: terminal}",
+        "use: advance-provider-operation-lifecycle@1, with: {transition: assigned}",
+        "use: advance-provider-operation-lifecycle@1, with: {transition: 1}",
+        "use: advance-provider-operation-lifecycle@1, with: {transition: invoked, timeout-ms: 2000}",
+        "use: advance-provider-operation-lifecycle@1, with: {transition: invoked, retry-limit: 1}",
+        "use: advance-provider-operation-lifecycle@1, with: {transition: invoked, kind: input-token-count}",
+        "use: advance-provider-operation-lifecycle@1, with: {transition: invoked, slot: selected}",
+        "use: advance-provider-operation-lifecycle@1, with: {transition: invoked, prompt: prompt}",
+        "use: hidden-provider-invocation@1, with: {transition: invoked}",
+    };
+    for (invalid) |replacement| {
+        const changed = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, valid, replacement);
+        if (fixture.compile(changed)) |_| return error.ExpectedRejection else |err| switch (err) {
+            error.WorkflowGraphCompileInvalid, error.WorkflowDefinitionSchemaInvalid => {},
+            else => return err,
+        }
+    }
+    const missing = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "use: prepare-provider-operation-authorization@1, with: {timeout-ms: 1000}", "use: core.noop@1");
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(missing));
+}
+
+test "provider invocation requires an invoked request and rejects failed cancelled expired and foreign leases" {
+    for (0..7) |variant| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try operationLifecycleYaml(&fixture, "inference"));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        try prepareAuthorized(&runner);
+        if (variant != 0) try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-request" }).outcome);
+        const original = runner.model_accounting.?.current_operations;
+        const id = (try assignedOperation(&runner)).record().id;
+        switch (variant) {
+            0 => {},
+            1, 2 => {
+                const owner = try authorization_result.create(std.testing.allocator, try requestLedger(&runner), if (variant == 1)
+                    .{ .failed = .{ .operation_id = id, .cause = .authentication_failed, .retry_class = .never, .delivery = .not_sent } }
+                else
+                    .{ .cancelled = id });
+                const value = try values.adopt(std.testing.allocator, authorization_workflow.schema, authorization_result.Result, authorization_result.Result, owner, authorization_result_view, authorization_result.destroy, null);
+                const key = @intFromEnum(authorization_workflow.schema.key);
+                values.destroy(runner.envelope.slots[key].?);
+                runner.envelope.slots[key] = value;
+            },
+            3 => fixture.clock.now_ms = 1001,
+            4 => runner.runtime = .{ .status_fn = alwaysCancelled },
+            5 => {
+                var foreign = fixture.runner(graph, std.testing.allocator);
+                defer foreign.deinit();
+                try prepareInvocable(&foreign);
+                const key = @intFromEnum(authorization_workflow.schema.key);
+                std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &runner.envelope.slots[key], &foreign.envelope.slots[key]);
+                try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).rejected);
+                try std.testing.expect(original == runner.model_accounting.?.current_operations);
+                continue;
+            },
+            6 => runner.provider_clock = null,
+            else => unreachable,
+        }
+        const applied = runner.bindings().invokeStep(.{ .bytes = "advance-operation" });
+        try std.testing.expectEqual(@as(execution.Rejection, switch (variant) {
+            0 => .operation_failed,
+            1, 6 => .authority,
+            2, 4 => .cancelled,
+            3 => .deadline_exhausted,
+            else => unreachable,
+        }), applied.rejected);
+        try std.testing.expect(original == runner.model_accounting.?.current_operations);
+        try std.testing.expectEqual(.assigned, std.meta.activeTag(original.record(id).?.state));
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.invoked_provider_operation)] == null);
+        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+    }
+}
+
+test "provider invocation rejects forged transitions and deltas without publishing state or evidence" {
+    for (std.enums.values(FaultyOperationLifecycle.Fault)) |fault| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try operationLifecycleYaml(&fixture, "inference"));
+        var faulty: FaultyOperationLifecycle = .{ .advance = fixture.native.advance_operation, .fault = fault, .clock = &fixture.clock };
+        for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, operation_lifecycle_workflow.Advance.contract.id)) {
+            entry.binding = bindings.bind(FaultyOperationLifecycle, &faulty, FaultyOperationLifecycle.invoke);
+        };
+        {
+            var runner = fixture.runner(graph, std.testing.allocator);
+            defer runner.deinit();
+            runner.runtime = .{ .context = &faulty, .status_fn = FaultyOperationLifecycle.status };
+            try prepareInvocable(&runner);
+            const original = runner.model_accounting.?.current_operations;
+            const before = runner.envelope.slots;
+            const applied = runner.bindings().invokeStep(.{ .bytes = "advance-operation" });
+            try std.testing.expectEqual(@as(workflow.OutcomeTag, switch (fault) {
+                .cancel => .cancelled,
+                .expire => .failed,
+                else => .invalid,
+            }), if (applied == .rejected) applied.rejected.status() else applied.outcome);
+            try std.testing.expect(original == runner.model_accounting.?.current_operations);
+            try std.testing.expectEqualSlices(?*@import("domain/pipeline_data.zig").Value, &before, &runner.envelope.slots);
+            try std.testing.expectEqual(@as(usize, 1), faulty.calls);
+            try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+            try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+        }
+        try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
+    }
+}
+
+test "invoked evidence cannot cross executions or outlive its canonical status" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try operationLifecycleYaml(&fixture, "input-token-count"));
+    var first = fixture.runner(graph, std.testing.allocator);
+    defer first.deinit();
+    var second = fixture.runner(graph, std.testing.allocator);
+    defer second.deinit();
+    for ([_]*runner_module.Runner{ &first, &second }) |runner| {
+        try prepareInvocable(runner);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+    }
+    const key = @intFromEnum(pipeline.DataKey.invoked_provider_operation);
+    std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[key], &second.envelope.slots[key]);
+    try std.testing.expectEqual(.authority, first.bindings().invokeStep(.{ .bytes = "observe" }).rejected);
+    std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[key], &second.envelope.slots[key]);
+    const state = &first.model_accounting.?;
+    const invoked = (try invokedOperation(&first)).operation();
+    const authority = state.operationAuthority(try requestLedger(&first));
+    const current = state.current_operations;
+    const terminal = try lifecycle.propose(current, authority, current.revision(), invoked.id, current.record(invoked.id).?.revision, .{ .terminate = .{ .cancelled = .not_sent } });
+    state.current_operations = try lifecycle.apply(current, authority, terminal);
+    state.authorization_leases.update(state.current_operations);
+    try std.testing.expectEqual(.authority, first.bindings().invokeStep(.{ .bytes = "observe" }).rejected);
+    try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+}
+
+test "provider invocation cancellation allocation failures and retained evidence clean up exactly once" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try operationLifecycleYaml(&fixture, "inference"));
+    for (0..10) |boundary| {
+        {
+            var runner = fixture.runner(graph, std.testing.allocator);
+            defer runner.deinit();
+            var harness: Harness = .{ .runner = &runner, .cancel_at = boundary };
+            runner.runtime = .{ .context = &harness, .status_fn = Harness.status };
+            try std.testing.expectEqual(.cancelled, harness.run());
+            if (boundary == 8) try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.invoked_provider_operation)] == null);
+        }
+        try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
+    }
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ &fixture, graph });
+    try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
+    fixture.native.init(std.testing.allocator);
+    fixture.authorization.allocator = std.testing.allocator;
+    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    @memcpy(fixture.entries[core.entries.len .. core.entries.len + native.count], &fixture.native.entries);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    try prepareInvocable(&runner);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+    const evidence = try invokedOperation(&runner);
+    const key = @intFromEnum(pipeline.DataKey.invoked_provider_operation);
+    const retained = runner.envelope.slots[key].?;
+    runner.envelope.slots[key] = null;
+    defer values.destroy(retained);
+    runner.deinit();
+    try std.testing.expectEqualStrings("origin", evidence.operation().id.model_request_id.model_operation_id.workflow_step_id.bytes);
+    try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
+}
+
+test "provider invocation accounting permission and exact compiled profile cannot be hidden or weakened" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try operationLifecycleYaml(&fixture, "inference"));
+    for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, operation_lifecycle_workflow.Advance.contract.id)) {
+        const original = entry.*;
+        for (0..6) |variant| {
+            switch (variant) {
+                0 => entry.contract.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt },
+                1 => entry.contract.runner_accounting = .none,
+                2 => entry.contract.parameters = &.{},
+                3 => entry.contract.invalidates = &.{},
+                4 => entry.contract.produces = &.{ .invoked_provider_operation, .assigned_provider_operation },
+                5 => entry.contract.replaces = &.{.provider_authorization_result},
+                else => unreachable,
+            }
+            try std.testing.expect(!fixture.registry.validate());
+            entry.* = original;
+        }
+    };
+    for (0..5) |variant| {
+        var tampered = graph.*;
+        const steps = try fixture.arena.allocator().dupe(compilation.CompiledStep, graph.authority.steps);
+        for (steps) |*step| if (std.mem.eql(u8, step.operation_id.bytes, operation_lifecycle_workflow.Advance.contract.id)) {
+            switch (variant) {
+                0 => step.parameters = &.{},
+                1 => step.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt },
+                2 => step.runner_accounting = .none,
+                3 => step.invalidates = &.{},
+                4 => step.capabilities = &.{"model-provider"},
+                else => unreachable,
+            }
+        };
+        tampered.authority.steps = steps;
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        var runner = fixture.runner(&tampered, std.testing.allocator);
+        defer runner.deinit();
+        try prepareInvocable(&runner);
+        try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).rejected);
+    }
+}
+
+test "provider invocation rechecks cancellation and lease deadline after allocating candidate evidence" {
+    for (std.enums.values(PublicationGuard.Fault)) |fault| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try operationLifecycleYaml(&fixture, "inference"));
+        var counted = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+        {
+            var runner = fixture.runner(graph, counted.allocator());
+            defer runner.deinit();
+            try prepareInvocable(&runner);
+            const before = runner.envelope.slots;
+            const current = runner.model_accounting.?.current_operations;
+            var guard: PublicationGuard = .{ .allocations = &counted, .before = counted.allocated_bytes, .fault = fault };
+            runner.provider_clock = .{ .context = @ptrCast(&guard), .now_fn = PublicationGuard.now };
+            runner.runtime = .{ .context = &guard, .status_fn = PublicationGuard.status };
+            const result = runner.bindings().invokeStep(.{ .bytes = "advance-operation" });
+            try std.testing.expectEqual(@as(execution.Rejection, switch (fault) {
+                .expire, .deadline => .deadline_exhausted,
+                .cancel => .cancelled,
+                .clock => .authority,
+            }), result.rejected);
+            try std.testing.expect(guard.checked_after_allocation);
+            try std.testing.expect(current == runner.model_accounting.?.current_operations);
+            try std.testing.expectEqualSlices(?*@import("domain/pipeline_data.zig").Value, &before, &runner.envelope.slots);
+        }
+        try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
+    }
+}
+
+const PublicationGuard = struct {
+    const Fault = enum { expire, cancel, deadline, clock };
+    allocations: *std.testing.FailingAllocator,
+    before: usize,
+    fault: Fault,
+    checked_after_allocation: bool = false,
+    fn now(context: *@import("ports/provider_authorization_lease.zig").Context) error{ClockUnavailable}!u64 {
+        const self: *@This() = @ptrCast(@alignCast(context));
+        if (self.allocations.allocated_bytes > self.before) {
+            self.checked_after_allocation = true;
+            if (self.fault == .expire) return 1001;
+            if (self.fault == .clock) return error.ClockUnavailable;
+        }
+        return 1;
+    }
+    fn status(context: ?*anyopaque) pipeline.RuntimeStatus {
+        const self: *const @This() = @ptrCast(@alignCast(context.?));
+        if (!self.checked_after_allocation) return .active;
+        return switch (self.fault) {
+            .cancel => .cancelled,
+            .deadline => .deadline_exhausted,
+            .expire, .clock => .active,
+        };
+    }
+};
+
+const FaultyOperationLifecycle = struct {
+    const Fault = enum { missing, undeclared_write, injected_evidence, no_invalidation, deadline, operation, ordinal, revision, ledger_revision, stale_ledger, assignment, terminal, failed_outcome, cancel, expire };
+    advance: operation_lifecycle_workflow.Advance,
+    fault: Fault,
+    clock: *@import("provider_authorization_test_fixture.zig").TestClock,
+    cancelled: bool = false,
+    calls: usize = 0,
+    fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        self.calls += 1;
+        var candidate = try operation_lifecycle_workflow.Advance.invoke(&self.advance, input);
+        const transition = &candidate.delta.runner_accounting_transition.?.advance_provider_operation;
+        switch (self.fault) {
+            .missing => candidate.delta.runner_accounting_transition = null,
+            .no_invalidation => candidate.delta.data_invalidations = .initEmpty(),
+            .deadline => transition.command.invoke.deadline_monotonic_ms += 1,
+            .operation => transition.operation_id.kind = .input_token_count,
+            .ordinal => transition.operation_id.model_attempt_ordinal.value += 1,
+            .revision => transition.expected_operation_revision.?.value += 1,
+            .ledger_revision => transition.expected_revision.value += 1,
+            .stale_ledger => transition.expected_ledger = lifecycle.apply(input.step.provider_operation.?.ledger, input.step.provider_operation.?.authority, transition.*) catch return error.OperationExecutionFailed,
+            .assignment => {
+                const request = (try requests.readCurrent(&input.step.data, requests.prepared_schema)).prepared().?;
+                transition.command = .{ .assign_inference = .{ .binding_id = request.binding_id, .model_visible_input_id = request.model_visible_input_id } };
+            },
+            .terminal => transition.command = .{ .terminate = .{ .cancelled = .not_sent } },
+            .failed_outcome => candidate.outcome = .failed,
+            .cancel => self.cancelled = true,
+            .expire => self.clock.now_ms = 1001,
+            .undeclared_write, .injected_evidence => {
+                const key: pipeline.DataKey = if (self.fault == .undeclared_write) .raw_engine_config else .invoked_provider_operation;
+                const descriptor = if (self.fault == .undeclared_write) values.schema(.raw_engine_config, bool, 1, 1) else values.schema(.invoked_provider_operation, bool, 1, 1);
+                candidate.delta.data_writes[@intFromEnum(key)] = values.create(std.testing.allocator, descriptor, bool, true) catch return error.OperationExecutionFailed;
+            },
+        }
+        return candidate;
+    }
+    fn status(context: ?*anyopaque) pipeline.RuntimeStatus {
+        const self: *const @This() = @ptrCast(@alignCast(context.?));
+        return if (self.cancelled) .cancelled else .active;
+    }
+};
+
+fn operationLifecycleYaml(fixture: *Fixture, kind: []const u8) ![]const u8 {
+    const source = try requestLifecycleYaml(fixture, kind);
+    fixture.entries[fixture.entries.len - 1].contract.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .invoked_provider_operation, .provider_authorization_result };
+    const replaced = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "{ok: observe, failed: end.failed}", "{ok: advance-operation, failed: end.failed}");
+    return std.fmt.allocPrint(fixture.arena.allocator(), "{s}\n  advance-operation: {{ use: advance-provider-operation-lifecycle@1, with: {{transition: invoked}}, on: {{ok: observe, failed: end.failed}} }}\n", .{replaced});
+}
+
+fn prepareInvocable(runner: *runner_module.Runner) !void {
+    try prepareAuthorized(runner);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-request" }).outcome);
+}
+
+fn invokedOperation(runner: *const runner_module.Runner) !*const lifecycle.InvokedOperation {
+    return values.read(&.{ .slots = runner.envelope.slots }, attempt_values.invoked_schema, lifecycle.InvokedOperation);
+}
+
 const Observer = struct {
     calls: usize = 0,
     last_attempt: u32 = 0,
@@ -1367,6 +1760,10 @@ const Observer = struct {
             if (record.id.model_request_id != request.id() or record.id.model_attempt_ordinal.value != self.last_attempt or
                 !record.binding_id.eql(request.prepared().?.binding_id) or !record.model_visible_input_id.eql(request.prepared().?.model_visible_input_id) or record.state != .assigned) return error.OperationExecutionFailed;
             if (self.consume_operation) delta.data_invalidations.insert(.assigned_provider_operation);
+        }
+        if (input.step.data.contains(.invoked_provider_operation)) {
+            const evidence = (values.read(&input.step.data, attempt_values.invoked_schema, lifecycle.InvokedOperation) catch return error.OperationExecutionFailed).operation();
+            if (evidence.id.model_request_id != request.id() or evidence.id.model_attempt_ordinal.value != self.last_attempt) return error.OperationExecutionFailed;
         }
         if (input.step.data.contains(.provider_authorization_result)) {
             const result = values.read(&input.step.data, authorization_workflow.schema, authorization_result.Result) catch return error.OperationExecutionFailed;

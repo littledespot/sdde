@@ -60,6 +60,26 @@ pub fn scan(allocator: std.mem.Allocator, grammar: grammar_module.Grammar, text:
         if (length == 0) break;
         index += length;
     }
+    // Exact registered names may contain spaces/punctuation. Recognize those
+    // complete names as well as ordinary lexer tokens; neither consumer adds
+    // its own filename exception or second extension list.
+    for (grammar.policy.rules) |bound| switch (bound.rule.kind) {
+        .exact, .manifest, .reserved => try collectName(allocator, arena, &matches, text, bound.rule.value, bound.rule.case_sensitive, normalizer, folder, classifier),
+        .extension, .glob => {},
+    };
+    for (grammar.reference_names) |name| try collectName(allocator, arena, &matches, text, name.basename, true, normalizer, folder, classifier);
+    std.mem.sort(Match, matches.items, {}, struct {
+        fn less(_: void, a: Match, b: Match) bool {
+            return if (a.start_byte == b.start_byte) a.end_byte > b.end_byte else a.start_byte < b.start_byte;
+        }
+    }.less);
+    var count: usize = 0;
+    for (matches.items) |match| {
+        if (count != 0 and match.start_byte < matches.items[count - 1].end_byte) continue;
+        matches.items[count] = match;
+        count += 1;
+    }
+    matches.items.len = count;
     owner.matches = try matches.toOwnedSlice(arena);
     return owner;
 }
@@ -79,9 +99,7 @@ fn classify(allocator: std.mem.Allocator, grammar: grammar_module.Grammar, token
     if (uriPrefix(token)) return .external_uri;
     if (paths.hasEncodedDotOrSeparator(token)) return .display_path;
     if (token[0] == '/' or token[0] == '\\') return .display_path;
-    if (std.mem.indexOfAny(u8, token, "/\\")) |separator| {
-        if (separator + 1 < token.len) return .display_path;
-    }
+    if (std.mem.indexOfAny(u8, token, "/\\") != null) return .display_path;
     const normalized = try naming.normalize(allocator, token, true, normalizer, folder);
     var folded: ?[]const u8 = null;
     for (grammar.policy.rules) |bound| {
@@ -90,6 +108,41 @@ fn classify(allocator: std.mem.Allocator, grammar: grammar_module.Grammar, token
     }
     for (grammar.reference_names) |name| if (std.mem.eql(u8, normalized, name.basename)) return .display_filename;
     return null;
+}
+
+fn collectName(allocator: std.mem.Allocator, output_allocator: std.mem.Allocator, matches: *std.ArrayList(Match), text: []const u8, name: []const u8, case_sensitive: bool, normalizer: unicode.Normalizer, folder: unicode.CaseFolder, classifier: unicode.LexicalClassifier) Error!void {
+    var name_points = (std.unicode.Utf8View.init(name) catch return error.InvalidPathTokenText).iterator();
+    var multi_token = false;
+    while (name_points.nextCodepoint()) |point| if (isBoundary(point, "", classifier)) {
+        multi_token = true;
+        break;
+    };
+    if (!multi_token) return;
+    // NFC can compose several input scalars. This search window derives from
+    // the exact registered name, not a limit on scanned/model text.
+    const window = std.math.add(usize, std.math.mul(usize, name.len, 4) catch return error.OutOfMemory, 4) catch return error.OutOfMemory;
+    var start: usize = 0;
+    var left_boundary = true;
+    while (start < text.len) {
+        const length = std.unicode.utf8ByteSequenceLength(text[start]) catch return error.InvalidPathTokenText;
+        const point = std.unicode.utf8Decode(text[start..][0..length]) catch return error.InvalidPathTokenText;
+        if (left_boundary) {
+            var end = start;
+            while (end < text.len and end - start < window) {
+                end += std.unicode.utf8ByteSequenceLength(text[end]) catch return error.InvalidPathTokenText;
+                if (end < text.len) {
+                    const next_length = std.unicode.utf8ByteSequenceLength(text[end]) catch return error.InvalidPathTokenText;
+                    const next = std.unicode.utf8Decode(text[end..][0..next_length]) catch return error.InvalidPathTokenText;
+                    if (!classifier.isBoundary(next)) continue;
+                }
+                const normalized = try naming.normalize(allocator, text[start..end], case_sensitive, normalizer, folder);
+                defer allocator.free(normalized);
+                if (std.mem.eql(u8, normalized, name)) try matches.append(output_allocator, .{ .start_byte = start, .end_byte = end, .kind = .display_filename });
+            }
+        }
+        left_boundary = classifier.isBoundary(point);
+        start += length;
+    }
 }
 
 fn uriPrefix(token: []const u8) bool {
