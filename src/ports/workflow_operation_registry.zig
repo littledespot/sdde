@@ -134,6 +134,7 @@ pub const Registry = struct {
             if (workflow.RegisteredRef.parse(profile.id) == null or
                 !uniqueStrings(profile.allowed_capabilities) or
                 !uniqueOutcomes(profile.allowed_terminal_outcomes) or
+                std.mem.indexOfScalar(workflow.OutcomeTag, profile.allowed_terminal_outcomes, .more) != null or
                 !profile.total_model_token_budget.isValid()) return false;
             for (self.policies[0..index]) |prior| {
                 if (std.mem.eql(u8, prior.id, profile.id)) return false;

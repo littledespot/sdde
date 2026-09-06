@@ -99,12 +99,18 @@ fn errorResponse(allocator: std.mem.Allocator, response: transport.Response, id:
 }
 
 fn decodeError(raw: std.json.Value, status: u16, header: ?[]const u8) Invalid!operation.ProviderFailureCause {
-    try fields(raw, &.{ "message", "__type", "originalStatusCode", "resourceName" });
+    try fields(raw, &.{ "message", "__type", "code", "originalStatusCode", "resourceName" });
     if (raw.object.get("message")) |message| _ = try string(message);
     if (raw.object.get("resourceName")) |name| _ = try string(name);
-    const body_type = if (raw.object.get("__type")) |value| try string(value) else null;
-    if (header != null and body_type != null and !std.mem.eql(u8, header.?, body_type.?)) return error.InvalidResponse;
-    const discriminator = header orelse body_type orelse return error.InvalidResponse;
+    var resolved: ?[]const u8 = if (header) |value| exceptionName(value) else null;
+    for ([_][]const u8{ "__type", "code" }) |key_name| {
+        if (raw.object.get(key_name)) |value| {
+            const name = exceptionName(try string(value));
+            if (resolved) |previous| if (!std.mem.eql(u8, name, previous)) return error.InvalidResponse;
+            resolved = name;
+        }
+    }
+    const discriminator = resolved orelse return error.InvalidResponse;
     if (std.mem.eql(u8, discriminator, "ModelErrorException") and status == 424) {
         return switch (try integer(try field(raw, "originalStatusCode"))) {
             408, 429, 500, 503 => .service_unavailable,
@@ -139,6 +145,13 @@ fn fields(raw: std.json.Value, allowed: []const []const u8) Invalid!void {
     for (raw.object.keys()) |key| {
         for (allowed) |name| if (std.mem.eql(u8, key, name)) break else {} else return error.InvalidResponse;
     }
+}
+
+// AWS restJson1 defines these decorations as part of error serialization.
+// Only the resulting recognized shape name and matching status classify it.
+fn exceptionName(raw: []const u8) []const u8 {
+    const value = raw[0 .. std.mem.indexOfScalar(u8, raw, ':') orelse raw.len];
+    return if (std.mem.indexOfScalar(u8, value, '#')) |index| value[index + 1 ..] else value;
 }
 fn field(raw: std.json.Value, name: []const u8) Invalid!std.json.Value {
     if (raw != .object) return error.InvalidResponse;

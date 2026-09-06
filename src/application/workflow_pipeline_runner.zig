@@ -247,7 +247,7 @@ pub const Runner = struct {
             attempt_input = .{
                 .accounting = current,
                 .operations = state.current_operations,
-                .attempt = if (executions == 0) .initial else .{ .retry = .{ .authority = authority, .completed_retries = executions - 1 } },
+                .attempt = if (current.attemptsReserved((retained_request orelse return .{ .rejected = .authority }).id()) == 0) .initial else .{ .retry = .{ .authority = authority, .completed_retries = if (executions == 0) 0 else executions - 1 } },
             };
             expected = .{ .attempt = attempt_input.?.attempt };
         }

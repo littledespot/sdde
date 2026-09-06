@@ -273,7 +273,7 @@ fn validateDeclaredOutcomes(
         const transition = findOutcome(declared, expected_outcome) orelse return invalid();
         switch (transition.target) {
             .step => |target| if (!hasStep(steps, target.bytes)) return invalid(),
-            .terminal => |terminal| if (terminal != expected_outcome or !containsOutcome(policy.allowed_terminal_outcomes, terminal)) return invalid(),
+            .terminal => |terminal| if (terminal == .more or terminal != expected_outcome or !containsOutcome(policy.allowed_terminal_outcomes, terminal)) return invalid(),
         }
     }
     for (declared) |transition| if (!containsOutcome(expected, transition.outcome)) return invalid();

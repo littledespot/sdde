@@ -551,6 +551,20 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     missing_config_command.step.dependOn(&token_command.step);
     missing_config_command.step.dependOn(&reference_command.step);
     missing_config_command.step.dependOn(&denied_reference.step);
+    const progress_directory = b.addTempFiles();
+    const progress_executable = progress_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = progress_directory.add(".sddtoolkit.json", configuration);
+    const progress_yaml = std.mem.replaceOwned(u8, b.allocator, hello_workflow, "end.ok", "end.more") catch @panic("allocate invalid terminal fixture");
+    _ = progress_directory.add(".sddtoolkit/workflows/hello.workflow.yaml", progress_yaml);
+    const denied_progress = std.Build.Step.Run.create(b, "reject packaged progress as workflow completion");
+    denied_progress.addFileArg(progress_executable);
+    denied_progress.addArg("hello");
+    denied_progress.setCwd(progress_directory.getDirectory());
+    denied_progress.clearEnvironment();
+    denied_progress.expectExitCode(1);
+    denied_progress.expectStdOutEqual("");
+    denied_progress.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    missing_config_command.step.dependOn(&denied_progress.step);
     for ([_]bool{ false, true }) |invalid_region| {
         const directory = b.addTempFiles();
         const packaged = directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);

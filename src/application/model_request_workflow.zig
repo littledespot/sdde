@@ -9,6 +9,8 @@ const pipeline = @import("../domain/pipeline.zig");
 const data = @import("../domain/pipeline_data.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const values = @import("pipeline_values.zig");
+const packets = @import("../domain/model_input_packet.zig");
+pub const packet_schema = values.schema(.model_input_packet, packets.Packet, 1, null);
 
 // Native sealed owners retain canonical identity and graph references. Their
 // payloads have no model-call byte ceiling and are never copied by the envelope.
@@ -16,7 +18,7 @@ pub const ledger_schema = values.schema(.model_request_identity_ledger, identity
 pub const assigned_schema = values.schema(.assigned_model_request, handoff.Request, 1, null);
 pub const validated_schema = values.schema(.validated_model_request, handoff.Request, 1, null);
 pub const prepared_schema = values.schema(.prepared_model_request, handoff.Request, 1, null);
-pub const schemas = [_]data.Schema{ ledger_schema, assigned_schema, validated_schema, prepared_schema };
+pub const schemas = [_]data.Schema{ ledger_schema, assigned_schema, validated_schema, prepared_schema, packet_schema };
 
 pub const Initialize = struct {
     pub const Action = @import("../actions/model/build_initial_model_request_identity_ledger.zig").Action;
@@ -38,6 +40,7 @@ pub const Assign = struct {
     pub const Action = @import("../actions/model/assign_model_request_id.zig").Action;
     pub const contract: operation.Contract = contract: {
         var result = descriptor(Action.contract, &.{.model_request_identity_ledger}, &.{.assigned_model_request}, &.{.model_request_identity_ledger});
+        result.optional = &.{.model_input_packet};
         result.parameters = &([_]operation.ParameterDescriptor{
             .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
             .{ .id = "prompt", .kind = .resource, .resource_kind = .prompt, .required = true, .workflow_definition_safe = true },
@@ -56,9 +59,12 @@ pub const Assign = struct {
         const current = values.read(&step.data, ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
         const prompt = resource(step, "prompt") orelse return error.OperationExecutionFailed;
         const result = resource(step, "result-schema") orelse return error.OperationExecutionFailed;
-        const assignment = self.action.execute(current, current.revision(), .workflow_step, selected.operation_id, .initial_generation) catch return error.OperationExecutionFailed;
+        const packet = if (step.data.contains(.model_input_packet)) values.read(&step.data, packet_schema, packets.Packet) catch return error.OperationExecutionFailed else null;
+        const static_input = resource(step, "input");
+        if (packet != null and static_input != null) return error.OperationExecutionFailed;
+        const assignment = self.action.execute(current, current.revision(), if (packet) |value| value.unit() else .workflow_step, selected.operation_id, if (packet) |value| value.purpose() else .initial_generation) catch return error.OperationExecutionFailed;
         defer identity.deinitOwner(assignment.owner);
-        const request = handoff.assign(self.allocator, assignment.owner, assignment.model_request_id, selected.*, prompt, result, resource(step, "input")) catch return error.OperationExecutionFailed;
+        const request = handoff.assign(self.allocator, assignment.owner, assignment.model_request_id, selected.*, prompt, result, if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null) catch return error.OperationExecutionFailed;
         errdefer handoff.destroy(request);
         identity.retainOwner(assignment.owner) catch return error.OperationExecutionFailed;
         const ledger_value = adoptLedger(self.allocator, assignment.owner) catch {
@@ -140,6 +146,10 @@ fn resource(input: operations.StepInput, parameter_id: []const u8) ?compilation.
 
 pub fn adoptLedger(allocator: std.mem.Allocator, owner: *identity.Owner) values.Error!*data.Value {
     return values.adopt(allocator, ledger_schema, identity.ModelRequestIdentityLedger, identity.Owner, owner, identity.ledger, identity.deinitOwner, null);
+}
+
+pub fn adoptPacket(allocator: std.mem.Allocator, packet: *packets.Packet) values.Error!*data.Value {
+    return values.adopt(allocator, packet_schema, packets.Packet, packets.Packet, packet, packets.view, packets.release, null);
 }
 
 fn adoptRequest(allocator: std.mem.Allocator, schema: data.Schema, request: *handoff.Request) values.Error!*data.Value {

@@ -65,6 +65,45 @@ const prompt_bytes = "Return the requested object.";
 const schema_bytes = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":20000}},\"required\":[\"answer\"],\"additionalProperties\":false}";
 const input_bytes = "x" ** 16_384;
 
+test "native domain packets traverse generic fake provider execution without resource or request substitution" {
+    const packets = @import("domain/model_input_packet.zig");
+    const candidate_handoff = @import("application/model_candidate_handoff.zig");
+    for ([_][]const u8{ "{\"answer\":\"Hello, World!\"}", "{\"answer\":\"Loan renewed.\"}", "{}" }) |body| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const definition = try std.mem.replaceOwned(u8, fixture.arena.allocator(), try requestCompletionYaml(&fixture), ", input: input }", " }");
+        const no_static_resource = try std.mem.replaceOwned(u8, fixture.arena.allocator(), definition, ", input: input.txt", "");
+        const graph = try fixture.compileWithAssets(no_static_resource, schema_bytes, false);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        const unit: identity.ImmutableUnitOwnerId = .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = "current-reference" }, .chunk_id = .{ .bytes = "selected-chunk" } } };
+        const packet = try packets.create(std.testing.allocator, "{\"text\":\"Only the selected chunk.\"}", unit, .initial_generation);
+        runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.invocation_plan.complete.content = body;
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        const expected: workflow.OutcomeTag = if (std.mem.eql(u8, body, "{}")) .invalid else .ok;
+        try prepareRequestClosure(&runner, expected);
+        const request = try currentRequest(&runner);
+        try std.testing.expect(identity.unitOwnerEql(unit, request.id().immutable_unit_owner_id));
+        try std.testing.expectEqualStrings(packet.body(), request.prepared().?.content[1].user);
+        const view: @import("domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+        if (expected == .ok) {
+            try std.testing.expectEqualStrings(body, try candidate_handoff.body(&view));
+        } else {
+            try std.testing.expectError(error.OperationExecutionFailed, candidate_handoff.body(&view));
+        }
+        // Equal bytes do not authorize substituting another packet identity.
+        const foreign = try packets.create(std.testing.allocator, packet.body(), unit, .initial_generation);
+        const foreign_value = try requests.adoptPacket(std.testing.allocator, foreign);
+        defer values.destroy(foreign_value);
+        var changed = view;
+        changed.slots[@intFromEnum(requests.packet_schema.key)] = foreign_value;
+        try std.testing.expectError(error.OperationExecutionFailed, candidate_handoff.body(&changed));
+    }
+}
+
 test "native YAML preparation retains one generic request across distinct steps" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
@@ -375,6 +414,34 @@ fn accountingYaml(fixture: *Fixture, limit: u32, cycle: bool) ![]const u8 {
     var source = try std.mem.replaceOwned(u8, allocator, yaml, "ok: observe", "ok: account");
     if (cycle) source = try std.mem.replaceOwned(u8, allocator, source, "on: { ok: end.ok }", "on: { ok: end.ok, invalid: account }");
     return std.fmt.allocPrint(allocator, "{s}\n  account: {{ use: advance-model-attempt-accounting, with: {{retry-limit: {d}}}, on: {{ok: observe, failed: end.failed}} }}\n", .{ source, limit });
+}
+
+test "new logical requests get initial attempts without resetting the YAML operation bound" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try accountingYaml(&fixture, 1, false));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "initialize" }).outcome);
+    for (0..3) |index| {
+        for ([_][]const u8{ "origin", "validate", "build" }) |step| try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        const applied = runner.bindings().invokeStep(.{ .bytes = "account" });
+        if (index == 2) {
+            try std.testing.expectEqual(.failed, applied.outcome);
+            break;
+        }
+        try std.testing.expectEqual(.ok, applied.outcome);
+        const request = try currentRequest(&runner);
+        try std.testing.expectEqual(@as(u32, 1), attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved(request.id()));
+        // Isolate the accounting boundary: no provider operation was assigned.
+        // Retire test transport values through the same envelope delta owner.
+        const keys = [_]pipeline.DataKey{ .assigned_model_request, .validated_model_request, .prepared_model_request, .accounted_model_attempt };
+        var delta: pipeline.NodeDelta = .{};
+        for (keys) |key| delta.data_invalidations.insert(key);
+        try runner.envelope.apply(.{ .id = "test.retire-uninvoked-request-values", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &keys, .side_effect = .none }, &delta, .ok);
+    }
 }
 
 test "forged accounting transitions and rejected deltas cannot publish attempts" {
@@ -5296,6 +5363,10 @@ const Fixture = struct {
     }
 
     fn compileWithSchema(self: *Fixture, bytes: []const u8, result_schema: []const u8) !*const compilation.CompiledWorkflow {
+        return self.compileWithAssets(bytes, result_schema, true);
+    }
+
+    fn compileWithAssets(self: *Fixture, bytes: []const u8, result_schema: []const u8, include_static_input: bool) !*const compilation.CompiledWorkflow {
         const allocator = self.arena.allocator();
         var parser: @import("adapters/parsers/workflow_definitions.zig").Adapter = .{};
         var schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
@@ -5309,9 +5380,11 @@ const Fixture = struct {
             descriptors[index] = .{ .path = path, .kind = .file, .identity = .{ .filesystem_id = 1, .file_id = index + 1 }, .size = body.len };
             accounts[index] = .{ .ordinal = @intCast(index + 1), .path = path, .disposition = if (index == 0) .definition else .resource };
         }
-        const inv: inventory.Inventory = .{ .capability = roots.registry(self.roots_owner).workflowAuthority(), .descriptors = &descriptors, .accounts = &accounts, .definition_ordinals = &.{1}, .resource_ordinals = &.{ 2, 3, 4 } };
+        const count: usize = if (include_static_input) 4 else 3;
+        const inv: inventory.Inventory = .{ .capability = roots.registry(self.roots_owner).workflowAuthority(), .descriptors = descriptors[0..count], .accounts = accounts[0..count], .definition_ordinals = &.{1}, .resource_ordinals = if (include_static_input) &.{ 2, 3, 4 } else &.{ 2, 3 } };
         const manifest = try (@import("actions/workflow/resolve_workflow_resources.zig").Action{}).execute(allocator, inv, definitions);
-        const graphs = try (@import("actions/workflow/compile_workflow_graphs.zig").Action{ .registry = &self.registry, .result_schema_compiler = schema_parser.compiler() }).execute(allocator, definitions, inv, manifest, &.{ .{ .ordinal = 2, .bytes = prompt_bytes }, .{ .ordinal = 3, .bytes = result_schema }, .{ .ordinal = 4, .bytes = input_bytes } });
+        const captures = [_]inventory.Capture{ .{ .ordinal = 2, .bytes = prompt_bytes }, .{ .ordinal = 3, .bytes = result_schema }, .{ .ordinal = 4, .bytes = input_bytes } };
+        const graphs = try (@import("actions/workflow/compile_workflow_graphs.zig").Action{ .registry = &self.registry, .result_schema_compiler = schema_parser.compiler() }).execute(allocator, definitions, inv, manifest, captures[0 .. count - 1]);
         _ = try (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(allocator, graphs);
         return &graphs[0];
     }

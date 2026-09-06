@@ -103,6 +103,7 @@
       "minProperties": 1,
       "properties": {
         "ok": { "$ref": "#/$defs/transitionTarget" },
+        "more": { "$ref": "#/$defs/transitionTarget" },
         "needs-user": { "$ref": "#/$defs/transitionTarget" },
         "invalid": { "$ref": "#/$defs/transitionTarget" },
         "blocked": { "$ref": "#/$defs/transitionTarget" },

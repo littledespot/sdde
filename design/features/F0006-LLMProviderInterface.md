@@ -62,8 +62,9 @@ termination of assigned operations and pre-call logical-request closure are also
 YAML-integrated. `CountModelInputTokensAction` and
 `ValidateModelTokenCountObservationAction` are YAML-integrated with fake-provider
 tests, count-operation completion and count failure/cancellation request closure.
-Production provider composition/contracts remain implementation work. No transaction store or
-provider-effect journal is a prerequisite.
+Production composition installs the registered Bedrock contracts and concrete
+authorization/count/inference adapters through the existing boundary. No
+transaction store or provider-effect journal is a prerequisite.
 
 Provider-neutral capability and model-slot binding are implemented. ADR 0011's
 capacity removal is implemented across registration, compilation, binding,
@@ -141,8 +142,9 @@ edge; unexpected binding errors terminate without publishing a result or
 following an edge with missing data. Rejected publication, expiry, cancellation
 and execution cleanup release unused capabilities through the existing private
 table. Preparation never marks an operation invoked or charges tokens.
-Native composition exposes the operation but fails with `authorization_denied`
-until an adapter is explicitly bound; fake preloaders remain test-only.
+Production composition binds the preloaded Bedrock authorization adapter after
+selected-workflow binding validation. An unbound operation still fails with
+`authorization_denied`; fake preloaders remain test-only.
 
 **Implemented YAML request invocation state:**
 `advance-model-request-lifecycle` requires explicit `transition: invoked`.
@@ -351,34 +353,11 @@ step. Slot/resource/control overrides reject. The existing compiler proves the
 handoff and the runner rejects foreign execution references. No new YAML
 syntax, route registry, provider port, byte cap or persisted state is added.
 
-For example, this request and authorization preparation workflow uses one repository-authorized
-slot and captured resources. The [complete provider workflow example](../examples/provider-request.workflow.yaml)
-also performs inference, validation, operation/request closure and explicit
-pre-call failure handling. Its prompt, input and result schema remain in files.
-
-```yaml
-schema: workflow/v1
-id: prepare-request
-version: 1
-shortcode: PREP
-invoke: core.empty-invocation
-policy: core.model-authorization@1
-start: initialize
-resources: { prompt: prompt.md, result: result.json }
-steps:
-  initialize: { use: build-initial-model-request-identity-ledger, on: { ok: assign, failed: end.failed } }
-  assign:
-    use: assign-model-request-id
-    with: { slot: generation, response-mode: prompt-only, prompt: prompt, result-schema: result }
-    on: { ok: validate, failed: end.failed }
-  validate: { use: validate-model-request-binding, on: { ok: build, failed: end.failed } }
-  build: { use: build-model-request, on: { ok: account, failed: end.failed } }
-  account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: operation, failed: end.failed } }
-  operation: { use: assign-provider-operation, with: { kind: inference }, on: { ok: authorize, failed: end.failed } }
-  authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 1000 }, on: { ok: advance-request, failed: end.failed, cancelled: end.cancelled } }
-  advance-request: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: advance-operation, failed: end.failed } }
-  advance-operation: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
-```
+The [complete provider workflow example](../examples/provider-request.workflow.yaml)
+uses one repository-authorized slot and captured resources. It performs
+inference, validation, operation/request closure and explicit pre-call failure
+handling. Prompt, input and result schema remain in files. The same example is
+compiled and exercised by packaged-executable tests; it is not a runtime fallback.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
@@ -603,10 +582,7 @@ repository-authorized.
 
 `RegisteredProviderModelConfig` is a closed tagged union selected by the
 validated enclosing provider. For example, `provider: "aws-bedrock"` requires
-the exact F0007 configuration `{ "region": <validated-region> }`. A future
-OpenAI feature would have to accept, reject, or replace `baseUrl` in its own
-governing design; F0006 does not treat the current example's OpenAI entries as
-implemented or callable.
+the exact F0007 configuration `{ "region": <validated-region> }`.
 
 Every root, provider, model, and resolved provider-specific configuration
 object is closed at its owning boundary. An unknown field, provider,
@@ -1038,8 +1014,7 @@ transfers ownership once. Preparation failure, expiration, cancellation and
 operation terminalization release unused backing; consumed backing is destroyed
 by the adapter. The lifecycle runner destroys its table before its ledger and
 canonical request identities. Leases are execution-local and never restored
-by a later invocation. Production composition remains separate implementation
-work; there is no outstanding provider-recovery storage contract.
+by a later invocation. There is no provider-recovery storage contract.
 
 The minimum v1 authorization path uses already loaded, non-refreshing material
 and performs no filesystem, process, metadata, STS, or refresh I/O. If an
@@ -1407,9 +1382,9 @@ F0006 does not:
    common object and resolved provider variant is closed at its owning boundary.
 4. Capabilities, operations, tokenization, structured response, target,
    endpoint, and data-routing facts come only from compiled model contracts.
-5. The repository example is never a runtime default or fallback. Its common
-   shape can decode, but its OpenAI entries make whole-registry build fail until
-   an OpenAI feature is compiled and accepted.
+5. The repository example selects a registered Bedrock model/configuration and
+   validates against the production contracts. It is never a runtime default
+   or fallback.
 6. If the selected compiled graph has neither model-binding requirements nor
    the exact `model-provider` capability, file probing/loading is unreachable;
    otherwise the entire exact file must validate before selected-workflow execution. A
@@ -1624,7 +1599,10 @@ Implementation evidence must cover:
 - **Port conformance:** identical golden provider-neutral cases through fake
   and real adapters; closed stop/failure mapping; complete response reads with
   cancellation/deadline enforcement; malformed and
-  partial observations; complete cleanup on every terminal branch.
+  partial observations; complete cleanup on every terminal branch. Concrete
+  HTTP acceptance uses in-memory connections beneath the same send/read and
+  deadline code, proving in-flight interruption, rejected partial bodies,
+  joined cleanup and no resend; F0007 records the implemented evidence.
 - **Compact response:** ADR 0006 single-shape and discriminated results,
   bound-identity swaps, strict whole-object parsing, required selections,
   keyed repair groups and clarification/context alternatives. Inspect actual

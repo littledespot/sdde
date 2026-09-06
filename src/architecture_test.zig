@@ -22,7 +22,8 @@ test "production provider wiring retains fact-only authority and no-I/O lease pr
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(provider_source, "self.transport.exchange("));
     const http = @embedFile("adapters/provider/bedrock_http.zig");
     inline for (.{ "Environ", "initDefaultProxies", "ssl_key_log", "getenv", "@constCast" }) |forbidden| try expectAbsent(http, forbidden);
-    try std.testing.expectEqual(@as(usize, 1), countOccurrences(http, "client.request("));
+    try std.testing.expect(std.mem.indexOf(u8, http, "pub const Adapter = HttpAdapter(std.http.Client.request);") != null);
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(http, "try open_request("));
     const dispatch = @embedFile("adapters/provider/provider_dispatch.zig");
     try expectAbsent(dispatch, "anyopaque");
     try expectAbsent(dispatch, "else =>");

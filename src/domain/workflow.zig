@@ -76,7 +76,8 @@ fn validLocalId(bytes: []const u8) bool {
     return !hyphen;
 }
 
-pub const OutcomeTag = enum { ok, needs_user, invalid, blocked, failed, cancelled };
+/// `more` is successful bounded progress, never a workflow terminal state.
+pub const OutcomeTag = enum { ok, more, needs_user, invalid, blocked, failed, cancelled };
 
 pub const ParameterValue = union(enum) {
     boolean: bool,

@@ -9,8 +9,9 @@ clarification separation are defined below. The explicit feature/reference
 invocation, shared directory preflight, read-only clarification inputs, Markdown
 ingestion, citable reference preparation, typed text, Markdown exact-value
 preservation, scripted extraction accounting and reconciliation in Sections
-3.1–3.9 are implemented. Generated-name code is removed; live semantic
-extraction/reconciliation, generation,
+3.1–3.9 are implemented. Native model input/result bridges (§3.11) and initial
+specification-unit validators (§5.7) now exist. Generated-name code is removed;
+end-to-end semantic extraction/reconciliation, generation,
 output publication and the complete definition remain unfinished.
 The native content schema and mechanical specification Markdown codec in §5.6
 are implemented. The shared required-authority boundary and Specify projection
@@ -315,8 +316,8 @@ This is not the complete `result.reference-claims/v1` production contract:
 semantic support, business-boundary review, live reconciliation and publication
 are still required before these candidates can become reference authority.
 Markdown inline-code candidates are implemented; other format extractors remain
-future work. There is no live
-model producer or hidden prompt/schema resource. Native values own their data
+future work. The native model bridge is described in §3.11; production workflow
+resources and complete model/gate integration remain open. Native values own their data
 and retain only execution-local predecessors; they impose no model-call byte
 ceiling. The test-only YAML path runs these operations with scripted results
 and does not write artifacts, accept clarifications or mark a stage complete.
@@ -568,6 +569,46 @@ gate bypasses. The production reference fixture reaches the Specify projection;
 H-009/H-010 must still supply semantic evidence and generation, and H-011–H-013
 must connect gap handling, publication and the complete definition.
 
+### 3.11 Native reference/model bridge (partial H-009)
+
+Registered operations now build immutable domain packets and collect bodies
+accepted by the existing provider-observation, envelope and result-schema
+validators:
+
+- `initialize-reference-extraction`, `check-reference-extraction-progress`,
+  `build-reference-extraction-model-input`,
+  `collect-reference-extraction-result`, `build-reference-extraction-results`.
+- `build-reference-reconciliation-model-input`,
+  `check-reference-reconciliation-purpose`,
+  `collect-reference-reconciliation-result`.
+
+Each extraction packet contains one exact captured chunk, its citation span,
+scoped passive choices and token candidates. Reconciliation packets retain all
+partition claim/summary membership and exact-token references. Collection checks
+the immutable request/packet association; models cannot select another chunk or
+partition. Existing domain validators still own interpretation/accounting.
+
+`assign-model-request-id` accepts either a native `model_input_packet` or
+the declared static input resource, never both. The packet supplies an
+engine-owned unit/purpose, not a prompt, result schema or provider selection.
+Only initial-generation producers are registered in this increment.
+A new logical request gets an initial attempt; it does not reset the YAML
+operation's execution/retry ceiling. `more` exposes bounded collection progress
+without reusing failure outcomes.
+
+These bridges do not yet form an executable Specify path. Workflow-owned
+resources, explicit request retirement/retry, production loops and H-008 evidence
+integration remain open. In particular, current gate lineage requires every
+transient source generation to remain current: replacing a completed request
+for the next unit stales its descendants. An explicit native snapshot boundary
+that retains validated response evidence while checking current domain
+authorities has been proposed for approval; no freshness bypass is implemented.
+
+`test-reference-model-input` checks packets, exact values, scope membership and
+allocation failures; `test-model-request-workflow` checks native packet transport
+through the fake provider and rejects packet substitution/schema rejection.
+These are boundary tests, not an end-to-end Specify completion claim.
+
 ## 4. Required logical coverage
 
 The compiled registered contracts collectively cover:
@@ -774,6 +815,28 @@ Markdown scanner owns code-span recognition. Parsing captures text/spans, not
 NFC normalization, provenance, applicability, semantic adequacy or stage success.
 H-008 implements the shared authority boundary (§3.10); H-010/H-012 still own
 generation validation and publication integration.
+
+### 5.7 Initial generation validation (partial H-010)
+
+The native generation candidate is a closed content-or-clarification union.
+Content units are a feature brief (title, description, primary goal), primary
+story, entity applicability, or one registered record family. Native validation
+normalizes typed text, rejects the wrong family and identical normalized records,
+and keeps questions outside specification content.
+
+The initial reference-only provenance join requires retained current claims and
+their stable unique citation union. Exact copies contain only a valid token and
+citation reference, never replacement display bytes. Arbitrary loaded
+clarification-response IDs are rejected; applicable-answer integration remains
+with H-011. Engine code allocates monotonic per-family record IDs; no model
+identity, completion, approval or artifact-path field is accepted.
+
+These are mechanical domain-library boundaries, tested by
+`test-specification-generation`, not a registered generation workflow or semantic
+approval. Model input/resources, coverage accounting, H-008 semantic-evidence
+production, unit-authorized repair and assembled-candidate validation remain
+open. Persistence, editable-ID reconciliation and publication are not implemented
+by these functions.
 
 ## 6. Diagrams
 

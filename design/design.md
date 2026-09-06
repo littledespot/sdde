@@ -2823,6 +2823,11 @@ limit, which the compiler binds to monotonic accounting and which no transition
 cycle can bypass. The selected policy contributes only the workflow
 execution's total-token budget.
 
+Bounded collection operations may return `more` for successful progress with
+remaining work. It is a registered, non-terminal outcome: YAML declares its
+successor and every cycle still requires the existing monotonic bound. No policy
+may admit `end.more`; it grants no acceptance, gate or completion authority.
+
 ### 14.2 `StageGateOrchestrator`
 
 For the selected initial SDD workflow's predecessor gate it:

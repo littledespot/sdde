@@ -31,6 +31,7 @@ const KeyState = [key_count]bool;
 
 fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkflow) Error!void {
     const steps = graph.authority.steps;
+    for (graph.authority.transitions) |transition| if (transition.target == .terminal and transition.target.terminal == .more) return invalid();
     if (workflow.OperationId.parse(graph.authority.invocation_operation_id.bytes) == null) return invalid();
     try validateDataSchemas(graph.authority);
     if (steps.len == 0 or steps.len > definition.max_steps or
@@ -239,6 +240,18 @@ fn findParameter(parameters: []const compilation.CompiledParameter, id: []const 
 }
 fn invalid() Error {
     return error.WorkflowGraphCompileInvalid;
+}
+
+test "bounded progress can never be a compiled workflow terminal state" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var step = testStep("start", null);
+    step.outcomes = &.{ .ok, .more };
+    const transitions = [_]workflow.Transition{
+        .{ .from = step.id, .outcome = .ok, .target = .{ .terminal = .ok } },
+        .{ .from = step.id, .outcome = .more, .target = .{ .terminal = .more } },
+    };
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{testGraph(&.{step}, &transitions)}));
 }
 
 fn testStep(id: []const u8, retry_limit: ?u32) compilation.CompiledStep {

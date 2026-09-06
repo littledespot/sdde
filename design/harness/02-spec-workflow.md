@@ -130,9 +130,22 @@ Acceptance:
 
 ## H-009 — Connect reference operations to model execution
 
-**Status:** Open — foundations exist. **Owner:** registered reference/model
+**Status:** Partial — native packet/result bridges and fake-provider transport
+tests exist; the production reference/model workflow is not complete. **Owner:** registered reference/model
 operations. **Dependencies:** reuse current generic request lifecycle work;
 H-008 is required at applicable production authority gates.
+
+Implemented: engine-owned chunk/reconciliation packets, exact request/result
+association, total sequential extraction collection, native operation bindings,
+non-terminal `more` progress, and per-request initial-attempt classification
+without resetting the operation ceiling.
+
+Still required: workflow resources, bounded production iteration/retry and
+request retirement, complete fake-provider reference-pipeline tests, and H-008
+integration. Current gate lineage treats transient request generations as
+continuing authority, so progressing to another request invalidates descendants.
+The proposed shared snapshot boundary retains validated evidence and checks
+current domain authorities; approval is pending. No freshness rule is bypassed.
 
 Work:
 
@@ -161,8 +174,26 @@ existing targeted extraction/reconciliation/provider tests before extending them
 
 ## H-010 — Generate and validate specification content
 
-**Status:** Open. **Owner:** registered specification actions and typed IR.
+**Status:** Partial — initial typed unit/provenance/ID domain boundaries exist;
+production generation is not complete. **Owner:** registered specification actions and typed IR.
 **Dependencies:** H-007–H-009.
+
+Implemented: closed brief/story/entity/record-family candidates, separate typed
+clarification needs, current retained-claim/citation-union joins, shared typed-text
+validation, exact-token references, duplicate normalized record rejection and
+engine-owned monotonic initial IDs. Tests cover all families and unrelated
+business examples.
+
+Still required: registered generation/model-input operations and resources,
+semantic evidence through H-008, complete claim/obligation coverage,
+unit-authorized bounded repair and assembled-candidate revalidation.
+Applicable clarification answers are not inferred from read-only forms.
+
+Current boundary verification:
+`zig build test-reference-model-input test-specification-generation test-model-request-workflow verify --summary all`
+passed 111/111 build steps and 1,134/1,134 test executions, including lint,
+architecture and native-package smoke checks. `git diff --check` passed.
+No live model calls or end-to-end Specify completion are claimed.
 
 Work:
 

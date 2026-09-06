@@ -100,6 +100,8 @@ request and complete response have no engine byte ceilings. One network task
 is raced against the original monotonic deadline and joined before releasing
 call storage; this is not parallel workflow execution. Cancellation stays
 cancellation. Transmission uncertainty stays `accepted_or_unknown`.
+Socket read/write errors retain cancellation separately from HTTP framing
+errors. EOF before a declared body ends rejects without publishing partial data.
 
 ## Request and schema projection
 
@@ -146,8 +148,10 @@ Recognized non-candidate stops discard content and retain usage:
 | `model_context_window_exceeded` | `context_limit` |
 | `stop_sequence`, unknown | `response_invalid` failure |
 
-AWS exception discrimination requires a matching status and recognized type;
-body/header disagreements reject. Authentication, access denial, validation,
+AWS exception discrimination follows the [restJson1 error encoding](https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html#operation-error-serialization):
+the header, `__type` or `code` must resolve to one recognized shape name after
+the specified namespace/colon normalization. Status or discriminator disagreements
+reject. Authentication, access denial, validation,
 missing model, throttling, model readiness, timeout and service failures retain
 their closed F0006 causes. `ModelErrorException` requires its recognized nested
 status. Error prose never determines retryability and is never exposed.
@@ -171,6 +175,14 @@ never charge tokens again.
 - Wire fixtures cover canonical projection, URI encoding, strict response and
   usage rejection, secret redaction, native representability, unsupported
   counting, status/type agreement and growing HTTP headers.
+- [Concrete HTTP tests](../../src/bedrock_http_test.zig) exercise the actual
+  serializer, response reader and deadline race over event-controlled in-memory
+  connections. They prove one bearer header and request per call, fragmented
+  writes/reads, in-flight timeout/cancellation, truncated and malformed bodies,
+  completion during cancellation cleanup, no redirect/service-error resend,
+  and task/connection cleanup under allocation or scheduling failure. Only
+  connection establishment is substituted at compile time; production remains
+  bound to Zig's HTTPS opener. These tests perform no DNS, TLS handshake or AWS request.
 - YAML tests use the real production composition and adapter with a deterministic
   transport: complete lifecycle, count then inference, missing-key termination,
   budget overshoot and execution isolation. No test silently bypasses a ledger.

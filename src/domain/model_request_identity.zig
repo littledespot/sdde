@@ -695,7 +695,7 @@ fn validateContentOwner(owner: ContentUnitOwnerId) ValidationError!void {
     }
 }
 
-fn cloneUnitOwner(allocator: std.mem.Allocator, owner: ImmutableUnitOwnerId) std.mem.Allocator.Error!ImmutableUnitOwnerId {
+pub fn cloneUnitOwner(allocator: std.mem.Allocator, owner: ImmutableUnitOwnerId) std.mem.Allocator.Error!ImmutableUnitOwnerId {
     return switch (owner) {
         .workflow_step => .workflow_step,
         .reference_chunk => |value| .{ .reference_chunk = (try cloneContentOwner(allocator, .{ .reference_chunk = value })).reference_chunk },

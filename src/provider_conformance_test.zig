@@ -10,6 +10,10 @@ const contracts = @import("composition/provider_model_contracts.zig");
 const response = @import("adapters/provider/bedrock_response.zig");
 const strict = @import("domain/strict_json.zig");
 
+test {
+    _ = @import("bedrock_http_test.zig");
+}
+
 const Backend = enum { fake, bedrock };
 const Wire = @import("bedrock_transport_test_fixture.zig").Wire;
 
@@ -445,4 +449,16 @@ test "Bedrock model error nested status and conflicting discriminators fail clos
         const observed = try response.count(std.testing.allocator, .{ .received = .{ .status = 424, .exception = "ModelErrorException", .body = case.body } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.input_token_count));
         try std.testing.expectEqual(case.cause, observed.failed.cause);
     }
+}
+
+test "Bedrock uses AWS restJson1 error discriminators without guessing from prose" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator, .bedrock);
+    defer fixture.deinit();
+    for ([_][]const u8{ "{\"code\":\"ThrottlingException\"}", "{\"__type\":\"com.amazonaws.bedrock#ThrottlingException:detail\"}", "{\"__type\":\"ThrottlingException\",\"code\":\"ThrottlingException\"}" }) |body| {
+        const observed = try response.count(std.testing.allocator, .{ .received = .{ .status = 429, .body = body } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.input_token_count));
+        try std.testing.expectEqual(.throttled, observed.failed.cause);
+    }
+    const conflict = try response.count(std.testing.allocator, .{ .received = .{ .status = 429, .exception = "ThrottlingException", .body = "{\"code\":\"AccessDeniedException\"}" } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.input_token_count));
+    try std.testing.expectEqual(.response_invalid, conflict.failed.cause);
 }

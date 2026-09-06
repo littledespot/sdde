@@ -298,6 +298,22 @@ pub fn build(b: *std.Build) void {
     const reconciliation_step = b.step("test-reference-reconciliation", "Test hierarchical reference reconciliation and blocking conflicts");
     reconciliation_step.dependOn(&b.addRunArtifact(reconciliation_tests).step);
 
+    const reference_model_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/reference_model_input_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    b.step("test-reference-model-input", "Test engine-owned reference model packets and exact response membership").dependOn(&b.addRunArtifact(reference_model_tests).step);
+
+    const specification_generation_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/specification_generation_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    b.step("test-specification-generation", "Test reference-grounded specification units and engine-owned IDs").dependOn(&b.addRunArtifact(specification_generation_tests).step);
+
     const structured_token_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/structured_token_test.zig"),
         .target = target,

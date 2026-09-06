@@ -32,6 +32,7 @@ const passive_literals = @import("../application/passive_literal_workflow.zig");
 const structured_tokens = @import("../application/structured_token_workflow.zig");
 const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
 const authority = @import("../application/required_authority_workflow.zig");
+const reference_model = @import("../application/reference_model_workflow.zig");
 
 /// Composition of native implementations, not a workflow graph. No setup action
 /// executes until the selected YAML reaches its registered operation.
@@ -106,7 +107,15 @@ pub const Assembly = struct {
     reconcile_required_authority: authority.Reconcile,
     validate_required_authority: authority.Validate,
     model_requests: model_request.Assembly,
-    entries: [core.entries.len + 69 + model_request.count]operations.Entry,
+    initialize_extraction: reference_model.Initialize,
+    check_extraction: reference_model.CheckExtraction,
+    build_extraction_packet: reference_model.BuildExtractionInput,
+    collect_extraction: reference_model.CollectExtraction,
+    finish_extraction: reference_model.FinishExtraction,
+    build_reconciliation_packet: reference_model.BuildReconciliationInput,
+    check_reconciliation: reference_model.CheckReconciliation,
+    collect_reconciliation: reference_model.CollectReconciliation,
+    entries: [core.entries.len + 77 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -144,6 +153,14 @@ pub const Assembly = struct {
             .validate_reference_chunks = .{ .allocator = allocator },
             .validate_source_citations = .{ .allocator = allocator },
             .parse_reference_extraction = .{ .allocator = allocator },
+            .initialize_extraction = .{ .allocator = allocator },
+            .check_extraction = .{},
+            .build_extraction_packet = .{ .allocator = allocator },
+            .collect_extraction = .{ .allocator = allocator },
+            .finish_extraction = .{ .allocator = allocator },
+            .build_reconciliation_packet = .{ .allocator = allocator },
+            .check_reconciliation = .{},
+            .collect_reconciliation = .{ .allocator = allocator },
             .extract_structured_facts = .{ .allocator = allocator },
             .assign_token_candidates = .{ .allocator = allocator },
             .validate_token_classifications = .{ .allocator = allocator },
@@ -219,6 +236,14 @@ pub const Assembly = struct {
             entry(evidence.ValidateChunks, &self.validate_reference_chunks),
             entry(evidence.ValidateCitations, &self.validate_source_citations),
             entry(extraction.Parse, &self.parse_reference_extraction),
+            entry(reference_model.Initialize, &self.initialize_extraction),
+            entry(reference_model.CheckExtraction, &self.check_extraction),
+            entry(reference_model.BuildExtractionInput, &self.build_extraction_packet),
+            entry(reference_model.CollectExtraction, &self.collect_extraction),
+            entry(reference_model.FinishExtraction, &self.finish_extraction),
+            entry(reference_model.BuildReconciliationInput, &self.build_reconciliation_packet),
+            entry(reference_model.CheckReconciliation, &self.check_reconciliation),
+            entry(reference_model.CollectReconciliation, &self.collect_reconciliation),
             entry(structured_tokens.Extract, &self.extract_structured_facts),
             entry(structured_tokens.AssignCandidates, &self.assign_token_candidates),
             entry(structured_tokens.Validate, &self.validate_token_classifications),
@@ -273,7 +298,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation.schemas ++ authority.schemas ++ model_request.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation.schemas ++ authority.schemas ++ reference_model.schemas ++ model_request.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.toolchain@1",
     .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },

@@ -60,7 +60,7 @@ pub fn readCurrent(view: *const @import("../domain/pipeline_data.zig").View) ope
             // Explicit closure abandons invalid content; it does not assert retry exhaustion.
             .invalid, .failed => .failed,
             .cancelled => .cancelled,
-            .needs_user, .blocked => return error.OperationExecutionFailed,
+            .more, .needs_user, .blocked => return error.OperationExecutionFailed,
         },
         .outcome = outcome,
     };

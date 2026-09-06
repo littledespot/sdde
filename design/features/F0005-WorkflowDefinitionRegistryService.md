@@ -282,10 +282,14 @@ parameters, never unrelated workflow resources or source paths.
 `on` maps every outcome declared by the selected operation contract exactly
 once to either another local step ID or one of `end.ok`, `end.needs-user`,
 `end.invalid`, `end.blocked`, `end.failed`, and `end.cancelled`. The exact YAML
-keys are `ok`, `needs-user`, `invalid`, `blocked`, `failed`, and `cancelled`;
+keys are `ok`, `more`, `needs-user`, `invalid`, `blocked`, `failed`, and `cancelled`;
 the compiler converts them to the corresponding internal tagged-union variants.
 A terminal target must preserve the source outcome and cannot relabel a
 non-`ok` result as `ok`.
+
+`more` means successful progress with remaining collection work. Its target
+must be another step, never a terminal. Existing compiler-proven cycle bounds
+and runner-owned monotonic accounting apply; it grants no gate authority.
 
 Source mapping order has no semantic authority. The compiler canonicalizes
 steps, parameters, resources, and outcomes by their typed IDs before constructing

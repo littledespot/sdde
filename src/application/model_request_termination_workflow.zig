@@ -48,7 +48,7 @@ pub fn readCurrent(view: *const @import("../domain/pipeline_data.zig").View) ope
         .reason = switch (outcome) {
             .failed => if (record.status == .assigned) .not_invoked_authorization_failure else .failed,
             .cancelled => .cancelled,
-            .ok, .invalid, .needs_user, .blocked => return error.OperationExecutionFailed,
+            .ok, .more, .invalid, .needs_user, .blocked => return error.OperationExecutionFailed,
         },
         .outcome = outcome,
     };

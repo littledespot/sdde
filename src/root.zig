@@ -24,6 +24,8 @@ test {
     _ = @import("provider_conformance_test.zig");
     _ = @import("required_authority_test.zig");
     _ = @import("specification_contract_test.zig");
+    _ = @import("reference_model_input_test.zig");
+    _ = @import("specification_generation_test.zig");
     _ = @import("model_result_schema_test.zig");
     _ = @import("model_capabilities_test.zig");
     refAllDeclsRecursive(@This());

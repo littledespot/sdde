@@ -4,6 +4,7 @@ const std = @import("std");
 const extraction = @import("reference_extraction.zig");
 const reconciliation = @import("reference_reconciliation.zig");
 pub const Payload = union(enum) {
+    extraction_progress: @import("reference_model_iteration.zig").Progress,
     raw: extraction.Raw,
     parsed: extraction.Parsed,
     text_validated: extraction.TextValidated,

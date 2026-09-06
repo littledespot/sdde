@@ -4,6 +4,8 @@ const binding_module = @import("llm_provider_binding.zig");
 const compilation = @import("workflow_compilation.zig");
 const preparation = @import("model_request_preparation.zig");
 const provider = @import("llm_provider_operation.zig");
+const packets = @import("model_input_packet.zig");
+pub const Input = union(enum) { resource: compilation.CompiledResource, packet: *const packets.Packet };
 
 /// One immutable association, carried by typed pipeline keys. Canonical IDs are
 /// retained through their ledger owner, never cloned into a second authority.
@@ -25,8 +27,17 @@ pub const Request = opaque {
     }
 
     pub fn input(self: *const Request) ?[]const u8 {
-        const resource = storage(self).input orelse return null;
-        return resource.content.data;
+        return switch (storage(self).input orelse return null) {
+            .resource => |resource| resource.content.data,
+            .packet => |value| value.body(),
+        };
+    }
+
+    pub fn packet(self: *const Request) ?*const packets.Packet {
+        return switch (storage(self).input orelse return null) {
+            .resource => null,
+            .packet => |value| value,
+        };
     }
 
     pub fn source(self: *const Request, input_id: provider.ModelVisibleInputId) preparation.ValidationError!preparation.Source {
@@ -59,7 +70,7 @@ const Storage = struct {
     binding: binding_module.ValidatedProviderModelBinding,
     prompt: compilation.CompiledResource,
     result: compilation.CompiledResource,
-    input: ?compilation.CompiledResource,
+    input: ?Input,
     phase: union(enum) {
         assigned,
         validated: *const identity.ModelRequestBindingEvidence,
@@ -67,13 +78,17 @@ const Storage = struct {
     },
 };
 
-pub const Error = identity.Error || preparation.ValidationError;
+pub const Error = packets.Error || preparation.ValidationError;
 
-pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *const identity.ModelRequestId, selected: binding_module.ValidatedProviderModelBinding, prompt: compilation.CompiledResource, result: compilation.CompiledResource, input: ?compilation.CompiledResource) Error!*Request {
+pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *const identity.ModelRequestId, selected: binding_module.ValidatedProviderModelBinding, prompt: compilation.CompiledResource, result: compilation.CompiledResource, input: ?Input) Error!*Request {
     if (prompt.content != .prompt or result.content != .result_schema or
-        (input != null and input.?.content != .data) or
+        (input != null and input.? == .resource and input.?.resource.content != .data) or
         !identity.ledger(ledger_owner).containsRequest(id) or
         !id.model_operation_id.eql(selected.operation_id)) return error.ModelRequestAssociationInvalid;
+    if (input) |value| if (value == .packet) {
+        const current = identity.ledger(ledger_owner);
+        _ = identity.validateBinding(current, current.revision(), id, value.packet.unit(), selected.operation_id, value.packet.purpose()) catch return error.ModelRequestAssociationInvalid;
+    };
     return create(.{
         .allocator = allocator,
         .ledger_owner = ledger_owner,
@@ -105,6 +120,7 @@ pub fn prepared(current: *const Request, owned: preparation.Owned) Error!*Reques
 pub fn destroy(request: *Request) void {
     const value: *Storage = @ptrCast(@alignCast(request));
     if (value.phase == .prepared) value.phase.prepared.deinit();
+    if (value.input) |input| if (input == .packet) packets.release(input.packet);
     identity.deinitOwner(value.ledger_owner);
     value.allocator.destroy(value);
 }
@@ -117,6 +133,10 @@ fn create(value: Storage) Error!*Request {
     const result = try value.allocator.create(Storage);
     errdefer value.allocator.destroy(result);
     try identity.retainOwner(value.ledger_owner);
+    errdefer identity.deinitOwner(value.ledger_owner);
+    if (value.input) |input| if (input == .packet) {
+        _ = try packets.retain(input.packet);
+    };
     result.* = value;
     return @ptrCast(result);
 }

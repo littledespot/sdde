@@ -16,6 +16,8 @@ pub fn main(init: std.process.Init) !void {
     switch (outcome) {
         .execution => |execution| switch (execution) {
             .ok => return,
+            // Compiled graphs cannot terminate with a progress-only outcome.
+            .more => unreachable,
             .needs_user, .invalid, .blocked, .failed, .cancelled => {
                 try writeFailure(init.io, @tagName(execution));
                 std.process.exit(1);
