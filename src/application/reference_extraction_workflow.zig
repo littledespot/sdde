@@ -1,5 +1,5 @@
 const std = @import("std");
-const owned = @import("../domain/reference_extraction_value.zig");
+const owned = @import("../domain/reference_candidate_value.zig");
 const evidence = @import("../domain/reference_evidence.zig");
 const evidence_values = @import("reference_evidence_workflow.zig");
 const values = @import("pipeline_values.zig");

@@ -9,8 +9,9 @@ pub const Error = text.Error || tokens.Error || error{InvalidReferenceExtraction
 /// Syntax-validated interpretation is still not reconciled business authority.
 pub const ProposalContent = ContentOf(text.BusinessText, text.ReferenceSemanticText);
 pub const Content = ContentOf(text.ValidatedBusinessText, text.ValidatedReferenceSemanticText);
+pub const Kind = enum { business, design, technical, validation, implementation_assumption, open_question, scope_guard };
 fn ContentOf(comptime Business: type, comptime Reference: type) type {
-    return union(enum) { business: Business, design: Reference, technical: Reference, validation: Reference, implementation_assumption: Reference, open_question: Reference, scope_guard: Business };
+    return union(Kind) { business: Business, design: Reference, technical: Reference, validation: Reference, implementation_assumption: Reference, open_question: Reference, scope_guard: Business };
 }
 pub const Proposal = struct { content: ProposalContent, citations: []const evidence.CitationProposal };
 pub const TextValidatedProposal = struct { content: Content, citations: []const evidence.CitationProposal };

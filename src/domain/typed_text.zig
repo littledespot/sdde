@@ -17,21 +17,29 @@ pub const ReferenceSemanticText = struct { nodes: []const ReferenceNode };
 pub const ValidatedBusinessText = struct { value: BusinessText };
 pub const ValidatedReferenceSemanticText = struct { value: ReferenceSemanticText };
 pub const Context = struct { registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, scope: evidence.Scope };
+pub const ScopeSetContext = struct { registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, scopes: []const evidence.Scope };
 pub const Validator = struct {
     normalizer: unicode.Normalizer,
     folder: unicode.CaseFolder,
     classifier: unicode.LexicalClassifier,
 
     pub fn business(self: Validator, allocator: std.mem.Allocator, context: Context, candidate: BusinessText) Error!ValidatedBusinessText {
-        return .{ .value = .{ .segments = try self.nodes(BusinessSegment, allocator, context, candidate.segments) } };
+        return self.businessIn(allocator, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = &.{context.scope} }, candidate);
     }
     pub fn reference(self: Validator, allocator: std.mem.Allocator, context: Context, candidate: ReferenceSemanticText) Error!ValidatedReferenceSemanticText {
+        return self.referenceIn(allocator, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = &.{context.scope} }, candidate);
+    }
+    pub fn businessIn(self: Validator, allocator: std.mem.Allocator, context: ScopeSetContext, candidate: BusinessText) Error!ValidatedBusinessText {
+        return .{ .value = .{ .segments = try self.nodes(BusinessSegment, allocator, context, candidate.segments) } };
+    }
+    pub fn referenceIn(self: Validator, allocator: std.mem.Allocator, context: ScopeSetContext, candidate: ReferenceSemanticText) Error!ValidatedReferenceSemanticText {
         return .{ .value = .{ .nodes = try self.nodes(ReferenceNode, allocator, context, candidate.nodes) } };
     }
-    fn nodes(self: Validator, comptime Node: type, allocator: std.mem.Allocator, context: Context, candidates: []const Node) Error![]const Node {
+    fn nodes(self: Validator, comptime Node: type, allocator: std.mem.Allocator, context: ScopeSetContext, candidates: []const Node) Error![]const Node {
         comptime std.debug.assert(Node == BusinessSegment or Node == ReferenceNode);
         try @import("path_token_grammar.zig").validateBinding(allocator, context.registry.grammar, context.current, context.inputs, self.normalizer, self.folder);
-        const unit = try evidence.resolve(context.inputs, context.scope);
+        if (context.scopes.len == 0) return error.InvalidTypedText;
+        for (context.scopes) |scope| _ = try evidence.resolve(context.inputs, scope);
         if (candidates.len == 0) return error.InvalidTypedText;
         var result: std.ArrayList(Node) = .empty;
         var index: usize = 0;
@@ -54,12 +62,15 @@ pub const Validator = struct {
                     visible = visible or std.mem.trim(u8, text, " \t\r\n").len != 0;
                     try result.append(allocator, .{ .literal = .{ .value = text } });
                 } else if (comptime tag == .passive) {
-                    _ = try literals.resolve(context.registry, context.inputs, context.scope, node.passive_literal_id);
+                    _ = try literals.resolveIn(context.registry, context.inputs, context.scopes, node.passive_literal_id);
                     try result.append(allocator, .{ .passive = node });
                     visible = true;
                     index += 1;
                 } else {
-                    if (node.source_id.ordinal != unit.source.id.ordinal) return error.InvalidTypedText;
+                    for (context.scopes) |scope| {
+                        const unit = try evidence.resolve(context.inputs, scope);
+                        if (node.source_id.ordinal == unit.source.id.ordinal) break;
+                    } else return error.InvalidTypedText;
                     try result.append(allocator, .{ .source = node });
                     visible = true;
                     index += 1;

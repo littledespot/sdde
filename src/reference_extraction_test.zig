@@ -29,7 +29,7 @@ pub fn passiveReply(allocator: std.mem.Allocator, chunk: evidence.Chunk, ordinal
 fn raw(inputs: evidence.Inputs, index: usize, bytes: []const u8) extraction.RawResult {
     return .{ .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[index].id }, .result = .{ .response = bytes } };
 }
-fn finish(allocator: std.mem.Allocator, inputs: evidence.Inputs, results: []const extraction.RawResult) !extraction.Accounted {
+pub fn finish(allocator: std.mem.Allocator, inputs: evidence.Inputs, results: []const extraction.RawResult) !extraction.Accounted {
     const parsed = try parse.execute(allocator, .{ .entries = results });
     const tokens = try token_fixture.assignments(allocator, inputs, try text_fixture.check(allocator, inputs, parsed));
     const valid = try validate.execute(allocator, inputs, try token_fixture.build.execute(allocator, tokens));
@@ -173,7 +173,7 @@ test "sealed extraction values retain only owned candidate data after inputs are
     try std.testing.checkAllAllocationFailures(std.testing.allocator, ownershipCase, .{});
 }
 fn ownershipCase(allocator: std.mem.Allocator) !void {
-    const owned = @import("domain/reference_extraction_value.zig");
+    const owned = @import("domain/reference_candidate_value.zig");
     const bindings = @import("application/reference_extraction_workflow.zig");
     const values = @import("application/pipeline_values.zig");
     var source_arena: std.heap.ArenaAllocator = .init(allocator);

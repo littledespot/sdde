@@ -6,7 +6,7 @@ const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const source_values = @import("reference_evidence_workflow.zig");
 const extraction_values = @import("reference_extraction_workflow.zig");
-const owned = @import("../domain/reference_extraction_value.zig");
+const owned = @import("../domain/reference_candidate_value.zig");
 
 // Source-derived bounds only. Model candidate values use the sealed owner below.
 pub const facts_schema = values.schema(.structured_reference_facts, tokens.Facts, 1, 64 * 1024 * 1024);

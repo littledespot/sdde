@@ -2,6 +2,7 @@
 //! model capabilities or model-call byte ceilings.
 const std = @import("std");
 const extraction = @import("reference_extraction.zig");
+const reconciliation = @import("reference_reconciliation.zig");
 pub const Payload = union(enum) {
     raw: extraction.Raw,
     parsed: extraction.Parsed,
@@ -13,6 +14,21 @@ pub const Payload = union(enum) {
     assigned: extraction.Assignments,
     ledger: extraction.Ledger,
     accounted: extraction.Accounted,
+    reconciliation_items: reconciliation.Items,
+    reconciliation_layout: reconciliation.Layout,
+    reconciliation_plan: reconciliation.Plan,
+    reconciliation_progress: reconciliation.Progress,
+    reconciliation_input: reconciliation.Input,
+    reconciliation_raw: reconciliation.Raw,
+    reconciliation_parsed: reconciliation.Parsed,
+    reconciliation_summary: reconciliation.CheckedSummary,
+    reconciliation_summary_ids: reconciliation.SummaryAssignment,
+    reconciliation_dispositions: reconciliation.CheckedDispositions,
+    reconciliation_signals: reconciliation.CheckedSignals,
+    reconciliation_conflicts: reconciliation.CheckedConflicts,
+    reconciliation_record_ids: reconciliation.RecordAssignments,
+    reconciliation_records: reconciliation.Records,
+    reconciliation_accounted: reconciliation.Accounted,
 };
 pub const Value = opaque {
     pub fn payload(self: *const Value) *const Payload {
@@ -41,13 +57,17 @@ pub fn view(owner: *const Owner) *const Value {
     return @ptrCast(&owner.handle);
 }
 pub fn destroy(owner: *Owner) void {
-    std.debug.assert(owner.references > 0);
-    owner.references -= 1;
-    if (owner.references != 0) return;
-    if (owner.parent) |parent| destroy(storage(parent));
-    const allocator = owner.allocator;
-    owner.arena.deinit();
-    allocator.destroy(owner);
+    var current = owner;
+    while (true) {
+        std.debug.assert(current.references > 0);
+        current.references -= 1;
+        if (current.references != 0) return;
+        const parent = if (current.parent) |value| storage(value) else null;
+        const allocator = current.allocator;
+        current.arena.deinit();
+        allocator.destroy(current);
+        current = parent orelse return;
+    }
 }
 fn storage(value: *const Value) *Owner {
     const handle: *const Handle = @ptrCast(@alignCast(value));

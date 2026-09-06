@@ -82,18 +82,27 @@ pub fn validate(allocator: std.mem.Allocator, assigned: Assigned, current: *cons
 }
 
 pub fn resolve(registry: Registry, inputs: evidence.Inputs, scope: evidence.Scope, id: Id) Error!Record {
+    return resolveIn(registry, inputs, &.{scope}, id);
+}
+
+/// The caller supplies an exact provenance allowlist, never a corpus-wide scope.
+pub fn resolveIn(registry: Registry, inputs: evidence.Inputs, scopes: []const evidence.Scope, id: Id) Error!Record {
     if (!registry.grammar.reference_state_id.eql(inputs.corpus.state_id) or !std.mem.eql(u8, registry.grammar.feature_id.bytes, inputs.corpus.feature_id.bytes)) return error.InvalidPassiveLiteral;
-    const unit = try evidence.resolve(inputs, scope);
+    if (scopes.len == 0) return error.InvalidPassiveLiteral;
+    for (scopes) |scope| _ = try evidence.resolve(inputs, scope);
     if (id.ordinal == 0 or id.ordinal > registry.records.len) return error.InvalidPassiveLiteral;
     const record = registry.records[id.ordinal - 1];
     if (record.id.ordinal != id.ordinal) return error.InvalidPassiveLiteral;
     for (registry.occurrences) |occurrence| {
         if (occurrence.id.ordinal != id.ordinal) continue;
-        const allowed = switch (occurrence.origin) {
-            .reference_name => |source| source.ordinal == unit.source.id.ordinal,
-            .reference_span => |span| span.source_id.ordinal == unit.source.id.ordinal and span.block_id.ordinal == unit.chunk.block_id.ordinal and span.start_byte >= unit.chunk.span.start.byte and span.end_byte <= unit.chunk.span.end.byte,
-        };
-        if (allowed) return record;
+        for (scopes) |scope| {
+            const unit = try evidence.resolve(inputs, scope);
+            const allowed = switch (occurrence.origin) {
+                .reference_name => |source| source.ordinal == unit.source.id.ordinal,
+                .reference_span => |span| span.source_id.ordinal == unit.source.id.ordinal and span.block_id.ordinal == unit.chunk.block_id.ordinal and span.start_byte >= unit.chunk.span.start.byte and span.end_byte <= unit.chunk.span.end.byte,
+            };
+            if (allowed) return record;
+        }
     }
     return error.InvalidPassiveLiteral;
 }

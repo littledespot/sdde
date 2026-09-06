@@ -1635,6 +1635,29 @@ test "preservation is a generic YAML boundary with source-only scalars and manda
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("adapters/parsers/markdown_reference.zig"), "markdown_code_spans.zig") != null);
 }
 
+test "reconciliation is YAML visible capability free and preserves closed candidate authority" {
+    const native = @import("application/reference_reconciliation_workflow.zig");
+    const binding = @import("application/workflow_operation_binding.zig");
+    const r = @import("domain/reference_reconciliation.zig");
+    inline for (.{ native.BuildItems, native.Partition, native.AssignPartitions, native.ValidatePartitions, native.BuildInput, native.Parse, native.ValidateSummary, native.AssignSummary, native.BuildSummary, native.ValidateDispositions, native.ValidateSignals, native.ValidateConflicts, native.AssignRecords, native.BuildRecords, native.Account }) |T| {
+        try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
+        try std.testing.expectEqual(.none, T.Action.contract.side_effect);
+    }
+    for (native.schemas) |schema| try std.testing.expect(schema.maximum_bytes == null);
+    try std.testing.expectEqual(@as(i64, 2), native.Partition.parameters[0].integer_min);
+    try std.testing.expect(native.Partition.parameters[0].required);
+    try std.testing.expectEqual(@as(usize, 4), @typeInfo(r.Disposition).@"enum".fields.len);
+    try std.testing.expectEqual(@as(usize, 1), @typeInfo(@FieldType(r.ConflictProposal, "resolution")).@"enum".fields.len);
+    try std.testing.expect(!@hasField(r.SignalProposal, "id"));
+    try std.testing.expect(!@hasField(r.ConflictProposal, "id"));
+    try std.testing.expect(!@hasField(r.SummaryProposal, "partition_id"));
+    try std.testing.expect(@FieldType(r.ContentProposal, "model") == @import("domain/reference_extraction.zig").ProposalContent);
+    try std.testing.expect(@FieldType(r.Item, "claim") == @import("domain/reference_extraction.zig").Claim);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.reference_reconciliation_records}, native.Account.Action.contract.requires);
+    try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "reconciliation");
+    try expectAbsent(@embedFile("domain/reference_reconciliation.zig"), "precedenceRule");
+}
+
 test "feature document filenames and headings agree" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;

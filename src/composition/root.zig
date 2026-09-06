@@ -1056,11 +1056,11 @@ const ReferenceCitationTestProducer = struct {
 };
 
 const ReferenceExtractionTestProducer = struct {
-    mode: enum { claims, no_claim, blocked, malformed, missing, duplicate, invalid_citation, unbound, passive, unknown_literal, legacy, preserved, missing_classification, positive_empty_preserved, irrelevant },
+    mode: enum { claims, no_claim, blocked, malformed, missing, duplicate, invalid_citation, unbound, passive, unknown_literal, legacy, preserved, missing_classification, positive_empty_preserved, irrelevant, reconciled, conflict, bad_reconciliation },
     observed: usize = 0,
     const bindings = @import("../application/reference_extraction_workflow.zig");
     const extraction = @import("../domain/reference_extraction.zig");
-    const owned = @import("../domain/reference_extraction_value.zig");
+    const owned = @import("../domain/reference_candidate_value.zig");
     fn propose(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
         const allocator = std.testing.allocator;
         const source = ReferenceCitationTestProducer.values.read(&input.step.data, ReferenceCitationTestProducer.bindings.inputs_schema, ReferenceCitationTestProducer.evidence.Inputs) catch return error.OperationExecutionFailed;
@@ -1103,7 +1103,7 @@ const ReferenceExtractionTestProducer = struct {
                         const body = if (context.?.mode == .positive_empty_preserved or context.?.mode == .irrelevant) @import("../reference_extraction_test.zig").no_claim else @import("../reference_extraction_test.zig").reply(scratch, chunk, "A supported candidate.") catch return error.OperationExecutionFailed;
                         break :response .{ .response = token_fixture.wire(scratch, body, if (context.?.mode == .missing_classification) &.{} else decisions) catch return error.OperationExecutionFailed };
                     },
-                    .claims, .missing, .duplicate, .invalid_citation => .{ .response = @import("../reference_extraction_test.zig").reply(scratch, citation_chunk, "Scripted unreviewed claim.") catch return error.OperationExecutionFailed },
+                    .claims, .missing, .duplicate, .invalid_citation, .reconciled, .conflict, .bad_reconciliation => .{ .response = @import("../reference_extraction_test.zig").reply(scratch, citation_chunk, "Scripted unreviewed claim.") catch return error.OperationExecutionFailed },
                 },
             };
             switch (context.?.mode) {
@@ -1132,15 +1132,52 @@ const ReferenceExtractionTestProducer = struct {
     }
 };
 
-test "native YAML validates citations and accounts every extraction chunk before continuation" {
+const ReferenceReconciliationTestProducer = struct {
+    mode: @FieldType(ReferenceExtractionTestProducer, "mode"),
+    observed: usize = 0,
+    const native = @import("../application/reference_reconciliation_workflow.zig");
+    const fixture = @import("../test_fixtures/reference_reconciliation.zig");
+    const prior = @import("../application/reference_extraction_workflow.zig");
+    fn propose(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
+        const allocator = std.testing.allocator;
+        const current = try prior.read(&input.step.data, native.input_schema, .reconciliation_input);
+        const packet = current.payload().reconciliation_input;
+        var arena: std.heap.ArenaAllocator = .init(allocator);
+        defer arena.deinit();
+        const scratch = arena.allocator();
+        const response = if (packet.purpose == .summary)
+            std.json.Stringify.valueAlloc(scratch, .{ .summary = fixture.summary(scratch, packet) catch return error.OperationExecutionFailed }, .{}) catch return error.OperationExecutionFailed
+        else final: {
+            var proposal = if (context.?.mode == .conflict) @import("../reference_reconciliation_test.zig").conflicting(scratch, packet) catch return error.OperationExecutionFailed else fixture.global(scratch, packet) catch return error.OperationExecutionFailed;
+            if (context.?.mode == .bad_reconciliation) proposal.claim_dispositions = proposal.claim_dispositions[1..];
+            break :final std.json.Stringify.valueAlloc(scratch, .{ .global = proposal }, .{}) catch return error.OperationExecutionFailed;
+        };
+        const owner = try native.capture(allocator, current, response);
+        errdefer @import("../domain/reference_candidate_value.zig").destroy(owner);
+        return prior.publish(allocator, native.raw_schema, owner, .ok);
+    }
+    fn observe(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
+        const result = try prior.read(&input.step.data, native.accounted_schema, .reconciliation_accounted);
+        if (result.payload().reconciliation_accounted.outcome != .complete) return error.OperationExecutionFailed;
+        context.?.observed += 1;
+        return .{ .outcome = .ok, .delta = .{} };
+    }
+};
+
+test "native YAML validates citations extraction and reconciliation before continuation" {
     const io = std.testing.io;
     const binding = @import("../application/workflow_operation_binding.zig");
-    const scenarios = [_]?@FieldType(ReferenceExtractionTestProducer, "mode"){ null, null, .claims, .no_claim, .blocked, .malformed, .missing, .duplicate, .invalid_citation, .unbound, .passive, .unknown_literal, .legacy, .preserved, .missing_classification, .positive_empty_preserved, .irrelevant };
+    const scenarios = [_]?@FieldType(ReferenceExtractionTestProducer, "mode"){ null, null, .claims, .no_claim, .blocked, .malformed, .missing, .duplicate, .invalid_citation, .unbound, .passive, .unknown_literal, .legacy, .preserved, .missing_classification, .positive_empty_preserved, .irrelevant, .reconciled, .conflict, .bad_reconciliation };
     for (scenarios, 0..) |mode, scenario| {
         const invalid = scenario == 1;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
+        const reconcile = mode == .reconciled or mode == .conflict or mode == .bad_reconciliation;
+        if (reconcile) {
+            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A submitted request requires confirmation.\n" });
+            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/second.md", .data = "The request requires approval.\n" });
+        }
         if (mode == .preserved or mode == .missing_classification or mode == .positive_empty_preserved or mode == .irrelevant) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Hello, World!` and retain `Cafe\u{301}`.\n" });
         const suffix = if (mode != null) "use: assign-structured-token-candidate-identities, on: { ok: propose-extraction, failed: end.failed } }\n" ++
             "  propose-extraction: { use: test.propose-extraction, on: { ok: parse-extraction } }\n" ++
@@ -1161,7 +1198,11 @@ test "native YAML validates citations and accounts every extraction chunk before
         defer std.testing.allocator.free(preparation);
         const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, if (mode != null) preparation else @embedFile("../test_fixtures/reference-ingestion.workflow.yaml"), if (mode != null) "use: assign-structured-token-candidate-identities, on: { ok: end.ok, failed: end.failed } }" else "use: validate-reference-chunks\n    on: { ok: end.ok, failed: end.failed }", suffix);
         defer std.testing.allocator.free(yaml);
-        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = yaml });
+        const reconciliation_suffix = try @import("../test_fixtures/reference_reconciliation_workflow.zig").suffix(std.testing.allocator, 3);
+        defer std.testing.allocator.free(reconciliation_suffix);
+        const complete_yaml = if (reconcile) try std.mem.replaceOwned(u8, std.testing.allocator, yaml, "  observe-extraction: { use: test.observe-extraction, on: { ok: end.ok } }", reconciliation_suffix) else try std.testing.allocator.dupe(u8, yaml);
+        defer std.testing.allocator.free(complete_yaml);
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = complete_yaml });
         if (mode != null) {
             try project.dir.createDirPath(io, ".sdd/principles");
             try project.dir.createDirPath(io, ".sdd/presets");
@@ -1180,6 +1221,7 @@ test "native YAML validates citations and accounts every extraction chunk before
         native.init(std.testing.allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
         var producer: ReferenceCitationTestProducer = .{ .invalid = invalid };
         var extraction_producer: ReferenceExtractionTestProducer = .{ .mode = mode orelse .claims };
+        var reconciliation_producer: ReferenceReconciliationTestProducer = .{ .mode = mode orelse .claims };
         var protected_arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer protected_arena.deinit();
         const closed = try @import("../test_fixtures/clarification_inputs.zig").closed(protected_arena.allocator(), "S01", true);
@@ -1189,6 +1231,8 @@ test "native YAML validates citations and accounts every extraction chunk before
             .{ .contract = .{ .id = "test.observe-citations", .kind = .step, .requires = &.{.validated_source_citations}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.observe) },
             .{ .contract = .{ .id = "test.propose-extraction", .kind = .step, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .structured_token_candidates }, .produces = &.{.raw_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.propose) },
             .{ .contract = .{ .id = "test.observe-extraction", .kind = .step, .requires = &.{.accounted_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.observe) },
+            .{ .contract = .{ .id = "test.propose-reconciliation", .kind = .step, .requires = &.{.reference_reconciliation_input}, .produces = &.{.raw_reference_reconciliation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceReconciliationTestProducer, &reconciliation_producer, ReferenceReconciliationTestProducer.propose) },
+            .{ .contract = .{ .id = "test.observe-reconciliation", .kind = .step, .requires = &.{.accounted_reference_reconciliation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceReconciliationTestProducer, &reconciliation_producer, ReferenceReconciliationTestProducer.observe) },
         };
         native.registry.operations = &entries;
         var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
@@ -1198,12 +1242,12 @@ test "native YAML validates citations and accounts every extraction chunk before
         var providers = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project.dir, .{}, &llm_provider_contracts.Registry.empty);
         const result = runBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{}, null);
         const expected: workflow.OutcomeTag = if (mode) |selected| switch (selected) {
-            .claims, .no_claim, .passive, .preserved, .irrelevant => .ok,
-            .blocked => .blocked,
-            .malformed, .missing, .duplicate, .invalid_citation, .unbound, .unknown_literal, .legacy, .missing_classification, .positive_empty_preserved => .failed,
+            .claims, .no_claim, .passive, .preserved, .irrelevant, .reconciled => .ok,
+            .blocked, .conflict => .blocked,
+            .malformed, .missing, .duplicate, .invalid_citation, .unbound, .unknown_literal, .legacy, .missing_classification, .positive_empty_preserved, .bad_reconciliation => .failed,
         } else if (invalid) .failed else .ok;
         try std.testing.expectEqual(expected, result.executionStatus().?);
-        try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), if (mode != null) extraction_producer.observed else producer.observed);
+        try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), if (reconcile) reconciliation_producer.observed else if (mode != null) extraction_producer.observed else producer.observed);
         const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", protected_arena.allocator(), .limited(16384));
         try std.testing.expectEqualSlices(u8, closed.forms[0].bytes, retained);
         try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/spec.md", .{}));

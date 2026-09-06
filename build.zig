@@ -213,6 +213,15 @@ pub fn build(b: *std.Build) void {
     const extraction_step = b.step("test-reference-extraction", "Test closed reference claim candidates and complete chunk accounting");
     extraction_step.dependOn(&b.addRunArtifact(extraction_tests).step);
 
+    const reconciliation_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/reference_reconciliation_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const reconciliation_step = b.step("test-reference-reconciliation", "Test hierarchical reference reconciliation and blocking conflicts");
+    reconciliation_step.dependOn(&b.addRunArtifact(reconciliation_tests).step);
+
     const structured_token_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/structured_token_test.zig"),
         .target = target,

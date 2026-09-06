@@ -8,6 +8,7 @@ test {
     _ = @import("reference_ingestion_test.zig");
     _ = @import("reference_evidence_test.zig");
     _ = @import("reference_extraction_test.zig");
+    _ = @import("reference_reconciliation_test.zig");
     _ = @import("path_token_test.zig");
     _ = @import("typed_text_test.zig");
     _ = @import("feature_directory_test.zig");
