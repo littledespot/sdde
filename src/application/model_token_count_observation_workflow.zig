@@ -10,7 +10,7 @@ const invocation = @import("model_invocation_workflow.zig");
 const data = @import("../domain/pipeline_data.zig");
 const values = @import("pipeline_values.zig");
 
-pub const schema = values.schema(.provider_token_count_validation_result, Result, 1, null);
+pub const schema = values.schema(.provider_token_count_validation_result, Result, 1, null).captured();
 pub const Outcome = union(enum) { validated: validation.Result, rejected: validation.Error, cancelled };
 
 pub const Result = opaque {

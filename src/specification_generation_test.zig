@@ -9,6 +9,76 @@ const extraction = @import("reference_extraction_test.zig");
 const text = @import("test_fixtures/reference_text.zig");
 const tokens = @import("test_fixtures/reference_tokens.zig");
 
+test "complete specification sessions preserve unit order provenance and conditional entities" {
+    const sessions = @import("domain/specification_session.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "A customer views a greeting.", "A librarian renews a loan." }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        var current = try sessions.initialize(.{ .bytes = "requested-feature" }, fixture.context);
+        const first = current;
+        const value = try fixture.value(source);
+        try std.testing.expectError(error.InvalidSpecificationUnit, sessions.assemble(a, text.validator, fixture.context, current));
+        while (current.completed < sessions.unit_count) {
+            const unit = try sessions.unit(current.completed);
+            const packet = try sessions.packet(std.testing.allocator, current, fixture.context);
+            defer @import("domain/model_input_packet.zig").release(packet);
+            try std.testing.expect(std.mem.indexOf(u8, packet.body(), "principles") == null);
+            const response: g.Response = .{ .content = switch (unit) {
+                .brief => .{ .brief = .{ .title = value, .description = value, .primary_goal = value } },
+                .primary_user_story => .{ .primary_user_story = value },
+                .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = value } },
+                .records => |kind| result: {
+                    if (kind != .functional_requirement) break :result .{ .records = &.{} };
+                    const records = try a.dupe(spec.RecordProposal, &.{.{ .content = .{ .functional_requirement = .{ .text = value.value } }, .provenance = value.provenance }});
+                    break :result .{ .records = records };
+                },
+            } };
+            const checked = try g.validate(a, text.validator, fixture.context, unit, response);
+            current = try sessions.append(current, checked);
+        }
+        const identified = try sessions.assemble(a, text.validator, fixture.context, current);
+        try std.testing.expectEqual(@as(usize, 1), identified.content.records.len);
+        try std.testing.expectEqual(spec.Id{ .kind = .functional_requirement, .ordinal = 1 }, identified.content.records[0].id);
+        try std.testing.expectEqual(@as(usize, 0), first.completed);
+        try std.testing.expectError(error.InvalidSpecificationUnit, sessions.append(current, current.units[0].?));
+        var stale = fixture.context;
+        stale.inputs.corpus.state_id.bytes = "changed";
+        try std.testing.expectError(error.InvalidSpecificationUnit, sessions.assemble(a, text.validator, stale, current));
+    }
+}
+
+test "specification semantic support contributes scoped evidence to the shared gate" {
+    const support = @import("domain/specification_support.zig");
+    const authority = @import("domain/required_authority.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.init(a, "A visitor sees a greeting.");
+    defer fixture.deinit();
+    const initial = try @import("domain/specification_authority.zig").project(a, .{ .bytes = "chosen" }, fixture.context.references, null);
+    const ledger = try authority.build(a, initial);
+    const findings = try a.alloc(support.Finding, ledger.requirements.len);
+    const value = try fixture.value("A greeting is visible.");
+    for (findings, 0..) |*finding, index| finding.* = .{ .requirement_ordinal = @intCast(index + 1), .finding = .supported, .disposition = .supported, .provenance = value.provenance };
+    const bytes = try std.json.Stringify.valueAlloc(a, support.Review{ .entries = findings }, .{});
+    const reviewed = try support.collect(a, initial, fixture.context, bytes);
+    for (reviewed.evidence) |proof| try std.testing.expectEqual(.model_assisted, proof.method);
+    const current = try authority.build(a, reviewed);
+    const observations = try (@import("actions/authority/build_required_authority_observations.zig").Action{}).execute(a, current);
+    const result = try authority.reconcile(a, current, observations);
+    try std.testing.expect(try authority.validate(a, reviewed, observations, result));
+    findings[0].finding = .ambiguous;
+    const gap = try support.collect(a, initial, fixture.context, try std.json.Stringify.valueAlloc(a, support.Review{ .entries = findings }, .{}));
+    const gap_ledger = try authority.build(a, gap);
+    const gap_observations = try (@import("actions/authority/build_required_authority_observations.zig").Action{}).execute(a, gap_ledger);
+    try std.testing.expectEqual(.needs_user, (try authority.reconcile(a, gap_ledger, gap_observations)).continuation);
+    findings[0].requirement_ordinal = 999;
+    try std.testing.expectError(error.InvalidRequiredAuthority, support.collect(a, initial, fixture.context, try std.json.Stringify.valueAlloc(a, support.Review{ .entries = findings }, .{})));
+}
+
 test "specification units validate every section family without creating IDs or filler" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

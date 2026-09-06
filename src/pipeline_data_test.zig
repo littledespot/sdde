@@ -70,6 +70,44 @@ test "shared gate checks source lineage and renewal after source and projection 
     }
 }
 
+test "captured evidence survives transport retirement but keeps every current source dependency" {
+    const gate = @import("domain/workflow_gate.zig");
+    const packet = values.schema(.model_input_packet, u32, 1, 32).captured();
+    const evidence = values.schema(.model_payload_schema_result, u32, 1, 32).captured();
+    const proof = values.schema(.workflow_operation_registry_evidence, gate.Decision, 1, 32);
+    const contract: gate.Contract = .{ .id = .{ .bytes = "test.capture@1" }, .issuer = .{ .bytes = "test.validate-capture" }, .evidence = proof.key, .authority = &.{count_schema.key} };
+    const validate: pipeline.NodeContract = .{ .id = contract.issuer.bytes, .kind = .action, .requires = contract.authority, .produces = &.{proof.key}, .side_effect = .none };
+    for ([_][]const u8{ "Reference business meaning", "Executable decomposition evidence" }) |text| {
+        var envelope = envelope_module.PipelineEnvelope.init(&.{ context_schema, count_schema, packet, evidence, proof });
+        defer envelope.deinit();
+        var delta: pipeline.NodeDelta = .{};
+        defer envelope.discard(&delta);
+        delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = text, .attempts = 1 });
+        try envelope.apply(produce, &delta, .ok);
+        for ([_]struct { schema: data.Schema, input: pipeline.DataKey }{
+            .{ .schema = packet, .input = context_schema.key },
+            .{ .schema = evidence, .input = packet.key },
+            .{ .schema = count_schema, .input = evidence.key },
+        }) |stage| {
+            delta.data_writes[@intFromEnum(stage.schema.key)] = try values.create(std.testing.allocator, stage.schema, u32, 1);
+            try envelope.apply(.{ .id = "test.capture", .kind = .action, .requires = &.{stage.input}, .produces = &.{stage.schema.key}, .side_effect = .none }, &delta, .ok);
+        }
+        delta.data_writes[@intFromEnum(proof.key)] = try values.create(std.testing.allocator, proof, gate.Decision, .accepted);
+        try envelope.apply(validate, &delta, .ok);
+        try std.testing.expect(envelope.checkGate(contract) == null);
+        delta.data_invalidations = .initMany(&.{ packet.key, evidence.key });
+        try envelope.apply(.{ .id = "test.retire", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{ packet.key, evidence.key }, .side_effect = .none }, &delta, .ok);
+        delta = .{};
+        try std.testing.expect(envelope.checkGate(contract) == null);
+        delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = text, .attempts = 1 });
+        try envelope.apply(.{ .id = "test.refresh", .kind = .action, .requires = &.{}, .produces = &.{}, .replaces = &.{context_schema.key}, .side_effect = .none }, &delta, .ok);
+        try std.testing.expectEqual(.stale_authority, envelope.checkGate(contract).?);
+        delta.data_invalidations = .initOne(context_schema.key);
+        try envelope.apply(.{ .id = "test.remove", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{context_schema.key}, .side_effect = .none }, &delta, .ok);
+        try std.testing.expectEqual(.missing_authority, envelope.checkGate(contract).?);
+    }
+}
+
 test "envelope owns copied input and exposes only declared keys" {
     var envelope = envelope_module.PipelineEnvelope.init(&schemas);
     defer envelope.deinit();

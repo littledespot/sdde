@@ -10,14 +10,14 @@ const data = @import("../domain/pipeline_data.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const values = @import("pipeline_values.zig");
 const packets = @import("../domain/model_input_packet.zig");
-pub const packet_schema = values.schema(.model_input_packet, packets.Packet, 1, null);
+pub const packet_schema = values.schema(.model_input_packet, packets.Packet, 1, null).captured();
 
 // Native sealed owners retain canonical identity and graph references. Their
 // payloads have no model-call byte ceiling and are never copied by the envelope.
-pub const ledger_schema = values.schema(.model_request_identity_ledger, identity.ModelRequestIdentityLedger, 1, null);
-pub const assigned_schema = values.schema(.assigned_model_request, handoff.Request, 1, null);
-pub const validated_schema = values.schema(.validated_model_request, handoff.Request, 1, null);
-pub const prepared_schema = values.schema(.prepared_model_request, handoff.Request, 1, null);
+pub const ledger_schema = values.schema(.model_request_identity_ledger, identity.ModelRequestIdentityLedger, 1, null).executionControl();
+pub const assigned_schema = values.schema(.assigned_model_request, handoff.Request, 1, null).captured();
+pub const validated_schema = values.schema(.validated_model_request, handoff.Request, 1, null).captured();
+pub const prepared_schema = values.schema(.prepared_model_request, handoff.Request, 1, null).captured();
 pub const schemas = [_]data.Schema{ ledger_schema, assigned_schema, validated_schema, prepared_schema, packet_schema };
 
 pub const Initialize = struct {
@@ -28,7 +28,7 @@ pub const Initialize = struct {
 
     pub fn invoke(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const owner = self.action.execute(self.allocator, .{ .initial_generation = true }) catch return error.OperationExecutionFailed;
+        const owner = self.action.execute(self.allocator, .{ .initial_generation = true, .semantic_review = true }) catch return error.OperationExecutionFailed;
         errdefer identity.deinitOwner(owner);
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(ledger_schema.key)] = adoptLedger(self.allocator, owner) catch return error.OperationExecutionFailed;
@@ -150,6 +150,13 @@ pub fn adoptLedger(allocator: std.mem.Allocator, owner: *identity.Owner) values.
 
 pub fn adoptPacket(allocator: std.mem.Allocator, packet: *packets.Packet) values.Error!*data.Value {
     return values.adopt(allocator, packet_schema, packets.Packet, packets.Packet, packet, packets.view, packets.release, null);
+}
+
+pub fn publishPacket(allocator: std.mem.Allocator, packet: *packets.Packet) operations.Error!execution.Candidate {
+    errdefer packets.release(packet);
+    var delta: pipeline.NodeDelta = .{};
+    delta.data_writes[@intFromEnum(packet_schema.key)] = adoptPacket(allocator, packet) catch return error.OperationExecutionFailed;
+    return .{ .outcome = .ok, .delta = delta };
 }
 
 fn adoptRequest(allocator: std.mem.Allocator, schema: data.Schema, request: *handoff.Request) values.Error!*data.Value {

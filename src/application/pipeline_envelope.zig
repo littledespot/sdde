@@ -61,6 +61,15 @@ pub const PipelineEnvelope = struct {
         inline for (.{ contract.requires, contract.optional }) |keys| {
             for (keys) |key| if (self.origins[@intFromEnum(key)]) |input| {
                 origin.inputs[@intFromEnum(key)] = input.generation;
+                const schema = data.find(self.schemas, key) orelse return error.UnregisteredDataSchema;
+                if (schema.retention == .current) {
+                    mergeGeneration(&origin, @intFromEnum(key), input.generation);
+                } else if (schema.retention == .captured) {
+                    origin.lineage_conflict = origin.lineage_conflict or input.lineage_conflict;
+                    for (input.lineage, 0..) |expected, index| if (expected) |value| {
+                        mergeGeneration(&origin, index, value);
+                    };
+                }
             };
         }
         // No allocation or fallible operation is allowed beyond this boundary.
@@ -114,7 +123,8 @@ pub const PipelineEnvelope = struct {
         if (checked.contains(key)) return null;
         checked.insert(key);
         const origin = self.origins[@intFromEnum(key)] orelse return .missing_authority;
-        for (origin.inputs, 0..) |generation, index| {
+        if (origin.lineage_conflict) return .stale_authority;
+        for (origin.lineage, 0..) |generation, index| {
             if (index == @intFromEnum(key)) continue;
             const expected = generation orelse continue;
             const current = self.origins[index] orelse return .missing_authority;
@@ -153,6 +163,12 @@ pub const PipelineEnvelope = struct {
         return contains(&self.slots, value);
     }
 };
+
+fn mergeGeneration(origin: *data.Origin, index: usize, generation: u64) void {
+    if (origin.lineage[index]) |prior| {
+        if (prior != generation) origin.lineage_conflict = true;
+    } else origin.lineage[index] = generation;
+}
 
 fn contains(slots: []const ?*data.Value, value: *data.Value) bool {
     for (slots) |slot| if (slot == value) return true;

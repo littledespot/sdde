@@ -1,0 +1,109 @@
+{
+  "type": "object",
+  "properties": {
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "requirement_ordinal": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          },
+          "finding": {
+            "enum": [
+              "supported",
+              "ambiguous",
+              "conflicting",
+              "unsupported"
+            ]
+          },
+          "disposition": {
+            "enum": [
+              "supported",
+              "not_applicable"
+            ]
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "claim_ids": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ordinal": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4294967295
+                    }
+                  },
+                  "required": [
+                    "ordinal"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 4294967295
+              },
+              "citation_ids": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ordinal": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4294967295
+                    }
+                  },
+                  "required": [
+                    "ordinal"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 4294967295
+              },
+              "clarification_response_ids": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ordinal": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4294967295
+                    }
+                  },
+                  "required": [
+                    "ordinal"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 4294967295
+              }
+            },
+            "required": [
+              "claim_ids",
+              "citation_ids",
+              "clarification_response_ids"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requirement_ordinal",
+          "finding",
+          "disposition",
+          "provenance"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 4294967295
+    }
+  },
+  "required": [
+    "entries"
+  ],
+  "additionalProperties": false
+}

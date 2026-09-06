@@ -14,7 +14,7 @@ const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const handoff = @import("model_candidate_handoff.zig");
 
-pub const progress_schema = values.schema(.reference_extraction_progress, owned.Value, 1, null);
+pub const progress_schema = values.schema(.reference_extraction_progress, owned.Value, 1, null).captured();
 pub const schemas = [_]data.Schema{progress_schema};
 
 pub const Initialize = struct {
@@ -50,7 +50,7 @@ pub const BuildExtractionInput = struct {
         const tokens = values.read(&input.step.data, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch return error.OperationExecutionFailed;
         const prior = try extraction.read(&input.step.data, progress_schema, .extraction_progress);
         const packet = self.action.execute(self.allocator, inputs.*, literals.*, tokens.*, prior.payload().extraction_progress) catch return error.OperationExecutionFailed;
-        return publishPacket(self.allocator, packet);
+        return requests.publishPacket(self.allocator, packet);
     }
 };
 pub const CollectExtraction = struct {
@@ -91,7 +91,7 @@ pub const BuildReconciliationInput = struct {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, reconciliation.input_schema, .reconciliation_input);
         const packet = self.action.execute(self.allocator, prior.payload().reconciliation_input, (try readInputs(&input.step.data)).*, (try readLiterals(&input.step.data)).*) catch return error.OperationExecutionFailed;
-        return publishPacket(self.allocator, packet);
+        return requests.publishPacket(self.allocator, packet);
     }
 };
 pub const CheckReconciliation = struct {
@@ -124,10 +124,4 @@ fn readLiterals(view: *const data.View) operations.Error!*const @import("../doma
 }
 fn readPacket(view: *const data.View) operations.Error!*const packets.Packet {
     return values.read(view, requests.packet_schema, packets.Packet) catch error.OperationExecutionFailed;
-}
-fn publishPacket(allocator: std.mem.Allocator, packet: *packets.Packet) operations.Error!execution.Candidate {
-    errdefer packets.release(packet);
-    var delta: pipeline.NodeDelta = .{};
-    delta.data_writes[@intFromEnum(requests.packet_schema.key)] = requests.adoptPacket(allocator, packet) catch return error.OperationExecutionFailed;
-    return .{ .outcome = .ok, .delta = delta };
 }

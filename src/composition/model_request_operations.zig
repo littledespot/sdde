@@ -18,7 +18,8 @@ const termination = @import("../application/provider_operation_termination_workf
 const request_termination = @import("../application/model_request_termination_workflow.zig");
 const count_observation = @import("../application/model_token_count_observation_workflow.zig");
 
-pub const count = 21;
+const transport = @import("../application/model_transport_workflow.zig");
+pub const count = 24;
 pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema, invocation.count_schema, count_observation.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
@@ -44,6 +45,9 @@ pub const Assembly = struct {
     validate_count: count_observation.Validate,
     complete_count_operation: completion.CompleteCount,
     complete_count_request: request_completion.CompleteCount,
+    retire_request: transport.Retire(.request),
+    retire_attempt: transport.Retire(.rejected_attempt),
+    retire_input: transport.Retire(.input),
     entries: [count]operations.Entry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator) void {
@@ -69,6 +73,9 @@ pub const Assembly = struct {
             .validate_count = .{ .allocator = allocator },
             .complete_count_operation = .{},
             .complete_count_request = .{ .allocator = allocator },
+            .retire_request = .{},
+            .retire_attempt = .{},
+            .retire_input = .{},
             .entries = undefined,
         };
         self.entries = .{
@@ -93,6 +100,9 @@ pub const Assembly = struct {
             entry(count_observation.Validate, &self.validate_count),
             entry(completion.CompleteCount, &self.complete_count_operation),
             entry(request_completion.CompleteCount, &self.complete_count_request),
+            entry(transport.Retire(.request), &self.retire_request),
+            entry(transport.Retire(.rejected_attempt), &self.retire_attempt),
+            entry(transport.Retire(.input), &self.retire_input),
         };
     }
 };

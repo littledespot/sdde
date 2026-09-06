@@ -156,6 +156,10 @@ pub const Registry = struct {
             if (issuer.contract.kind != .step or issuer.binding.capabilities().len != 0 or issuer.contract.side_effect != .none or
                 (!containsKey(issuer.contract.produces, contract.evidence) and !containsKey(issuer.contract.replaces, contract.evidence))) return false;
             for (contract.authority) |key| if (!containsKey(issuer.contract.requires, key)) return false;
+            for (contract.authority) |key| {
+                const authority_schema = data.find(self.data_schemas, key) orelse return false;
+                if (authority_schema.retention != .current) return false;
+            }
             const schema = data.find(self.data_schemas, contract.evidence) orelse return false;
             if (schema.version != 1 or !std.mem.eql(u8, schema.type_name, @typeName(gate.Decision))) return false;
             for (self.operations) |entry| {

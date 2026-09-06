@@ -7,7 +7,7 @@ const observation = @import("provider_observation_workflow.zig");
 const data = @import("../domain/pipeline_data.zig");
 const values = @import("pipeline_values.zig");
 
-pub const schema = values.schema(.model_envelope_result, Result, 1, null);
+pub const schema = values.schema(.model_envelope_result, Result, 1, null).captured();
 pub const Outcome = union(enum) {
     decoded: *const envelope.Candidate,
     protocol_rejected: envelope.Rejection,

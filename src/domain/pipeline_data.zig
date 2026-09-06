@@ -10,6 +10,9 @@ pub const Origin = struct {
     producer: []const u8,
     outcome: @import("workflow.zig").OutcomeTag,
     inputs: [key_count]?u64,
+    // Current authority frontier after expanding captured, immutable inputs.
+    lineage: [key_count]?u64 = @splat(null),
+    lineage_conflict: bool = false,
 };
 
 /// Compiled native value schema. Workflows reference keys, never supply schemas
@@ -19,6 +22,22 @@ pub const Schema = struct {
     version: u32,
     type_name: []const u8,
     maximum_bytes: ?u32,
+    retention: enum { current, captured, execution_control } = .current,
+
+    /// Native-only declaration: successors retain this value's evidence, not
+    /// its replaceable transport slot. Governing inputs remain current.
+    pub fn captured(self: Schema) Schema {
+        var result = self;
+        result.retention = .captured;
+        return result;
+    }
+
+    /// Runner-validated bookkeeping is not business or policy authority.
+    pub fn executionControl(self: Schema) Schema {
+        var result = self;
+        result.retention = .execution_control;
+        return result;
+    }
 
     pub fn valid(self: Schema) bool {
         return self.version != 0 and self.type_name.len != 0 and (self.maximum_bytes == null or self.maximum_bytes.? != 0);
@@ -26,7 +45,7 @@ pub const Schema = struct {
 
     pub fn eql(self: Schema, other: Schema) bool {
         return self.key == other.key and self.version == other.version and
-            self.maximum_bytes == other.maximum_bytes and std.mem.eql(u8, self.type_name, other.type_name);
+            self.maximum_bytes == other.maximum_bytes and self.retention == other.retention and std.mem.eql(u8, self.type_name, other.type_name);
     }
 };
 

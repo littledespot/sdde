@@ -35,6 +35,26 @@ pub const ProjectSpecification = struct {
         return owned.publish(self.allocator, inputs_schema, owner, .ok) catch return error.OperationExecutionFailed;
     }
 };
+pub const BuildObservations = struct {
+    pub const Action = @import("../actions/authority/build_required_authority_observations.zig").Action;
+    allocator: std.mem.Allocator,
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const ledger = owned.read(&input.step.data, ledger_schema, .ledger) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .observations = self.action.execute(owner.arena.allocator(), ledger) catch return error.OperationExecutionFailed };
+        return owned.publish(self.allocator, observations_schema, owner, .ok) catch error.OperationExecutionFailed;
+    }
+};
+pub const Retire = struct {
+    pub const Action = @import("../actions/authority/retire_required_authority_projection.zig").Action;
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
+        return .{ .outcome = .ok, .delta = context.?.action.execute() };
+    }
+};
 
 pub const Build = struct {
     pub const Action = @import("../actions/authority/build_required_authority_ledger.zig").Action;

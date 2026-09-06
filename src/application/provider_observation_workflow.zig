@@ -10,7 +10,7 @@ const model_invocation = @import("model_invocation_workflow.zig");
 const data = @import("../domain/pipeline_data.zig");
 const values = @import("pipeline_values.zig");
 
-pub const schema = values.schema(.provider_invocation_validation_result, Result, 1, null);
+pub const schema = values.schema(.provider_invocation_validation_result, Result, 1, null).captured();
 pub const Outcome = union(enum) {
     validated: *const validation.Evidence,
     rejected: validation.ValidationError,

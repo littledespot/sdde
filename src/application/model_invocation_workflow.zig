@@ -13,8 +13,8 @@ const accounting = @import("workflow_model_accounting.zig");
 const authorization = @import("provider_authorization_workflow.zig");
 const selection = @import("../domain/workflow_model_invocation.zig");
 
-pub const schema = values.schema(.provider_invocation_result, results.For(.inference).Result, 1, null);
-pub const count_schema = values.schema(.provider_token_count_result, results.For(.input_token_count).Result, 1, null);
+pub const schema = values.schema(.provider_invocation_result, results.For(.inference).Result, 1, null).captured();
+pub const count_schema = values.schema(.provider_token_count_result, results.For(.input_token_count).Result, 1, null).captured();
 pub const Invoke = Call(.inference);
 pub const Count = Call(.input_token_count);
 

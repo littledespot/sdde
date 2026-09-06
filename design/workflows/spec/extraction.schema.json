@@ -1,0 +1,975 @@
+{
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "claims"
+        },
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "content": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "business"
+                      },
+                      "text": {
+                        "type": "object",
+                        "properties": {
+                          "segments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "literal": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "string",
+                                      "maxLength": 4294967295
+                                    }
+                                  },
+                                  "required": [
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "passive": {
+                                  "type": "object",
+                                  "properties": {
+                                    "passive_literal_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "passive_literal_id"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 4294967295
+                          }
+                        },
+                        "required": [
+                          "segments"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "design"
+                      },
+                      "text": {
+                        "type": "object",
+                        "properties": {
+                          "nodes": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "literal": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "string",
+                                      "maxLength": 4294967295
+                                    }
+                                  },
+                                  "required": [
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "passive": {
+                                  "type": "object",
+                                  "properties": {
+                                    "passive_literal_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "passive_literal_id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "source": {
+                                  "type": "object",
+                                  "properties": {
+                                    "source_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "source_id"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 4294967295
+                          }
+                        },
+                        "required": [
+                          "nodes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "technical"
+                      },
+                      "text": {
+                        "type": "object",
+                        "properties": {
+                          "nodes": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "literal": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "string",
+                                      "maxLength": 4294967295
+                                    }
+                                  },
+                                  "required": [
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "passive": {
+                                  "type": "object",
+                                  "properties": {
+                                    "passive_literal_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "passive_literal_id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "source": {
+                                  "type": "object",
+                                  "properties": {
+                                    "source_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "source_id"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 4294967295
+                          }
+                        },
+                        "required": [
+                          "nodes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "validation"
+                      },
+                      "text": {
+                        "type": "object",
+                        "properties": {
+                          "nodes": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "literal": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "string",
+                                      "maxLength": 4294967295
+                                    }
+                                  },
+                                  "required": [
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "passive": {
+                                  "type": "object",
+                                  "properties": {
+                                    "passive_literal_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "passive_literal_id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "source": {
+                                  "type": "object",
+                                  "properties": {
+                                    "source_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "source_id"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 4294967295
+                          }
+                        },
+                        "required": [
+                          "nodes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "implementation_assumption"
+                      },
+                      "text": {
+                        "type": "object",
+                        "properties": {
+                          "nodes": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "literal": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "string",
+                                      "maxLength": 4294967295
+                                    }
+                                  },
+                                  "required": [
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "passive": {
+                                  "type": "object",
+                                  "properties": {
+                                    "passive_literal_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "passive_literal_id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "source": {
+                                  "type": "object",
+                                  "properties": {
+                                    "source_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "source_id"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 4294967295
+                          }
+                        },
+                        "required": [
+                          "nodes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "open_question"
+                      },
+                      "text": {
+                        "type": "object",
+                        "properties": {
+                          "nodes": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "literal": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "string",
+                                      "maxLength": 4294967295
+                                    }
+                                  },
+                                  "required": [
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "passive": {
+                                  "type": "object",
+                                  "properties": {
+                                    "passive_literal_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "passive_literal_id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "source": {
+                                  "type": "object",
+                                  "properties": {
+                                    "source_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "source_id"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 4294967295
+                          }
+                        },
+                        "required": [
+                          "nodes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "scope_guard"
+                      },
+                      "text": {
+                        "type": "object",
+                        "properties": {
+                          "segments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "literal": {
+                                  "type": "object",
+                                  "properties": {
+                                    "value": {
+                                      "type": "string",
+                                      "maxLength": 4294967295
+                                    }
+                                  },
+                                  "required": [
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "passive": {
+                                  "type": "object",
+                                  "properties": {
+                                    "passive_literal_id": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ordinal": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "ordinal"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "passive_literal_id"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 4294967295
+                          }
+                        },
+                        "required": [
+                          "segments"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "citations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "source_id": {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4294967295
+                        }
+                      },
+                      "required": [
+                        "ordinal"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "block_id": {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4294967295
+                        }
+                      },
+                      "required": [
+                        "ordinal"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "location": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "object",
+                          "properties": {
+                            "byte": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 4294967295
+                            },
+                            "line": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 4294967295
+                            },
+                            "column": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 4294967295
+                            }
+                          },
+                          "required": [
+                            "byte",
+                            "line",
+                            "column"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "end": {
+                          "type": "object",
+                          "properties": {
+                            "byte": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 4294967295
+                            },
+                            "line": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 4294967295
+                            },
+                            "column": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 4294967295
+                            }
+                          },
+                          "required": [
+                            "byte",
+                            "line",
+                            "column"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "verbatim": {
+                      "type": "string",
+                      "maxLength": 4294967295
+                    }
+                  },
+                  "required": [
+                    "source_id",
+                    "block_id",
+                    "location",
+                    "verbatim"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 4294967295
+              }
+            },
+            "required": [
+              "content",
+              "citations"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        },
+        "token_classifications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "enum": [
+                  "preserve",
+                  "irrelevant"
+                ]
+              },
+              "token_candidate_id": {
+                "type": "object",
+                "properties": {
+                  "source_id": {
+                    "type": "object",
+                    "properties": {
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "ordinal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "extractor_id": {
+                    "enum": [
+                      "markdown_inline_code_v1"
+                    ]
+                  },
+                  "ordinal": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  }
+                },
+                "required": [
+                  "source_id",
+                  "extractor_id",
+                  "ordinal"
+                ],
+                "additionalProperties": false
+              },
+              "kind": {
+                "enum": [
+                  "visual_color",
+                  "visual_spacing",
+                  "visual_dimension",
+                  "visual_typography",
+                  "visual_radius",
+                  "visual_shadow",
+                  "visual_motion",
+                  "business_exact_string",
+                  "numeric_constraint",
+                  "exact_identifier"
+                ]
+              }
+            },
+            "required": [
+              "decision",
+              "token_candidate_id"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "kind",
+        "claims",
+        "token_classifications"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "no_feature_claim"
+        },
+        "reason": {
+          "type": "object",
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "literal": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "maxLength": 4294967295
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "passive": {
+                    "type": "object",
+                    "properties": {
+                      "passive_literal_id": {
+                        "type": "object",
+                        "properties": {
+                          "ordinal": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 4294967295
+                          }
+                        },
+                        "required": [
+                          "ordinal"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "passive_literal_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "source_id": {
+                        "type": "object",
+                        "properties": {
+                          "ordinal": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 4294967295
+                          }
+                        },
+                        "required": [
+                          "ordinal"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "source_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "maxItems": 4294967295
+            }
+          },
+          "required": [
+            "nodes"
+          ],
+          "additionalProperties": false
+        },
+        "token_classifications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "enum": [
+                  "preserve",
+                  "irrelevant"
+                ]
+              },
+              "token_candidate_id": {
+                "type": "object",
+                "properties": {
+                  "source_id": {
+                    "type": "object",
+                    "properties": {
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "ordinal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "extractor_id": {
+                    "enum": [
+                      "markdown_inline_code_v1"
+                    ]
+                  },
+                  "ordinal": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  }
+                },
+                "required": [
+                  "source_id",
+                  "extractor_id",
+                  "ordinal"
+                ],
+                "additionalProperties": false
+              },
+              "kind": {
+                "enum": [
+                  "visual_color",
+                  "visual_spacing",
+                  "visual_dimension",
+                  "visual_typography",
+                  "visual_radius",
+                  "visual_shadow",
+                  "visual_motion",
+                  "business_exact_string",
+                  "numeric_constraint",
+                  "exact_identifier"
+                ]
+              }
+            },
+            "required": [
+              "decision",
+              "token_candidate_id"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "kind",
+        "reason",
+        "token_classifications"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

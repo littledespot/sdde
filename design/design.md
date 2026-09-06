@@ -1589,6 +1589,18 @@ Specify's schema/reference projection in `specification_authority.zig` and
 five generic YAML bindings documented in [F0100 §3.10](features/F0100-SpecWorkflow.md#310-shared-required-authority-boundary).
 The runner checks both direct authority generations and their source lineage;
 replacing a source requires rebuilding its affected projection and gate.
+Native data schemas distinguish current authorities from captured immutable
+evidence. A captured value carries its complete current-authority frontier into
+every successor; retiring or replacing its transport slot does not invalidate
+that evidence. Conflicting source generations remain stale. Gate authorities
+must use current schemas. YAML and model output cannot change this classification.
+Runner-validated execution-control records (such as the request identity ledger)
+are not domain authorities and cannot be gate authorities. They retain their
+canonical lifecycle/accounting checks rather than making every later request
+depend on the business inputs of every historical request.
+Request/result validators still prove the exact current association before
+capture, and successors own their data; capture never grants semantic support.
+This handoff is in memory only, with no snapshot files or recovery subsystem.
 Production generation/evidence producers and clarification/publication consumers
 remain the separate H-009–H-013 integration work.
 

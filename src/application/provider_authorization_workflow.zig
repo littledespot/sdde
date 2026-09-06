@@ -6,7 +6,7 @@ const result = @import("../domain/provider_authorization_result.zig");
 const selection = @import("../domain/workflow_provider_authorization.zig");
 const values = @import("pipeline_values.zig");
 
-pub const schema = values.schema(.provider_authorization_result, result.Result, 1, null);
+pub const schema = values.schema(.provider_authorization_result, result.Result, 1, null).captured();
 
 pub const Prepare = struct {
     pub const Action = @import("../actions/model/prepare_provider_operation_authorization.zig").Action;

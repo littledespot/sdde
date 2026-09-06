@@ -7,10 +7,10 @@ const data = @import("../domain/pipeline_data.zig");
 const provider = @import("../domain/llm_provider_operation.zig");
 const leases = @import("provider_authorization_lease_table.zig");
 
-pub const schema = values.schema(.accounted_model_attempt, accounting.AccountedAttempt, 1, null);
-pub const operation_schema = values.schema(.assigned_provider_operation, lifecycle.AssignedOperation, 1, null);
-pub const invoked_schema = values.schema(.invoked_provider_operation, lifecycle.InvokedOperation, 1, null);
-pub const terminal_schema = values.schema(.terminal_provider_operation, lifecycle.TerminalOperation, 1, null);
+pub const schema = values.schema(.accounted_model_attempt, accounting.AccountedAttempt, 1, null).captured();
+pub const operation_schema = values.schema(.assigned_provider_operation, lifecycle.AssignedOperation, 1, null).captured();
+pub const invoked_schema = values.schema(.invoked_provider_operation, lifecycle.InvokedOperation, 1, null).captured();
+pub const terminal_schema = values.schema(.terminal_provider_operation, lifecycle.TerminalOperation, 1, null).captured();
 pub const Error = accounting.Error || accounting.RequestError || identity.Error || lifecycle.Error || values.Error || error{InvalidAccountingTransition};
 
 /// Expected terminal facts retain their exact applied source, not a second record.

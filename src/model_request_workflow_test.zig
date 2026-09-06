@@ -4740,7 +4740,7 @@ test "compiled observation validation cannot hide its dependencies or add a capa
     }
 }
 
-fn invocationProvider(runner: *runner_module.Runner, allocator: std.mem.Allocator) fake_provider.FakeLLMProvider {
+pub fn invocationProvider(runner: *runner_module.Runner, allocator: std.mem.Allocator) fake_provider.FakeLLMProvider {
     return .{
         .allocator = allocator,
         .authorization_leases = .{ .context = @ptrCast(runner), .clock = runner.provider_clock.?, .runtime = runner.runtime, .consume_fn = consumeInvocationLease },
@@ -5337,7 +5337,7 @@ const Fixture = struct {
     fn initWithProvider(self: *Fixture, allocator: std.mem.Allocator, production: ?usize) !void {
         self.arena = .init(allocator);
         errdefer self.arena.deinit();
-        self.services = try providerServices(allocator, production);
+        self.services = try providerServices(allocator, production, "selected");
         errdefer self.services.deinit();
         self.roots_owner = try rootOwner(allocator);
         self.native.init(allocator);
@@ -5396,7 +5396,7 @@ const Fixture = struct {
     }
 };
 
-fn providerServices(allocator: std.mem.Allocator, production: ?usize) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
+pub fn providerServices(allocator: std.mem.Allocator, production: ?usize, slot: []const u8) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
     const selected: contracts.ProviderModelContract = if (production) |index| @import("composition/provider_model_contracts.zig").registry.entries[index] else .{ .provider = .{ .bytes = "test-provider" }, .model = .{ .bytes = "test-model" }, .implementation_id = .{ .ordinal = 1 }, .config_schema = .empty_object, .capabilities = @import("model_contract_test_fixture.zig").capabilities, .supported_reasoning_efforts = &.{} };
     const registered: contracts.Registry = .{ .entries = &.{selected} };
     var candidate = try registry.Candidate.init(allocator, 1);
@@ -5407,7 +5407,7 @@ fn providerServices(allocator: std.mem.Allocator, production: ?usize) !@import("
     errdefer registry.deinitOwner(owner);
     var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
     defer models.slots.deinit(allocator);
-    try models.slots.map.put(allocator, "selected", .{ .provider = contract.provider.bytes, .model = contract.model.bytes });
+    try models.slots.map.put(allocator, slot, .{ .provider = contract.provider.bytes, .model = contract.model.bytes });
     const allowlist = try @import("domain/repository_model_allowlist.zig").createValidated(allocator, &models, registry.registry(owner));
     return .init(.init(owner), allowlist);
 }

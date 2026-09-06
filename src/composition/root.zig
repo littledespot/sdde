@@ -1285,6 +1285,65 @@ test "native YAML validates citations extraction and reconciliation before conti
     }
 }
 
+test "configured specification generation YAML executes native references models and authority gates" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    for (0..4) |scenario| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeReferenceIngestionFixture(io, project.dir);
+        try project.dir.createDirPath(io, ".sdd/principles");
+        try project.dir.createDirPath(io, ".sdd/presets");
+        try project.dir.createDirPath(io, "engine/workflows/spec");
+        try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
+        if (scenario == 1) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
+        const definition = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec-generation.workflow.yaml", allocator, .limited(1_048_576));
+        defer allocator.free(definition);
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = definition });
+        inline for (.{ "extraction", "reconciliation", "generation", "support" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
+            const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name ++ "." ++ extension, allocator, .limited(1_048_576));
+            defer allocator.free(bytes);
+            try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/spec/" ++ name ++ "." ++ extension, .data = bytes });
+        };
+        var project_source = toolchain_authority_source.Adapter.init(io, project.dir);
+        var document_parser: toolchain_documents.Adapter = .{};
+        var reference_source: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var feature_source: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
+        var reference_ids: @import("../adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
+        var native: @import("native_workflow_operations.zig").Assembly = undefined;
+        native.init(allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
+        var boot = runInProjectWithRegistry(io, allocator, project.dir, .{}, &native.registry);
+        defer boot.deinit();
+        if (boot != .ready) std.debug.print("generation bootstrap: {any}\n", .{boot});
+        try std.testing.expect(boot == .ready);
+        native.bindRoots(boot.ready.roots.registry());
+        var services = try @import("../model_request_workflow_test.zig").providerServices(allocator, null, "spec_generation");
+        defer services.deinit();
+        const graph = boot.ready.workflows.registry().resolve(.{ .bytes = "spec-generation" }).?;
+        var runner = @import("../application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{ "--feature", "chosen", "--reference", "first" } }, .graph = graph }, &native.registry, boot.ready.logs.barrier(), .{}, &services);
+        defer runner.deinit();
+        var clock: @import("../provider_authorization_test_fixture.zig").TestClock = .{};
+        runner.provider_clock = clock.port();
+        var authorization: @import("../adapters/provider/fake_provider_authorization.zig").FakeProviderAuthorization = .{ .allocator = allocator };
+        native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
+        var fake = @import("../model_request_workflow_test.zig").invocationProvider(&runner, allocator);
+        native.model_requests.invoke_model.action = .{ .provider = fake.interface() };
+        var driver: @import("../test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &runner, .fake = &fake, .malformed = scenario == 2, .uncertain = scenario == 3 };
+        const result = driver.run();
+        try std.testing.expectEqual(@as(workflow.OutcomeTag, if (scenario == 2) .invalid else if (scenario == 3) .needs_user else .ok), result.executionStatus().?);
+        if (scenario < 2) {
+            const content = try @import("../application/required_authority_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/required_authority_workflow.zig").content_schema, .content);
+            try std.testing.expect(content.records.len != 0);
+            try std.testing.expect(runner.envelope.checkGate(@import("../application/required_authority_workflow.zig").gate_contract) == null);
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.prepared_model_request)] == null);
+        }
+        try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/chosen/spec.md", .{}));
+    }
+}
+
 fn writeFeatureInputFixture(io: std.Io, project: std.Io.Dir) !void {
     const allocator = std.testing.allocator;
     const specs_config = try std.mem.replaceOwned(u8, allocator, valid_config, "\"specs\": \"specs\"", "\"specs\": \"requirements/current\"");
