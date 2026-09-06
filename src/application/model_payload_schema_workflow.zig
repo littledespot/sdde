@@ -60,13 +60,23 @@ pub const Validate = struct {
         const value = values.adopt(self.allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch return error.OperationExecutionFailed;
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(schema.key)] = value;
-        return .{ .outcome = switch (owner.outcome) {
-            .valid => .ok,
-            .schema_rejected => .invalid,
-            .not_validated => |original| envelope.status(original),
-        }, .delta = delta };
+        return .{ .outcome = status(owner.view()), .delta = delta };
     }
 };
+
+pub fn readCurrent(view: *const data.View) operations.Error!*const Result {
+    const result = values.read(view, schema, Result) catch return error.OperationExecutionFailed;
+    try @import("provider_observation_workflow.zig").requireCurrent(view, result.source().source());
+    return result;
+}
+
+pub fn status(result: *const Result) @import("../domain/workflow.zig").OutcomeTag {
+    return switch (result.outcome()) {
+        .valid => .ok,
+        .schema_rejected => .invalid,
+        .not_validated => |original| envelope.status(original),
+    };
+}
 
 const Owner = struct {
     allocator: std.mem.Allocator,

@@ -97,7 +97,7 @@ all request/binding/resource/attempt/lease references stay unchanged. Prepared
 authorization is required and rechecked; cancellation or rejected publication
 leaves the prior ledger current. The provider operation stays assigned and no
 API call, token charge, new limit or persistence occurs. Request terminalization
-remains separate work; the provider call is an explicit later operation.
+and the provider call use the separate explicit operations below.
 
 ## Provider-operation invocation-state integration (implemented 2026-09-06)
 
@@ -110,7 +110,7 @@ The evidence references the canonical invocation and retains its owners.
 Failed, expired, cancelled, foreign, stale, duplicate or deadline-altered inputs
 reject without publication. The lease is not consumed here; `invoke-model`
 performs the separate call. Observed inference completion is now explicit below;
-pre-call termination remains work. No additional capability,
+pre-call termination uses its separate explicit operation below. No additional capability,
 timeout, retry, token charge, persistence or recovery mechanism is introduced.
 
 ## Inference integration (implemented 2026-09-06)
@@ -176,9 +176,54 @@ one application. It reuses the existing ledger and lease cleanup; response
 owners and token accounting do not change. Stops/failures stay `failed` and
 cancellation stays `cancelled`; provider completion proves no payload, logical
 request or workflow success. Completion may precede decoding, whose dependencies
-retain the original evidence. Request closure, assigned-operation termination
-and optional count-call integration remain separate. A runtime/budget rejection
+retain the original evidence. Optional count-call integration remains separate. A runtime/budget rejection
 abandons execution without inserting a hidden completion step.
+
+## Pre-call operation termination integration (implemented 2026-09-06)
+
+`terminate-provider-operation` is a parameter-free binding of the existing
+provider lifecycle action. It consumes the request ledger, prepared request,
+applied attempt, assigned operation and retained authorization result. A failure
+becomes `preparation_failed` with unchanged facts; cancellation becomes
+`cancelled(not_sent)`. The existing authorization validator owns failure
+association, delivery and retry consistency. Prepared authorization is rejected.
+
+The runner shares terminal publication with observed completion, using an exact
+assigned or invoked source. It validates the source, proposed terminal fact and
+outcome before publishing the successor and sealed terminal evidence together
+with assignment invalidation. Missing/foreign/stale/duplicate evidence and
+forged deltas reject without mutation. Consumers may retain authorization facts
+against exactly one current lifecycle phase, including terminal, without a
+clock for non-prepared outcomes; prepared lease checks are unchanged.
+
+The original result and request/attempt remain intact. Existing lease cleanup
+destroys backing once; no provider call, token charge, retry, persistence or
+logical-request transition is introduced. Pre-call logical-request closure
+remains separate. Runtime cancellation abandons execution without a hidden step.
+
+## Logical-request closure integration (implemented 2026-09-06)
+
+`complete-model-request` is a parameter-free binding of
+`AdvanceModelRequestLifecycleAction`. It requires the current request ledger,
+prepared request, applied attempt, canonical terminal provider-operation evidence
+and retained payload-schema result. Every associated provider operation must be
+terminal before the runner can publish one direct `invoked -> terminal` request
+ledger successor. Response owners and actual-token accounting remain unchanged.
+
+Schema-valid evidence closes this request as `accepted` with `ok`; this accepts
+only a candidate, not semantics, user approval, commit or workflow success.
+Protocol/schema rejection closes as `failed` with `invalid`; provider stops or
+failures close as `failed` with `failed`; cancellation stays `cancelled`.
+The original detailed evidence is retained. Explicitly closing invalid content
+does not assert retry exhaustion; YAML may instead select permitted retry work
+before closure. Unsupported terminal reasons cannot be supplied as parameters.
+
+Missing, foreign, stale, duplicate, open-operation or forged reason/outcome
+evidence cannot replace the ledger. The runner independently validates the
+successor and retains the exact published snapshot, without a second ledger,
+capability, call, lease renewal, token charge or persistence. Pure closure needs
+no remaining token budget or unexpired provider deadline; runtime cancellation
+still abandons execution without inserting a hidden closure step.
 
 ## Acceptance
 
@@ -210,4 +255,13 @@ cancelled/rejected publication and validation at token-budget exhaustion.
 Completion cases cover exact terminal facts, malformed/schema-invalid content
 independence, missing/foreign/stale/duplicate evidence, forged facts/outcomes,
 allocation/cancellation cleanup, owner lifetime and unchanged usage at exhaustion.
+Request-closure cases cover all evidence-backed reasons/outcomes, unfinished
+operations, missing/foreign/stale/duplicate inputs, forged successors/reasons,
+suppressed failures, compiler/registry rejection, allocation and cancellation
+cleanup, owner lifetime, and closure without a live lease at token exhaustion.
 Bedrock remains a separate increment.
+
+Pre-call termination cases cover both operation kinds, failure/cancellation,
+prepared/missing/foreign/stale/duplicate rejection, forged deltas, no-clock
+terminal fact consumption, prepared-lease checks, allocation and deposited-lease
+cleanup, retained owners, and runtime abandonment without hidden termination.

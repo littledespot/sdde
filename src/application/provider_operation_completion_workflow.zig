@@ -1,8 +1,6 @@
 const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
-const workflow = @import("../domain/workflow.zig");
 const lifecycle = @import("../domain/provider_operation_lifecycle.zig");
-const provider = @import("../domain/llm_provider_operation.zig");
 const data = @import("../domain/pipeline_data.zig");
 const values = @import("pipeline_values.zig");
 const accounting = @import("workflow_model_accounting.zig");
@@ -26,7 +24,7 @@ pub const Complete = struct {
         const self = context.?;
         const facts = try readCurrent(&input.step.data);
         const authority = input.step.provider_operation orelse return error.OperationExecutionFailed;
-        const record = authority.ledger.record(facts.operation_id) orelse return error.OperationExecutionFailed;
+        const record = authority.ledger.record(facts.source.id()) orelse return error.OperationExecutionFailed;
         var delta = self.action.execute(authority.ledger, authority.authority, authority.ledger.revision(), record.id, record.revision, .{ .terminate = facts.terminal }) catch return error.OperationExecutionFailed;
         delta.data_invalidations.insert(.invoked_provider_operation);
         return .{ .outcome = facts.outcome, .delta = delta };
@@ -34,13 +32,7 @@ pub const Complete = struct {
 };
 
 /// Derived from the sealed observation, never parameters or model claims.
-pub const Facts = struct {
-    operation_id: provider.ProviderOperationId,
-    terminal: lifecycle.Terminal,
-    outcome: workflow.OutcomeTag,
-};
-
-pub fn readCurrent(view: *const data.View) operations.Error!Facts {
+pub fn readCurrent(view: *const data.View) operations.Error!accounting.Completion {
     const source = try observation.readCurrent(view);
     const invoked = (values.read(view, accounting.invoked_schema, lifecycle.InvokedOperation) catch return error.OperationExecutionFailed).operation();
     if (!source.operationId().eql(invoked.id) or invoked.id.kind != .inference) return error.OperationExecutionFailed;
@@ -54,5 +46,5 @@ pub fn readCurrent(view: *const data.View) operations.Error!Facts {
         .cancelled => .{ .cancelled = .accepted_or_unknown },
         .rejected => return error.OperationExecutionFailed,
     };
-    return .{ .operation_id = invoked.id, .terminal = terminal, .outcome = observation.status(source) };
+    return .{ .source = .{ .invoked = invoked }, .terminal = terminal, .outcome = observation.status(source) };
 }

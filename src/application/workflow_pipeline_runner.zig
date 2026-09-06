@@ -32,13 +32,14 @@ const provider = @import("../domain/llm_provider_operation.zig");
 const model_invocation = @import("workflow_model_invocation.zig");
 const invocation_validation = @import("../domain/provider_invocation_validation.zig");
 const operation_completion = @import("provider_operation_completion_workflow.zig");
+const operation_termination = @import("provider_operation_termination_workflow.zig");
 
 const ExpectedAccounting = union(enum) {
     none,
     attempt: attempt.Attempt,
     assignment: provider.ProviderOperationKind,
     invocation: lifecycle.Invocation,
-    completion: operation_completion.Facts,
+    completion: model_accounting.Completion,
 };
 
 pub const Runner = struct {
@@ -124,7 +125,8 @@ pub const Runner = struct {
         if (index >= self.retry_execution_counts.len) return .{ .rejected = .authority };
         const step = &self.selected.graph.authority.steps[index];
         if (!@import("../domain/workflow_model_invocation.zig").validProjection(step.*) or
-            !operation_selection.validProjection(step.*)) return .{ .rejected = .authority };
+            !operation_selection.validProjection(step.*) or
+            !request_lifecycle_selection.validProjection(step.*)) return .{ .rejected = .authority };
         const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .rejected = .authority };
         if (!contractMatchesStep(entry.contract, step.*) or
             !equalStrings(entry.binding.capabilities(), step.capabilities) or
@@ -149,6 +151,7 @@ pub const Runner = struct {
         }
         const input_data = self.envelope.view(stepPipelineContract(step.*)) catch return .{ .outcome = .invalid };
         const advances_request = request_lifecycle_selection.advances(step.replaces, step.produces);
+        const completes_request = advances_request and request_lifecycle_selection.completes(step.requires);
         const invokes_operation = operation_selection.invokes(step.produces);
         const completes_operation = operation_selection.completes(step.produces);
         const calls_model = step.side_effect == .model_call;
@@ -203,10 +206,14 @@ pub const Runner = struct {
             state.validateTerminal(evidence, (retained_request orelse return .{ .rejected = .authority }).prepared().?) catch return .{ .rejected = .authority };
             operation_id = evidence.record().id;
         }
+        if (completes_request) {
+            _ = @import("model_request_completion_workflow.zig").readCurrent(&input_data) catch return .{ .rejected = .authority };
+            self.model_accounting.?.current_operations.validateRequestClosure(retained_request.?.id()) catch return .{ .rejected = .authority };
+        }
         if (input_data.contains(.provider_authorization_result)) {
             const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
             const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
-            authorization_deadline = authorization_binding.validateConsumer(&state.authorization_leases, result, retained_request orelse return .{ .rejected = .authority }, operation_id orelse return .{ .rejected = .authority }, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return authorizationRejected(err);
+            authorization_deadline = authorization_binding.validateConsumer(&state.authorization_leases, result, retained_request orelse return .{ .rejected = .authority }, operation_id orelse return .{ .rejected = .authority }, self.provider_clock, self.runtime) catch |err| return authorizationRejected(err);
             if (advances_request or invokes_operation or calls_model) authorization_binding.requirePrepared(result) catch |err| return authorizationRejected(err);
         }
         var resolved_binding = self.resolveModelBinding(step.*) catch {
@@ -251,7 +258,7 @@ pub const Runner = struct {
                 provider_input.?.invocation = invocation;
                 expected = .{ .invocation = invocation };
             } else if (completes_operation) {
-                expected = .{ .completion = operation_completion.readCurrent(&input_data) catch return .{ .rejected = .authority } };
+                expected = .{ .completion = (if (operation_selection.terminatesAssigned(step.requires)) operation_termination.readCurrent(&input_data) else operation_completion.readCurrent(&input_data)) catch return .{ .rejected = .authority } };
             } else {
                 expected = .{ .assignment = operation_selection.resolve(step.parameters) orelse return .{ .rejected = .authority } };
             }
@@ -301,7 +308,7 @@ pub const Runner = struct {
         }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .outcome = .failed };
-        if (advances_request) {
+        if (advances_request and !completes_request) {
             const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
             const assigned = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
             const deadline = authorization_binding.validateConsumer(&self.model_accounting.?.authorization_leases, result, retained_request.?, assigned.record().id, self.provider_clock.?, self.runtime) catch |err| return authorizationRejected(err);
@@ -368,9 +375,8 @@ pub const Runner = struct {
         var request_owner: ?*identity.Owner = null;
         defer if (request_owner) |owner| identity.deinitOwner(owner);
         if (candidate.delta.data_replacements[@intFromEnum(pipeline.DataKey.model_request_identity_ledger)] != null) {
-            if (candidate.outcome != .ok) return .{ .rejected = .authority };
             const input = self.envelope.view(contract) catch return .{ .rejected = .authority };
-            const successor = request_lifecycle_binding.validateReplacement(&input, contract, &candidate.delta) catch return .{ .rejected = .authority };
+            const successor = request_lifecycle_binding.validateReplacement(&input, contract, &candidate.delta, candidate.outcome, if (self.model_accounting) |state| state.current_operations else null) catch return .{ .rejected = .authority };
             if (self.model_accounting != null) request_owner = identity.retainLedger(successor) catch return .{ .rejected = .operation_failed };
         }
         var pending: ?model_accounting.Pending = null;
@@ -407,10 +413,8 @@ pub const Runner = struct {
                     pending = state.prepareInvocation(current, request.prepared().?, assigned, invocation, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .outcome = .invalid };
                 },
                 .completion => |facts| {
-                    if (transition != .advance_provider_operation or !candidate.delta.data_invalidations.contains(.invoked_provider_operation)) return .{ .outcome = .invalid };
-                    const invoked = (values.read(&view, model_accounting.invoked_schema, lifecycle.InvokedOperation) catch return .{ .rejected = .authority }).operation();
-                    if (!invoked.id.eql(facts.operation_id)) return .{ .rejected = .authority };
-                    pending = state.prepareCompletion(current, request.prepared().?, invoked, facts.terminal, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .outcome = .invalid };
+                    if (transition != .advance_provider_operation or !candidate.delta.data_invalidations.contains(facts.source.key())) return .{ .outcome = .invalid };
+                    pending = state.prepareCompletion(current, request.prepared().?, facts, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .outcome = .invalid };
                 },
                 .none => unreachable,
             }

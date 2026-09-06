@@ -61,8 +61,8 @@ pub fn validate(allocator: std.mem.Allocator, plan: r.Plan) r.Error!void {
     const expected = try layout(allocator, plan.layout.items, plan.layout.group_size);
     if (plan.layout.groups.len != expected.groups.len or plan.partitions.len != expected.groups.len) return error.InvalidReferenceReconciliation;
     for (expected.groups, plan.layout.groups, plan.partitions, 0..) |group, supplied, partition, index| {
-        if (!std.meta.eql(group.level, supplied.level) or group.round != supplied.round or !equalGroup(group, supplied) or !equalGroup(group, partition.group) or partition.id.ordinal != index + 1 or partition.member_summary_ids.len != group.children.len) return error.InvalidReferenceReconciliation;
-        for (group.children, partition.member_summary_ids) |child, id| if (id.ordinal != child.value + 1 or child.value >= index) return error.InvalidReferenceReconciliation;
+        if (!equalGroup(group, supplied) or !equalGroup(group, partition.group) or partition.id.ordinal != index + 1) return error.InvalidReferenceReconciliation;
+        for (group.children) |child| if (child.value >= index) return error.InvalidReferenceReconciliation;
     }
 }
 fn equalGroup(a: r.Group, b: r.Group) bool {

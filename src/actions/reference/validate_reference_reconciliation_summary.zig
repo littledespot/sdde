@@ -10,7 +10,7 @@ pub const Action = struct {
         try validation.bind(allocator, parsed.input.progress.plan.layout.items, context, self.validator);
         const proposal = parsed.proposal.summary;
         try r.sameSet(r.ClaimId, proposal.member_claim_ids, parsed.input.partition.group.claim_ids);
-        try r.sameSet(r.SummaryId, proposal.member_summary_ids, parsed.input.partition.member_summary_ids);
+        try r.sameSet(r.SummaryId, proposal.member_summary_ids, parsed.input.member_summary_ids);
         const statements = try allocator.alloc(r.ValidatedStatement, proposal.statements.len);
         var represented: std.ArrayList(r.ClaimId) = .empty;
         for (proposal.statements, statements, 0..) |statement, *result, index| {

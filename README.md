@@ -89,8 +89,23 @@ using its validated provider observation. It takes no parameters and retains
 completed, stopped, failed or cancelled facts in the existing in-memory ledger.
 Only the runner publishes terminal evidence and removes the old invocation
 evidence; response values and token usage stay unchanged. Provider completion
-does not accept the payload or complete the logical request/workflow. Request
-closure and pre-call termination remain separate integration work.
+does not accept the payload or complete the logical request/workflow.
+
+`complete-model-request` explicitly closes an invoked logical request using its
+retained payload-validation result and terminal provider-operation evidence.
+It has no parameters and requires every associated operation to be terminal.
+Schema-valid candidates close as request `accepted`; content rejection and
+provider stops/failures close as `failed`; cancellation closes as `cancelled`.
+Content rejection keeps its `invalid` YAML outcome and original diagnostics.
+Request acceptance grants no semantic, approval, commit or workflow-success
+authority. Ownership and token usage stay unchanged.
+
+`terminate-provider-operation` closes an assigned operation from its retained
+authorization result: failure becomes `preparation_failed`, and cancellation
+becomes `cancelled(not_sent)`. It takes no parameters, rejects prepared or
+missing/foreign/stale evidence, and uses the same terminal ledger publication
+and lease cleanup. It makes no provider call, charges no tokens and leaves the
+logical request unchanged. Pre-call logical-request closure remains separate work.
 
 ## Requirements
 
@@ -109,6 +124,7 @@ zig build test-reference-preflight
 zig build test-reference-ingestion
 zig build test-reference-evidence
 zig build test-reference-extraction
+zig build test-reference-reconciliation
 zig build test-structured-tokens
 zig build test-path-tokens
 zig build test-typed-text
@@ -147,8 +163,10 @@ captured bytes. The [ingestion YAML fixture](src/test_fixtures/reference-ingesti
 tests these read-only preparation steps; it is not an additional required user
 workflow. Native extraction-result parsing, citation-backed candidate validation,
 engine-assigned claim/citation IDs and complete chunk accounting are also tested
-through YAML with scripted results. Model extraction, semantic reconciliation
-and snapshot publication remain future work. See
+through YAML with scripted results. Hierarchical reconciliation now preserves
+claim membership, validates dispositions and signal/conflict joins, assigns
+engine IDs and blocks unresolved conflicts. Live model extraction/reconciliation,
+semantic review and snapshot publication remain future work. See
 [F0100](design/features/F0100-SpecWorkflow.md#35-extraction-candidate-accounting).
 Registered toolchain naming rules now feed a shared, YAML-addressable path-token
 grammar and detector, including current reference basenames. Source-backed

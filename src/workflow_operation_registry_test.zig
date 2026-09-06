@@ -72,7 +72,7 @@ test "operation lookup is exact with one current contract and no version aliases
 }
 
 test "model response contracts require exact inputs without effects or overrides" {
-    inline for (.{ @import("application/provider_observation_workflow.zig").Validate, @import("application/model_envelope_workflow.zig").Decode, @import("application/model_payload_schema_workflow.zig").Validate, @import("application/provider_operation_completion_workflow.zig").Complete }) |Native| {
+    inline for (.{ @import("application/provider_observation_workflow.zig").Validate, @import("application/model_envelope_workflow.zig").Decode, @import("application/model_payload_schema_workflow.zig").Validate, @import("application/provider_operation_completion_workflow.zig").Complete, @import("application/model_request_completion_workflow.zig").Complete, @import("application/provider_operation_termination_workflow.zig").Terminate }) |Native| {
         const required = Native.contract.requires;
         var context: Native = if (@hasField(Native, "allocator")) .{ .allocator = std.testing.allocator } else .{};
         const entry: Entry = .{ .contract = Native.contract, .binding = bindings.bind(Native, &context, Native.invoke) };
@@ -97,7 +97,7 @@ test "model response contracts require exact inputs without effects or overrides
             switch (variant) {
                 0 => changed.contract.side_effect = .model_call,
                 1 => changed.contract.invalidates = &.{required[required.len - 1]},
-                2 => changed.contract.replaces = Native.contract.produces,
+                2 => changed.contract.replaces = if (Native.contract.replaces.len == 0) Native.contract.produces else &.{ .model_request_identity_ledger, .prepared_model_request },
                 3 => changed.contract.optional = &.{.provider_authorization_result},
                 4 => changed.contract.parameters = &.{.{ .id = "hidden", .kind = .boolean, .required = true, .workflow_definition_safe = true }},
                 5 => changed.contract.runner_accounting = .reconcile_workflow_tokens,

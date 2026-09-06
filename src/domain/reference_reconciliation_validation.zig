@@ -73,7 +73,12 @@ pub fn history(allocator: std.mem.Allocator, progress: r.Progress) r.Error!void 
         if (summary.id.ordinal != remaining or summary.partition_id.ordinal != partition.id.ordinal or summary.statements.len >= next_statement) return error.InvalidReferenceReconciliation;
         next_statement -= @intCast(summary.statements.len);
         try r.sameSet(r.ClaimId, partition.group.claim_ids, summary.member_claim_ids);
-        try r.sameSet(r.SummaryId, partition.member_summary_ids, summary.member_summary_ids);
+        if (partition.group.children.len != summary.member_summary_ids.len) return error.InvalidReferenceReconciliation;
+        for (partition.group.children, summary.member_summary_ids) |child, id| {
+            // These earlier records are checked by this same complete walk;
+            // no canonical summary IDs are allocated by partition planning.
+            if (id.ordinal != child.value + 1) return error.InvalidReferenceReconciliation;
+        }
         var represented: std.ArrayList(r.ClaimId) = .empty;
         for (summary.statements, 0..) |statement, index| {
             if (statement.id.ordinal != next_statement + index or statement.claim_ids.len == 0) return error.InvalidReferenceReconciliation;

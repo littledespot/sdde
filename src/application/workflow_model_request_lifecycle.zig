@@ -4,17 +4,27 @@ const pipeline = @import("../domain/pipeline.zig");
 const data = @import("../domain/pipeline_data.zig");
 const requests = @import("model_request_workflow.zig");
 const values = @import("pipeline_values.zig");
-const Error = identity.ValidationError || values.Error || @import("../ports/workflow_operation_registry.zig").Error;
+const selection = @import("../domain/workflow_model_request_lifecycle.zig");
+const lifecycle = @import("../domain/provider_operation_lifecycle.zig");
+const Error = identity.ValidationError || lifecycle.ValidationError || values.Error || @import("../ports/workflow_operation_registry.zig").Error;
 
 /// Validate a declared ledger replacement, not a second transition authority.
-pub fn validateReplacement(input: *const data.View, contract: pipeline.NodeContract, delta: *const pipeline.NodeDelta) Error!*const identity.ModelRequestIdentityLedger {
+pub fn validateReplacement(input: *const data.View, contract: pipeline.NodeContract, delta: *const pipeline.NodeDelta, outcome: @import("../domain/workflow.zig").OutcomeTag, operations: ?*const lifecycle.Ledger) Error!*const identity.ModelRequestIdentityLedger {
     const current = try values.read(input, requests.ledger_schema, identity.ModelRequestIdentityLedger);
     const next = try values.read(&.{ .slots = delta.data_replacements }, requests.ledger_schema, identity.ModelRequestIdentityLedger);
-    if (@import("../domain/workflow_model_request_lifecycle.zig").advances(contract.replaces, contract.produces)) {
+    if (selection.advances(contract.replaces, contract.produces)) {
         const request = try requests.readCurrent(input, requests.prepared_schema);
-        // The closed YAML contract currently supports only this transition.
-        try identity.validateLifecycleSuccessor(current, next, request.id(), .assigned, .invoked);
+        if (selection.completes(contract.requires)) {
+            const facts = try @import("model_request_completion_workflow.zig").readCurrent(input);
+            if (outcome != facts.outcome) return error.InvalidModelRequestLifecycleTransition;
+            try (operations orelse return error.OperationExecutionFailed).validateRequestClosure(request.id());
+            try identity.validateLifecycleSuccessor(current, next, request.id(), .invoked, .{ .terminal = facts.reason });
+        } else {
+            if (outcome != .ok) return error.InvalidModelRequestLifecycleTransition;
+            try identity.validateLifecycleSuccessor(current, next, request.id(), .assigned, .invoked);
+        }
     } else {
+        if (outcome != .ok) return error.InvalidModelRequestLifecycleTransition;
         const assigned = try values.read(&.{ .slots = delta.data_writes }, requests.assigned_schema, handoff.Request);
         if (assigned.ledger() != next) return error.ModelRequestBindingInvalid;
         try identity.validateAssignmentSuccessor(current, next, assigned.id());

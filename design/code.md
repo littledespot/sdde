@@ -635,6 +635,20 @@ ProviderAuthorizationResult = opaque {
 // owners and token usage are unchanged. This does not complete the logical request,
 // accept the payload or grant workflow success.
 
+// complete-model-request consumes that terminal operation, applied attempt and
+// retained payload-schema result. AdvanceModelRequestLifecycleAction closes only
+// this request after all its operations are terminal. Schema-valid -> accepted/ok;
+// protocol or schema rejection -> failed/invalid; provider stop/failure -> failed;
+// cancellation -> cancelled. Only the exact evidence-derived ledger successor is
+// published. Response owners and tokens stay unchanged; request acceptance is not
+// semantic validity, approval, workflow success or commit authority.
+
+// terminate-provider-operation consumes assigned operation and retained authorization
+// evidence: failure -> preparation_failed/failed; cancellation -> cancelled(not_sent).
+// Prepared results reject. The same lifecycle action/runner terminal publication
+// replaces assignment evidence, retaining original facts and sole lease cleanup.
+// No call, token charge, retry, persistence or logical-request transition occurs.
+
 TelemetryFact =
   | RunStartedFact
   | RunCompletedFact { outcome, durationMs? }
@@ -3730,9 +3744,16 @@ ReferenceReconciliationItem {
   claimId,
   sourceId,
   sourceOrdinal,
+  sourceBlockId,
+  sourceChunkId,
   compactContent: ReferenceClaimContent,
-  citationIds[]
+  citations: SourceCitation[] // IDs and canonical captured-source locations
 }
+
+// Approved partition policy: the selected reference directory is the related
+// document set. YAML supplies group-size >= 2; source/claim order, followed by
+// preceding-summary order, determines within-source, cross-source and recursive
+// global groups. No modality/entity identities or source precedence are inferred.
 
 ReferenceReconciliationPartition {
   partitionId,
@@ -3780,6 +3801,10 @@ HierarchicalReferenceReconciliationState {
   summaries: ReferenceReconciliationSummary[],
   finalProposal: ReferenceReconciliationProposal
 }
+
+// F0100 §3.9 documents the implemented execution-local scripted-result boundary.
+// It reuses the native extraction content variants and permits unresolved
+// conflicts only; it is not yet this persisted snapshot/continuity contract.
 
 IdentifiedReferenceClaim {
   claimId,

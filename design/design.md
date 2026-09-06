@@ -1448,7 +1448,7 @@ rejects stale, foreign, duplicate, skipped or assignment-disguised updates.
 Authorization is rechecked before publication; rejection preserves the prior
 ledger. The prepared request, attempt and lease are unchanged and the provider
 operation remains assigned. This step performs no API call or token accounting;
-actual API calls and request closure remain separate YAML work.
+actual API calls and request closure use separate YAML operations.
 
 Native `advance-provider-operation-lifecycle` with `transition: invoked`
 advances the assigned operation under that invoked request. The runner binds
@@ -1466,7 +1466,34 @@ while removing invocation evidence. Provider facts, response ownership and
 actual-token usage stay unchanged. Stops/failures and cancellation retain their
 outcomes; a completed provider response proves no payload or workflow success.
 There are no parameters, API calls, renewed deadlines or hidden completion steps
-on abandonment. Logical-request closure and pre-call termination remain separate.
+on abandonment.
+
+Pre-call `terminate-provider-operation` consumes the exact assigned operation
+and retained authorization result. The same lifecycle action and runner terminal
+publication path apply `assigned -> terminal`, publishing terminal evidence and
+removing assignment evidence together. Authorization failure becomes
+`preparation_failed`; cancellation becomes `cancelled(not_sent)`, preserving
+`failed`/`cancelled` outcomes. Prepared, missing, foreign, stale or duplicate
+evidence cannot authorize termination. Authorization-result consumers require
+exactly one current assigned/invoked/terminal association; non-prepared facts
+need no clock, while prepared leases retain their deadline checks. Existing
+lease cleanup remains the sole backing owner. No provider call, token charge,
+retry, persistence or logical-request transition is added; pre-call logical-request
+closure remains separate. Runtime abandonment never inserts this YAML step.
+
+Logical-request closure is an explicit parameter-free `complete-model-request`
+step using the same lifecycle action and request ledger. It requires the
+retained payload-validation result, exact current attempt and terminal
+provider-operation evidence; every operation associated with the request must
+be terminal. Schema-valid candidate evidence permits request `accepted`/`ok`
+only, granting no semantic, approval, commit or workflow-success authority.
+Protocol/schema rejection closes as request `failed` while retaining the
+`invalid` outcome; provider stops/failures remain `failed` and cancellation
+remains `cancelled`. No retry exhaustion or user approval is inferred.
+The runner validates the evidence-derived reason/outcome and one direct ledger
+successor before publication; missing, foreign, stale, duplicate or unfinished
+operation evidence rejects. Response ownership and token usage are unchanged;
+no call, renewed lease, deadline, persistence or hidden completion is added.
 
 Each workflow-declared result schema defines the entire compact response;
 there is no generic open payload or repeated engine metadata. Repair operations

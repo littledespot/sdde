@@ -24,7 +24,7 @@ pub const Level = enum { within_source, cross_source, global };
 pub const GroupIndex = struct { value: usize };
 pub const Group = struct { level: Level, round: u32, claim_ids: []const ClaimId, children: []const GroupIndex };
 pub const Layout = struct { items: Items, group_size: u32, groups: []const Group };
-pub const Partition = struct { id: PartitionId, group: Group, member_summary_ids: []const SummaryId };
+pub const Partition = struct { id: PartitionId, group: Group };
 pub const Plan = struct { layout: Layout, partitions: []const Partition };
 pub const TokenReference = struct { token_id: extraction.tokens.Id };
 pub const ContentProposal = union(enum) {
@@ -44,7 +44,7 @@ pub const Summary = struct { id: SummaryId, partition_id: PartitionId, member_cl
 /// every previous summary or mutate an older workflow value.
 pub const SummaryHistory = struct { value: Summary, previous: ?*const SummaryHistory };
 pub const Progress = struct { plan: Plan, latest: ?*const SummaryHistory, summary_count: usize, next_statement_ordinal: u32 };
-pub const Input = struct { progress: Progress, partition: Partition, items: []const Item, summaries: []const Summary, purpose: enum { summary, global } };
+pub const Input = struct { progress: Progress, partition: Partition, items: []const Item, summaries: []const Summary, member_summary_ids: []const SummaryId, purpose: enum { summary, global } };
 pub const Disposition = enum { retained, superseded, duplicate, conflicting };
 pub const ClaimDisposition = struct { claim_id: ClaimId, disposition: Disposition, related_claim_ids: []const ClaimId };
 pub const SignalProposal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: ContentProposal };

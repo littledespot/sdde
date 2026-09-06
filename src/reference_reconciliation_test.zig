@@ -50,7 +50,7 @@ test "hierarchical reconciliation preserves original meaning citations exact tok
     for (initial.plan.partitions) |partition| {
         levels.insert(partition.group.level);
         recursive_global = recursive_global or partition.group.round > 0;
-        try std.testing.expect((if (partition.group.level == .within_source) partition.group.claim_ids.len else partition.member_summary_ids.len) <= 2);
+        try std.testing.expect((if (partition.group.level == .within_source) partition.group.claim_ids.len else partition.group.children.len) <= 2);
     }
     try std.testing.expectEqual(@as(usize, 3), levels.count());
     try std.testing.expect(recursive_global);
@@ -80,7 +80,7 @@ test "partition coverage rejects omissions duplicates foreign children ordering 
         switch (scenario) {
             0 => plan.partitions = partitions[1..],
             1 => partitions[1] = partitions[0],
-            2 => partitions[2].member_summary_ids = &.{.{ .ordinal = 999 }},
+            2 => partitions[2].group.children = &.{.{ .value = 999 }},
             3 => partitions[0].group.claim_ids = &.{.{ .ordinal = 2 }},
             else => unreachable,
         }
@@ -188,6 +188,17 @@ test "each disposition is total unique current and has a valid terminal relation
         proposal.signals = valid.signals[1..];
         try std.testing.expectEqual(.complete, (try f.finish(a, input, proposal, fixture.context())).outcome);
     }
+    var chain = valid;
+    const chained = try a.dupe(r.ClaimDisposition, valid.claim_dispositions);
+    chained[0].disposition = .duplicate;
+    chained[0].related_claim_ids = &.{chained[1].claim_id};
+    chained[1].disposition = .superseded;
+    chained[1].related_claim_ids = &.{chained[2].claim_id};
+    chain.claim_dispositions = chained;
+    chain.signals = valid.signals[2..];
+    try std.testing.expectEqual(.complete, (try f.finish(a, input, chain, fixture.context())).outcome);
+    chained[1].related_claim_ids = &.{ chained[2].claim_id, chained[2].claim_id };
+    try std.testing.expectError(error.InvalidReferenceReconciliation, f.finish(a, input, chain, fixture.context()));
 }
 
 pub fn conflicting(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
@@ -309,7 +320,7 @@ test "every existing claim kind uses the same reconciliation text and signal con
     const a = arena.allocator();
     const fixture = try prepare(a, &.{"An independently supported claim.\n"});
     defer fixture.deinit();
-    inline for (std.meta.tags(r.extraction.Kind)) |kind| {
+    inline for (comptime std.meta.tags(r.extraction.Kind)) |kind| {
         var extracted = fixture.extracted;
         const claims = try a.dupe(r.extraction.Claim, extracted.ledger.claims);
         claims[0].content = .{ .model = @unionInit(r.extraction.Content, @tagName(kind), if (comptime kind == .business or kind == .scope_guard)
@@ -346,7 +357,7 @@ test "final lineage rejects removed summaries altered membership and changed can
         try std.testing.expectError(error.InvalidReferenceReconciliation, f.finish(a, altered, proposal, fixture.context()));
     }
     const result = try f.finish(a, input, proposal, fixture.context());
-    for (0..3) |scenario| {
+    for (0..5) |scenario| {
         var records = result.records;
         const signals = try a.dupe(r.Signal, records.signals);
         records.signals = signals;
@@ -354,6 +365,12 @@ test "final lineage rejects removed summaries altered membership and changed can
             0 => records.signals = signals[1..],
             1 => signals[0].id.ordinal += 1,
             2 => signals[0].value.claim_ids = &.{},
+            3 => records.assignments.checked.prior.prior.dispositions = &.{},
+            4 => {
+                const dispositions = try a.dupe(r.ClaimDisposition, records.assignments.checked.prior.prior.dispositions);
+                dispositions[0].related_claim_ids = &.{.{ .ordinal = 999 }};
+                records.assignments.checked.prior.prior.dispositions = dispositions;
+            },
             else => unreachable,
         }
         try std.testing.expectError(error.InvalidReferenceReconciliation, f.account.execute(a, records));
@@ -415,4 +432,31 @@ test "reference candidate ownership retains predecessors and cleans deep histori
         current = successor;
     }
     try std.testing.expectEqualStrings("retained-reference-state", current.payload.reconciliation_items.state_id.bytes);
+}
+
+test "overlapping conflicts conserve every declared conflict relationship" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "First\n", "Second\n", "Third\n" });
+    defer fixture.deinit();
+    const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    var proposal = try f.global(a, input);
+    const dispositions = try a.dupe(r.ClaimDisposition, proposal.claim_dispositions);
+    for (dispositions) |*value| value.disposition = .conflicting;
+    dispositions[0].related_claim_ids = &.{ dispositions[1].claim_id, dispositions[2].claim_id };
+    dispositions[1].related_claim_ids = &.{dispositions[0].claim_id};
+    dispositions[2].related_claim_ids = &.{dispositions[0].claim_id};
+    proposal.claim_dispositions = dispositions;
+    proposal.signals = &.{};
+    const conflicts = try a.alloc(r.ConflictProposal, 2);
+    for (conflicts, 1..) |*conflict, index| {
+        conflict.* = .{ .claim_ids = try a.dupe(r.ClaimId, &.{ dispositions[0].claim_id, dispositions[index].claim_id }), .citation_ids = try a.dupe(r.CitationId, &.{ input.items[0].claim.citation_ids[0], input.items[index].claim.citation_ids[0] }), .kind = .scope_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The scopes disagree." } }} }, .resolution = .unresolved };
+    }
+    proposal.conflicts = conflicts;
+    const result = try f.finish(a, input, proposal, fixture.context());
+    try std.testing.expectEqual(.blocked, result.outcome);
+    try std.testing.expectEqual(@as(usize, 2), result.records.conflicts.len);
+    proposal.conflicts = conflicts[0..1];
+    try std.testing.expectError(error.InvalidReferenceReconciliation, f.finish(a, input, proposal, fixture.context()));
 }

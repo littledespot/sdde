@@ -334,6 +334,54 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_completion.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
     denied_payload.step.dependOn(&denied_completion.step);
 
+    const missing_request_closure = b.addTempFiles();
+    const closure_executable = missing_request_closure.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_request_closure.add(".sddtoolkit.json", configuration);
+    _ = missing_request_closure.add(".sddtoolkit/workflows/close.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: close
+        \\version: 1
+        \\shortcode: CLOS
+        \\invoke: core.empty-invocation
+        \\policy: core.model-inference@1
+        \\start: close
+        \\steps:
+        \\  close: { use: complete-model-request, on: { ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
+    );
+    const denied_closure = std.Build.Step.Run.create(b, "reject packaged request closure without terminal operation and payload evidence");
+    denied_closure.addFileArg(closure_executable);
+    denied_closure.addArg("close");
+    denied_closure.setCwd(missing_request_closure.getDirectory());
+    denied_closure.clearEnvironment();
+    denied_closure.expectExitCode(1);
+    denied_closure.expectStdOutEqual("");
+    denied_closure.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_completion.step.dependOn(&denied_closure.step);
+
+    const missing_termination_inputs = b.addTempFiles();
+    const termination_executable = missing_termination_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_termination_inputs.add(".sddtoolkit.json", configuration);
+    _ = missing_termination_inputs.add(".sddtoolkit/workflows/terminate.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: terminate
+        \\version: 1
+        \\shortcode: TERM
+        \\invoke: core.empty-invocation
+        \\policy: core.model-authorization@1
+        \\start: terminate
+        \\steps:
+        \\  terminate: { use: terminate-provider-operation, on: { failed: end.failed, cancelled: end.cancelled } }
+    );
+    const denied_termination = std.Build.Step.Run.create(b, "reject packaged pre-call termination without assignment and authorization evidence");
+    denied_termination.addFileArg(termination_executable);
+    denied_termination.addArg("terminate");
+    denied_termination.setCwd(missing_termination_inputs.getDirectory());
+    denied_termination.clearEnvironment();
+    denied_termination.expectExitCode(1);
+    denied_termination.expectStdOutEqual("");
+    denied_termination.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_closure.step.dependOn(&denied_termination.step);
+
     const denied_toolchain = std.Build.Step.Run.create(b, "reject invalid toolchain only when selected");
     denied_toolchain.addFileArg(packaged_executable);
     denied_toolchain.addArg("toolchain-check");

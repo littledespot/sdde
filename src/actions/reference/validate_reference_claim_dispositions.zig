@@ -38,16 +38,49 @@ pub const Action = struct {
             }
             dispositions[index] = value;
         }
-        // Relationships terminate at retained originals, never a chain/cycle
-        // that could hide an unresolved claim behind another disposition.
         for (dispositions) |value| for (value.related_claim_ids) |id| {
             const target = dispositions[id.ordinal - 1];
             switch (value.disposition) {
                 .retained => unreachable,
-                .duplicate, .superseded => if (target.disposition != .retained) return error.InvalidReferenceReconciliation,
+                .duplicate, .superseded => if (target.disposition == .conflicting) return error.InvalidReferenceReconciliation,
                 .conflicting => if (target.disposition != .conflicting or !r.contains(r.ClaimId, target.related_claim_ids, value.claim_id)) return error.InvalidReferenceReconciliation,
             }
         };
+        try validateAcyclic(allocator, dispositions);
         return .{ .input = parsed.input, .proposal = parsed.proposal.global, .dispositions = dispositions };
     }
 };
+
+/// Iterative graph proof: duplicate/supersession chains must terminate at
+/// retained claims. Conflict relationships are symmetric, not directed edges.
+fn validateAcyclic(allocator: std.mem.Allocator, values: []const r.ClaimDisposition) r.Error!void {
+    const Mark = enum { unseen, active, done };
+    const marks = try allocator.alloc(Mark, values.len);
+    @memset(marks, .unseen);
+    const Frame = struct { index: usize, edge: usize };
+    var stack: std.ArrayList(Frame) = .empty;
+    for (values, 0..) |value, root| {
+        if (marks[root] == .done or value.disposition == .conflicting) continue;
+        try stack.append(allocator, .{ .index = root, .edge = 0 });
+        marks[root] = .active;
+        while (stack.items.len != 0) {
+            const frame = &stack.items[stack.items.len - 1];
+            const edges = values[frame.index].related_claim_ids;
+            if (frame.edge == edges.len) {
+                marks[frame.index] = .done;
+                _ = stack.pop();
+                continue;
+            }
+            const target = edges[frame.edge].ordinal - 1;
+            frame.edge += 1;
+            switch (marks[target]) {
+                .active => return error.InvalidReferenceReconciliation,
+                .done => {},
+                .unseen => {
+                    marks[target] = .active;
+                    try stack.append(allocator, .{ .index = target, .edge = 0 });
+                },
+            }
+        }
+    }
+}

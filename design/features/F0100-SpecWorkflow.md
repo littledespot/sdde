@@ -8,8 +8,9 @@ and ADR 0005. The logical Specify flow, `spec.md` section hierarchy, and
 clarification separation are defined below. The explicit feature/reference
 invocation, shared directory preflight, read-only clarification inputs, Markdown
 ingestion, citable reference preparation, typed text, Markdown exact-value
-preservation and scripted extraction accounting in Sections 3.1–3.8 are implemented.
-Generated-name code is removed; semantic extraction/reconciliation, generation,
+preservation, scripted extraction accounting and reconciliation in Sections
+3.1–3.9 are implemented. Generated-name code is removed; live semantic
+extraction/reconciliation, generation,
 output publication and the complete definition remain unfinished.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
@@ -308,7 +309,7 @@ fresh reference state and follow chunk/claim/citation order; response arrival
 order cannot change them. No ID counters or ledgers are persisted.
 
 This is not the complete `result.reference-claims/v1` production contract:
-semantic support, business-boundary review, reconciliation and publication
+semantic support, business-boundary review, live reconciliation and publication
 are still required before these candidates can become reference authority.
 Markdown inline-code candidates are implemented; other format extractors remain
 future work. There is no live
@@ -395,7 +396,7 @@ gate. Citation validation and total accounting remain separate responsibilities.
 
 The raw-string format is removed, with no dual reader. No file/network grant,
 model call, output write, clarification modification or completion transition is
-introduced. Semantic review, reconciliation and publication remain required.
+introduced. Semantic review, live reconciliation and publication remain required.
 
 ### 3.8 Exact-value preservation
 
@@ -438,6 +439,77 @@ obligation joins. Eligibility and relevance are not semantic proof, and token
 values grant no file, path, command or network authority. Everything remains
 execution-local: no registry persistence, artifact publication or clarification
 write is added.
+
+### 3.9 Reference-reconciliation boundary
+
+Design §16.4's approved input contract retains existing typed claims, canonical
+citations, source/block/chunk identities and preserved-token references. It adds
+no inferred modality or subject/object IDs. The selected reference directory is
+the complete related-document set; filenames confer no precedence.
+
+The explicit YAML parameter `group-size` is an integer of at least two. The
+engine partitions claims within each source in source/claim order, groups those
+summaries across sources, then recursively groups global summaries until one
+global partition remains. The bound counts immediate members, not request bytes
+or tokens. Every partition keeps its complete original-claim map and provenance;
+its input includes unchanged original payloads and accepted child summaries.
+An empty accounted claim set has one empty global partition. Blocked extraction
+cannot enter reconciliation.
+
+All operations are pure and individually registered in the generic YAML registry:
+
+| Responsibility | Operations |
+| --- | --- |
+| Inputs and grouping | `build-reference-reconciliation-items`, `partition-reference-reconciliation-items` (`with: { group-size: 16 }`), `assign-reference-reconciliation-partitions`, `validate-reference-reconciliation-partitions` |
+| Each partition | `build-reference-reconciliation-input`, `parse-reference-reconciliation-result` |
+| Non-final summaries | `validate-reference-reconciliation-summary`, `assign-reference-summary-identities`, `build-reference-reconciliation-summary` |
+| Global proposal | `validate-reference-claim-dispositions`, `validate-reference-signal-proposals`, `validate-reference-conflict-proposals` |
+| Identified result | `assign-reference-reconciliation-identities`, `build-reference-reconciliation-records`, `validate-reference-reconciliation-completeness` |
+
+The closed native response is either `{"summary": {...}}` or
+`{"global": {...}}`; the engine binds the response to its current partition.
+A summary contains `member_claim_ids`, `member_summary_ids` and `statements`
+with positive unique `local_key`, `claim_ids` and typed `content`. Membership
+must match exactly, and statements represent every member claim exactly once.
+Summary IDs are allocated only after validation; partition planning contains
+local group links, not future canonical summary IDs. Statement IDs follow sorted
+local keys. Accepted summaries retain their lineage
+in immutable execution-local history; advancing clears the consumed candidate
+keys rather than retaining stale parallel candidates.
+
+A global proposal contains `claim_dispositions`, `signals` and `conflicts`:
+
+- Exactly one disposition per original claim: `retained` has no related IDs;
+  `duplicate` has one; `superseded` and `conflicting` have one or more.
+  Related IDs must be current, unique and non-self. Duplicate/supersession
+  edges are acyclic and terminate at retained claims; conflict relationships
+  are symmetric and must be represented by conflicts.
+- Signal content is either `{"model": {"business": {"segments": [...]}}}`
+  (or another existing extraction kind), or
+  `{"preserved_token": {"token_id": {"ordinal": 1}}}`. Kind, claim and token
+  joins must agree; citations are the exact union for the selected claims.
+  Every retained claim is covered. Every non-conflicting preserved token retains
+  its own reference and obligation, including when its claim is superseded or
+  duplicate. Different exact scalars cannot be declared duplicates.
+- Conflicts name at least two current conflicting claims, exact citations,
+  a closed conflict kind, typed `summary`, and `resolution: "unresolved"`.
+  Overlapping conflicts retain all relationship coverage; duplicate conflict
+  groups of the same kind fail. Conflicting claims cannot be projected as
+  resolved signals. No source-precedence authority is currently registered,
+  so model-proposed precedence or user resolution is rejected.
+
+All text uses §3.7's shared validator with the explicit contributing-claim
+scope set; cross-source scope never becomes corpus-wide permission. Models
+cannot supply canonical signal, conflict or statement IDs, scalar replacements,
+paths or completion status. The final validator checks hierarchy and record
+joins and returns `blocked` whenever unresolved conflicts exist, otherwise
+`ok`. This is candidate accounting, not semantic proof or permission to publish.
+
+The scripted YAML fixture explicitly sequences these operations. Live model
+iteration/repair, shared authority-reconciliation integration, persisted
+snapshot/conflict continuity, clarification creation and specification rendering
+remain separate work. No new prompt, provider call, persistence or artifact
+write is introduced; user-closed clarification files remain unchanged.
 
 ## 4. Required logical coverage
 
@@ -681,6 +753,13 @@ YAML definition.
 
 ## 8. Verification
 
+- `zig build test-reference-reconciliation` covers hierarchical/recursive
+  grouping, exact original membership, all claim kinds, preserved tokens,
+  closed proposals, invalid/acyclic relationships, overlapping blocking
+  conflicts, scoped text, canonical record joins and allocation/lifetime
+  failures. `zig build verify` also exercises the native YAML path, rejects
+  missing prerequisites and invalid group sizes, preserves user-closed forms,
+  and runs the clean-environment native packaging smoke suite;
 - `zig build test-structured-tokens` covers inline-code eligibility, exact
   Unicode/whitespace, multiline and size-boundary citations, closed and total
   classifications, source/identity forgery, preserved-claim conservation and

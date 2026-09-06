@@ -48,8 +48,10 @@ typed `NodeDelta`; shared execution-reference ownership preserves identity
 without copying capabilities. `InvokeModelAction` now makes one interface
 inference call through its native YAML binding with fake-provider acceptance
 evidence. Observation validation, strict JSON decoding and payload-schema validation
-are also YAML-integrated, together with invoked inference-operation completion.
-Logical-request closure, assigned-operation termination, optional count-call actions and production
+are also YAML-integrated, together with invoked inference-operation completion
+and evidence-derived logical-request closure. Authorization-failure/cancellation
+termination of assigned operations is also YAML-integrated. Pre-call logical-request
+closure, optional count-call actions and production
 provider composition/contracts remain implementation work. No transaction store or
 provider-effect journal is a prerequisite.
 
@@ -134,7 +136,7 @@ until an adapter is explicitly bound; fake preloaders remain test-only.
 **Implemented YAML request invocation state:**
 `advance-model-request-lifecycle` requires explicit `transition: invoked`.
 It reuses `AdvanceModelRequestLifecycleAction` for exactly `assigned -> invoked`;
-terminal transitions remain separate integration work. The runner requires the
+observed request closure uses the separate YAML operation below. The runner requires the
 same prepared request, applied attempt, assigned operation and prepared lease,
 rechecks authorization/deadline before publication, and validates the exact
 direct ledger successor. Failed, cancelled, expired or foreign authorization,
@@ -158,7 +160,7 @@ allocation and before publication.
 The lease remains unconsumed for the later explicit provider call. This step
 makes no API call or delivery claim, charges no tokens, and adds no timeout,
 retry, persistence or recovery mechanism. Invoked inference completion is now
-YAML-integrated below; assigned-operation termination remains separate work.
+YAML-integrated below, as is authorization-derived assigned-operation termination.
 
 **Implemented YAML inference:** `invoke-model` has no parameters. It consumes
 the retained prepared request, applied attempt, invoked operation and prepared
@@ -251,8 +253,64 @@ terminal publication. No token charge, provider call, deadline renewal, retry or
 persistence occurs. Complete provider output is not JSON/schema validity,
 logical-request completion or workflow success. Decoding can run afterward from
 its retained evidence. Runtime/budget rejection abandons execution without a
-hidden terminalization call. Pre-call termination and count-call integration are
-separate work.
+hidden terminalization call. Pre-call logical-request closure and count-call
+integration are separate work.
+
+**Implemented YAML pre-call operation termination:** `terminate-provider-operation`
+requires the current request ledger, prepared request, applied attempt,
+`assigned_provider_operation` and retained `provider_authorization_result`.
+It has no parameters or capability. The existing lifecycle action proposes
+`assigned -> terminal`: a validated authorization failure becomes
+`preparation_failed` with its original cause/retry/delivery facts; cancellation
+becomes `cancelled(not_sent)`. Outcomes remain `failed` and `cancelled`.
+Prepared authorization cannot authorize this transition. Failure identity,
+`not_sent` delivery and `never` retry facts use the existing authorization
+validator, not a second interpretation.
+
+Both terminalization bindings share the runner's canonical terminal-publication
+path. Only successful application publishes `terminal_provider_operation` and
+invalidates the corresponding assigned/invoked evidence. Missing, foreign,
+stale, duplicate or forged evidence rejects without publishing a successor.
+Authorization-result consumers require exactly one current assigned, invoked
+or terminal operation association. Non-prepared result facts need no clock or
+live lease; a prepared lease still requires its original deadline checks.
+Existing lease cleanup releases unused backing once; retained authorization
+facts and request/attempt identity remain unchanged. No provider call, token
+charge, retry, logical-request closure or persistence occurs. Runtime rejection
+abandons execution without inserting this YAML step.
+
+**Implemented YAML logical-request closure:** `complete-model-request` consumes
+the current request ledger, prepared request, applied attempt,
+`terminal_provider_operation` and `model_payload_schema_result`. It has no
+parameters, capability, deadline or retry policy. It reuses
+`AdvanceModelRequestLifecycleAction` for `invoked -> terminal`; the existing
+provider ledger must prove every operation for that request is terminal.
+
+The terminal reason comes only from the exactly associated retained evidence:
+
+| Evidence | Request terminal reason | YAML outcome |
+| --- | --- | --- |
+| Schema-valid candidate | `accepted` | `ok` |
+| Protocol or payload-schema rejection | `failed` | `invalid` |
+| Provider stop or failure | `failed` | `failed` |
+| Cancellation | `cancelled` | `cancelled` |
+
+Here `accepted` means only acceptance of a schema-valid candidate for this
+request, not semantic correctness, domain approval, commit or workflow success.
+Explicit closure of invalid content abandons that request; it does not claim
+retry exhaustion. `needs_user`, `blocked`, `invalid_exhausted` and pre-call
+reasons are not inferred or exposed as YAML assertions by this binding.
+YAML chooses whether to close or follow separately authorized retry/validation
+steps; neither choice is hidden inside closure.
+
+The runner verifies the canonical operation/attempt association and exact
+evidence-derived reason/outcome, validates one direct request-ledger successor,
+and retains that same published snapshot. Missing, foreign, stale, duplicate,
+open-operation or forged successor evidence rejects without mutation.
+Original candidate, protocol and provider evidence remain owned and unchanged.
+No tokens are charged, provider calls made, leases renewed or records persisted.
+Closure can run after the provider deadline or at token-budget exhaustion;
+runtime cancellation still abandons execution without a hidden closure call.
 
 A consumer declares the prepared-request and request-ledger data dependencies;
 the runner supplies the retained binding, not a new selection for the consumer
@@ -825,7 +883,8 @@ erase an open operation or reset an attempt. Assignment is not invocation or a
 lease: authorization preparation is a separate implemented YAML operation;
 Logical-request and provider-operation invocation state and the explicit
 `invoke-model` call and observed inference completion are YAML-integrated;
-logical-request closure and assigned-operation termination remain separate work.
+evidence-derived logical-request closure is YAML-integrated too;
+authorization-derived assigned-operation termination is also YAML-integrated.
 Execution cleanup discards its in-memory records, never resumes
 or persists them.
 
@@ -1349,6 +1408,19 @@ F0006 does not:
     and suppressed-outcome rejection, allocation/cancellation cleanup and owner
     lifetime. Completion at token exhaustion or after the call deadline adds no
     charge, call, retry or logical-request transition.
+    Native YAML logical-request closure proves evidence-derived accepted,
+    failed and cancelled reasons while preserving invalid/failed/cancelled
+    outcomes, exact ledger replacement, all-operation closure, missing/foreign/
+    stale/duplicate evidence rejection, forged reason/outcome rejection,
+    cancellation and allocation cleanup, and retained owner lifetime. It works
+    at token exhaustion without a live lease or provider deadline and grants no
+    semantic or workflow-success authority.
+    Native YAML pre-call termination covers both operation kinds, exact failure
+    and cancellation facts, prepared/missing/foreign/stale/duplicate rejection,
+    forged deltas/outcomes, retained owners, deposited-capability and allocation
+    cleanup, and zero provider calls/token charges. Terminal fact consumers need
+    no clock but cannot mix lifecycle phases or bypass prepared-lease checks.
+    Runtime cancellation performs no hidden termination or logical-request closure.
 13. Each call performs zero or one provider request with no hidden retry,
     fallback, backoff, credential acquisition/refresh, or second operation;
     any permitted credential I/O has separate accepted accounting.

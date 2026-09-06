@@ -13,8 +13,10 @@ const observation = @import("../application/provider_observation_workflow.zig");
 const envelope = @import("../application/model_envelope_workflow.zig");
 const payload = @import("../application/model_payload_schema_workflow.zig");
 const completion = @import("../application/provider_operation_completion_workflow.zig");
+const request_completion = @import("../application/model_request_completion_workflow.zig");
+const termination = @import("../application/provider_operation_termination_workflow.zig");
 
-pub const count = 14;
+pub const count = 16;
 pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
@@ -33,6 +35,8 @@ pub const Assembly = struct {
     decode_envelope: envelope.Decode,
     validate_payload: payload.Validate,
     complete_operation: completion.Complete,
+    complete_request: request_completion.Complete,
+    terminate_operation: termination.Terminate,
     entries: [count]operations.Entry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator) void {
@@ -51,6 +55,8 @@ pub const Assembly = struct {
             .decode_envelope = .{ .allocator = allocator },
             .validate_payload = .{ .allocator = allocator },
             .complete_operation = .{},
+            .complete_request = .{ .allocator = allocator },
+            .terminate_operation = .{},
             .entries = undefined,
         };
         self.entries = .{
@@ -68,6 +74,8 @@ pub const Assembly = struct {
             entry(envelope.Decode, &self.decode_envelope),
             entry(payload.Validate, &self.validate_payload),
             entry(completion.Complete, &self.complete_operation),
+            entry(request_completion.Complete, &self.complete_request),
+            entry(termination.Terminate, &self.terminate_operation),
         };
     }
 };

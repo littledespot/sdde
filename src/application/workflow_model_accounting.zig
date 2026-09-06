@@ -13,6 +13,32 @@ pub const invoked_schema = values.schema(.invoked_provider_operation, lifecycle.
 pub const terminal_schema = values.schema(.terminal_provider_operation, lifecycle.TerminalOperation, 1, null);
 pub const Error = accounting.Error || accounting.RequestError || identity.Error || lifecycle.Error || values.Error || error{InvalidAccountingTransition};
 
+/// Expected terminal facts retain their exact applied source, not a second record.
+pub const Completion = struct {
+    source: CompletionSource,
+    terminal: lifecycle.Terminal,
+    outcome: @import("../domain/workflow.zig").OutcomeTag,
+};
+
+pub const CompletionSource = union(enum) {
+    assigned: *const lifecycle.AssignedOperation,
+    invoked: *const provider.InvokedProviderOperation,
+
+    pub fn id(self: CompletionSource) provider.ProviderOperationId {
+        return switch (self) {
+            .assigned => |value| value.record().id,
+            .invoked => |value| value.id,
+        };
+    }
+
+    pub fn key(self: CompletionSource) @import("../domain/pipeline.zig").DataKey {
+        return switch (self) {
+            .assigned => .assigned_provider_operation,
+            .invoked => .invoked_provider_operation,
+        };
+    }
+};
+
 /// Execution-owned accounting only. No action dispatch, retry counter or I/O.
 pub const State = struct {
     allocator: std.mem.Allocator,
@@ -92,12 +118,15 @@ pub const State = struct {
         return self.retainOperation(lifecycle.InvokedOperation, invoked_schema, requests, successor, try successor.requireInvocation(transition.operation_id));
     }
 
-    pub fn prepareCompletion(self: *const State, requests: *const identity.ModelRequestIdentityLedger, request: *const provider.IdentifiedProviderNeutralModelRequest, invoked: *const provider.InvokedProviderOperation, terminal: lifecycle.Terminal, transition: lifecycle.Transition) Error!Pending {
-        try self.validateInvocation(invoked, request);
-        if (!transition.operation_id.eql(invoked.id) or transition.command != .terminate or
-            !std.meta.eql(transition.command.terminate, terminal)) return error.InvalidAccountingTransition;
+    pub fn prepareCompletion(self: *const State, requests: *const identity.ModelRequestIdentityLedger, request: *const provider.IdentifiedProviderNeutralModelRequest, expected: Completion, transition: lifecycle.Transition) Error!Pending {
+        switch (expected.source) {
+            .assigned => |value| try self.validateAssignment(value, request),
+            .invoked => |value| try self.validateInvocation(value, request),
+        }
+        if (!transition.operation_id.eql(expected.source.id()) or transition.command != .terminate or
+            !std.meta.eql(transition.command.terminate, expected.terminal)) return error.InvalidAccountingTransition;
         const successor = try lifecycle.apply(self.current_operations, self.operationAuthority(requests), transition);
-        return self.retainOperation(lifecycle.TerminalOperation, terminal_schema, requests, successor, try successor.requireTerminal(invoked.id));
+        return self.retainOperation(lifecycle.TerminalOperation, terminal_schema, requests, successor, try successor.requireTerminal(expected.source.id()));
     }
 
     fn retainOperation(self: *const State, comptime T: type, comptime value_schema: data.Schema, requests: *const identity.ModelRequestIdentityLedger, successor: *const lifecycle.Ledger, evidence: *const T) Error!Pending {

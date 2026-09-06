@@ -665,6 +665,23 @@ test "YAML request lifecycle uses its existing action and publishes only a valid
     try std.testing.expect(std.mem.indexOf(u8, runner, "self.envelope.apply(").? < std.mem.indexOf(u8, runner, "self.model_accounting.?.replaceRequests(").?);
 }
 
+test "YAML request closure reuses lifecycle validation without new authority or effects" {
+    const native = @import("application/model_request_completion_workflow.zig");
+    const metadata = @import("application/workflow_operation_binding.zig").inspect(native.Complete, &.{});
+    try std.testing.expect(metadata.valid and !metadata.model_provider and !metadata.provider_authorization);
+    try std.testing.expectEqual(.none, native.Complete.contract.runner_accounting);
+    try std.testing.expectEqual(@as(usize, 0), native.Complete.contract.parameters.len);
+    try std.testing.expectEqual(@as(usize, 0), native.Complete.contract.produces.len);
+    try std.testing.expectEqual(@as(usize, 0), native.Complete.contract.invalidates.len);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.model_request_identity_ledger}, native.Complete.contract.replaces);
+    const source = @embedFile("application/model_request_completion_workflow.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.action.execute("));
+    inline for (.{ "createLifecycleSuccessor", "reconcile", "lease", "std.json", "/adapters/", "envelope.apply", "retry-limit" }) |forbidden| try expectAbsent(source, forbidden);
+    const validation = @embedFile("application/workflow_model_request_lifecycle.zig");
+    try std.testing.expect(std.mem.indexOf(u8, validation, ".validateRequestClosure(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, validation, "outcome != facts.outcome") != null);
+}
+
 test "provider operation boundary has one capability-limited interface" {
     switch (@typeInfo(llm_provider_interface.Context)) {
         .@"opaque" => {},
@@ -743,6 +760,23 @@ test "YAML provider completion uses one lifecycle action and runner-published te
     const runner = @embedFile("application/workflow_pipeline_runner.zig");
     try std.testing.expect(std.mem.indexOf(u8, runner, "pending = state.prepareCompletion(").? < std.mem.indexOf(u8, runner, "self.envelope.apply(").?);
     try std.testing.expect(std.mem.indexOf(u8, runner, "self.envelope.apply(").? < std.mem.indexOf(u8, runner, "self.model_accounting.?.commit(").?);
+}
+
+test "YAML pre-call termination reuses one lifecycle action and canonical terminal publication" {
+    const native = @import("application/provider_operation_termination_workflow.zig");
+    const metadata = @import("application/workflow_operation_binding.zig").inspect(native.Terminate, &.{});
+    try std.testing.expect(metadata.valid and !metadata.model_provider and !metadata.provider_authorization);
+    try std.testing.expectEqual(.advance_provider_operation, native.Terminate.contract.runner_accounting);
+    try std.testing.expectEqual(@as(usize, 0), native.Terminate.contract.parameters.len);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.terminal_provider_operation}, native.Terminate.contract.produces);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.assigned_provider_operation}, native.Terminate.contract.invalidates);
+    try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .failed, .cancelled }, native.Terminate.contract.outcomes);
+    const source = @embedFile("application/provider_operation_termination_workflow.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.action.execute("));
+    try std.testing.expect(std.mem.indexOf(u8, source, ".validateFailure(") != null);
+    inline for (.{ "lifecycle.apply(", "authorization_leases", "LLMProviderInterface", "timeout-ms", "retry-limit", "std.Io", "/adapters/", "reconcile(", "values.adopt(", "envelope.apply(" }) |forbidden| try expectAbsent(source, forbidden);
+    const state = @embedFile("application/workflow_model_accounting.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(state, "self.retainOperation(lifecycle.TerminalOperation,"));
 }
 
 test "provider authorization exposes only non-operational references and narrow single-use ports" {

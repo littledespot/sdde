@@ -1251,6 +1251,21 @@ test "native YAML validates citations extraction and reconciliation before conti
         const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", protected_arena.allocator(), .limited(16384));
         try std.testing.expectEqualSlices(u8, closed.forms[0].bytes, retained);
         try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/spec.md", .{}));
+        if (mode == .reconciled) {
+            for ([_][2][]const u8{
+                .{ "with: { group-size: 2 }", "with: { group-size: 1 }" },
+                .{ "with: { group-size: 2 }", "with: {}" },
+                .{ "use: validate-reference-reconciliation-summary", "use: assign-reference-summary-identities" },
+                .{ "use: validate-reference-conflict-proposals", "use: assign-reference-reconciliation-identities" },
+            }) |change| {
+                const invalid_yaml = try std.mem.replaceOwned(u8, std.testing.allocator, complete_yaml, change[0], change[1]);
+                defer std.testing.allocator.free(invalid_yaml);
+                try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = invalid_yaml });
+                var rejected = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
+                defer rejected.deinit();
+                try std.testing.expect(rejected != .ready);
+            }
+        }
     }
 }
 

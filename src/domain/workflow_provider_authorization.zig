@@ -27,8 +27,11 @@ fn hasConsumerInputs(keys: []const pipeline.DataKey) bool {
         if (key == .assigned_provider_operation) continue;
         if (std.mem.indexOfScalar(pipeline.DataKey, keys, key) == null) return false;
     }
-    return (std.mem.indexOfScalar(pipeline.DataKey, keys, .assigned_provider_operation) != null) !=
-        (std.mem.indexOfScalar(pipeline.DataKey, keys, .invoked_provider_operation) != null);
+    var phases: usize = 0;
+    for ([_]pipeline.DataKey{ .assigned_provider_operation, .invoked_provider_operation, .terminal_provider_operation }) |key| {
+        if (std.mem.indexOfScalar(pipeline.DataKey, keys, key) != null) phases += 1;
+    }
+    return phases == 1;
 }
 
 pub fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
@@ -45,6 +48,8 @@ pub fn validContract(contract: operation.Contract, capabilities: []const []const
 }
 
 pub fn validProjection(step: compilation.CompiledStep) bool {
+    if ((std.mem.indexOfScalar(pipeline.DataKey, step.requires, .provider_authorization_result) != null or
+        std.mem.indexOfScalar(pipeline.DataKey, step.optional, .provider_authorization_result) != null) and !hasConsumerInputs(step.requires)) return false;
     if (!prepares(step.produces)) return !containsCapability(step.capabilities);
     return hasInputs(step.requires) and std.mem.eql(pipeline.DataKey, step.produces, &.{.provider_authorization_result}) and
         step.side_effect == .none and step.runner_accounting == .none and

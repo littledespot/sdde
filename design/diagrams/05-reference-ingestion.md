@@ -17,8 +17,14 @@ flowchart TD
     TEXT --> CLASSIFY["Validate total chunk-local token classifications;<br/>reject missing, duplicate, foreign or stale candidates"]
     CLASSIFY --> TOKENS["Assign preserved-token IDs and build deterministic claims;<br/>keep exact bytes and derive obligation identities"]
     TOKENS --> ACCOUNT["Validate and identify all claims and citations;<br/>prove total chunk coverage and one claim per preserved token"]
-    ACCOUNT -->|Valid| RECONCILE["Reconcile meaning across the complete reference set;<br/>apply current validated clarification answers"]
-    RECONCILE --> CHECK{"Required meaning supported and conflicts resolved?"}
+    ACCOUNT -->|Valid| ITEMS["Retain typed claims, original citations and token references"]
+    ITEMS --> WITHIN["Partition within each source in claim order;<br/>explicit YAML group-size"]
+    WITHIN --> CROSS["Validate complete summary membership;<br/>group across the selected directory's sources"]
+    CROSS --> GLOBAL["Group global summaries recursively;<br/>retain original claim membership and payloads"]
+    GLOBAL --> DISPOSITIONS["Require one retained / superseded / duplicate / conflicting<br/>disposition per original claim; validate every relationship"]
+    DISPOSITIONS --> RECORDS["Validate signal / citation / token / conflict joins;<br/>assign engine IDs and validate complete lineage"]
+    RECORDS -->|Unresolved conflict| BLOCKED
+    RECORDS -->|Structurally valid candidate| CHECK{"Required meaning supported and conflicts resolved?"}
     CHECK -->|Yes| CANDIDATE["Retain validated reference inputs<br/>for subsequent workflow steps"]
     CHECK -->|Clarification required| CLARIFY["Save or reuse questions for the same subject;<br/>preserve protected answers and end needs_user"]
     CHECK -->|Repairable candidate defect| REPAIR["Repair the authorized unit<br/>within the declared retry limits"]
@@ -33,6 +39,8 @@ flowchart TD
     CLASSIFY -->|Invalid| FAILED
     TOKENS -->|Preservation contradicts positive empty| FAILED
     LITERALS -->|Invalid or stale| FAILED
+    DISPOSITIONS -->|Missing, duplicate, foreign or invalid| FAILED
+    RECORDS -->|Incomplete or invalid| FAILED
 ```
 
 Citation checks establish where content came from. Semantic interpretation is
@@ -45,6 +53,9 @@ Scanning returns byte spans, not file authority or validated business text.
 Typed-text/passive-literal validation is implemented for execution-local
 reference candidates. Inline-code eligibility and exact-value classification,
 identity and accounting are implemented with scripted results. A positive
-`no_feature_claim` cannot retain a preserved-token claim. Full
+`no_feature_claim` cannot retain a preserved-token claim. Hierarchical grouping,
+summary/disposition accounting and identified signals/conflicts are implemented
+with scripted results. Unresolved conflicts return `blocked`; no resolution is
+invented. The clarification/semantic-review continuation is still future work. Full
 environment/repository bindings, live semantic extraction, review and publication
-remain separate work. See [F0100 §§3.6–3.8](../features/F0100-SpecWorkflow.md#38-exact-value-preservation).
+remain separate work. See [F0100 §§3.6–3.9](../features/F0100-SpecWorkflow.md#39-reference-reconciliation-boundary).

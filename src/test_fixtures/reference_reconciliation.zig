@@ -33,7 +33,7 @@ pub fn summary(allocator: std.mem.Allocator, input: r.Input) !r.SummaryProposal 
         ids[0] = item.claim.id;
         statement.* = .{ .local_key = @intCast(index + 1), .claim_ids = ids, .content = content(item.claim) };
     }
-    return .{ .member_claim_ids = input.partition.group.claim_ids, .member_summary_ids = input.partition.member_summary_ids, .statements = statements };
+    return .{ .member_claim_ids = input.partition.group.claim_ids, .member_summary_ids = input.member_summary_ids, .statements = statements };
 }
 pub fn global(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
     const dispositions = try allocator.alloc(r.ClaimDisposition, input.items.len);

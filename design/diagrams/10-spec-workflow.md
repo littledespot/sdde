@@ -7,8 +7,10 @@ flowchart TD
     SETUP --> INPUTS["Validate feature and reference locations;<br/>load existing feature state and clarification answers"]
     INPUTS --> READ["Read the selected reference material;<br/>account for every source"]
     READ --> EXACT["Prepare eligible source-backed exact values;<br/>require complete preserve/irrelevant classifications"]
-    EXACT --> UNDERSTAND["Account for typed and preserved-token claims;<br/>reconcile meaning and apply validated clarification answers"]
-    UNDERSTAND --> BRIEF["Generate the feature title, description and goal"]
+    EXACT --> UNDERSTAND["Account for typed and preserved-token claims;<br/>reconcile within-source, cross-source and global groups"]
+    UNDERSTAND --> RECONCILED["Validate total dispositions, signals and conflict joins;<br/>retain claim meaning, citations and exact tokens"]
+    RECONCILED -->|No unresolved conflicts| BRIEF["Generate the feature title, description and goal"]
+    RECONCILED -->|Unresolved conflict in current increment| BLOCKED
     BRIEF --> SPEC["Generate scenarios, outcomes, edge cases and acceptance criteria;<br/>requirements, business rules and scope;<br/>key entities when the feature involves business data"]
     SPEC --> CHECK{"Is the complete specification<br/>valid and fully supported?"}
 
@@ -38,8 +40,11 @@ material and validated answers.
 Markdown inline-code interiors are exact-value candidates; prose, quoted text
 and fenced code are not candidates through that extractor. Preserved values
 retain original bytes and citations, without implying semantic approval or
-operational authority. This in-memory boundary is implemented; the complete
-Specify generation and publication flow shown here remains unfinished.
+operational authority. This in-memory boundary and scripted hierarchical
+reconciliation are implemented. Group size is explicit in YAML; the selected
+reference directory defines related documents. Unresolved conflicts block;
+live model iteration, answer application, clarification writing and the complete
+Specify generation/publication flow shown here remain unfinished.
 
 Every rerun starts the workflow from the beginning. A successful rerun replaces
 the workflow's existing outputs at the same paths while preserving user-closed

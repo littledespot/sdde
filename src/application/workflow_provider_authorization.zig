@@ -50,9 +50,9 @@ pub const Binding = struct {
     }
 };
 
-pub fn validateConsumer(table: *table_module.Table, value: *const result.Result, request: *const handoff.Request, id: provider.ProviderOperationId, clock: lease.Clock, runtime: pipeline.NodeRuntime) lease.Error!?u64 {
+pub fn validateConsumer(table: *table_module.Table, value: *const result.Result, request: *const handoff.Request, id: provider.ProviderOperationId, clock: ?lease.Clock, runtime: pipeline.NodeRuntime) lease.Error!?u64 {
     switch (value.outcome().*) {
-        .prepared => |reference| return try table.validateReference(reference, request.binding(), request.prepared().?, id, currentTime(clock, runtime)),
+        .prepared => |reference| return try table.validateReference(reference, request.binding(), request.prepared().?, id, if (clock) |available| currentTime(available, runtime) else error.ClockUnavailable),
         .failed => |failure| try validateFailure(failure, id),
         .cancelled => |operation_id| if (!operation_id.eql(id)) return error.AuthorizationDenied,
     }
@@ -67,7 +67,7 @@ pub fn requirePrepared(value: *const result.Result) lease.Error!void {
     };
 }
 
-fn validateFailure(failure: provider.ProviderFailure, id: provider.ProviderOperationId) lease.Error!void {
+pub fn validateFailure(failure: provider.ProviderFailure, id: provider.ProviderOperationId) lease.Error!void {
     if (!failure.operation_id.eql(id) or failure.delivery != .not_sent or failure.retry_class != .never) return error.AuthorizationDenied;
 }
 

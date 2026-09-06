@@ -6,12 +6,10 @@ pub const Action = struct {
     pub fn execute(_: Action, allocator: std.mem.Allocator, layout: r.Layout) r.Error!r.Plan {
         const partitions = try allocator.alloc(r.Partition, layout.groups.len);
         for (layout.groups, partitions, 0..) |group, *partition, index| {
-            const members = try allocator.alloc(r.SummaryId, group.children.len);
-            for (group.children, members) |child, *id| {
+            for (group.children) |child| {
                 if (child.value >= index) return error.InvalidReferenceReconciliation;
-                id.* = .{ .ordinal = try r.ordinal(child.value) };
             }
-            partition.* = .{ .id = .{ .ordinal = try r.ordinal(index) }, .group = group, .member_summary_ids = members };
+            partition.* = .{ .id = .{ .ordinal = try r.ordinal(index) }, .group = group };
         }
         return .{ .layout = layout, .partitions = partitions };
     }

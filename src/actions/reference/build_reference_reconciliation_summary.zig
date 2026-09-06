@@ -9,7 +9,7 @@ pub const Action = struct {
         const statements = try allocator.alloc(r.Statement, checked.statements.len);
         for (checked.statements, assignment.statement_ids, statements) |value, id, *statement| statement.* = .{ .id = id, .claim_ids = value.claim_ids, .content = value.content };
         const latest = try allocator.create(r.SummaryHistory);
-        latest.* = .{ .previous = checked.input.progress.latest, .value = .{ .id = assignment.id, .partition_id = checked.input.partition.id, .member_claim_ids = checked.input.partition.group.claim_ids, .member_summary_ids = checked.input.partition.member_summary_ids, .statements = statements } };
+        latest.* = .{ .previous = checked.input.progress.latest, .value = .{ .id = assignment.id, .partition_id = checked.input.partition.id, .member_claim_ids = checked.input.partition.group.claim_ids, .member_summary_ids = checked.input.member_summary_ids, .statements = statements } };
         return .{ .plan = checked.input.progress.plan, .latest = latest, .summary_count = checked.input.progress.summary_count + 1, .next_statement_ordinal = assignment.next_statement_ordinal };
     }
 };
