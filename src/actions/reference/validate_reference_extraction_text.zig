@@ -14,6 +14,7 @@ pub const Action = struct {
             const context: text.Context = .{ .registry = registry, .current = current, .inputs = inputs, .scope = candidate.scope };
             _ = try evidence.resolve(inputs, candidate.scope);
             entry.scope = candidate.scope;
+            entry.token_classifications = candidate.token_classifications;
             entry.outcome = switch (candidate.outcome) {
                 .blocked => |reason| .{ .blocked = reason },
                 .no_feature_claim => |reason| .{ .no_feature_claim = try self.validator.reference(allocator, context, reason) },

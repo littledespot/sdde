@@ -1,4 +1,5 @@
 test {
+    _ = @import("structured_token_test.zig");
     _ = @import("workflow_operation_registry_test.zig");
     _ = @import("pipeline_data_test.zig");
     _ = @import("pipeline_native_value_test.zig");

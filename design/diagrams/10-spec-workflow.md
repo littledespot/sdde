@@ -6,7 +6,8 @@ flowchart TD
     START --> SETUP["Load project configuration and select the Specify workflow;<br/>prepare the required model provider"]
     SETUP --> INPUTS["Validate feature and reference locations;<br/>load existing feature state and clarification answers"]
     INPUTS --> READ["Read the selected reference material;<br/>account for every source"]
-    READ --> UNDERSTAND["Extract and reconcile reference meaning;<br/>apply current validated clarification answers"]
+    READ --> EXACT["Prepare eligible source-backed exact values;<br/>require complete preserve/irrelevant classifications"]
+    EXACT --> UNDERSTAND["Account for typed and preserved-token claims;<br/>reconcile meaning and apply validated clarification answers"]
     UNDERSTAND --> BRIEF["Generate the feature title, description and goal"]
     BRIEF --> SPEC["Generate scenarios, outcomes, edge cases and acceptance criteria;<br/>requirements, business rules and scope;<br/>key entities when the feature involves business data"]
     SPEC --> CHECK{"Is the complete specification<br/>valid and fully supported?"}
@@ -33,6 +34,12 @@ flowchart TD
 `FEATURE` is relative to the configured `paths.specs`; `SOURCE` is relative
 to `paths.references`. The feature title and requirements come from reference
 material and validated answers.
+
+Markdown inline-code interiors are exact-value candidates; prose, quoted text
+and fenced code are not candidates through that extractor. Preserved values
+retain original bytes and citations, without implying semantic approval or
+operational authority. This in-memory boundary is implemented; the complete
+Specify generation and publication flow shown here remains unfinished.
 
 Every rerun starts the workflow from the beginning. A successful rerun replaces
 the workflow's existing outputs at the same paths while preserving user-closed

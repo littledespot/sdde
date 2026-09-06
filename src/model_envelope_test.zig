@@ -137,7 +137,7 @@ test "JSON container guard accepts its exact boundary and ignores brackets in st
         }
     }
     try checkDocument("{\"brackets\":\"" ++ "[]{}" ** 100 ++ "\"}", true);
-    // Surrounding JSON whitespace counts toward the existing output-byte guard.
+    // Surrounding JSON whitespace is accepted; there is no output-byte guard.
     try checkDocument("{}" ++ " " ** 1022, true);
 }
 

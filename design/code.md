@@ -609,6 +609,32 @@ ProviderAuthorizationResult = opaque {
 // evidence. Rejection publishes neither change. The lease is still unconsumed;
 // no API call, token charge, new timeout or persisted state is introduced.
 
+// validate-provider-invocation-observation consumes the retained raw result,
+// prepared request, applied attempt and invoked operation. Its pure action
+// validates the runner-bound association, usage and UTF-8 without another
+// token charge. Its read-only result retains the request/response owners;
+// only complete evidence exposes decoder input. Stops, failures, typed
+// rejections and cancellation remain distinct. No JSON decoding is implicit.
+
+// decode-model-envelope consumes that retained validation result and its original
+// prepared request. Only complete evidence enters the strict JSON decoder.
+// model_envelope_result owns the tree and retains the source evidence; malformed
+// JSON is protocol-invalid, not provider-failed. Non-complete observations pass
+// through unchanged. No schema check, token charge or retry is implicit.
+
+// validate-model-payload-schema consumes model_envelope_result and checks only
+// decoded candidates against their original request's compiled result schema.
+// model_payload_schema_result retains that owner and exposes valid evidence,
+// schema_rejected or unchanged not_validated source facts. No parsing, token
+// charge, semantic proof or commit authority is introduced.
+
+// complete-provider-operation consumes the validated observation and exact invoked
+// operation, applying one terminal transition through the existing lifecycle action.
+// Only the runner publishes terminal_provider_operation and removes invoked evidence.
+// Stops/failures/cancellation stay distinct; unknown delivery stays unknown. Response
+// owners and token usage are unchanged. This does not complete the logical request,
+// accept the payload or grant workflow success.
+
 TelemetryFact =
   | RunStartedFact
   | RunCompletedFact { outcome, durationMs? }
@@ -3628,6 +3654,16 @@ StructuredTokenCandidate {
   citation: SourceCitationProposal,
   deterministicKindHint?
 }
+
+StructuredTokenExtractorDescriptor {
+  extractorId,
+  preservationEligibility: exact_value
+}
+// Approved Markdown descriptor: markdown_inline_code_v1. Only parsed inline-code
+// interiors qualify, not prose, quoted text or fenced code. Capture raw source
+// whitespace/line endings/scalars, never Markdown-rendered or NFC-normalized text.
+// Candidate identity is (sourceId, extractorId, sourceLocalOrdinal); the model
+// classifies an engine-supplied ID rather than proposing a scalar or its origin.
 
 PreservedTokenClassificationProposal {
   tokenCandidateId,

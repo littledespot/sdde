@@ -53,10 +53,10 @@ pub const Validate = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const source = values.read(&input.step.data, evidence_values.inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
-        const prior = try read(&input.step.data, text_schema, .text_validated);
+        const prior = try read(&input.step.data, @import("structured_token_workflow.zig").prepared_schema, .prepared);
         const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .validated = self.action.execute(owner.arena.allocator(), source.*, prior.payload().text_validated) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .validated = self.action.execute(owner.arena.allocator(), source.*, prior.payload().prepared) catch return error.OperationExecutionFailed };
         return publish(self.allocator, validated_schema, owner, .ok);
     }
 };
@@ -95,9 +95,10 @@ pub const Account = struct {
         const self = context.?;
         const source = values.read(&input.step.data, evidence_values.inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
         const prior = try read(&input.step.data, ledger_schema, .ledger);
+        const assigned = try read(&input.step.data, @import("structured_token_workflow.zig").assigned_schema, .tokens_assigned);
         const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        const result = self.action.execute(source.*, prior.payload().ledger) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(source.*, assigned.payload().tokens_assigned, prior.payload().ledger) catch return error.OperationExecutionFailed;
         owner.payload = .{ .accounted = result };
         return publish(self.allocator, accounted_schema, owner, switch (result.outcome) {
             .complete => .ok,

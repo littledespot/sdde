@@ -3,7 +3,8 @@ const invocation = @import("provider_invocation_validation.zig");
 const schema = @import("model_result_schema.zig");
 const json = @import("strict_json.zig");
 
-pub const Error = error{InvalidModelEnvelope} || std.mem.Allocator.Error;
+pub const Rejection = error{InvalidModelEnvelope};
+pub const Error = Rejection || std.mem.Allocator.Error;
 
 /// Read-only views of the one parsed tree. Numbers retain their exact JSON
 /// lexemes: decoding neither rounds them nor decides schema type/range validity.

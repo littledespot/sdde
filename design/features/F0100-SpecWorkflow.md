@@ -7,8 +7,8 @@ compiler, registry, and transition-runner boundaries are implemented by F0005
 and ADR 0005. The logical Specify flow, `spec.md` section hierarchy, and
 clarification separation are defined below. The explicit feature/reference
 invocation, shared directory preflight, read-only clarification inputs, Markdown
-ingestion, citable reference preparation and scripted extraction-candidate
-accounting in Sections 3.1–3.5 are implemented.
+ingestion, citable reference preparation, typed text, Markdown exact-value
+preservation and scripted extraction accounting in Sections 3.1–3.8 are implemented.
 Generated-name code is removed; semantic extraction/reconciliation, generation,
 output publication and the complete definition remain unfinished.
 
@@ -223,8 +223,9 @@ changed, malformed or over-limit inputs fail without output writes.
 The native `markdown_source_v1` reader retains lossless UTF-8 source ranges,
 not a semantic Markdown AST. Inventory/capture/decoding enforce 1,024 entries,
 depth 16, 1 MiB per source, 8 MiB source/decoded corpus budgets, 1,024 blocks per
-file, 16 KiB blocks and 5-second phase checks. Blocks also break at 64 lines and
-never split a Unicode scalar or CRLF. These are source-reader limits, not model
+file, 16 KiB blocks and 5-second phase checks. Blocks normally break at 64 lines;
+they never split a Unicode scalar, CRLF or eligible exact-value span (§3.8).
+A span may defer the line break but cannot exceed the byte ceiling. These are source-reader limits, not model
 request-size estimates. Decoding never reopens captured source bodies.
 
 Additional formats and the full multi-reader probe/rank registry remain future
@@ -270,20 +271,21 @@ second required user workflow. Closed clarification files remain untouched.
 
 ### 3.5 Extraction-candidate accounting
 
-Six registered operations keep this boundary explicit in the selected YAML:
+These operations, together with §3.8's preservation operations, keep extraction
+explicit in the selected YAML:
 
 | Operation | Contract |
 | --- | --- |
 | `parse-reference-extraction-results` | Engine-scoped raw observations → closed parsed candidates. |
 | `validate-reference-extraction-text` | Parsed candidates, current toolchain, citable inputs and source-backed literal registry → text-validated candidates (§3.7). |
-| `validate-reference-claims` | Citable inputs and text-validated candidates → structurally validated claims, ordered by engine chunk order. Reuses the same citation validator as §3.4. |
+| `validate-reference-claims` | Citable inputs and prepared model/preserved-token claims → structurally validated claims. Reuses the same citation validator as §3.4. |
 | `assign-reference-claim-identities` | Validated candidates → state-local claim/citation ordinals; no model-selected IDs. |
-| `build-reference-extraction-ledger` | Assigned identities → in-memory claims, citations and chunk outcomes. |
-| `validate-reference-extraction-accounting` | Citable inputs and ledger → exact total chunk/claim/citation coverage, with explicit `ok` or `blocked`; malformed coverage fails. |
+| `build-reference-extraction-ledger` | Assigned identities → in-memory claims, citations and chunk outcomes; binds preserved tokens to their assigned citation IDs. |
+| `validate-reference-extraction-accounting` | Citable inputs, preserved-token assignments and ledger → exact total chunk/claim/citation/token coverage, with explicit `ok` or `blocked`; malformed coverage fails. |
 
 The current lossless-Markdown candidate body is exactly one JSON object:
-`{kind: claims, claims: [...], token_classifications: []}` or
-`{kind: no_feature_claim, reason: ReferenceSemanticText, token_classifications: []}`.
+`{kind: claims, claims: [...], token_classifications: [...]}` or
+`{kind: no_feature_claim, reason: ReferenceSemanticText, token_classifications: [...]}`.
 These are shape descriptions, not literal JSON examples. Each claim has only
 `content: {kind, text}` and a nonempty `citations` collection using §3.4's typed
 proposal shape. Content kinds are `business`, `design`, `technical`,
@@ -291,12 +293,14 @@ proposal shape. Content kinds are `business`, `design`, `technical`,
 `business` and `scope_guard` use `BusinessText`; other kinds use
 `ReferenceSemanticText`. Text validation establishes syntax and permitted
 references, **not accepted meaning or requirements**. Unknown/duplicate fields,
-unsupported kinds, forged IDs, missing fields, legacy raw strings and nonempty
-token classifications are rejected.
+unsupported kinds, forged IDs, missing fields and legacy raw strings are
+rejected. Each supplied exact-value candidate needs one classification (§3.8).
 
 State/chunk scope and `blocked: extraction_failed` are engine observations,
 never model body fields. Every supplied chunk needs exactly one claims,
-positive `no_feature_claim`, or engine-blocked result. Missing/duplicate/foreign
+positive `no_feature_claim`, or engine-blocked result. Positive empty requires
+no model or preserved-token claims; `claims: []` is valid only when preservation
+produces at least one deterministic claim. Missing/duplicate/foreign
 chunks fail; any blocked chunk makes total accounting blocked, even when other
 chunks contain claims. `source_blocks_v1` has one chunk per block, so exact chunk
 coverage also proves block coverage. Claim/citation IDs start at one in each
@@ -304,14 +308,13 @@ fresh reference state and follow chunk/claim/citation order; response arrival
 order cannot change them. No ID counters or ledgers are persisted.
 
 This is not the complete `result.reference-claims/v1` production contract:
-structured-token candidate generation/classification, semantic support,
-business-boundary review, reconciliation and publication are
-still required before these candidates can become reference authority. The
-current reader supplies no structured-token candidates; empty classifications
-are explicit, not an invitation to ignore future candidates. There is no live
+semantic support, business-boundary review, reconciliation and publication
+are still required before these candidates can become reference authority.
+Markdown inline-code candidates are implemented; other format extractors remain
+future work. There is no live
 model producer or hidden prompt/schema resource. Native values own their data
 and retain only execution-local predecessors; they impose no model-call byte
-ceiling. The test-only YAML path runs the six operations with scripted results
+ceiling. The test-only YAML path runs these operations with scripted results
 and does not write artifacts, accept clarifications or mark a stage complete.
 
 ### 3.6 Shared naming-policy and path-token grammar
@@ -393,6 +396,48 @@ gate. Citation validation and total accounting remain separate responsibilities.
 The raw-string format is removed, with no dual reader. No file/network grant,
 model call, output write, clarification modification or completion transition is
 introduced. Semantic review, reconciliation and publication remain required.
+
+### 3.8 Exact-value preservation
+
+Design §16.3's approved `markdown_inline_code_v1` descriptor makes parsed
+Markdown inline-code spans eligible. Prose, quotation-marked text and fenced
+code blocks do not qualify through this extractor. Equal-length backtick runs
+identify the exact interior source bytes; escaped/unmatched delimiters do not
+create invented spans. Code-block/HTML regions are not inline code. Candidate
+values keep source whitespace, line endings and Unicode scalar sequences,
+without Markdown-rendering transformations or NFC normalization. The source
+reader and fact extractor share this parser; reader boundaries do not split a
+value, and an over-limit value fails explicitly.
+
+| Operation | Contract |
+| --- | --- |
+| `extract-structured-reference-facts` | Current captured sources → source-ordered, citation-validated exact facts from registered extractors. |
+| `assign-structured-token-candidate-identities` | Current sources and verified complete facts → transient `(source_id, extractor_id, ordinal)` candidates. Ordinals are source/extractor-local. |
+| `validate-preserved-token-classifications` | Current candidates and text-validated responses → exactly one current chunk-local `preserve` or `irrelevant` decision per candidate. Engine-blocked chunks retain blocked candidate dispositions. |
+| `assign-preserved-token-identities` | Validated decisions → state-local token ordinals in source order; irrelevant/blocked candidates allocate none. |
+| `build-preserved-token-claims` | Token assignments → prepared deterministic claims alongside unchanged model claims, before common citation validation, claim-ID assignment and ledger construction. |
+
+The closed model classifications are:
+
+```json
+{"token_candidate_id":{"source_id":{"ordinal":1},"extractor_id":"markdown_inline_code_v1","ordinal":1},"decision":"preserve","kind":"business_exact_string"}
+```
+
+or the same candidate ID with `"decision":"irrelevant"` and **no `kind`
+field**. The model never supplies scalar bytes, citations, canonical token IDs
+or obligation IDs. Unknown, duplicate, omitted, stale and cross-chunk candidates
+fail. An empty classification collection is valid only for a response whose
+chunk has no candidates. `no_feature_claim` may classify candidates irrelevant,
+but cannot preserve any.
+
+Each preserved value produces one claim through the ordinary claim/citation
+pipeline. The final ledger binds its exact scalar to its citation ID and derives
+the downstream obligation identity from the token identity. Final accounting
+checks one-to-one preservation and unchanged bytes, kind, source, citation and
+obligation joins. Eligibility and relevance are not semantic proof, and token
+values grant no file, path, command or network authority. Everything remains
+execution-local: no registry persistence, artifact publication or clarification
+write is added.
 
 ## 4. Required logical coverage
 
@@ -636,6 +681,11 @@ YAML definition.
 
 ## 8. Verification
 
+- `zig build test-structured-tokens` covers inline-code eligibility, exact
+  Unicode/whitespace, multiline and size-boundary citations, closed and total
+  classifications, source/identity forgery, preserved-claim conservation and
+  allocation failures. `zig build verify` also proves the generic YAML gates,
+  protected closed-clarification bytes, and clean packaged candidate extraction;
 - `zig build test-reference-ingestion test-reference-evidence test-reference-extraction` covers source
   accounting, deterministic identity mappings, complete chunks, Unicode/CRLF,
   exact quotations, foreign scopes, closed extraction bodies, engine IDs,

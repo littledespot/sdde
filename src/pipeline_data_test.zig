@@ -66,6 +66,28 @@ test "optional inputs expose present values without making absent values require
     try std.testing.expectEqualStrings("optional", (try values.read(&present, context_schema, Context)).text);
 }
 
+test "retaining immutable pipeline data preserves its owner after invalidation" {
+    var envelope = envelope_module.PipelineEnvelope.init(&schemas);
+    defer envelope.deinit();
+    var delta: pipeline.NodeDelta = .{};
+    defer envelope.discard(&delta);
+    delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "retained once", .attempts = 2 });
+    try envelope.apply(produce, &delta, .ok);
+    const before = try envelope.view(consume);
+    const original = try values.read(&before, context_schema, Context);
+    const retained = try values.retain(before.slots[context_index].?);
+    defer values.destroy(retained);
+    var invalidation: pipeline.NodeDelta = .{ .data_invalidations = .initOne(.workflow_invocation) };
+    const invalidate: pipeline.NodeContract = .{ .id = "test.invalidate", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{.workflow_invocation}, .side_effect = .none };
+    try envelope.apply(invalidate, &invalidation, .ok);
+    try std.testing.expectError(error.MissingRequiredData, envelope.view(consume));
+    var retained_view: data.View = .{};
+    retained_view.slots[context_index] = retained;
+    const after = try values.read(&retained_view, context_schema, Context);
+    try std.testing.expect(after == original);
+    try std.testing.expectEqualStrings("retained once", after.text);
+}
+
 test "rejected replacements and schema mismatches preserve the complete old envelope" {
     var envelope = envelope_module.PipelineEnvelope.init(&schemas);
     defer envelope.deinit();

@@ -7,8 +7,8 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "decode-model-envelope",
         .kind = .action,
-        .requires = &.{},
-        .produces = &.{},
+        .requires = &@import("../../domain/workflow_model_invocation.zig").decode_requires,
+        .produces = &.{.model_envelope_result},
         .side_effect = .none,
     };
 

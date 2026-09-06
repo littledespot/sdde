@@ -29,8 +29,9 @@ immutable binding data; provider calls require a separate policy-permitted port.
 [Workflow-owned requests](design/decisions/0012-workflow-owned-model-request.md)
 now have native YAML initialization, assignment, binding-validation and building
 operations. One request retains its originating slot/resources across steps;
-generic preparation needs no SDD feature or task. Native inference is now
-YAML-callable; response-validation bindings and Bedrock remain separate work.
+generic preparation needs no SDD feature or task. Native inference, observation
+validation, JSON decoding and payload-schema validation are YAML-callable;
+Bedrock remains separate work.
 
 YAML, the registry and runner use [unversioned operation IDs](design/decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06).
 Each ID selects one current contract; version suffixes are rejected without aliases.
@@ -64,6 +65,33 @@ later calls. Failures and cancellation remain distinct; no counting, retry,
 response decoding or lifecycle terminalization is implicit. The native binding
 is fake-provider tested and fails closed until a real adapter is bound.
 
+`validate-provider-invocation-observation` checks the retained response against
+the exact call using the existing association, usage and UTF-8 validator. It has
+no parameters, provider capability or token charge. Its owned result preserves
+complete, stopped, failed and cancelled outcomes; only validated complete
+observations expose decoder input. This is not JSON or payload-schema validation.
+
+`decode-model-envelope` parses only that complete branch using the existing strict
+JSON decoder. It retains the original evidence with its owned parse tree and
+returns `invalid` for malformed JSON; stops, failures and cancellation stay
+unchanged. The inference profile permits `end.invalid`, without converting it
+to failure or success. No schema check, provider call, retry or token charge is
+implicit, and the operation has no parameters.
+
+`validate-model-payload-schema` checks decoded candidates against only their
+original request's compiled result schema. Its parameter-free result retains the
+candidate and publishes valid evidence or typed schema rejection. Protocol errors,
+provider stops/failures and cancellation pass through unchanged. It neither
+reparses nor charges tokens; schema validity grants no semantic or commit authority.
+
+`complete-provider-operation` explicitly closes an invoked inference operation
+using its validated provider observation. It takes no parameters and retains
+completed, stopped, failed or cancelled facts in the existing in-memory ledger.
+Only the runner publishes terminal evidence and removes the old invocation
+evidence; response values and token usage stay unchanged. Provider completion
+does not accept the payload or complete the logical request/workflow. Request
+closure and pre-call termination remain separate integration work.
+
 ## Requirements
 
 - Zig 0.16.0 exactly
@@ -81,6 +109,7 @@ zig build test-reference-preflight
 zig build test-reference-ingestion
 zig build test-reference-evidence
 zig build test-reference-extraction
+zig build test-structured-tokens
 zig build test-path-tokens
 zig build test-typed-text
 zig build test-feature-directory
@@ -127,6 +156,12 @@ display IDs and shared typed-text validation now gate extraction candidates;
 raw-string extraction text is rejected. These are read-only, execution-local
 values, not file authority or semantic proof. See
 [F0100's text contract](design/features/F0100-SpecWorkflow.md#37-typed-reference-text-and-source-backed-display-literals).
+Markdown inline-code spans now become source-backed exact-value candidates;
+prose, quoted text and fenced code do not qualify through that extractor.
+Scripted `preserve`/`irrelevant` classifications are complete and chunk-scoped.
+Preserved bytes bypass NFC and enter the existing claim/citation ledger with
+engine-assigned token and obligation identities. No new persisted registry or
+prompt is added. See [F0100's preservation contract](design/features/F0100-SpecWorkflow.md#38-exact-value-preservation).
 Full `spec.md` generation remains unfinished. Shared NFC uses statically
 linked utf8proc with packaged license notices
 ([ADR 0007](design/decisions/0007-unicode-normalization.md)).

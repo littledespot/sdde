@@ -238,6 +238,102 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_call.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
     denied_operation_lifecycle.step.dependOn(&denied_call.step);
 
+    const missing_observation_inputs = b.addTempFiles();
+    const observation_executable = missing_observation_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_observation_inputs.add(".sddtoolkit.json", configuration);
+    _ = missing_observation_inputs.add(".sddtoolkit/workflows/observation.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: observation
+        \\version: 1
+        \\shortcode: OBSV
+        \\invoke: core.empty-invocation
+        \\policy: core.model-inference@1
+        \\start: validate
+        \\steps:
+        \\  validate: { use: validate-provider-invocation-observation, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
+    );
+    const denied_observation = std.Build.Step.Run.create(b, "reject packaged observation validation without its retained call and response");
+    denied_observation.addFileArg(observation_executable);
+    denied_observation.addArg("observation");
+    denied_observation.setCwd(missing_observation_inputs.getDirectory());
+    denied_observation.clearEnvironment();
+    denied_observation.expectExitCode(1);
+    denied_observation.expectStdOutEqual("");
+    denied_observation.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_call.step.dependOn(&denied_observation.step);
+
+    const missing_decode_inputs = b.addTempFiles();
+    const decode_executable = missing_decode_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_decode_inputs.add(".sddtoolkit.json", configuration);
+    _ = missing_decode_inputs.add(".sddtoolkit/workflows/decode.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: decode
+        \\version: 1
+        \\shortcode: DECO
+        \\invoke: core.empty-invocation
+        \\policy: core.model-inference@1
+        \\start: decode
+        \\steps:
+        \\  decode: { use: decode-model-envelope, on: { ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
+    );
+    const denied_decode = std.Build.Step.Run.create(b, "reject packaged decoding without retained complete observation evidence");
+    denied_decode.addFileArg(decode_executable);
+    denied_decode.addArg("decode");
+    denied_decode.setCwd(missing_decode_inputs.getDirectory());
+    denied_decode.clearEnvironment();
+    denied_decode.expectExitCode(1);
+    denied_decode.expectStdOutEqual("");
+    denied_decode.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_observation.step.dependOn(&denied_decode.step);
+
+    const missing_payload_inputs = b.addTempFiles();
+    const payload_executable = missing_payload_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_payload_inputs.add(".sddtoolkit.json", configuration);
+    _ = missing_payload_inputs.add(".sddtoolkit/workflows/payload.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: payload
+        \\version: 1
+        \\shortcode: PAYL
+        \\invoke: core.empty-invocation
+        \\policy: core.model-inference@1
+        \\start: validate
+        \\steps:
+        \\  validate: { use: validate-model-payload-schema, on: { ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
+    );
+    const denied_payload = std.Build.Step.Run.create(b, "reject packaged payload validation without its decoded candidate");
+    denied_payload.addFileArg(payload_executable);
+    denied_payload.addArg("payload");
+    denied_payload.setCwd(missing_payload_inputs.getDirectory());
+    denied_payload.clearEnvironment();
+    denied_payload.expectExitCode(1);
+    denied_payload.expectStdOutEqual("");
+    denied_payload.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_decode.step.dependOn(&denied_payload.step);
+
+    const missing_completion_inputs = b.addTempFiles();
+    const completion_executable = missing_completion_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_completion_inputs.add(".sddtoolkit.json", configuration);
+    _ = missing_completion_inputs.add(".sddtoolkit/workflows/complete.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: complete
+        \\version: 1
+        \\shortcode: COMP
+        \\invoke: core.empty-invocation
+        \\policy: core.model-inference@1
+        \\start: complete
+        \\steps:
+        \\  complete: { use: complete-provider-operation, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
+    );
+    const denied_completion = std.Build.Step.Run.create(b, "reject packaged provider completion without invocation and observation evidence");
+    denied_completion.addFileArg(completion_executable);
+    denied_completion.addArg("complete");
+    denied_completion.setCwd(missing_completion_inputs.getDirectory());
+    denied_completion.clearEnvironment();
+    denied_completion.expectExitCode(1);
+    denied_completion.expectStdOutEqual("");
+    denied_completion.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_payload.step.dependOn(&denied_completion.step);
+
     const denied_toolchain = std.Build.Step.Run.create(b, "reject invalid toolchain only when selected");
     denied_toolchain.addFileArg(packaged_executable);
     denied_toolchain.addArg("toolchain-check");
@@ -284,6 +380,20 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     literal_command.expectStdOutEqual("");
     literal_command.expectStdErrEqual("");
 
+    const token_yaml = @import("../../src/test_fixtures/reference_tokens_workflow.zig").yaml(b.allocator) catch @panic("build structured-token fixture");
+    const named_token_yaml = std.mem.replaceOwned(u8, b.allocator, token_yaml, "id: reference-ingestion", "id: exact-values") catch @panic("name exact-value fixture");
+    const distinct_token_yaml = std.mem.replaceOwned(u8, b.allocator, named_token_yaml, "shortcode: RING", "shortcode: EXAC") catch @panic("name exact-value log scope");
+    _ = toolchain_directory.add(".sddtoolkit/workflows/exact-values.workflow.yaml", distinct_token_yaml);
+    _ = toolchain_directory.add("references/Exact/requirements.md", "Display `Hello, World!` and retain `Cafe\u{301}`.\n~~~\n`not eligible`\n~~~\n");
+    const token_command = std.Build.Step.Run.create(b, "run packaged source-backed exact-value candidate preparation");
+    token_command.addFileArg(toolchain_executable);
+    token_command.addArgs(&.{ "exact-values", "--feature", "Exact/Example", "--reference", "Exact" });
+    token_command.setCwd(toolchain_directory.getDirectory());
+    token_command.clearEnvironment();
+    token_command.expectExitCode(0);
+    token_command.expectStdOutEqual("");
+    token_command.expectStdErrEqual("");
+
     const missing_config_directory = b.addTempFiles();
     const reference_command = std.Build.Step.Run.create(b, "run packaged config-root-relative feature and Unicode reference preflight");
     reference_command.addFileArg(packaged_executable);
@@ -317,6 +427,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     missing_config_command.step.dependOn(&toolchain_command.step);
     missing_config_command.step.dependOn(&path_token_command.step);
     missing_config_command.step.dependOn(&literal_command.step);
+    missing_config_command.step.dependOn(&token_command.step);
     missing_config_command.step.dependOn(&reference_command.step);
     missing_config_command.step.dependOn(&denied_reference.step);
     for ([_][2][]const u8{

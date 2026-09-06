@@ -85,6 +85,13 @@ pub const InvokedOperation = opaque {
     }
 };
 
+/// Sealed view of the applied terminal record, not a second result authority.
+pub const TerminalOperation = opaque {
+    pub fn record(self: *const TerminalOperation) *const Record {
+        return @ptrCast(@alignCast(self));
+    }
+};
+
 pub const Authority = struct {
     requests: *const identity.ModelRequestIdentityLedger,
     expected_request_revision: identity.LedgerRevision,
@@ -132,6 +139,12 @@ pub const Ledger = opaque {
 
     pub fn requireInvocation(self: *const Ledger, id: provider.ProviderOperationId) ValidationError!*const InvokedOperation {
         return @ptrCast(try self.requireInvoked(id));
+    }
+
+    pub fn requireTerminal(self: *const Ledger, id: provider.ProviderOperationId) ValidationError!*const TerminalOperation {
+        const found = self.record(id) orelse return error.ProviderOperationNotFound;
+        if (found.state != .terminal) return error.InvalidProviderOperationTransition;
+        return @ptrCast(found);
     }
 
     pub fn validateRequestClosure(self: *const Ledger, request: *const identity.ModelRequestId) ValidationError!void {

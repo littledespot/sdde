@@ -1274,6 +1274,24 @@ LLM interaction is deliberately split across actions:
 
 No one action both invokes and interprets the model. No model action reads or writes the workspace directly.
 
+Native YAML `validate-provider-invocation-observation` implements step 5 through
+the existing validator. Its parameter-free binding retains the exact request
+and response owners and publishes sealed evidence or typed rejection/cancellation.
+Only complete evidence exposes decoder input. It performs no provider call,
+token accounting, decoding or lifecycle transition; YAML selects those steps.
+
+Native `decode-model-envelope` separately parses only complete validated content,
+retaining its evidence with the owned tree. Malformed JSON returns `invalid`,
+including through the inference profile's permitted `end.invalid`; non-complete
+observations keep their failure/cancellation outcome without parsing. This proves
+syntax only and performs no provider call, accounting or payload-schema check.
+
+Native `validate-model-payload-schema` checks only decoded candidates against
+their retained compiled schema and retains the original tree/evidence owner.
+Its parameter-free result separates schema rejection from unchanged protocol,
+provider and cancellation outcomes. No parsing, accounting or semantic/commit
+authority is implicit.
+
 ### 12.2 Initial guidance packet
 
 Each generation request contains only what the current unit needs:
@@ -1419,8 +1437,8 @@ before publication. The action holds only the policy-permitted preloaded
 `provider-authorization` port: no I/O, refresh or provider call is allowed.
 Its sealed result contains a lease reference or closed failure/cancellation
 facts, never a backing capability. Rejected/expired preparation and execution
-cleanup release unused leases. Invocation and lifecycle closure remain explicit
-separate integration work; no token charge or persistent record is added.
+cleanup release unused leases. Invocation and observed completion are separately
+selected YAML operations; no token charge or persistent record is added here.
 
 Native `advance-model-request-lifecycle` with `transition: invoked` now exposes
 the existing logical-request `assigned -> invoked` action. The runner requires
@@ -1439,7 +1457,16 @@ proposal before publishing canonical invoked-operation evidence and invalidating
 assignment evidence together. Stale/foreign/duplicate evidence, altered
 deadlines, cancellation and rejected deltas cannot publish a successor. The
 lease remains unconsumed; no API call, token charge, new timeout or persistence
-occurs. Provider-operation terminalization remains separate integration work.
+occurs.
+
+Observed inference completion is exposed by `complete-provider-operation`.
+It consumes the validated observation and exact invoked-operation association;
+the existing lifecycle action and runner publish a sealed terminal-record view
+while removing invocation evidence. Provider facts, response ownership and
+actual-token usage stay unchanged. Stops/failures and cancellation retain their
+outcomes; a completed provider response proves no payload or workflow success.
+There are no parameters, API calls, renewed deadlines or hidden completion steps
+on abandonment. Logical-request closure and pre-call termination remain separate.
 
 Each workflow-declared result schema defines the entire compact response;
 there is no generic open payload or repeated engine metadata. Repair operations
@@ -2967,6 +2994,16 @@ Where a parser can decide mechanically, the engine extracts facts before involvi
 - explicit numeric values, units, and color literals where a format adapter defines them.
 
 Ordinary structured facts are supplied as evidence to the chunk's typed claim proposals, through which the LLM may classify their meaning as business, design, technical, validation, assumption, scope, open question, or irrelevant-to-feature. Separately, only extractor facts whose closed descriptor marks them preservation-eligible exact values become `StructuredTokenCandidate`s. For those candidates the model returns exactly one `preserve | irrelevant` decision and, only for preserve, one `PreservedTokenKind`; it never returns the bytes, citation, token ID, or obligation ID. Exact source values stay as tagged raw-source scalars. Dedicated actions assign/build a preserved token and deterministic preserved-token claim. Downstream coverage validators require its derived obligation ID in planning and task records, and renderers emit the exact scalar sequence through deterministic Markdown escaping without Unicode normalization.
+
+The approved Markdown eligibility rule is `markdown_inline_code_v1`: parsed
+inline-code spans are preservation-eligible candidates; ordinary prose, quoted
+text and fenced code blocks are not candidates through this extractor. The
+candidate retains the exact source bytes between matching backtick delimiters,
+including whitespace and line endings, rather than Markdown-rendered or
+Unicode-normalized text. Eligibility is not relevance, semantic approval or an
+operational capability. The model still classifies every supplied candidate.
+Source partitioning must keep each exact span citable within its chunk or fail
+explicitly; it must never silently omit or truncate an eligible value.
 
 ### 16.4 Semantic extraction flow
 

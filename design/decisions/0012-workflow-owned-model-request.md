@@ -69,7 +69,8 @@ association and publishes sealed evidence from the applied canonical record with
 the envelope delta. The evidence retains the operation and request owners.
 Rejected deltas publish neither; consuming evidence does not remove an open
 operation. No authorization preparation, API call, retry, token charge or
-persistence is implicit. Later lifecycle phases remain separate integration work.
+persistence is implicit. Later lifecycle phases use the separate YAML operations
+described below.
 
 ## Authorization preparation integration (implemented 2026-09-06)
 
@@ -108,7 +109,8 @@ sealed invoked-operation evidence and invalidates assignment evidence together.
 The evidence references the canonical invocation and retains its owners.
 Failed, expired, cancelled, foreign, stale, duplicate or deadline-altered inputs
 reject without publication. The lease is not consumed here; `invoke-model`
-performs the separate call. Terminalization and response validation remain work. No additional capability,
+performs the separate call. Observed inference completion is now explicit below;
+pre-call termination remains work. No additional capability,
 timeout, retry, token charge, persistence or recovery mechanism is introduced.
 
 ## Inference integration (implemented 2026-09-06)
@@ -123,6 +125,60 @@ rejections reach the workflow caller and CLI; no YAML edge can bypass them.
 Complete, stopped, failed and cancelled results stay distinct. Decoding,
 terminalization and retries are not hidden inside invocation. Native composition
 requires an explicitly bound provider; fake implementations remain test-only.
+
+## Observation validation integration (implemented 2026-09-06)
+
+`validate-provider-invocation-observation` is a parameter-free pure YAML step.
+It consumes the retained raw result and exact request/attempt/invocation inputs;
+the runner supplies the current call association without an authorization lease
+or operational capability. The existing validator alone proves association,
+usage consistency and UTF-8 safety. The result retains the existing immutable
+request and response values, keeping borrowed evidence valid without copying
+content. Complete, stopped, provider-failed, rejected and cancelled results stay
+distinct. Only complete evidence exposes decoder input. No token reconciliation,
+decoding, schema validation, retry or terminalization is implicit.
+
+## JSON decoding integration (implemented 2026-09-06)
+
+Native `decode-model-envelope` is also integrated as a parameter-free pure step.
+It consumes the same prepared request and sealed observation, parses only its
+complete branch through the existing decoder, and retains the source value with
+the owned tree. Syntax rejection returns typed `InvalidModelEnvelope` as
+`invalid`; the inference profile now permits `end.invalid`, preserving the
+compiler's matching-terminal rule. Stops, failures, observation rejection and
+cancellation are forwarded unchanged without parsing. No schema check, new
+identity, byte limit, token charge, retry or lifecycle transition is introduced.
+
+## Payload-schema validation integration (implemented 2026-09-06)
+
+`validate-model-payload-schema` is a parameter-free pure step consuming the
+retained decoded result, prepared request and request ledger. The existing
+validator alone checks decoded candidates against their original compiled schema.
+Its owned result retains the source, publishing schema-valid evidence or a closed
+schema rejection; non-decoded protocol/provider/cancellation facts pass through
+unchanged. Consumers cannot substitute a schema or reuse foreign evidence.
+No parsing, copying of content, token charge, lifecycle transition or retry occurs.
+Schema validity remains distinct from semantic correctness and commit authority.
+
+## Provider-operation completion integration (implemented 2026-09-06)
+
+`complete-provider-operation` is a parameter-free binding of the existing
+lifecycle action. It requires the prepared request, current request ledger,
+applied attempt, invoked operation and validated observation result. Complete
+output, provider stops and failures supply their exact terminal facts;
+cancellation without delivery evidence retains `accepted_or_unknown`. Rejected
+observation evidence cannot authorize completion. YAML cannot assert an outcome
+or delivery disposition.
+
+The runner checks the exact proposed fact and outcome, then publishes a sealed
+view of the canonical terminal record and invalidates invocation evidence in
+one application. It reuses the existing ledger and lease cleanup; response
+owners and token accounting do not change. Stops/failures stay `failed` and
+cancellation stays `cancelled`; provider completion proves no payload, logical
+request or workflow success. Completion may precede decoding, whose dependencies
+retain the original evidence. Request closure, assigned-operation termination
+and optional count-call integration remain separate. A runtime/budget rejection
+abandons execution without inserting a hidden completion step.
 
 ## Acceptance
 
@@ -141,4 +197,17 @@ consumption through the existing adapter port, rejected-delta atomicity and
 execution isolation. Fake-provider YAML tests also cover one inference call,
 lease reuse, missing dependencies/capabilities, original deadlines, actual-token
 accounting, failed publication, allocation cleanup and execution isolation.
-Response-validation bindings and Bedrock remain separate increments.
+Observation-validation cases cover exact associations, every stop, provider
+failures, cancellation, invalid UTF-8, cross-execution rejection, missing inputs,
+parameter overrides, allocation cleanup and retained evidence lifetime. Token
+usage is unchanged, and pure validation remains available at budget exhaustion.
+Decoder cases cover valid objects, exact numbers, malformed JSON, duplicate
+decoded keys, trailing content, missing/foreign evidence, source-owner lifetime,
+allocation failure and rejected/cancelled publication. Payload-validation cases
+cover exact compiled schemas, accepted/rejected candidates, unchanged upstream
+outcomes, missing/foreign evidence, overrides, owner lifetime, allocation failure,
+cancelled/rejected publication and validation at token-budget exhaustion.
+Completion cases cover exact terminal facts, malformed/schema-invalid content
+independence, missing/foreign/stale/duplicate evidence, forged facts/outcomes,
+allocation/cancellation cleanup, owner lifetime and unchanged usage at exhaustion.
+Bedrock remains a separate increment.

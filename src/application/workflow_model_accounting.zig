@@ -10,6 +10,7 @@ const leases = @import("provider_authorization_lease_table.zig");
 pub const schema = values.schema(.accounted_model_attempt, accounting.AccountedAttempt, 1, null);
 pub const operation_schema = values.schema(.assigned_provider_operation, lifecycle.AssignedOperation, 1, null);
 pub const invoked_schema = values.schema(.invoked_provider_operation, lifecycle.InvokedOperation, 1, null);
+pub const terminal_schema = values.schema(.terminal_provider_operation, lifecycle.TerminalOperation, 1, null);
 pub const Error = accounting.Error || accounting.RequestError || identity.Error || lifecycle.Error || values.Error || error{InvalidAccountingTransition};
 
 /// Execution-owned accounting only. No action dispatch, retry counter or I/O.
@@ -91,6 +92,14 @@ pub const State = struct {
         return self.retainOperation(lifecycle.InvokedOperation, invoked_schema, requests, successor, try successor.requireInvocation(transition.operation_id));
     }
 
+    pub fn prepareCompletion(self: *const State, requests: *const identity.ModelRequestIdentityLedger, request: *const provider.IdentifiedProviderNeutralModelRequest, invoked: *const provider.InvokedProviderOperation, terminal: lifecycle.Terminal, transition: lifecycle.Transition) Error!Pending {
+        try self.validateInvocation(invoked, request);
+        if (!transition.operation_id.eql(invoked.id) or transition.command != .terminate or
+            !std.meta.eql(transition.command.terminate, terminal)) return error.InvalidAccountingTransition;
+        const successor = try lifecycle.apply(self.current_operations, self.operationAuthority(requests), transition);
+        return self.retainOperation(lifecycle.TerminalOperation, terminal_schema, requests, successor, try successor.requireTerminal(invoked.id));
+    }
+
     fn retainOperation(self: *const State, comptime T: type, comptime value_schema: data.Schema, requests: *const identity.ModelRequestIdentityLedger, successor: *const lifecycle.Ledger, evidence: *const T) Error!Pending {
         const Retained = RetainedOperation(T);
         const retained = try identity.retainLedger(requests);
@@ -116,6 +125,11 @@ pub const State = struct {
         const record = self.current_operations.record(evidence.id) orelse return error.InvalidAccountingTransition;
         try self.validateOperation(record, request);
         if (try self.current_operations.requireInvoked(record.id) != evidence) return error.InvalidAccountingTransition;
+    }
+
+    pub fn validateTerminal(self: *const State, evidence: *const lifecycle.TerminalOperation, request: *const provider.IdentifiedProviderNeutralModelRequest) Error!void {
+        try self.validateOperation(evidence.record(), request);
+        if (try self.current_operations.requireTerminal(evidence.record().id) != evidence) return error.InvalidAccountingTransition;
     }
 
     fn validateOperation(self: *const State, record: *const lifecycle.Record, request: *const provider.IdentifiedProviderNeutralModelRequest) Error!void {
@@ -156,7 +170,7 @@ pub const Pending = struct {
 };
 
 fn RetainedOperation(comptime T: type) type {
-    if (T != lifecycle.AssignedOperation and T != lifecycle.InvokedOperation) @compileError("operation evidence only");
+    if (T != lifecycle.AssignedOperation and T != lifecycle.InvokedOperation and T != lifecycle.TerminalOperation) @compileError("operation evidence only");
     return struct {
         allocator: std.mem.Allocator,
         operations: *lifecycle.Owner,

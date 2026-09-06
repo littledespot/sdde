@@ -185,15 +185,15 @@ fixture.
 | Boundary | Implemented evidence | Readiness for this goal |
 | --- | --- | --- |
 | Native build and packaging | Zig 0.16.0 pin, native executable, lint/test/smoke/verify build steps, clean temporary-directory smoke | Foundation exists. Smoke covers no-op execution without valid toolchain documents and selected toolchain success/failure. |
-| Exact configuration | Exact-CWD `.sddtoolkit.json` location/read/decode and closed `logs`, `models.slots`, and eight-path shape | Strict provider-catalogue decoding, immutable registry construction, slot subset allowlist, and exact selected-graph provider-requirement derivation are implemented; production provider contracts and YAML-declared model-operation binding remain missing. |
+| Exact configuration | Exact-CWD `.sddtoolkit.json` location/read/decode and closed `logs`, `models.slots`, and eight-path shape | Strict provider-catalogue decoding, immutable registry construction, slot subset allowlist and selected-graph provider requirement are implemented. Native YAML request preparation, inference, observation validation, JSON decoding and payload-schema validation are fake-provider tested; production provider contracts remain missing. |
 | Bootstrap roots | Normalization, active-filesystem checks, root roles, separation, and root registry | Foundation exists. The named fixture has no runtime config or roots. |
 | Feature logging | Policy, records, sinks, rotation, retention, recovery, and composition tests | Subsystem exists, but no Specify activation/state transaction binds it to a feature run. |
 | Workflow authority | Bounded inventory/capture/YAML parse/schema validation, compiler, graph validator, and immutable ID registry | Strong generic foundation exists. The current uncommitted tests strengthen this boundary only. |
 | Generic execution | Exact workflow selection, compiled transitions, owned typed invocation/value flow, declared-input views, and schema-checked delta application | Value-flow foundation exists; Specify generation/commit operations remain missing. |
-| Registered behavior | Core/toolchain operations, Specify invocation/directory preflight, read-only clarification inputs, Markdown ingestion, citable inputs and five extraction-candidate accounting operations (F0100 §3) | Scripted extraction results exercise native YAML; no model extraction or content generation. Naming a definition `specify` adds no behavior. |
+| Registered behavior | Core/toolchain operations, Specify invocation/directory preflight, read-only clarification inputs, Markdown ingestion, citable inputs, typed-text and exact-value extraction/accounting operations (F0100 §3) | Scripted extraction results exercise native YAML; no live model extraction or content generation. Naming a definition `specify` adds no behavior. |
 | Toolchain | Closed v1 project/preset package references, inheritance, policy composition, and safety validation through selected YAML operations | F0003 owns one sealed validated result in the workflow envelope. Node/Vitest commands and environment facts remain absent. |
 | Workflow artifact registry | One fixed path owner for specification/reference views, clarification forms/state, workflow state and logs; existing log sink binding reuses it | Paths do not grant ownership or publication authority. |
-| Specify domain | Read-only inputs, citable chunks, closed claim candidates, structural citation validation, engine IDs and complete chunk accounting implemented; no semantic extraction/reconciliation, `SpecificationIR`, persisted reference snapshot, renderer/parser, answer acceptance or publication | In-memory candidates only; full Specify remains unavailable. |
+| Specify domain | Read-only inputs, citable chunks, typed claims, source-backed display literals, inline-code exact values, structural citations, engine IDs and complete chunk/token accounting implemented; no semantic extraction/reconciliation, `SpecificationIR`, persisted reference snapshot, renderer/parser, answer acceptance or publication | In-memory candidates only; full Specify remains unavailable. |
 | Evaluation harness | `TEST_HARNESS.md` only | No build wiring, driver, schemas, suites, reports, fake scripts, or end-to-end cases exist. |
 
 The generic runner now retains owned, versioned native values from invocation
@@ -275,6 +275,9 @@ The first case needs at least the production Markdown reader path:
 - deterministic source/block/chunk identities, source maps, citations, and
   source/decoded budget accounting;
 - typed claim extraction and hierarchical reconciliation;
+- propagation of exact-value candidates through reconciled authority and final
+  artifacts; native inline-code extraction and scripted preservation accounting
+  are implemented in [F0100 §3.8](F0100-SpecWorkflow.md#38-exact-value-preservation);
 - complete conflict, claim-disposition, passive-literal, and reference-context
   state; and
 - full restart validation without a content fingerprint.

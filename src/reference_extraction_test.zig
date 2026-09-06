@@ -9,6 +9,7 @@ const assign = @import("actions/reference/assign_reference_claim_identities.zig"
 const build = @import("actions/reference/build_reference_extraction_ledger.zig").Action{};
 const account = @import("actions/reference/validate_reference_extraction_accounting.zig").Action{};
 const text_fixture = @import("test_fixtures/reference_text.zig");
+const token_fixture = @import("test_fixtures/reference_tokens.zig");
 
 pub const no_claim = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"literal\":{\"value\":\"This chunk contains no feature claims.\"}}]},\"token_classifications\":[]}";
 
@@ -30,8 +31,9 @@ fn raw(inputs: evidence.Inputs, index: usize, bytes: []const u8) extraction.RawR
 }
 fn finish(allocator: std.mem.Allocator, inputs: evidence.Inputs, results: []const extraction.RawResult) !extraction.Accounted {
     const parsed = try parse.execute(allocator, .{ .entries = results });
-    const valid = try validate.execute(allocator, inputs, try text_fixture.check(allocator, inputs, parsed));
-    return account.execute(inputs, try build.execute(allocator, try assign.execute(allocator, valid)));
+    const tokens = try token_fixture.assignments(allocator, inputs, try text_fixture.check(allocator, inputs, parsed));
+    const valid = try validate.execute(allocator, inputs, try token_fixture.build.execute(allocator, tokens));
+    return account.execute(inputs, tokens, try build.execute(allocator, try assign.execute(allocator, valid)));
 }
 
 test "Hello World and unrelated source claims receive only engine assigned IDs" {
@@ -43,10 +45,11 @@ test "Hello World and unrelated source claims receive only engine assigned IDs" 
         var ids: fixture.IdSource = .{};
         const inputs = try fixture.prepare(allocator, &ids, try ingest(allocator, "requirements.md", bytes));
         const results = try allocator.alloc(extraction.RawResult, inputs.chunks.entries.len);
-        for (results, inputs.chunks.entries, 0..) |*result, chunk, index| result.* = raw(inputs, index, try reply(allocator, chunk, "An unreviewed business claim."));
+        const available = try token_fixture.candidates(allocator, inputs);
+        for (results, inputs.chunks.entries, 0..) |*result, chunk, index| result.* = raw(inputs, index, try token_fixture.wire(allocator, try reply(allocator, chunk, "An unreviewed business claim."), try token_fixture.classifications(allocator, available, chunk)));
         const completed = try finish(allocator, inputs, results);
         try std.testing.expectEqual(.complete, completed.outcome);
-        try std.testing.expectEqual(results.len, completed.ledger.claims.len);
+        try std.testing.expectEqual(results.len + available.entries.len, completed.ledger.claims.len);
         for (completed.ledger.claims, 1..) |claim, ordinal| {
             try std.testing.expectEqual(ordinal, claim.id.ordinal);
             try std.testing.expectEqual(ordinal, claim.citation_ids[0].ordinal);
@@ -112,10 +115,10 @@ test "positive no claim evidence and valid citations are mandatory" {
     citation.verbatim = "Cafe\r\n";
     claim.citations = &.{citation};
     entry.outcome = .{ .claims = &.{claim} };
-    try std.testing.expectError(error.InvalidSourceCitation, validate.execute(allocator, inputs, try text_fixture.check(allocator, inputs, .{ .entries = &.{entry} })));
+    try std.testing.expectError(error.InvalidSourceCitation, validate.execute(allocator, inputs, try token_fixture.prepare(allocator, inputs, try text_fixture.check(allocator, inputs, .{ .entries = &.{entry} }))));
     claim.citations = &.{};
     entry.outcome = .{ .claims = &.{claim} };
-    try std.testing.expectError(error.InvalidSourceCitation, validate.execute(allocator, inputs, try text_fixture.check(allocator, inputs, .{ .entries = &.{entry} })));
+    try std.testing.expectError(error.InvalidSourceCitation, validate.execute(allocator, inputs, try token_fixture.prepare(allocator, inputs, try text_fixture.check(allocator, inputs, .{ .entries = &.{entry} }))));
     claim.content.business = .{ .segments = &.{.{ .literal = .{ .value = " \t" } }} };
     entry.outcome = .{ .claims = &.{claim} };
     try std.testing.expectError(error.InvalidTypedText, text_fixture.check(allocator, inputs, .{ .entries = &.{entry} }));
@@ -128,6 +131,7 @@ test "final accounting rejects omitted orphan duplicate and foreign identity joi
     var ids: fixture.IdSource = .{};
     const inputs = try fixture.prepare(allocator, &ids, try ingest(allocator, "source.md", "claim\n"));
     const completed = try finish(allocator, inputs, &.{raw(inputs, 0, try reply(allocator, inputs.chunks.entries[0], "Claim"))});
+    const tokens = try token_fixture.assignments(allocator, inputs, try text_fixture.check(allocator, inputs, try parse.execute(allocator, .{ .entries = &.{raw(inputs, 0, try reply(allocator, inputs.chunks.entries[0], "Claim"))} })));
     for (0..7) |case| {
         var ledger = completed.ledger;
         var claim = ledger.claims[0];
@@ -148,7 +152,7 @@ test "final accounting rejects omitted orphan duplicate and foreign identity joi
             6 => ledger.claims = &.{ claim, claim },
             else => unreachable,
         }
-        try std.testing.expectError(error.InvalidReferenceExtraction, account.execute(inputs, ledger));
+        try std.testing.expectError(error.InvalidReferenceExtraction, account.execute(inputs, tokens, ledger));
     }
 }
 
@@ -176,9 +180,10 @@ fn ownershipCase(allocator: std.mem.Allocator) !void {
     defer source_arena.deinit();
     const source_allocator = source_arena.allocator();
     var ids: fixture.IdSource = .{};
-    const inputs = try fixture.prepare(source_allocator, &ids, try ingest(source_allocator, "owned.md", "A quoted requirement.\r\n"));
+    const inputs = try fixture.prepare(source_allocator, &ids, try ingest(source_allocator, "owned.md", "A `quoted` requirement.\r\n"));
     const unquoted = try reply(source_allocator, inputs.chunks.entries[0], "Retained claim");
-    const bytes = try std.mem.replaceOwned(u8, source_allocator, unquoted, "\"verbatim\":null", "\"verbatim\":\"A quoted requirement.\\r\\n\"");
+    const quoted = try std.mem.replaceOwned(u8, source_allocator, unquoted, "\"verbatim\":null", "\"verbatim\":\"A `quoted` requirement.\\r\\n\"");
+    const bytes = try token_fixture.wire(source_allocator, quoted, try token_fixture.classifications(source_allocator, try token_fixture.candidates(source_allocator, inputs), inputs.chunks.entries[0]));
     const captured = try owned.capture(allocator, .{ .entries = &.{raw(inputs, 0, bytes)} });
     defer owned.destroy(captured);
     var current = try owned.create(allocator, null);
@@ -194,7 +199,29 @@ fn ownershipCase(allocator: std.mem.Allocator) !void {
     {
         const next = try owned.create(allocator, owned.view(current));
         errdefer owned.destroy(next);
-        next.payload = .{ .validated = try validate.execute(next.arena.allocator(), inputs, current.payload.text_validated) };
+        next.payload = .{ .token_classified = try token_fixture.classify.execute(next.arena.allocator(), inputs, try token_fixture.candidates(source_allocator, inputs), current.payload.text_validated) };
+        owned.destroy(current);
+        current = next;
+    }
+    {
+        const next = try owned.create(allocator, owned.view(current));
+        errdefer owned.destroy(next);
+        next.payload = .{ .tokens_assigned = try token_fixture.assign.execute(next.arena.allocator(), current.payload.token_classified) };
+        owned.destroy(current);
+        current = next;
+    }
+    const tokens = current.payload.tokens_assigned;
+    {
+        const next = try owned.create(allocator, owned.view(current));
+        errdefer owned.destroy(next);
+        next.payload = .{ .prepared = try token_fixture.build.execute(next.arena.allocator(), current.payload.tokens_assigned) };
+        owned.destroy(current);
+        current = next;
+    }
+    {
+        const next = try owned.create(allocator, owned.view(current));
+        errdefer owned.destroy(next);
+        next.payload = .{ .validated = try validate.execute(next.arena.allocator(), inputs, current.payload.prepared) };
         owned.destroy(current);
         current = next;
     }
@@ -213,7 +240,7 @@ fn ownershipCase(allocator: std.mem.Allocator) !void {
         current = next;
     }
     const terminal = try owned.create(allocator, owned.view(current));
-    terminal.payload = .{ .accounted = account.execute(inputs, current.payload.ledger) catch |err| {
+    terminal.payload = .{ .accounted = account.execute(inputs, tokens, current.payload.ledger) catch |err| {
         owned.destroy(terminal);
         return err;
     } };
@@ -229,9 +256,10 @@ fn ownershipCase(allocator: std.mem.Allocator) !void {
     var view: @import("domain/pipeline_data.zig").View = .{};
     view.slots[@intFromEnum(bindings.accounted_schema.key)] = value;
     const retained = try bindings.read(&view, bindings.accounted_schema, .accounted);
-    try std.testing.expectEqualStrings("Retained claim", retained.payload().accounted.ledger.claims[0].content.business.value.segments[0].literal.value);
+    try std.testing.expectEqualStrings("Retained claim", retained.payload().accounted.ledger.claims[0].content.model.business.value.segments[0].literal.value);
     try std.testing.expectEqualStrings("chunk-1", retained.payload().accounted.ledger.claims[0].chunk_id.bytes);
-    try std.testing.expectEqualStrings("A quoted requirement.\r\n", retained.payload().accounted.ledger.citations[0].value.verbatim.?);
+    try std.testing.expectEqualStrings("A `quoted` requirement.\r\n", retained.payload().accounted.ledger.citations[0].value.verbatim.?);
+    try std.testing.expectEqualStrings("quoted", retained.payload().accounted.ledger.claims[1].content.preserved_token.value.raw_value.bytes);
 }
 
 test "an empty captured source does not acquire invented extraction results" {

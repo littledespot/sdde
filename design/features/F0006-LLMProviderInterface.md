@@ -47,7 +47,9 @@ implemented. The action publishes only an opaque identity reference through a
 typed `NodeDelta`; shared execution-reference ownership preserves identity
 without copying capabilities. `InvokeModelAction` now makes one interface
 inference call through its native YAML binding with fake-provider acceptance
-evidence. Optional count-call actions, response-validation bindings and production
+evidence. Observation validation, strict JSON decoding and payload-schema validation
+are also YAML-integrated, together with invoked inference-operation completion.
+Logical-request closure, assigned-operation termination, optional count-call actions and production
 provider composition/contracts remain implementation work. No transaction store or
 provider-effect journal is a prerequisite.
 
@@ -73,8 +75,8 @@ complete-candidate evidence. `DecodeModelEnvelopeAction` now parses that sealed
 input into an owned, read-only JSON object retaining the same association and
 compiled schema. `ValidateModelPayloadSchemaAction` now checks that tree against
 only its retained schema and returns allocation-free candidate evidence or a
-closed rejection reason. Response-operation YAML registration and
-provider-native schema representability remain work.
+closed rejection reason. These response operations are YAML-registered;
+provider-native schema representability remains work.
 
 **Accepted and implemented YAML preparation:** [ADR 0012](../decisions/0012-workflow-owned-model-request.md)
 replaces mandatory SDD ownership for generic requests and per-consumer binding
@@ -155,7 +157,8 @@ evidence. Cancellation and authorization are rechecked after candidate-evidence
 allocation and before publication.
 The lease remains unconsumed for the later explicit provider call. This step
 makes no API call or delivery claim, charges no tokens, and adds no timeout,
-retry, persistence or recovery mechanism. Terminalization remains separate work.
+retry, persistence or recovery mechanism. Invoked inference completion is now
+YAML-integrated below; assigned-operation termination remains separate work.
 
 **Implemented YAML inference:** `invoke-model` has no parameters. It consumes
 the retained prepared request, applied attempt, invoked operation and prepared
@@ -179,6 +182,77 @@ or cancellation. Workflow results retain typed runner rejections; the CLI prints
 All owners are execution-local. There is no hidden count, retry, decoding,
 terminalization or recovery. An unbound adapter returns `authorization_denied`
 with `not_sent`; native composition never substitutes the test fake.
+
+**Implemented YAML observation validation:**
+`validate-provider-invocation-observation` consumes `provider_invocation_result`
+and the retained prepared request, request ledger, applied attempt and invoked
+operation. It has no parameters, side effects or operational capabilities. The
+runner supplies the exact current call association; the existing validator owns
+association, usage consistency and UTF-8 checks. No tokens are charged again,
+and budget exhaustion or unavailable usage does not prohibit this pure step.
+
+Its read-only `provider_invocation_validation_result` contains sealed validation
+evidence, a typed association/usage rejection, or cancellation. Complete evidence
+maps to `ok`; stopped output, provider failure and validation rejection map to
+`failed` without losing their distinct facts; cancellation maps to `cancelled`.
+Invalid UTF-8 retains reported usage as `response_invalid` with no candidate.
+Only complete evidence exposes decoder input; JSON/schema validity is not proved.
+The result retains the existing immutable request and response owners without
+copying content or creating another authority. Rejected publication and execution
+cleanup release those references. No consumed lease is required or refreshed,
+and no decoding, retry or lifecycle transition is implicit.
+
+**Implemented YAML decoding:** `decode-model-envelope` requires the retained
+request ledger, prepared request and `provider_invocation_validation_result`.
+It has no parameters or operational capabilities. Only the sealed complete
+branch enters the existing strict decoder. The owned `model_envelope_result`
+contains a decoded candidate, typed `InvalidModelEnvelope` protocol rejection,
+or a reference to the unchanged non-decoded observation. It retains that source
+value, keeping the original request/response/evidence alive with the parse tree.
+Foreign request associations reject before parsing; no association is rebuilt
+from model text.
+
+Decoded syntax maps to `ok`; malformed JSON maps to `invalid`; non-decoded
+provider stops/failures and observation rejection stay `failed`, and cancellation
+stays `cancelled`. The native inference profile permits `end.invalid`; the
+compiler still rejects mismatched terminal tags. No payload-schema validation,
+content extraction, byte ceiling, provider call, token charge, retry or lifecycle
+transition is implicit. Rejection, cancellation and allocation failure release
+partial trees and retained references without consuming the original evidence.
+
+**Implemented YAML payload-schema validation:** `validate-model-payload-schema`
+requires the request ledger, prepared request and `model_envelope_result`, with
+no parameters, capabilities or side effects. Only decoded candidates enter the
+existing validator against their original request's compiled schema. The owned
+`model_payload_schema_result` retains that source value and contains `valid`
+evidence (`ok`), `schema_rejected` with the closed reason (`invalid`), or
+`not_validated` referencing the unchanged source. Protocol rejection stays
+`invalid`; provider stops/failures and observation rejection stay `failed`;
+cancellation stays `cancelled`. Foreign associations reject before validation.
+No schema is selected again, no content is copied/reparsed and no tokens are
+charged. Rejected publication, allocation failure and cleanup release retained
+owners once. This proves schema validity only, not semantics or commit authority.
+
+**Implemented YAML provider completion:** `complete-provider-operation` requires
+the request ledger, prepared request, applied attempt, invoked operation and
+`provider_invocation_validation_result`. It has no parameters or provider/lease
+capability. The existing lifecycle action proposes `invoked -> terminal` from
+the exact sealed observation: complete output is `completed`, stops retain their
+reason, failures retain cause/retry/delivery, and cancellation without delivery
+evidence is `cancelled(accepted_or_unknown)`. Rejected, missing, foreign, stale
+or duplicate evidence cannot produce completion.
+
+Only runner application publishes `terminal_provider_operation`, a sealed view
+of the existing canonical record, and invalidates `invoked_provider_operation`.
+The runner validates both the terminal fact and returned outcome; a stop/failure
+cannot become `ok`, nor cancellation become success. Original response/evidence
+owners stay intact, and the existing lease table releases unused backing on
+terminal publication. No token charge, provider call, deadline renewal, retry or
+persistence occurs. Complete provider output is not JSON/schema validity,
+logical-request completion or workflow success. Decoding can run afterward from
+its retained evidence. Runtime/budget rejection abandons execution without a
+hidden terminalization call. Pre-call termination and count-call integration are
+separate work.
 
 A consumer declares the prepared-request and request-ledger data dependencies;
 the runner supplies the retained binding, not a new selection for the consumer
@@ -717,8 +791,9 @@ One ordinal represents one provider attempt. Inference has no count prerequisite
    its single-use authorization;
 4. check actual execution token usage, apply the in-memory invoked transitions,
    then perform that one API call under cancellation and deadline guards;
-5. record reported input/output usage once and close the operation, retaining
-   any overshoot before returning the budget error; and
+5. record reported input/output usage once, retaining any overshoot before
+   returning the budget error; when execution continues, an explicit YAML
+   completion step closes the observed operation; and
 6. follow explicit YAML transitions for retry or logical-request closure.
 
 A separately selected count operation has its own identity, authorization,
@@ -749,7 +824,8 @@ and evidence together only after envelope validation. Removing evidence cannot
 erase an open operation or reset an attempt. Assignment is not invocation or a
 lease: authorization preparation is a separate implemented YAML operation;
 Logical-request and provider-operation invocation state and the explicit
-`invoke-model` call are YAML-integrated; terminalization remains separate work.
+`invoke-model` call and observed inference completion are YAML-integrated;
+logical-request closure and assigned-operation termination remain separate work.
 Execution cleanup discards its in-memory records, never resumes
 or persists them.
 
@@ -903,8 +979,9 @@ Prepared-request checks reuse the shared identity, binding, control and schema
 validators. They grant no send authority or token allowance and enforce no
 request/response size ceiling. These pure checks do not reserve attempts,
 prepare leases or call a provider. Native YAML preparation bindings implement
-this handoff and inference under ADR 0012; response-validation bindings remain a
-separate increment. The fixed internal content contract is `model-request/v1`:
+this handoff, inference, observation validation, JSON decoding and payload-schema
+validation under ADR 0012. The fixed
+internal content contract is `model-request/v1`:
 the selected prompt is guidance and an optional declared data resource is user
 content. The builder adds no instruction text or metadata echoes.
 
@@ -1055,8 +1132,9 @@ Validation returns either an opaque, allocation-free view of the same decoded
 candidate or one closed rejection reason. One invalid member rejects the whole
 result; no partial proof is published. The proof borrows its existing owners
 and changes no candidate, usage, lifecycle or execution state. Schema validity
-proves neither semantic correctness nor permission to commit. Production YAML
-binding remains a subsequent integration step.
+proves neither semantic correctness nor permission to commit. The native YAML
+binding retains the candidate's existing owner and preserves non-decoded outcomes
+without invoking this validator.
 
 Explicit cancellation remains terminal `cancelled` and is propagated outside
 the failure union. Provider failure is never converted to the model-content
@@ -1250,6 +1328,27 @@ F0006 does not:
     post-call cancellation/deadline/delta rejection without lost usage, allocation
     cleanup and fresh execution identity/usage. Budget rejections reach the
     top-level result without selecting a declared failure edge.
+    Native YAML observation validation preserves complete/stopped/failed/cancelled
+    facts, rejects foreign associations and unsafe UTF-8, and retains the exact
+    request/response owners. Tests prove no decoding or second token charge,
+    validation at exact budget exhaustion, missing-input/override rejection,
+    allocation cleanup and evidence lifetime after source-value cleanup.
+    Native YAML decoding proves strict object parsing, exact numeric lexemes,
+    malformed/duplicate/trailing-content rejection, unchanged non-complete
+    outcomes, missing/foreign-evidence rejection, and cleanup of parsed trees
+    and retained evidence. Parsing does not validate payload schema, charge
+    tokens again or repeat a provider call. Protocol rejection remains `invalid`.
+    Native YAML payload-schema validation proves exact retained-schema selection,
+    valid/invalid payloads, unchanged protocol/provider/cancellation outcomes,
+    missing/foreign-evidence and override rejection, retained candidate lifetime,
+    allocation and rejected-publication cleanup. It remains available at exact
+    token-budget exhaustion without another charge or provider call.
+    Native YAML operation completion proves exact canonical terminal evidence,
+    retained stop/failure/cancellation facts, content-validity independence,
+    missing/foreign/stale/duplicate/rejected-evidence rejection, forged terminal
+    and suppressed-outcome rejection, allocation/cancellation cleanup and owner
+    lifetime. Completion at token exhaustion or after the call deadline adds no
+    charge, call, retry or logical-request transition.
 13. Each call performs zero or one provider request with no hidden retry,
     fallback, backoff, credential acquisition/refresh, or second operation;
     any permitted credential I/O has separate accepted accounting.

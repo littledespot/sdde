@@ -990,6 +990,11 @@ test "reference ingestion compiler enforces inputs and content-read capability" 
         .{ "use: validate-reference-chunks", "use: assign-passive-literal-identities" },
         .{ "use: validate-reference-chunks", "use: validate-reference-passive-literals" },
         .{ "use: validate-reference-chunks", "use: validate-reference-extraction-text" },
+        .{ "use: validate-reference-chunks", "use: extract-structured-reference-facts" },
+        .{ "use: validate-reference-chunks", "use: assign-structured-token-candidate-identities" },
+        .{ "use: validate-reference-chunks", "use: validate-preserved-token-classifications" },
+        .{ "use: validate-reference-chunks", "use: assign-preserved-token-identities" },
+        .{ "use: validate-reference-chunks", "use: build-preserved-token-claims" },
         .{ "use: validate-reference-chunks", "use: validate-reference-claims" },
         .{ "use: validate-reference-chunks", "use: assign-reference-claim-identities" },
         .{ "use: validate-reference-chunks", "use: build-reference-extraction-ledger" },
@@ -1051,7 +1056,7 @@ const ReferenceCitationTestProducer = struct {
 };
 
 const ReferenceExtractionTestProducer = struct {
-    mode: enum { claims, no_claim, blocked, malformed, missing, duplicate, invalid_citation, unbound, passive, unknown_literal, legacy },
+    mode: enum { claims, no_claim, blocked, malformed, missing, duplicate, invalid_citation, unbound, passive, unknown_literal, legacy, preserved, missing_classification, positive_empty_preserved, irrelevant },
     observed: usize = 0,
     const bindings = @import("../application/reference_extraction_workflow.zig");
     const extraction = @import("../domain/reference_extraction.zig");
@@ -1086,9 +1091,34 @@ const ReferenceExtractionTestProducer = struct {
                         break :response .{ .response = @import("../reference_extraction_test.zig").passiveReply(scratch, citation_chunk, ordinal) catch return error.OperationExecutionFailed };
                     },
                     .legacy => .{ .response = "{\"kind\":\"no_feature_claim\",\"reason\":\"Old raw text\",\"token_classifications\":[]}" },
+                    .preserved, .missing_classification, .positive_empty_preserved, .irrelevant => response: {
+                        const token_values = @import("../application/structured_token_workflow.zig");
+                        const token_fixture = @import("../test_fixtures/reference_tokens.zig");
+                        const candidates = ReferenceCitationTestProducer.values.read(&input.step.data, token_values.candidates_schema, extraction.tokens.Candidates) catch return error.OperationExecutionFailed;
+                        const choices = token_fixture.classifications(scratch, candidates.*, chunk) catch return error.OperationExecutionFailed;
+                        const decisions = scratch.dupe(extraction.tokens.Classification, choices) catch return error.OperationExecutionFailed;
+                        if (context.?.mode == .irrelevant) for (decisions) |*decision| {
+                            decision.* = .{ .irrelevant = decision.id() };
+                        };
+                        const body = if (context.?.mode == .positive_empty_preserved or context.?.mode == .irrelevant) @import("../reference_extraction_test.zig").no_claim else @import("../reference_extraction_test.zig").reply(scratch, chunk, "A supported candidate.") catch return error.OperationExecutionFailed;
+                        break :response .{ .response = token_fixture.wire(scratch, body, if (context.?.mode == .missing_classification) &.{} else decisions) catch return error.OperationExecutionFailed };
+                    },
                     .claims, .missing, .duplicate, .invalid_citation => .{ .response = @import("../reference_extraction_test.zig").reply(scratch, citation_chunk, "Scripted unreviewed claim.") catch return error.OperationExecutionFailed },
                 },
             };
+            switch (context.?.mode) {
+                .claims, .no_claim, .passive, .invalid_citation, .duplicate => {
+                    const token_fixture = @import("../test_fixtures/reference_tokens.zig");
+                    const candidates = ReferenceCitationTestProducer.values.read(&input.step.data, @import("../application/structured_token_workflow.zig").candidates_schema, extraction.tokens.Candidates) catch return error.OperationExecutionFailed;
+                    const choices = token_fixture.classifications(scratch, candidates.*, chunk) catch return error.OperationExecutionFailed;
+                    const decisions = scratch.dupe(extraction.tokens.Classification, choices) catch return error.OperationExecutionFailed;
+                    if (context.?.mode == .no_claim) for (decisions) |*decision| {
+                        decision.* = .{ .irrelevant = decision.id() };
+                    };
+                    entry.result.response = token_fixture.wire(scratch, entry.result.response, decisions) catch return error.OperationExecutionFailed;
+                },
+                else => {},
+            }
         }
         const owner = owned.capture(allocator, .{ .entries = entries }) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
@@ -1105,16 +1135,20 @@ const ReferenceExtractionTestProducer = struct {
 test "native YAML validates citations and accounts every extraction chunk before continuation" {
     const io = std.testing.io;
     const binding = @import("../application/workflow_operation_binding.zig");
-    const scenarios = [_]?@FieldType(ReferenceExtractionTestProducer, "mode"){ null, null, .claims, .no_claim, .blocked, .malformed, .missing, .duplicate, .invalid_citation, .unbound, .passive, .unknown_literal, .legacy };
+    const scenarios = [_]?@FieldType(ReferenceExtractionTestProducer, "mode"){ null, null, .claims, .no_claim, .blocked, .malformed, .missing, .duplicate, .invalid_citation, .unbound, .passive, .unknown_literal, .legacy, .preserved, .missing_classification, .positive_empty_preserved, .irrelevant };
     for (scenarios, 0..) |mode, scenario| {
         const invalid = scenario == 1;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
-        const suffix = if (mode != null) "use: validate-reference-passive-literals, on: { ok: propose-extraction, failed: end.failed } }\n" ++
+        if (mode == .preserved or mode == .missing_classification or mode == .positive_empty_preserved or mode == .irrelevant) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Hello, World!` and retain `Cafe\u{301}`.\n" });
+        const suffix = if (mode != null) "use: assign-structured-token-candidate-identities, on: { ok: propose-extraction, failed: end.failed } }\n" ++
             "  propose-extraction: { use: test.propose-extraction, on: { ok: parse-extraction } }\n" ++
             "  parse-extraction: { use: parse-reference-extraction-results, on: { ok: validate-text, failed: end.failed } }\n" ++
-            "  validate-text: { use: validate-reference-extraction-text, on: { ok: validate-claims, failed: end.failed } }\n" ++
+            "  validate-text: { use: validate-reference-extraction-text, on: { ok: validate-classifications, failed: end.failed } }\n" ++
+            "  validate-classifications: { use: validate-preserved-token-classifications, on: { ok: assign-tokens, failed: end.failed } }\n" ++
+            "  assign-tokens: { use: assign-preserved-token-identities, on: { ok: build-token-claims, failed: end.failed } }\n" ++
+            "  build-token-claims: { use: build-preserved-token-claims, on: { ok: validate-claims, failed: end.failed } }\n" ++
             "  validate-claims: { use: validate-reference-claims, on: { ok: assign-claims, failed: end.failed } }\n" ++
             "  assign-claims: { use: assign-reference-claim-identities, on: { ok: build-ledger, failed: end.failed } }\n" ++
             "  build-ledger: { use: build-reference-extraction-ledger, on: { ok: account-extraction, failed: end.failed } }\n" ++
@@ -1123,9 +1157,9 @@ test "native YAML validates citations and accounts every extraction chunk before
             "  propose-citations: { use: test.propose-citations, on: { ok: validate-citations } }\n" ++
             "  validate-citations: { use: validate-source-citations, on: { ok: observe-citations, failed: end.failed } }\n" ++
             "  observe-citations: { use: test.observe-citations, on: { ok: end.ok } }";
-        const preparation = try @import("../test_fixtures/reference_text_workflow.zig").yaml(std.testing.allocator);
+        const preparation = try @import("../test_fixtures/reference_tokens_workflow.zig").yaml(std.testing.allocator);
         defer std.testing.allocator.free(preparation);
-        const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, if (mode != null) preparation else @embedFile("../test_fixtures/reference-ingestion.workflow.yaml"), if (mode != null) "use: validate-reference-passive-literals, on: { ok: end.ok, failed: end.failed } }" else "use: validate-reference-chunks\n    on: { ok: end.ok, failed: end.failed }", suffix);
+        const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, if (mode != null) preparation else @embedFile("../test_fixtures/reference-ingestion.workflow.yaml"), if (mode != null) "use: assign-structured-token-candidate-identities, on: { ok: end.ok, failed: end.failed } }" else "use: validate-reference-chunks\n    on: { ok: end.ok, failed: end.failed }", suffix);
         defer std.testing.allocator.free(yaml);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = yaml });
         if (mode != null) {
@@ -1153,7 +1187,7 @@ test "native YAML validates citations and accounts every extraction chunk before
         const entries = native.entries ++ [_]workflow_operation_registry.Entry{
             .{ .contract = .{ .id = "test.propose-citations", .kind = .step, .requires = &.{.citable_reference_inputs}, .produces = &.{.reference_citation_proposals}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.propose) },
             .{ .contract = .{ .id = "test.observe-citations", .kind = .step, .requires = &.{.validated_source_citations}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.observe) },
-            .{ .contract = .{ .id = "test.propose-extraction", .kind = .step, .requires = &.{ .citable_reference_inputs, .reference_passive_literals }, .produces = &.{.raw_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.propose) },
+            .{ .contract = .{ .id = "test.propose-extraction", .kind = .step, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .structured_token_candidates }, .produces = &.{.raw_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.propose) },
             .{ .contract = .{ .id = "test.observe-extraction", .kind = .step, .requires = &.{.accounted_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.observe) },
         };
         native.registry.operations = &entries;
@@ -1164,9 +1198,9 @@ test "native YAML validates citations and accounts every extraction chunk before
         var providers = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project.dir, .{}, &llm_provider_contracts.Registry.empty);
         const result = runBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{}, null);
         const expected: workflow.OutcomeTag = if (mode) |selected| switch (selected) {
-            .claims, .no_claim, .passive => .ok,
+            .claims, .no_claim, .passive, .preserved, .irrelevant => .ok,
             .blocked => .blocked,
-            .malformed, .missing, .duplicate, .invalid_citation, .unbound, .unknown_literal, .legacy => .failed,
+            .malformed, .missing, .duplicate, .invalid_citation, .unbound, .unknown_literal, .legacy, .missing_classification, .positive_empty_preserved => .failed,
         } else if (invalid) .failed else .ok;
         try std.testing.expectEqual(expected, result.executionStatus().?);
         try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), if (mode != null) extraction_producer.observed else producer.observed);

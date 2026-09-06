@@ -598,6 +598,56 @@ test "model invocation forwards one call through the sole provider port without 
     try expectAbsent(@embedFile("composition/native_workflow_operations.zig"), "invoke_model.zig");
 }
 
+test "YAML observation validation reuses the pure validator and retains immutable inputs" {
+    const native = @import("application/provider_observation_workflow.zig");
+    try std.testing.expect(@typeInfo(native.Result) == .@"opaque");
+    try std.testing.expect(@FieldType(native.Outcome, "validated") == *const @import("domain/provider_invocation_validation.zig").Evidence);
+    try std.testing.expect(native.schema.maximum_bytes == null);
+    const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(native.Validate, &.{});
+    try std.testing.expect(capabilities.valid and !capabilities.model_provider and !capabilities.provider_authorization);
+    try std.testing.expect(native.Validate.contract.side_effect == .none);
+    try std.testing.expect(native.Validate.contract.runner_accounting == .none);
+    try std.testing.expectEqual(@as(usize, 0), native.Validate.contract.parameters.len);
+    const source = @embedFile("application/provider_observation_workflow.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.action.execute("));
+    try std.testing.expectEqual(@as(usize, 2), countOccurrences(source, "values.retain("));
+    inline for (.{ "/adapters/", "std.Io", "std.json", "countInputTokens", "reconcile", "validation.validate(", "utf8Validate", "LLMProviderInterface", "retry_limit", "while (" }) |forbidden| try expectAbsent(source, forbidden);
+}
+
+test "YAML decoding reuses the pure decoder without schema validation or accounting" {
+    const native = @import("application/model_envelope_workflow.zig");
+    try std.testing.expect(@typeInfo(native.Result) == .@"opaque");
+    try std.testing.expect(@FieldType(native.Outcome, "decoded") == *const @import("domain/model_envelope.zig").Candidate);
+    try std.testing.expect(@FieldType(native.Outcome, "not_decoded") == *const @import("application/provider_observation_workflow.zig").Result);
+    try std.testing.expect(native.schema.maximum_bytes == null);
+    const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(native.Decode, &.{});
+    try std.testing.expect(capabilities.valid and !capabilities.model_provider and !capabilities.provider_authorization);
+    try std.testing.expect(native.Decode.contract.side_effect == .none);
+    try std.testing.expect(native.Decode.contract.runner_accounting == .none);
+    try std.testing.expectEqual(@as(usize, 0), native.Decode.contract.parameters.len);
+    const source = @embedFile("application/model_envelope_workflow.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.action.execute("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "values.retain("));
+    inline for (.{ "/adapters/", "std.Io", "std.json", "strict_json", "countInputTokens", "reconcile", "validateUsage", "validateInferenceInvocation", "utf8Validate", "LLMProviderInterface", "model_payload_schema", "retry_limit", "while (" }) |forbidden| try expectAbsent(source, forbidden);
+}
+
+test "YAML payload validation retains candidates and reuses only the bound schema validator" {
+    const native = @import("application/model_payload_schema_workflow.zig");
+    try std.testing.expect(@typeInfo(native.Result) == .@"opaque");
+    try std.testing.expect(@FieldType(native.Outcome, "valid") == *const @import("domain/model_payload_schema.zig").Evidence);
+    try std.testing.expect(@FieldType(native.Outcome, "not_validated") == *const @import("application/model_envelope_workflow.zig").Result);
+    try std.testing.expect(native.schema.maximum_bytes == null);
+    const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(native.Validate, &.{});
+    try std.testing.expect(capabilities.valid and !capabilities.model_provider and !capabilities.provider_authorization);
+    try std.testing.expect(native.Validate.contract.side_effect == .none);
+    try std.testing.expect(native.Validate.contract.runner_accounting == .none);
+    try std.testing.expectEqual(@as(usize, 0), native.Validate.contract.parameters.len);
+    const source = @embedFile("application/model_payload_schema_workflow.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.action.execute("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "values.retain("));
+    inline for (.{ "/adapters/", "std.Io", "std.json", "strict_json", "countInputTokens", "reconcile", "validateUsage", "validateInferenceInvocation", "validation.validate(", "utf8Validate", "LLMProviderInterface", "retry_limit", "while (" }) |forbidden| try expectAbsent(source, forbidden);
+}
+
 test "YAML request lifecycle uses its existing action and publishes only a validated ledger successor" {
     const native = @import("application/model_request_lifecycle_workflow.zig");
     const metadata = @import("application/workflow_operation_binding.zig").inspect(native.Advance, &.{});
@@ -676,6 +726,23 @@ test "YAML provider invocation proposes one lifecycle change without receiving a
     const state = @embedFile("application/workflow_model_accounting.zig");
     try std.testing.expect(std.mem.indexOf(u8, state, "authorization_leases.deinit()").? < std.mem.indexOf(u8, state, "lifecycle.deinitOwner(").?);
     inline for (.{ "actions/", "adapters/", "LLMProviderInterface", "std.Io" }) |forbidden| try expectAbsent(state, forbidden);
+}
+
+test "YAML provider completion uses one lifecycle action and runner-published terminal evidence" {
+    const native = @import("application/provider_operation_completion_workflow.zig");
+    const metadata = @import("application/workflow_operation_binding.zig").inspect(native.Complete, &.{});
+    try std.testing.expect(metadata.valid and !metadata.model_provider and !metadata.provider_authorization);
+    try std.testing.expectEqual(.advance_provider_operation, native.Complete.contract.runner_accounting);
+    try std.testing.expectEqual(@as(usize, 0), native.Complete.contract.parameters.len);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.terminal_provider_operation}, native.Complete.contract.produces);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.invoked_provider_operation}, native.Complete.contract.invalidates);
+    try std.testing.expect(@typeInfo(@import("domain/provider_operation_lifecycle.zig").TerminalOperation) == .@"opaque");
+    const source = @embedFile("application/provider_operation_completion_workflow.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.action.execute("));
+    inline for (.{ "lifecycle.apply(", "authorization_leases", "LLMProviderInterface", "timeout-ms", "retry-limit", "std.Io", "/adapters/", "reconcile(", "validateUsage", "std.json", "values.adopt(" }) |forbidden| try expectAbsent(source, forbidden);
+    const runner = @embedFile("application/workflow_pipeline_runner.zig");
+    try std.testing.expect(std.mem.indexOf(u8, runner, "pending = state.prepareCompletion(").? < std.mem.indexOf(u8, runner, "self.envelope.apply(").?);
+    try std.testing.expect(std.mem.indexOf(u8, runner, "self.envelope.apply(").? < std.mem.indexOf(u8, runner, "self.model_accounting.?.commit(").?);
 }
 
 test "provider authorization exposes only non-operational references and narrow single-use ports" {
@@ -1544,7 +1611,28 @@ test "typed extraction has one shared prose gate and no passive operational capa
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("domain/typed_text.zig"), "scan.scan(") != null);
     try expectAbsent(@embedFile("actions/reference/validate_reference_claims.zig"), "nonempty");
     try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "passive_literal");
-    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{ .citable_reference_inputs, .text_validated_reference_extraction }, extraction.Validate.Action.contract.requires);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{ .citable_reference_inputs, .prepared_reference_claims }, extraction.Validate.Action.contract.requires);
+}
+
+test "preservation is a generic YAML boundary with source-only scalars and mandatory accounting" {
+    const native = @import("application/structured_token_workflow.zig");
+    const binding = @import("application/workflow_operation_binding.zig");
+    const key = @import("domain/pipeline.zig").DataKey;
+    inline for (.{ native.Extract, native.AssignCandidates, native.Validate, native.AssignTokens, native.BuildClaims }) |T| {
+        try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
+        try std.testing.expectEqual(.none, T.Action.contract.side_effect);
+    }
+    try std.testing.expectEqualSlices(key, &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction }, native.Validate.Action.contract.requires);
+    try std.testing.expectEqualSlices(key, &.{.preserved_token_identities}, native.BuildClaims.Action.contract.requires);
+    try std.testing.expectEqualSlices(key, &.{ .citable_reference_inputs, .preserved_token_identities, .reference_extraction_ledger }, @import("actions/reference/validate_reference_extraction_accounting.zig").Action.contract.requires);
+    try std.testing.expect(native.classified_schema.maximum_bytes == null);
+    const classification = @import("domain/structured_tokens.zig").Classification;
+    try std.testing.expect(!@hasField(@FieldType(classification, "preserve"), "raw_value"));
+    try std.testing.expect(!@hasField(@FieldType(classification, "preserve"), "citation_id"));
+    try expectAbsent(@embedFile("domain/reference_extraction_parser.zig"), "[0]struct {}");
+    try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "structured_token");
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("domain/structured_tokens.zig"), "markdown_code_spans.zig") != null);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("adapters/parsers/markdown_reference.zig"), "markdown_code_spans.zig") != null);
 }
 
 test "feature document filenames and headings agree" {

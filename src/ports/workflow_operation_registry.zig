@@ -23,6 +23,7 @@ pub const StepInput = struct {
     model_binding: ?*const provider_binding.ValidatedProviderModelBinding,
     log: pipeline.WorkflowLog,
     model_request_lifecycle: ?*const @import("../domain/provider_operation_lifecycle.zig").Ledger = null,
+    provider_invocation: ?@import("../domain/provider_invocation_validation.zig").Call = null,
     model_attempt: ?struct {
         accounting: *const @import("../domain/model_attempt_accounting.zig").RunnerModelAttemptAccounting,
         operations: *const @import("../domain/provider_operation_lifecycle.zig").Ledger,
@@ -214,7 +215,7 @@ fn validContract(contract: operation.Contract, capabilities: []const []const u8)
 }
 
 fn validDataContract(contract: operation.Contract) bool {
-    for ([_]pipeline.DataKey{ .assigned_provider_operation, .invoked_provider_operation }) |key| {
+    for ([_]pipeline.DataKey{ .assigned_provider_operation, .invoked_provider_operation, .terminal_provider_operation }) |key| {
         if (containsKey(contract.replaces, key) or
             ((containsKey(contract.requires, key) or containsKey(contract.optional, key)) and
                 (!contract.consumesPreparedRequest() or !containsKey(contract.requires, .accounted_model_attempt)))) return false;

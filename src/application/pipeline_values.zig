@@ -11,6 +11,7 @@ pub const Error = std.mem.Allocator.Error || error{
 };
 
 const Owned = struct {
+    references: usize = 1,
     allocator: std.mem.Allocator,
     arena: std.heap.ArenaAllocator,
     schema: data.Schema,
@@ -106,8 +107,18 @@ pub fn read(view: *const data.View, expected: data.Schema, comptime T: type) Err
     return @ptrCast(@alignCast(owner.payload));
 }
 
+/// Retains an immutable value's existing owner; never clones its payload or authority.
+pub fn retain(value: *data.Value) error{DataReferenceOverflow}!*data.Value {
+    const owner: *Owned = @ptrCast(@alignCast(value));
+    owner.references = std.math.add(usize, owner.references, 1) catch return error.DataReferenceOverflow;
+    return value;
+}
+
 pub fn destroy(value: *data.Value) void {
     const owner: *Owned = @ptrCast(@alignCast(value));
+    std.debug.assert(owner.references > 0);
+    owner.references -= 1;
+    if (owner.references != 0) return;
     const allocator = owner.allocator;
     releaseReferences(owner);
     if (owner.native_owner) |native| native.destroy_fn(native.context);

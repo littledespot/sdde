@@ -27,7 +27,14 @@ pub const Action = struct {
                         index += 1;
                         if (assignment.citation_ids.len != value.citations.len) return error.InvalidReferenceExtraction;
                         id.* = assignment.claim_id;
-                        try claims.append(allocator, .{ .id = id.*, .chunk_id = entry.scope.chunk_id, .content = value.content, .citation_ids = assignment.citation_ids });
+                        const content: extraction.ClaimContent = switch (value.content) {
+                            .model => |model| .{ .model = model },
+                            .preserved_token => |token| token: {
+                                if (assignment.citation_ids.len != 1) return error.InvalidReferenceExtraction;
+                                break :token .{ .preserved_token = .{ .value = token, .citation_id = assignment.citation_ids[0] } };
+                            },
+                        };
+                        try claims.append(allocator, .{ .id = id.*, .chunk_id = entry.scope.chunk_id, .content = content, .citation_ids = assignment.citation_ids });
                         for (value.citations, assignment.citation_ids) |citation, citation_id| try citations.append(allocator, .{ .id = citation_id, .value = citation });
                     }
                     break :result .{ .claims = ids };

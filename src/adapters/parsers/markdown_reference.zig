@@ -21,6 +21,9 @@ pub const Adapter = struct {
         if (!std.unicode.utf8ValidateSlice(bytes)) return error.MalformedText;
         for (bytes) |byte| if ((byte < 32 and byte != '\t' and byte != '\r' and byte != '\n') or byte == 127) return error.MalformedText;
         const started: std.Io.Clock.Timestamp = .now(self.io, .boot);
+        const exact_spans = try @import("../../domain/markdown_code_spans.zig").scan(allocator, bytes);
+        defer allocator.free(exact_spans);
+        var exact_index: usize = 0;
         var blocks: std.ArrayList(reference.BlockProposal) = .empty;
         errdefer blocks.deinit(allocator);
         var position: reference.Position = .{ .byte = 0, .line = 1, .column = 1 };
@@ -32,13 +35,25 @@ pub const Adapter = struct {
                 check_at = position.byte + 4096;
             }
             const next = reference.advance(bytes, position) catch return error.MalformedText;
+            while (exact_index < exact_spans.len and position.byte >= exact_spans[exact_index].end) exact_index += 1;
+            if (exact_index < exact_spans.len and position.byte == exact_spans[exact_index].start and exact_spans[exact_index].end - start.byte > reference.limits.block_bytes) {
+                if (exact_spans[exact_index].end - position.byte > reference.limits.block_bytes) return error.DecodeLimitExceeded;
+                if (position.byte > start.byte) {
+                    if (blocks.items.len == reference.limits.blocks_per_file) return error.DecodeLimitExceeded;
+                    try blocks.append(allocator, .{ .span = .{ .start = start, .end = position } });
+                    start = position;
+                }
+            }
+            const inside_exact = exact_index < exact_spans.len and position.byte > exact_spans[exact_index].start and position.byte < exact_spans[exact_index].end;
             if (next.byte - start.byte > reference.limits.block_bytes) {
+                if (inside_exact) return error.DecodeLimitExceeded;
                 if (blocks.items.len == reference.limits.blocks_per_file) return error.DecodeLimitExceeded;
                 try blocks.append(allocator, .{ .span = .{ .start = start, .end = position } });
                 start = position;
             }
             position = next;
-            if (position.line - start.line >= 64 or position.byte == bytes.len) {
+            const splits_exact = exact_index < exact_spans.len and position.byte > exact_spans[exact_index].start and position.byte < exact_spans[exact_index].end;
+            if ((!splits_exact and position.line - start.line >= 64) or position.byte == bytes.len) {
                 if (blocks.items.len == reference.limits.blocks_per_file) return error.DecodeLimitExceeded;
                 try blocks.append(allocator, .{ .span = .{ .start = start, .end = position } });
                 start = position;

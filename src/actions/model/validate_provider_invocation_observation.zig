@@ -7,8 +7,8 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "validate-provider-invocation-observation",
         .kind = .action,
-        .requires = &.{ .model_request_identity_ledger, .validated_provider_model_binding },
-        .produces = &.{},
+        .requires = &@import("../../domain/workflow_model_invocation.zig").validation_requires,
+        .produces = &.{.provider_invocation_validation_result},
         .side_effect = .none,
     };
 

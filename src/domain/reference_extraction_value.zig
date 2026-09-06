@@ -6,6 +6,9 @@ pub const Payload = union(enum) {
     raw: extraction.Raw,
     parsed: extraction.Parsed,
     text_validated: extraction.TextValidated,
+    token_classified: extraction.Classified,
+    tokens_assigned: extraction.TokenAssignments,
+    prepared: extraction.Prepared,
     validated: extraction.Validated,
     assigned: extraction.Assignments,
     ledger: extraction.Ledger,
@@ -27,7 +30,7 @@ pub const Owner = struct {
 const Handle = struct { owner: *Owner };
 
 /// A result may borrow its one preceding immutable candidate, never a runner
-/// input's unretained allocation. The chain has seven closed payload stages.
+/// input's unretained allocation. Each successor retains one closed prior stage.
 pub fn create(allocator: std.mem.Allocator, parent: ?*const Value) std.mem.Allocator.Error!*Owner {
     const owner = try allocator.create(Owner);
     owner.* = .{ .allocator = allocator, .arena = .init(allocator), .parent = parent, .payload = .{ .raw = .{ .entries = &.{} } }, .handle = .{ .owner = owner } };

@@ -6,8 +6,8 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "validate-model-payload-schema",
         .kind = .action,
-        .requires = &.{},
-        .produces = &.{},
+        .requires = &@import("../../domain/workflow_model_invocation.zig").payload_schema_requires,
+        .produces = &.{.model_payload_schema_result},
         .side_effect = .none,
     };
 

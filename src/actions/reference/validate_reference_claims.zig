@@ -7,24 +7,17 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "validate-reference-claims",
         .kind = .action,
-        .requires = &.{ .citable_reference_inputs, .text_validated_reference_extraction },
+        .requires = &.{ .citable_reference_inputs, .prepared_reference_claims },
         .produces = &.{.validated_reference_claims},
         .side_effect = .none,
     };
     /// Structural validation only. Results are ordered by engine chunk order;
     /// model response arrival order cannot change canonical ID assignment.
-    pub fn execute(_: Action, allocator: std.mem.Allocator, inputs: evidence.Inputs, parsed: extraction.TextValidated) extraction.Error!extraction.Validated {
+    pub fn execute(_: Action, allocator: std.mem.Allocator, inputs: evidence.Inputs, parsed: extraction.Prepared) extraction.Error!extraction.Validated {
         if (parsed.entries.len != inputs.chunks.entries.len) return error.InvalidReferenceExtraction;
         const entries = try allocator.alloc(extraction.ValidatedResult, parsed.entries.len);
-        for (inputs.chunks.entries, entries) |chunk, *entry| {
-            var selected: ?extraction.TextValidatedResult = null;
-            for (parsed.entries) |candidate| {
-                if (!candidate.scope.state_id.eql(inputs.corpus.state_id)) return error.InvalidReferenceExtraction;
-                if (!candidate.scope.chunk_id.eql(chunk.id)) continue;
-                if (selected != null) return error.InvalidReferenceExtraction;
-                selected = candidate;
-            }
-            const candidate = selected orelse return error.InvalidReferenceExtraction;
+        for (inputs.chunks.entries, parsed.entries, entries) |chunk, candidate, *entry| {
+            if (!candidate.scope.state_id.eql(inputs.corpus.state_id) or !candidate.scope.chunk_id.eql(chunk.id)) return error.InvalidReferenceExtraction;
             _ = try evidence.resolve(inputs, candidate.scope);
             entry.scope = candidate.scope;
             entry.outcome = switch (candidate.outcome) {

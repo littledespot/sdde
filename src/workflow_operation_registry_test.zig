@@ -71,6 +71,45 @@ test "operation lookup is exact with one current contract and no version aliases
     try std.testing.expect(duplicate.resolveOperation(workflow.OperationId.parse("test.noop").?) == null);
 }
 
+test "model response contracts require exact inputs without effects or overrides" {
+    inline for (.{ @import("application/provider_observation_workflow.zig").Validate, @import("application/model_envelope_workflow.zig").Decode, @import("application/model_payload_schema_workflow.zig").Validate, @import("application/provider_operation_completion_workflow.zig").Complete }) |Native| {
+        const required = Native.contract.requires;
+        var context: Native = if (@hasField(Native, "allocator")) .{ .allocator = std.testing.allocator } else .{};
+        const entry: Entry = .{ .contract = Native.contract, .binding = bindings.bind(Native, &context, Native.invoke) };
+        const valid: Registry = .{ .operations = &.{entry}, .data_schemas = &@import("composition/model_request_operations.zig").schemas, .policies = &.{}, .gates = &.{} };
+        try std.testing.expect(valid.validate());
+        for (0..required.len) |missing| {
+            var inputs: [required.len - 1]@import("domain/pipeline.zig").DataKey = undefined;
+            var index: usize = 0;
+            for (required, 0..) |key, ordinal| {
+                if (ordinal == missing) continue;
+                inputs[index] = key;
+                index += 1;
+            }
+            var changed = entry;
+            changed.contract.requires = &inputs;
+            var registry = valid;
+            registry.operations = &.{changed};
+            try std.testing.expect(!registry.validate());
+        }
+        for (0..6) |variant| {
+            var changed = entry;
+            switch (variant) {
+                0 => changed.contract.side_effect = .model_call,
+                1 => changed.contract.invalidates = &.{required[required.len - 1]},
+                2 => changed.contract.replaces = Native.contract.produces,
+                3 => changed.contract.optional = &.{.provider_authorization_result},
+                4 => changed.contract.parameters = &.{.{ .id = "hidden", .kind = .boolean, .required = true, .workflow_definition_safe = true }},
+                5 => changed.contract.runner_accounting = .reconcile_workflow_tokens,
+                else => unreachable,
+            }
+            var registry = valid;
+            registry.operations = &.{changed};
+            try std.testing.expect(!registry.validate());
+        }
+    }
+}
+
 test "one registry rejects duplicate and structurally invalid operations" {
     try std.testing.expect(!@hasField(operation.PolicyProfile, "retry_limit"));
     try std.testing.expect(!@hasField(operation.PolicyProfile, "attempts"));

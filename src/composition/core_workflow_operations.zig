@@ -41,7 +41,7 @@ pub const profiles = [_]@import("../domain/workflow_operation.zig").PolicyProfil
 }, .{
     .id = "core.model-inference@1",
     .allowed_capabilities = &.{ @import("../domain/workflow_capability.zig").model_provider, @import("../domain/workflow_capability.zig").provider_authorization },
-    .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
+    .allowed_terminal_outcomes = &.{ .ok, .invalid, .failed, .cancelled },
     .total_model_token_budget = .{ .value = 100_000 },
 } };
 

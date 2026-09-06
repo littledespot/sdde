@@ -135,7 +135,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{.{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module }},
     }) });
-    b.step("test-model-request-workflow", "Test native YAML request preparation, inference, accounting and immutable handoff").dependOn(&b.addRunArtifact(request_workflow_tests).step);
+    b.step("test-model-request-workflow", "Test native YAML model requests, inference, response handling and accounting").dependOn(&b.addRunArtifact(request_workflow_tests).step);
 
     const attempt_accounting_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/model_attempt_accounting_test.zig"),
@@ -212,6 +212,15 @@ pub fn build(b: *std.Build) void {
     }) });
     const extraction_step = b.step("test-reference-extraction", "Test closed reference claim candidates and complete chunk accounting");
     extraction_step.dependOn(&b.addRunArtifact(extraction_tests).step);
+
+    const structured_token_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/structured_token_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const structured_token_step = b.step("test-structured-tokens", "Test exact-value extraction classification and claim accounting");
+    structured_token_step.dependOn(&b.addRunArtifact(structured_token_tests).step);
 
     const path_token_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/path_token_test.zig"),

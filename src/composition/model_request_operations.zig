@@ -9,9 +9,13 @@ const authorization = @import("../application/provider_authorization_workflow.zi
 const lifecycle = @import("../application/model_request_lifecycle_workflow.zig");
 const provider_lifecycle = @import("../application/provider_operation_lifecycle_workflow.zig");
 const invocation = @import("../application/model_invocation_workflow.zig");
+const observation = @import("../application/provider_observation_workflow.zig");
+const envelope = @import("../application/model_envelope_workflow.zig");
+const payload = @import("../application/model_payload_schema_workflow.zig");
+const completion = @import("../application/provider_operation_completion_workflow.zig");
 
-pub const count = 10;
-pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, authorization.schema, invocation.schema };
+pub const count = 14;
+pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
 pub const Assembly = struct {
@@ -25,6 +29,10 @@ pub const Assembly = struct {
     advance_request: lifecycle.Advance,
     advance_operation: provider_lifecycle.Advance,
     invoke_model: invocation.Invoke,
+    validate_observation: observation.Validate,
+    decode_envelope: envelope.Decode,
+    validate_payload: payload.Validate,
+    complete_operation: completion.Complete,
     entries: [count]operations.Entry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator) void {
@@ -39,6 +47,10 @@ pub const Assembly = struct {
             .advance_request = .{ .allocator = allocator },
             .advance_operation = .{},
             .invoke_model = .{ .allocator = allocator },
+            .validate_observation = .{ .allocator = allocator },
+            .decode_envelope = .{ .allocator = allocator },
+            .validate_payload = .{ .allocator = allocator },
+            .complete_operation = .{},
             .entries = undefined,
         };
         self.entries = .{
@@ -52,6 +64,10 @@ pub const Assembly = struct {
             entry(lifecycle.Advance, &self.advance_request),
             entry(provider_lifecycle.Advance, &self.advance_operation),
             entry(invocation.Invoke, &self.invoke_model),
+            entry(observation.Validate, &self.validate_observation),
+            entry(envelope.Decode, &self.decode_envelope),
+            entry(payload.Validate, &self.validate_payload),
+            entry(completion.Complete, &self.complete_operation),
         };
     }
 };
