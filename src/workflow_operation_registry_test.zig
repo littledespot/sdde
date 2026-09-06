@@ -7,6 +7,45 @@ const bindings = @import("application/workflow_operation_binding.zig");
 const fixture = @import("workflow_binding_test_fixture.zig");
 const workflow = @import("domain/workflow.zig");
 
+test "model-call contracts require complete invocation inputs and owned result publication" {
+    const native = @import("application/model_invocation_workflow.zig");
+    const selection = @import("domain/workflow_model_invocation.zig");
+    var context: native.Invoke = .{ .allocator = std.testing.allocator };
+    const entry: Entry = .{ .contract = native.Invoke.contract, .binding = bindings.bind(native.Invoke, &context, native.Invoke.invoke) };
+    const valid: Registry = .{ .operations = &.{entry}, .data_schemas = &@import("composition/model_request_operations.zig").schemas, .policies = &.{}, .gates = &.{} };
+    try std.testing.expect(valid.validate());
+    for (0..selection.requires.len) |missing| {
+        var inputs: [selection.requires.len - 1]@import("domain/pipeline.zig").DataKey = undefined;
+        var index: usize = 0;
+        for (selection.requires, 0..) |key, ordinal| {
+            if (ordinal == missing) continue;
+            inputs[index] = key;
+            index += 1;
+        }
+        var changed = entry;
+        changed.contract.requires = &inputs;
+        var registry = valid;
+        registry.operations = &.{changed};
+        try std.testing.expect(!registry.validate());
+    }
+    for (0..7) |variant| {
+        var changed = entry;
+        switch (variant) {
+            0 => changed.contract.produces = &.{},
+            1 => changed.contract.side_effect = .none,
+            2 => changed.binding = bindings.bind(void, null, fixture.unused),
+            3 => changed.contract.invalidates = &.{.provider_authorization_result},
+            4 => changed.contract.replaces = &.{.provider_invocation_result},
+            5 => changed.contract.optional = &.{.assigned_model_request},
+            6 => changed.contract.parameters = &.{.{ .id = "hidden", .kind = .boolean, .required = true, .workflow_definition_safe = true }},
+            else => unreachable,
+        }
+        var registry = valid;
+        registry.operations = &.{changed};
+        try std.testing.expect(!registry.validate());
+    }
+}
+
 test "operation lookup is exact with one current contract and no version aliases" {
     const entry: Entry = .{
         .contract = .{ .id = "test.noop", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none },

@@ -8,9 +8,10 @@ const accounting = @import("../application/workflow_model_accounting.zig");
 const authorization = @import("../application/provider_authorization_workflow.zig");
 const lifecycle = @import("../application/model_request_lifecycle_workflow.zig");
 const provider_lifecycle = @import("../application/provider_operation_lifecycle_workflow.zig");
+const invocation = @import("../application/model_invocation_workflow.zig");
 
-pub const count = 9;
-pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, authorization.schema };
+pub const count = 10;
+pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, authorization.schema, invocation.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
 pub const Assembly = struct {
@@ -23,6 +24,7 @@ pub const Assembly = struct {
     prepare_authorization: authorization.Prepare,
     advance_request: lifecycle.Advance,
     advance_operation: provider_lifecycle.Advance,
+    invoke_model: invocation.Invoke,
     entries: [count]operations.Entry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator) void {
@@ -36,6 +38,7 @@ pub const Assembly = struct {
             .prepare_authorization = .{ .allocator = allocator },
             .advance_request = .{ .allocator = allocator },
             .advance_operation = .{},
+            .invoke_model = .{ .allocator = allocator },
             .entries = undefined,
         };
         self.entries = .{
@@ -48,6 +51,7 @@ pub const Assembly = struct {
             entry(authorization.Prepare, &self.prepare_authorization),
             entry(lifecycle.Advance, &self.advance_request),
             entry(provider_lifecycle.Advance, &self.advance_operation),
+            entry(invocation.Invoke, &self.invoke_model),
         };
     }
 };

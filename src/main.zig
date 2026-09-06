@@ -30,6 +30,10 @@ pub fn main(init: std.process.Init) !void {
             try stderr.flush();
             std.process.exit(1);
         },
+        .execution_rejected => |reason| {
+            try writeFailure(init.io, reason.diagnostic());
+            std.process.exit(1);
+        },
         .invocation_invalid => {
             try writeFailure(init.io, "invalid");
             std.process.exit(1);

@@ -27,6 +27,10 @@ const authorization_result = @import("domain/provider_authorization_result.zig")
 const authorization_port = @import("ports/provider_operation_authorization.zig");
 const request_lifecycle_workflow = @import("application/model_request_lifecycle_workflow.zig");
 const operation_lifecycle_workflow = @import("application/provider_operation_lifecycle_workflow.zig");
+const model_invocation = @import("application/model_invocation_workflow.zig");
+const invocation_result = @import("domain/model_invocation_result.zig");
+const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
+const lease_port = @import("ports/provider_authorization_lease.zig");
 
 const yaml =
     \\schema: workflow/v1
@@ -1731,6 +1735,403 @@ fn invokedOperation(runner: *const runner_module.Runner) !*const lifecycle.Invok
     return values.read(&.{ .slots = runner.envelope.slots }, attempt_values.invoked_schema, lifecycle.InvokedOperation);
 }
 
+test "native YAML invokes one model call and retains unparsed output and actual usage" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try invocationYaml(&fixture));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.ok, harness.run());
+    try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
+    try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
+    try std.testing.expectEqual(@as(usize, 0), fake.count_call_count);
+    try std.testing.expectEqual(@as(usize, 1), fixture.observer.calls);
+    try std.testing.expectEqual(@as(usize, 1), fixture.authorization.destroyed_count);
+    const observed = try invocationResult(&runner);
+    try std.testing.expect(observed.operationId().eql((try invokedOperation(&runner)).operation().id));
+    const output = observed.outcome().?.observation.completed.raw_result.complete;
+    try std.testing.expectEqualStrings("not JSON; still untrusted", output.content.bytes);
+    const request = try currentRequest(&runner);
+    try std.testing.expect(request.id() == output.request_id);
+    try std.testing.expect(request.prepared().?.binding_id.eql(output.binding_id));
+    try std.testing.expectEqualStrings("origin", output.request_id.model_operation_id.workflow_step_id.bytes);
+    try std.testing.expectEqual(@as(u128, 7), runner.tokenLedger().committed());
+    try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
+    try std.testing.expectEqual(.invoked, (try requestLedger(&runner)).record(request.id()).?.status);
+    try std.testing.expectEqual(.invoked, std.meta.activeTag(runner.model_accounting.?.current_operations.record(observed.operationId()).?.state));
+    // Even removing the result cannot resurrect the consumed authorization.
+    values.destroy(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)].?);
+    runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] = null;
+    try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected);
+    try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
+    try std.testing.expectEqual(@as(u128, 7), runner.tokenLedger().committed());
+}
+
+test "YAML invocation preserves every stopped outcome and charges its actual usage" {
+    inline for (std.enums.values(provider.ProviderNonCandidateStopReason)) |reason| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try invocationYaml(&fixture));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.invocation_plan = .{ .stopped = .{ .reason = reason, .input_tokens = 8, .output_tokens = 3 } };
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.failed, harness.run());
+        try std.testing.expectEqual(reason, (try invocationResult(&runner)).outcome().?.observation.completed.raw_result.stopped.reason);
+        try std.testing.expectEqual(@as(u128, 11), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
+    }
+}
+
+test "YAML invocation preserves failures and blocks further calls when usage is unavailable" {
+    inline for (std.enums.values(provider.ProviderDeliveryDisposition)) |delivery| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try invocationYaml(&fixture));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.invocation_plan = .{ .failed = .{ .cause = .request_rejected, .retry_class = .policy_eligible, .delivery = delivery } };
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.failed, harness.run());
+        const failure = (try invocationResult(&runner)).outcome().?.observation.failed;
+        try std.testing.expectEqualDeep(provider.ProviderFailure{ .operation_id = (try invokedOperation(&runner)).operation().id, .cause = .request_rejected, .retry_class = .policy_eligible, .delivery = delivery }, failure);
+        try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
+        if (delivery == .not_sent) {
+            try std.testing.expectEqual(.available, runner.tokenLedger().status());
+        } else {
+            try std.testing.expectEqual(.usage_unavailable, runner.tokenLedger().status());
+            try std.testing.expectEqual(error.ProviderTokenUsageUnavailable, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected.token_budget);
+        }
+        try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
+        try std.testing.expectEqual(@as(usize, 0), fake.count_call_count);
+    }
+}
+
+test "YAML invocation accounts exact budget exhaustion and overshoot before blocking subsequent calls" {
+    for ([_]u64{ 0, 1 }) |overshoot| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try invocationYaml(&fixture));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        try prepareInvocable(&runner);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = graph.authority.total_model_token_budget.value - 2, .output_tokens = 2 + overshoot } };
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        const first = runner.bindings().invokeStep(.{ .bytes = "call" });
+        if (overshoot == 0) {
+            try std.testing.expectEqual(.ok, first.outcome);
+            try std.testing.expectEqual(.exhausted, runner.tokenLedger().status());
+        } else {
+            try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, first.rejected.token_budget);
+            try std.testing.expectEqual(.exceeded, runner.tokenLedger().status());
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
+        }
+        try std.testing.expectEqual(@as(u128, graph.authority.total_model_token_budget.value) + overshoot, runner.tokenLedger().committed());
+        try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected.token_budget);
+        try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
+    }
+}
+
+test "YAML invocation cancellation stays distinct without fabricated usage" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try invocationYaml(&fixture));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fake.invocation_plan = .cancelled;
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.cancelled, harness.run());
+    try std.testing.expectEqual(.cancelled, std.meta.activeTag((try invocationResult(&runner)).outcome().?.*));
+    try std.testing.expectEqual(.usage_unavailable, runner.tokenLedger().status());
+    try std.testing.expectEqual(@as(usize, 1), fixture.authorization.destroyed_count);
+    try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+}
+
+test "YAML call rejects missing dependencies controls and policy permission" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const source = try invocationYaml(&fixture);
+    for ([_][2][]const u8{
+        .{ "ok: advance-operation", "ok: call" },
+        .{ "use: build-model-request", "use: core.noop" },
+        .{ "use: invoke-model, on:", "use: invoke-model, with: {slot: selected}, on:" },
+        .{ "use: invoke-model, on:", "use: invoke-model, with: {timeout-ms: 1000}, on:" },
+        .{ "use: invoke-model, on:", "use: invoke-model, with: {retry-limit: 1}, on:" },
+        .{ "use: invoke-model, on:", "use: invoke-model, with: {input-bytes: 1000}, on:" },
+        .{ "use: invoke-model, on:", "use: invoke-model, with: {response-mode: prompt-only}, on:" },
+        .{ "policy: core.model-inference@1", "policy: core.model-authorization@1" },
+        .{ "use: invoke-model", "use: hidden-invoke-model" },
+    }) |change| {
+        const invalid = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, change[0], change[1]);
+        try std.testing.expect(!std.mem.eql(u8, source, invalid));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(invalid));
+    }
+}
+
+fn invocationYaml(fixture: *Fixture) ![]const u8 {
+    const allocator = fixture.arena.allocator();
+    const source = try operationLifecycleYaml(fixture, "inference");
+    fixture.entries[fixture.entries.len - 1].contract.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .provider_invocation_result };
+    var replaced = try std.mem.replaceOwned(u8, allocator, source, "core.model-authorization@1", "core.model-inference@1");
+    replaced = try std.mem.replaceOwned(u8, allocator, replaced, "ok: observe", "ok: call");
+    return std.fmt.allocPrint(allocator, "{s}\n  call: {{ use: invoke-model, on: {{ok: observe, failed: end.failed, cancelled: end.cancelled}} }}\n", .{replaced});
+}
+
+test "workflow result retains the exact budget rejection and does not follow a YAML failure edge" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const source = try invocationYaml(&fixture);
+    const yaml_bytes = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "ok: observe, failed: end.failed, cancelled: end.cancelled", "ok: observe, failed: observe, cancelled: end.cancelled");
+    const graph = try fixture.compile(yaml_bytes);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = graph.authority.total_model_token_budget.value, .output_tokens = 1 } };
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    var harness: Harness = .{ .runner = &runner };
+    const outcome = harness.result();
+    try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, outcome.execution_rejected.token_budget);
+    try std.testing.expectEqualStrings("WorkflowTokenBudgetExceeded", outcome.execution_rejected.diagnostic());
+    try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+    try std.testing.expectEqual(@as(u128, graph.authority.total_model_token_budget.value) + 1, runner.tokenLedger().committed());
+}
+
+test "YAML call guards cancellation expiry wrong kinds and absent adapters before effects" {
+    for (0..5) |fault| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        var source = try invocationYaml(&fixture);
+        if (fault == 3) source = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "kind: inference", "kind: input-token-count");
+        const graph = try fixture.compile(source);
+        {
+            var runner = fixture.runner(graph, std.testing.allocator);
+            defer runner.deinit();
+            try prepareInvocable(&runner);
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+            var fake = invocationProvider(&runner, std.testing.allocator);
+            fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+            switch (fault) {
+                0 => fixture.clock.now_ms = 1001,
+                1 => runner.runtime = .{ .status_fn = alwaysCancelled },
+                2 => fixture.clock.unavailable = true,
+                3 => {},
+                4 => fixture.native.invoke_model.action = null,
+                else => unreachable,
+            }
+            const outcome = runner.bindings().invokeStep(.{ .bytes = "call" });
+            switch (fault) {
+                0 => try std.testing.expectEqual(.deadline_exhausted, outcome.rejected),
+                1 => try std.testing.expectEqual(.cancelled, outcome.rejected),
+                2, 3 => try std.testing.expectEqual(.authority, outcome.rejected),
+                4 => {
+                    try std.testing.expectEqual(.failed, outcome.outcome);
+                    try std.testing.expectEqual(.authorization_denied, (try invocationResult(&runner)).outcome().?.observation.failed.cause);
+                },
+                else => unreachable,
+            }
+            try std.testing.expectEqual(@as(usize, 0), fake.invocation_call_count);
+            try std.testing.expectEqual(@as(usize, 0), fake.effect_count);
+            try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+        }
+        try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
+    }
+}
+
+test "post-call cancellation deadlines malformed associations and usage fail without replay" {
+    inline for (std.enums.values(InvocationSpy.Fault)) |fault| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try invocationYaml(&fixture));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        var spy: InvocationSpy = .{ .fake = &fake, .clock = &fixture.clock, .fault = fault };
+        runner.runtime = .{ .context = &spy, .status_fn = InvocationSpy.status };
+        fake.authorization_leases.runtime = runner.runtime;
+        fixture.native.invoke_model.action = .{ .provider = spy.port() };
+        var harness: Harness = .{ .runner = &runner };
+        const outcome = harness.result();
+        switch (fault) {
+            .cancelled => try std.testing.expectEqual(.cancelled, outcome.execution_rejected),
+            .expired => try std.testing.expectEqual(.deadline_exhausted, outcome.execution_rejected),
+            .operation, .binding, .usage => try std.testing.expectEqual(.authority, outcome.execution_rejected),
+        }
+        try std.testing.expectEqual(@as(u128, if (fault == .cancelled or fault == .expired) 7 else 0), runner.tokenLedger().committed());
+        if (fault == .operation or fault == .binding or fault == .usage) try std.testing.expectEqual(.usage_unavailable, runner.tokenLedger().status());
+        try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
+        try std.testing.expectEqual(@as(usize, 1), fixture.authorization.destroyed_count);
+        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
+    }
+}
+
+test "rejected invocation deltas retain actual usage without publishing candidate data" {
+    for ([_]bool{ true, false }) |wrong_outcome| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try invocationYaml(&fixture));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        var spy: InvocationDeltaSpy = .{ .inner = &fixture.native.invoke_model, .wrong_outcome = wrong_outcome };
+        for (&fixture.entries) |*entry| if (entry.contract.side_effect == .model_call) {
+            entry.binding = bindings.bind(InvocationDeltaSpy, &spy, InvocationDeltaSpy.invoke);
+        };
+        try prepareInvocable(&runner);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+        const outcome = runner.bindings().invokeStep(.{ .bytes = "call" });
+        if (wrong_outcome) try std.testing.expectEqual(.authority, outcome.rejected) else try std.testing.expectEqual(.invalid, outcome.outcome);
+        try std.testing.expectEqual(@as(u128, 7), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
+    }
+}
+
+test "YAML invocation owners and token usage are isolated between executions" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try invocationYaml(&fixture));
+    var first = fixture.runner(graph, std.testing.allocator);
+    var first_live = true;
+    defer if (first_live) first.deinit();
+    var fake_first = invocationProvider(&first, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake_first.interface() };
+    var one: Harness = .{ .runner = &first };
+    try std.testing.expectEqual(.ok, one.run());
+    const first_result = try invocationResult(&first);
+    const retained = first.envelope.slots[@intFromEnum(model_invocation.schema.key)].?;
+    first.envelope.slots[@intFromEnum(model_invocation.schema.key)] = null;
+    defer values.destroy(retained);
+    const first_id = first_result.operationId();
+    first.deinit();
+    first_live = false;
+    var second = fixture.runner(graph, std.testing.allocator);
+    defer second.deinit();
+    try std.testing.expectEqual(@as(u128, 0), second.tokenLedger().committed());
+    var fake_second = invocationProvider(&second, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake_second.interface() };
+    var two: Harness = .{ .runner = &second };
+    try std.testing.expectEqual(.ok, two.run());
+    const second_id = (try invocationResult(&second)).operationId();
+    try std.testing.expect(!first_id.eql(second_id));
+    try std.testing.expect(!first_id.model_request_id.stage_run_epoch_id.eql(second_id.model_request_id.stage_run_epoch_id));
+    try std.testing.expectEqualStrings("not JSON; still untrusted", first_result.outcome().?.observation.completed.raw_result.complete.content.bytes);
+    try std.testing.expectEqual(@as(u128, 7), second.tokenLedger().committed());
+}
+
+test "YAML invocation allocation failures release pending responses and consumed or unused leases" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try invocationYaml(&fixture));
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, invocationAllocationCase, .{ &fixture, graph });
+    try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
+}
+
+fn invocationAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow) !void {
+    fixture.native.init(allocator);
+    fixture.authorization.allocator = allocator;
+    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    @memcpy(fixture.entries[core.entries.len .. core.entries.len + native.count], &fixture.native.entries);
+    var runner = fixture.runner(graph, allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    var harness: Harness = .{ .runner = &runner };
+    const outcome = harness.run();
+    try std.testing.expect(fake.effect_count <= 1);
+    if (outcome == .failed) return error.OutOfMemory;
+    try std.testing.expectEqual(.ok, outcome);
+    try std.testing.expectEqual(@as(u128, 7), runner.tokenLedger().committed());
+}
+
+const InvocationSpy = struct {
+    const Fault = enum { cancelled, expired, operation, binding, usage };
+    fake: *fake_provider.FakeLLMProvider,
+    clock: *@import("provider_authorization_test_fixture.zig").TestClock,
+    fault: Fault,
+    cancelled: bool = false,
+    fn port(self: *InvocationSpy) @import("ports/llm_provider_interface.zig").LLMProviderInterface {
+        return .{ .context = @ptrCast(self), .vtable = &.{ .invoke = invoke, .count_input_tokens = count } };
+    }
+    fn invoke(context: *@import("ports/llm_provider_interface.zig").Context, selected: *const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding, request: *const provider.IdentifiedProviderNeutralModelRequest, reference: *const provider.ValidatedProviderAuthorizationLeaseRef, invoked: *const provider.InvokedProviderOperation) @import("ports/llm_provider_interface.zig").Error!provider.ProviderInvocationObservation {
+        const self: *InvocationSpy = @ptrCast(@alignCast(context));
+        var response = try self.fake.interface().invoke(selected, request, reference, invoked);
+        switch (self.fault) {
+            .cancelled => self.cancelled = true,
+            .expired => self.clock.now_ms = invoked.deadline_monotonic_ms,
+            .operation => response.completed.operation_id.kind = .input_token_count,
+            .binding => response.completed.raw_result.complete.binding_id.operation_id.workflow_version += 1,
+            .usage => response.completed.raw_result.complete.usage.total_tokens += 1,
+        }
+        return response;
+    }
+    fn count(context: *@import("ports/llm_provider_interface.zig").Context, selected: *const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding, request: *const provider.IdentifiedProviderNeutralModelRequest, reference: *const provider.ValidatedProviderAuthorizationLeaseRef, invoked: *const provider.InvokedProviderOperation) @import("ports/llm_provider_interface.zig").Error!provider.ProviderTokenCountObservation {
+        const self: *InvocationSpy = @ptrCast(@alignCast(context));
+        return self.fake.interface().countInputTokens(selected, request, reference, invoked);
+    }
+    fn status(context: ?*anyopaque) pipeline.RuntimeStatus {
+        const self: *InvocationSpy = @ptrCast(@alignCast(context.?));
+        return if (self.cancelled) .cancelled else .active;
+    }
+};
+
+const InvocationDeltaSpy = struct {
+    inner: *model_invocation.Invoke,
+    wrong_outcome: bool,
+    fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        var candidate = try model_invocation.Invoke.invoke(self.inner, input);
+        if (self.wrong_outcome) candidate.outcome = .failed else candidate.delta.data_invalidations.insert(.prepared_model_request);
+        return candidate;
+    }
+};
+
+fn invocationResult(runner: *const runner_module.Runner) !*const invocation_result.Result {
+    return values.read(&.{ .slots = runner.envelope.slots }, model_invocation.schema, invocation_result.Result);
+}
+
+fn invocationProvider(runner: *runner_module.Runner, allocator: std.mem.Allocator) fake_provider.FakeLLMProvider {
+    return .{
+        .allocator = allocator,
+        .authorization_leases = .{ .context = @ptrCast(runner), .clock = runner.provider_clock.?, .runtime = runner.runtime, .consume_fn = consumeInvocationLease },
+        .count_plan = .{ .counted = 0 },
+        .invocation_plan = .{ .complete = .{ .content = "not JSON; still untrusted", .input_tokens = 5, .output_tokens = 2 } },
+    };
+}
+
+fn consumeInvocationLease(context: *lease_port.Context, reference: *const provider.ValidatedProviderAuthorizationLeaseRef, selected: *const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding, request: *const provider.IdentifiedProviderNeutralModelRequest, invoked: *const provider.InvokedProviderOperation, now: lease_port.Error!u64) lease_port.Error!lease_port.Capability {
+    const runner: *runner_module.Runner = @ptrCast(@alignCast(context));
+    const state = if (runner.model_accounting) |*value| value else return error.AuthorizationDenied;
+    const port = state.authorization_leases.port(runner.provider_clock.?, runner.runtime);
+    return port.consume_fn(port.context, reference, selected, request, invoked, now);
+}
+
 const Observer = struct {
     calls: usize = 0,
     last_attempt: u32 = 0,
@@ -1874,7 +2275,10 @@ const Harness = struct {
     cancel_at: ?usize = null,
     cancelled: bool = false,
     fn run(self: *Harness) workflow.OutcomeTag {
-        return engine.run(.{ .context = self, .vtable = &.{ .validate_operation_registry = selected, .parse_invocation = selected, .select_workflow = selected, .prepare_workflow = ready, .selected_graph = graph, .invoke_invocation = invocation, .invoke_step = step } }).execution;
+        return self.result().executionStatus().?;
+    }
+    fn result(self: *Harness) @import("domain/run_outcome.zig").Outcome {
+        return engine.run(.{ .context = self, .vtable = &.{ .validate_operation_registry = selected, .parse_invocation = selected, .select_workflow = selected, .prepare_workflow = ready, .selected_graph = graph, .invoke_invocation = invocation, .invoke_step = step } });
     }
     fn selected(_: *anyopaque) children.SelectionStepOutcome {
         return .ok;

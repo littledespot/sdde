@@ -52,8 +52,8 @@ intersections, wire budgets and the static-capacity action/evidence are removed.
 Request construction reuses existing identity/schema/control validators, and
 observation validation retains the exact prepared request. No replacement
 capacity service or authority exists. Native YAML request preparation is now
-implemented under ADR 0012. Production YAML model-call integration
-and the real Bedrock adapter remain separate work.
+implemented under ADR 0012, including the `invoke-model` binding and unconditional
+post-call usage accounting. The real Bedrock adapter remains separate work.
 
 Fake-provider and compiler tests cover rejected retired size parameters,
 registration/preparation without capacity configuration, complete valid payloads

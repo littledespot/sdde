@@ -46,9 +46,9 @@ port, runner-private single-use lease table and fake-provider consumption are
 implemented. The action publishes only an opaque identity reference through a
 typed `NodeDelta`; shared execution-reference ownership preserves identity
 without copying capabilities. `InvokeModelAction` now makes one interface
-inference call with fake-provider acceptance evidence. Optional count-call
-actions, production provider composition/contracts and integration into the
-atomic workflow execution remain implementation work. No transaction store or
+inference call through its native YAML binding with fake-provider acceptance
+evidence. Optional count-call actions, response-validation bindings and production
+provider composition/contracts remain implementation work. No transaction store or
 provider-effect journal is a prerequisite.
 
 Provider-neutral capability and model-slot binding are implemented. ADR 0011's
@@ -73,7 +73,7 @@ complete-candidate evidence. `DecodeModelEnvelopeAction` now parses that sealed
 input into an owned, read-only JSON object retaining the same association and
 compiled schema. `ValidateModelPayloadSchemaAction` now checks that tree against
 only its retained schema and returns allocation-free candidate evidence or a
-closed rejection reason. Provider-call/response-operation YAML registration and
+closed rejection reason. Response-operation YAML registration and
 provider-native schema representability remain work.
 
 **Accepted and implemented YAML preparation:** [ADR 0012](../decisions/0012-workflow-owned-model-request.md)
@@ -156,6 +156,29 @@ allocation and before publication.
 The lease remains unconsumed for the later explicit provider call. This step
 makes no API call or delivery claim, charges no tokens, and adds no timeout,
 retry, persistence or recovery mechanism. Terminalization remains separate work.
+
+**Implemented YAML inference:** `invoke-model` has no parameters. It consumes
+the retained prepared request, applied attempt, invoked operation and prepared
+authorization; its narrow provider port requires policy permission. The native
+`core.model-inference@1` profile permits inference and separate authorization
+preparation. One call consumes the lease once and publishes an owned, read-only
+`provider_invocation_result`. Complete content maps to `ok`; stopped output and
+provider failures map to `failed` while remaining distinct typed payloads;
+provider cancellation maps to `cancelled`. No content is decoded or accepted as
+validated model output by this operation.
+
+The runner checks the existing token ledger before a call, validates the
+returned association/usage through the shared observation boundary, and records
+actual usage before cancellation, deadline or delta-publication rejection can
+discard the response. Bookkeeping allocation occurs before the call; it reserves
+no tokens and imposes no response-size limit. Overshoot retains the full charge
+and returns the exact budget diagnostic without following a YAML failure edge.
+Unknown usage blocks future calls without replacing the original provider failure
+or cancellation. Workflow results retain typed runner rejections; the CLI prints
+`WorkflowTokenBudgetExceeded` or `ProviderTokenUsageUnavailable` when applicable.
+All owners are execution-local. There is no hidden count, retry, decoding,
+terminalization or recovery. An unbound adapter returns `authorization_denied`
+with `not_sent`; native composition never substitutes the test fake.
 
 A consumer declares the prepared-request and request-ledger data dependencies;
 the runner supplies the retained binding, not a new selection for the consumer
@@ -725,8 +748,8 @@ checks the proposal against the retained request, and publishes the successor
 and evidence together only after envelope validation. Removing evidence cannot
 erase an open operation or reset an attempt. Assignment is not invocation or a
 lease: authorization preparation is a separate implemented YAML operation;
-Logical-request and provider-operation invocation state are also YAML-integrated;
-terminalization and actual provider calls remain separate integration work.
+Logical-request and provider-operation invocation state and the explicit
+`invoke-model` call are YAML-integrated; terminalization remains separate work.
 Execution cleanup discards its in-memory records, never resumes
 or persists them.
 
@@ -744,7 +767,8 @@ through unchanged, as do cancellation and allocation errors. The caller owns
 the returned observation. Its `model_call` side-effect classification grants
 no capability or send authority; capability derivation still uses the injected
 port. Fake-provider tests exercise the action through observation validation,
-decoding and payload schema validation; production registration stays disabled.
+decoding and payload schema validation. Native YAML registration now invokes this
+same action; provider implementation binding remains explicitly required.
 
 Authorization failure before the first provider call leaves the logical request
 `assigned`; a typed terminal outcome uses an amended
@@ -879,7 +903,7 @@ Prepared-request checks reuse the shared identity, binding, control and schema
 validators. They grant no send authority or token allowance and enforce no
 request/response size ceiling. These pure checks do not reserve attempts,
 prepare leases or call a provider. Native YAML preparation bindings implement
-this handoff under ADR 0012; provider invocation/response bindings remain a
+this handoff and inference under ADR 0012; response-validation bindings remain a
 separate increment. The fixed internal content contract is `model-request/v1`:
 the selected prompt is guidance and an optional declared data resource is user
 content. The builder adds no instruction text or metadata echoes.
@@ -1220,6 +1244,12 @@ F0006 does not:
     invocation, rejected deltas and cancellation cannot publish a successor.
     Both operation kinds retain the unconsumed lease and zero token usage;
     allocation failures and retained-evidence destruction release owners once.
+    Native YAML inference proves one provider call, no count/fallback/retry,
+    exact retained association and lease consumption, preserved complete/stopped/
+    failed/cancelled outcomes, token equality/overshoot/unavailable handling,
+    post-call cancellation/deadline/delta rejection without lost usage, allocation
+    cleanup and fresh execution identity/usage. Budget rejections reach the
+    top-level result without selecting a declared failure edge.
 13. Each call performs zero or one provider request with no hidden retry,
     fallback, backoff, credential acquisition/refresh, or second operation;
     any permitted credential I/O has separate accepted accounting.

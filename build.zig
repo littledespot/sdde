@@ -135,7 +135,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{.{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module }},
     }) });
-    b.step("test-model-request-workflow", "Test native YAML request preparation, accounting and immutable handoff").dependOn(&b.addRunArtifact(request_workflow_tests).step);
+    b.step("test-model-request-workflow", "Test native YAML request preparation, inference, accounting and immutable handoff").dependOn(&b.addRunArtifact(request_workflow_tests).step);
 
     const attempt_accounting_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/model_attempt_accounting_test.zig"),

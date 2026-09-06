@@ -9,6 +9,23 @@ const accounting = @import("domain/workflow_token_accounting.zig");
 const pipeline = @import("domain/pipeline.zig");
 const workflow = @import("domain/workflow.zig");
 
+test "pre-call bookkeeping changes no usage and reconciliation needs no post-call allocation" {
+    var fixture = try Fixture.init();
+    defer fixture.deinit();
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var runner = token_runner.Runner.init(failing.allocator(), .{ .value = 100 });
+    defer runner.deinit();
+    const id = fixture.inferenceId(1);
+    try runner.prepare(id);
+    try std.testing.expectEqual(@as(u128, 0), runner.current().committed());
+    try std.testing.expectEqual(@as(u64, 0), runner.current().revision().value);
+    try std.testing.expectEqual(@as(usize, 0), runner.ledger.accounted_operations.items.len);
+    failing.fail_index = failing.alloc_index;
+    try runner.reconcile(.initial, id, usage(20, 10));
+    try std.testing.expectEqual(@as(u128, 30), runner.current().committed());
+    try std.testing.expectError(error.TokenUsageAlreadyAccounted, runner.prepare(id));
+}
+
 test "actual usage accumulates across retries and executions remain isolated" {
     var fixture = try Fixture.init();
     defer fixture.deinit();

@@ -214,6 +214,30 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_operation_lifecycle.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
     denied_request_lifecycle.step.dependOn(&denied_operation_lifecycle.step);
 
+    const missing_call_inputs = b.addTempFiles();
+    const call_executable = missing_call_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_call_inputs.add(".sddtoolkit.json", configuration);
+    _ = missing_call_inputs.add(".sddtoolkit/workflows/call.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: call
+        \\version: 1
+        \\shortcode: CALL
+        \\invoke: core.empty-invocation
+        \\policy: core.model-inference@1
+        \\start: call
+        \\steps:
+        \\  call: { use: invoke-model, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
+    );
+    const denied_call = std.Build.Step.Run.create(b, "reject packaged model call without retained request invocation and authorization");
+    denied_call.addFileArg(call_executable);
+    denied_call.addArg("call");
+    denied_call.setCwd(missing_call_inputs.getDirectory());
+    denied_call.clearEnvironment();
+    denied_call.expectExitCode(1);
+    denied_call.expectStdOutEqual("");
+    denied_call.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_operation_lifecycle.step.dependOn(&denied_call.step);
+
     const denied_toolchain = std.Build.Step.Run.create(b, "reject invalid toolchain only when selected");
     denied_toolchain.addFileArg(packaged_executable);
     denied_toolchain.addArg("toolchain-check");

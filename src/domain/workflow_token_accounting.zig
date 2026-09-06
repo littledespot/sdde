@@ -83,6 +83,14 @@ pub const Ledger = struct {
         return self.status();
     }
 
+    /// Allocate bookkeeping before an external call. This reserves no tokens,
+    /// publishes no operation record and does not change budget or revision.
+    pub fn prepareReconciliation(self: *Ledger, operation_id: provider.ProviderOperationId) Error!void {
+        try validateReconciliation(self, .{ .expected_revision = self.revision_value, .operation_id = operation_id, .reconciliation = .unavailable });
+        _ = std.math.add(u64, self.revision_value.value, 1) catch return error.TokenAccountingRevisionExhausted;
+        try self.accounted_operations.ensureUnusedCapacity(self.allocator, 1);
+    }
+
     fn contains(self: *const Ledger, id: provider.ProviderOperationId) bool {
         for (self.accounted_operations.items) |prior| if (prior.eql(id)) return true;
         return false;

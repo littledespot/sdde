@@ -23,6 +23,10 @@ pub const Runner = struct {
         try self.check_action.execute(&self.ledger);
     }
 
+    pub fn prepare(self: *Runner, operation_id: operation.ProviderOperationId) accounting.Error!void {
+        try self.ledger.prepareReconciliation(operation_id);
+    }
+
     // Usage survives the error from an over-budget response. The response
     // must not become candidate success, and later calls fail check().
     pub fn reconcile(

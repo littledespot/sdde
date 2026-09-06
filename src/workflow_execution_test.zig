@@ -27,7 +27,7 @@ test "generic engine preserves every YAML-compiled terminal outcome" {
         );
         defer runner.deinit();
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
-        try std.testing.expectEqual(expected, engine.run(children.bindings()).execution);
+        try std.testing.expectEqual(expected, engine.run(children.bindings()).executionStatus().?);
         try std.testing.expectEqual(@as(usize, 1), barrier.calls);
     }
 }
@@ -58,7 +58,7 @@ test "rerunning an abandoned workflow executes every step again from compiled st
             var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
             defer runner.deinit();
             var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
-            try std.testing.expectEqual(@as(workflow.OutcomeTag, terminal), engine.run(children.bindings()).execution);
+            try std.testing.expectEqual(@as(workflow.OutcomeTag, terminal), engine.run(children.bindings()).executionStatus().?);
             try std.testing.expectEqual(@as(usize, 2), control.state.calls);
         }
         var control: OperationControl = .{ .state = .{ .outcome = .ok, .expected_steps = &.{ "first", "second", "last" } } };
@@ -67,7 +67,7 @@ test "rerunning an abandoned workflow executes every step again from compiled st
         var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
         defer runner.deinit();
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
-        try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).executionStatus().?);
         try std.testing.expectEqual(@as(usize, 3), control.state.calls);
     }
 }
@@ -80,7 +80,7 @@ test "runner applies an operation delta before the telemetry barrier" {
     var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
-    try std.testing.expectEqual(workflow.OutcomeTag.blocked, engine.run(children.bindings()).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.blocked, engine.run(children.bindings()).executionStatus().?);
     try std.testing.expectEqual(@as(usize, 1), barrier.calls);
 }
 
@@ -122,7 +122,7 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     var complete_runner = runner_module.Runner.init(std.testing.allocator, selected(&complete_graph), &complete_registry, complete_barrier.port(), .{}, null);
     defer complete_runner.deinit();
     var complete_children: TestEngineBindings = .{ .graph = &complete_graph, .runner = &complete_runner };
-    try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(complete_children.bindings()).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(complete_children.bindings()).executionStatus().?);
     try std.testing.expectEqual(@as(usize, 2), completes.state.calls);
     try std.testing.expectEqual(@as(usize, 2), complete_barrier.calls);
 
@@ -136,7 +136,7 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     var exhausted_runner = runner_module.Runner.init(std.testing.allocator, selected(&exhausted_graph), &exhausted_registry, exhausted_barrier.port(), .{}, null);
     defer exhausted_runner.deinit();
     var exhausted_children: TestEngineBindings = .{ .graph = &exhausted_graph, .runner = &exhausted_runner };
-    try std.testing.expectEqual(workflow.OutcomeTag.failed, engine.run(exhausted_children.bindings()).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.failed, engine.run(exhausted_children.bindings()).executionStatus().?);
     try std.testing.expectEqual(@as(usize, 3), exhausts.state.calls);
     try std.testing.expectEqual(@as(usize, 3), exhausted_barrier.calls);
 
@@ -155,7 +155,7 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     var zero_runner = runner_module.Runner.init(std.testing.allocator, selected(&zero_graph), &zero_registry, zero_barrier.port(), .{}, null);
     defer zero_runner.deinit();
     var zero_children: TestEngineBindings = .{ .graph = &zero_graph, .runner = &zero_runner };
-    try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(zero_children.bindings()).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(zero_children.bindings()).executionStatus().?);
     try std.testing.expectEqual(@as(usize, 1), zero_control.state.calls);
 }
 
@@ -195,7 +195,7 @@ test "runner exposes only resources referenced by the active compiled step" {
     var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
-    try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).executionStatus().?);
     try std.testing.expectEqual(@as(usize, 1), control.state.calls);
 }
 
@@ -208,7 +208,7 @@ test "runner rejects an operation binding that differs from compiled authority" 
     var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
-    try std.testing.expectEqual(workflow.OutcomeTag.failed, engine.run(children.bindings()).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.failed, engine.run(children.bindings()).executionStatus().?);
     try std.testing.expectEqual(@as(usize, 0), control.state.calls);
     try std.testing.expectEqual(@as(usize, 0), barrier.calls);
 }
@@ -232,7 +232,7 @@ test "unexpected binding failure never follows a declared failed transition" {
     var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
-    try std.testing.expectEqual(.failed, engine.run(children.bindings()).execution);
+    try std.testing.expectEqual(.failed, engine.run(children.bindings()).executionStatus().?);
     try std.testing.expectEqual(@as(usize, 1), control.state.calls);
     try std.testing.expectEqual(@as(usize, 0), barrier.calls);
 }
@@ -240,6 +240,8 @@ test "unexpected binding failure never follows a declared failed transition" {
 const TestEngineBindings = struct {
     graph: *const compilation.CompiledWorkflow,
     runner: *runner_module.Runner,
+    rejection: ?execution.Rejection = null,
+    reject_invocation: bool = false,
 
     fn bindings(self: *TestEngineBindings) engine_bindings.ChildBindings {
         return .{ .context = self, .vtable = &test_engine_vtable };
@@ -256,13 +258,33 @@ const TestEngineBindings = struct {
     }
     fn invokeInvocation(context: *anyopaque) execution.Applied {
         const self: *TestEngineBindings = @ptrCast(@alignCast(context));
+        if (self.reject_invocation) if (self.rejection) |reason| return .{ .rejected = reason };
         return self.runner.bindings().invokeInvocation();
     }
     fn invokeStep(context: *anyopaque, id: workflow.WorkflowStepId) execution.Applied {
         const self: *TestEngineBindings = @ptrCast(@alignCast(context));
+        if (!self.reject_invocation) if (self.rejection) |reason| return .{ .rejected = reason };
         return self.runner.bindings().invokeStep(id);
     }
 };
+
+test "workflow outcomes preserve exact runner rejections at invocation and step boundaries" {
+    for ([_]execution.Rejection{ .authority, .operation_failed, .cancelled, .deadline_exhausted, .{ .gate = .missing_evidence }, .{ .logging = .LOG_SINK_FAILURE }, .{ .token_budget = error.WorkflowTokenBudgetExceeded }, .{ .token_budget = error.ProviderTokenUsageUnavailable } }) |reason| {
+        for ([_]bool{ false, true }) |invocation| {
+            var graph = try testGraph();
+            var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+            var barrier: FakeBarrier = .{};
+            var registry = testRegistry(&control);
+            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+            defer runner.deinit();
+            var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner, .rejection = reason, .reject_invocation = invocation };
+            const outcome = engine.run(children.bindings());
+            try std.testing.expectEqualDeep(reason, outcome.execution_rejected);
+            try std.testing.expectEqual(reason.status(), outcome.executionStatus().?);
+            try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+        }
+    }
+}
 
 fn selected(graph: *const compilation.CompiledWorkflow) execution.SelectedWorkflow {
     return .{

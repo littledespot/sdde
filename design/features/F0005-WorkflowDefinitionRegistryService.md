@@ -26,6 +26,11 @@ and cancelled candidates are released. This adds no YAML fields or executable
 project-supplied schemas. Fixed kernel bindings retain their concrete typed
 owners; `DataShape` is dependency/effect metadata, not a workflow value store.
 
+Runner rejections retain their closed diagnostic in the workflow result and do
+not follow YAML outcome edges. Inference charges actual usage before any result
+publication rejection; an exceeded or unavailable token budget blocks later
+model calls and its exact diagnostic reaches the CLI.
+
 **Compatibility:** None. This pre-release increment accepts only the exact
 concise v1 YAML contract. It has no verbose tagged-parameter form, JSON or
 `.yml` reader, migration, YAML alias, legacy filename, dual reader, implicit

@@ -40,6 +40,13 @@ pub const Rejection = union(enum) {
     deadline_exhausted,
     token_budget: @import("workflow_token_accounting.zig").BudgetError,
 
+    pub fn diagnostic(self: Rejection) []const u8 {
+        return switch (self) {
+            .token_budget => |failure| @errorName(failure),
+            .gate, .authority, .operation_failed, .logging, .cancelled, .deadline_exhausted => @tagName(self.status()),
+        };
+    }
+
     pub fn status(self: Rejection) workflow.OutcomeTag {
         return switch (self) {
             .gate, .logging => .blocked,

@@ -41,7 +41,7 @@ test "unrelated YAML workflows carry typed invocation values through replacement
             var runner = fixture.runner(&control);
             defer runner.deinit();
             var children: EngineBindings = .{ .runner = &runner, .graph = fixture.graph };
-            try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bind()).execution);
+            try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bind()).executionStatus().?);
             try std.testing.expectEqual(@as(usize, 1), control.observations);
             try std.testing.expect(control.inputs_hidden);
             try std.testing.expectEqual(telemetry.CanonicalLogLevel.warning, control.observed.?);
@@ -65,7 +65,7 @@ test "runtime rejects schema drift and releases candidates on cancellation inval
             .throw_after_allocation, .deadline_after_allocation, .undeclared_outcome => .failed,
             .none => unreachable,
         };
-        try std.testing.expectEqual(expected, engine.run(children.bind()).execution);
+        try std.testing.expectEqual(expected, engine.run(children.bind()).executionStatus().?);
         try std.testing.expectEqual(@as(usize, 0), control.observations);
         const missing: pipeline.NodeContract = .{ .id = "test.missing", .kind = .action, .requires = &.{.canonical_log_level}, .produces = &.{}, .side_effect = .none };
         try std.testing.expectError(error.MissingRequiredData, runner.envelope.view(missing));
@@ -130,7 +130,7 @@ test "unrelated YAML workflows enforce current evidence and cannot route around 
             defer runner.deinit();
             var children: EngineBindings = .{ .runner = &runner, .graph = fixture.graph };
             const expected: workflow.OutcomeTag = if (decision == .accepted) .ok else .blocked;
-            try std.testing.expectEqual(expected, engine.run(children.bind()).execution);
+            try std.testing.expectEqual(expected, engine.run(children.bind()).executionStatus().?);
             try std.testing.expectEqual(@as(usize, if (decision == .accepted) 1 else 0), control.observations);
         }
     }
@@ -169,7 +169,7 @@ test "a logging barrier rejection cannot continue from the evidence issuer throu
     var runner = fixture.runner(&control);
     defer runner.deinit();
     var children: EngineBindings = .{ .runner = &runner, .graph = fixture.graph };
-    try std.testing.expectEqual(workflow.OutcomeTag.blocked, engine.run(children.bind()).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.blocked, engine.run(children.bind()).executionStatus().?);
     try std.testing.expectEqual(@as(usize, 0), control.observations);
 }
 

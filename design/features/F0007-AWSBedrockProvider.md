@@ -12,7 +12,8 @@ Bedrock reports its API limits; SDDE preserves those failures/stops and accounts
 actual usage. F0006's capacity-free boundary and native YAML request preparation,
 attempt accounting, operation-assignment handoff and preloaded authorization
 preparation and logical-request/provider-operation invocation-state advancement
-(ADR 0012) are YAML-integrated. Actual provider calls remain separate work. No size-ceiling
+(ADR 0012) are YAML-integrated. The native `invoke-model` binding is fake-provider
+tested with actual-usage accounting; the real Bedrock adapter remains work. No size-ceiling
 decision is a prerequisite for this feature. The Bedrock adapter remains proposed.
 
 **Implementation readiness:** Blocked. F0006 and its governing amendments are

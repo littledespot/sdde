@@ -29,8 +29,8 @@ immutable binding data; provider calls require a separate policy-permitted port.
 [Workflow-owned requests](design/decisions/0012-workflow-owned-model-request.md)
 now have native YAML initialization, assignment, binding-validation and building
 operations. One request retains its originating slot/resources across steps;
-generic preparation needs no SDD feature or task. Inference integration and
-Bedrock remain separate work.
+generic preparation needs no SDD feature or task. Native inference is now
+YAML-callable; response-validation bindings and Bedrock remain separate work.
 
 YAML, the registry and runner use [unversioned operation IDs](design/decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06).
 Each ID selects one current contract; version suffixes are rejected without aliases.
@@ -55,6 +55,14 @@ or provider-operation state. No API call occurs in this step.
 assigned operation next. It retains the prepared lease's original deadline;
 only the runner publishes sealed invoked-operation evidence and removes the
 assignment evidence. It does not consume the lease, call an API or charge tokens.
+
+`invoke-model` makes one provider call using that retained request and lease,
+with no repeated parameters. The runner accounts actual input/output usage
+before publishing the untrusted result, including stopped output. Budget
+overshoots retain the full usage, return `WorkflowTokenBudgetExceeded` and block
+later calls. Failures and cancellation remain distinct; no counting, retry,
+response decoding or lifecycle terminalization is implicit. The native binding
+is fake-provider tested and fails closed until a real adapter is bound.
 
 ## Requirements
 

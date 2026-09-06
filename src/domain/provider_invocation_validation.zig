@@ -100,30 +100,43 @@ fn storage(evidence: *const Evidence) *const Storage {
     return @ptrCast(@alignCast(evidence));
 }
 
-pub fn validate(allocator: std.mem.Allocator, call: Call, observation: *const provider.ProviderInvocationObservation) Error!Owned {
+/// Shared association/usage boundary. Does not decode or validate response text.
+pub fn validateUsage(call: Call, observation: *const provider.ProviderInvocationObservation) ValidationError!?provider.ProviderUsage {
     const request = call.request;
     const invoked = call.operations.requireInvoked(call.operation_id) catch return error.InvalidProviderInvocationContext;
     const record = call.operations.record(call.operation_id) orelse return error.InvalidProviderInvocationContext;
     if (!provider.validateInferenceInvocation(call.provider_binding, request, invoked) or
         !record.binding_id.eql(request.binding_id) or
         !record.model_visible_input_id.eql(request.model_visible_input_id)) return error.InvalidProviderInvocationContext;
-    var validated: Storage = .{
-        .request = request,
-        .operation_id = invoked.id,
-        .result = undefined,
-    };
-    switch (observation.*) {
-        .failed => |failure| {
-            if (!failure.operation_id.eql(invoked.id)) return error.ProviderInvocationAssociationInvalid;
-            validated.result = .{ .failed = failure };
-        },
-        .completed => |completed| {
+    return switch (observation.*) {
+        .failed => |failure| if (failure.operation_id.eql(invoked.id)) null else error.ProviderInvocationAssociationInvalid,
+        .completed => |completed| usage: {
             if (!completed.operation_id.eql(invoked.id)) return error.ProviderInvocationAssociationInvalid;
             switch (completed.raw_result) {
                 inline .complete, .stopped => |result| {
                     if (result.request_id != request.model_request_id or
                         !result.binding_id.eql(request.binding_id)) return error.ProviderInvocationAssociationInvalid;
-                    validated.usage = provider.ProviderUsage.init(result.usage.input_tokens, result.usage.output_tokens, result.usage.total_tokens) orelse return error.InvalidProviderTokenUsage;
+                    break :usage provider.ProviderUsage.init(result.usage.input_tokens, result.usage.output_tokens, result.usage.total_tokens) orelse return error.InvalidProviderTokenUsage;
+                },
+            }
+        },
+    };
+}
+
+pub fn validate(allocator: std.mem.Allocator, call: Call, observation: *const provider.ProviderInvocationObservation) Error!Owned {
+    var validated: Storage = .{
+        .request = call.request,
+        .operation_id = call.operation_id,
+        .usage = try validateUsage(call, observation),
+        .result = undefined,
+    };
+    switch (observation.*) {
+        .failed => |failure| {
+            validated.result = .{ .failed = failure };
+        },
+        .completed => |completed| {
+            switch (completed.raw_result) {
+                inline .complete, .stopped => |result| {
                     validated.provider_latency_ms = result.provider_latency_ms;
                 },
             }
@@ -134,7 +147,7 @@ pub fn validate(allocator: std.mem.Allocator, call: Call, observation: *const pr
                         // Keep valid reported usage even when content is unsafe.
                         // This is a provider-boundary failure, never JSON repair.
                         break :complete .{ .failed = .{
-                            .operation_id = invoked.id,
+                            .operation_id = call.operation_id,
                             .cause = .response_invalid,
                             .retry_class = .never,
                             .delivery = .response_received,

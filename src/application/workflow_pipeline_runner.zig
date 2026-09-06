@@ -29,6 +29,8 @@ const lease = @import("../ports/provider_authorization_lease.zig");
 const request_lifecycle_selection = @import("../domain/workflow_model_request_lifecycle.zig");
 const request_lifecycle_binding = @import("workflow_model_request_lifecycle.zig");
 const provider = @import("../domain/llm_provider_operation.zig");
+const model_invocation = @import("workflow_model_invocation.zig");
+const invocation_validation = @import("../domain/provider_invocation_validation.zig");
 
 const ExpectedAccounting = union(enum) {
     none,
@@ -119,6 +121,7 @@ pub const Runner = struct {
         const index = findStepIndex(self.selected.graph.authority.steps, id) orelse return .{ .rejected = .authority };
         if (index >= self.retry_execution_counts.len) return .{ .rejected = .authority };
         const step = &self.selected.graph.authority.steps[index];
+        if (!@import("../domain/workflow_model_invocation.zig").validProjection(step.*)) return .{ .rejected = .authority };
         const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .rejected = .authority };
         if (!contractMatchesStep(entry.contract, step.*) or
             !equalStrings(entry.binding.capabilities(), step.capabilities) or
@@ -136,9 +139,15 @@ pub const Runner = struct {
             ) orelse return .{ .outcome = .failed };
             if (!std.meta.eql(expected, step.model orelse return .{ .outcome = .failed })) return .{ .outcome = .failed };
         } else if (step.model != null) return .{ .outcome = .failed };
+        for (step.capabilities) |capability| {
+            if (std.mem.eql(u8, capability, @import("../domain/workflow_capability.zig").model_provider)) {
+                self.token_accounting.check() catch |err| return .{ .rejected = .{ .token_budget = err } };
+            }
+        }
         const input_data = self.envelope.view(stepPipelineContract(step.*)) catch return .{ .outcome = .invalid };
         const advances_request = request_lifecycle_selection.advances(step.replaces, step.produces);
         const invokes_operation = operation_selection.invokes(step.produces);
+        const calls_model = step.side_effect == .model_call;
         if (self.model_accounting) |state| {
             if (input_data.contains(.model_request_identity_ledger)) {
                 const current = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
@@ -186,17 +195,22 @@ pub const Runner = struct {
             const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
             const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
             authorization_deadline = authorization_binding.validateConsumer(&state.authorization_leases, result, retained_request orelse return .{ .rejected = .authority }, operation_id orelse return .{ .rejected = .authority }, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return authorizationRejected(err);
-            if (advances_request or invokes_operation) authorization_binding.requirePrepared(result) catch |err| return authorizationRejected(err);
+            if (advances_request or invokes_operation or calls_model) authorization_binding.requirePrepared(result) catch |err| return authorizationRejected(err);
         }
         var resolved_binding = self.resolveModelBinding(step.*) catch {
             return .{ .outcome = .failed };
         };
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
-        for (step.capabilities) |capability| {
-            if (std.mem.eql(u8, capability, @import("../domain/workflow_capability.zig").model_provider)) {
-                self.token_accounting.check() catch |err| return .{ .rejected = .{ .token_budget = err } };
-            }
-        }
+        const call: ?invocation_validation.Call = if (calls_model) call: {
+            const request = retained_request orelse return .{ .rejected = .authority };
+            const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
+            const id_value = operation_id orelse return .{ .rejected = .authority };
+            const invoked = state.current_operations.requireInvoked(id_value) catch return .{ .rejected = .authority };
+            if (!provider.validateInferenceInvocation(request.binding(), request.prepared().?, invoked)) return .{ .rejected = .authority };
+            self.token_accounting.prepare(id_value) catch return .{ .rejected = .operation_failed };
+            break :call .{ .request = request.prepared().?, .provider_binding = request.binding(), .operations = state.current_operations, .operation_id = id_value };
+        } else null;
+        const token_revision = self.token_accounting.current().revision();
         var attempt_input: @FieldType(operations.StepInput, "model_attempt") = null;
         var provider_input: @FieldType(operations.StepInput, "provider_operation") = null;
         var expected: ExpectedAccounting = .none;
@@ -257,8 +271,17 @@ pub const Runner = struct {
             .model_request_lifecycle = if (advances_request) self.model_accounting.?.current_operations else null,
             .provider_operation = provider_input,
             .provider_authorization = if (authorization) |bound| .{ .facts = bound.facts, .slot = bound.slot, .runtime = bound.runtime } else null,
-        } }) catch return .{ .rejected = .operation_failed };
+        } }) catch {
+            if (call) |invoked| {
+                if (model_invocation.reconcile(&self.token_accounting, token_revision, invoked, null)) |reason| return .{ .rejected = reason };
+            }
+            return .{ .rejected = .operation_failed };
+        };
         defer self.envelope.discard(&candidate.delta);
+        if (call) |invoked| {
+            if (model_invocation.reconcile(&self.token_accounting, token_revision, invoked, &candidate)) |reason| return .{ .rejected = reason };
+            if (candidate.outcome != .cancelled) authorization_binding.checkDeadline(self.provider_clock.?, self.runtime, authorization_deadline.?) catch |err| return authorizationRejected(err);
+        }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!containsOutcome(step.outcomes, candidate.outcome)) return .{ .outcome = .failed };
         if (advances_request) {

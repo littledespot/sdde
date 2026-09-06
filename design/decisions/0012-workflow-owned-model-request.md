@@ -96,7 +96,7 @@ all request/binding/resource/attempt/lease references stay unchanged. Prepared
 authorization is required and rechecked; cancellation or rejected publication
 leaves the prior ledger current. The provider operation stays assigned and no
 API call, token charge, new limit or persistence occurs. Request terminalization
-and actual provider calls remain separate work.
+remains separate work; the provider call is an explicit later operation.
 
 ## Provider-operation invocation-state integration (implemented 2026-09-06)
 
@@ -107,9 +107,22 @@ the exact transition and authorization before publication, then publishes
 sealed invoked-operation evidence and invalidates assignment evidence together.
 The evidence references the canonical invocation and retains its owners.
 Failed, expired, cancelled, foreign, stale, duplicate or deadline-altered inputs
-reject without publication. The lease is not consumed; API calls, terminalization
-and response integration remain separate work. No additional capability,
+reject without publication. The lease is not consumed here; `invoke-model`
+performs the separate call. Terminalization and response validation remain work. No additional capability,
 timeout, retry, token charge, persistence or recovery mechanism is introduced.
+
+## Inference integration (implemented 2026-09-06)
+
+`invoke-model` consumes the same request, applied attempt, invoked operation and
+single-use lease without selection parameters. It performs one interface call
+and retains its untrusted observation or cancellation. The runner uses the shared
+association/usage validator and existing token ledger, accounting before result
+publication, cancellation or deadline rejection. Allocation for bookkeeping is
+done before the call, without token reservation or a size limit. Typed budget
+rejections reach the workflow caller and CLI; no YAML edge can bypass them.
+Complete, stopped, failed and cancelled results stay distinct. Decoding,
+terminalization and retries are not hidden inside invocation. Native composition
+requires an explicitly bound provider; fake implementations remain test-only.
 
 ## Acceptance
 
@@ -125,5 +138,7 @@ expiration, cancellation and allocation-failure cleanup. Test-only
 provider contracts do not enter production composition. Invocation-state cases
 also prove exact canonical evidence, the unchanged lease deadline, one-use
 consumption through the existing adapter port, rejected-delta atomicity and
-execution isolation. Actual API-call integration and Bedrock remain separate
-increments.
+execution isolation. Fake-provider YAML tests also cover one inference call,
+lease reuse, missing dependencies/capabilities, original deadlines, actual-token
+accounting, failed publication, allocation cleanup and execution isolation.
+Response-validation bindings and Bedrock remain separate increments.

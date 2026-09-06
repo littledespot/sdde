@@ -380,7 +380,7 @@ test "capability-free invocation does not probe a missing provider document" {
         project_root.dir,
         &.{"hello"},
     );
-    try std.testing.expectEqual(workflow_execution.Outcome.ok, outcome.execution);
+    try std.testing.expectEqual(workflow_execution.Outcome.ok, outcome.executionStatus().?);
 }
 
 test "invocation runner handles every provider preparation outcome before workflow execution" {
@@ -422,7 +422,7 @@ test "invocation runner handles every provider preparation outcome before workfl
         try std.testing.expectEqualStrings("hello", probe.selected_workflow_id.?);
         switch (mode) {
             .not_required, .ready => {
-                try std.testing.expectEqual(workflow_execution.Outcome.ok, outcome.execution);
+                try std.testing.expectEqual(workflow_execution.Outcome.ok, outcome.executionStatus().?);
                 try std.testing.expectEqual(@as(usize, 1), probe.observation.invocation_calls);
                 try std.testing.expectEqual(@as(usize, 1), probe.observation.step_calls);
             },
@@ -435,7 +435,7 @@ test "invocation runner handles every provider preparation outcome before workfl
                 try std.testing.expectEqual(@as(usize, 0), probe.observation.step_calls);
             },
             .cancelled => {
-                try std.testing.expectEqual(workflow_execution.Outcome.cancelled, outcome.execution);
+                try std.testing.expectEqual(workflow_execution.Outcome.cancelled, outcome.executionStatus().?);
                 try std.testing.expectEqual(@as(usize, 0), probe.observation.invocation_calls);
                 try std.testing.expectEqual(@as(usize, 0), probe.observation.step_calls);
             },
@@ -491,9 +491,9 @@ test "unrelated workflows do not load toolchain documents even with a toolchain 
             try project.dir.writeFile(io, .{ .sub_path = ".sdd/presets/invalid.toolchain-preset.yaml", .data = "not a preset" });
         }
         inline for (.{ "hello", "independent-audit" }) |id| {
-            try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{id}).execution);
+            try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{id}).executionStatus().?);
         }
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"toolchain-check"}).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"toolchain-check"}).executionStatus().?);
     }
 }
 
@@ -637,7 +637,7 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     var provider = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project_root, .{}, &llm_provider_contracts.Registry.empty);
     var invocation = engine_invocation.Assembly.init(std.testing.allocator, &boot.ready, &.{"toolchain-check"}, &operations.registry, provider.bind(), runtime);
     defer invocation.deinit();
-    const result = workflow_engine.run(invocation.bindings()).execution;
+    const result = workflow_engine.run(invocation.bindings()).executionStatus().?;
     const read_contract: pipeline.NodeContract = .{ .id = "test-toolchain-consumer", .kind = .action, .requires = &.{.valid_toolchain}, .produces = &.{}, .side_effect = .none };
     if (result != .ok) {
         if (invocation.pipeline_runner) |*runner| try std.testing.expectError(error.MissingRequiredData, runner.envelope.view(read_contract));
@@ -688,7 +688,7 @@ test "reference preflight uses ordinary YAML and leaves reference and artifact t
     try project.dir.writeFile(io, .{ .sub_path = "references/Café/日本語/stories.md", .data = "Hello, World!\n" });
     for ([_][]const u8{ "Café/日本語", "./Cafe\u{301}\\日本語" }) |selector| {
         const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", selector });
-        try std.testing.expectEqual(workflow.OutcomeTag.ok, result.execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, result.executionStatus().?);
     }
     const bytes = try project.dir.readFileAlloc(io, "references/Café/日本語/stories.md", std.testing.allocator, .limited(64));
     defer std.testing.allocator.free(bytes);
@@ -703,14 +703,14 @@ test "unrelated workflows never require the installed reference operations to ru
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
     try writeReferencePreflightFixture(io, project.dir);
-    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).execution);
-    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "missing" }).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).executionStatus().?);
+    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "missing" }).executionStatus().?);
     // The same contracts work under a different workflow ID; no name dispatch.
     const changed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/reference-preflight.workflow.yaml"), "id: reference-preflight", "id: documentation-check");
     defer std.testing.allocator.free(changed);
     try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/preflight.workflow.yaml", .data = changed });
     try project.dir.createDirPath(io, "references/manual");
-    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "documentation-check", "--feature", "Hello/日本語", "--reference", "manual" }).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "documentation-check", "--feature", "Hello/日本語", "--reference", "manual" }).executionStatus().?);
 }
 
 test "reference preflight rejects missing arguments files unreadable directories and symlink ancestors" {
@@ -731,12 +731,12 @@ test "reference preflight rejects missing arguments files unreadable directories
         &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "alias/child" },
         &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "escape/child" },
     };
-    for (arguments) |args| try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, args).execution);
+    for (arguments) |args| try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, args).executionStatus().?);
     var unreadable = try project.dir.openDir(io, "references/real", .{ .iterate = true });
     defer unreadable.close(io);
     try unreadable.setPermissions(io, .fromMode(0o000));
     defer unreadable.setPermissions(io, .fromMode(0o700)) catch @panic("restore test directory permissions");
-    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "real" }).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "real" }).executionStatus().?);
 }
 
 test "reference inspection rejects wrong root capabilities and stale physical roots" {
@@ -791,12 +791,12 @@ test "reference preflight cancellation stops safely at each runtime checkpoint" 
     for (0..256) |checks| {
         var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
         const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "hello" }, control.runtime());
-        try std.testing.expect(result == .execution);
-        if (result.execution == .ok) {
+        try std.testing.expect(result.executionStatus() != null);
+        if (result.executionStatus().? == .ok) {
             try std.testing.expect(checks > 3);
             return;
         }
-        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.executionStatus().?);
     }
     return error.ReferencePreflightNeverCompleted;
 }
@@ -835,7 +835,7 @@ test "native YAML compiles selected naming rules and scans text without artifact
     for ([_][]const u8{ "Use stories.md and src/main.zig?", "Ordinary business text", "\xff" }) |text| {
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/sample.txt", .data = text });
         const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "lexical-check", "--feature", "Chosen/Café", "--reference", "first" });
-        try std.testing.expectEqual(if (std.unicode.utf8ValidateSlice(text)) workflow.OutcomeTag.ok else .failed, result.execution);
+        try std.testing.expectEqual(if (std.unicode.utf8ValidateSlice(text)) workflow.OutcomeTag.ok else .failed, result.executionStatus().?);
         try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/spec.md", .{}));
         const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", arena.allocator(), .limited(16384));
         try std.testing.expectEqualSlices(u8, closed.forms[0].bytes, retained);
@@ -863,14 +863,14 @@ test "reference ingestion YAML reads configured source content without creating 
     try project.dir.writeFile(io, .{ .sub_path = "source-material/first/nested/Café.md", .data = "# Other evidence\nKeep exact bytes.\n" });
     try project.dir.writeFile(io, .{ .sub_path = "source-material/first/.hidden.md", .data = "Hidden reference evidence.\n" });
     for (0..2) |_| {
-        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "engine/workflows/features", .{}));
     }
     const renamed = try std.mem.replaceOwned(u8, std.testing.allocator, @embedFile("../test_fixtures/reference-ingestion.workflow.yaml"), "id: reference-ingestion", "id: document-evidence");
     defer std.testing.allocator.free(renamed);
     try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = renamed });
-    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "document-evidence", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "document-evidence", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
 }
 
 test "reference failures are not skipped and cannot change closed clarification files" {
@@ -914,8 +914,8 @@ test "reference failures are not skipped and cannot change closed clarification 
             directory.setPermissions(io, .fromMode(0o700)) catch @panic("restore test directory permissions");
             directory.close(io);
         };
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }).execution);
-        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).executionStatus().?);
         const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", allocator, .limited(16384));
         try std.testing.expectEqualSlices(u8, clarifications.forms[0].bytes, retained);
         try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/spec.md", .{}));
@@ -1014,10 +1014,10 @@ test "reference ingestion cancellation does not create artifacts" {
     for (0..512) |checks| {
         var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
         const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, control.runtime());
-        try std.testing.expect(result == .execution);
+        try std.testing.expect(result.executionStatus() != null);
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
-        if (result.execution == .ok) return;
-        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.execution);
+        if (result.executionStatus().? == .ok) return;
+        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.executionStatus().?);
     }
     return error.ReferenceIngestionNeverCompleted;
 }
@@ -1168,7 +1168,7 @@ test "native YAML validates citations and accounts every extraction chunk before
             .blocked => .blocked,
             .malformed, .missing, .duplicate, .invalid_citation, .unbound, .unknown_literal, .legacy => .failed,
         } else if (invalid) .failed else .ok;
-        try std.testing.expectEqual(expected, result.execution);
+        try std.testing.expectEqual(expected, result.executionStatus().?);
         try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), if (mode != null) extraction_producer.observed else producer.observed);
         const retained = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", protected_arena.allocator(), .limited(16384));
         try std.testing.expectEqualSlices(u8, closed.forms[0].bytes, retained);
@@ -1207,14 +1207,14 @@ test "feature input YAML is read-only for new targets and unrelated workflows" {
     defer project.cleanup();
     try writeFeatureInputFixture(io, project.dir);
     for (0..2) |_| {
-        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "engine/workflows/features", .{}));
     }
     // Unselected invalid content is not read, even though its reader is registered.
     try project.dir.createDirPath(io, "requirements/current/Chosen/Café/clarify");
     try project.dir.writeFile(io, .{ .sub_path = "requirements/current/Chosen/Café/clarify/unknown.txt", .data = "unrecognized" });
-    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).execution);
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{"hello"}).executionStatus().?);
 }
 
 test "feature input reruns retain submitted and recorded closed files with configured roots" {
@@ -1232,7 +1232,7 @@ test "feature input reruns retain submitted and recorded closed files with confi
         // This operation does not import stage state or generated views as authority.
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/features/Chosen/Café/state/workflow.json", .data = "not required by this read-only operation" });
         for ([_][]const u8{ "first", "second", "first" }) |reference| {
-            try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", reference }).execution);
+            try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", reference }).executionStatus().?);
             const closed = try project.dir.readFileAlloc(io, "requirements/current/Chosen/Café/clarify/S01.md", arena.allocator(), .limited(16384));
             try std.testing.expectEqualSlices(u8, captures.forms[0].bytes, closed);
             const state = try project.dir.readFileAlloc(io, "engine/workflows/features/Chosen/Café/state/clarifications.json", arena.allocator(), .limited(8 * 1024 * 1024));
@@ -1243,7 +1243,7 @@ test "feature input reruns retain submitted and recorded closed files with confi
         // The compiled operations do not depend on the workflow's name.
         const renamed = try std.mem.replaceOwned(u8, arena.allocator(), @embedFile("../test_fixtures/feature-input-preflight.workflow.yaml"), "id: feature-input-preflight", "id: arbitrary-preparation");
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = renamed });
-        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "arbitrary-preparation", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "arbitrary-preparation", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
     }
 }
 
@@ -1271,7 +1271,7 @@ test "feature input failures preserve invalid stale and changed close submission
         if (failure == .wrong_feature) captures.state = try std.mem.replaceOwned(u8, allocator, captures.state.?, "Chosen/Café", "Unrelated");
         if (failure == .orphan_form) captures.state = null;
         try writeClarificationCapture(io, project.dir, captures);
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
         if (failure == .missing_form) {
             try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/Chosen/Café/clarify/S01.md", .{}));
         } else {
@@ -1314,7 +1314,7 @@ test "feature input capture rejects unknown entries directories and symlink path
                 }
             },
         }
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }).executionStatus().?);
     }
 }
 
@@ -1365,11 +1365,11 @@ test "feature input preparation cancellation never creates artifacts" {
     for (0..256) |checks| {
         var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
         const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }, control.runtime());
-        try std.testing.expect(result == .execution);
+        try std.testing.expect(result.executionStatus() != null);
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "engine/workflows/features", .{}));
-        if (result.execution == .ok) return;
-        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.execution);
+        if (result.executionStatus().? == .ok) return;
+        try std.testing.expectEqual(workflow.OutcomeTag.cancelled, result.executionStatus().?);
     }
     return error.FeatureInputsNeverCompleted;
 }
@@ -1410,7 +1410,7 @@ test "feature preflight uses configured specs roots and preserves selected files
         try project.dir.createDirPath(io, "references/second");
         // Missing configured root and target are observations, never mkdir.
         const arguments: []const []const u8 = &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", "first" };
-        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, arguments).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, arguments).executionStatus().?);
         try std.testing.expectError(error.FileNotFound, project.dir.access(io, specs_root, .{}));
 
         // Selected content, including a user-closed clarification, is untouched.
@@ -1442,7 +1442,7 @@ test "feature preflight uses configured specs roots and preserves selected files
         const observed = try inspector.inspect(std.testing.allocator, selected);
         try std.testing.expect(observed.observation == .directory);
         for ([_][]const u8{ "first", "second", "first" }) |reference| {
-            try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", reference }).execution);
+            try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Chosen/Café", "--reference", reference }).executionStatus().?);
             const again = try inspector.inspect(std.testing.allocator, selected);
             try std.testing.expect(observed.observation.directory.eql(again.observation.directory));
         }
@@ -1472,7 +1472,7 @@ test "feature preflight rejects archive traversal files and symlink ancestors wi
     try project.dir.symLink(io, "../outside", "specs/escape", .{ .is_directory = true });
     try project.dir.symLink(io, "missing", "specs/dangling", .{ .is_directory = true });
     for ([_][]const u8{ "archive", "ARCHIVE/child", "../outside", "/outside", "file", "file/child", "linked/child", "escape/child", "dangling/child" }) |feature_path| {
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", feature_path, "--reference", "source" }).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", feature_path, "--reference", "source" }).executionStatus().?);
     }
     // On a case-insensitive filesystem, an existing alias must be rejected.
     // On a case-sensitive filesystem, the spelling is a distinct absent target.
@@ -1481,7 +1481,7 @@ test "feature preflight rejects archive traversal files and symlink ancestors wi
         else => return err,
     };
     const alias_result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "real/child", "--reference", "source" });
-    try std.testing.expectEqual(if (alias_exists) workflow.OutcomeTag.failed else workflow.OutcomeTag.ok, alias_result.execution);
+    try std.testing.expectEqual(if (alias_exists) workflow.OutcomeTag.failed else workflow.OutcomeTag.ok, alias_result.executionStatus().?);
     try std.testing.expectError(error.FileNotFound, project.dir.access(io, ".sdd/workflows/features", .{}));
     try std.testing.expectError(error.FileNotFound, project.dir.access(io, "specs/Real/child/spec.md", .{}));
 }
@@ -1666,7 +1666,7 @@ test "loads and resolves a generic workflow definition from the configured root"
         const graph = registry.resolve(workflow.WorkflowId.parse("hello").?);
         try std.testing.expect(graph != null);
         try std.testing.expectEqualStrings("core.noop", graph.?.authority.steps[0].operation_id.bytes);
-        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project_root.dir, &.{"hello"}).execution);
+        try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project_root.dir, &.{"hello"}).executionStatus().?);
     }
 }
 

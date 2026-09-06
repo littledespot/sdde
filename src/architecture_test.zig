@@ -556,6 +556,23 @@ test "workflow request handoff retains authority without introducing operations 
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "self.model_requests.entries") != null);
 }
 
+test "YAML invocation owns one response and uses runner accounting without hidden response work" {
+    const native = @import("application/model_invocation_workflow.zig");
+    try std.testing.expect(@typeInfo(@import("domain/model_invocation_result.zig").Result) == .@"opaque");
+    try std.testing.expect(native.schema.maximum_bytes == null);
+    const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(native.Invoke, &.{});
+    try std.testing.expect(capabilities.valid and capabilities.model_provider and !capabilities.provider_authorization);
+    try std.testing.expect(native.Invoke.contract.side_effect == .model_call);
+    try std.testing.expectEqual(@as(usize, 0), native.Invoke.contract.parameters.len);
+    const source = @embedFile("application/model_invocation_workflow.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "action.execute("));
+    inline for (.{ "/adapters/", "std.Io", "std.json", "countInputTokens", "reconcile", "decode", "retry_limit", "while (" }) |forbidden| try expectAbsent(source, forbidden);
+    const accounting_source = @embedFile("application/workflow_model_invocation.zig");
+    try std.testing.expect(std.mem.indexOf(u8, accounting_source, "validation.validateUsage(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, accounting_source, "accounting.reconcile(") != null);
+    inline for (.{ "/adapters/", "std.Io", "std.json", "LLMProviderInterface", "countInputTokens", "decode" }) |forbidden| try expectAbsent(accounting_source, forbidden);
+}
+
 test "model invocation forwards one call through the sole provider port without hidden work" {
     const action = @import("actions/model/invoke_model.zig").Action;
     try std.testing.expectEqual(@as(usize, 1), @typeInfo(action).@"struct".fields.len);

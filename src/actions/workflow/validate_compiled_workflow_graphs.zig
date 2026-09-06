@@ -44,6 +44,7 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
         if (!@import("../../domain/workflow_model_request_lifecycle.zig").validProjection(step)) return invalid();
         if (!@import("../../domain/workflow_provider_operation.zig").validProjection(step)) return invalid();
         if (!@import("../../domain/workflow_provider_authorization.zig").validProjection(step)) return invalid();
+        if (!@import("../../domain/workflow_model_invocation.zig").validProjection(step)) return invalid();
         const retry_parameter = findParameter(step.parameters, workflow_retry.parameter_id);
         if (step.retry_authority) |authority| {
             if (!authority.isValid() or

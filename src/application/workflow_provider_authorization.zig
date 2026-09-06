@@ -29,7 +29,7 @@ pub const Binding = struct {
     }
 
     pub fn validate(self: Binding, value: *const result.Result, outcome: workflow.OutcomeTag) lease.Error!bool {
-        if (try currentTime(self.clock, self.runtime) >= self.facts.deadline_monotonic_ms) return error.AuthorizationExpired;
+        try checkDeadline(self.clock, self.runtime, self.facts.deadline_monotonic_ms);
         switch (value.outcome().*) {
             .prepared => |reference| {
                 if (outcome != .ok) return error.AuthorizationDenied;
@@ -77,4 +77,8 @@ fn currentTime(clock: lease.Clock, runtime: pipeline.NodeRuntime) lease.Error!u6
         .cancelled => error.Cancelled,
         .deadline_exhausted => error.AuthorizationExpired,
     };
+}
+
+pub fn checkDeadline(clock: lease.Clock, runtime: pipeline.NodeRuntime, deadline: u64) lease.Error!void {
+    if (try currentTime(clock, runtime) >= deadline) return error.AuthorizationExpired;
 }

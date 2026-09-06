@@ -52,6 +52,7 @@ pub const DataKey = enum {
     assigned_provider_operation,
     invoked_provider_operation,
     provider_authorization_result,
+    provider_invocation_result,
     project_toolchain_capture,
     toolchain_preset_inventory,
     toolchain_preset_captures,

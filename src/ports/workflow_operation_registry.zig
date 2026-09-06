@@ -165,6 +165,7 @@ pub const Registry = struct {
 };
 
 fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
+    if (!@import("../domain/workflow_model_invocation.zig").validContract(contract, capabilities)) return false;
     if (!@import("../domain/workflow_model_request_lifecycle.zig").validContract(contract, capabilities)) return false;
     if (!@import("../domain/workflow_provider_authorization.zig").validContract(contract, capabilities)) return false;
     if (!operation.validAccounting(contract.runner_accounting, contract.requires, contract.produces, contract.side_effect, contract.retry_limit != null)) return false;
