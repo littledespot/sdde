@@ -2,7 +2,18 @@ pub const ExactTokenCounter = enum { unavailable, provider_input_token_count };
 
 // Native schema profiles must be supplied with a provider implementation. A
 // nominal "supports JSON" flag cannot authorize an arbitrary result schema.
-pub const StructuredResponse = enum { unavailable, prompt_only };
+pub const StructuredResponse = enum {
+    unavailable,
+    prompt_only,
+    bedrock_json_schema,
+
+    pub fn represents(self: StructuredResponse, schema: *const @import("model_result_schema.zig").Schema) bool {
+        return switch (self) {
+            .unavailable, .prompt_only => false,
+            .bedrock_json_schema => @import("bedrock_schema_profile.zig").represents(schema.root()),
+        };
+    }
+};
 
 pub const Capabilities = struct {
     input_token_count: bool,
@@ -24,8 +35,8 @@ pub const Capabilities = struct {
             if (!self.temperature or temperature.value > 1000) return false;
         }
         return switch (mode) {
-            .prompt_only => self.structured_response == .prompt_only,
-            .native_schema => false,
+            .prompt_only => self.structured_response != .unavailable,
+            .native_schema => self.structured_response == .bedrock_json_schema,
         };
     }
 };

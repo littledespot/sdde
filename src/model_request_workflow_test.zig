@@ -5073,21 +5073,7 @@ test "YAML counts then independently authorizes inference on the same attempt an
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
-    const allocator = fixture.arena.allocator();
-    var source = try countYaml(&fixture, false);
-    source = try std.mem.replaceOwned(u8, allocator, source, "on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }", "on: { ok: assign-inference, failed: end.failed, cancelled: end.cancelled }");
-    source = try std.fmt.allocPrint(allocator, "{s}\n  assign-inference: {{ use: assign-provider-operation, with: {{kind: inference}}, on: {{ok: authorize-inference, failed: end.failed}} }}\n" ++
-        "  authorize-inference: {{ use: prepare-provider-operation-authorization, with: {{timeout-ms: 100}}, on: {{ok: advance-inference, failed: end.failed, cancelled: end.cancelled}} }}\n" ++
-        "  advance-inference: {{ use: advance-provider-operation-lifecycle, with: {{transition: invoked}}, on: {{ok: infer, failed: end.failed}} }}\n" ++
-        "  infer: {{ use: invoke-model, on: {{ok: validate-response, failed: validate-response, cancelled: validate-response}} }}\n" ++
-        "  validate-response: {{ use: validate-provider-invocation-observation, on: {{ok: complete-inference, failed: complete-inference, cancelled: complete-inference}} }}\n" ++
-        "  complete-inference: {{ use: complete-provider-operation, on: {{ok: decode, failed: decode, cancelled: decode}} }}\n" ++
-        "  decode: {{ use: decode-model-envelope, on: {{ok: validate-payload, invalid: validate-payload, failed: validate-payload, cancelled: validate-payload}} }}\n" ++
-        "  validate-payload: {{ use: validate-model-payload-schema, on: {{ok: close-request, invalid: close-request, failed: close-request, cancelled: close-request}} }}\n" ++
-        "  close-request: {{ use: complete-model-request, on: {{ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}} }}\n", .{source});
-    fixture.entries[fixture.entries.len - 1].contract.invalidates = &.{ .terminal_provider_operation, .provider_authorization_result };
-    fixture.observer.release_terminal = true;
-    const graph = try fixture.compile(source);
+    const graph = try fixture.compile(try countInferenceYaml(&fixture));
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
@@ -5109,6 +5095,24 @@ test "YAML counts then independently authorizes inference on the same attempt an
     try std.testing.expectEqual(counted.count_operation_id.model_attempt_ordinal.value, inferred.model_attempt_ordinal.value);
     try std.testing.expectEqual(.accepted, (try requestLedger(&runner)).record(inferred.model_request_id).?.terminal_reason.?);
     try runner.model_accounting.?.current_operations.validateRequestClosure(inferred.model_request_id);
+}
+
+fn countInferenceYaml(fixture: *Fixture) ![]const u8 {
+    const allocator = fixture.arena.allocator();
+    var source = try countYaml(fixture, false);
+    source = try std.mem.replaceOwned(u8, allocator, source, "on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }", "on: { ok: assign-inference, failed: end.failed, cancelled: end.cancelled }");
+    source = try std.fmt.allocPrint(allocator, "{s}\n  assign-inference: {{ use: assign-provider-operation, with: {{kind: inference}}, on: {{ok: authorize-inference, failed: end.failed}} }}\n" ++
+        "  authorize-inference: {{ use: prepare-provider-operation-authorization, with: {{timeout-ms: 100}}, on: {{ok: advance-inference, failed: end.failed, cancelled: end.cancelled}} }}\n" ++
+        "  advance-inference: {{ use: advance-provider-operation-lifecycle, with: {{transition: invoked}}, on: {{ok: infer, failed: end.failed}} }}\n" ++
+        "  infer: {{ use: invoke-model, on: {{ok: validate-response, failed: validate-response, cancelled: validate-response}} }}\n" ++
+        "  validate-response: {{ use: validate-provider-invocation-observation, on: {{ok: complete-inference, failed: complete-inference, cancelled: complete-inference}} }}\n" ++
+        "  complete-inference: {{ use: complete-provider-operation, on: {{ok: decode, failed: decode, cancelled: decode}} }}\n" ++
+        "  decode: {{ use: decode-model-envelope, on: {{ok: validate-payload, invalid: validate-payload, failed: validate-payload, cancelled: validate-payload}} }}\n" ++
+        "  validate-payload: {{ use: validate-model-payload-schema, on: {{ok: close-request, invalid: close-request, failed: close-request, cancelled: close-request}} }}\n" ++
+        "  close-request: {{ use: complete-model-request, on: {{ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}} }}\n", .{source});
+    fixture.entries[fixture.entries.len - 1].contract.invalidates = &.{ .terminal_provider_operation, .provider_authorization_result };
+    fixture.observer.release_terminal = true;
+    return source;
 }
 
 test "YAML count retries follow explicit edges and operation-local limits" {
@@ -5260,9 +5264,13 @@ const Fixture = struct {
     registry: operations.Registry,
 
     fn init(self: *Fixture, allocator: std.mem.Allocator) !void {
+        return self.initWithProvider(allocator, null);
+    }
+
+    fn initWithProvider(self: *Fixture, allocator: std.mem.Allocator, production: ?usize) !void {
         self.arena = .init(allocator);
         errdefer self.arena.deinit();
-        self.services = try providerServices(allocator);
+        self.services = try providerServices(allocator, production);
         errdefer self.services.deinit();
         self.roots_owner = try rootOwner(allocator);
         self.native.init(allocator);
@@ -5315,17 +5323,18 @@ const Fixture = struct {
     }
 };
 
-fn providerServices(allocator: std.mem.Allocator) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
-    const registered: contracts.Registry = .{ .entries = &.{.{ .provider = .{ .bytes = "test-provider" }, .model = .{ .bytes = "test-model" }, .implementation_id = .{ .ordinal = 1 }, .config_schema = .empty_object, .capabilities = @import("model_contract_test_fixture.zig").capabilities, .supported_reasoning_efforts = &.{} }} };
+fn providerServices(allocator: std.mem.Allocator, production: ?usize) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
+    const selected: contracts.ProviderModelContract = if (production) |index| @import("composition/provider_model_contracts.zig").registry.entries[index] else .{ .provider = .{ .bytes = "test-provider" }, .model = .{ .bytes = "test-model" }, .implementation_id = .{ .ordinal = 1 }, .config_schema = .empty_object, .capabilities = @import("model_contract_test_fixture.zig").capabilities, .supported_reasoning_efforts = &.{} };
+    const registered: contracts.Registry = .{ .entries = &.{selected} };
     var candidate = try registry.Candidate.init(allocator, 1);
     defer candidate.deinit();
     const contract = registered.entries[0];
-    candidate.entries[0] = .{ .provider = contract.provider, .model = contract.model, .implementation_id = contract.implementation_id, .config = .empty_object, .capabilities = contract.capabilities, .supported_reasoning_efforts = &.{} };
+    candidate.entries[0] = .{ .provider = contract.provider, .model = contract.model, .implementation_id = contract.implementation_id, .config = if (production != null) .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0] } } else .empty_object, .capabilities = contract.capabilities, .supported_reasoning_efforts = &.{} };
     const owner = try registry.createValidated(allocator, candidate, registered);
     errdefer registry.deinitOwner(owner);
     var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
     defer models.slots.deinit(allocator);
-    try models.slots.map.put(allocator, "selected", .{ .provider = "test-provider", .model = "test-model" });
+    try models.slots.map.put(allocator, "selected", .{ .provider = contract.provider.bytes, .model = contract.model.bytes });
     const allowlist = try @import("domain/repository_model_allowlist.zig").createValidated(allocator, &models, registry.registry(owner));
     return .init(.init(owner), allowlist);
 }
@@ -5386,4 +5395,109 @@ fn currentRequest(runner: *const runner_module.Runner) operations.Error!*const h
 
 fn noTelemetry(_: *anyopaque, _: @import("domain/telemetry.zig").WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
     return .dropped;
+}
+
+test "production Bedrock composition executes count inference validation and request closure from YAML" {
+    for ([_]bool{ false, true }) |count_first| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithProvider(std.testing.allocator, if (count_first) 1 else 0);
+        defer fixture.deinit();
+        const graph = try fixture.compile(if (count_first) try countInferenceYaml(&fixture) else try requestCompletionYaml(&fixture));
+        // A fresh invocation captures its own environment snapshot and ledger.
+        for (0..2) |_| {
+            var environment = try bedrockEnvironment(std.testing.allocator);
+            defer environment.deinit();
+            var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+                .environment = &environment,
+                .operations = &fixture.native,
+                .authorization = .{ .allocator = std.testing.allocator },
+                .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+            };
+            defer runtime.deinit();
+            var runner = fixture.runner(graph, std.testing.allocator);
+            defer runner.deinit();
+            try runtime.bind(&runner);
+            // Changing the environment after preloading cannot refresh a lease.
+            try environment.put("AWS_BEARER_TOKEN_BEDROCK", "");
+            var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
+            runtime.provider.?.aws_bedrock.transport = wire.port();
+            var harness: Harness = .{ .runner = &runner };
+            try std.testing.expectEqual(.ok, harness.run());
+            try std.testing.expectEqual(@as(usize, if (count_first) 2 else 1), wire.calls);
+            try std.testing.expectEqual(@as(u128, 12), runner.tokenLedger().committed());
+            try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
+            const request = try currentRequest(&runner);
+            try std.testing.expectEqual(.terminal, (try requestLedger(&runner)).record(request.id()).?.status);
+            try runner.model_accounting.?.current_operations.validateRequestClosure(request.id());
+        }
+    }
+}
+
+test "production Bedrock YAML records budget overshoot and blocks another call" {
+    var fixture: Fixture = undefined;
+    try fixture.initWithProvider(std.testing.allocator, 0);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try invocationYaml(&fixture));
+    var environment = try bedrockEnvironment(std.testing.allocator);
+    defer environment.deinit();
+    var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+        .environment = &environment,
+        .operations = &fixture.native,
+        .authorization = .{ .allocator = std.testing.allocator },
+        .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+    };
+    defer runtime.deinit();
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    try runtime.bind(&runner);
+    const body = try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":2,\"totalTokens\":100002");
+    var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
+    runtime.provider.?.aws_bedrock.transport = wire.port();
+    var harness: Harness = .{ .runner = &runner };
+    const result = harness.result();
+    try std.testing.expect(result == .execution_rejected);
+    try std.testing.expectEqual(@as(u128, 100002), runner.tokenLedger().committed());
+    const repeated = runner.bindings().invokeStep(.{ .bytes = "call" });
+    try std.testing.expect(repeated == .rejected);
+    try std.testing.expectEqual(@as(usize, 1), wire.calls);
+}
+
+test "production Bedrock missing credentials follow explicit pre-call termination without effects" {
+    var fixture: Fixture = undefined;
+    try fixture.initWithProvider(std.testing.allocator, 0);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try requestTerminationYaml(&fixture, "inference"));
+    var environment: std.process.Environ.Map = .init(std.testing.allocator);
+    defer environment.deinit();
+    var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+        .environment = &environment,
+        .operations = &fixture.native,
+        .authorization = .{ .allocator = std.testing.allocator },
+        .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+    };
+    defer runtime.deinit();
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    try runtime.bind(&runner);
+    var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{};
+    runtime.provider.?.aws_bedrock.transport = wire.port();
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.failed, harness.run());
+    try std.testing.expectEqual(@as(usize, 0), wire.calls);
+    try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+    const request = try currentRequest(&runner);
+    try std.testing.expectEqual(.not_invoked_authorization_failure, (try requestLedger(&runner)).record(request.id()).?.terminal_reason.?);
+}
+
+const bedrock_complete_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{\\\"answer\\\":\\\"candidate\\\"}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
+
+fn bedrockEnvironment(allocator: std.mem.Allocator) !std.process.Environ.Map {
+    var environment: std.process.Environ.Map = .init(allocator);
+    errdefer environment.deinit();
+    var canary: [48]u8 = undefined;
+    std.testing.io.random(&canary);
+    for (&canary) |*byte| byte.* = 'A' + byte.* % 26;
+    defer std.crypto.secureZero(u8, &canary);
+    try environment.put("AWS_BEARER_TOKEN_BEDROCK", &canary);
+    return environment;
 }

@@ -430,6 +430,31 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         denied_pre_call_closure.step.dependOn(&denied_count.step);
     }
 
+    for ([_][2][]const u8{
+        .{ "build-specification-authority-requirements", "ok: end.ok, blocked: end.blocked" },
+        .{ "build-required-authority-ledger", "ok: end.ok, blocked: end.blocked" },
+        .{ "parse-required-authority-observations", "ok: end.ok, blocked: end.blocked" },
+        .{ "reconcile-required-authorities", "ok: end.ok, needs_user: end.needs_user, blocked: end.blocked" },
+        .{ "validate-required-authority-reconciliation", "ok: end.ok, needs_user: end.needs_user, blocked: end.blocked" },
+    }) |contract| {
+        const project = b.addTempFiles();
+        const binary = project.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+        _ = project.add(".sddtoolkit.json", configuration);
+        _ = project.add(".sddtoolkit/workflows/authority.workflow.yaml", b.fmt(
+            "schema: workflow/v1\nid: authority\nversion: 1\nshortcode: AUTH\ninvoke: core.empty-invocation\npolicy: core.capability-free@1\nstart: check\nsteps:\n  check: {{ use: {s}, on: {{{s}}} }}\n",
+            .{ contract[0], contract[1] },
+        ));
+        const denied = std.Build.Step.Run.create(b, b.fmt("reject packaged {s} without current authority inputs", .{contract[0]}));
+        denied.addFileArg(binary);
+        denied.addArg("authority");
+        denied.setCwd(project.getDirectory());
+        denied.clearEnvironment();
+        denied.expectExitCode(1);
+        denied.expectStdOutEqual("");
+        denied.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+        denied_pre_call_closure.step.dependOn(&denied.step);
+    }
+
     const denied_toolchain = std.Build.Step.Run.create(b, "reject invalid toolchain only when selected");
     denied_toolchain.addFileArg(packaged_executable);
     denied_toolchain.addArg("toolchain-check");
@@ -526,6 +551,29 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     missing_config_command.step.dependOn(&token_command.step);
     missing_config_command.step.dependOn(&reference_command.step);
     missing_config_command.step.dependOn(&denied_reference.step);
+    for ([_]bool{ false, true }) |invalid_region| {
+        const directory = b.addTempFiles();
+        const packaged = directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+        const slots = std.mem.replaceOwned(u8, b.allocator, configuration, "\"slots\": {}", "\"slots\": {\"spec_generation\": {\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\"}}") catch @panic("allocate provider smoke config");
+        const configured = std.mem.replaceOwned(u8, b.allocator, slots, "\"providers\": \".sddproviders.json\"", "\"providers\": \"config/.sddproviders.json\"") catch @panic("allocate configured provider path");
+        _ = directory.add(".sddtoolkit.json", configured);
+        const provider_bytes = @embedFile("../../design/examples/.sddproviders.json");
+        const catalogue = if (invalid_region) std.mem.replaceOwned(u8, b.allocator, provider_bytes, "ap-southeast-2", "us-west-2") catch @panic("allocate invalid deployment") else provider_bytes;
+        _ = directory.add("config/.sddproviders.json", catalogue);
+        _ = directory.add(".sddtoolkit/workflows/provider-request.workflow.yaml", @embedFile("../../design/examples/provider-request.workflow.yaml"));
+        _ = directory.add(".sddtoolkit/workflows/provider-request.prompt.md", @embedFile("../../design/examples/provider-request.prompt.md"));
+        _ = directory.add(".sddtoolkit/workflows/provider-request.input.txt", @embedFile("../../design/examples/provider-request.input.txt"));
+        _ = directory.add(".sddtoolkit/workflows/provider-request.schema.json", @embedFile("../../design/examples/provider-request.schema.json"));
+        const check = std.Build.Step.Run.create(b, "run packaged external Bedrock catalogue without credentials or network");
+        check.addFileArg(packaged);
+        check.addArg("provider-request");
+        check.setCwd(directory.getDirectory());
+        check.clearEnvironment();
+        check.expectExitCode(1);
+        check.expectStdOutEqual("");
+        check.expectStdErrEqual(if (invalid_region) "LLM_PROVIDER_REGISTRY_INVALID\n" else "failed\n");
+        missing_config_command.step.dependOn(&check.step);
+    }
     for ([_][2][]const u8{
         .{ "invoke: core.empty-invocation", "invoke: core.empty-invocation@1" },
         .{ "use: core.noop", "use: core.noop@1" },

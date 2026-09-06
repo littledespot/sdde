@@ -15,7 +15,8 @@ not waived by that exclusion.
 ## H-007 — Align the existing specification contract
 
 **Status:** Native content contract and mechanical Markdown codec implemented;
-workflow authority/identity integration remains in H-008/H-010/H-012.
+the shared authority boundary is implemented in H-008; generation/identity and
+publication integration remain in H-010/H-012.
 **Owner:** F0100 and
 canonical specification types. **Dependencies:** none; independent of H-001.
 
@@ -72,9 +73,36 @@ an exact semantic expected `spec.md` for the harness.
 
 ## H-008 — Implement the shared required-authority boundary
 
-**Status:** Open. **Owner:** shared domain/actions; Specify contributes evidence.
+**Status:** Implemented and offline-tested. **Owner:** shared domain/actions;
+Specify contributes evidence.
 **Dependencies:** H-007 for concrete Specify registrations, not for all generic
 mechanics. Governing source: Design §12.8 and acceptance criteria 36–40.
+
+`src/domain/required_authority.zig` owns the closed policies, structural ledger,
+current support checks, reconciliation and earliest-owner routing.
+`specification_authority.zig` derives Specify requirements from the native
+content schema and accounted references; it does not decide continuation.
+The shared gate rejects stale source lineage as well as directly replaced
+inputs, using the runner's existing generation metadata.
+
+Five capability-free operations are registered in the normal YAML registry;
+see [F0100 §3.10](../features/F0100-SpecWorkflow.md#310-shared-required-authority-boundary).
+Observations can reference engine-supplied evidence and candidates, but cannot
+create requiredness, choose ownership, mint supporting evidence or submit an
+overall success/score. Directly equivalent resolutions retain every member's
+evidence; semantic findings remain explicitly model-assisted.
+
+`zig build test-required-authority` covers schema-derived Specify fields,
+reference conflicts/preservation, unrelated policy/decomposition kinds,
+closed scripted observations, YAML gate bypasses, staleness and allocation
+failures. H-009/H-010 still supply the production semantic evidence producers;
+H-011 consumes the typed gaps, and H-012/H-013 integrate publication and the
+complete workflow. This ticket does not claim those workflows execute yet.
+
+Verification: `zig build test-required-authority verify --summary all` passed
+103/103 build steps and 927/927 test executions (83 in the targeted authority
+suite), including lint, architecture checks and clean native-package smoke
+tests. `git diff --check` passed. No live provider calls were made.
 
 Work:
 
@@ -93,12 +121,12 @@ Work:
 
 Acceptance:
 
-- [ ] Missing, duplicate, foreign, stale, unsupported and conflicting support
+- [x] Missing, duplicate, foreign, stale, unsupported and conflicting support
   cannot pass a gate or enter ordinary repair as invented content.
-- [ ] Tests exercise the same mechanics across unrelated requirement kinds;
+- [x] Tests exercise the same mechanics across unrelated requirement kinds;
   implementing the full Plan/Tasks workflows is not required for those tests.
-- [ ] Signals/conflicts have one validation owner and complete provenance.
-- [ ] The external judge's score is not a candidate resolution or gate token.
+- [x] Signals/conflicts have one validation owner and complete provenance.
+- [x] The external judge's score is not a candidate resolution or gate token.
 
 ## H-009 — Connect reference operations to model execution
 

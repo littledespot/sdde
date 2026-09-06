@@ -1584,6 +1584,14 @@ The ledger is a deterministic projection over current canonical authorities, not
 
 This contract is deliberately domain-neutral. Adding a new requirement kind requires its schema, ownership entry, reconciliation policy, accepted and rejected fixtures, and stage-gate tests. It never authorizes a caller-specific workaround or a special continuation for one example.
 
+The native H-008 implementation is `src/domain/required_authority.zig`, with
+Specify's schema/reference projection in `specification_authority.zig` and
+five generic YAML bindings documented in [F0100 §3.10](features/F0100-SpecWorkflow.md#310-shared-required-authority-boundary).
+The runner checks both direct authority generations and their source lineage;
+replacing a source requires rebuilding its affected projection and gate.
+Production generation/evidence producers and clarification/publication consumers
+remain the separate H-009–H-013 integration work.
+
 ---
 
 ## 13. Action catalogue
@@ -4894,13 +4902,13 @@ The following implementation choices are accepted:
   slot, and the runner resolves that slot to one immutable provider/model
   binding before invoking the registered operation. `LLMProviderInterface` is
   the sole provider-neutral port. One ordinal covers the complete count and
-  inference attempt, external-operation effects use the accepted durable
-  journal lifecycle, retry selection remains explicit in compiled YAML, and
+  inference attempt, external-operation lifecycle remains execution-local,
+  retry selection remains explicit in compiled YAML, and
   authorization preparation is restricted to a preloaded, non-refreshing,
-  no-I/O lease. No production provider contract is registered until its
-  provider feature is accepted.
-- [F0007](features/F0007-AWSBedrockProvider.md) has one accepted credential
-  choice while the feature remains proposed: a narrow infrastructure source
+  no-I/O lease. Production Bedrock contracts, closed configuration, native-schema
+  representability and concrete adapters are included in F0006 completion.
+- [F0007](features/F0007-AWSBedrockProvider.md) implements the accepted production
+  integration and environment-only credential choice: a narrow infrastructure source
   reads only `AWS_BEARER_TOKEN_BEDROCK` into an invocation-owned snapshot before
   no-I/O lease preparation. No key value may be hardcoded or supplied through
   repository configuration, workflow YAML, prompts, arguments, source,

@@ -101,7 +101,27 @@ pub const PipelineEnvelope = struct {
         for (contract.authority) |key| if (self.origins[@intFromEnum(key)]) |authority| {
             current[@intFromEnum(key)] = authority.generation;
         };
-        return gate.check(contract, decision.*, origin, current);
+        if (gate.check(contract, decision.*, origin, current)) |rejection| return rejection;
+        var checked = std.enums.EnumSet(pipeline.DataKey).initEmpty();
+        for (contract.authority) |key| if (self.checkAuthorityLineage(key, &checked)) |rejection| return rejection;
+        return null;
+    }
+
+    // A projection cannot keep a gate current after one of its sources changes.
+    // Replacement's self-input is the superseded revision, not a dependency on
+    // itself; all other recorded input generations must still be available.
+    fn checkAuthorityLineage(self: *const PipelineEnvelope, key: pipeline.DataKey, checked: *std.enums.EnumSet(pipeline.DataKey)) ?gate.Rejection {
+        if (checked.contains(key)) return null;
+        checked.insert(key);
+        const origin = self.origins[@intFromEnum(key)] orelse return .missing_authority;
+        for (origin.inputs, 0..) |generation, index| {
+            if (index == @intFromEnum(key)) continue;
+            const expected = generation orelse continue;
+            const current = self.origins[index] orelse return .missing_authority;
+            if (current.generation != expected) return .stale_authority;
+            if (self.checkAuthorityLineage(@enumFromInt(index), checked)) |rejection| return rejection;
+        }
+        return null;
     }
 
     /// Releases rejected/unapplied candidates exactly once, including aliased

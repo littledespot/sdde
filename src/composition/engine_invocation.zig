@@ -20,6 +20,7 @@ pub const Assembly = struct {
     provider_outcome: ?model_provider_orchestrator.Outcome = null,
     pipeline_runner: ?workflow_pipeline_runner.Runner = null,
     provider_clock: ?@import("../ports/provider_authorization_lease.zig").Clock = null,
+    provider_runtime: ?*@import("model_provider_runtime.zig").Assembly = null,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -83,6 +84,9 @@ pub const Assembly = struct {
                     self.preparedProviderServices(),
                 );
                 self.pipeline_runner.?.provider_clock = self.provider_clock;
+                if (self.provider_outcome.? == .ready) {
+                    if (self.provider_runtime) |providers| providers.bind(&self.pipeline_runner.?) catch return .{ .failed = .LLM_PROVIDER_MODEL_BINDING_INVALID };
+                }
                 break :ready .ok;
             },
             .failed => |failure| .{ .failed = failure },

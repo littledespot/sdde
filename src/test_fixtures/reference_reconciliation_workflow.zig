@@ -29,7 +29,9 @@ pub fn suffix(allocator: std.mem.Allocator, summary_count: usize) ![]const u8 {
         "  check-conflicts: { use: validate-reference-conflict-proposals, on: { ok: assign-records, failed: end.failed } }\n" ++
         "  assign-records: { use: assign-reference-reconciliation-identities, on: { ok: build-records, failed: end.failed } }\n" ++
         "  build-records: { use: build-reference-reconciliation-records, on: { ok: account-reconciliation, failed: end.failed } }\n" ++
-        "  account-reconciliation: { use: validate-reference-reconciliation-completeness, on: { ok: observe-reconciliation, blocked: end.blocked, failed: end.failed } }\n" ++
+        "  account-reconciliation: { use: validate-reference-reconciliation-completeness, on: { ok: project-authority, blocked: end.blocked, failed: end.failed } }\n" ++
+        "  project-authority: { use: build-specification-authority-requirements, on: { ok: build-authority, blocked: end.blocked } }\n" ++
+        "  build-authority: { use: build-required-authority-ledger, on: { ok: observe-reconciliation, blocked: end.blocked } }\n" ++
         "  observe-reconciliation: { use: test.observe-reconciliation, on: { ok: end.ok } }\n");
     return result.toOwnedSlice(allocator);
 }

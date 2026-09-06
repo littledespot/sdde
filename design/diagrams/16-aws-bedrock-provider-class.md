@@ -25,7 +25,7 @@ classDiagram
     AWSBedrockProvider --> ProviderAuthorizationLeasePort : consumes single-use authorization
     AWSBedrockProvider ..> InvokedProviderOperation : requires the authorized operation and deadline
     AWSBedrockProvider --> TrustedEndpointResolver : resolves an allowed endpoint
-    AWSBedrockProvider --> AWSBedrockRuntimePort : performs the bounded provider operation
+    AWSBedrockProvider --> AWSBedrockRuntimePort : performs one deadline-bound exchange
     AWSBedrockProvider ..> ProviderInvocationObservation : returns response and usage evidence
 
     note for LLMProviderInterface "Supports inference and explicitly requested input-token counting"

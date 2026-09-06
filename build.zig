@@ -167,6 +167,14 @@ pub fn build(b: *std.Build) void {
     }) });
     b.step("test-specification-contract", "Test the closed specification content and editable-view shapes").dependOn(&b.addRunArtifact(specification_tests).step);
 
+    const authority_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/required_authority_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{ .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module }, .{ .name = "unicode_normalization", .module = unicode_module } },
+    }) });
+    b.step("test-required-authority", "Test shared required authority, ownership routing and YAML gates").dependOn(&b.addRunArtifact(authority_tests).step);
+
     const request_preparation_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/model_request_preparation_test.zig"),
         .target = target,
@@ -229,6 +237,13 @@ pub fn build(b: *std.Build) void {
     }) });
     const count_model_step = b.step("test-count-model-input-tokens", "Test optional single-call token counting and outcome propagation");
     count_model_step.dependOn(&b.addRunArtifact(count_model_tests).step);
+
+    const provider_conformance_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/provider_conformance_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    b.step("test-provider-conformance", "Test shared fake and production Bedrock contracts without AWS calls").dependOn(&b.addRunArtifact(provider_conformance_tests).step);
 
     const count_validation_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/model_token_count_validation_test.zig"),

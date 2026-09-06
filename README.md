@@ -30,8 +30,11 @@ immutable binding data; provider calls require a separate policy-permitted port.
 now have native YAML initialization, assignment, binding-validation and building
 operations. One request retains its originating slot/resources across steps;
 generic preparation needs no SDD feature or task. Native inference, observation
-validation, JSON decoding and payload-schema validation are YAML-callable;
-Bedrock remains separate work.
+validation, JSON decoding and payload-schema validation are YAML-callable.
+Production [Bedrock support](design/features/F0007-AWSBedrockProvider.md) is
+connected through the same port and runner. Model and region are selected in
+the external provider catalogue; API keys come only from the invocation's
+`AWS_BEARER_TOKEN_BEDROCK` environment snapshot.
 
 YAML, the registry and runner use [unversioned operation IDs](design/decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06).
 Each ID selects one current contract; version suffixes are rejected without aliases.
@@ -46,8 +49,8 @@ Assignment makes no API call, prepares no authorization and charges no tokens.
 operation's single-use lease, with a required `timeout-ms` and the separate
 `provider-authorization` capability. Preparation uses only a preloaded port;
 it performs no I/O, refresh, provider call or token charge. The runner owns
-lease cleanup; YAML receives only an opaque result. Bedrock composition remains
-separate, and an unbound authorization adapter fails closed.
+lease cleanup; YAML receives only an opaque result. The Bedrock adapter uses
+preloaded material without I/O or refresh; missing credentials fail closed.
 `advance-model-request-lifecycle` with `transition: invoked` then explicitly
 advances the logical request through its existing immutable ledger. It requires
 that same prepared authorization and changes no request content, attempt, lease
@@ -62,8 +65,8 @@ with no repeated parameters. The runner accounts actual input/output usage
 before publishing the untrusted result, including stopped output. Budget
 overshoots retain the full usage, return `WorkflowTokenBudgetExceeded` and block
 later calls. Failures and cancellation remain distinct; no counting, retry,
-response decoding or lifecycle terminalization is implicit. The native binding
-is fake-provider tested and fails closed until a real adapter is bound.
+response decoding or lifecycle terminalization is implicit. Shared fake/Bedrock
+conformance and production-composition YAML tests exercise the same boundary.
 
 `count-model-input-tokens` and `validate-model-token-count-observation` are
 parameter-free YAML bindings of the existing actions. Their typed results retain
@@ -146,6 +149,7 @@ zig build test-reference-ingestion
 zig build test-reference-evidence
 zig build test-reference-extraction
 zig build test-reference-reconciliation
+zig build test-required-authority
 zig build test-structured-tokens
 zig build test-path-tokens
 zig build test-typed-text
@@ -201,6 +205,13 @@ claim membership, validates dispositions and signal/conflict joins, assigns
 engine IDs and blocks unresolved conflicts. Live model extraction/reconciliation,
 semantic review and snapshot publication remain future work. See
 [F0100](design/features/F0100-SpecWorkflow.md#35-extraction-candidate-accounting).
+The shared required-authority boundary now projects registered Specify fields
+and reference obligations, checks complete current support, and routes gaps to
+their earliest owner. Its YAML-visible gate uses existing runner provenance to
+reject stale inputs and sources. Scripted tests cover unrelated requirement
+kinds; no rubric score, citation alone or model success assertion grants gate
+authority. Generation/clarification/publication wiring remains separate work.
+See [F0100 §3.10](design/features/F0100-SpecWorkflow.md#310-shared-required-authority-boundary).
 Registered toolchain naming rules now feed a shared, YAML-addressable path-token
 grammar and detector, including current reference basenames. Source-backed
 display IDs and shared typed-text validation now gate extraction candidates;

@@ -10,6 +10,12 @@ pub fn decode(
             .object => |object| if (object.count() == 0) .empty_object else null,
             else => null,
         },
+        .aws_bedrock => blk: {
+            if (raw != .object or raw.object.count() != 1) break :blk null;
+            const region = raw.object.get("region") orelse break :blk null;
+            if (region != .string) break :blk null;
+            break :blk .{ .aws_bedrock = .{ .region = std.meta.stringToEnum(contracts.BedrockRegion, region.string) orelse break :blk null } };
+        },
     };
 }
 
@@ -19,5 +25,6 @@ pub fn matches(
 ) bool {
     return switch (schema) {
         .empty_object => value == .empty_object,
+        .aws_bedrock => value == .aws_bedrock,
     };
 }

@@ -287,7 +287,8 @@ Request-closure cases cover all evidence-backed reasons/outcomes, unfinished
 operations, missing/foreign/stale/duplicate inputs, forged successors/reasons,
 suppressed failures, compiler/registry rejection, allocation and cancellation
 cleanup, owner lifetime, and closure without a live lease at token exhaustion.
-Bedrock remains a separate increment.
+Production Bedrock is connected through the same retained-request bindings;
+shared fake/adapter and YAML tests prove the production handoff.
 
 Pre-call termination cases cover both operation kinds, failure/cancellation,
 prepared/missing/foreign/stale/duplicate rejection, forged deltas, no-clock

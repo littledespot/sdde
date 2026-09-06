@@ -1,6 +1,5 @@
 const std = @import("std");
 const contracts = @import("llm_provider_contracts.zig");
-const config_schema = @import("llm_provider_config_schema.zig");
 const document = @import("llm_provider_document.zig");
 const identity = @import("llm_provider_identity.zig");
 
@@ -166,7 +165,7 @@ fn validateCandidate(
         };
         if (!entry.implementation_id.eql(registered.implementation_id) or
             !std.meta.eql(entry.capabilities, registered.capabilities) or
-            !config_schema.matches(registered.config_schema, entry.config) or
+            !registered.acceptsConfig(entry.config) or
             !sameStrings(entry.supported_reasoning_efforts, registered.supported_reasoning_efforts))
         {
             return error.InvalidLLMProviderRegistry;

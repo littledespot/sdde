@@ -5685,6 +5685,14 @@ SpecificationClaimDispositionEntry {
 
 ### 6.1 Authority reconciliation contract
 
+The sample below illustrates the broader design. H-008's native execution-local
+types and compiler-locked policies are owned by
+[`required_authority.zig`](../src/domain/required_authority.zig), not a second
+wire schema here. Its closed observations reference supplied evidence; they
+cannot author requirement rules, ownership, evidence records or continuation.
+Specify's native projection and YAML operations are described in
+[F0100 §3.10](features/F0100-SpecWorkflow.md#310-shared-required-authority-boundary).
+
 ```text
 AuthorityOwnerStage = ClarificationStage
 AuthorityDetectionStage = spec | plan | tasks | implement | recovery
@@ -8498,11 +8506,11 @@ and every referenced tuple must exist in the separately configured
   },
   "models": {
     "slots": {
-      "audit_analysis": { "provider": "openai", "model": "gpt-5-nano" },
-      "drift_analysis": { "provider": "openai", "model": "gpt-5-nano" },
-      "spec_generation": { "provider": "openai", "model": "gpt-5-nano", "reasoningEffort": "low" },
-      "design_section_generation": { "provider": "openai", "model": "gpt-5.4-nano" },
-      "implementation": { "provider": "openai", "model": "gpt-5.4-mini" }
+      "audit_analysis": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
+      "drift_analysis": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
+      "spec_generation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
+      "design_section_generation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
+      "implementation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" }
     }
   },
   "workflow": {

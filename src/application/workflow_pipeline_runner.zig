@@ -332,6 +332,12 @@ pub const Runner = struct {
         return self.token_accounting.current();
     }
 
+    pub fn validateModelBindings(self: *Runner) resolve_provider_binding.Error!void {
+        for (self.selected.graph.authority.steps) |step| {
+            if (step.model != null) _ = try self.resolveModelBinding(step);
+        }
+    }
+
     fn resolveModelBinding(
         self: *Runner,
         step: compilation.CompiledStep,

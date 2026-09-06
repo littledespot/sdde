@@ -25,6 +25,51 @@ const consume: pipeline.NodeContract = .{
     .side_effect = .none,
 };
 
+test "shared gate checks source lineage and renewal after source and projection replacements" {
+    const gate = @import("domain/workflow_gate.zig");
+    const proof = values.schema(.workflow_operation_registry_evidence, gate.Decision, 1, 32);
+    const contract: gate.Contract = .{ .id = .{ .bytes = "test.projection@1" }, .issuer = .{ .bytes = "test.validate-projection" }, .evidence = proof.key, .authority = &.{count_schema.key} };
+    const project: pipeline.NodeContract = .{ .id = "test.project", .kind = .action, .requires = &.{context_schema.key}, .produces = &.{count_schema.key}, .side_effect = .none };
+    const validate: pipeline.NodeContract = .{ .id = contract.issuer.bytes, .kind = .action, .requires = &.{count_schema.key}, .produces = &.{proof.key}, .side_effect = .none };
+    for ([_][]const u8{ "Business source", "Repository capability" }) |text| {
+        var envelope = envelope_module.PipelineEnvelope.init(&.{ context_schema, count_schema, proof });
+        defer envelope.deinit();
+        var delta: pipeline.NodeDelta = .{};
+        defer envelope.discard(&delta);
+        delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = text, .attempts = 1 });
+        try envelope.apply(produce, &delta, .ok);
+        delta.data_writes[count_index] = try values.create(std.testing.allocator, count_schema, u32, 1);
+        try envelope.apply(project, &delta, .ok);
+        delta.data_writes[@intFromEnum(proof.key)] = try values.create(std.testing.allocator, proof, gate.Decision, .accepted);
+        try envelope.apply(validate, &delta, .ok);
+        try std.testing.expect(envelope.checkGate(contract) == null);
+        var refresh = produce;
+        refresh.requires = produce.produces;
+        refresh.replaces = produce.produces;
+        refresh.produces = &.{};
+        delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = text, .attempts = 1 });
+        try envelope.apply(refresh, &delta, .ok);
+        try std.testing.expectEqual(.stale_authority, envelope.checkGate(contract).?);
+        var rebuild = project;
+        rebuild.requires = &.{ context_schema.key, count_schema.key };
+        rebuild.replaces = project.produces;
+        rebuild.produces = &.{};
+        delta.data_replacements[count_index] = try values.create(std.testing.allocator, count_schema, u32, 1);
+        try envelope.apply(rebuild, &delta, .ok);
+        try std.testing.expectEqual(.stale_authority, envelope.checkGate(contract).?);
+        var renew = validate;
+        renew.replaces = validate.produces;
+        renew.produces = &.{};
+        delta.data_replacements[@intFromEnum(proof.key)] = try values.create(std.testing.allocator, proof, gate.Decision, .accepted);
+        try envelope.apply(renew, &delta, .ok);
+        try std.testing.expect(envelope.checkGate(contract) == null);
+        const remove: pipeline.NodeContract = .{ .id = "test.remove-source", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{context_schema.key}, .side_effect = .none };
+        delta.data_invalidations.insert(context_schema.key);
+        try envelope.apply(remove, &delta, .ok);
+        try std.testing.expectEqual(.missing_authority, envelope.checkGate(contract).?);
+    }
+}
+
 test "envelope owns copied input and exposes only declared keys" {
     var envelope = envelope_module.PipelineEnvelope.init(&schemas);
     defer envelope.deinit();

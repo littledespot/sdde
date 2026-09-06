@@ -8,14 +8,14 @@ const Fixture = struct {
     inputs: r.evidence.Inputs,
     extracted: r.extraction.Accounted,
     text: @import("test_fixtures/reference_text.zig").Prepared,
-    fn deinit(self: Fixture) void {
+    pub fn deinit(self: Fixture) void {
         self.text.deinit();
     }
-    fn context(self: Fixture) f.Context {
+    pub fn context(self: Fixture) f.Context {
         return .{ .inputs = self.inputs, .registry = self.text.registry, .current = text.safety.value(self.text.owner) };
     }
 };
-fn prepare(allocator: std.mem.Allocator, sources: []const []const u8) !Fixture {
+pub fn prepare(allocator: std.mem.Allocator, sources: []const []const u8) !Fixture {
     const ingestion = @import("domain/reference_ingestion.zig");
     var inputs = try @import("reference_ingestion_test.zig").read(allocator, "base.md", "");
     const documents = try allocator.alloc(ingestion.Document, sources.len);

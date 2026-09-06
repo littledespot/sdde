@@ -13,7 +13,8 @@ preservation, scripted extraction accounting and reconciliation in Sections
 extraction/reconciliation, generation,
 output publication and the complete definition remain unfinished.
 The native content schema and mechanical specification Markdown codec in §5.6
-are implemented; their authority/generation/publication integration remains open.
+are implemented. The shared required-authority boundary and Specify projection
+in §3.10 are implemented; generation/publication integration remains open.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -513,6 +514,60 @@ snapshot/conflict continuity, clarification creation and specification rendering
 remain separate work. No new prompt, provider call, persistence or artifact
 write is introduced; user-closed clarification files remain unchanged.
 
+### 3.10 Shared required-authority boundary
+
+H-008 implements Design §12.8 through one shared native contract, not a
+specification-quality oracle. `src/domain/required_authority.zig` owns the
+closed requiredness/ownership policies, current support checks and outcomes.
+`specification_authority.zig` contributes the schema-derived Specify projection.
+
+The projection includes the display name, primary story and evidence-backed
+entity decision; each field of an existing identified content record; every
+accounted reference signal/conflict; and each exact-preservation obligation.
+Optional collections add no minimum record count. The gate rebuilds this
+projection to reject omitted/invented entries. Signals retain the existing
+claim/citation/token lineage and unresolved conflicts force a gap; neither a
+citation nor reconciliation membership supplies semantic support by itself.
+
+| Registered YAML operation | Responsibility |
+| --- | --- |
+| `build-specification-authority-requirements` | Project native content/reference facts into shared requirements. |
+| `build-required-authority-ledger` | Validate and canonically order registered requirements/current inputs. |
+| `parse-required-authority-observations` | Parse the closed observation shape using the shared strict JSON decoder. |
+| `reconcile-required-authorities` | Account for every supplied evidence member and derive one resolution or gap per requirement. |
+| `validate-required-authority-reconciliation` | Rebuild against current inputs and issue accepted/rejected gate evidence. |
+
+Observations contain only requirement references, the complete inspected
+authority set and supplied evidence IDs. Native evidence keeps current
+authority identities, scoped candidate revisions, provenance and whether its
+finding is deterministic or model-assisted. The model cannot mint evidence,
+choose ownership, remove requirements or set workflow success. Only direct
+identity/revision equality collapses equivalent candidates, retaining all member
+evidence. Entity non-applicability requires supported `no_business_data` evidence;
+exceptions are permitted only by the shared registered exact-scope policy and
+current authenticated authority, not by an arbitrary flag.
+
+The shared owner mapping routes business/reference gaps to spec, design/policy
+gaps to plan and decomposition gaps to tasks. Downstream detection produces
+explicit upstream rework; unknown ownership/policy blocks. Structural
+accounting errors block instead of entering model repair. Gap records are
+execution-local inputs to H-011, not inline questions or persisted forms.
+
+The registered `required-authority@1` gate binds its sole issuer to the current
+input, observation and result generations. The existing runner also checks
+source lineage, so refreshing a reference, candidate or support source requires
+explicit projection/reconciliation/validation again. Protected operations
+declare that gate in their native contract; YAML cannot bypass it or supply
+an alternative issuer. There is no persisted authority ledger, new prompt,
+fingerprint or recovery mechanism.
+
+`zig build test-required-authority` covers scripted outcomes, unrelated kinds,
+all Specify record families, missing/foreign/duplicate/stale support, permitted
+and prohibited dispositions, scoped exceptions, source preservation and YAML
+gate bypasses. The production reference fixture reaches the Specify projection;
+H-009/H-010 must still supply semantic evidence and generation, and H-011–H-013
+must connect gap handling, publication and the complete definition.
+
 ## 4. Required logical coverage
 
 The compiled registered contracts collectively cover:
@@ -717,7 +772,8 @@ continuation lines have two structural indentation spaces, removed on parse.
 Record order is section order, preserving order within each family. The shared
 Markdown scanner owns code-span recognition. Parsing captures text/spans, not
 NFC normalization, provenance, applicability, semantic adequacy or stage success.
-H-008/H-010/H-012 still own those validation and workflow integration steps.
+H-008 implements the shared authority boundary (§3.10); H-010/H-012 still own
+generation validation and publication integration.
 
 ## 6. Diagrams
 

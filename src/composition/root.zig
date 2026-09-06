@@ -71,8 +71,8 @@ const model_provider_bootstrap = @import("model_provider_bootstrap.zig");
 const engine_invocation = @import("engine_invocation.zig");
 const workflow_operation_registry = @import("../ports/workflow_operation_registry.zig");
 
-pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) run_outcome.Outcome {
-    return runInvocationInProject(io, allocator, .cwd(), arguments);
+pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8, environment: *const std.process.Environ.Map) run_outcome.Outcome {
+    return runInvocationInProjectWithRuntime(io, allocator, .cwd(), arguments, .{}, environment);
 }
 
 fn runInvocationInProject(
@@ -81,10 +81,10 @@ fn runInvocationInProject(
     project_root: std.Io.Dir,
     arguments: []const []const u8,
 ) run_outcome.Outcome {
-    return runInvocationInProjectWithRuntime(io, allocator, project_root, arguments, .{});
+    return runInvocationInProjectWithRuntime(io, allocator, project_root, arguments, .{}, null);
 }
 
-fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, project_root: std.Io.Dir, arguments: []const []const u8, runtime: pipeline.NodeRuntime) run_outcome.Outcome {
+fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, project_root: std.Io.Dir, arguments: []const []const u8, runtime: pipeline.NodeRuntime, environment: ?*const std.process.Environ.Map) run_outcome.Outcome {
     var toolchain_source_adapter = toolchain_authority_source.Adapter.init(io, project_root);
     var toolchain_parser_adapter: toolchain_documents.Adapter = .{};
     var reference_adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
@@ -103,9 +103,16 @@ fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, p
         allocator,
         project_root,
         .{},
-        &llm_provider_contracts.Registry.empty,
+        &@import("provider_model_contracts.zig").registry,
     );
     var provider_clock: @import("../adapters/system/provider_operation_clock.zig").Adapter = .{ .io = io };
+    var provider_runtime: @import("model_provider_runtime.zig").Assembly = .{
+        .environment = environment,
+        .operations = &native_bindings.model_requests,
+        .authorization = .{ .allocator = allocator },
+        .transport = .{ .io = io, .clock = provider_clock.clock(), .runtime = runtime },
+    };
+    defer provider_runtime.deinit();
     return runBootstrappedInvocation(
         allocator,
         &boot,
@@ -114,6 +121,7 @@ fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, p
         provider_bootstrap.bind(),
         runtime,
         provider_clock.clock(),
+        &provider_runtime,
     );
 }
 
@@ -125,6 +133,7 @@ fn runBootstrappedInvocation(
     provider_bootstrap: model_provider_bootstrap_binding.Binding,
     runtime: pipeline.NodeRuntime,
     provider_clock: ?@import("../ports/provider_authorization_lease.zig").Clock,
+    provider_runtime: ?*@import("model_provider_runtime.zig").Assembly,
 ) run_outcome.Outcome {
     return switch (boot.*) {
         .failed => |failure| .{ .bootstrap_failed = failure },
@@ -140,6 +149,7 @@ fn runBootstrappedInvocation(
             );
             defer invocation.deinit();
             invocation.provider_clock = provider_clock;
+            invocation.provider_runtime = provider_runtime;
             break :execute workflow_engine.run(invocation.bindings());
         },
     };
@@ -416,6 +426,7 @@ test "invocation runner handles every provider preparation outcome before workfl
             probe.providerBinding(),
             .{},
             null,
+            null,
         );
 
         try std.testing.expectEqual(@as(usize, 1), probe.prepare_calls);
@@ -450,6 +461,7 @@ test "invocation runner handles every provider preparation outcome before workfl
         invalid_probe.registry(),
         invalid_probe.providerBinding(),
         .{},
+        null,
         null,
     );
     try std.testing.expect(invalid == .invocation_invalid);
@@ -790,7 +802,7 @@ test "reference preflight cancellation stops safely at each runtime checkpoint" 
     try project.dir.createDirPath(io, "references/hello");
     for (0..256) |checks| {
         var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
-        const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "hello" }, control.runtime());
+        const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "reference-preflight", "--feature", "Hello/日本語", "--reference", "hello" }, control.runtime(), null);
         try std.testing.expect(result.executionStatus() != null);
         if (result.executionStatus().? == .ok) {
             try std.testing.expect(checks > 3);
@@ -1018,7 +1030,7 @@ test "reference ingestion cancellation does not create artifacts" {
     try writeReferenceIngestionFixture(io, project.dir);
     for (0..512) |checks| {
         var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
-        const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, control.runtime());
+        const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, control.runtime(), null);
         try std.testing.expect(result.executionStatus() != null);
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
         if (result.executionStatus().? == .ok) return;
@@ -1159,6 +1171,10 @@ const ReferenceReconciliationTestProducer = struct {
     fn observe(context: ?*@This(), input: workflow_operation_registry.Input) workflow_operation_registry.Error!workflow_execution.Candidate {
         const result = try prior.read(&input.step.data, native.accounted_schema, .reconciliation_accounted);
         if (result.payload().reconciliation_accounted.outcome != .complete) return error.OperationExecutionFailed;
+        const authority = @import("../application/required_authority_workflow.zig");
+        const ledger = @import("../application/required_authority_values.zig").read(&input.step.data, authority.ledger_schema, .ledger) catch return error.OperationExecutionFailed;
+        if (ledger.requirements.len < 3 or ledger.inputs.projection != .specification or ledger.inputs.evidence.len != 0) return error.OperationExecutionFailed;
+        if (!ledger.inputs.references.?.records.assignments.checked.prior.prior.input.progress.plan.layout.items.state_id.eql(result.payload().reconciliation_accounted.records.assignments.checked.prior.prior.input.progress.plan.layout.items.state_id)) return error.OperationExecutionFailed;
         context.?.observed += 1;
         return .{ .outcome = .ok, .delta = .{} };
     }
@@ -1232,7 +1248,7 @@ test "native YAML validates citations extraction and reconciliation before conti
             .{ .contract = .{ .id = "test.propose-extraction", .kind = .step, .requires = &.{ .citable_reference_inputs, .reference_passive_literals, .structured_token_candidates }, .produces = &.{.raw_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.propose) },
             .{ .contract = .{ .id = "test.observe-extraction", .kind = .step, .requires = &.{.accounted_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.observe) },
             .{ .contract = .{ .id = "test.propose-reconciliation", .kind = .step, .requires = &.{.reference_reconciliation_input}, .produces = &.{.raw_reference_reconciliation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceReconciliationTestProducer, &reconciliation_producer, ReferenceReconciliationTestProducer.propose) },
-            .{ .contract = .{ .id = "test.observe-reconciliation", .kind = .step, .requires = &.{.accounted_reference_reconciliation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceReconciliationTestProducer, &reconciliation_producer, ReferenceReconciliationTestProducer.observe) },
+            .{ .contract = .{ .id = "test.observe-reconciliation", .kind = .step, .requires = &.{ .accounted_reference_reconciliation, .required_authority_ledger }, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceReconciliationTestProducer, &reconciliation_producer, ReferenceReconciliationTestProducer.observe) },
         };
         native.registry.operations = &entries;
         var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
@@ -1240,7 +1256,7 @@ test "native YAML validates citations extraction and reconciliation before conti
         try std.testing.expect(boot == .ready);
         native.bindRoots(boot.ready.roots.registry());
         var providers = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project.dir, .{}, &llm_provider_contracts.Registry.empty);
-        const result = runBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{}, null);
+        const result = runBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{}, null, null);
         const expected: workflow.OutcomeTag = if (mode) |selected| switch (selected) {
             .claims, .no_claim, .passive, .preserved, .irrelevant, .reconciled => .ok,
             .blocked, .conflict => .blocked,
@@ -1457,7 +1473,7 @@ test "feature input preparation cancellation never creates artifacts" {
     try writeFeatureInputFixture(io, project.dir);
     for (0..256) |checks| {
         var control: RuntimeAfterObservations = .{ .active_observations_remaining = checks, .terminal = .cancelled };
-        const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }, control.runtime());
+        const result = runInvocationInProjectWithRuntime(io, std.testing.allocator, project.dir, &.{ "feature-input-preflight", "--feature", "Chosen/Café", "--reference", "first" }, control.runtime(), null);
         try std.testing.expect(result.executionStatus() != null);
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "requirements", .{}));
         try std.testing.expectError(error.FileNotFound, project.dir.openDir(io, "engine/workflows/features", .{}));

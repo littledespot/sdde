@@ -2,6 +2,14 @@
 
 **Status:** Accepted feature design
 
+**Production completion scope:** The user explicitly includes production
+provider/model registration, Bedrock configuration and concrete authorization/
+count/inference wiring, applicable native-schema representability and shared
+fake/real-adapter conformance. These are F0006 completion requirements, not
+work deferred behind the F0007 label. The implementation uses the existing
+composition boundary, runner ledgers and pinned Zig HTTP transport. See
+[the implemented Bedrock contract](F0007-AWSBedrockProvider.md).
+
 **Execution amendment:** [ADR 0009](../decisions/0009-atomic-workflow-execution.md)
 removes provider-effect persistence, durable handoff and cross-execution
 recovery. The whole workflow is atomic; an abandoned execution is never resumed.
@@ -79,8 +87,9 @@ complete-candidate evidence. `DecodeModelEnvelopeAction` now parses that sealed
 input into an owned, read-only JSON object retaining the same association and
 compiled schema. `ValidateModelPayloadSchemaAction` now checks that tree against
 only its retained schema and returns allocation-free candidate evidence or a
-closed rejection reason. These response operations are YAML-registered;
-provider-native schema representability remains work.
+closed rejection reason. These response operations are YAML-registered.
+The registered Bedrock native profile checks exact schema representability;
+prompt-only mode retains the full engine schema without that native check.
 
 **Accepted and implemented YAML preparation:** [ADR 0012](../decisions/0012-workflow-owned-model-request.md)
 replaces mandatory SDD ownership for generic requests and per-consumer binding
@@ -343,8 +352,9 @@ handoff and the runner rejects foreign execution references. No new YAML
 syntax, route registry, provider port, byte cap or persisted state is added.
 
 For example, this request and authorization preparation workflow uses one repository-authorized
-slot and two captured resources. It makes no provider call; response operations are
-separate integration work. The prompt and closed result schema remain in files.
+slot and captured resources. The [complete provider workflow example](../examples/provider-request.workflow.yaml)
+also performs inference, validation, operation/request closure and explicit
+pre-call failure handling. Its prompt, input and result schema remain in files.
 
 ```yaml
 schema: workflow/v1
@@ -433,12 +443,12 @@ It also accepts the fixed conditional run-preparation owner and exact
 selected-graph requirement derivation. The runner bindings and immutable
 per-invocation provider snapshot are implemented and invoked immediately after
 exact workflow selection. The request-identity ledger now owns assignment and
-binding validation without provider I/O. Production provider contracts,
-attempt/operation accounting, and externally counted operations remain
-undefined or incomplete.
+binding validation without provider I/O. Production contracts, attempt/operation
+accounting, authorization and externally counted operations are implemented
+through the same execution-local boundaries.
 
-The following amendments are accepted. Items marked implemented already have
-runtime evidence; the remaining items define subsequent implementation work:
+The following amendments are accepted and implemented, with journal/recovery
+requirements explicitly withdrawn by ADR 0009:
 
 1. **Accepted by F0001/F0004/F0008:** require `paths.providers`, validate its
    normalized project-relative path and exact `.sddproviders.json` basename,
@@ -474,7 +484,7 @@ runtime evidence; the remaining items define subsequent implementation work:
    model; unused catalogue entries gain no repository authority. ADR 0005
    removes built-in routes: each originating YAML model-request step names
    one repository slot explicitly; consumers retain its binding under ADR 0012;
-7. **Accepted, partially implemented:** amends
+7. **Accepted and implemented:** amends
    `AdvanceModelAttemptAccountingAction`, design Sections 12.1 and 13.4, and
    `ModelRequestLifecycle` for the Section 7 full-attempt semantics:
    reserve the initial attempt once before the first external provider
@@ -579,9 +589,9 @@ decodes its raw `config` through exactly one registered closed variant,
 producing a validated `ProviderModelDefinition`. An unregistered provider, unknown
 provider-specific field, or wrong provider-specific value is
 `LLM_PROVIDER_REGISTRY_INVALID`, not a partial decode. This staged
-raw-to-validated boundary permits the current example's common collection
-shape to decode, but its unimplemented OpenAI entries make whole-registry build
-fail.
+raw-to-validated boundary rejects any unsupported sibling before publishing
+the registry. The current source example selects the registered Sydney Bedrock
+model; it is still not an automatic runtime configuration or fallback.
 
 There are no common project-authored `endpoint`, `contextWindow`,
 `maxOutputTokens`, `supportsTemperature`, `structuredOutput`, `tokenizer`, or
@@ -623,13 +633,10 @@ credential process, command, role session, secret reference, arbitrary header,
 retry count, proxy, CA override, or unrestricted request map. Provider-specific
 features may add only narrowly typed, explicitly accepted fields.
 
-The current provider source example includes one Bedrock entry and
-unimplemented OpenAI entries, while the current [toolkit source
-example](../examples/.sddtoolkit.json) selects only OpenAI catalogue models and
-leaves the Bedrock entry unreferenced. It therefore demonstrates a valid strict
-slot-to-catalogue subset, including multiple slots referencing `gpt-5-nano`.
-It is still not a conforming runtime fixture because no accepted OpenAI provider
-implementation exists; it does not enable an adapter or provide a fallback.
+The provider and [toolkit source example](../examples/.sddtoolkit.json) select
+the registered Sydney `openai.gpt-oss-20b-1:0` Bedrock model. Multiple repository
+slots may reference it without duplicating its provider configuration. These
+files are source examples, never runtime fallbacks.
 
 ## 4. Registered contracts and immutable registry
 
@@ -681,13 +688,12 @@ LLMProviderDispatch = union(enum) {
 }
 ```
 
-The current production contract registry is empty. The generic registry and
-allowlist boundary is exercised with private compiler-supplied test contracts
-whose configuration schema is the closed empty object; those contracts are not
-installed by production composition and cannot activate a project provider.
-F0007 or another accepted provider feature must add a production contract,
-configuration variant, implementation discriminator, and later dispatch branch
-together.
+Production installs the Bedrock contracts in `composition/provider_model_contracts.zig`
+with the closed `aws_bedrock { region }` configuration and exhaustive concrete
+dispatch. The exact supported models, regions and modes are listed in F0007.
+The empty-object variant belongs only to private test contracts, not production.
+External catalogue and slot selection remain mandatory; registration supplies
+support facts, never a default or repository authorization.
 
 The neutral contract carries count/inference support, an exact-count
 mechanism (`unavailable | provider_input_token_count`), response support and
@@ -699,10 +705,11 @@ even a narrower candidate cannot substitute different contract facts. An
 internally consistent but insufficient contract may remain catalogued, but
 cannot produce a usable model binding.
 
-Response support currently admits `unavailable | prompt_only`. An explicit
-native-schema selection rejects without falling back to prompt guidance. A
-provider feature must supply the native schema-feature profile and its proof
-before that mode can bind; a generic JSON-support flag is not such proof.
+Response support admits `unavailable | prompt_only | bedrock_json_schema`.
+Only the registered native profile permits native mode, and exact schema
+representability is checked against the request's retained compiled schema.
+Unsupported constraints reject without being dropped or falling back to prompt
+guidance. Prompt-only is not subjected to a native representability check.
 Prompt guidance representability does not prove schema validity or candidate
 validity: those remain the request/schema validators' responsibilities.
 
@@ -1560,6 +1567,12 @@ F0006 does not:
     workflow increments deterministic without network access or credentials.
 22. The packaged native executable needs only accepted target-owned runtime
     inputs, never repository examples, source files, build cache, or Zig.
+23. Production composition installs real contracts and authorization/count/
+    inference implementations through the sole port. Shared fake/Bedrock tests
+    prove association, usage, failure/cancellation, deadlines, single-use leases,
+    secret handling and cleanup. YAML tests prove complete lifecycle, execution
+    isolation and token-budget enforcement with a deterministic HTTP seam;
+    live AWS requests remain separately authorized.
 
 ## 13. Verification
 

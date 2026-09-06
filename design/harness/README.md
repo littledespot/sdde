@@ -53,7 +53,7 @@ requested live, LLM-based evaluation.
 | Generic engine | YAML discovery/compiler/runner and explicit feature/reference invocation exist. | Complete Specify definition and content-producing operations. |
 | References | F0100 §§3.1–3.9 implement Markdown inputs, citations, typed text, exact-value preservation and scripted extraction/reconciliation. | Model wiring, semantic generation and final artifact/state publication. |
 | Model calls | [Native request operations](../../src/composition/model_request_operations.zig) and fake-provider tests exist; lifecycle work is changing in the worktree. | Verify/reuse that work, supply live provider integration and domain request/result bindings. |
-| Specify | Native content shapes and the mechanical Markdown codec are implemented under H-007. [Native reference tests](../../src/composition/root.zig) still assert that no `spec.md` was written. | Shared authority/model/generation integration, clarification lifecycle and complete output publication. |
+| Specify | H-007's content/Markdown contract and H-008's shared authority gate/Specify projection are implemented. [Native reference tests](../../src/composition/root.zig) still assert that no `spec.md` was written. | Model/generation evidence integration, clarification lifecycle and complete output publication. |
 | Fixture | Unchanged `stories.md`, seven principle files, `spec.case.json`, draft rubric and seven [calibration specimens](../../test/evaluation/wf-001-hello-world/node-vitest/calibration/README.md) exist. | Human rubric review/live calibration and full-workflow runtime resources. |
 | Evaluator | `test/harness/`, `harness.zig` and `evaluate-spec`/offline test/smoke build steps implement supplied-spec OpenAI grading and reports. | Authorized live acceptance; no paid API call was made during implementation. |
 | Full-workflow harness | Specify execution/handoff is still separate from the supplied-spec evaluator. `TEST_HARNESS.md` remains absent; [evaluator.md](evaluator.md) documents actual commands. | H-007–H-018 integration and live end-to-end evidence. |
@@ -81,8 +81,8 @@ not an optional phase after a golden-file harness.
 ## Backlog index
 
 H-001–H-006 have an offline implementation; live acceptance and human review
-are excluded from the current task. H-007's native contract/codec is implemented;
-H-008–H-018 remain open.
+are excluded from the current task. H-007's native contract/codec and H-008's
+shared required-authority boundary are implemented; H-009–H-018 remain open.
 Dependencies and evidence are defined in the ticket bodies.
 
 | ID | Work item | Track |

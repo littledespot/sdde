@@ -1,0 +1,1 @@
+{"type":"object","properties":{"answer":{"type":"string","maxLength":1000}},"required":["answer"],"additionalProperties":false}

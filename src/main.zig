@@ -11,7 +11,7 @@ pub fn main(init: std.process.Init) !void {
         try arguments.append(init.gpa, try init.arena.allocator().dupe(u8, argument));
     }
 
-    const outcome = sdde.run(init.io, init.gpa, arguments.items);
+    const outcome = sdde.run(init.io, init.gpa, arguments.items, init.environ_map);
 
     switch (outcome) {
         .execution => |execution| switch (execution) {

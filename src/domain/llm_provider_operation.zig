@@ -135,6 +135,7 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     pub fn matchesBinding(self: IdentifiedProviderNeutralModelRequest, selected: binding.ValidatedProviderModelBinding) bool {
         const supported = selected.registry_entry.capabilities;
         return supported.supports(selected.response_mode, selected.controls) and
+            (self.response_guidance_mode != .native_schema or supported.structured_response.represents(self.response_schema)) and
             self.binding_id.eql(selected.bindingId()) and
             self.response_guidance_mode == selected.response_mode and
             std.meta.eql(self.controls, selected.controls);

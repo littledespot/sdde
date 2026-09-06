@@ -31,6 +31,7 @@ const path_tokens = @import("../application/path_token_workflow.zig");
 const passive_literals = @import("../application/passive_literal_workflow.zig");
 const structured_tokens = @import("../application/structured_token_workflow.zig");
 const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
+const authority = @import("../application/required_authority_workflow.zig");
 
 /// Composition of native implementations, not a workflow graph. No setup action
 /// executes until the selected YAML reaches its registered operation.
@@ -99,8 +100,13 @@ pub const Assembly = struct {
     assign_reconciliation_records: reconciliation.AssignRecords,
     build_reconciliation_records: reconciliation.BuildRecords,
     account_reconciliation: reconciliation.Account,
+    project_specification_authority: authority.ProjectSpecification,
+    build_required_authority: authority.Build,
+    parse_authority_observations: authority.Parse,
+    reconcile_required_authority: authority.Reconcile,
+    validate_required_authority: authority.Validate,
     model_requests: model_request.Assembly,
-    entries: [core.entries.len + 64 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 69 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -158,6 +164,11 @@ pub const Assembly = struct {
             .assign_reconciliation_records = .{ .allocator = allocator },
             .build_reconciliation_records = .{ .allocator = allocator },
             .account_reconciliation = .{ .allocator = allocator },
+            .project_specification_authority = .{ .allocator = allocator },
+            .build_required_authority = .{ .allocator = allocator },
+            .parse_authority_observations = .{ .allocator = allocator },
+            .reconcile_required_authority = .{ .allocator = allocator },
+            .validate_required_authority = .{ .allocator = allocator },
             .validate_extraction_text = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
             .validate_reference_claims = .{ .allocator = allocator },
             .assign_reference_claims = .{ .allocator = allocator },
@@ -228,6 +239,11 @@ pub const Assembly = struct {
             entry(reconciliation.AssignRecords, &self.assign_reconciliation_records),
             entry(reconciliation.BuildRecords, &self.build_reconciliation_records),
             entry(reconciliation.Account, &self.account_reconciliation),
+            entry(authority.ProjectSpecification, &self.project_specification_authority),
+            entry(authority.Build, &self.build_required_authority),
+            entry(authority.Parse, &self.parse_authority_observations),
+            entry(authority.Reconcile, &self.reconcile_required_authority),
+            entry(authority.Validate, &self.validate_required_authority),
             entry(extraction.ValidateText, &self.validate_extraction_text),
             entry(extraction.Validate, &self.validate_reference_claims),
             entry(extraction.Assign, &self.assign_reference_claims),
@@ -240,7 +256,7 @@ pub const Assembly = struct {
             entry(passive_literals.Assign, &self.assign_passive_literals),
             entry(passive_literals.Validate, &self.validate_passive_literals),
         };
-        self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{} };
+        self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{authority.gate_contract} };
     }
 
     pub fn bindRoots(self: *Assembly, registry: *const roots.BootstrapRootRegistry) void {
@@ -257,7 +273,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation.schemas ++ model_request.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation.schemas ++ authority.schemas ++ model_request.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.toolchain@1",
     .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },
@@ -292,7 +308,7 @@ fn invocationEntry(comptime T: type, context: *T) operations.Entry {
     return result;
 }
 
-fn entry(comptime T: type, context: *T) operations.Entry {
+pub fn entry(comptime T: type, context: *T) operations.Entry {
     const contract = T.Action.contract;
     return .{
         .contract = .{
@@ -306,6 +322,7 @@ fn entry(comptime T: type, context: *T) operations.Entry {
             .invalidates = contract.invalidates,
             .side_effect = contract.side_effect,
             .outcomes = if (@hasDecl(T, "outcomes")) &T.outcomes else &.{ .ok, .failed },
+            .gates = if (@hasDecl(T, "gates")) &T.gates else &.{},
         },
         .binding = binding.bind(T, context, T.invoke),
     };

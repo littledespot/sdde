@@ -1,4 +1,32 @@
 const std = @import("std");
+
+test "production provider wiring retains fact-only authority and no-I/O lease preparation" {
+    const contracts_source = @embedFile("composition/provider_model_contracts.zig");
+    try expectAbsent(contracts_source, "/adapters/");
+    try expectAbsent(contracts_source, "api_key");
+    try expectAbsent(contracts_source, "anyopaque");
+    const runtime = @embedFile("composition/model_provider_runtime.zig");
+    const validation = std.mem.indexOf(u8, runtime, "try runner.validateModelBindings();").?;
+    const capture = std.mem.indexOf(u8, runtime, "source.read(").?;
+    try std.testing.expect(validation < capture);
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(runtime, "source.read("));
+    try expectAbsent(runtime, "Table.init");
+    try expectAbsent(runtime, "countInputTokens(");
+    const source = @embedFile("adapters/system/bedrock_api_key_source.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "environment.get("));
+    inline for (.{ "std.http", "std.Io", "metadata", "getenv", "AWS_ACCESS_KEY_ID" }) |forbidden| try expectAbsent(source, forbidden);
+    const authorization = @embedFile("adapters/provider/bedrock_authorization.zig");
+    inline for (.{ "std.http", "std.Io", "std.process", "bedrock_api_key_source", "environment", "logger", "/application/" }) |forbidden| try expectAbsent(authorization, forbidden);
+    const provider_source = @embedFile("adapters/provider/aws_bedrock.zig");
+    inline for (.{ "/actions/", "/application/", "std.process", "std.Io", "workflow_token_accounting", "journal", "maxTokens" }) |forbidden| try expectAbsent(provider_source, forbidden);
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(provider_source, "self.transport.exchange("));
+    const http = @embedFile("adapters/provider/bedrock_http.zig");
+    inline for (.{ "Environ", "initDefaultProxies", "ssl_key_log", "getenv", "@constCast" }) |forbidden| try expectAbsent(http, forbidden);
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(http, "client.request("));
+    const dispatch = @embedFile("adapters/provider/provider_dispatch.zig");
+    try expectAbsent(dispatch, "anyopaque");
+    try expectAbsent(dispatch, "else =>");
+}
 const bootstrap_root_registry = @import("domain/bootstrap_root_registry.zig");
 const bootstrap_root_registry_service = @import("application/bootstrap_root_registry_service.zig");
 const workflow_registry = @import("domain/workflow_registry.zig");
@@ -1741,6 +1769,22 @@ test "reconciliation is YAML visible capability free and preserves closed candid
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.reference_reconciliation_records}, native.Account.Action.contract.requires);
     try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "reconciliation");
     try expectAbsent(@embedFile("domain/reference_reconciliation.zig"), "precedenceRule");
+}
+
+test "required authority has capability-free registered bindings and no model continuation authority" {
+    const native = @import("application/required_authority_workflow.zig");
+    const binding = @import("application/workflow_operation_binding.zig");
+    const authority = @import("domain/required_authority.zig");
+    inline for (.{ native.ProjectSpecification, native.Build, native.Parse, native.Reconcile, native.Validate }) |T| {
+        try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
+        try std.testing.expectEqual(.none, T.Action.contract.side_effect);
+    }
+    try std.testing.expectEqual(@import("domain/clarification_inputs.zig").Stage, authority.Stage);
+    try std.testing.expectEqual(@as(usize, 6), @typeInfo(authority.Outcome).@"union".fields.len);
+    try std.testing.expect(!@hasField(authority.Observation, "outcome"));
+    try std.testing.expect(!@hasField(authority.Observation, "owner"));
+    try std.testing.expect(!@hasField(authority.Observation, "score"));
+    try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "required_authority");
 }
 
 test "feature document filenames and headings agree" {

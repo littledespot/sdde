@@ -504,7 +504,10 @@ operation may write that evidence key.
 The runner records each applied value's local generation, producer, outcome,
 and input generations in its envelope. Before a protected operation, a gate
 requires accepted evidence from a successful execution of its exact issuer,
-bound to the still-present, unchanged authority generations. Missing, rejected,
+bound to the still-present, unchanged authority generations and their recorded
+source lineage. A replaced or removed ancestor invalidates derived evidence;
+a replacement's self-input identifies its superseded revision, not a dependency
+on itself. Missing, rejected,
 foreign, or stale evidence blocks execution. Refresh and domain validation
 remain explicit YAML operations; guards perform no I/O or hidden validation
 workflow. Evidence cannot be imported from a prior envelope as authority.

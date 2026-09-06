@@ -4,8 +4,8 @@ const composition = @import("composition/root.zig");
 pub const config = @import("domain/config.zig");
 pub const RunOutcome = @import("domain/run_outcome.zig").Outcome;
 
-pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) RunOutcome {
-    return composition.run(io, allocator, arguments);
+pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8, environment: *const std.process.Environ.Map) RunOutcome {
+    return composition.run(io, allocator, arguments, environment);
 }
 
 fn refAllDeclsRecursive(comptime T: type) void {
@@ -21,6 +21,8 @@ fn refAllDeclsRecursive(comptime T: type) void {
 }
 
 test {
+    _ = @import("provider_conformance_test.zig");
+    _ = @import("required_authority_test.zig");
     _ = @import("specification_contract_test.zig");
     _ = @import("model_result_schema_test.zig");
     _ = @import("model_capabilities_test.zig");
