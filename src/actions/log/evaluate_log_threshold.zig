@@ -6,7 +6,7 @@ pub const Decision = enum { emit, drop };
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "evaluate-log-threshold@1",
+        .id = "evaluate-log-threshold",
         .kind = .action,
         .requires = &.{ .logging_policy, .log_event_definition },
         .produces = &.{.log_emit_decision},

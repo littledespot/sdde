@@ -13,7 +13,7 @@ const data = @import("domain/pipeline_data.zig");
 // Pipeline evidence references the immutable registry; it never copies config.
 const binding_schema = values.schema(.validated_provider_model_binding, binding.ProviderModelBindingId, 1, 1024);
 const input_contract: pipeline.NodeContract = .{
-    .id = "provider-authorization-input@1",
+    .id = "provider-authorization-input",
     .kind = .action,
     .requires = &.{},
     .produces = &.{.validated_provider_model_binding},

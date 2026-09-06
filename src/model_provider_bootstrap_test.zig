@@ -28,13 +28,13 @@ test "compiled binding requirements activate bootstrap without granting provider
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const capable = try compileOne(arena.allocator(), &operation_registry, "test.model@1");
+    const capable = try compileOne(arena.allocator(), &operation_registry, "test.model");
     try std.testing.expectEqual(requirement.Requirement.required, deriveGraph(&capable));
 
-    const capability_free = try compileOne(arena.allocator(), &operation_registry, "test.noop@1");
+    const capability_free = try compileOne(arena.allocator(), &operation_registry, "test.noop");
     try std.testing.expectEqual(requirement.Requirement.not_required, deriveGraph(&capability_free));
 
-    const binding_only = try compileOne(arena.allocator(), &binding_only_registry, "test.model@1");
+    const binding_only = try compileOne(arena.allocator(), &binding_only_registry, "test.model");
     try std.testing.expect(binding_only.authority.steps[0].model != null);
     try std.testing.expectEqual(@as(usize, 0), binding_only.authority.steps[0].capabilities.len);
     try std.testing.expectEqual(@as(usize, 0), binding_only.authority.allowed_capabilities.len);
@@ -49,14 +49,14 @@ test "compiled binding requirements activate bootstrap without granting provider
     }};
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
-        compileOne(arena.allocator(), &denied, "test.model@1"),
+        compileOne(arena.allocator(), &denied, "test.model"),
     );
 }
 
 test "conditional runner skips F0008 for a capability-free selected workflow" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const graph = try compileOne(arena.allocator(), &operation_registry, "test.noop@1");
+    const graph = try compileOne(arena.allocator(), &operation_registry, "test.noop");
     const selected = selectedWorkflow(&graph);
 
     var toolkit = try decodeToolkit(model_config);
@@ -93,7 +93,7 @@ test "conditional runner captures once and publishes one immutable run authority
     for ([_]*const operations.Registry{ &operation_registry, &binding_only_registry }) |registered| {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
-        const graph = try compileOne(arena.allocator(), registered, "test.model@1");
+        const graph = try compileOne(arena.allocator(), registered, "test.model");
         const selected = selectedWorkflow(&graph);
 
         var toolkit = try decodeToolkit(model_config);
@@ -159,7 +159,7 @@ fn compileOne(
     }} ++ @import("model_contract_test_fixture.zig").declared_parameters;
     steps[0] = .{
         .id = workflow.WorkflowStepId.parse("run").?,
-        .operation_id = workflow.RegisteredRef.parse(contract_id).?,
+        .operation_id = workflow.OperationId.parse(contract_id).?,
         .parameters = if (registry.resolveOperation(.{ .bytes = contract_id }).?.contract.requiresModelBinding()) &model_parameters else &.{},
         .outcomes = &.{.{ .outcome = .ok, .target = .{ .terminal = .ok } }},
     };
@@ -169,7 +169,7 @@ fn compileOne(
         .workflow_id = workflow.WorkflowId.parse("model-provider").?,
         .workflow_version = 1,
         .shortcode = telemetry.WorkflowShortcode.parse("TEST") catch unreachable,
-        .invocation_operation_id = workflow.RegisteredRef.parse("test.empty@1").?,
+        .invocation_operation_id = workflow.OperationId.parse("test.empty").?,
         .policy_profile_id = workflow.RegisteredRef.parse("test.safe@1").?,
         .start_step_id = steps[0].id,
         .resources = &.{},
@@ -213,7 +213,7 @@ fn expectPreparationFailure(
     for ([_]*const operations.Registry{ &operation_registry, &binding_only_registry }) |registered| {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
-        const graph = try compileOne(arena.allocator(), registered, "test.model@1");
+        const graph = try compileOne(arena.allocator(), registered, "test.model");
         const selected = selectedWorkflow(&graph);
         var toolkit = try decodeToolkit(toolkit_bytes);
         defer toolkit.deinit();
@@ -352,7 +352,7 @@ const operation_registry: operations.Registry = .{
     .operations = &.{
         .{
             .contract = .{
-                .id = "test.empty@1",
+                .id = "test.empty",
                 .kind = .invocation,
                 .outcomes = &.{.ok},
                 .side_effect = .none,
@@ -361,7 +361,7 @@ const operation_registry: operations.Registry = .{
         },
         .{
             .contract = .{
-                .id = "test.model@1",
+                .id = "test.model",
                 .kind = .step,
                 .parameters = &([_]@import("domain/workflow_operation.zig").ParameterDescriptor{.{
                     .id = "slot",
@@ -376,7 +376,7 @@ const operation_registry: operations.Registry = .{
         },
         .{
             .contract = .{
-                .id = "test.noop@1",
+                .id = "test.noop",
                 .kind = .step,
                 .outcomes = &.{.ok},
                 .side_effect = .none,

@@ -26,12 +26,12 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\id: hello
         \\version: 1
         \\shortcode: HELO
-        \\invoke: core.empty-invocation@1
+        \\invoke: core.empty-invocation
         \\policy: core.capability-free@1
         \\start: run
         \\steps:
         \\  run:
-        \\    use: core.noop@1
+        \\    use: core.noop
         \\    on: { ok: end.ok }
     ;
     _ = package_directory.add(".sddtoolkit/workflows/transactions/hello.workflow.yaml", hello_workflow);
@@ -40,12 +40,12 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\id: request-ledger
         \\version: 1
         \\shortcode: MREQ
-        \\invoke: core.empty-invocation@1
+        \\invoke: core.empty-invocation
         \\policy: core.capability-free@1
         \\start: initialize
         \\steps:
         \\  initialize:
-        \\    use: build-initial-model-request-identity-ledger@1
+        \\    use: build-initial-model-request-identity-ledger
         \\    on: { ok: end.ok, failed: end.failed }
     );
     _ = package_directory.add(".sddtoolkit/workflows/toolchain.workflow.yaml", @embedFile("../../src/test_fixtures/toolchain.workflow.yaml"));
@@ -103,11 +103,11 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\id: account
         \\version: 1
         \\shortcode: ACCT
-        \\invoke: core.empty-invocation@1
+        \\invoke: core.empty-invocation
         \\policy: core.capability-free@1
         \\start: account
         \\steps:
-        \\  account: { use: advance-model-attempt-accounting@1, with: { retry-limit: 0 }, on: { ok: end.ok, failed: end.failed } }
+        \\  account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: end.ok, failed: end.failed } }
     );
     const denied_accounting = std.Build.Step.Run.create(b, "reject packaged attempt accounting without a prepared request");
     denied_accounting.addFileArg(missing_request_executable);
@@ -126,11 +126,11 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\id: assign
         \\version: 1
         \\shortcode: ASGN
-        \\invoke: core.empty-invocation@1
+        \\invoke: core.empty-invocation
         \\policy: core.capability-free@1
         \\start: assign
         \\steps:
-        \\  assign: { use: assign-provider-operation@1, with: { kind: inference }, on: { ok: end.ok, failed: end.failed } }
+        \\  assign: { use: assign-provider-operation, with: { kind: inference }, on: { ok: end.ok, failed: end.failed } }
     );
     const denied_assignment = std.Build.Step.Run.create(b, "reject packaged provider assignment without prepared request and attempt evidence");
     denied_assignment.addFileArg(missing_attempt_executable);
@@ -150,11 +150,11 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\id: authorize
         \\version: 1
         \\shortcode: AUTH
-        \\invoke: core.empty-invocation@1
+        \\invoke: core.empty-invocation
         \\policy: core.model-authorization@1
         \\start: authorize
         \\steps:
-        \\  authorize: { use: prepare-provider-operation-authorization@1, with: { timeout-ms: 1000 }, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
+        \\  authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 1000 }, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
     );
     const denied_authorization = std.Build.Step.Run.create(b, "reject packaged authorization without an assigned operation");
     denied_authorization.addFileArg(missing_assignment_executable);
@@ -174,11 +174,11 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\id: advance
         \\version: 1
         \\shortcode: ADVN
-        \\invoke: core.empty-invocation@1
+        \\invoke: core.empty-invocation
         \\policy: core.capability-free@1
         \\start: advance
         \\steps:
-        \\  advance: { use: advance-model-request-lifecycle@1, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
+        \\  advance: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
     );
     const denied_request_lifecycle = std.Build.Step.Run.create(b, "reject packaged request invocation without prepared authorization");
     denied_request_lifecycle.addFileArg(missing_authorization_executable);
@@ -198,11 +198,11 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\id: advance-operation
         \\version: 1
         \\shortcode: AOPR
-        \\invoke: core.empty-invocation@1
+        \\invoke: core.empty-invocation
         \\policy: core.capability-free@1
         \\start: advance
         \\steps:
-        \\  advance: { use: advance-provider-operation-lifecycle@1, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
+        \\  advance: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
     );
     const denied_operation_lifecycle = std.Build.Step.Run.create(b, "reject packaged provider invocation without its prepared lease and assigned operation");
     denied_operation_lifecycle.addFileArg(missing_invocation_executable);
@@ -295,6 +295,25 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     missing_config_command.step.dependOn(&literal_command.step);
     missing_config_command.step.dependOn(&reference_command.step);
     missing_config_command.step.dependOn(&denied_reference.step);
+    for ([_][2][]const u8{
+        .{ "invoke: core.empty-invocation", "invoke: core.empty-invocation@1" },
+        .{ "use: core.noop", "use: core.noop@1" },
+    }) |change| {
+        const directory = b.addTempFiles();
+        const packaged = directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+        _ = directory.add(".sddtoolkit.json", configuration);
+        const yaml = std.mem.replaceOwned(u8, b.allocator, hello_workflow, change[0], change[1]) catch @panic("allocate retired operation ID fixture");
+        _ = directory.add(".sddtoolkit/workflows/hello.workflow.yaml", yaml);
+        const rejected = std.Build.Step.Run.create(b, "reject packaged version-suffixed operation IDs without compatibility aliases");
+        rejected.addFileArg(packaged);
+        rejected.addArg("hello");
+        rejected.setCwd(directory.getDirectory());
+        rejected.clearEnvironment();
+        rejected.expectExitCode(1);
+        rejected.expectStdOutEqual("");
+        rejected.expectStdErrEqual("WORKFLOW_DEFINITION_SCHEMA_INVALID\n");
+        missing_config_command.step.dependOn(&rejected.step);
+    }
     for ([_]struct { selector: []const u8, rejected: bool }{
         .{ .selector = "Hello", .rejected = false },
         .{ .selector = "Unsupported", .rejected = true },

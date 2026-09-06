@@ -5,7 +5,7 @@ const source = @import("../../ports/reference_corpus_source.zig");
 pub const Action = struct {
     source: source.Capturer,
     pub const contract: pipeline.NodeContract = .{
-        .id = "capture-reference-sources@1",
+        .id = "capture-reference-sources",
         .kind = .action,
         .requires = &.{.reference_inventory},
         .produces = &.{.captured_reference_corpus},

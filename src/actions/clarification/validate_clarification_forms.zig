@@ -7,7 +7,7 @@ const parser_port = @import("../../ports/clarification_input_parser.zig");
 pub const Action = struct {
     parser: parser_port.FormParser,
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-clarification-forms@1",
+        .id = "validate-clarification-forms",
         .kind = .action,
         .requires = &.{ .raw_clarification_inputs, .validated_clarification_state },
         .produces = &.{.clarification_inputs},

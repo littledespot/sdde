@@ -42,7 +42,7 @@ pub const ValidateArguments = struct {
 pub const Invocation = struct {
     allocator: std.mem.Allocator,
     pub const contract: @import("../domain/workflow_operation.zig").Contract = .{
-        .id = "specify-invocation@1",
+        .id = "specify-invocation",
         .kind = .invocation,
         .produces = ValidateArguments.Action.contract.produces,
         .outcomes = &.{.ok},

@@ -5,12 +5,38 @@ const Entry = operations.Entry;
 const Registry = operations.Registry;
 const bindings = @import("application/workflow_operation_binding.zig");
 const fixture = @import("workflow_binding_test_fixture.zig");
+const workflow = @import("domain/workflow.zig");
+
+test "operation lookup is exact with one current contract and no version aliases" {
+    const entry: Entry = .{
+        .contract = .{ .id = "test.noop", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none },
+        .binding = bindings.bind(void, null, fixture.unused),
+    };
+    const registry: Registry = .{ .operations = &.{entry}, .policies = &.{}, .gates = &.{} };
+    try std.testing.expect(registry.validate());
+    try std.testing.expectEqualStrings(entry.contract.id, registry.resolveOperation(workflow.OperationId.parse("test.noop").?).?.contract.id);
+    try std.testing.expect(registry.resolveOperation(workflow.OperationId.parse("test.missing").?) == null);
+    for ([_][]const u8{ "test.noop@1", "test.noop@2", "test.noop@latest", "Test.noop", "test..noop", "" }) |id| {
+        try std.testing.expect(registry.resolveOperation(.{ .bytes = id }) == null);
+        var invalid_entry = entry;
+        invalid_entry.contract.id = id;
+        const invalid: Registry = .{ .operations = &.{invalid_entry}, .policies = &.{}, .gates = &.{} };
+        try std.testing.expect(!invalid.validate());
+        try std.testing.expect(invalid.resolveOperation(.{ .bytes = id }) == null);
+        try std.testing.expect(invalid.resolveOperation(workflow.OperationId.parse("test.noop").?) == null);
+        const parallel: Registry = .{ .operations = &.{ entry, invalid_entry }, .policies = &.{}, .gates = &.{} };
+        try std.testing.expect(!parallel.validate());
+    }
+    const duplicate: Registry = .{ .operations = &.{ entry, entry }, .policies = &.{}, .gates = &.{} };
+    try std.testing.expect(!duplicate.validate());
+    try std.testing.expect(duplicate.resolveOperation(workflow.OperationId.parse("test.noop").?) == null);
+}
 
 test "one registry rejects duplicate and structurally invalid operations" {
     try std.testing.expect(!@hasField(operation.PolicyProfile, "retry_limit"));
     try std.testing.expect(!@hasField(operation.PolicyProfile, "attempts"));
     const noop: Entry = .{
-        .contract = .{ .id = "core.noop@1", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none },
+        .contract = .{ .id = "core.noop", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none },
         .binding = bindings.bind(void, null, fixture.unused),
     };
     const valid: Registry = .{
@@ -29,7 +55,7 @@ test "one registry rejects duplicate and structurally invalid operations" {
     try std.testing.expect(!duplicate.validate());
 
     const hidden_invocation: Entry = .{
-        .contract = .{ .id = "core.hidden@1", .kind = .invocation, .outcomes = &.{ .ok, .failed }, .side_effect = .none },
+        .contract = .{ .id = "core.hidden", .kind = .invocation, .outcomes = &.{ .ok, .failed }, .side_effect = .none },
         .binding = bindings.bind(void, null, fixture.unused),
     };
     duplicate.operations = &.{hidden_invocation};
@@ -37,7 +63,7 @@ test "one registry rejects duplicate and structurally invalid operations" {
 
     const model_without_slot: Entry = .{
         .contract = .{
-            .id = "model.invalid@1",
+            .id = "model.invalid",
             .kind = .step,
             .outcomes = &.{.ok},
             .side_effect = .none,
@@ -50,7 +76,7 @@ test "one registry rejects duplicate and structurally invalid operations" {
 
     const hidden_slot: Entry = .{
         .contract = .{
-            .id = "model.hidden-slot@1",
+            .id = "model.hidden-slot",
             .kind = .step,
             .parameters = &.{.{
                 .id = "slot",
@@ -77,7 +103,7 @@ test "one registry rejects duplicate and structurally invalid operations" {
 
     const hidden_retry: Entry = .{
         .contract = .{
-            .id = "core.hidden-retry@1",
+            .id = "core.hidden-retry",
             .kind = .step,
             .parameters = &.{.{
                 .id = "retry-limit",
@@ -116,7 +142,7 @@ test "one registry rejects duplicate and structurally invalid operations" {
 }
 
 test "validation action rejects a duplicate operation identity" {
-    const entry: Entry = .{ .contract = .{ .id = "test.noop@1", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none }, .binding = bindings.bind(void, null, fixture.unused) };
+    const entry: Entry = .{ .contract = .{ .id = "test.noop", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none }, .binding = bindings.bind(void, null, fixture.unused) };
     const registry: Registry = .{ .operations = &.{ entry, entry }, .policies = &.{}, .gates = &.{} };
     try std.testing.expectError(error.WorkflowOperationRegistryInvalid, (@import("actions/workflow/validate_workflow_operation_registry.zig").Action{}).execute(&registry));
 }
@@ -127,7 +153,7 @@ test "pure model-binding contracts derive authority only from the typed slot" {
     } ++ @import("domain/workflow_model.zig").parameters;
     const entry: Entry = .{
         .contract = .{
-            .id = "test.prepare@1",
+            .id = "test.prepare",
             .kind = .step,
             .parameters = &parameters,
             .outcomes = &.{.ok},
@@ -193,7 +219,7 @@ test "registry rejects absent typed operation context" {
     };
     var context: Context = .{};
     var entry: Entry = .{
-        .contract = .{ .id = "test.bound@1", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none },
+        .contract = .{ .id = "test.bound", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none },
         .binding = bindings.bind(Context, &context, Context.invoke),
     };
     const registry: Registry = .{ .operations = (&entry)[0..1], .policies = &.{}, .gates = &.{} };

@@ -8,7 +8,7 @@ pub const Action = struct {
     locator: engine_config_source.Locator,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "locate-exact-engine-config@1",
+        .id = "locate-exact-engine-config",
         .kind = .action,
         .requires = &.{.invocation_working_directory},
         .produces = &.{.exact_engine_config_file},

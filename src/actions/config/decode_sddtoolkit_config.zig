@@ -6,7 +6,7 @@ pub const Error = error{EngineConfigParseError};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "decode-sddtoolkit-config@1",
+        .id = "decode-sddtoolkit-config",
         .kind = .action,
         .requires = &.{.raw_engine_config},
         .produces = &.{.engine_config},

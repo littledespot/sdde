@@ -13,7 +13,7 @@ pub const Action = struct {
     authorization: preparation.Port,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "prepare-provider-operation-authorization@1",
+        .id = "prepare-provider-operation-authorization",
         .kind = .action,
         .requires = &.{.validated_provider_model_binding},
         .produces = &.{.validated_provider_authorization},

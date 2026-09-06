@@ -9,7 +9,7 @@ pub const Action = struct {
     inspector: root_inspector.Inspector,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-configured-base-root@1",
+        .id = "validate-configured-base-root",
         .kind = .action,
         .requires = &.{.configured_root_candidate_set},
         .produces = &.{.configured_root_capability_set},

@@ -17,6 +17,30 @@ const binding_fixture = @import("workflow_binding_test_fixture.zig");
 const values = @import("application/pipeline_values.zig");
 const gate_module = @import("domain/workflow_gate.zig");
 
+test "YAML operation IDs are unversioned and reject version selectors and fields" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var yaml_parser: parser_adapter.Adapter = .{};
+    for ([_][2][]const u8{
+        .{ "invoke: test.empty", "invoke: test.empty@1" },
+        .{ "invoke: test.empty", "invoke: test.empty@2" },
+        .{ "invoke: test.empty", "invoke: {id: test.empty, version: 1}" },
+        .{ "invoke: test.empty", "invoke: test.empty\noperation-version: 1" },
+        .{ "use: model.generate", "use: model.generate@1" },
+        .{ "use: model.generate", "use: model.generate@2" },
+        .{ "use: model.generate", "use: model.generate@latest" },
+        .{ "use: model.generate", "use: {id: model.generate, version: 1}" },
+        .{ "use: model.generate", "use: model.generate\n    version: 1" },
+        .{ "use: model.generate", "use: model.generate\n    operation-version: 1" },
+        .{ "policy: test.model-policy@1", "policy: test.model-policy" },
+    }) |change| {
+        const yaml = try std.mem.replaceOwned(u8, arena.allocator(), resource_workflow, change[0], change[1]);
+        try std.testing.expect(!std.mem.eql(u8, resource_workflow, yaml));
+        const raw = try (parse.Action{ .parser = yaml_parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
+        try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, (validate_schema.Action{}).execute(arena.allocator(), raw));
+    }
+}
+
 test "concise resources and native parameters compile into immutable operation authority" {
     for ([_]bool{ true, false }) |provider_calls| {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -51,6 +75,11 @@ test "concise resources and native parameters compile into immutable operation a
         _ = try (validate_graphs.Action{}).execute(arena.allocator(), graphs);
         const graph = graphs[0];
         try std.testing.expectEqualStrings("custom-generation", graph.authority.workflow_id.bytes);
+        try std.testing.expectEqual(@as(u32, 1), graph.authority.workflow_version);
+        try std.testing.expectEqualStrings("test.model-policy@1", graph.authority.policy_profile_id.bytes);
+        try std.testing.expectEqualStrings("test.empty", graph.authority.invocation_operation_id.bytes);
+        try std.testing.expectEqualStrings("model.generate", graph.authority.steps[0].operation_id.bytes);
+        try std.testing.expectEqualStrings("test.validate", graph.authority.steps[0].gates[0].issuer.bytes);
         try std.testing.expectEqual(@as(usize, 2), graph.authority.resources.len);
         try std.testing.expectEqualStrings("Generate one result.", graph.authority.resources[0].bytes());
         const result_schema = graph.authority.resources[1].content.result_schema;
@@ -79,6 +108,17 @@ test "concise resources and native parameters compile into immutable operation a
             try std.testing.expectEqual(@as(usize, 0), graph.authority.allowed_capabilities.len);
         }
         try std.testing.expect(@import("domain/workflow_model.zig").validProjection(graph.authority.steps[0]));
+        for ([_]bool{ true, false }) |invocation| {
+            var invalid = graph;
+            if (invocation) {
+                invalid.authority.invocation_operation_id.bytes = "test.empty@1";
+            } else {
+                const steps = try arena.allocator().dupe(@import("domain/workflow_compilation.zig").CompiledStep, graph.authority.steps);
+                steps[0].operation_id.bytes = "model.generate@1";
+                invalid.authority.steps = steps;
+            }
+            try std.testing.expectError(error.WorkflowGraphCompileInvalid, (validate_graphs.Action{}).execute(arena.allocator(), &.{invalid}));
+        }
     }
 }
 
@@ -323,7 +363,7 @@ const resource_workflow =
     \\id: custom-generation
     \\version: 1
     \\shortcode: CSTM
-    \\invoke: test.empty@1
+    \\invoke: test.empty
     \\policy: test.model-policy@1
     \\start: validate
     \\resources:
@@ -331,10 +371,10 @@ const resource_workflow =
     \\  result-schema: schemas/result.json
     \\steps:
     \\  generate:
-    \\    use: model.generate@1
+    \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
-    \\  validate: { use: test.validate@1, on: { ok: generate } }
+    \\  validate: { use: test.validate, on: { ok: generate } }
 ;
 
 const unknown_operation_workflow =
@@ -342,12 +382,12 @@ const unknown_operation_workflow =
     \\id: unknown-operation
     \\version: 1
     \\shortcode: UNKN
-    \\invoke: test.empty@1
+    \\invoke: test.empty
     \\policy: test.safe@1
     \\start: run
     \\steps:
     \\  run:
-    \\    use: source.only@1
+    \\    use: source.only
     \\    on: { ok: end.ok }
 ;
 
@@ -356,13 +396,13 @@ const wrong_parameter_workflow =
     \\id: custom-generation
     \\version: 1
     \\shortcode: CSTM
-    \\invoke: test.empty@1
+    \\invoke: test.empty
     \\policy: test.model-policy@1
     \\start: generate
     \\resources: { prompt: prompts/generate.md, result-schema: schemas/result.json }
     \\steps:
     \\  generate:
-    \\    use: model.generate@1
+    \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: two, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
@@ -372,13 +412,13 @@ const missing_retry_limit_workflow =
     \\id: custom-generation
     \\version: 1
     \\shortcode: CSTM
-    \\invoke: test.empty@1
+    \\invoke: test.empty
     \\policy: test.model-policy@1
     \\start: generate
     \\resources: { prompt: prompts/generate.md, result-schema: schemas/result.json }
     \\steps:
     \\  generate:
-    \\    use: model.generate@1
+    \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
@@ -388,13 +428,13 @@ const negative_retry_limit_workflow =
     \\id: custom-generation
     \\version: 1
     \\shortcode: CSTM
-    \\invoke: test.empty@1
+    \\invoke: test.empty
     \\policy: test.model-policy@1
     \\start: generate
     \\resources: { prompt: prompts/generate.md, result-schema: schemas/result.json }
     \\steps:
     \\  generate:
-    \\    use: model.generate@1
+    \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: -1, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
@@ -404,13 +444,13 @@ const excessive_retry_limit_workflow =
     \\id: custom-generation
     \\version: 1
     \\shortcode: CSTM
-    \\invoke: test.empty@1
+    \\invoke: test.empty
     \\policy: test.model-policy@1
     \\start: generate
     \\resources: { prompt: prompts/generate.md, result-schema: schemas/result.json }
     \\steps:
     \\  generate:
-    \\    use: model.generate@1
+    \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 4, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
@@ -420,13 +460,13 @@ const missing_outcome_workflow =
     \\id: custom-generation
     \\version: 1
     \\shortcode: CSTM
-    \\invoke: test.empty@1
+    \\invoke: test.empty
     \\policy: test.model-policy@1
     \\start: generate
     \\resources: { prompt: prompts/generate.md, result-schema: schemas/result.json }
     \\steps:
     \\  generate:
-    \\    use: model.generate@1
+    \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, response-mode: prompt-only }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed }
 ;
@@ -436,12 +476,12 @@ const unguarded_cycle_workflow =
     \\id: unguarded-cycle
     \\version: 1
     \\shortcode: CYCL
-    \\invoke: test.empty@1
+    \\invoke: test.empty
     \\policy: test.safe@1
     \\start: run
     \\steps:
     \\  run:
-    \\    use: test.retry@1
+    \\    use: test.retry
     \\    on: { ok: end.ok, invalid: run }
 ;
 
@@ -450,12 +490,12 @@ const hidden_retry_limit_workflow =
     \\id: hidden-retry
     \\version: 1
     \\shortcode: HIDN
-    \\invoke: test.empty@1
+    \\invoke: test.empty
     \\policy: test.safe@1
     \\start: run
     \\steps:
     \\  run:
-    \\    use: test.retry@1
+    \\    use: test.retry
     \\    with: { retry-limit: 1 }
     \\    on: { ok: end.ok, invalid: run }
 ;
@@ -496,12 +536,12 @@ fn emptyInventory() inventory.Inventory {
 
 const operation_entries = [_]operation_registry.Entry{
     .{
-        .contract = .{ .id = "test.empty@1", .kind = .invocation, .produces = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none },
+        .contract = .{ .id = "test.empty", .kind = .invocation, .produces = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none },
         .binding = operation_bindings.bind(void, null, unusedOperation),
     },
     .{
         .contract = .{
-            .id = "model.generate@1",
+            .id = "model.generate",
             .kind = .step,
             .parameters = &([_]@import("domain/workflow_operation.zig").ParameterDescriptor{
                 .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
@@ -517,11 +557,11 @@ const operation_entries = [_]operation_registry.Entry{
         .binding = operation_bindings.bind(binding_fixture.ModelContext, &binding_fixture.model_context, binding_fixture.unusedModel),
     },
     .{
-        .contract = .{ .id = "test.retry@1", .kind = .step, .outcomes = &.{ .ok, .invalid }, .side_effect = .none },
+        .contract = .{ .id = "test.retry", .kind = .step, .outcomes = &.{ .ok, .invalid }, .side_effect = .none },
         .binding = operation_bindings.bind(void, null, unusedOperation),
     },
     .{
-        .contract = .{ .id = "test.validate@1", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{.ok}, .side_effect = .none },
+        .contract = .{ .id = "test.validate", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{.ok}, .side_effect = .none },
         .binding = operation_bindings.bind(void, null, unusedOperation),
     },
 };
@@ -532,7 +572,7 @@ const operations: operation_registry.Registry = .{
         .{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok}, .total_model_token_budget = .{ .value = 1000 } },
         .{ .id = "test.model-policy@1", .allowed_capabilities = &.{"model-provider"}, .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled }, .total_model_token_budget = .{ .value = 1000 } },
     },
-    .gates = &.{.{ .id = .{ .bytes = "model-ready@1" }, .issuer = .{ .bytes = "test.validate@1" }, .evidence = .workflow_operation_registry_evidence, .authority = &.{.workflow_invocation} }},
+    .gates = &.{.{ .id = .{ .bytes = "model-ready@1" }, .issuer = .{ .bytes = "test.validate" }, .evidence = .workflow_operation_registry_evidence, .authority = &.{.workflow_invocation} }},
     .data_schemas = &.{ values.schema(.workflow_invocation, u32, 1, 32), values.schema(.workflow_operation_registry_evidence, gate_module.Decision, 1, 32) },
 };
 

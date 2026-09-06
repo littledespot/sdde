@@ -6,7 +6,7 @@ const pipeline = @import("../../domain/pipeline.zig");
 pub const Action = struct {
     normalizer: unicode.Normalizer,
     pub const contract: pipeline.NodeContract = .{
-        .id = "normalize-reference-selector@1",
+        .id = "normalize-reference-selector",
         .kind = .action,
         .requires = &.{.specify_invocation},
         .produces = &.{.normalized_reference_selector},

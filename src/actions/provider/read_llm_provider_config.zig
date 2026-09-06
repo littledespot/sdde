@@ -7,7 +7,7 @@ pub const Error = error{ LLMProviderConfigReadError, Cancelled, DeadlineExhauste
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "read-llm-provider-config@1",
+        .id = "read-llm-provider-config",
         .kind = .action,
         .requires = &.{.exact_llm_provider_config_file},
         .produces = &.{.raw_llm_provider_config},

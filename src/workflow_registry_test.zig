@@ -137,7 +137,7 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     }};
     const local_declared_steps = [_]workflow.DeclarativeStep{.{
         .id = workflow.WorkflowStepId.parse(step_id_bytes).?,
-        .operation_id = workflow.RegisteredRef.parse("core.noop@1").?,
+        .operation_id = workflow.OperationId.parse("core.noop").?,
         .parameters = &retry_parameters,
         .outcomes = &.{.{ .outcome = .ok, .target = .{ .terminal = .ok } }},
     }};
@@ -223,7 +223,7 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     var service = registry_service.WorkflowDefinitionRegistryService.init(owner);
     defer service.deinit();
     const resolved = service.registry().resolve(workflow.WorkflowId.parse("hello").?).?;
-    try std.testing.expectEqualStrings("core.noop@1", resolved.authority.steps[0].operation_id.bytes);
+    try std.testing.expectEqualStrings("core.noop", resolved.authority.steps[0].operation_id.bytes);
     try std.testing.expectEqualStrings("immutable prompt", resolved.authority.resources[0].bytes());
     const retained_schema = resolved.authority.resources[1].content.result_schema;
     try std.testing.expectEqualStrings(schema_bytes, retained_schema.bytes());
@@ -272,7 +272,7 @@ test "registry rejects a partially valid duplicate identity set" {
 
 const declared_steps = [_]workflow.DeclarativeStep{.{
     .id = workflow.WorkflowStepId.parse("run").?,
-    .operation_id = workflow.RegisteredRef.parse("core.noop@1").?,
+    .operation_id = workflow.OperationId.parse("core.noop").?,
     .parameters = &.{},
     .outcomes = &.{.{ .outcome = .ok, .target = .{ .terminal = .ok } }},
 }};
@@ -302,7 +302,7 @@ fn validDefinition(id: []const u8, shortcode: []const u8, ordinal: u16) definiti
         .workflow_id = workflow.WorkflowId.parse(id).?,
         .workflow_version = 1,
         .shortcode = @import("domain/telemetry.zig").WorkflowShortcode.parse(shortcode) catch unreachable,
-        .invocation_operation_id = workflow.RegisteredRef.parse("core.empty@1").?,
+        .invocation_operation_id = workflow.OperationId.parse("core.empty").?,
         .policy_profile_id = workflow.RegisteredRef.parse("core.safe@1").?,
         .start_step_id = declared_steps[0].id,
         .resources = &.{},

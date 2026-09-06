@@ -7,7 +7,7 @@ pub const Error = error{LogSinkFailure};
 pub const Action = struct {
     sink: sink_port.SegmentRotator,
     pub const contract: pipeline.NodeContract = .{
-        .id = "rotate-feature-log-segment@1",
+        .id = "rotate-feature-log-segment",
         .kind = .action,
         .requires = &.{ .feature_log_binding, .feature_log_stream_lock, .feature_log_stream_state },
         .replaces = &.{.feature_log_stream_state},

@@ -7,7 +7,7 @@ pub const Error = error{EngineConfigReadError};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "read-engine-config@1",
+        .id = "read-engine-config",
         .kind = .action,
         .requires = &.{.exact_engine_config_file},
         .produces = &.{.raw_engine_config},

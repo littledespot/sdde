@@ -8,7 +8,7 @@ const workflow = @import("../../domain/workflow.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "derive-provider-requirement@1",
+        .id = "derive-provider-requirement",
         .kind = .action,
         .requires = &.{.selected_compiled_workflow},
         .produces = &.{.model_provider_requirement},
@@ -53,7 +53,7 @@ test "provider-call requirement uses the exact capability and ignores workflow n
 fn deriveFor(workflow_id: []const u8, capabilities: []const []const u8) requirement.Requirement {
     const step: compilation.CompiledStep = .{
         .id = workflow.WorkflowStepId.parse("run").?,
-        .operation_id = workflow.RegisteredRef.parse("test.operation@1").?,
+        .operation_id = workflow.OperationId.parse("test.operation").?,
         .parameters = &.{},
         .requires = &.{},
         .produces = &.{},
@@ -76,7 +76,7 @@ fn deriveFor(workflow_id: []const u8, capabilities: []const []const u8) requirem
         .authority = .{
             .workflow_id = workflow.WorkflowId.parse(workflow_id).?,
             .workflow_version = 1,
-            .invocation_operation_id = workflow.RegisteredRef.parse("test.empty@1").?,
+            .invocation_operation_id = workflow.OperationId.parse("test.empty").?,
             .policy_profile_id = workflow.RegisteredRef.parse("test.safe@1").?,
             .total_model_token_budget = .{ .value = 1000 },
             .start_step_id = step.id,

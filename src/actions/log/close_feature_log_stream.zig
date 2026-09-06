@@ -7,7 +7,7 @@ pub const Error = error{ LogSinkFailure, LogFlushFailure };
 pub const Action = struct {
     sink: sink_port.StreamCloser,
     pub const contract: pipeline.NodeContract = .{
-        .id = "close-feature-log-stream@1",
+        .id = "close-feature-log-stream",
         .kind = .action,
         .requires = &.{ .feature_log_binding, .feature_log_stream_lock, .feature_log_stream_state },
         .invalidates = &.{.feature_log_stream_state},

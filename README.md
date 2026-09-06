@@ -31,23 +31,27 @@ now have native YAML initialization, assignment, binding-validation and building
 operations. One request retains its originating slot/resources across steps;
 generic preparation needs no SDD feature or task. Inference integration and
 Bedrock remain separate work.
-`advance-model-attempt-accounting@1` now accounts that prepared request through
+
+YAML, the registry and runner use [unversioned operation IDs](design/decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06).
+Each ID selects one current contract; version suffixes are rejected without aliases.
+
+`advance-model-attempt-accounting` now accounts that prepared request through
 the same YAML runner. Its explicit `retry-limit` permits retries after the
 initial execution; applied attempt evidence and ledgers remain execution-local.
-`assign-provider-operation@1` then explicitly selects `inference` or
+`assign-provider-operation` then explicitly selects `inference` or
 `input-token-count` and publishes sealed assignment evidence for that attempt.
 Assignment makes no API call, prepares no authorization and charges no tokens.
-`prepare-provider-operation-authorization@1` explicitly prepares the assigned
+`prepare-provider-operation-authorization` explicitly prepares the assigned
 operation's single-use lease, with a required `timeout-ms` and the separate
 `provider-authorization` capability. Preparation uses only a preloaded port;
 it performs no I/O, refresh, provider call or token charge. The runner owns
 lease cleanup; YAML receives only an opaque result. Bedrock composition remains
 separate, and an unbound authorization adapter fails closed.
-`advance-model-request-lifecycle@1` with `transition: invoked` then explicitly
+`advance-model-request-lifecycle` with `transition: invoked` then explicitly
 advances the logical request through its existing immutable ledger. It requires
 that same prepared authorization and changes no request content, attempt, lease
 or provider-operation state. No API call occurs in this step.
-`advance-provider-operation-lifecycle@1` with `transition: invoked` advances the
+`advance-provider-operation-lifecycle` with `transition: invoked` advances the
 assigned operation next. It retains the prepared lease's original deadline;
 only the runner publishes sealed invoked-operation evidence and removes the
 assignment evidence. It does not consume the lease, call an API or charge tokens.

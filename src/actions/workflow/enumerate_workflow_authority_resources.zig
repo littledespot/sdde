@@ -9,7 +9,7 @@ pub const Action = struct {
     source: source_port.Enumerator,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "enumerate-workflow-authority-resources@1",
+        .id = "enumerate-workflow-authority-resources",
         .kind = .action,
         .requires = &.{.workflow_authority_layout},
         .produces = &.{.raw_workflow_authority_entries},

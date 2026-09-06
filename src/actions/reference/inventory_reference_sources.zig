@@ -5,7 +5,7 @@ const source = @import("../../ports/reference_corpus_source.zig");
 pub const Action = struct {
     source: source.Enumerator,
     pub const contract: pipeline.NodeContract = .{
-        .id = "inventory-reference-sources@1",
+        .id = "inventory-reference-sources",
         .kind = .action,
         .requires = &.{.reference_directory},
         .produces = &.{.raw_reference_inventory},

@@ -9,7 +9,7 @@ pub const Error = error{WorkflowDefinitionSchemaInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-workflow-definition-schema@1",
+        .id = "validate-workflow-definition-schema",
         .kind = .action,
         .requires = &.{.raw_workflow_definitions},
         .produces = &.{.declarative_workflow_definitions},
@@ -46,7 +46,7 @@ fn convert(
     const version_value = integer(field(map, "version")) orelse return invalid();
     if (version_value <= 0 or version_value > std.math.maxInt(u32)) return invalid();
     const shortcode = telemetry.WorkflowShortcode.parse(string(field(map, "shortcode")) orelse return invalid()) catch return invalid();
-    const invocation = workflow.RegisteredRef.parse(string(field(map, "invoke")) orelse return invalid()) orelse return invalid();
+    const invocation = workflow.OperationId.parse(string(field(map, "invoke")) orelse return invalid()) orelse return invalid();
     const policy = workflow.RegisteredRef.parse(string(field(map, "policy")) orelse return invalid()) orelse return invalid();
     const start = workflow.WorkflowStepId.parse(string(field(map, "start")) orelse return invalid()) orelse return invalid();
     const resources = try convertResources(allocator, field(map, "resources"));
@@ -95,7 +95,7 @@ fn convertSteps(
         const step_map = closedMapping(pair.value, &step_fields, &step_required) orelse return invalid();
         step.* = .{
             .id = id,
-            .operation_id = workflow.RegisteredRef.parse(string(field(step_map, "use")) orelse return invalid()) orelse return invalid(),
+            .operation_id = workflow.OperationId.parse(string(field(step_map, "use")) orelse return invalid()) orelse return invalid(),
             .parameters = try convertParameters(allocator, field(step_map, "with")),
             .outcomes = try convertOutcomes(allocator, field(step_map, "on") orelse return invalid()),
         };
@@ -259,7 +259,7 @@ const RawBuilder = struct {
 fn conciseRaw(builder: RawBuilder, legacy: bool) !*definition.RawNode {
     const outcomes = try builder.mapping(&.{try builder.pair("ok", try builder.scalar("end.ok"))});
     const step = try builder.mapping(&.{
-        try builder.pair("use", try builder.scalar("core.noop@1")),
+        try builder.pair("use", try builder.scalar("core.noop")),
         try builder.pair("on", outcomes),
     });
     const steps = try builder.mapping(&.{try builder.pair("run", step)});
@@ -274,7 +274,7 @@ fn conciseRaw(builder: RawBuilder, legacy: bool) !*definition.RawNode {
         try builder.pair("id", try builder.scalar("arbitrary-flow")),
         try builder.pair("version", try builder.integer(1)),
         try builder.pair("shortcode", try builder.scalar("FLOW")),
-        try builder.pair("invoke", try builder.scalar("core.empty-invocation@1")),
+        try builder.pair("invoke", try builder.scalar("core.empty-invocation")),
         try builder.pair("policy", try builder.scalar("core.capability-free@1")),
         try builder.pair("start", try builder.scalar("run")),
         try builder.pair("steps", steps),
@@ -300,7 +300,7 @@ test "rejects unknown outcome and unsafe resource name" {
     const builder: RawBuilder = .{ .allocator = arena.allocator() };
     const invalid_outcomes = try builder.mapping(&.{try builder.pair("success", try builder.scalar("end.ok"))});
     const step = try builder.mapping(&.{
-        try builder.pair("use", try builder.scalar("core.noop@1")),
+        try builder.pair("use", try builder.scalar("core.noop")),
         try builder.pair("on", invalid_outcomes),
     });
     const steps = try builder.mapping(&.{try builder.pair("run", step)});
@@ -310,7 +310,7 @@ test "rejects unknown outcome and unsafe resource name" {
         try builder.pair("id", try builder.scalar("bad-flow")),
         try builder.pair("version", try builder.integer(1)),
         try builder.pair("shortcode", try builder.scalar("BADF")),
-        try builder.pair("invoke", try builder.scalar("core.empty-invocation@1")),
+        try builder.pair("invoke", try builder.scalar("core.empty-invocation")),
         try builder.pair("policy", try builder.scalar("core.capability-free@1")),
         try builder.pair("start", try builder.scalar("run")),
         try builder.pair("resources", resources),

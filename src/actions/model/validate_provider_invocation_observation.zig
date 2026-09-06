@@ -5,7 +5,7 @@ const validation = @import("../../domain/provider_invocation_validation.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-provider-invocation-observation@1",
+        .id = "validate-provider-invocation-observation",
         .kind = .action,
         .requires = &.{ .model_request_identity_ledger, .validated_provider_model_binding },
         .produces = &.{},

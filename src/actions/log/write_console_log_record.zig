@@ -6,7 +6,7 @@ pub const Error = error{ConsoleLogWriteFailure};
 pub const Action = struct {
     sink: console_port.Sink,
     pub const contract: pipeline.NodeContract = .{
-        .id = "write-console-log-record@1",
+        .id = "write-console-log-record",
         .kind = .action,
         .requires = &.{.serialized_log_record},
         .produces = &.{},

@@ -85,7 +85,7 @@ test "parses strict YAML into a workflow-owned raw value" {
         \\id: hello
         \\version: 1
         \\shortcode: HELO
-        \\invoke: core.empty@1
+        \\invoke: core.empty
         \\policy: core.safe@1
         \\start: run
         \\steps: {}
@@ -151,12 +151,12 @@ test "comments and equivalent block and flow YAML have identical raw authority" 
         \\id: hello
         \\version: 1
         \\shortcode: HELO
-        \\invoke: core.empty@1
+        \\invoke: core.empty
         \\policy: core.safe@1
         \\start: run
         \\steps: {}
     ;
-    const flow = "{schema: workflow/v1, id: hello, version: 1, shortcode: HELO, invoke: core.empty@1, policy: core.safe@1, start: run, steps: {}}\n";
+    const flow = "{schema: workflow/v1, id: hello, version: 1, shortcode: HELO, invoke: core.empty, policy: core.safe@1, start: run, steps: {}}\n";
     var block_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer block_arena.deinit();
     var flow_arena = std.heap.ArenaAllocator.init(std.testing.allocator);

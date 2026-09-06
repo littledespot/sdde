@@ -12,7 +12,7 @@ pub const Action = struct {
     contracts: *const contracts.Registry,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "build-llm-provider-registry@1",
+        .id = "build-llm-provider-registry",
         .kind = .action,
         .requires = &.{.raw_llm_provider_document},
         .produces = &.{.llm_provider_registry_candidate},

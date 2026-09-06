@@ -5,7 +5,7 @@ const port = @import("../../ports/reference_decoder.zig");
 pub const Action = struct {
     decoder: port.Decoder,
     pub const contract: pipeline.NodeContract = .{
-        .id = "decode-reference-markdown@1",
+        .id = "decode-reference-markdown",
         .kind = .action,
         .requires = &.{.captured_reference_corpus},
         .produces = &.{.decoded_reference_corpus},

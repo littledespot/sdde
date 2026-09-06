@@ -13,7 +13,7 @@ test "sealed native results keep identity and have one owner on apply discard an
             const native = try values.adopt(std.testing.allocator, schema, T, Owner, owner, Access(T).get, Owner.destroy, @sizeOf(Owner));
             var store = envelope.PipelineEnvelope.init(&.{schema});
             defer store.deinit();
-            const produce: pipeline.NodeContract = .{ .id = "test.native@1", .kind = .action, .requires = &.{}, .produces = &.{schema.key}, .side_effect = .none };
+            const produce: pipeline.NodeContract = .{ .id = "test.native", .kind = .action, .requires = &.{}, .produces = &.{schema.key}, .side_effect = .none };
             var delta: pipeline.NodeDelta = .{};
             delta.data_writes[@intFromEnum(schema.key)] = native;
             if (reject) {
@@ -27,7 +27,7 @@ test "sealed native results keep identity and have one owner on apply discard an
                 try std.testing.expect(try values.read(&view, schema, T) == Access(T).get(owner));
                 store.discard(&delta);
                 try std.testing.expectEqual(@as(usize, 0), destroyed);
-                const remove: pipeline.NodeContract = .{ .id = "test.remove@1", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{schema.key}, .side_effect = .none };
+                const remove: pipeline.NodeContract = .{ .id = "test.remove", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{schema.key}, .side_effect = .none };
                 var invalidation: pipeline.NodeDelta = .{ .data_invalidations = .initOne(schema.key) };
                 try store.apply(remove, &invalidation, .ok);
             }

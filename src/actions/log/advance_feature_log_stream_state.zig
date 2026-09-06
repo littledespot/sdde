@@ -3,7 +3,7 @@ const pipeline = @import("../../domain/pipeline.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "advance-feature-log-stream-state@1",
+        .id = "advance-feature-log-stream-state",
         .kind = .action,
         .requires = &.{ .feature_log_stream_state, .feature_log_append_evidence, .trusted_log_clock },
         .replaces = &.{.feature_log_stream_state},

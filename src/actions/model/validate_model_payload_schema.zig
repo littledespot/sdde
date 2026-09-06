@@ -4,7 +4,7 @@ const validation = @import("../../domain/model_payload_schema.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-model-payload-schema@1",
+        .id = "validate-model-payload-schema",
         .kind = .action,
         .requires = &.{},
         .produces = &.{},

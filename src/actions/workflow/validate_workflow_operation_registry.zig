@@ -5,7 +5,7 @@ pub const Error = error{WorkflowOperationRegistryInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-workflow-operation-registry@1",
+        .id = "validate-workflow-operation-registry",
         .kind = .action,
         .requires = &.{.workflow_operation_registry},
         .produces = &.{.workflow_operation_registry_evidence},

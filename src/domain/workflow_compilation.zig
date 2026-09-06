@@ -55,7 +55,7 @@ pub const CompiledResource = struct {
 
 pub const CompiledStep = struct {
     id: workflow.WorkflowStepId,
-    operation_id: workflow.RegisteredRef,
+    operation_id: workflow.OperationId,
     parameters: []const CompiledParameter,
     requires: []const pipeline.DataKey,
     optional: []const pipeline.DataKey = &.{},
@@ -78,7 +78,7 @@ pub const SemanticAuthority = struct {
     data_schemas: []const @import("pipeline_data.zig").Schema = &.{},
     workflow_id: workflow.WorkflowId,
     workflow_version: u32,
-    invocation_operation_id: workflow.RegisteredRef,
+    invocation_operation_id: workflow.OperationId,
     policy_profile_id: workflow.RegisteredRef,
     total_model_token_budget: workflow_token_budget.TotalTokenBudget,
     start_step_id: workflow.WorkflowStepId,

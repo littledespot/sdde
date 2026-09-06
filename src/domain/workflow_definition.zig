@@ -19,7 +19,7 @@ pub const Definition = struct {
     workflow_id: workflow.WorkflowId,
     workflow_version: u32,
     shortcode: telemetry.WorkflowShortcode,
-    invocation_operation_id: workflow.RegisteredRef,
+    invocation_operation_id: workflow.OperationId,
     policy_profile_id: workflow.RegisteredRef,
     start_step_id: workflow.WorkflowStepId,
     resources: []const workflow.ResourceDeclaration,

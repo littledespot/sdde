@@ -10,7 +10,7 @@ pub const Action = struct {
     parser: parser_port.Parser,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "parse-workflow-definitions@1",
+        .id = "parse-workflow-definitions",
         .kind = .action,
         .requires = &.{.workflow_definition_captures},
         .produces = &.{.raw_workflow_definitions},

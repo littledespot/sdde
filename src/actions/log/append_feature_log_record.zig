@@ -7,7 +7,7 @@ pub const Error = error{ LogSinkFailure, LogFlushFailure };
 pub const Action = struct {
     sink: sink_port.RecordAppender,
     pub const contract: pipeline.NodeContract = .{
-        .id = "append-feature-log-record@1",
+        .id = "append-feature-log-record",
         .kind = .action,
         .requires = &.{ .feature_log_binding, .feature_log_stream_lock, .feature_log_stream_state, .serialized_log_record },
         .produces = &.{.feature_log_append_evidence},

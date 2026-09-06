@@ -9,7 +9,7 @@ pub const Action = struct {
     policy: bootstrap_roots.WorkspacePathPolicy,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "resolve-llm-provider-config-path@1",
+        .id = "resolve-llm-provider-config-path",
         .kind = .action,
         .requires = &.{ .exact_engine_config_file, .llm_provider_config_path_policy },
         .produces = &.{.llm_provider_config_path_candidate},

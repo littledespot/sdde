@@ -10,7 +10,7 @@ pub const Error = error{InvalidPromptLogRecord};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "build-prompt-log-record@1",
+        .id = "build-prompt-log-record",
         .kind = .action,
         .requires = &.{ .feature_log_binding, .feature_log_stream_state, .trusted_log_clock, .validated_prompt_fragment },
         .produces = &.{.identified_prompt_log},

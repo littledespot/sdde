@@ -8,7 +8,7 @@ const pipeline = @import("../../domain/pipeline.zig");
 pub const Action = struct {
     sink: emergency_port.Sink,
     pub const contract: pipeline.NodeContract = .{
-        .id = "emit-emergency-log-failure-record@1",
+        .id = "emit-emergency-log-failure-record",
         .kind = .action,
         .requires = &.{},
         .produces = &.{},

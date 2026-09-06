@@ -140,7 +140,7 @@ const provider_contract: contracts.ProviderModelContract = .{
 };
 const model_operation: operations.Entry = .{
     .contract = .{
-        .id = "test.generate@1",
+        .id = "test.generate",
         .kind = .step,
         .parameters = &([_]operation.ParameterDescriptor{.{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true }} ++ model.parameters),
         .outcomes = &.{.ok},

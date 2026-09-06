@@ -5,7 +5,7 @@ pub const Error = error{LoggingPolicyInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "canonicalize-log-level@1",
+        .id = "canonicalize-log-level",
         .kind = .action,
         .requires = &.{.engine_config},
         .produces = &.{.canonical_log_level},

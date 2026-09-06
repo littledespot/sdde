@@ -4,7 +4,7 @@ const evidence = @import("../../domain/reference_evidence.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "build-reference-chunks@1",
+        .id = "build-reference-chunks",
         .kind = .action,
         .requires = &.{.identified_reference_corpus},
         .produces = &.{.reference_chunks},

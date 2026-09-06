@@ -7,7 +7,7 @@ pub const Error = error{LogSinkFailure};
 pub const Action = struct {
     sink: sink_port.SegmentPruner,
     pub const contract: pipeline.NodeContract = .{
-        .id = "prune-feature-log-segment@1",
+        .id = "prune-feature-log-segment",
         .kind = .action,
         .requires = &.{ .feature_log_binding, .feature_log_stream_lock, .feature_log_retention_authorization },
         .invalidates = &.{.feature_log_retention_authorization},

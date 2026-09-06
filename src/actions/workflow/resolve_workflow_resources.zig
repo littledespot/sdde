@@ -7,7 +7,7 @@ pub const Error = error{WorkflowAuthorityInventoryInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "resolve-workflow-resources@1",
+        .id = "resolve-workflow-resources",
         .kind = .action,
         .requires = &.{ .workflow_authority_inventory, .declarative_workflow_definitions },
         .produces = &.{.workflow_resource_manifest},
@@ -105,7 +105,7 @@ test "all regular resources must be explicitly and uniquely declared" {
         .workflow_id = workflow.WorkflowId.parse("flow").?,
         .workflow_version = 1,
         .shortcode = telemetry.WorkflowShortcode.parse("FLOW") catch unreachable,
-        .invocation_operation_id = workflow.RegisteredRef.parse("core.empty@1").?,
+        .invocation_operation_id = workflow.OperationId.parse("core.empty").?,
         .policy_profile_id = workflow.RegisteredRef.parse("core.safe@1").?,
         .start_step_id = workflow.WorkflowStepId.parse("run").?,
         .resources = &declared,

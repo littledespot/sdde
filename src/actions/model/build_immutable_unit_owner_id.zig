@@ -3,7 +3,7 @@ const pipeline = @import("../../domain/pipeline.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "build-immutable-unit-owner-id@1",
+        .id = "build-immutable-unit-owner-id",
         .kind = .action,
         .requires = &.{},
         .produces = &.{},

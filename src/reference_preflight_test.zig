@@ -99,7 +99,7 @@ test "invocation publishes only validated owned context and rejects without outp
     const contract: @import("domain/pipeline.zig").NodeContract = .{ .id = invocation_runner.Invocation.contract.id, .kind = .orchestrator, .requires = &.{}, .produces = invocation_runner.Invocation.contract.produces, .side_effect = .none };
     try envelope.apply(contract, &candidate.delta, .ok);
     try std.testing.expect(envelope.slots[@intFromEnum(schemas.parsed.key)] == null);
-    const read_contract: @import("domain/pipeline.zig").NodeContract = .{ .id = "read@1", .kind = .action, .requires = &.{.specify_invocation}, .produces = &.{}, .side_effect = .none };
+    const read_contract: @import("domain/pipeline.zig").NodeContract = .{ .id = "read", .kind = .action, .requires = &.{.specify_invocation}, .produces = &.{}, .side_effect = .none };
     const view = try envelope.view(read_contract);
     try std.testing.expectEqualStrings("hello", (try values.read(&view, schemas.invocation, @import("domain/specify_invocation.zig").Invocation)).raw_reference);
     try std.testing.expectError(error.OperationExecutionFailed, invocation_runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{} } }));

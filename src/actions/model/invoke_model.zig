@@ -7,7 +7,7 @@ pub const Action = struct {
     provider: provider_port.LLMProviderInterface,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "invoke-model@1",
+        .id = "invoke-model",
         .kind = .action,
         .requires = &.{ .model_request_identity_ledger, .validated_provider_model_binding, .validated_provider_authorization },
         .produces = &.{},

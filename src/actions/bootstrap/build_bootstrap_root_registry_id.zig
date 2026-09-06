@@ -6,7 +6,7 @@ pub const Error = error{BootstrapRootRegistryInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "build-bootstrap-root-registry-id@1",
+        .id = "build-bootstrap-root-registry-id",
         .kind = .action,
         .requires = &.{ .exact_engine_config_file, .configured_root_capability_set },
         .produces = &.{.bootstrap_root_registry_id},

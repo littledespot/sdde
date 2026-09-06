@@ -7,7 +7,7 @@ pub const Error = error{FeatureLogRetentionAuthorizationInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "resolve-feature-log-retention-stream@1",
+        .id = "resolve-feature-log-retention-stream",
         .kind = .action,
         .requires = &.{ .feature_log_binding, .feature_log_retention_authorization },
         .produces = &.{},

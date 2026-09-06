@@ -8,7 +8,7 @@ pub const Error = error{LogLockTimeout};
 pub const Action = struct {
     sink: sink_port.LockAcquirer,
     pub const contract: pipeline.NodeContract = .{
-        .id = "acquire-feature-log-stream-lock@1",
+        .id = "acquire-feature-log-stream-lock",
         .kind = .action,
         .requires = &.{.feature_log_binding},
         .produces = &.{.feature_log_stream_lock},

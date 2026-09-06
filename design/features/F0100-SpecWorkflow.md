@@ -85,7 +85,7 @@ schema: workflow/v1
 id: specify
 version: <positive-u32>
 shortcode: "<validated-unique-four-character-shortcode>"
-invoke: specify-invocation@1
+invoke: specify-invocation
 policy: "<registered-ref@version>"
 start: generate
 
@@ -95,7 +95,7 @@ resources:
 
 steps:
   generate:
-    use: model.generate@1
+    use: model.generate
     with:
       slot: spec-generation
       prompt: spec-prompt
@@ -140,9 +140,9 @@ The existing reusable reference operations remain:
 
 | Contract | Input → output |
 | --- | --- |
-| `normalize-reference-selector@1` | Validated reference input → normalized candidate |
-| `validate-reference-selector@1` | Normalized candidate → relative selector |
-| `inspect-reference-directory@1` | Relative selector → read-only directory observation |
+| `normalize-reference-selector` | Validated reference input → normalized candidate |
+| `validate-reference-selector` | Normalized candidate → relative selector |
+| `inspect-reference-directory` | Relative selector → read-only directory observation |
 
 The shared ADR 0007 adapter owns NFC. Reference policy retains its 4,096-byte
 raw/normalized limit, 255-byte segment limit, separator/dot normalization, and
@@ -151,9 +151,9 @@ portable names. Inspection alone carries `reference-read`; it rechecks root
 identity, follows no symlinks, requires a readable directory, and grants no write
 capability. Reference inspection does not read or reconcile the corpus.
 
-**Implemented preflight:** `specify-invocation@1` requires both inputs.
-`normalize-feature-directory@1`, `validate-feature-directory@1` and
-`inspect-feature-directory@1` reuse shared path policy and the runner/value
+**Implemented preflight:** `specify-invocation` requires both inputs.
+`normalize-feature-directory`, `validate-feature-directory` and
+`inspect-feature-directory` reuse shared path policy and the runner/value
 envelope. Inspection carries only `feature-read`; `core.directory-read@1`
 permits feature/reference inspection. The fixture selects these steps through
 ordinary YAML, accepts absent targets without creation, and rejects archive
@@ -177,9 +177,9 @@ The shared artifact-path owner resolves the selected feature's `spec.md`,
 not configurable filenames, an ownership registry or write permission.
 
 Five registered operations compose through ordinary YAML:
-`resolve-feature-artifact-paths@1`, `capture-clarification-inputs@1`,
-`parse-clarification-state@1`, `validate-clarification-state@1` and
-`validate-clarification-forms@1`. Only capture carries `feature-input-read`;
+`resolve-feature-artifact-paths`, `capture-clarification-inputs`,
+`parse-clarification-state`, `validate-clarification-state` and
+`validate-clarification-forms`. Only capture carries `feature-input-read`;
 `core.feature-input-read@1` explicitly permits that capability alongside
 feature/reference inspection. Existing inspection-only profiles are unchanged.
 The executable test definition is
@@ -213,9 +213,9 @@ protection checks remain later work; no stage completion is inferred.
 ### 3.3 Read-only Markdown ingestion
 
 Five registered operations cover the physical source boundary:
-`inventory-reference-sources@1`, `validate-reference-inventory@1`,
-`capture-reference-sources@1`, `decode-reference-markdown@1` and
-`validate-reference-accounting@1`. They use the configured `paths.references`
+`inventory-reference-sources`, `validate-reference-inventory`,
+`capture-reference-sources`, `decode-reference-markdown` and
+`validate-reference-accounting`. They use the configured `paths.references`
 root and independent selector. Every encountered entry, including hidden files,
 directories and non-followed symlinks, is accounted; unsupported, unreadable,
 changed, malformed or over-limit inputs fail without output writes.
@@ -236,10 +236,10 @@ Four registered operations extend that boundary:
 
 | Operation | Contract |
 | --- | --- |
-| `assign-reference-identities@1` | Validated reference inputs and selected feature → identified corpus and total provisional-to-canonical mappings. |
-| `build-reference-chunks@1` | Identified corpus → state-bound chunks; `source_blocks_v1` uses one chunk per existing source block. |
-| `validate-reference-chunks@1` | Original inputs, feature, corpus and chunks → validated citable inputs; reject omissions, duplicates, changed bytes, wrong mappings or foreign state/feature bindings. |
-| `validate-source-citations@1` | Citable inputs and engine-scoped typed proposals → validated source citations. |
+| `assign-reference-identities` | Validated reference inputs and selected feature → identified corpus and total provisional-to-canonical mappings. |
+| `build-reference-chunks` | Identified corpus → state-bound chunks; `source_blocks_v1` uses one chunk per existing source block. |
+| `validate-reference-chunks` | Original inputs, feature, corpus and chunks → validated citable inputs; reject omissions, duplicates, changed bytes, wrong mappings or foreign state/feature bindings. |
+| `validate-source-citations` | Citable inputs and engine-scoped typed proposals → validated source citations. |
 
 The [reference identity owner](../../src/domain/reference_identity.zig) supplies
 the same state/chunk types used by model-request owners. Each corpus receives a
@@ -274,12 +274,12 @@ Six registered operations keep this boundary explicit in the selected YAML:
 
 | Operation | Contract |
 | --- | --- |
-| `parse-reference-extraction-results@1` | Engine-scoped raw observations → closed parsed candidates. |
-| `validate-reference-extraction-text@1` | Parsed candidates, current toolchain, citable inputs and source-backed literal registry → text-validated candidates (§3.7). |
-| `validate-reference-claims@1` | Citable inputs and text-validated candidates → structurally validated claims, ordered by engine chunk order. Reuses the same citation validator as §3.4. |
-| `assign-reference-claim-identities@1` | Validated candidates → state-local claim/citation ordinals; no model-selected IDs. |
-| `build-reference-extraction-ledger@1` | Assigned identities → in-memory claims, citations and chunk outcomes. |
-| `validate-reference-extraction-accounting@1` | Citable inputs and ledger → exact total chunk/claim/citation coverage, with explicit `ok` or `blocked`; malformed coverage fails. |
+| `parse-reference-extraction-results` | Engine-scoped raw observations → closed parsed candidates. |
+| `validate-reference-extraction-text` | Parsed candidates, current toolchain, citable inputs and source-backed literal registry → text-validated candidates (§3.7). |
+| `validate-reference-claims` | Citable inputs and text-validated candidates → structurally validated claims, ordered by engine chunk order. Reuses the same citation validator as §3.4. |
+| `assign-reference-claim-identities` | Validated candidates → state-local claim/citation ordinals; no model-selected IDs. |
+| `build-reference-extraction-ledger` | Assigned identities → in-memory claims, citations and chunk outcomes. |
+| `validate-reference-extraction-accounting` | Citable inputs and ledger → exact total chunk/claim/citation coverage, with explicit `ok` or `blocked`; malformed coverage fails. |
 
 The current lossless-Markdown candidate body is exactly one JSON object:
 `{kind: claims, claims: [...], token_classifications: []}` or
@@ -327,9 +327,9 @@ operations:
 
 | Operation | Required inputs → output |
 | --- | --- |
-| `compile-naming-policy@1` | `valid_toolchain` → `compiled_naming_policy` |
-| `build-superset-path-token-grammar@1` | Compiled naming policy, current toolchain and citable reference inputs → `path_token_grammar` |
-| `scan-path-tokens@1` | Grammar, current toolchain, citable inputs and required `text` data-resource parameter → `path_token_scan` |
+| `compile-naming-policy` | `valid_toolchain` → `compiled_naming_policy` |
+| `build-superset-path-token-grammar` | Compiled naming policy, current toolchain and citable reference inputs → `path_token_grammar` |
+| `scan-path-tokens` | Grammar, current toolchain, citable inputs and required `text` data-resource parameter → `path_token_scan` |
 
 [F0003 §3.5](F0003-ToolChainService.md#35-registered-lexical-naming-rules) owns
 the registered rule contract. Grammar construction includes every selected rule
@@ -361,9 +361,9 @@ Three pure YAML operations prepare the execution-local literal registry:
 
 | Operation | Required inputs → output |
 | --- | --- |
-| `scan-reference-passive-literals@1` | Current grammar/toolchain and citable inputs → ordered source-name/block-span candidates |
-| `assign-passive-literal-identities@1` | Candidates → source-ordered IDs, deduplicated by `(kind, NFC bytes)` |
-| `validate-reference-passive-literals@1` | Assigned candidates and current inputs → `reference_passive_literals` |
+| `scan-reference-passive-literals` | Current grammar/toolchain and citable inputs → ordered source-name/block-span candidates |
+| `assign-passive-literal-identities` | Candidates → source-ordered IDs, deduplicated by `(kind, NFC bytes)` |
+| `validate-reference-passive-literals` | Assigned candidates and current inputs → `reference_passive_literals` |
 
 Validation reuses the shared detector to prove complete exact origins, values
 and allocations. Models and workflow data resources cannot register literals.
@@ -382,7 +382,7 @@ The native JSON text shapes are closed:
 `{"source":{"source_id":{"ordinal":1}}}`. Neither permits a project-file
 node. A passive node contains only its ID, never model-provided display bytes.
 
-`validate-reference-extraction-text@1` normalizes literal runs to NFC and rejects
+`validate-reference-extraction-text` normalizes literal runs to NFC and rejects
 empty/control-invalid text and inline path/filename/URI matches. Adjacent literal
 segments are joined before scanning so splitting a token cannot bypass it.
 Passive IDs require an occurrence inside the exact chunk, or that chunk's source

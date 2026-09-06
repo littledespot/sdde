@@ -6,7 +6,7 @@ const state_source = @import("../../ports/reference_state_identity.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "assign-reference-identities@1",
+        .id = "assign-reference-identities",
         .kind = .action,
         .requires = &.{ .reference_inputs, .feature_directory },
         .produces = &.{.identified_reference_corpus},

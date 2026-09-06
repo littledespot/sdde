@@ -5,7 +5,7 @@ pub const Error = error{InvalidFeatureLogFinalization};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-feature-log-finalization@1",
+        .id = "validate-feature-log-finalization",
         .kind = .action,
         .requires = &.{.feature_log_runtime_status},
         .produces = &.{.feature_log_finalization_authority},

@@ -4,7 +4,7 @@ const workflow = @import("../../domain/workflow.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "parse-workflow-invocation@1",
+        .id = "parse-workflow-invocation",
         .kind = .action,
         .requires = &.{.workflow_operation_registry_evidence},
         .produces = &.{.workflow_invocation},

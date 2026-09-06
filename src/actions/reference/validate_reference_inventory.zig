@@ -8,7 +8,7 @@ pub const Action = struct {
     normalizer: unicode.Normalizer,
     case_folder: unicode.CaseFolder,
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-reference-inventory@1",
+        .id = "validate-reference-inventory",
         .kind = .action,
         .requires = &.{.raw_reference_inventory},
         .produces = &.{.reference_inventory},

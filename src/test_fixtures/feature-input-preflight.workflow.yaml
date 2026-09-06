@@ -2,40 +2,40 @@ schema: workflow/v1
 id: feature-input-preflight
 version: 1
 shortcode: FINP
-invoke: specify-invocation@1
+invoke: specify-invocation
 policy: core.feature-input-read@1
 start: normalize-feature
 steps:
   normalize-feature:
-    use: normalize-feature-directory@1
+    use: normalize-feature-directory
     on: { ok: validate-feature, failed: end.failed }
   validate-feature:
-    use: validate-feature-directory@1
+    use: validate-feature-directory
     on: { ok: inspect-feature, failed: end.failed }
   inspect-feature:
-    use: inspect-feature-directory@1
+    use: inspect-feature-directory
     on: { ok: normalize-reference, failed: end.failed }
   normalize-reference:
-    use: normalize-reference-selector@1
+    use: normalize-reference-selector
     on: { ok: validate-reference, failed: end.failed }
   validate-reference:
-    use: validate-reference-selector@1
+    use: validate-reference-selector
     on: { ok: inspect-reference, failed: end.failed }
   inspect-reference:
-    use: inspect-reference-directory@1
+    use: inspect-reference-directory
     on: { ok: resolve-paths, failed: end.failed }
   resolve-paths:
-    use: resolve-feature-artifact-paths@1
+    use: resolve-feature-artifact-paths
     on: { ok: capture, failed: end.failed }
   capture:
-    use: capture-clarification-inputs@1
+    use: capture-clarification-inputs
     on: { ok: parse-state, failed: end.failed }
   parse-state:
-    use: parse-clarification-state@1
+    use: parse-clarification-state
     on: { ok: validate-state, failed: end.failed }
   validate-state:
-    use: validate-clarification-state@1
+    use: validate-clarification-state
     on: { ok: validate-forms, failed: end.failed }
   validate-forms:
-    use: validate-clarification-forms@1
+    use: validate-clarification-forms
     on: { ok: end.ok, failed: end.failed }

@@ -9,7 +9,7 @@ pub const Action = struct {
     policy: bootstrap_roots.WorkspacePathPolicy,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-configured-root-path-policy@1",
+        .id = "validate-configured-root-path-policy",
         .kind = .action,
         .requires = &.{.engine_config},
         .produces = &.{.configured_root_path_policy_set},

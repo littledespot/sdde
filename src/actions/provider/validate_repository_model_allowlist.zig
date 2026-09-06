@@ -8,7 +8,7 @@ pub const Error = error{LLMProviderModelBindingInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-repository-model-allowlist@1",
+        .id = "validate-repository-model-allowlist",
         .kind = .action,
         .requires = &.{ .engine_config, .llm_provider_registry },
         .produces = &.{.repository_model_allowlist},

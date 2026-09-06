@@ -9,7 +9,7 @@ pub const Action = struct {
     contracts: *const contracts.Registry,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-llm-provider-registry@1",
+        .id = "validate-llm-provider-registry",
         .kind = .action,
         .requires = &.{.llm_provider_registry_candidate},
         .produces = &.{.llm_provider_registry},

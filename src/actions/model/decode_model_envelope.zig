@@ -5,7 +5,7 @@ const envelope = @import("../../domain/model_envelope.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "decode-model-envelope@1",
+        .id = "decode-model-envelope",
         .kind = .action,
         .requires = &.{},
         .produces = &.{},

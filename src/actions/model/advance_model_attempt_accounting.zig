@@ -7,7 +7,7 @@ pub const Error = accounting.ProposalError || accounting.RequestError;
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "advance-model-attempt-accounting@1",
+        .id = "advance-model-attempt-accounting",
         .kind = .action,
         .requires = &.{.model_request_identity_ledger},
         .produces = &.{},

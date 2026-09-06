@@ -79,7 +79,8 @@ pub const Registry = struct {
     policies: []const operation.PolicyProfile,
     gates: []const gate.Contract,
 
-    pub fn resolveOperation(self: *const Registry, id: workflow.RegisteredRef) ?*const Entry {
+    pub fn resolveOperation(self: *const Registry, id: workflow.OperationId) ?*const Entry {
+        if (workflow.OperationId.parse(id.bytes) == null) return null;
         var found: ?*const Entry = null;
         for (self.operations) |*entry| {
             if (!std.mem.eql(u8, entry.contract.id, id.bytes)) continue;
@@ -117,7 +118,7 @@ pub const Registry = struct {
         }
         for (self.operations, 0..) |entry, index| {
             if (entry.binding.implementation.context_required and entry.binding.context == null) return false;
-            if (workflow.RegisteredRef.parse(entry.contract.id) == null or
+            if (workflow.OperationId.parse(entry.contract.id) == null or
                 !validContract(entry.contract, entry.binding.capabilities())) return false;
             inline for (.{ entry.contract.requires, entry.contract.optional, entry.contract.produces, entry.contract.replaces, entry.contract.invalidates }) |keys| {
                 for (keys) |key| if (data.find(self.data_schemas, key) == null) return false;

@@ -4,7 +4,7 @@ const pipeline = @import("../../domain/pipeline.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "build-initial-model-request-identity-ledger@1",
+        .id = "build-initial-model-request-identity-ledger",
         .kind = .action,
         .requires = &.{},
         .produces = &.{.model_request_identity_ledger},

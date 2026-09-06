@@ -5,7 +5,7 @@ pub const Error = accounting.BudgetError;
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "check-workflow-token-budget@1",
+        .id = "check-workflow-token-budget",
         .kind = .action,
         .requires = &.{},
         .produces = &.{},

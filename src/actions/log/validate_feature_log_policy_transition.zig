@@ -7,7 +7,7 @@ pub const Error = error{InvalidFeatureLogPolicyTransition};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-feature-log-policy-transition@1",
+        .id = "validate-feature-log-policy-transition",
         .kind = .action,
         .requires = &.{ .feature_log_binding, .logging_policy },
         .produces = &.{.feature_log_policy_transition_authority},

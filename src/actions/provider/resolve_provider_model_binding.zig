@@ -12,7 +12,7 @@ pub const Error = error{ProviderModelBindingInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "resolve-provider-model-binding@1",
+        .id = "resolve-provider-model-binding",
         .kind = .action,
         .requires = &.{ .selected_compiled_workflow, .llm_provider_registry, .repository_model_allowlist },
         .produces = &.{.validated_provider_model_binding},

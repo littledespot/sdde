@@ -2,8 +2,8 @@ const execution = @import("../domain/workflow_execution.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const bindings = @import("../application/workflow_operation_binding.zig");
 
-const empty_invocation_id = "core.empty-invocation@1";
-const noop_id = "core.noop@1";
+const empty_invocation_id = "core.empty-invocation";
+const noop_id = "core.noop";
 const capability_free_policy_id = "core.capability-free@1";
 
 pub const entries = [_]operations.Entry{

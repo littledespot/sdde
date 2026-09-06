@@ -11,14 +11,14 @@ const schemas = [_]data.Schema{ context_schema, count_schema };
 const context_index = @intFromEnum(pipeline.DataKey.workflow_invocation);
 const count_index = @intFromEnum(pipeline.DataKey.canonical_log_level);
 const produce: pipeline.NodeContract = .{
-    .id = "test.context@1",
+    .id = "test.context",
     .kind = .action,
     .requires = &.{},
     .produces = &.{.workflow_invocation},
     .side_effect = .none,
 };
 const consume: pipeline.NodeContract = .{
-    .id = "test.consume@1",
+    .id = "test.consume",
     .kind = .action,
     .requires = &.{.workflow_invocation},
     .produces = &.{},
@@ -39,7 +39,7 @@ test "envelope owns copied input and exposes only declared keys" {
     const context = try values.read(&view, context_schema, Context);
     try std.testing.expectEqualStrings("hello", context.text);
     try std.testing.expectEqual(@as(u32, 2), context.attempts);
-    const hidden = try envelope.view(.{ .id = "test.hidden@1", .kind = .action, .requires = &.{}, .produces = &.{}, .side_effect = .none });
+    const hidden = try envelope.view(.{ .id = "test.hidden", .kind = .action, .requires = &.{}, .produces = &.{}, .side_effect = .none });
     try std.testing.expect(!hidden.contains(.workflow_invocation));
     try std.testing.expectError(error.MissingRequiredData, values.read(&hidden, context_schema, Context));
     try std.testing.expectError(error.DataSchemaMismatch, values.read(&view, context_schema, u32));
@@ -49,7 +49,7 @@ test "optional inputs expose present values without making absent values require
     var envelope = envelope_module.PipelineEnvelope.init(&schemas);
     defer envelope.deinit();
     const optional: pipeline.NodeContract = .{
-        .id = "test.optional@1",
+        .id = "test.optional",
         .kind = .action,
         .requires = &.{},
         .optional = &.{.workflow_invocation},
@@ -74,7 +74,7 @@ test "rejected replacements and schema mismatches preserve the complete old enve
     initial.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "old", .attempts = 1 });
     try envelope.apply(produce, &initial, .ok);
     const replace_and_write: pipeline.NodeContract = .{
-        .id = "test.replace@1",
+        .id = "test.replace",
         .kind = .action,
         .requires = &.{.workflow_invocation},
         .produces = &.{.canonical_log_level},
@@ -90,7 +90,7 @@ test "rejected replacements and schema mismatches preserve the complete old enve
     try std.testing.expectError(error.DataSchemaMismatch, envelope.apply(replace_and_write, &delta, .ok));
     const old = try envelope.view(consume);
     try std.testing.expectEqualStrings("old", (try values.read(&old, context_schema, Context)).text);
-    const require_count: pipeline.NodeContract = .{ .id = "test.count@1", .kind = .action, .requires = &.{.canonical_log_level}, .produces = &.{}, .side_effect = .none };
+    const require_count: pipeline.NodeContract = .{ .id = "test.count", .kind = .action, .requires = &.{.canonical_log_level}, .produces = &.{}, .side_effect = .none };
     try std.testing.expectError(error.MissingRequiredData, envelope.view(require_count));
     envelope.discard(&delta);
     delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "new", .attempts = 2 });
@@ -102,7 +102,7 @@ test "rejected replacements and schema mismatches preserve the complete old enve
     try std.testing.expectEqual(@as(u32, 9), (try values.read(&counts, count_schema, u32)).*);
 
     var invalidation: pipeline.NodeDelta = .{ .data_invalidations = .initOne(.workflow_invocation) };
-    const invalidate: pipeline.NodeContract = .{ .id = "test.invalidate@1", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{.workflow_invocation}, .side_effect = .none };
+    const invalidate: pipeline.NodeContract = .{ .id = "test.invalidate", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{.workflow_invocation}, .side_effect = .none };
     try envelope.apply(invalidate, &invalidation, .ok);
     try std.testing.expectError(error.MissingRequiredData, envelope.view(consume));
     try std.testing.expectError(error.InvalidationTargetMissing, envelope.apply(invalidate, &invalidation, .ok));
@@ -117,7 +117,7 @@ test "missing extra wrong-key and aliased values cannot satisfy a data contract"
     delta.data_writes[count_index] = try values.create(std.testing.allocator, count_schema, u32, 1);
     try std.testing.expectError(error.UndeclaredWrite, envelope.apply(produce, &delta, .ok));
     delta.data_writes[context_index] = delta.data_writes[count_index];
-    const both: pipeline.NodeContract = .{ .id = "test.both@1", .kind = .action, .requires = &.{}, .produces = &.{ .canonical_log_level, .workflow_invocation }, .side_effect = .none };
+    const both: pipeline.NodeContract = .{ .id = "test.both", .kind = .action, .requires = &.{}, .produces = &.{ .canonical_log_level, .workflow_invocation }, .side_effect = .none };
     try std.testing.expectError(error.AliasedDataValue, envelope.apply(both, &delta, .ok));
     envelope.discard(&delta); // Duplicate handle is destroyed once.
     delta.data_writes[context_index] = try values.create(std.testing.allocator, count_schema, u32, 1);
@@ -127,7 +127,7 @@ test "missing extra wrong-key and aliased values cannot satisfy a data contract"
     try envelope.apply(produce, &delta, .ok);
     const view = try envelope.view(consume);
     delta.data_replacements[context_index] = view.slots[context_index];
-    const replace: pipeline.NodeContract = .{ .id = "test.replace@1", .kind = .action, .requires = &.{}, .produces = &.{}, .replaces = &.{.workflow_invocation}, .side_effect = .none };
+    const replace: pipeline.NodeContract = .{ .id = "test.replace", .kind = .action, .requires = &.{}, .produces = &.{}, .replaces = &.{.workflow_invocation}, .side_effect = .none };
     try std.testing.expectError(error.AliasedDataValue, envelope.apply(replace, &delta, .ok));
     envelope.discard(&delta); // A borrowed input remains owned by the envelope.
     try std.testing.expectEqualStrings("retained", (try values.read(&view, context_schema, Context)).text);
@@ -159,7 +159,7 @@ test "unregistered schemas invalid telemetry and conflicting effects leave value
     delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "rejected", .attempts = 2 });
     delta.data_invalidations.insert(.workflow_invocation);
     const conflicting: pipeline.NodeContract = .{
-        .id = "test.conflict@1",
+        .id = "test.conflict",
         .kind = .action,
         .requires = &.{},
         .produces = &.{},

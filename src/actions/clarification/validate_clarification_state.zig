@@ -4,7 +4,7 @@ const feature = @import("../../domain/feature_identity.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-clarification-state@1",
+        .id = "validate-clarification-state",
         .kind = .action,
         .requires = &.{ .parsed_clarification_state, .feature_artifact_paths },
         .produces = &.{.validated_clarification_state},

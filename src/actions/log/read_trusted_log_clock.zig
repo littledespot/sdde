@@ -7,7 +7,7 @@ pub const Error = error{LogClockReadFailure};
 pub const Action = struct {
     clock: clock_port.Clock,
     pub const contract: pipeline.NodeContract = .{
-        .id = "read-trusted-log-clock@1",
+        .id = "read-trusted-log-clock",
         .kind = .action,
         .requires = &.{},
         .produces = &.{.trusted_log_clock},

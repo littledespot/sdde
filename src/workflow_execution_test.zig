@@ -87,7 +87,7 @@ test "runner applies an operation delta before the telemetry barrier" {
 test "runner follows a compiled bounded cycle and enforces its limit" {
     const loop_steps = [_]compilation.CompiledStep{.{
         .id = .{ .bytes = "run" },
-        .operation_id = .{ .bytes = "test.operation@1" },
+        .operation_id = .{ .bytes = "test.operation" },
         .parameters = &.{},
         .requires = &.{},
         .produces = &.{},
@@ -319,12 +319,12 @@ const FakeBarrier = struct {
 fn testRegistry(control: *OperationControl) operations.Registry {
     control.entries = .{
         .{
-            .contract = .{ .id = "test.empty@1", .kind = .invocation, .outcomes = &.{.ok}, .side_effect = .none },
+            .contract = .{ .id = "test.empty", .kind = .invocation, .outcomes = &.{.ok}, .side_effect = .none },
             .binding = operation_bindings.bind(OperationState, &control.state, invokeOperation),
         },
         .{
             .contract = .{
-                .id = "test.operation@1",
+                .id = "test.operation",
                 .kind = .step,
                 .parameters = &.{.{
                     .id = "prompt",
@@ -383,7 +383,7 @@ fn testGraph() !compilation.CompiledWorkflow {
         .authority = .{
             .workflow_id = .{ .bytes = "arbitrary-workflow" },
             .workflow_version = 1,
-            .invocation_operation_id = .{ .bytes = "test.empty@1" },
+            .invocation_operation_id = .{ .bytes = "test.empty" },
             .policy_profile_id = .{ .bytes = "test.safe@1" },
             .total_model_token_budget = .{ .value = 1000 },
             .start_step_id = .{ .bytes = "run" },
@@ -399,7 +399,7 @@ fn testGraph() !compilation.CompiledWorkflow {
 const test_outcomes = std.meta.tags(workflow.OutcomeTag);
 const test_steps = [_]compilation.CompiledStep{.{
     .id = .{ .bytes = "run" },
-    .operation_id = .{ .bytes = "test.operation@1" },
+    .operation_id = .{ .bytes = "test.operation" },
     .parameters = &.{},
     .requires = &.{},
     .produces = &.{},

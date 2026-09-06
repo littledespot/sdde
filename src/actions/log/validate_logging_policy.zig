@@ -7,7 +7,7 @@ pub const Error = error{LoggingPolicyInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-logging-policy@1",
+        .id = "validate-logging-policy",
         .kind = .action,
         .requires = &.{ .engine_config, .canonical_log_level },
         .produces = &.{.logging_policy},

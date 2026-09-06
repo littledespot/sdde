@@ -9,7 +9,7 @@ pub const Error = error{WorkflowRegistryInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "build-workflow-definition-registry@1",
+        .id = "build-workflow-definition-registry",
         .kind = .action,
         .requires = &.{
             .workflow_authority_inventory,

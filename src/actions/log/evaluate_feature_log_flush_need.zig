@@ -7,7 +7,7 @@ pub const Decision = enum { flush, buffer };
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "evaluate-feature-log-flush-need@1",
+        .id = "evaluate-feature-log-flush-need",
         .kind = .action,
         .requires = &.{ .logging_policy, .feature_log_stream_state, .trusted_log_clock },
         .produces = &.{.log_flush_decision},

@@ -26,7 +26,7 @@ const evidence_schema = values.schema(.workflow_operation_registry_evidence, gat
 const schemas = [_]data.Schema{ level_schema, input_schema, evidence_schema };
 const gate_contract: gate.Contract = .{
     .id = .{ .bytes = "test.current-input@1" },
-    .issuer = .{ .bytes = "test.validate@1" },
+    .issuer = .{ .bytes = "test.validate" },
     .evidence = evidence_schema.key,
     .authority = &.{input_schema.key},
 };
@@ -45,7 +45,7 @@ test "unrelated YAML workflows carry typed invocation values through replacement
             try std.testing.expectEqual(@as(usize, 1), control.observations);
             try std.testing.expect(control.inputs_hidden);
             try std.testing.expectEqual(telemetry.CanonicalLogLevel.warning, control.observed.?);
-            const cleared: pipeline.NodeContract = .{ .id = "test.cleared@1", .kind = .action, .requires = &.{.workflow_invocation}, .produces = &.{}, .side_effect = .none };
+            const cleared: pipeline.NodeContract = .{ .id = "test.cleared", .kind = .action, .requires = &.{.workflow_invocation}, .produces = &.{}, .side_effect = .none };
             try std.testing.expectError(error.MissingRequiredData, runner.envelope.view(cleared));
         }
     }
@@ -67,7 +67,7 @@ test "runtime rejects schema drift and releases candidates on cancellation inval
         };
         try std.testing.expectEqual(expected, engine.run(children.bind()).execution);
         try std.testing.expectEqual(@as(usize, 0), control.observations);
-        const missing: pipeline.NodeContract = .{ .id = "test.missing@1", .kind = .action, .requires = &.{.canonical_log_level}, .produces = &.{}, .side_effect = .none };
+        const missing: pipeline.NodeContract = .{ .id = "test.missing", .kind = .action, .requires = &.{.canonical_log_level}, .produces = &.{}, .side_effect = .none };
         try std.testing.expectError(error.MissingRequiredData, runner.envelope.view(missing));
     }
     var control: Control = .{};
@@ -143,7 +143,7 @@ test "authority replacement invalidates evidence even for identical bytes and ex
     var runner = fixture.runner(&control);
     defer runner.deinit();
     try prepareGate(&runner);
-    const refresh: pipeline.NodeContract = .{ .id = "test.refresh@1", .kind = .action, .requires = &.{input_schema.key}, .produces = &.{}, .replaces = &.{input_schema.key}, .side_effect = .none };
+    const refresh: pipeline.NodeContract = .{ .id = "test.refresh", .kind = .action, .requires = &.{input_schema.key}, .produces = &.{}, .replaces = &.{input_schema.key}, .side_effect = .none };
     const input = try runner.envelope.view(refresh);
     const current = try values.read(&input, input_schema, execution.Invocation);
     var delta: pipeline.NodeDelta = .{};
@@ -154,7 +154,7 @@ test "authority replacement invalidates evidence even for identical bytes and ex
     try std.testing.expectEqual(gate.Rejection.stale_authority, stale.rejected.gate);
     try std.testing.expectEqual(@as(usize, 0), control.observations);
 
-    const invalidate: pipeline.NodeContract = .{ .id = "test.invalidate-proof@1", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{evidence_schema.key}, .side_effect = .none };
+    const invalidate: pipeline.NodeContract = .{ .id = "test.invalidate-proof", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{evidence_schema.key}, .side_effect = .none };
     var invalidation: pipeline.NodeDelta = .{ .data_invalidations = .initOne(evidence_schema.key) };
     try runner.envelope.apply(invalidate, &invalidation, .ok);
     try std.testing.expectEqual(workflow.OutcomeTag.ok, runner.bindings().invokeStep(.{ .bytes = "validate" }).status());
@@ -185,11 +185,11 @@ test "missing foreign and unsuccessful evidence cannot authorize execution" {
         defer runner.envelope.discard(&delta);
         if (reason == .missing_evidence or reason == .missing_authority) {
             const key = if (reason == .missing_evidence) evidence_schema.key else input_schema.key;
-            const contract: pipeline.NodeContract = .{ .id = "test.remove@1", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{key}, .side_effect = .none };
+            const contract: pipeline.NodeContract = .{ .id = "test.remove", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{key}, .side_effect = .none };
             delta.data_invalidations.insert(key);
             try runner.envelope.apply(contract, &delta, .ok);
         } else {
-            const contract: pipeline.NodeContract = .{ .id = if (reason == .foreign_issuer) "test.foreign@1" else gate_contract.issuer.bytes, .kind = .action, .requires = &.{input_schema.key}, .produces = &.{}, .replaces = &.{evidence_schema.key}, .side_effect = .none };
+            const contract: pipeline.NodeContract = .{ .id = if (reason == .foreign_issuer) "test.foreign" else gate_contract.issuer.bytes, .kind = .action, .requires = &.{input_schema.key}, .produces = &.{}, .replaces = &.{evidence_schema.key}, .side_effect = .none };
             delta.data_replacements[@intFromEnum(evidence_schema.key)] = try values.create(std.testing.allocator, evidence_schema, gate.Decision, .accepted);
             try runner.envelope.apply(contract, &delta, if (reason == .rejected_evidence) .failed else .ok);
         }
@@ -228,7 +228,7 @@ test "gate registration rejects ambiguous issuers missing authority and invalid 
     var control: Control = .{};
     var fixture = try Fixture.init(&control, guarded_yaml);
     defer fixture.deinit();
-    const Invalid = enum { duplicate_id, duplicate_evidence, empty_authority, duplicate_authority, evidence_as_authority, unknown_issuer, missing_input, foreign_producer, evidence_schema };
+    const Invalid = enum { duplicate_id, duplicate_evidence, empty_authority, duplicate_authority, evidence_as_authority, unknown_issuer, versioned_issuer, missing_input, foreign_producer, evidence_schema };
     inline for (std.meta.tags(Invalid)) |reason| {
         var registry = fixture.registry;
         var contracts = [_]gate.Contract{ gate_contract, gate_contract };
@@ -246,7 +246,8 @@ test "gate registration rejects ambiguous issuers missing authority and invalid 
             .empty_authority => contracts[0].authority = &.{},
             .duplicate_authority => contracts[0].authority = &.{ input_schema.key, input_schema.key },
             .evidence_as_authority => contracts[0].authority = &.{evidence_schema.key},
-            .unknown_issuer => contracts[0].issuer.bytes = "test.missing@1",
+            .unknown_issuer => contracts[0].issuer.bytes = "test.missing",
+            .versioned_issuer => contracts[0].issuer.bytes = gate_contract.issuer.bytes ++ "@1",
             .missing_input => contracts[0].authority = &.{level_schema.key},
             .foreign_producer => entries[4].contract.produces = &.{evidence_schema.key},
             .evidence_schema => registry.data_schemas = &.{ input_schema, level_schema, values.schema(evidence_schema.key, bool, 1, 32) },
@@ -257,7 +258,7 @@ test "gate registration rejects ambiguous issuers missing authority and invalid 
 
 test "compiler requires explicit evidence production before protected operations" {
     var control: Control = .{};
-    const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, guarded_yaml, "  normalize: { use: test.normalize@1, on: { ok: validate } }\n  validate: { use: test.validate@1, on: { ok: guarded, blocked: bypass } }", "  normalize: { use: test.normalize@1, on: { ok: guarded } }");
+    const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, guarded_yaml, "  normalize: { use: test.normalize, on: { ok: validate } }\n  validate: { use: test.validate, on: { ok: guarded, blocked: bypass } }", "  normalize: { use: test.normalize, on: { ok: guarded } }");
     defer std.testing.allocator.free(yaml);
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, Fixture.init(&control, yaml));
 }
@@ -311,7 +312,7 @@ test "rejected deltas and exhausted generations preserve previously validated ga
         var runner = fixture.runner(&control);
         defer runner.deinit();
         try prepareGate(&runner);
-        const contract: pipeline.NodeContract = .{ .id = "test.replace@1", .kind = .action, .requires = &.{input_schema.key}, .produces = &.{}, .replaces = &.{input_schema.key}, .side_effect = .none };
+        const contract: pipeline.NodeContract = .{ .id = "test.replace", .kind = .action, .requires = &.{input_schema.key}, .produces = &.{}, .replaces = &.{input_schema.key}, .side_effect = .none };
         const input = try runner.envelope.view(contract);
         const current = try values.read(&input, input_schema, execution.Invocation);
         var delta: pipeline.NodeDelta = .{};
@@ -483,14 +484,14 @@ const EngineBindings = struct {
 };
 
 const operation_entries = [_]registry_module.Entry{
-    .{ .contract = .{ .id = "test.input@1", .kind = .invocation, .produces = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.invoke) },
-    .{ .contract = .{ .id = "test.normalize@1", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.normalize) },
-    .{ .contract = .{ .id = "test.replace@1", .kind = .step, .optional = &.{.canonical_log_level}, .replaces = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.replace) },
-    .{ .contract = .{ .id = "test.route@1", .kind = .step, .requires = &.{.workflow_invocation}, .optional = &.{.canonical_log_level}, .outcomes = &.{ .ok, .invalid }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.route) },
-    .{ .contract = .{ .id = "test.observe@1", .kind = .step, .requires = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.observe) },
-    .{ .contract = .{ .id = "test.clear@1", .kind = .step, .invalidates = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.clear) },
-    .{ .contract = .{ .id = "test.validate@1", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{ .ok, .blocked }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.validate) },
-    .{ .contract = .{ .id = "test.guarded@1", .kind = .step, .requires = &.{.canonical_log_level}, .gates = &.{"test.current-input@1"}, .outcomes = &.{ .ok, .blocked }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.observe) },
+    .{ .contract = .{ .id = "test.input", .kind = .invocation, .produces = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.invoke) },
+    .{ .contract = .{ .id = "test.normalize", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.normalize) },
+    .{ .contract = .{ .id = "test.replace", .kind = .step, .optional = &.{.canonical_log_level}, .replaces = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.replace) },
+    .{ .contract = .{ .id = "test.route", .kind = .step, .requires = &.{.workflow_invocation}, .optional = &.{.canonical_log_level}, .outcomes = &.{ .ok, .invalid }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.route) },
+    .{ .contract = .{ .id = "test.observe", .kind = .step, .requires = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.observe) },
+    .{ .contract = .{ .id = "test.clear", .kind = .step, .invalidates = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.clear) },
+    .{ .contract = .{ .id = "test.validate", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{ .ok, .blocked }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.validate) },
+    .{ .contract = .{ .id = "test.guarded", .kind = .step, .requires = &.{.canonical_log_level}, .gates = &.{"test.current-input@1"}, .outcomes = &.{ .ok, .blocked }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.observe) },
 };
 
 const guarded_yaml =
@@ -498,14 +499,14 @@ const guarded_yaml =
     \\id: guarded-preview
     \\version: 1
     \\shortcode: GPRE
-    \\invoke: test.input@1
+    \\invoke: test.input
     \\policy: test.safe@1
     \\start: normalize
     \\steps:
-    \\  normalize: { use: test.normalize@1, on: { ok: validate } }
-    \\  validate: { use: test.validate@1, on: { ok: guarded, blocked: bypass } }
-    \\  guarded: { use: test.guarded@1, on: { ok: end.ok, blocked: bypass } }
-    \\  bypass: { use: test.observe@1, on: { ok: end.ok } }
+    \\  normalize: { use: test.normalize, on: { ok: validate } }
+    \\  validate: { use: test.validate, on: { ok: guarded, blocked: bypass } }
+    \\  guarded: { use: test.guarded, on: { ok: end.ok, blocked: bypass } }
+    \\  bypass: { use: test.observe, on: { ok: end.ok } }
 ;
 
 const linear_yaml =
@@ -513,14 +514,14 @@ const linear_yaml =
     \\id: log-preview
     \\version: 1
     \\shortcode: PREV
-    \\invoke: test.input@1
+    \\invoke: test.input
     \\policy: test.safe@1
     \\start: normalize
     \\steps:
-    \\  normalize: { use: test.normalize@1, on: { ok: replace } }
-    \\  replace: { use: test.replace@1, on: { ok: observe } }
-    \\  observe: { use: test.observe@1, on: { ok: clear } }
-    \\  clear: { use: test.clear@1, on: { ok: end.ok } }
+    \\  normalize: { use: test.normalize, on: { ok: replace } }
+    \\  replace: { use: test.replace, on: { ok: observe } }
+    \\  observe: { use: test.observe, on: { ok: clear } }
+    \\  clear: { use: test.clear, on: { ok: end.ok } }
 ;
 
 const branching_yaml =
@@ -528,13 +529,13 @@ const branching_yaml =
     \\id: settings-audit
     \\version: 1
     \\shortcode: AUDT
-    \\invoke: test.input@1
+    \\invoke: test.input
     \\policy: test.safe@1
     \\start: route
     \\steps:
-    \\  route: { use: test.route@1, on: { ok: left, invalid: right } }
-    \\  left: { use: test.normalize@1, on: { ok: observe } }
-    \\  right: { use: test.normalize@1, on: { ok: observe } }
-    \\  observe: { use: test.observe@1, on: { ok: clear } }
-    \\  clear: { use: test.clear@1, on: { ok: end.ok } }
+    \\  route: { use: test.route, on: { ok: left, invalid: right } }
+    \\  left: { use: test.normalize, on: { ok: observe } }
+    \\  right: { use: test.normalize, on: { ok: observe } }
+    \\  observe: { use: test.observe, on: { ok: clear } }
+    \\  clear: { use: test.clear, on: { ok: end.ok } }
 ;

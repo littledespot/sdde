@@ -314,7 +314,7 @@ implementations, never raw child nodes. They do not receive `FileSystem`,
 child execution from bypassing the runner.
 
 The composition root registers concrete generic operation implementations in
-one versioned operation registry and binds their pipeline nodes and
+one registry of current operation contracts and binds their pipeline nodes and
 infrastructure adapters. It assembles the fixed engine-startup graph that loads
 and compiles project workflow definitions and the separate fixed,
 nonselectable, capability-free `ModelProviderBootstrapOrchestrator` accepted by
@@ -325,7 +325,7 @@ requirements and provider-call capabilities; the run-preparation orchestrator
 conditionally coordinates the provider-file children before selected-workflow execution. The
 workflow loader inventories and parses the definitions beneath
 `paths.workflows`. The workflow compiler alone resolves each referenced operation
-contract/version, validates its closed parameters and typed transitions, proves
+contract by its unversioned ID, validates its closed parameters and typed transitions, proves
 the effective graph and capability set are permitted by the selected workflow
 policy, and produces an immutable executable graph. The workflow registry owns
 the unique `WorkflowId -> CompiledWorkflowGraph` mapping. The generic
@@ -451,7 +451,7 @@ Every orchestrator must:
 - allow child orchestrators, while preventing cycles in the orchestration graph.
 
 Every orchestrator that represents workflow behavior must be bound to a
-versioned operation ID in the single registry and callable through YAML. An
+unversioned operation ID in the single registry and callable through YAML. An
 unregistered orchestrator is permitted only for an engine-kernel responsibility
 explicitly named by ADR 0005. An operation's private child graph may implement
 that operation's one atomic contract; it cannot conceal workflow transitions,
@@ -1382,7 +1382,7 @@ accounts API-reported input plus output usage against the execution's total
 token budget. Optional count operations provide observations only and never
 authorize inference or replace actual-usage accounting.
 
-Native `advance-model-attempt-accounting@1` consumes the retained prepared
+Native `advance-model-attempt-accounting` consumes the retained prepared
 request through an explicit YAML step and requires `retry-limit` (`0` means
 initial execution only). Its accounting permission is compiled from the
 registered contract, never authored in YAML. The runner binds the attempt and
@@ -1396,7 +1396,7 @@ foreign/stale evidence and another initial attempt cannot reset accounting.
 This operation prepares no lease, advances no provider operation, performs no
 provider call and charges no tokens. All its owners are destroyed with execution.
 
-Native `assign-provider-operation@1` consumes that prepared request and applied
+Native `assign-provider-operation` consumes that prepared request and applied
 attempt with one explicit `kind` (`inference` or `input-token-count`). The existing
 provider-operation lifecycle action proposes assignment; the runner validates
 its exact request/attempt/binding/input association and current revisions, then
@@ -1405,7 +1405,7 @@ view together. Consuming evidence cannot erase an unfinished operation or permit
 a retry. This step neither invokes a provider nor prepares authorization, counts
 tokens or persists records. Those operations remain explicit separate YAML work.
 
-Native `prepare-provider-operation-authorization@1` now consumes that same
+Native `prepare-provider-operation-authorization` now consumes that same
 request, attempt and assignment through a separate YAML step with required
 positive `timeout-ms`. The runner derives one absolute monotonic deadline,
 allocates the existing private lease slot and validates exact result correlation
@@ -1416,7 +1416,7 @@ facts, never a backing capability. Rejected/expired preparation and execution
 cleanup release unused leases. Invocation and lifecycle closure remain explicit
 separate integration work; no token charge or persistent record is added.
 
-Native `advance-model-request-lifecycle@1` with `transition: invoked` now exposes
+Native `advance-model-request-lifecycle` with `transition: invoked` now exposes
 the existing logical-request `assigned -> invoked` action. The runner requires
 the exact prepared authorization and validates one direct immutable successor
 before replacing the request ledger. It retains that published snapshot and
@@ -1426,7 +1426,7 @@ ledger. The prepared request, attempt and lease are unchanged and the provider
 operation remains assigned. This step performs no API call or token accounting;
 actual API calls and request closure remain separate YAML work.
 
-Native `advance-provider-operation-lifecycle@1` with `transition: invoked`
+Native `advance-provider-operation-lifecycle` with `transition: invoked`
 advances the assigned operation under that invoked request. The runner binds
 the existing prepared lease's original deadline and validates the lifecycle
 proposal before publishing canonical invoked-operation evidence and invalidating
@@ -2648,7 +2648,7 @@ These actions own the shared contract. Domain actions only produce registered re
 An orchestrator “contains” children through composition. It does not contain their logic. Actions expose no child collection or dispatcher, so an action cannot contain or call an orchestrator.
 
 For project workflow execution, every reusable workflow operation described in
-this section is available through one versioned registered operation ID and is
+this section is available through one unversioned registered operation ID and is
 selected only by a YAML `steps.*.use` field. An operation may coordinate the
 actions needed for its single atomic responsibility, but it returns a typed
 outcome without selecting the next workflow operation. The YAML `on` mapping

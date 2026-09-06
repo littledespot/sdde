@@ -13,6 +13,11 @@ declared retry count. No legacy reader, generic loop budget, or split
 invocation/step registry remains. Concrete domain operations and initial
 workflow definitions remain separately governed increments.
 
+**Accepted operation-ID amendment:** [ADR 0005](../decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06)
+requires one current unversioned contract per operation. The formal schema,
+runtime parser, registry, compiler and runner use that contract. Tests reject
+version suffixes and separate operation-version fields, with no aliases.
+
 The operation registry also owns versioned native data schemas. Compilation
 captures only schemas used by the selected graph; the runner retains owned
 invocation values, exposes only declared required/optional inputs, and validates
@@ -192,7 +197,7 @@ Every definition contains these exact concise fields:
 | `id` | Project-authored `WorkflowId`: 1-64 ASCII bytes in lower-kebab form. |
 | `version` | Positive unsigned 32-bit integer. It is part of semantic authority; v1 performs no migration or range selection. |
 | `shortcode` | Exactly four case-sensitive ASCII alphanumeric bytes. F0002's canonical parser owns the same syntax. |
-| `invoke` | Exact versioned reference to one registered capability-free invocation operation. |
+| `invoke` | Exact unversioned ID of one registered capability-free invocation operation. |
 | `policy` | Exact versioned reference to one registered workflow policy profile containing the positive total model-token budget applied to each execution; it supplies no retry count. |
 | `start` | Definition-local ID of the graph entry step. |
 | `resources` | Optional map of concise local aliases to bounded workflow-root-relative resource names. |
@@ -214,14 +219,20 @@ WorkflowId | WorkflowStepId | WorkflowParameterId | WorkflowResourceId
   = [a-z][a-z0-9]*(?:-[a-z0-9]+)*
   = 1..64 ASCII bytes
 
+OperationId
+  = [a-z][a-z0-9]*(?:[.-][a-z0-9]+)*
+  = 1..128 ASCII bytes
+
 RegisteredRef
   = [a-z][a-z0-9]*(?:[.-][a-z0-9]+)*@[1-9][0-9]*
   = 3..128 ASCII bytes
 ```
 
-`RegisteredRef` is one exact contract/profile name plus positive version. The
-compiler resolves it by direct typed registry lookup; it never selects a
-version range, `latest`, filename, implementation symbol, or near match.
+`OperationId` is used by `invoke` and `steps.*.use` and resolves to exactly one
+current contract. Version suffixes and separate operation-version fields are
+rejected, not accepted as compatibility aliases. `RegisteredRef` retains the
+existing policy-profile name plus positive version. Both use direct typed
+lookup, never a range, `latest`, filename, implementation symbol or near match.
 
 ### 3.3 Steps, parameters, resources, and transitions
 
@@ -230,7 +241,7 @@ map, and one outcome map:
 
 ```yaml
 preflight:
-  use: repository.preflight@1
+  use: repository.preflight
   with: { scope: feature }
   on: { ok: generate, failed: end.failed, cancelled: end.cancelled }
 ```
@@ -283,12 +294,12 @@ schema: workflow/v1
 id: specify
 version: 1
 shortcode: SPEC
-invoke: sdd.specify-invocation@1
+invoke: sdd.specify-invocation
 policy: sdd.hardened@1
 start: preflight
 steps:
   preflight:
-    use: repository.preflight@1
+    use: repository.preflight
     on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }
 ```
 
@@ -444,7 +455,7 @@ table. A sealed result carries a lease reference or closed failure/cancellation
 facts; publication and consumption checks retain the same request association.
 No provider call, refresh, retry or I/O is implicit.
 
-`advance-model-request-lifecycle@1` declares a ledger replacement and explicit
+`advance-model-request-lifecycle` declares a ledger replacement and explicit
 `transition: invoked`. Its compiled contract requires the retained request,
 attempt, assignment and authorization result, permits no operational capability
 or retry, and preserves the other values. The runner requires a prepared lease,
@@ -454,7 +465,7 @@ assignment. Neither writer can hide another kind of ledger change. Publication
 updates the runner's retained snapshot with the envelope, so an old snapshot
 cannot reset invocation. This is state advancement, not a provider call.
 
-`advance-provider-operation-lifecycle@1` also requires explicit
+`advance-provider-operation-lifecycle` also requires explicit
 `transition: invoked`. Its closed accounting contract consumes the assigned
 operation and requires the same request, attempt and prepared authorization.
 The runner checks the already-invoked request and original lease deadline,
@@ -525,7 +536,7 @@ invalidation, or cleanup. No second service registry or copied authority exists.
 
 `CompileWorkflowGraphAction` is a pure deterministic compiler over one
 schema-valid definition and immutable registered contracts. It resolves every
-reference exactly and version-exactly once, binds the invocation contract,
+reference exactly once, binds the current invocation contract,
 validates definition-safe parameters, canonicalizes graph data, and derives
 effective data-key, outcome, side-effect, ordering, gate, and capability facts.
 It constructs no adapter, child binding, state identity, or executable code and
@@ -541,7 +552,7 @@ invokes no node.
   operation whose finite `retry-limit` is an explicitly supplied and validated
   scalar parameter on that retry-capable operation instance; the selected
   workflow policy cannot supply or default it;
-- every step's `use` reference resolves to one registered operation contract/version and every
+- every step's `use` reference resolves to one current registered operation contract and every
   parameter satisfies that contract's closed definition-safe descriptor;
 - every declared resource is captured exactly once, has one compatible typed
   use, and is included in immutable compiled workflow authority;
@@ -560,7 +571,7 @@ invokes no node.
   budget to immutable compiled workflow authority, initialized as a fresh
   accounting ledger for each execution rather than shared across executions.
 
-Unknown or mismatched contracts, outcomes, gates, policies, or versions;
+Unknown or mismatched contracts, outcomes, gates, policies, schema/policy versions;
 dangling, unreachable, unbounded-cycle, duplicate transition-key, or unhandled graph
 members; invalid data flow; executable/infrastructure representation; gate weakening;
 capability escalation; and runner bypass all fail compilation.
@@ -675,9 +686,10 @@ Those concerns remain with their accepted owners or later increments.
 8. The external schema has no open mapping or unbounded parameter value. It
    uses native scalar parameters without tagged wrappers, and delegates typed
    identity syntax to the canonical ID and F0002 shortcode parsers.
-9. Every operation, parameter, resource, outcome, gate, policy, and capability
-   reference resolves exactly and version-exactly through compiler-owned
-   contracts and the captured workflow authority.
+9. Every operation ID resolves to exactly one current compiler-owned contract,
+   without an operation version or compatibility alias. Parameter, resource,
+   outcome, gate, policy and capability references resolve exactly through
+   their governing contracts and the captured workflow authority.
 10. Every accepted graph has one entry, only reachable terminal-reachable
     nodes, no unbounded cycle, complete unique outcome transitions, valid typed
     data flow, preserved gates, and policy-bounded effective capabilities.
@@ -739,8 +751,10 @@ Implementation tests must cover the owning boundaries:
   references, version, shortcode, scalar parameter types, integer limits,
   nested values, local duplicate IDs, resource aliases, and prohibited raw
   operational path/command/adapter/capability/script or runner-control shapes.
-- **Compiler:** unknown/version-mismatched invocation, operation, policy, parameter,
-  outcome, gate, and capability references; non-capability-free invocation;
+- **Compiler:** unknown invocation, operation, policy, parameter, outcome, gate
+  and capability references; version-suffixed operation IDs, separate operation
+  version fields, duplicate operation IDs and policy-version mismatches;
+  non-capability-free invocation;
   entry/run-context mismatch; missing entry or target; dangling, unreachable,
   nonterminal, cyclic, missing/duplicate-key/undeclared transition;
   invalid terminal mapping; data-key/version/producer/effect/barrier failure;

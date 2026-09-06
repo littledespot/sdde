@@ -5,7 +5,7 @@ const citations = @import("../../domain/source_citations.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-source-citations@1",
+        .id = "validate-source-citations",
         .kind = .action,
         .requires = &.{ .citable_reference_inputs, .reference_citation_proposals },
         .produces = &.{.validated_source_citations},

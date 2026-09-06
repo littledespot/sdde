@@ -3,7 +3,7 @@ const inventory = @import("../../domain/workflow_inventory.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "build-workflow-authority-inventory@1",
+        .id = "build-workflow-authority-inventory",
         .kind = .action,
         .requires = &.{ .workflow_authority_layout, .normalized_workflow_authority_entries, .workflow_authority_entry_accounts },
         .produces = &.{.workflow_authority_inventory_candidate},

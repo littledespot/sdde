@@ -6,7 +6,7 @@ const source = @import("../../ports/feature_directory_inspector.zig");
 pub const Action = struct {
     inspector: source.Inspector,
     pub const contract: pipeline.NodeContract = .{
-        .id = "inspect-feature-directory@1",
+        .id = "inspect-feature-directory",
         .kind = .action,
         .requires = &.{.relative_feature_directory},
         .produces = &.{.feature_directory},

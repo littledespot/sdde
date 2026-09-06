@@ -4,7 +4,7 @@ const provider_lifecycle = @import("../../domain/provider_operation_lifecycle.zi
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "advance-model-request-lifecycle@1",
+        .id = "advance-model-request-lifecycle",
         .kind = .action,
         .requires = &.{.model_request_identity_ledger},
         .produces = &.{},

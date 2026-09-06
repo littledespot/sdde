@@ -11,6 +11,10 @@ removes all additional model-call size ceilings and capacity gates. Provider
 APIs report their limits; the runner accounts actual usage against the workflow
 token budget. This is accepted, not a pending configuration or approval decision.
 
+**Operation-ID amendment:** [ADR 0005](../decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06)
+removes operation versioning. Runtime operations and names below use one current
+unversioned contract per operation; retired suffixes are rejected, not aliased.
+
 **Implementation readiness:** The configured provider-document path and
 read-only byte service are accepted and implemented by F0001/F0004/F0008. The
 strict common decoder, compiler-contract registry join, immutable
@@ -74,9 +78,9 @@ provider-native schema representability remain work.
 
 **Accepted and implemented YAML preparation:** [ADR 0012](../decisions/0012-workflow-owned-model-request.md)
 replaces mandatory SDD ownership for generic requests and per-consumer binding
-selection. The native registry exposes `build-initial-model-request-identity-ledger@1`,
-`assign-model-request-id@1`, `validate-model-request-binding@1` and
-`build-model-request@1` as separate YAML operations. Initialization creates a
+selection. The native registry exposes `build-initial-model-request-identity-ledger`,
+`assign-model-request-id`, `validate-model-request-binding` and
+`build-model-request` as separate YAML operations. Initialization creates a
 fresh process-local execution identity; assignment owns the originating
 compiled step, ordinal, slot, controls, prompt/result-schema resources and
 optional data resource. Validation and construction retain that same identity
@@ -86,7 +90,7 @@ generation requests; SDD-specific owners and other purpose bindings remain
 validated by their existing contracts, not fabricated by generic preparation.
 Provider calls, counting and retries are not part of these operations.
 
-**Implemented YAML attempt accounting:** `advance-model-attempt-accounting@1`
+**Implemented YAML attempt accounting:** `advance-model-attempt-accounting`
 consumes the retained prepared request and declares an explicit `retry-limit`.
 The compiler preserves its accounting permission; only the runner applies its
 transition and publishes `accounted_model_attempt` as a sealed view of the
@@ -98,7 +102,7 @@ as retry policy. Consumers invalidate used attempt evidence before a YAML retry.
 Missing/foreign/stale evidence, forged transitions and rejected deltas cannot
 publish or reset accounting. No provider call, lease or token charge occurs.
 
-**Implemented YAML operation assignment:** `assign-provider-operation@1` requires
+**Implemented YAML operation assignment:** `assign-provider-operation` requires
 `kind: inference` or `kind: input-token-count`, the retained prepared request and
 applied attempt evidence. It calls the existing lifecycle action once; only the
 runner applies the proposal and publishes sealed `assigned_provider_operation`
@@ -108,7 +112,7 @@ operations and stale/foreign evidence reject. Assignment performs no provider
 call, authorization preparation, counting, token charge or persistence.
 
 **Implemented YAML authorization preparation:**
-`prepare-provider-operation-authorization@1` consumes the retained request,
+`prepare-provider-operation-authorization` consumes the retained request,
 applied attempt and assigned operation. Its required positive `timeout-ms`
 has no default; the runner binds one absolute monotonic deadline when allocating
 the slot. The existing action calls only the preloaded, non-refreshing, no-I/O
@@ -126,7 +130,7 @@ Native composition exposes the operation but fails with `authorization_denied`
 until an adapter is explicitly bound; fake preloaders remain test-only.
 
 **Implemented YAML request invocation state:**
-`advance-model-request-lifecycle@1` requires explicit `transition: invoked`.
+`advance-model-request-lifecycle` requires explicit `transition: invoked`.
 It reuses `AdvanceModelRequestLifecycleAction` for exactly `assigned -> invoked`;
 terminal transitions remain separate integration work. The runner requires the
 same prepared request, applied attempt, assigned operation and prepared lease,
@@ -139,7 +143,7 @@ is not an API call or evidence of delivery. No new ledger, capability, timeout,
 retry, token charge or persistence is introduced.
 
 **Implemented YAML provider-operation invocation state:**
-`advance-provider-operation-lifecycle@1` requires `transition: invoked`, an
+`advance-provider-operation-lifecycle` requires `transition: invoked`, an
 already-invoked logical request, its applied attempt, assigned operation and
 prepared authorization. It reuses the existing lifecycle action; the runner
 binds the lease's original deadline, validates the exact proposal, and publishes
@@ -168,23 +172,23 @@ schema: workflow/v1
 id: prepare-request
 version: 1
 shortcode: PREP
-invoke: core.empty-invocation@1
+invoke: core.empty-invocation
 policy: core.model-authorization@1
 start: initialize
 resources: { prompt: prompt.md, result: result.json }
 steps:
-  initialize: { use: build-initial-model-request-identity-ledger@1, on: { ok: assign, failed: end.failed } }
+  initialize: { use: build-initial-model-request-identity-ledger, on: { ok: assign, failed: end.failed } }
   assign:
-    use: assign-model-request-id@1
+    use: assign-model-request-id
     with: { slot: generation, response-mode: prompt-only, prompt: prompt, result-schema: result }
     on: { ok: validate, failed: end.failed }
-  validate: { use: validate-model-request-binding@1, on: { ok: build, failed: end.failed } }
-  build: { use: build-model-request@1, on: { ok: account, failed: end.failed } }
-  account: { use: advance-model-attempt-accounting@1, with: { retry-limit: 0 }, on: { ok: operation, failed: end.failed } }
-  operation: { use: assign-provider-operation@1, with: { kind: inference }, on: { ok: authorize, failed: end.failed } }
-  authorize: { use: prepare-provider-operation-authorization@1, with: { timeout-ms: 1000 }, on: { ok: advance-request, failed: end.failed, cancelled: end.cancelled } }
-  advance-request: { use: advance-model-request-lifecycle@1, with: { transition: invoked }, on: { ok: advance-operation, failed: end.failed } }
-  advance-operation: { use: advance-provider-operation-lifecycle@1, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
+  validate: { use: validate-model-request-binding, on: { ok: build, failed: end.failed } }
+  build: { use: build-model-request, on: { ok: account, failed: end.failed } }
+  account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: operation, failed: end.failed } }
+  operation: { use: assign-provider-operation, with: { kind: inference }, on: { ok: authorize, failed: end.failed } }
+  authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 1000 }, on: { ok: advance-request, failed: end.failed, cancelled: end.cancelled } }
+  advance-request: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: advance-operation, failed: end.failed } }
+  advance-operation: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: end.ok, failed: end.failed } }
 ```
 
 **Compatibility:** None. This is a pre-release contract. There is one exact

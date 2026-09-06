@@ -6,7 +6,7 @@ pub const Decision = enum { capture, drop };
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "evaluate-prompt-log-capture@1",
+        .id = "evaluate-prompt-log-capture",
         .kind = .action,
         .requires = &.{ .logging_policy, .validated_prompt_fragment },
         .produces = &.{.prompt_capture_decision},

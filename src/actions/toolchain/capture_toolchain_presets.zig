@@ -5,7 +5,7 @@ const source_port = @import("../../ports/toolchain_authority_source.zig");
 const pipeline = @import("../../domain/pipeline.zig");
 pub const Action = struct {
     source: source_port.PresetCapturer,
-    pub const contract: pipeline.NodeContract = .{ .id = "capture-toolchain-presets@1", .kind = .action, .requires = &.{ .project_toolchain_capture, .toolchain_preset_inventory }, .produces = &.{.toolchain_preset_captures}, .side_effect = .filesystem_read };
+    pub const contract: pipeline.NodeContract = .{ .id = "capture-toolchain-presets", .kind = .action, .requires = &.{ .project_toolchain_capture, .toolchain_preset_inventory }, .produces = &.{.toolchain_preset_captures}, .side_effect = .filesystem_read };
     pub fn execute(self: Action, allocator: std.mem.Allocator, project: toolchain.Capture, entries: []const toolchain.Entry) toolchain.Error![]const toolchain.Capture {
         try accounting.validateCaptureBudget(project, entries);
         const captures = allocator.alloc(toolchain.Capture, entries.len) catch return error.InvalidToolchain;

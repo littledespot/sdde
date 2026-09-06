@@ -479,7 +479,7 @@ test "workflow log adds attributed facts to a candidate delta without I/O" {
 
 test "data shape applies only the exact declared effects" {
     const contract: NodeContract = .{
-        .id = "test@1",
+        .id = "test",
         .kind = .action,
         .requires = &.{.engine_config},
         .produces = &.{.configured_root_path_policy_set},
@@ -493,7 +493,7 @@ test "data shape applies only the exact declared effects" {
 
 test "data shape rejects missing undeclared and duplicate writes" {
     const contract: NodeContract = .{
-        .id = "test@1",
+        .id = "test",
         .kind = .action,
         .requires = &.{.engine_config},
         .produces = &.{.configured_root_path_policy_set},

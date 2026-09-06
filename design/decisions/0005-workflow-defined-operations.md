@@ -32,7 +32,7 @@ There is no built-in workflow or model-route catalogue. The workflow definition
 is the sole authority for workflow topology and for selecting the operations
 that make up that workflow.
 
-The engine exposes one versioned registry of generic operation contracts. Every
+The engine exposes one registry of current generic operation contracts. Every
 non-kernel workflow operation is addressable from workflow YAML by its
 registered ID; a non-kernel operation without such an ID is prohibited. A
 definition can call only a registered operation and can
@@ -54,6 +54,18 @@ preparation, cancellation, cleanup, and security enforcement remain fixed
 engine responsibilities. They may inspect only the compiled definition and
 registered contracts; they cannot add domain workflow behavior.
 
+### Unversioned operation IDs (accepted 2026-09-06)
+
+Explicit user direction removes operation-contract versioning. Each operation
+has one current contract and one unversioned ID, such as `invoke-model`.
+Both `invoke` and `steps.*.use` name that ID directly. No operation-version
+field, version suffix, range, compatibility alias or parallel legacy contract
+is retained. The compiler and runner enforce the current closed contract.
+Workflow-definition, data-schema, policy and preset versions are unchanged.
+Runtime parsing, registration, compiled references, bindings and fixtures now
+implement this amendment. Tests reject retired spellings and version fields;
+the packaged executable also rejects suffixed invocation and step IDs.
+
 ### Concise workflow form
 
 The workflow-definition contract will use YAML mappings and native scalar
@@ -69,7 +81,7 @@ schema: workflow/v1
 id: specify
 version: 1
 shortcode: SPEC
-invoke: sdd.feature-invocation@1
+invoke: sdd.feature-invocation
 policy: sdd.hardened@1
 start: generate
 
@@ -79,7 +91,7 @@ resources:
 
 steps:
   generate:
-    use: model.generate@1
+    use: model.generate
     with:
       slot: spec-generation
       prompt: spec-prompt

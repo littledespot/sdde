@@ -33,19 +33,19 @@ const yaml =
     \\id: arbitrary-request
     \\version: 1
     \\shortcode: PREP
-    \\invoke: core.empty-invocation@1
+    \\invoke: core.empty-invocation
     \\policy: core.capability-free@1
     \\start: initialize
     \\resources: { prompt: prompt.md, result: result.json, input: input.txt }
     \\steps:
-    \\  initialize: { use: build-initial-model-request-identity-ledger@1, on: { ok: origin, failed: end.failed } }
+    \\  initialize: { use: build-initial-model-request-identity-ledger, on: { ok: origin, failed: end.failed } }
     \\  origin:
-    \\    use: assign-model-request-id@1
+    \\    use: assign-model-request-id
     \\    with: { slot: selected, response-mode: prompt-only, prompt: prompt, result-schema: result, input: input }
     \\    on: { ok: validate, failed: end.failed }
-    \\  validate: { use: validate-model-request-binding@1, on: { ok: build, failed: end.failed } }
-    \\  build: { use: build-model-request@1, on: { ok: observe, failed: end.failed } }
-    \\  observe: { use: test.observe-request@1, on: { ok: end.ok } }
+    \\  validate: { use: validate-model-request-binding, on: { ok: build, failed: end.failed } }
+    \\  build: { use: build-model-request, on: { ok: observe, failed: end.failed } }
+    \\  observe: { use: test.observe-request, on: { ok: end.ok } }
 ;
 const prompt_bytes = "Return the requested object.";
 const schema_bytes = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":20000}},\"required\":[\"answer\"],\"additionalProperties\":false}";
@@ -92,11 +92,11 @@ test "compiler rejects missing preparation dependencies and consumer rebinding" 
         .{ "response-mode: prompt-only", "response-mode: unsupported" },
         .{ "prompt: prompt, result-schema: result", "prompt: result, result-schema: result" },
         .{ "result-schema: result", "result-schema: absent" },
-        .{ "use: build-model-request@1,", "use: build-model-request@1, with: {slot: selected}," },
-        .{ "use: build-model-request@1,", "use: build-model-request@1, with: {prompt: prompt}," },
-        .{ "use: validate-model-request-binding@1, on: { ok: build, failed: end.failed }", "use: core.noop@1, on: { ok: build }" },
-        .{ "use: build-initial-model-request-identity-ledger@1, on: { ok: origin, failed: end.failed }", "use: core.noop@1, on: { ok: origin }" },
-        .{ "use: build-model-request@1", "use: hidden-model-route@1" },
+        .{ "use: build-model-request,", "use: build-model-request, with: {slot: selected}," },
+        .{ "use: build-model-request,", "use: build-model-request, with: {prompt: prompt}," },
+        .{ "use: validate-model-request-binding, on: { ok: build, failed: end.failed }", "use: core.noop, on: { ok: build }" },
+        .{ "use: build-initial-model-request-identity-ledger, on: { ok: origin, failed: end.failed }", "use: core.noop, on: { ok: origin }" },
+        .{ "use: build-model-request", "use: hidden-model-route" },
     };
     for (changes) |change| {
         const invalid = try std.mem.replaceOwned(u8, fixture.arena.allocator(), yaml, change[0], change[1]);
@@ -303,7 +303,7 @@ test "accounting schema rejects missing invalid excessive hidden and policy retr
         .{ "retry-limit: 0", "attempts: 1" },
         .{ "retry-limit: 0", "retry-limit: 0, slot: selected" },
         .{ "policy: core.capability-free@1", "policy: {use: core.capability-free@1, retry-limit: 1}" },
-        .{ "use: build-model-request@1", "use: core.noop@1" },
+        .{ "use: build-model-request", "use: core.noop" },
     }) |change| {
         const invalid = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, change[0], change[1]);
         if (fixture.compile(invalid)) |_| return error.ExpectedRejection else |err| switch (err) {
@@ -360,7 +360,7 @@ fn accountingYaml(fixture: *Fixture, limit: u32, cycle: bool) ![]const u8 {
     fixture.observer.consume_attempt = cycle;
     var source = try std.mem.replaceOwned(u8, allocator, yaml, "ok: observe", "ok: account");
     if (cycle) source = try std.mem.replaceOwned(u8, allocator, source, "on: { ok: end.ok }", "on: { ok: end.ok, invalid: account }");
-    return std.fmt.allocPrint(allocator, "{s}\n  account: {{ use: advance-model-attempt-accounting@1, with: {{retry-limit: {d}}}, on: {{ok: observe, failed: end.failed}} }}\n", .{ source, limit });
+    return std.fmt.allocPrint(allocator, "{s}\n  account: {{ use: advance-model-attempt-accounting, with: {{retry-limit: {d}}}, on: {{ok: observe, failed: end.failed}} }}\n", .{ source, limit });
 }
 
 test "forged accounting transitions and rejected deltas cannot publish attempts" {
@@ -497,9 +497,9 @@ test "assignment rejects missing dependencies and hidden or invalid kind paramet
         .{ "kind: inference", "kind: inference, retry-limit: 1" },
         .{ "kind: inference", "kind: inference, slot: selected" },
         .{ "kind: inference", "kind: inference, prompt: prompt" },
-        .{ "use: advance-model-attempt-accounting@1, with: {retry-limit: 0}, on: {ok: assign-operation, failed: end.failed}", "use: core.noop@1, on: {ok: assign-operation}" },
-        .{ "use: build-model-request@1", "use: core.noop@1" },
-        .{ "assign-provider-operation@1", "hidden-provider-operation@1" },
+        .{ "use: advance-model-attempt-accounting, with: {retry-limit: 0}, on: {ok: assign-operation, failed: end.failed}", "use: core.noop, on: {ok: assign-operation}" },
+        .{ "use: build-model-request", "use: core.noop" },
+        .{ "assign-provider-operation", "hidden-provider-operation" },
     }) |change| {
         const invalid = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, change[0], change[1]);
         try std.testing.expect(!std.mem.eql(u8, source, invalid));
@@ -683,7 +683,7 @@ fn assignmentYaml(fixture: *Fixture, kind: []const u8, cycle: bool) ![]const u8 
     if (cycle) consumer.contract.invalidates = &.{ .accounted_model_attempt, .assigned_provider_operation };
     fixture.observer.consume_operation = cycle;
     const replaced = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "ok: observe", "ok: assign-operation");
-    return std.fmt.allocPrint(fixture.arena.allocator(), "{s}\n  assign-operation: {{ use: assign-provider-operation@1, with: {{kind: {s}}}, on: {{ok: observe, failed: end.failed}} }}\n", .{ replaced, kind });
+    return std.fmt.allocPrint(fixture.arena.allocator(), "{s}\n  assign-operation: {{ use: assign-provider-operation, with: {{kind: {s}}}, on: {{ok: observe, failed: end.failed}} }}\n", .{ replaced, kind });
 }
 
 fn assignedOperation(runner: *const runner_module.Runner) !*const lifecycle.AssignedOperation {
@@ -796,7 +796,7 @@ test "authorization rejects missing timeout invalid timeout dependencies and cap
         .{ "timeout-ms: 1000", "timeout-ms: 1000, kind: inference" },
         .{ "timeout-ms: 1000", "timeout-ms: 1000, api-key: forbidden" },
         .{ "policy: core.model-authorization@1", "policy: core.capability-free@1" },
-        .{ "use: assign-provider-operation@1, with: {kind: inference}, on: {ok: authorize, failed: end.failed}", "use: core.noop@1, on: {ok: authorize}" },
+        .{ "use: assign-provider-operation, with: {kind: inference}, on: {ok: authorize, failed: end.failed}", "use: core.noop, on: {ok: authorize}" },
     }) |change| {
         const invalid = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, change[0], change[1]);
         try std.testing.expect(!std.mem.eql(u8, invalid, source));
@@ -1055,7 +1055,7 @@ fn authorizationYaml(fixture: *Fixture, kind: []const u8) ![]const u8 {
     var replaced = try std.mem.replaceOwned(u8, allocator, source, "ok: observe", "ok: authorize");
     replaced = try std.mem.replaceOwned(u8, allocator, replaced, "policy: core.capability-free@1", "policy: core.model-authorization@1");
     replaced = try std.mem.replaceOwned(u8, allocator, replaced, "on: { ok: end.ok }", "on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }");
-    return std.fmt.allocPrint(allocator, "{s}\n  authorize: {{ use: prepare-provider-operation-authorization@1, with: {{timeout-ms: 1000}}, on: {{ok: observe, failed: observe, cancelled: end.cancelled}} }}\n", .{replaced});
+    return std.fmt.allocPrint(allocator, "{s}\n  authorize: {{ use: prepare-provider-operation-authorization, with: {{timeout-ms: 1000}}, on: {{ok: observe, failed: observe, cancelled: end.cancelled}} }}\n", .{replaced});
 }
 
 fn authorizationResult(runner: *const runner_module.Runner) !*const authorization_result.Result {
@@ -1116,7 +1116,7 @@ test "request lifecycle YAML rejects hidden transitions retry rebinding and abse
         .{ "transition: invoked", "transition: invoked, timeout-ms: 1000" },
         .{ "transition: invoked", "transition: invoked, slot: selected" },
         .{ "transition: invoked", "transition: invoked, input: data" },
-        .{ "use: prepare-provider-operation-authorization@1, with: {timeout-ms: 1000}, on: {ok: advance-request, failed: end.failed, cancelled: end.cancelled}", "use: core.noop@1, on: {ok: advance-request}" },
+        .{ "use: prepare-provider-operation-authorization, with: {timeout-ms: 1000}, on: {ok: advance-request, failed: end.failed, cancelled: end.cancelled}", "use: core.noop, on: {ok: advance-request}" },
     }) |change| {
         const invalid = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, change[0], change[1]);
         try std.testing.expect(!std.mem.eql(u8, source, invalid));
@@ -1318,7 +1318,7 @@ fn requestLifecycleYaml(fixture: *Fixture, kind: []const u8) ![]const u8 {
     const source = try authorizationYaml(fixture, kind);
     fixture.observer.expected_request_status = .invoked;
     const replaced = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "ok: observe, failed: observe", "ok: advance-request, failed: end.failed");
-    return std.fmt.allocPrint(fixture.arena.allocator(), "{s}\n  advance-request: {{ use: advance-model-request-lifecycle@1, with: {{transition: invoked}}, on: {{ok: observe, failed: end.failed}} }}\n", .{replaced});
+    return std.fmt.allocPrint(fixture.arena.allocator(), "{s}\n  advance-request: {{ use: advance-model-request-lifecycle, with: {{transition: invoked}}, on: {{ok: observe, failed: end.failed}} }}\n", .{replaced});
 }
 
 fn prepareAuthorized(runner: *runner_module.Runner) !void {
@@ -1399,18 +1399,18 @@ test "provider invocation YAML rejects missing unknown hidden and replacement pa
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
     const source = try operationLifecycleYaml(&fixture, "inference");
-    const valid = "use: advance-provider-operation-lifecycle@1, with: {transition: invoked}";
+    const valid = "use: advance-provider-operation-lifecycle, with: {transition: invoked}";
     const invalid = [_][]const u8{
-        "use: advance-provider-operation-lifecycle@1",
-        "use: advance-provider-operation-lifecycle@1, with: {transition: terminal}",
-        "use: advance-provider-operation-lifecycle@1, with: {transition: assigned}",
-        "use: advance-provider-operation-lifecycle@1, with: {transition: 1}",
-        "use: advance-provider-operation-lifecycle@1, with: {transition: invoked, timeout-ms: 2000}",
-        "use: advance-provider-operation-lifecycle@1, with: {transition: invoked, retry-limit: 1}",
-        "use: advance-provider-operation-lifecycle@1, with: {transition: invoked, kind: input-token-count}",
-        "use: advance-provider-operation-lifecycle@1, with: {transition: invoked, slot: selected}",
-        "use: advance-provider-operation-lifecycle@1, with: {transition: invoked, prompt: prompt}",
-        "use: hidden-provider-invocation@1, with: {transition: invoked}",
+        "use: advance-provider-operation-lifecycle",
+        "use: advance-provider-operation-lifecycle, with: {transition: terminal}",
+        "use: advance-provider-operation-lifecycle, with: {transition: assigned}",
+        "use: advance-provider-operation-lifecycle, with: {transition: 1}",
+        "use: advance-provider-operation-lifecycle, with: {transition: invoked, timeout-ms: 2000}",
+        "use: advance-provider-operation-lifecycle, with: {transition: invoked, retry-limit: 1}",
+        "use: advance-provider-operation-lifecycle, with: {transition: invoked, kind: input-token-count}",
+        "use: advance-provider-operation-lifecycle, with: {transition: invoked, slot: selected}",
+        "use: advance-provider-operation-lifecycle, with: {transition: invoked, prompt: prompt}",
+        "use: hidden-provider-invocation, with: {transition: invoked}",
     };
     for (invalid) |replacement| {
         const changed = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, valid, replacement);
@@ -1419,7 +1419,7 @@ test "provider invocation YAML rejects missing unknown hidden and replacement pa
             else => return err,
         }
     }
-    const missing = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "use: prepare-provider-operation-authorization@1, with: {timeout-ms: 1000}", "use: core.noop@1");
+    const missing = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "use: prepare-provider-operation-authorization, with: {timeout-ms: 1000}", "use: core.noop");
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(missing));
 }
 
@@ -1719,7 +1719,7 @@ fn operationLifecycleYaml(fixture: *Fixture, kind: []const u8) ![]const u8 {
     const source = try requestLifecycleYaml(fixture, kind);
     fixture.entries[fixture.entries.len - 1].contract.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .invoked_provider_operation, .provider_authorization_result };
     const replaced = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "{ok: observe, failed: end.failed}", "{ok: advance-operation, failed: end.failed}");
-    return std.fmt.allocPrint(fixture.arena.allocator(), "{s}\n  advance-operation: {{ use: advance-provider-operation-lifecycle@1, with: {{transition: invoked}}, on: {{ok: observe, failed: end.failed}} }}\n", .{replaced});
+    return std.fmt.allocPrint(fixture.arena.allocator(), "{s}\n  advance-operation: {{ use: advance-provider-operation-lifecycle, with: {{transition: invoked}}, on: {{ok: observe, failed: end.failed}} }}\n", .{replaced});
 }
 
 fn prepareInvocable(runner: *runner_module.Runner) !void {
@@ -1800,7 +1800,7 @@ const Fixture = struct {
         self.native.prepare_authorization.action = .{ .authorization = self.authorization.port() };
         self.observer = .{};
         self.entries = core.entries ++ self.native.entries ++ [_]operations.Entry{.{
-            .contract = .{ .id = "test.observe-request@1", .kind = .step, .requires = &.{ .model_request_identity_ledger, .prepared_model_request }, .outcomes = &.{.ok}, .side_effect = .none },
+            .contract = .{ .id = "test.observe-request", .kind = .step, .requires = &.{ .model_request_identity_ledger, .prepared_model_request }, .outcomes = &.{.ok}, .side_effect = .none },
             .binding = bindings.bind(Observer, &self.observer, Observer.invoke),
         }};
         self.registry = .{ .operations = &self.entries, .data_schemas = &native.schemas, .policies = &core.profiles, .gates = &.{} };

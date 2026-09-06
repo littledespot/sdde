@@ -7,7 +7,7 @@ pub const Decision = enum { accepted, rejected };
 
 pub const Contract = struct {
     id: workflow.RegisteredRef,
-    issuer: workflow.RegisteredRef,
+    issuer: workflow.OperationId,
     evidence: pipeline.DataKey,
     authority: []const pipeline.DataKey,
 

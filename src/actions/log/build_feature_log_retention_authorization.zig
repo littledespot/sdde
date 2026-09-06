@@ -12,7 +12,7 @@ pub const Action = struct {
     clock: clock_port.Clock,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "build-feature-log-retention-authorization@1",
+        .id = "build-feature-log-retention-authorization",
         .kind = .action,
         .requires = &.{ .logging_policy, .feature_log_binding },
         .produces = &.{.feature_log_retention_authorization},

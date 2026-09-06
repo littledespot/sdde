@@ -5,7 +5,7 @@ pub const Error = error{InvalidPromptLogFragment};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-prompt-log-fragment@1",
+        .id = "validate-prompt-log-fragment",
         .kind = .action,
         .requires = &.{.sanitized_prompt_fragment},
         .produces = &.{.validated_prompt_fragment},

@@ -8,14 +8,14 @@ const envelopes = @import("application/pipeline_envelope.zig");
 const key = pipeline.DataKey.workflow_invocation;
 const index = @intFromEnum(key);
 const produce: pipeline.NodeContract = .{
-    .id = "test.reference-producer@1",
+    .id = "test.reference-producer",
     .kind = .action,
     .requires = &.{},
     .produces = &.{key},
     .side_effect = .none,
 };
 const consume: pipeline.NodeContract = .{
-    .id = "test.reference-consumer@1",
+    .id = "test.reference-consumer",
     .kind = .action,
     .requires = &.{key},
     .produces = &.{},

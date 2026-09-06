@@ -6,7 +6,7 @@ pub const Action = struct {
     registry: *const registry.ValidatedWorkflowDefinitionRegistry,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "select-compiled-workflow@1",
+        .id = "select-compiled-workflow",
         .kind = .action,
         .requires = &.{ .workflow_definition_registry, .workflow_invocation },
         .produces = &.{.selected_compiled_workflow},

@@ -2,25 +2,25 @@ schema: workflow/v1
 id: reference-preflight
 version: 1
 shortcode: REFP
-invoke: specify-invocation@1
+invoke: specify-invocation
 policy: core.directory-read@1
 start: normalize-feature
 steps:
   normalize-feature:
-    use: normalize-feature-directory@1
+    use: normalize-feature-directory
     on: { ok: validate-feature, failed: end.failed }
   validate-feature:
-    use: validate-feature-directory@1
+    use: validate-feature-directory
     on: { ok: inspect-feature, failed: end.failed }
   inspect-feature:
-    use: inspect-feature-directory@1
+    use: inspect-feature-directory
     on: { ok: normalize, failed: end.failed }
   normalize:
-    use: normalize-reference-selector@1
+    use: normalize-reference-selector
     on: { ok: validate, failed: end.failed }
   validate:
-    use: validate-reference-selector@1
+    use: validate-reference-selector
     on: { ok: inspect, failed: end.failed }
   inspect:
-    use: inspect-reference-directory@1
+    use: inspect-reference-directory
     on: { ok: end.ok, failed: end.failed }

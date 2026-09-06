@@ -5,7 +5,7 @@ pub const Error = error{LogReleaseFailure};
 pub const Action = struct {
     sink: sink_port.LockReleaser,
     pub const contract: pipeline.NodeContract = .{
-        .id = "release-feature-log-stream-lock@1",
+        .id = "release-feature-log-stream-lock",
         .kind = .action,
         .requires = &.{.feature_log_stream_lock},
         .invalidates = &.{.feature_log_stream_lock},

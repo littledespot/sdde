@@ -44,7 +44,7 @@ This is not a second request store or a model-call size policy.
 
 ## Accounting integration (implemented 2026-09-06)
 
-The explicitly selected `advance-model-attempt-accounting@1` step consumes the
+The explicitly selected `advance-model-attempt-accounting` step consumes the
 prepared request and declares `retry-limit` (`0` permits only its initial
 execution). The compiler retains its accounting permission. The runner supplies
 read-only ledger snapshots and initial/retry classification, validates the
@@ -62,7 +62,7 @@ or token charge is hidden in this integration.
 
 ## Operation assignment integration (implemented 2026-09-06)
 
-`assign-provider-operation@1` consumes the same prepared request and applied
+`assign-provider-operation` consumes the same prepared request and applied
 attempt; `kind` explicitly selects `inference` or `input-token-count`. The existing
 lifecycle action proposes one assignment. The runner validates the exact retained
 association and publishes sealed evidence from the applied canonical record with
@@ -74,7 +74,7 @@ persistence is implicit. Later lifecycle phases remain separate integration work
 ## Authorization preparation integration (implemented 2026-09-06)
 
 Authorization preparation is also integrated through the existing
-`prepare-provider-operation-authorization@1` action and runner-private lease
+`prepare-provider-operation-authorization` action and runner-private lease
 table. YAML supplies only explicit positive `timeout-ms`; the runner binds the
 deadline to the exact retained request, attempt, assignment, model and input.
 The separately policy-permitted `provider-authorization` port can prepare only
@@ -86,7 +86,7 @@ ledger, persisted handoff, implicit retry or token charge is introduced.
 
 ## Request invocation-state integration (implemented 2026-09-06)
 
-Request invocation state is integrated by `advance-model-request-lifecycle@1`
+Request invocation state is integrated by `advance-model-request-lifecycle`
 with explicit `transition: invoked`. The existing action creates the immutable
 `assigned -> invoked` successor; only validated runner publication makes it
 current. Request-ledger replacements are checked at their shared boundary:
@@ -100,7 +100,7 @@ and actual provider calls remain separate work.
 
 ## Provider-operation invocation-state integration (implemented 2026-09-06)
 
-`advance-provider-operation-lifecycle@1` with `transition: invoked` reuses the
+`advance-provider-operation-lifecycle` with `transition: invoked` reuses the
 existing action for one assigned operation under an already-invoked request.
 The runner supplies the existing prepared lease's original deadline, checks
 the exact transition and authorization before publication, then publishes

@@ -8,7 +8,7 @@ pub const Error = error{LogSinkFailure};
 pub const Action = struct {
     sink: sink_port.StreamRecoverer,
     pub const contract: pipeline.NodeContract = .{
-        .id = "recover-feature-log-stream@1",
+        .id = "recover-feature-log-stream",
         .kind = .action,
         .requires = &.{ .feature_log_binding, .feature_log_stream_lock },
         .produces = &.{.feature_log_stream_state},

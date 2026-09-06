@@ -345,7 +345,7 @@ const model_parameters = [_]compilation.CompiledParameter{.{
 const model_step: compilation.CompiledStep = .{
     .model = @import("domain/workflow_model.zig").resolve(&model_parameters).?,
     .id = .{ .bytes = "generate" },
-    .operation_id = .{ .bytes = "model.generate@1" },
+    .operation_id = .{ .bytes = "model.generate" },
     .parameters = &model_parameters,
     .requires = &.{},
     .produces = &.{},
@@ -364,7 +364,7 @@ const model_graph: compilation.CompiledWorkflow = .{
         .allowed_capabilities = &.{},
         .workflow_id = .{ .bytes = "custom-generation" },
         .workflow_version = 1,
-        .invocation_operation_id = .{ .bytes = "test.empty@1" },
+        .invocation_operation_id = .{ .bytes = "test.empty" },
         .policy_profile_id = .{ .bytes = "test.model-policy@1" },
         .total_model_token_budget = .{ .value = 1000 },
         .start_step_id = model_step.id,
@@ -383,7 +383,7 @@ const OperationControl = struct {
     fn registry(self: *OperationControl) operation_registry.Registry {
         self.entries[0] = .{
             .contract = .{
-                .id = "model.generate@1",
+                .id = "model.generate",
                 .kind = .step,
                 .parameters = &([_]@import("domain/workflow_operation.zig").ParameterDescriptor{.{
                     .id = "slot",

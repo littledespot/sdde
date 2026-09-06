@@ -7,7 +7,7 @@ const unicode = @import("../../ports/unicode_normalizer.zig");
 pub const Action = struct {
     normalizer: unicode.Normalizer,
     pub const contract: pipeline.NodeContract = .{
-        .id = "normalize-feature-directory@1",
+        .id = "normalize-feature-directory",
         .kind = .action,
         .requires = &.{.specify_invocation},
         .produces = &.{.normalized_feature_directory},

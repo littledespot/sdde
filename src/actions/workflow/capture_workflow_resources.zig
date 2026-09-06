@@ -9,7 +9,7 @@ pub const Action = struct {
     source: source_port.Capturer,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "capture-workflow-resources@1",
+        .id = "capture-workflow-resources",
         .kind = .action,
         .requires = &.{ .workflow_authority_inventory, .workflow_resource_manifest },
         .produces = &.{.workflow_resource_captures},

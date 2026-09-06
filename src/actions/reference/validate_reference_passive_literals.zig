@@ -3,7 +3,7 @@ const pipeline = @import("../../domain/pipeline.zig");
 const literals = @import("../../domain/passive_literals.zig");
 const unicode = @import("../../ports/unicode_normalizer.zig");
 pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{ .id = "validate-reference-passive-literals@1", .kind = .action, .requires = &.{ .passive_literal_identities, .valid_toolchain, .citable_reference_inputs }, .produces = &.{.reference_passive_literals}, .side_effect = .none };
+    pub const contract: pipeline.NodeContract = .{ .id = "validate-reference-passive-literals", .kind = .action, .requires = &.{ .passive_literal_identities, .valid_toolchain, .citable_reference_inputs }, .produces = &.{.reference_passive_literals}, .side_effect = .none };
     normalizer: unicode.Normalizer,
     folder: unicode.CaseFolder,
     classifier: unicode.LexicalClassifier,

@@ -6,7 +6,7 @@ pub const Error = error{InvalidLogEventFact};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-log-event-fact@1",
+        .id = "validate-log-event-fact",
         .kind = .action,
         .requires = &.{.workflow_telemetry_fact},
         .produces = &.{.log_event_definition},

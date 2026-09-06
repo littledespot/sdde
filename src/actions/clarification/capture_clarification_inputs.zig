@@ -8,7 +8,7 @@ const source = @import("../../ports/feature_input_source.zig");
 pub const Action = struct {
     source: source.Capturer,
     pub const contract: pipeline.NodeContract = .{
-        .id = "capture-clarification-inputs@1",
+        .id = "capture-clarification-inputs",
         .kind = .action,
         .requires = &.{ .feature_directory, .feature_artifact_paths },
         .produces = &.{.raw_clarification_inputs},

@@ -5,7 +5,7 @@ const preparation = @import("../../domain/model_request_preparation.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "build-model-request@1",
+        .id = "build-model-request",
         .kind = .action,
         .requires = &.{ .model_request_identity_ledger, .validated_provider_model_binding },
         .produces = &.{},

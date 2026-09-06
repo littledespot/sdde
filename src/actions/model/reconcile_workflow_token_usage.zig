@@ -6,7 +6,7 @@ pub const Error = accounting.ProposalError;
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "reconcile-workflow-token-usage@1",
+        .id = "reconcile-workflow-token-usage",
         .kind = .action,
         .requires = &.{},
         .produces = &.{},

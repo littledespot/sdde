@@ -3,7 +3,7 @@ const pipeline = @import("../../domain/pipeline.zig");
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-specify-arguments@1",
+        .id = "validate-specify-arguments",
         .kind = .action,
         .requires = &.{.parsed_specify_invocation},
         .produces = &.{.specify_invocation},

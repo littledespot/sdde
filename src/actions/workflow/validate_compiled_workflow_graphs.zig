@@ -9,7 +9,7 @@ pub const Error = error{WorkflowGraphCompileInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "validate-compiled-workflow-graphs@1",
+        .id = "validate-compiled-workflow-graphs",
         .kind = .action,
         .requires = &.{.compiled_workflow_graphs},
         .produces = &.{.validated_workflow_graphs},
@@ -31,11 +31,13 @@ const KeyState = [key_count]bool;
 
 fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkflow) Error!void {
     const steps = graph.authority.steps;
+    if (workflow.OperationId.parse(graph.authority.invocation_operation_id.bytes) == null) return invalid();
     try validateDataSchemas(graph.authority);
     if (steps.len == 0 or steps.len > definition.max_steps or
         !graph.authority.total_model_token_budget.isValid() or
         graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return invalid())) return invalid();
     for (steps) |step| {
+        if (workflow.OperationId.parse(step.operation_id.bytes) == null) return invalid();
         if (!@import("../../domain/workflow_operation.zig").validAccounting(step.runner_accounting, step.requires, step.produces, step.side_effect, step.retry_authority != null)) return invalid();
         if (!@import("../../domain/workflow_capability.zig").permits(graph.authority.allowed_capabilities, step.capabilities)) return invalid();
         if (!@import("../../domain/workflow_model.zig").validProjection(step)) return invalid();
@@ -241,7 +243,7 @@ fn invalid() Error {
 fn testStep(id: []const u8, retry_limit: ?u32) compilation.CompiledStep {
     return .{
         .id = workflow.WorkflowStepId.parse(id).?,
-        .operation_id = workflow.RegisteredRef.parse("core.noop@1").?,
+        .operation_id = workflow.OperationId.parse("core.noop").?,
         .parameters = if (retry_limit == null) &.{} else &test_retry_parameters,
         .requires = &.{},
         .produces = &.{},
@@ -272,7 +274,7 @@ fn testGraph(steps: []const compilation.CompiledStep, transitions: []const workf
         .authority = .{
             .workflow_id = workflow.WorkflowId.parse("graph-test").?,
             .workflow_version = 1,
-            .invocation_operation_id = workflow.RegisteredRef.parse("core.empty@1").?,
+            .invocation_operation_id = workflow.OperationId.parse("core.empty").?,
             .policy_profile_id = workflow.RegisteredRef.parse("core.safe@1").?,
             .total_model_token_budget = .{ .value = 1 },
             .start_step_id = steps[0].id,

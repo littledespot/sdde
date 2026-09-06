@@ -8,7 +8,7 @@ pub const Error = error{LogSerializationFailure};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "serialize-feature-log-control-record@1",
+        .id = "serialize-feature-log-control-record",
         .kind = .action,
         .requires = &.{ .feature_log_binding, .feature_log_stream_state, .trusted_log_clock },
         .produces = &.{.serialized_log_control_record},

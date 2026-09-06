@@ -6,7 +6,7 @@ pub const Error = error{WorkflowAuthorityInventoryInvalid};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "normalize-workflow-authority-entries@1",
+        .id = "normalize-workflow-authority-entries",
         .kind = .action,
         .requires = &.{.raw_workflow_authority_entries},
         .produces = &.{.normalized_workflow_authority_entries},

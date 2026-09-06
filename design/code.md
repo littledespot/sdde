@@ -574,7 +574,7 @@ RepairAccountingTransition =
 // accounted_model_attempt is a sealed view of the applied canonical record.
 // Envelope publication and accounting installation succeed together or neither
 // becomes visible. The value retains its request and accounting owners.
-// assign-provider-operation@1 selects only inference or input-token-count and
+// assign-provider-operation selects only inference or input-token-count and
 // calls AdvanceProviderOperationLifecycleAction for assignment. The runner
 // compares the proposal to the retained prepared request and applied attempt.
 // assigned_provider_operation is a sealed view of the canonical assigned Record;
@@ -582,7 +582,7 @@ RepairAccountingTransition =
 // Publishing this view and its ledger successor is one runner application.
 // Its value retains operation/request owners; no lease or provider call occurs.
 
-// prepare-provider-operation-authorization@1 requires that same request,
+// prepare-provider-operation-authorization requires that same request,
 // attempt and assignment plus explicit positive timeout-ms. The runner binds
 // one deadline and private slot; the action uses only its preloaded no-I/O port.
 ProviderAuthorizationResult = opaque {
@@ -595,14 +595,14 @@ ProviderAuthorizationResult = opaque {
 // Expected failure carries typed data; unexpected binding errors terminate
 // without a delta or YAML transition. Execution cleanup releases unused leases.
 
-// advance-model-request-lifecycle@1 with transition: invoked requires the same
+// advance-model-request-lifecycle with transition: invoked requires the same
 // prepared authorization. AdvanceModelRequestLifecycleAction creates exactly
 // the assigned -> invoked request-ledger successor. The runner validates its
 // direct parent and exact request before replacing the ledger; all prepared
 // request, attempt, operation and lease values remain unchanged. The provider
 // operation is still assigned. No API call or delivery claim is made here.
 
-// advance-provider-operation-lifecycle@1 with transition: invoked consumes that
+// advance-provider-operation-lifecycle with transition: invoked consumes that
 // assignment under the already-invoked request. The runner supplies the original
 // prepared lease deadline, validates the proposal, and publishes a sealed view
 // of the canonical InvokedProviderOperation while invalidating assignment
@@ -1374,7 +1374,10 @@ WorkflowParameterId = opaque validated definition-local lower-kebab identifier,
                       1..64 ASCII bytes
 WorkflowResourceId = opaque validated definition-local lower-kebab identifier,
                      1..64 ASCII bytes
-WorkflowRegisteredRef = opaque validated exact registered reference,
+WorkflowOperationId = opaque validated unversioned operation identifier,
+                      `[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*`,
+                      1..128 ASCII bytes; one current contract per ID
+WorkflowRegisteredRef = opaque validated exact non-operation reference,
                         `[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*@[1-9][0-9]*`,
                         at most 128 ASCII bytes
 WorkflowDefinitionSchemaVersion = "workflow/v1"
@@ -1478,7 +1481,7 @@ WorkflowResourceBinding {
 
 DeclarativeWorkflowStep {
   workflowStepId: WorkflowStepId,
-  operationContractId: WorkflowRegisteredRef,
+  operationContractId: WorkflowOperationId,
   parameters: Map<WorkflowParameterId, boolean | signed_integer | bounded_string>,
   outcomes: Map<PipelineOutcomeStatus,
     WorkflowStepId | MatchingTerminalOutcome>
@@ -1495,7 +1498,7 @@ DeclarativeWorkflowDefinition {
   schema: WorkflowDefinitionSchemaVersion,
   workflowVersion: WorkflowVersion,
   workflowShortcode: WorkflowShortcode,
-  invocationOperationRef: WorkflowRegisteredRef,
+  invocationOperationId: WorkflowOperationId,
   // Resolves to one registered capability-free invocation operation. The
   // runner invokes it before graph entry to produce validated typed run context.
   workflowPolicyProfileRef: WorkflowRegisteredRef,
@@ -1512,11 +1515,11 @@ CompiledWorkflowSemanticAuthority {
   schema,
   workflowVersion,
   workflowShortcode,
-  resolvedInvocationOperationIdAndVersion,
+  resolvedInvocationOperationId,
   workflowPolicyProfileId,
   totalModelTokenBudget,
   entryStepId,
-  resolvedOperationContractsParametersAndVersions,
+  resolvedOperationContractsAndParameters,
   resolvedWorkflowResources,
   resolvedOutcomeTransitions,
   validatedGateSet,
@@ -1554,7 +1557,6 @@ WorkflowDefinitionRegistryState {
   workflowDefinitionRegistryId: BootstrapComponentId,
   workflowAuthorityInventory: WorkflowAuthorityInventory,
   workflowsById: Map<WorkflowId, CompiledWorkflowGraph>,
-  workflowOperationRegistryVersion,
   capabilityRegistryVersion
   // The BootstrapComponentId is the registry's only canonical identity.
   // The bounded map has no fixed cardinality. Workflow IDs, shortcodes, and

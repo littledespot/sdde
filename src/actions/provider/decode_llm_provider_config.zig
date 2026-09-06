@@ -7,7 +7,7 @@ pub const Error = error{LLMProviderConfigParseError};
 
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
-        .id = "decode-llm-provider-config@1",
+        .id = "decode-llm-provider-config",
         .kind = .action,
         .requires = &.{.raw_llm_provider_config},
         .produces = &.{.raw_llm_provider_document},

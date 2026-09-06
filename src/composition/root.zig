@@ -506,14 +506,14 @@ test "toolchain YAML rejects denied capabilities and missing data predecessors b
         try project.dir.createDirPath(io, ".sdd/workflows");
         const fixture = @embedFile("../test_fixtures/toolchain.workflow.yaml");
         const yaml = if (missing_input)
-            try std.mem.replaceOwned(u8, std.testing.allocator, fixture, "capture-project: { use: capture-project-toolchain@1", "capture-project: { use: core.noop@1")
+            try std.mem.replaceOwned(u8, std.testing.allocator, fixture, "capture-project: { use: capture-project-toolchain", "capture-project: { use: core.noop")
         else
             try std.mem.replaceOwned(u8, std.testing.allocator, fixture, "policy: core.toolchain@1", "policy: core.capability-free@1");
         defer std.testing.allocator.free(yaml);
         // Keep the replacement operation's outcome set exact so this case
         // specifically exercises the missing project-capture input.
         const exact = if (missing_input)
-            try std.mem.replaceOwned(u8, std.testing.allocator, yaml, "capture-project: { use: core.noop@1, on: { ok: inventory-presets, failed: end.failed } }", "capture-project: { use: core.noop@1, on: { ok: inventory-presets } }")
+            try std.mem.replaceOwned(u8, std.testing.allocator, yaml, "capture-project: { use: core.noop, on: { ok: inventory-presets, failed: end.failed } }", "capture-project: { use: core.noop, on: { ok: inventory-presets } }")
         else
             try std.testing.allocator.dupe(u8, yaml);
         defer std.testing.allocator.free(exact);
@@ -605,12 +605,12 @@ const valid_workflow =
     \\id: hello
     \\version: 1
     \\shortcode: HELO
-    \\invoke: core.empty-invocation@1
+    \\invoke: core.empty-invocation
     \\policy: core.capability-free@1
     \\start: run
     \\steps:
     \\  run:
-    \\    use: core.noop@1
+    \\    use: core.noop
     \\    on: { ok: end.ok }
 ;
 
@@ -638,7 +638,7 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     var invocation = engine_invocation.Assembly.init(std.testing.allocator, &boot.ready, &.{"toolchain-check"}, &operations.registry, provider.bind(), runtime);
     defer invocation.deinit();
     const result = workflow_engine.run(invocation.bindings()).execution;
-    const read_contract: pipeline.NodeContract = .{ .id = "test-toolchain-consumer@1", .kind = .action, .requires = &.{.valid_toolchain}, .produces = &.{}, .side_effect = .none };
+    const read_contract: pipeline.NodeContract = .{ .id = "test-toolchain-consumer", .kind = .action, .requires = &.{.valid_toolchain}, .produces = &.{}, .side_effect = .none };
     if (result != .ok) {
         if (invocation.pipeline_runner) |*runner| try std.testing.expectError(error.MissingRequiredData, runner.envelope.view(read_contract));
         return result;
@@ -772,7 +772,7 @@ test "reference compiler rejects a missing validated selector or read capability
         try writeReferencePreflightFixture(io, project.dir);
         const original = @embedFile("../test_fixtures/reference-preflight.workflow.yaml");
         const changed = if (missing_input)
-            try std.mem.replaceOwned(u8, std.testing.allocator, original, "use: validate-reference-selector@1", "use: normalize-reference-selector@1")
+            try std.mem.replaceOwned(u8, std.testing.allocator, original, "use: validate-reference-selector", "use: normalize-reference-selector")
         else
             try std.mem.replaceOwned(u8, std.testing.allocator, original, "policy: core.directory-read@1", "policy: core.capability-free@1");
         defer std.testing.allocator.free(changed);
@@ -842,8 +842,8 @@ test "native YAML compiles selected naming rules and scans text without artifact
     }
     try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/sample.txt", .data = "Ordinary text" });
     for ([_][2][]const u8{
-        .{ "use: compile-naming-policy@1", "use: core.noop@1" },
-        .{ "use: build-superset-path-token-grammar@1", "use: core.noop@1" },
+        .{ "use: compile-naming-policy", "use: core.noop" },
+        .{ "use: build-superset-path-token-grammar", "use: core.noop" },
         .{ "with: { text: sample }", "with: { text: sample, extensions: .zig }" },
         .{ "with: { text: sample }", "with: {}" },
     }) |change| {
@@ -980,21 +980,21 @@ test "reference ingestion compiler enforces inputs and content-read capability" 
     const io = std.testing.io;
     for ([_][2][]const u8{
         .{ "policy: core.reference-ingestion@1", "policy: core.feature-input-read@1" },
-        .{ "use: capture-reference-sources@1", "use: core.noop@1" },
-        .{ "use: validate-reference-inventory@1", "use: core.noop@1" },
-        .{ "use: assign-reference-identities@1", "use: core.noop@1" },
-        .{ "use: build-reference-chunks@1", "use: core.noop@1" },
-        .{ "use: validate-reference-chunks@1", "use: validate-source-citations@1" },
-        .{ "use: validate-reference-chunks@1", "use: parse-reference-extraction-results@1" },
-        .{ "use: validate-reference-chunks@1", "use: scan-reference-passive-literals@1" },
-        .{ "use: validate-reference-chunks@1", "use: assign-passive-literal-identities@1" },
-        .{ "use: validate-reference-chunks@1", "use: validate-reference-passive-literals@1" },
-        .{ "use: validate-reference-chunks@1", "use: validate-reference-extraction-text@1" },
-        .{ "use: validate-reference-chunks@1", "use: validate-reference-claims@1" },
-        .{ "use: validate-reference-chunks@1", "use: assign-reference-claim-identities@1" },
-        .{ "use: validate-reference-chunks@1", "use: build-reference-extraction-ledger@1" },
-        .{ "use: validate-reference-chunks@1", "use: validate-reference-extraction-accounting@1" },
-        .{ "use: assign-reference-identities@1", "use: assign-reference-identities@1\n    with: { state-id: invented }" },
+        .{ "use: capture-reference-sources", "use: core.noop" },
+        .{ "use: validate-reference-inventory", "use: core.noop" },
+        .{ "use: assign-reference-identities", "use: core.noop" },
+        .{ "use: build-reference-chunks", "use: core.noop" },
+        .{ "use: validate-reference-chunks", "use: validate-source-citations" },
+        .{ "use: validate-reference-chunks", "use: parse-reference-extraction-results" },
+        .{ "use: validate-reference-chunks", "use: scan-reference-passive-literals" },
+        .{ "use: validate-reference-chunks", "use: assign-passive-literal-identities" },
+        .{ "use: validate-reference-chunks", "use: validate-reference-passive-literals" },
+        .{ "use: validate-reference-chunks", "use: validate-reference-extraction-text" },
+        .{ "use: validate-reference-chunks", "use: validate-reference-claims" },
+        .{ "use: validate-reference-chunks", "use: assign-reference-claim-identities" },
+        .{ "use: validate-reference-chunks", "use: build-reference-extraction-ledger" },
+        .{ "use: validate-reference-chunks", "use: validate-reference-extraction-accounting" },
+        .{ "use: assign-reference-identities", "use: assign-reference-identities\n    with: { state-id: invented }" },
     }) |edit| {
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
@@ -1111,21 +1111,21 @@ test "native YAML validates citations and accounts every extraction chunk before
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
-        const suffix = if (mode != null) "use: validate-reference-passive-literals@1, on: { ok: propose-extraction, failed: end.failed } }\n" ++
-            "  propose-extraction: { use: test.propose-extraction@1, on: { ok: parse-extraction } }\n" ++
-            "  parse-extraction: { use: parse-reference-extraction-results@1, on: { ok: validate-text, failed: end.failed } }\n" ++
-            "  validate-text: { use: validate-reference-extraction-text@1, on: { ok: validate-claims, failed: end.failed } }\n" ++
-            "  validate-claims: { use: validate-reference-claims@1, on: { ok: assign-claims, failed: end.failed } }\n" ++
-            "  assign-claims: { use: assign-reference-claim-identities@1, on: { ok: build-ledger, failed: end.failed } }\n" ++
-            "  build-ledger: { use: build-reference-extraction-ledger@1, on: { ok: account-extraction, failed: end.failed } }\n" ++
-            "  account-extraction: { use: validate-reference-extraction-accounting@1, on: { ok: observe-extraction, blocked: end.blocked, failed: end.failed } }\n" ++
-            "  observe-extraction: { use: test.observe-extraction@1, on: { ok: end.ok } }" else "use: validate-reference-chunks@1\n    on: { ok: propose-citations, failed: end.failed }\n" ++
-            "  propose-citations: { use: test.propose-citations@1, on: { ok: validate-citations } }\n" ++
-            "  validate-citations: { use: validate-source-citations@1, on: { ok: observe-citations, failed: end.failed } }\n" ++
-            "  observe-citations: { use: test.observe-citations@1, on: { ok: end.ok } }";
+        const suffix = if (mode != null) "use: validate-reference-passive-literals, on: { ok: propose-extraction, failed: end.failed } }\n" ++
+            "  propose-extraction: { use: test.propose-extraction, on: { ok: parse-extraction } }\n" ++
+            "  parse-extraction: { use: parse-reference-extraction-results, on: { ok: validate-text, failed: end.failed } }\n" ++
+            "  validate-text: { use: validate-reference-extraction-text, on: { ok: validate-claims, failed: end.failed } }\n" ++
+            "  validate-claims: { use: validate-reference-claims, on: { ok: assign-claims, failed: end.failed } }\n" ++
+            "  assign-claims: { use: assign-reference-claim-identities, on: { ok: build-ledger, failed: end.failed } }\n" ++
+            "  build-ledger: { use: build-reference-extraction-ledger, on: { ok: account-extraction, failed: end.failed } }\n" ++
+            "  account-extraction: { use: validate-reference-extraction-accounting, on: { ok: observe-extraction, blocked: end.blocked, failed: end.failed } }\n" ++
+            "  observe-extraction: { use: test.observe-extraction, on: { ok: end.ok } }" else "use: validate-reference-chunks\n    on: { ok: propose-citations, failed: end.failed }\n" ++
+            "  propose-citations: { use: test.propose-citations, on: { ok: validate-citations } }\n" ++
+            "  validate-citations: { use: validate-source-citations, on: { ok: observe-citations, failed: end.failed } }\n" ++
+            "  observe-citations: { use: test.observe-citations, on: { ok: end.ok } }";
         const preparation = try @import("../test_fixtures/reference_text_workflow.zig").yaml(std.testing.allocator);
         defer std.testing.allocator.free(preparation);
-        const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, if (mode != null) preparation else @embedFile("../test_fixtures/reference-ingestion.workflow.yaml"), if (mode != null) "use: validate-reference-passive-literals@1, on: { ok: end.ok, failed: end.failed } }" else "use: validate-reference-chunks@1\n    on: { ok: end.ok, failed: end.failed }", suffix);
+        const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, if (mode != null) preparation else @embedFile("../test_fixtures/reference-ingestion.workflow.yaml"), if (mode != null) "use: validate-reference-passive-literals, on: { ok: end.ok, failed: end.failed } }" else "use: validate-reference-chunks\n    on: { ok: end.ok, failed: end.failed }", suffix);
         defer std.testing.allocator.free(yaml);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = yaml });
         if (mode != null) {
@@ -1151,10 +1151,10 @@ test "native YAML validates citations and accounts every extraction chunk before
         const closed = try @import("../test_fixtures/clarification_inputs.zig").closed(protected_arena.allocator(), "S01", true);
         try writeClarificationCapture(io, project.dir, closed);
         const entries = native.entries ++ [_]workflow_operation_registry.Entry{
-            .{ .contract = .{ .id = "test.propose-citations@1", .kind = .step, .requires = &.{.citable_reference_inputs}, .produces = &.{.reference_citation_proposals}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.propose) },
-            .{ .contract = .{ .id = "test.observe-citations@1", .kind = .step, .requires = &.{.validated_source_citations}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.observe) },
-            .{ .contract = .{ .id = "test.propose-extraction@1", .kind = .step, .requires = &.{ .citable_reference_inputs, .reference_passive_literals }, .produces = &.{.raw_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.propose) },
-            .{ .contract = .{ .id = "test.observe-extraction@1", .kind = .step, .requires = &.{.accounted_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.observe) },
+            .{ .contract = .{ .id = "test.propose-citations", .kind = .step, .requires = &.{.citable_reference_inputs}, .produces = &.{.reference_citation_proposals}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.propose) },
+            .{ .contract = .{ .id = "test.observe-citations", .kind = .step, .requires = &.{.validated_source_citations}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceCitationTestProducer, &producer, ReferenceCitationTestProducer.observe) },
+            .{ .contract = .{ .id = "test.propose-extraction", .kind = .step, .requires = &.{ .citable_reference_inputs, .reference_passive_literals }, .produces = &.{.raw_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.propose) },
+            .{ .contract = .{ .id = "test.observe-extraction", .kind = .step, .requires = &.{.accounted_reference_extraction}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(ReferenceExtractionTestProducer, &extraction_producer, ReferenceExtractionTestProducer.observe) },
         };
         native.registry.operations = &entries;
         var boot = runInProjectWithRegistry(io, std.testing.allocator, project.dir, .{}, &native.registry);
@@ -1378,7 +1378,7 @@ test "feature input compiler requires declared read capability and predecessor d
     const io = std.testing.io;
     for ([_][2][]const u8{
         .{ "policy: core.feature-input-read@1", "policy: core.directory-read@1" },
-        .{ "use: resolve-feature-artifact-paths@1", "use: core.noop@1" },
+        .{ "use: resolve-feature-artifact-paths", "use: core.noop" },
     }) |edit| {
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
@@ -1526,8 +1526,8 @@ test "feature inspection rejects missing authority stale roots and forged resolv
 test "feature YAML rejects missing typed input unknown parameters and insufficient read authority" {
     const io = std.testing.io;
     const changes = .{
-        .{ "use: normalize-feature-directory@1", "use: normalize-reference-selector@1" },
-        .{ "use: validate-feature-directory@1", "use: validate-feature-directory@1\n    with: { unexpected: true }" },
+        .{ "use: normalize-feature-directory", "use: normalize-reference-selector" },
+        .{ "use: validate-feature-directory", "use: validate-feature-directory\n    with: { unexpected: true }" },
         .{ "policy: core.directory-read@1", "policy: core.reference-read@1" },
     };
     inline for (changes) |change| {
@@ -1546,12 +1546,12 @@ const second_workflow_same_shortcode =
     \\id: goodbye
     \\version: 1
     \\shortcode: HELO
-    \\invoke: core.empty-invocation@1
+    \\invoke: core.empty-invocation
     \\policy: core.capability-free@1
     \\start: run
     \\steps:
     \\  run:
-    \\    use: core.noop@1
+    \\    use: core.noop
     \\    on: { ok: end.ok }
 ;
 
@@ -1568,7 +1568,7 @@ const test_provider_document =
 ;
 const test_model_step: workflow_compilation.CompiledStep = .{
     .id = workflow.WorkflowStepId.parse("run").?,
-    .operation_id = workflow.RegisteredRef.parse("test.model@1").?,
+    .operation_id = workflow.OperationId.parse("test.model").?,
     .parameters = &.{.{
         .id = workflow.WorkflowParameterId.parse("slot").?,
         .value = .{ .model_slot = llm_provider_identity.ModelSlotId.parse("implementation").? },
@@ -1594,7 +1594,7 @@ const test_model_graph: workflow_compilation.CompiledWorkflow = .{
     .authority = .{
         .workflow_id = workflow.WorkflowId.parse("model-flow").?,
         .workflow_version = 1,
-        .invocation_operation_id = workflow.RegisteredRef.parse("test.empty@1").?,
+        .invocation_operation_id = workflow.OperationId.parse("test.empty").?,
         .policy_profile_id = workflow.RegisteredRef.parse("test.safe@1").?,
         .total_model_token_budget = .{ .value = 1000 },
         .start_step_id = test_model_step.id,
@@ -1665,7 +1665,7 @@ test "loads and resolves a generic workflow definition from the configured root"
         try std.testing.expectEqual(@as(usize, 1), registry.count());
         const graph = registry.resolve(workflow.WorkflowId.parse("hello").?);
         try std.testing.expect(graph != null);
-        try std.testing.expectEqualStrings("core.noop@1", graph.?.authority.steps[0].operation_id.bytes);
+        try std.testing.expectEqualStrings("core.noop", graph.?.authority.steps[0].operation_id.bytes);
         try std.testing.expectEqual(workflow.OutcomeTag.ok, runInvocationInProject(io, std.testing.allocator, project_root.dir, &.{"hello"}).execution);
     }
 }
@@ -1959,7 +1959,7 @@ const InvocationPreparationProbe = struct {
         self.observation.requires_provider = self.mode == .ready;
         self.operation_entries[0] = .{
             .contract = .{
-                .id = "core.empty-invocation@1",
+                .id = "core.empty-invocation",
                 .kind = .invocation,
                 .outcomes = &.{.ok},
                 .side_effect = .none,
@@ -1968,7 +1968,7 @@ const InvocationPreparationProbe = struct {
         };
         self.operation_entries[1] = .{
             .contract = .{
-                .id = "core.noop@1",
+                .id = "core.noop",
                 .kind = .step,
                 .outcomes = &.{.ok},
                 .side_effect = .none,

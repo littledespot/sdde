@@ -9,7 +9,7 @@ pub const Action = struct {
     locator: source_port.Locator,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "locate-llm-provider-config@1",
+        .id = "locate-llm-provider-config",
         .kind = .action,
         .requires = &.{.bootstrap_root_registry_evidence},
         .produces = &.{.exact_llm_provider_config_file},

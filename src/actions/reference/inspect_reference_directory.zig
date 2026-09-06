@@ -6,7 +6,7 @@ const pipeline = @import("../../domain/pipeline.zig");
 pub const Action = struct {
     inspector: source.Inspector,
     pub const contract: pipeline.NodeContract = .{
-        .id = "inspect-reference-directory@1",
+        .id = "inspect-reference-directory",
         .kind = .action,
         .requires = &.{.relative_reference_selector},
         .produces = &.{.reference_directory},

@@ -26,7 +26,7 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9]{4}$"
     },
-    "invoke": { "$ref": "#/$defs/registeredRef" },
+    "invoke": { "$ref": "#/$defs/operationId" },
     "policy": { "$ref": "#/$defs/registeredRef" },
     "start": { "$ref": "#/$defs/localId" },
     "resources": {
@@ -49,6 +49,12 @@
       "minLength": 1,
       "maxLength": 64,
       "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "operationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
     },
     "registeredRef": {
       "type": "string",
@@ -109,7 +115,7 @@
       "additionalProperties": false,
       "required": ["use", "on"],
       "properties": {
-        "use": { "$ref": "#/$defs/registeredRef" },
+        "use": { "$ref": "#/$defs/operationId" },
         "with": {
           "type": "object",
           "maxProperties": 32,

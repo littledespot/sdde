@@ -17,7 +17,7 @@ pub const Action = struct {
     result_schema_compiler: @import("../../ports/model_result_schema_compiler.zig").Compiler,
 
     pub const contract: pipeline.NodeContract = .{
-        .id = "compile-workflow-graphs@1",
+        .id = "compile-workflow-graphs",
         .kind = .action,
         .requires = &.{ .declarative_workflow_definitions, .workflow_resource_manifest, .workflow_resource_captures, .workflow_operation_registry_evidence },
         .produces = &.{.compiled_workflow_graphs},

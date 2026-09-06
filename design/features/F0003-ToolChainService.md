@@ -56,7 +56,7 @@ envelope value; replacement, invalidation, rejection, and execution cleanup
 release native owners through the shared value lifecycle.
 
 Registered policy descriptors now include explicit naming rules. The separate,
-pure `compile-naming-policy@1` operation normalizes all selected rules from
+pure `compile-naming-policy` operation normalizes all selected rules from
 `ValidToolchain` for the shared lexical detector; it never infers rules from
 package names or source examples. Full environment/file-kind authorization and
 repository discovery remain separate work. See
@@ -70,16 +70,16 @@ The YAML graph owns ordering; no combined setup operation hides this sequence.
 
 | Operation | Output key |
 | --- | --- |
-| `capture-project-toolchain@1` | `project_toolchain_capture` |
-| `inventory-toolchain-presets@1` | `toolchain_preset_inventory` |
-| `capture-toolchain-presets@1` | `toolchain_preset_captures` |
-| `parse-toolchain-documents@1` | `raw_toolchain_documents` |
-| `validate-project-toolchain-schema@1` | `schema_valid_project_toolchain` |
-| `validate-toolchain-preset-registry@1` | `schema_valid_toolchain_registry` |
-| `resolve-toolchain-inheritance@1` | `resolved_toolchain_inheritance` |
-| `compose-toolchain@1` | `composed_toolchain` |
-| `validate-toolchain-safety@1` | `valid_toolchain` |
-| `compile-naming-policy@1` | `compiled_naming_policy` |
+| `capture-project-toolchain` | `project_toolchain_capture` |
+| `inventory-toolchain-presets` | `toolchain_preset_inventory` |
+| `capture-toolchain-presets` | `toolchain_preset_captures` |
+| `parse-toolchain-documents` | `raw_toolchain_documents` |
+| `validate-project-toolchain-schema` | `schema_valid_project_toolchain` |
+| `validate-toolchain-preset-registry` | `schema_valid_toolchain_registry` |
+| `resolve-toolchain-inheritance` | `resolved_toolchain_inheritance` |
+| `compose-toolchain` | `composed_toolchain` |
+| `validate-toolchain-safety` | `valid_toolchain` |
+| `compile-naming-policy` | `compiled_naming_policy` |
 
 Composition binds each source port to its exact F0004 root capability after
 startup, before invocation. Roots are not copied into workflow data or supplied
