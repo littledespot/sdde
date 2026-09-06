@@ -13,9 +13,12 @@ size limits to the provider API. These samples add no byte/token ceilings or
 size-fit evidence; workflow accounting uses actual API-reported token usage.
 
 Clarification identity is independent of execution identity. Its complete
-registry, forms, and responses persist across successive workflows and are
-consumed after current applicability checks. `implement` cannot execute while
-any specification, planning, or tasks clarification remains outstanding.
+registry and responses persist across successive workflows and are consumed
+after current applicability checks. Every workflow rerun completely overwrites
+its registered replaceable outputs and unresolved forms at the same paths,
+retaining subject IDs but not old unresolved form bytes. User-resolved forms
+remain byte-for-byte unchanged under Design Section 23.2. `implement` cannot
+execute while any specification, planning, or tasks clarification remains outstanding.
 
 The `text` blocks use language-neutral SDDE contract notation; they are not
 TypeScript or JavaScript source. In the Zig implementation, closed `A | B`
@@ -5590,7 +5593,9 @@ ClarificationRegistryState {
   authorityResolutions: ClarificationAuthorityResolution[]
   // The full registry survives successful replacement and abandoned executions.
   // Lookup includes open and closed records before allocating any new ID.
-  // Reuse applicable answers. Refresh/reopen only unprotected records;
+  // Reuse applicable answers. Completely overwrite unresolved forms on rerun
+  // at the same IDs/paths; record reuse never preserves their old file bytes.
+  // Refresh/reopen only unprotected records;
   // preserve user-closed forms and block an unresolved required subject under
   // design Section 23.2. Never allocate a duplicate or reset the ID ledger.
 }
@@ -5609,6 +5614,8 @@ ClarificationView =
       userSubmissionProjection,
       renderedBytes,
       editableRegions: [frontmatter.requestedStatus, answer]
+      // Before publication, capture/recheck user closures. Every remaining
+      // open form is completely overwritten on rerun, including drafts.
     }
   | ClarificationAuditView {
       kind: closed_audit,
@@ -9687,6 +9694,14 @@ closure, not a replacement audit form. Subsequent reads validate the retained
 file against that response's original submission binding. Stale/invalid closes
 block without rewriting; a still-required subject with an inapplicable protected
 answer requires user direction, not automatic reopening or a duplicate ID.
+
+Every unresolved form in the owning workflow's writable view set is completely
+overwritten from current validated state on rerun, including its editable regions
+and unsubmitted draft answers. Reuse its stable subject ID and registered path,
+even when the question is unchanged; do not reuse the old unresolved file bytes.
+The same replacement/protection rule applies to every workflow execution and
+every clarification family. Capture and validate controlled close submissions
+before replacement and recheck protection immediately before writing.
 
 | Prefix | Owning stage | Pending state | Must be closed before |
 |---|---|---|---|

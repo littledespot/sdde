@@ -13,6 +13,47 @@ const variants =
 ;
 const Case = struct { bytes: []const u8, rejection: ?validation.Rejection = null };
 
+test "protocol retry examples satisfy unrelated closed schemas without supplying semantic defaults" {
+    const contracts = [_][]const u8{
+        empty,                                                                                                                                                                                                                                                                                                                                                                                         variants,
+        "{\"type\":\"object\",\"properties\":{\"count\":{\"type\":\"integer\",\"minimum\":3,\"maximum\":9},\"items\":{\"type\":\"array\",\"minItems\":2,\"maxItems\":3,\"items\":{\"type\":\"string\",\"minLength\":2,\"maxLength\":8}},\"enabled\":{\"type\":\"boolean\"},\"absent\":{\"type\":\"null\"}},\"required\":[\"count\",\"items\",\"enabled\",\"absent\"],\"additionalProperties\":false}",
+    };
+    for (contracts) |contract| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithSchema(contract);
+        defer fixture.deinit();
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const minimum = try @import("domain/model_protocol_retry.zig").example(arena.allocator(), fixture.resource.content.result_schema.root());
+        const bytes = try std.json.Stringify.valueAlloc(arena.allocator(), minimum, .{});
+        try checkDocument(contract, .{ .bytes = bytes });
+    }
+}
+
+test "protocol retry retains exact request schema and identity and releases every failed allocation" {
+    var fixture: Fixture = undefined;
+    try fixture.initWithSchema(variants);
+    defer fixture.deinit();
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, retryAllocation, .{&fixture});
+    var source = try fixture.requestSource();
+    var other: Fixture = undefined;
+    try other.initWithSchema(empty);
+    defer other.deinit();
+    source.result_resource = &other.resource;
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, source, fixture.prepared.request, .{ .decoder = .invalid_json_object }, "Correct syntax only."));
+}
+
+fn retryAllocation(allocator: std.mem.Allocator, fixture: *Fixture) !void {
+    const source = try fixture.requestSource();
+    var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(allocator, source, fixture.prepared.request, .{ .schema = .missing_required_property }, "Correct syntax only.");
+    defer retried.deinit();
+    try std.testing.expect(retried.request.model_request_id == fixture.prepared.request.model_request_id);
+    try std.testing.expect(retried.request.response_schema == fixture.prepared.request.response_schema);
+    try std.testing.expectEqual(fixture.prepared.request.content.len + 2, retried.request.content.len);
+    for (fixture.prepared.request.content, retried.request.content[0..fixture.prepared.request.content.len]) |original, copied| try std.testing.expectEqualDeep(original, copied);
+    try std.testing.expectEqual(@as(usize, 0), fixture.fake.invocation_call_count);
+}
+
 test "fake provider through decode and schema validation retains only existing candidate authority" {
     try checkDocument(empty, .{ .bytes = "{}" });
     const schema =
@@ -239,7 +280,7 @@ fn checkField(field: []const u8, cases: []const Case) !void {
     }
 }
 
-fn checkDocument(contract: []const u8, case: Case) !void {
+pub fn checkDocument(contract: []const u8, case: Case) !void {
     var fixture: Fixture = undefined;
     try fixture.initWithSchema(contract);
     defer fixture.deinit();

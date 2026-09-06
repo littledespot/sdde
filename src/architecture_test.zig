@@ -402,7 +402,9 @@ test "request preparation is pure and reuses the sole request validation boundar
         try expectAbsent(source, "std.http");
         try expectAbsent(source, "countInputTokens");
     }
-    try std.testing.expect(std.mem.indexOf(u8, @embedFile("actions/model/build_model_request.zig"), "preparation.validateRequest(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("actions/model/build_model_request.zig"), "preparation.build(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("domain/model_protocol_retry.zig"), "preparation.build(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("domain/model_request_preparation.zig"), "try validateRequest(source, &request)") != null);
     const validator = @embedFile("domain/model_request_preparation.zig");
     try std.testing.expect(std.mem.indexOf(u8, validator, "request.validate()") != null);
     try std.testing.expect(std.mem.indexOf(u8, validator, "request.matchesBinding(") != null);

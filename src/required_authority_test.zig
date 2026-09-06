@@ -205,8 +205,8 @@ test "Specify projects registered native fields and complete reference obligatio
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
     const accounted = try f.finish(allocator, final, try f.global(allocator, final), reference.context());
     const project: @import("actions/authority/build_specification_authority_requirements.zig").Action = .{};
-    const before = try project.execute(allocator, .{ .bytes = "hello-world" }, accounted, null);
-    try std.testing.expectEqual(@as(usize, 6), before.seeds.len); // Three mandatory slots, two signals, one exact value.
+    const before = try project.execute(allocator, .{ .bytes = "hello-world" }, accounted, null, null);
+    try std.testing.expectEqual(@as(usize, 8), before.seeds.len); // Five mandatory slots, two signals, one exact value.
     try std.testing.expectEqual(.needs_user, (try run(allocator, before)).continuation);
     try std.testing.expectEqualStrings("Hello, World!", before.references.?.records.assignments.checked.prior.prior.input.progress.plan.layout.items.entries[1].claim.content.preserved_token.value.raw_value.bytes);
     const spec = @import("domain/specification.zig");
@@ -214,7 +214,7 @@ test "Specify projects registered native fields and complete reference obligatio
     const provenance: spec.Provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} };
     const attributed: spec.AttributedValue = .{ .value = value, .provenance = provenance };
     var content: spec.IdentifiedContent = .{ .display_name = attributed, .primary_user_story = attributed, .entities = .{ .disposition = .not_applicable, .basis = attributed }, .records = &.{} };
-    const empty = try project.execute(allocator, before.feature, accounted, content);
+    const empty = try project.execute(allocator, before.feature, accounted, content, null);
     try std.testing.expectEqual(before.seeds.len, empty.seeds.len);
     const records = try allocator.alloc(spec.IdentifiedRecord, @typeInfo(spec.Kind).@"enum".fields.len);
     inline for (comptime std.meta.tags(spec.Kind), 0..) |kind, index| {
@@ -225,7 +225,7 @@ test "Specify projects registered native fields and complete reference obligatio
         records[index] = .{ .id = .{ .kind = kind, .ordinal = 1 }, .proposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), fields), .provenance = provenance } };
     }
     content.records = records;
-    const after = try project.execute(allocator, before.feature, accounted, content);
+    const after = try project.execute(allocator, before.feature, accounted, content, null);
     try std.testing.expectEqual(before.seeds.len + 15, after.seeds.len);
     const ledger = try build.execute(allocator, after);
     try std.testing.expectEqual(after.seeds.len, ledger.requirements.len);
@@ -250,7 +250,7 @@ test "reference support must name current accounted signals with no foreign or d
     defer reference.deinit();
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
     const accounted = try f.finish(allocator, final, try f.global(allocator, final), reference.context());
-    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "catalogue" }, accounted, null);
+    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "catalogue" }, accounted, null, null);
     const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);
     for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };
     inputs.evidence = evidence;
@@ -277,7 +277,7 @@ test "reference conflicts cannot be dropped or resolved by supplied evidence" {
     defer reference.deinit();
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
     const accounted = try f.finish(allocator, final, try @import("reference_reconciliation_test.zig").conflicting(allocator, final), reference.context());
-    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "library" }, accounted, null);
+    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "library" }, accounted, null, null);
     try std.testing.expectEqual(@as(usize, 1), inputs.forced_gaps.len);
     const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);
     for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };

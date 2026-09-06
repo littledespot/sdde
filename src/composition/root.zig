@@ -1158,11 +1158,11 @@ const ReferenceReconciliationTestProducer = struct {
         defer arena.deinit();
         const scratch = arena.allocator();
         const response = if (packet.purpose == .summary)
-            std.json.Stringify.valueAlloc(scratch, .{ .summary = fixture.summary(scratch, packet) catch return error.OperationExecutionFailed }, .{}) catch return error.OperationExecutionFailed
+            @import("../domain/model_candidate_json.zig").encode(@FieldType(fixture.r.Parsed, "proposal"), scratch, .{ .summary = fixture.summary(scratch, packet) catch return error.OperationExecutionFailed }) catch return error.OperationExecutionFailed
         else final: {
             var proposal = if (context.?.mode == .conflict) @import("../reference_reconciliation_test.zig").conflicting(scratch, packet) catch return error.OperationExecutionFailed else fixture.global(scratch, packet) catch return error.OperationExecutionFailed;
             if (context.?.mode == .bad_reconciliation) proposal.claim_dispositions = proposal.claim_dispositions[1..];
-            break :final std.json.Stringify.valueAlloc(scratch, .{ .global = proposal }, .{}) catch return error.OperationExecutionFailed;
+            break :final @import("../domain/model_candidate_json.zig").encode(@FieldType(fixture.r.Parsed, "proposal"), scratch, .{ .global = proposal }) catch return error.OperationExecutionFailed;
         };
         const owner = try native.capture(allocator, current, response);
         errdefer @import("../domain/reference_candidate_value.zig").destroy(owner);
@@ -1288,7 +1288,22 @@ test "native YAML validates citations extraction and reconciliation before conti
 test "configured specification generation YAML executes native references models and authority gates" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
-    for (0..4) |scenario| {
+    const faults = [_]@import("../test_fixtures/spec_generation_driver.zig").Fault{
+        .{ .stage = .extraction, .shape = .empty },
+        .{ .stage = .reconciliation, .shape = .empty },
+        .{ .stage = .generation, .shape = .empty },
+        .{ .stage = .repair, .shape = .empty },
+        .{ .stage = .support, .shape = .empty },
+        .{ .stage = .extraction, .shape = .nested_empty },
+        .{ .stage = .reconciliation, .shape = .nested_empty },
+        .{ .stage = .generation, .shape = .nested_empty },
+        .{ .stage = .repair, .shape = .nested_empty },
+        .{ .stage = .generation, .shape = .mixed_variant },
+        .{ .stage = .generation, .shape = .empty, .persistent = true },
+        .{ .stage = .repair, .shape = .empty, .persistent = true },
+    };
+    for (0..12 + faults.len) |scenario| {
+        const fault: ?@TypeOf(faults[0]) = if (scenario >= 12) faults[scenario - 12] else null;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
@@ -1296,11 +1311,14 @@ test "configured specification generation YAML executes native references models
         try project.dir.createDirPath(io, ".sdd/presets");
         try project.dir.createDirPath(io, "engine/workflows/spec");
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
-        if (scenario == 1) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
+        if (scenario == 1 or scenario >= 8) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         const definition = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec-generation.workflow.yaml", allocator, .limited(1_048_576));
         defer allocator.free(definition);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = definition });
-        inline for (.{ "extraction", "reconciliation", "generation", "support" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
+        const protocol_prompt = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/protocol.prompt.md", allocator, .limited(1_048_576));
+        defer allocator.free(protocol_prompt);
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/spec/protocol.prompt.md", .data = protocol_prompt });
+        inline for (.{ "extraction", "reconciliation", "generation", "support", "repair" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name ++ "." ++ extension, allocator, .limited(1_048_576));
             defer allocator.free(bytes);
             try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/spec/" ++ name ++ "." ++ extension, .data = bytes });
@@ -1331,12 +1349,19 @@ test "configured specification generation YAML executes native references models
         native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
         var fake = @import("../model_request_workflow_test.zig").invocationProvider(&runner, allocator);
         native.model_requests.invoke_model.action = .{ .provider = fake.interface() };
-        var driver: @import("../test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &runner, .fake = &fake, .malformed = scenario == 2, .uncertain = scenario == 3 };
+        var driver: @import("../test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &runner, .fake = &fake, .malformed = scenario == 2, .uncertain = scenario == 3, .malformed_once = scenario == 4 or scenario == 9, .repair = scenario == 5 or scenario == 6 or scenario == 8, .failed_repair = scenario == 6, .omit_exact = scenario == 7, .brief_uncertain = scenario == 10, .entities_required = scenario == 11 };
+        if (fault) |selected_fault| {
+            driver.fault = selected_fault;
+            driver.repair = selected_fault.stage == .repair;
+        }
         const result = driver.run();
-        try std.testing.expectEqual(@as(workflow.OutcomeTag, if (scenario == 2) .invalid else if (scenario == 3) .needs_user else .ok), result.executionStatus().?);
-        if (scenario < 2) {
+        const expected: workflow.OutcomeTag = if (scenario == 2 or scenario == 6 or (fault != null and fault.?.persistent)) .failed else if (scenario == 3 or scenario == 10) .needs_user else if (scenario == 7) .invalid else .ok;
+        try std.testing.expectEqual(expected, result.executionStatus().?);
+        if (fault) |selected_fault| try std.testing.expectEqual(@as(usize, if (selected_fault.persistent) 2 else 1), driver.fault_calls);
+        if (expected == .ok) {
             const content = try @import("../application/required_authority_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/required_authority_workflow.zig").content_schema, .content);
             try std.testing.expect(content.records.len != 0);
+            try std.testing.expectEqual(@as(@TypeOf(content.entities.disposition), if (scenario == 11) .required else .not_applicable), content.entities.disposition);
             try std.testing.expect(runner.envelope.checkGate(@import("../application/required_authority_workflow.zig").gate_contract) == null);
             try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.prepared_model_request)] == null);
         }

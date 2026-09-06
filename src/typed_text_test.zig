@@ -152,12 +152,12 @@ test "all extraction content kinds and no-claim reasons pass through the shared 
     const scope = context(prepared, inputs, 0).scope;
     for ([_][]const u8{ "business", "scope_guard", "design", "technical", "validation", "implementation_assumption", "open_question" }) |kind| {
         const field = if (std.mem.eql(u8, kind, "business") or std.mem.eql(u8, kind, "scope_guard")) "segments" else "nodes";
-        const bytes = try std.fmt.allocPrint(allocator, "{{\"kind\":\"claims\",\"claims\":[{{\"content\":{{\"kind\":\"{s}\",\"text\":{{\"{s}\":[{{\"literal\":{{\"value\":\"A statement\"}}}}]}}}},\"citations\":[]}}],\"token_classifications\":[]}}", .{ kind, field });
+        const bytes = try std.fmt.allocPrint(allocator, "{{\"kind\":\"claims\",\"claims\":[{{\"content\":{{\"kind\":\"{s}\",\"{s}\":[{{\"kind\":\"literal\",\"value\":\"A statement\"}}]}},\"citations\":[]}}],\"token_classifications\":[]}}", .{ kind, field });
         const parsed = try parser.execute(allocator, .{ .entries = &.{.{ .scope = scope, .result = .{ .response = bytes } }} });
         const checked = try fixture.validate_text.execute(allocator, prepared.registry, fixture.safety.value(prepared.owner), inputs, parsed);
         try std.testing.expectEqualStrings(kind, @tagName(checked.entries[0].outcome.claims[0].content));
     }
-    const reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"literal\":{\"value\":\"Read source.md\"}}]},\"token_classifications\":[]}";
+    const reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"kind\":\"literal\",\"value\":\"Read source.md\"}]},\"token_classifications\":[]}";
     const parsed = try parser.execute(allocator, .{ .entries = &.{.{ .scope = scope, .result = .{ .response = reason } }} });
     try std.testing.expectError(error.UnboundPathReference, fixture.validate_text.execute(allocator, prepared.registry, fixture.safety.value(prepared.owner), inputs, parsed));
 }

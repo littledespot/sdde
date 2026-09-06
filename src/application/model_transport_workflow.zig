@@ -7,7 +7,7 @@ pub fn Retire(comptime retirement: transport.Retirement) type {
     return struct {
         pub const Action = switch (retirement) {
             .request => @import("../actions/model/retire_model_request.zig").Action,
-            .rejected_attempt => @import("../actions/model/retire_rejected_model_attempt.zig").Action,
+            .rejected_attempt => @compileError("Rejected attempt retirement belongs to protocol retry preparation"),
             .input => @import("../actions/model/retire_model_input.zig").Action,
         };
         pub const contract: @import("../domain/workflow_operation.zig").Contract = .{

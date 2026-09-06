@@ -71,7 +71,7 @@ pub const Runner = struct {
             .barrier = barrier,
             .runtime = runtime,
             .model_provider_services = model_provider_services,
-            .envelope = .init(selected.graph.authority.data_schemas),
+            .envelope = .init(allocator, selected.graph.authority.data_schemas),
             .token_accounting = workflow_token_runner.Runner.init(
                 allocator,
                 selected.graph.authority.total_model_token_budget,
@@ -438,7 +438,7 @@ pub const Runner = struct {
             }
         }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
-        self.envelope.apply(contract, &candidate.delta, candidate.outcome) catch return .{ .outcome = .invalid };
+        self.envelope.apply(contract, &candidate.delta, candidate.outcome) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .outcome = .invalid };
         if (request_owner) |owner| {
             self.model_accounting.?.replaceRequests(owner);
             request_owner = null;

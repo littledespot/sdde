@@ -75,6 +75,7 @@ pub const BusinessValue = union(enum) {
     exact_copy: struct { token_id: reference.tokens.Id, citation_id: reference.CitationId },
 };
 pub const AttributedValue = struct { value: BusinessValue, provenance: Provenance };
+pub const Brief = struct { title: AttributedValue, description: AttributedValue, primary_goal: AttributedValue };
 
 /// This shared field shape is used by semantic content and its text projection.
 /// Projection bytes never supply provenance, applicability or gate authority.
@@ -122,6 +123,16 @@ pub const IdentifiedContent = struct {
     records: []const IdentifiedRecord,
     entities: ApplicabilityProposal,
 };
+
+/// Direct complete typed-content comparison, including provenance and IDs.
+/// No digest, persisted comparison record or generated-view authority is used.
+pub fn sameContent(allocator: std.mem.Allocator, a: IdentifiedContent, b: IdentifiedContent) std.mem.Allocator.Error!bool {
+    const left = try std.json.Stringify.valueAlloc(allocator, a, .{});
+    defer allocator.free(left);
+    const right = try std.json.Stringify.valueAlloc(allocator, b, .{});
+    defer allocator.free(right);
+    return std.mem.eql(u8, left, right);
+}
 
 /// Captured unescaped Markdown field; deliberately not BusinessText authority.
 pub const CodeSpan = struct { start: usize, end: usize };

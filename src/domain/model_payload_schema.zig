@@ -114,7 +114,7 @@ fn integerEquals(number: []const u8, expected: i64) bool {
 /// Interpret a decoder-proven JSON number as an exact i64, not a float. JSON
 /// Schema treats 1, 1.0 and 1e0 alike. Remove only insignificant zeroes, then
 /// account for the decimal point and exponent before checking the i64 range.
-fn exactInteger(number: []const u8) error{ NotInteger, IntegerOutOfRange }!i64 {
+pub fn exactInteger(number: []const u8) error{ NotInteger, IntegerOutOfRange }!i64 {
     const negative = number[0] == '-';
     const exponent_at = std.mem.indexOfAny(u8, number, "eE") orelse number.len;
     const mantissa = number[@intFromBool(negative)..exponent_at];

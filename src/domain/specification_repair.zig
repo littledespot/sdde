@@ -11,6 +11,7 @@ pub const Replacement = union(enum) { attributed: g.spec.AttributedValue, record
 pub const Rule = enum { provenance, typed_text, record_kind, duplicate_record };
 pub const Authorization = struct {
     id: @import("model_request_identity.zig").RepairAuthorizationId,
+    owner: @import("model_request_identity.zig").ImmutableUnitOwnerId,
     unit: g.Unit,
     revision: u64,
     target: Target,
@@ -28,12 +29,16 @@ pub fn authorize(allocator: std.mem.Allocator, validator: @import("typed_text.zi
         .brief => |brief| {
             inline for (.{ "title", "description", "primary_goal" }) |field| {
                 _ = p.attributed(allocator, validator, context, @field(brief, field)) catch |err| {
-                    return make(allocator, current, candidate, @field(Target, field), try rule(err));
+                    return make(allocator, current, candidate, @unionInit(Target, field, {}), try rule(err));
                 };
             }
         },
-        .primary_user_story => |story| { _ = p.attributed(allocator, validator, context, story) catch |err| return make(allocator, current, candidate, .story, try rule(err)); },
-        .entities => |entities| { _ = p.attributed(allocator, validator, context, entities.basis) catch |err| return make(allocator, current, candidate, .entity_basis, try rule(err)); },
+        .primary_user_story => |story| {
+            _ = p.attributed(allocator, validator, context, story) catch |err| return make(allocator, current, candidate, .story, try rule(err));
+        },
+        .entities => |entities| {
+            _ = p.attributed(allocator, validator, context, entities.basis) catch |err| return make(allocator, current, candidate, .entity_basis, try rule(err));
+        },
         .records => |records| {
             const normalized = try allocator.alloc(g.spec.RecordProposal, records.len);
             for (records, normalized, 0..) |record, *accepted, index| {
@@ -56,27 +61,37 @@ fn rule(err: p.Error) Error!Rule {
     };
 }
 fn make(allocator: std.mem.Allocator, current: session.Session, candidate: Candidate, target: Target, selected_rule: Rule) Error!Authorization {
-    return .{ .id = .{ .bytes = try std.fmt.allocPrint(allocator, "spec-repair-{d}-{d}", .{ current.completed + 1, candidate.revision }) }, .unit = try session.unit(current.completed), .revision = candidate.revision, .target = target, .expected = try select(candidate.response, target), .rule = selected_rule };
+    return .{ .id = .{ .bytes = try std.fmt.allocPrint(allocator, "spec-repair-{d}-{d}", .{ current.completed + 1, candidate.revision }) }, .owner = try session.owner(allocator, current), .unit = try session.unit(current.completed), .revision = candidate.revision, .target = target, .expected = try select(candidate.response, target), .rule = selected_rule };
 }
 
 pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p.Context, authorization: Authorization) Error!*packets.Packet {
     if (!std.meta.eql(authorization.unit, try session.unit(current.completed))) return error.InvalidSpecificationRepair;
     const base = try session.packet(allocator, current, context);
     defer packets.release(base);
+    if (!@import("model_request_identity.zig").unitOwnerEql(authorization.owner, base.unit())) return error.InvalidSpecificationRepair;
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const scratch = arena.allocator();
-    var json = try std.json.parseFromSlice(std.json.Value, scratch, base.body(), .{});
-    defer json.deinit();
-    const selection = try std.json.Stringify.valueAlloc(scratch, .{ .target = authorization.target, .expected = authorization.expected, .rule = authorization.rule }, .{});
-    const details = try std.json.parseFromSliceLeaky(std.json.Value, scratch, selection, .{});
-    try json.value.object.put("repair", details);
-    return packets.create(allocator, try std.json.Stringify.valueAlloc(scratch, json.value, .{}), base.unit(), .{ .atomic_repair = authorization.id });
+    const original = @import("strict_json.zig").decode(std.json.Value, scratch, base.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }) catch |err| return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.InvalidJsonDocument => error.InvalidSpecificationRepair,
+    };
+    const expected_bytes = @import("model_candidate_json.zig").encode(Replacement, scratch, authorization.expected) catch |err| return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.InvalidJsonDocument => error.InvalidSpecificationRepair,
+    };
+    const expected = @import("strict_json.zig").decode(std.json.Value, scratch, expected_bytes, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }) catch |err| return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.InvalidJsonDocument => error.InvalidSpecificationRepair,
+    };
+    const body = try std.json.Stringify.valueAlloc(scratch, .{ .input = original, .repair = .{ .target = authorization.target, .expected = expected, .rule = authorization.rule } }, .{});
+    return packets.create(allocator, body, base.unit(), .{ .atomic_repair = authorization.id });
 }
 
 pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_value: *const packets.Packet, bytes: []const u8) Error!Replacement {
+    if (!@import("model_request_identity.zig").unitOwnerEql(authorization.owner, packet_value.unit())) return error.InvalidSpecificationRepair;
     if (packet_value.purpose() != .atomic_repair or !std.mem.eql(u8, packet_value.purpose().atomic_repair.bytes, authorization.id.bytes)) return error.InvalidSpecificationRepair;
-    const result = @import("strict_json.zig").decode(Replacement, allocator, bytes, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }) catch |err| return switch (err) {
+    const result = @import("model_candidate_json.zig").decode(Replacement, allocator, bytes) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         error.InvalidJsonDocument => error.InvalidSpecificationRepair,
     };
@@ -85,6 +100,7 @@ pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_
 }
 
 pub fn merge(allocator: std.mem.Allocator, current: session.Session, candidate: Candidate, authorization: Authorization, replacement: Replacement) Error!Candidate {
+    if (!@import("model_request_identity.zig").unitOwnerEql(authorization.owner, try session.owner(allocator, current))) return error.InvalidSpecificationRepair;
     if (candidate.revision != authorization.revision or !std.meta.eql(authorization.unit, try session.unit(current.completed)) or
         std.meta.activeTag(replacement) != std.meta.activeTag(authorization.expected)) return error.InvalidSpecificationRepair;
     const old = try std.json.Stringify.valueAlloc(allocator, try select(candidate.response, authorization.target), .{});
@@ -112,7 +128,9 @@ fn select(response: g.Response, target: Target) Error!Replacement {
     if (response != .content) return error.InvalidSpecificationRepair;
     const content = response.content;
     return switch (target) {
-        .title, .description, .primary_goal => |tag| if (content == .brief) .{ .attributed = switch (tag) { .title => content.brief.title, .description => content.brief.description, .primary_goal => content.brief.primary_goal, else => unreachable } } else error.InvalidSpecificationRepair,
+        .title => if (content == .brief) .{ .attributed = content.brief.title } else error.InvalidSpecificationRepair,
+        .description => if (content == .brief) .{ .attributed = content.brief.description } else error.InvalidSpecificationRepair,
+        .primary_goal => if (content == .brief) .{ .attributed = content.brief.primary_goal } else error.InvalidSpecificationRepair,
         .story => if (content == .primary_user_story) .{ .attributed = content.primary_user_story } else error.InvalidSpecificationRepair,
         .entity_basis => if (content == .entities) .{ .attributed = content.entities.basis } else error.InvalidSpecificationRepair,
         .record => |index| if (content == .records and index < content.records.len) .{ .record = content.records[index] } else error.InvalidSpecificationRepair,

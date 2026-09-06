@@ -12,7 +12,7 @@ flowchart TD
     TASKAPPROVAL --> IMPLEMENT["Run Implement<br/>Revalidate both approvals and all predecessor gates"]
     IMPLEMENT --> COMPLETE["Publish completed project changes<br/>with passing validation and task evidence"]
 
-    GAP["Required knowledge is missing during a workflow"] --> CLARIFY["Save or reuse questions in the owning workflow;<br/>end needs_user"]
+    GAP["Required knowledge is missing during a workflow"] --> CLARIFY["Reuse subject IDs; completely overwrite unresolved forms;<br/>preserve user-resolved forms and end needs_user"]
     CLARIFY --> ANSWERS["User answers the questions"]
     ANSWERS --> RERUN["Start a new execution of the owning workflow"]
 
@@ -22,5 +22,13 @@ flowchart TD
 
 Each workflow starts from its beginning and publishes its complete output only
 on success. Failure, blocking or cancellation ends that execution. Relevant
-clarification answers are retained for the next run. Other workflow definitions
-follow their own declared gates and transitions.
+clarification answers are retained for the next run. Every workflow completely
+overwrites its registered replaceable outputs and unresolved forms at the same
+paths on rerun, preserving user-resolved forms byte-for-byte. Other workflow
+definitions follow their own declared gates and transitions under that shared
+replacement rule.
+
+All outputs validate before publication. A publication write failure or
+interruption may leave already-replaced files, but cannot record new successful
+completion. Rerunning replaces the complete output set; there is no rollback or
+recovery store. User-closed clarification files remain protected throughout.

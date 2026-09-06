@@ -314,6 +314,13 @@ pub fn build(b: *std.Build) void {
     }) });
     b.step("test-specification-generation", "Test reference-grounded specification units and engine-owned IDs").dependOn(&b.addRunArtifact(specification_generation_tests).step);
 
+    const candidate_json_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/model_candidate_json_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    b.step("test-model-candidate-json", "Test compact model wire contracts and workflow schema examples").dependOn(&b.addRunArtifact(candidate_json_tests).step);
+
     const structured_token_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/structured_token_test.zig"),
         .target = target,

@@ -18,11 +18,22 @@ remainder of this design stays proposed.
 
 **Atomic-execution amendment (2026-09-05):**
 [ADR 0009](decisions/0009-atomic-workflow-execution.md) records the explicit
-user decision: the whole workflow executes atomically from beginning to end.
+user decision: the whole workflow executes from beginning to end with one
+validated publication boundary, subject to the publication-failure rule below.
 An interrupted execution is abandoned; a new invocation starts at `start`.
 There is no project-, feature-, task- or provider-level transaction/recovery
 subsystem, persisted continuation or durable-result handoff. Sections 24.4 and
 25 own this contract; Section 23.2 preserves clarifications across reruns.
+
+**Rerun-replacement amendment (2026-09-07):**
+[ADR 0009](decisions/0009-atomic-workflow-execution.md#rerun-replacement-rule-accepted-2026-09-07)
+records the shared rule for every workflow: completely overwrite its registered
+replaceable output files and unresolved clarification forms at the same paths;
+preserve user-resolved clarification forms byte-for-byte. Reuse clarification
+identities and applicable validated answers, not unresolved form bytes.
+Section 23.2 owns replacement and protection. The approved publication-failure
+amendment in ADR 0009 permits already-replaced files to remain after write failure
+or interruption, without a success report, rollback or recovery subsystem.
 
 **Feature-directory amendment (2026-09-05):** [ADR 0010](decisions/0010-explicit-feature-directory.md)
 accepts the supplied feature directory as feature identity. There is no
@@ -233,13 +244,16 @@ The new engine adopts the following unambiguous rules:
     workflow-owned resource aliases. Large prompts and schemas are declared
     once and referenced; they are never hidden packaged defaults or repeatedly
     copied into nodes.
-30. The whole workflow execution is atomic. Non-success abandons its candidate output; a new execution starts at `start`. No transaction, durable checkpoint or provider-recovery subsystem may be introduced for this contract.
+30. The whole workflow is validated before publication. Non-success abandons unpublished candidates; a new execution starts at `start`. Publication failure may leave already-replaced files but never records new successful completion (Section 25). No transaction, durable checkpoint or provider-recovery subsystem may be introduced.
 31. Clarification records and answers survive output replacement and abandoned
     executions. One stable target/owner/subject/slot has one clarification ID;
     new execution, authority revision, question wording or gap reason cannot
     mint a duplicate. Relevant validated answers are input to each rerun.
     User-closed clarification files are retained unchanged, not regenerated or
-    automatically reopened; Section 23.2 owns rerun replacement and protection.
+    automatically reopened. Every workflow rerun completely overwrites its
+    registered replaceable outputs and unresolved clarification forms at the
+    same paths; form replacement retains the subject ID, not the old form bytes.
+    Section 23.2 owns rerun replacement and protection.
 32. Provider APIs own model-call size limits. SDDE adds no request/response
     byte or per-call token ceilings, including renamed transport/memory budgets.
     It records and propagates provider failures/stops and accounts actual input
@@ -2187,7 +2201,7 @@ Semantic extraction and reconciliation use the common LLM actions; there is no s
 | `SerializeClarificationRegistryAction`                                | validated registry                                                                                                                                                                                                                                       | canonical clarification-state bytes                                                                                             | Serialize one restart-safe clarification authority.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `DeriveClarificationViewPathAction`                                   | clarification ID and validated workflow `clarify/` collection root                                                                                                                                                                                       | canonical clarification path                                                                                                    | Derive exactly `<featureDir>/clarify/<ID>.md`; accept no filename/path from a model, user, or config.                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `ValidateClarificationDirectoryAction`                                | collection root, current inventory, portability policy, and clarification registry                                                                                                                                                                       | directory evidence                                                                                                              | Reject unknown matching files, case/NFC aliases, wrong prefixes/widths, subdirectories, symlinks, and duplicate IDs; recreate only a missing engine-known open form.                                                                                                                                                                                                                                                                                                                                          |
-| `RenderClarificationViewAction`                                       | one record, exact registry revision, derived path, and clarification renderer contract                                                                                                                                                                   | discriminated `ClarificationView`                                                                                               | For an open record render `ClarificationSubmissionView` with only `requestedStatus` and `answer` editable. For an unprotected authority-resolved/cancelled record render `ClarificationAuditView` with no editable regions. User-closed submissions are retained as `ClarificationUserClosedView`, never passed to this renderer (Section 23.2). Never expose an uncommitted newly allocated identity as a file.                                                                                                                                                                                                   |
+| `RenderClarificationViewAction`                                       | one record, exact registry revision, derived path, and clarification renderer contract                                                                                                                                                                   | discriminated `ClarificationView`                                                                                               | For an open record render `ClarificationSubmissionView` with only `requestedStatus` and `answer` editable. For an unprotected authority-resolved/cancelled record render `ClarificationAuditView` with no editable regions. User-closed submissions are retained as `ClarificationUserClosedView`, never passed to this renderer (Section 23.2). On rerun, every writable view is completely overwritten at the same ID/path, even if its question is unchanged. Never expose an uncommitted newly allocated identity as a file.                                                                                                                                                                                                   |
 | `ParseClarificationViewAction`                                        | raw registered open `SNN.md`/`PNN.md`/`TNN.md` bytes and expected path/renderer contract                                                                                                                                                                 | unvalidated user submission and immutable projection                                                                            | Parse one exact `open_submission` form; never infer closure from prose, import an extra file, or accept a new submission against a `closed_audit` or `preserved_user_closed` view.                                                                                                                                                                                                                                                                                                                                                           |
 | `ValidateClarificationViewStaticProjectionAction`                     | parsed open view and current open record                                                                                                                                                                                                                 | immutable-projection evidence                                                                                                   | Require filename, ID, stage, state/revision, question, rationale, answer schema, and open lifecycle discriminant to equal canonical values directly, without a hash.                                                                                                                                                                                                                                                                                                                                          |
 | `ValidateClarificationViewLifecycleAction`                            | one rendered or retained clarification view and its exact registry record                                                                                                                                                                                            | clarification-view lifecycle evidence                                                                                           | Require `open -> open_submission` with exactly the two controlled editable regions, `resolved_by_user -> preserved_user_closed` against the accepted response and original submission binding, and other unprotected resolved/cancelled records to `closed_audit`; both closed variants have no editable/submittable regions.                                                                                                                                                                                                                                                                                                 |
@@ -3207,7 +3221,9 @@ and goal still come from validated reference content, not the directory name.
    private to the execution. Missing business authority creates a clarification,
    not a partial `spec.md`.
 7. At successful workflow completion, publish only the complete validated output
-   set to the same registered paths. Recheck containment and user-closed
+   set to the same registered paths, completely replacing existing outputs.
+   The clarification branch likewise completely replaces unresolved forms at
+   their existing IDs/paths. Recheck containment and user-closed
    clarification protection immediately before writes. Clarification persistence
    is the explicit exception in ADR 0009; failure is never `specified`.
 
@@ -3429,7 +3445,7 @@ All other cross-linked plan records follow the same proposal/canonical split. Th
 
 A plan need is deduplicated through the shared registry and allocated `P01` through `P99` only when its subject key has never existed. Its only path is `<paths.specs>/<featureId>/clarify/PNN.md`. Persisting a new/reused open record enters `plan_clarification_pending` and atomically persists a successor `PlanInputAuthorityState` bound to that next clarification revision. Its `PlanIdLedger` includes every path-candidate/research allocation or tombstone consumed before the pause, so full-stage regeneration cannot reuse an abandoned ID. No candidate `PlanState`, path-candidate record, accepted content unit, or plan view is committed, and a `PNN` cannot cite such uncommitted records.
 
-On a later plan run, the engine first rejects any open `SNN`, then refreshes the plan-authorized authority set: current reference/specification/provenance, current principles and presets, current repository facts, and configured research evidence. With no open `PNN`, a changed fact/adapter capture uses the legal `planning -> planning` plan-input transaction before any model call. While a `PNN` is open, the refresh and clarification change are one atomic clarification pause/resolution transaction: assign prospective IDs first, build the next clarification registry, then build the successor `PlanInputAuthorityState` against that exact next clarification ID/revision, validate the mutual authority joins, and choose pending or `planning` according to whether another `PNN` remains. A separate `planning` transaction is forbidden from bypassing the pending gate. A change to raw reference material is reingested through the specify flow before it can resolve a plan question; if that changes the specification, descendants are invalidated and plan restarts from the newly validated specification. The engine may close `PNN` only from a current non-conflicting authority resolution or a revision-current authenticated user-closed form. It reuses the same record when unresolved, and regenerates the complete plan stage after resolution before full validation.
+On a later plan run, the engine first rejects any open `SNN`, then refreshes the plan-authorized authority set: current reference/specification/provenance, current principles and presets, current repository facts, and configured research evidence. With no open `PNN`, a changed fact/adapter capture uses the legal `planning -> planning` plan-input transaction before any model call. While a `PNN` is open, the refresh and clarification change are one atomic clarification pause/resolution transaction: assign prospective IDs first, build the next clarification registry, then build the successor `PlanInputAuthorityState` against that exact next clarification ID/revision, validate the mutual authority joins, and choose pending or `planning` according to whether another `PNN` remains. A separate `planning` transaction is forbidden from bypassing the pending gate. A change to raw reference material is reingested through the specify flow before it can resolve a plan question; if that changes the specification, descendants are invalidated and plan restarts from the newly validated specification. The engine may close `PNN` only from a current non-conflicting authority resolution or a revision-current authenticated user-closed form. It reuses the same record when unresolved and completely overwrites its form on every rerun under Section 23.2; after resolution it regenerates the complete plan stage before full validation.
 
 `plan.md` and its design artifacts remain read-only. The clarification form is the only file-based plan feedback/answer channel; direct plan edits are never imported.
 
@@ -3556,7 +3572,7 @@ After all clusters have schema-valid proposals, the engine builds a `TaskProposa
 
 A task-generation need is deduplicated through the shared registry and allocated `T01` through `T99` only for a new subject. Its exact path is `<paths.specs>/<featureId>/clarify/TNN.md`. The pause transaction enters `tasks_clarification_pending` without committing a candidate `TaskDefinitionState`, runtime state, or `tasks.md`.
 
-On a subsequent tasks run, the engine first rejects any open `SNN`/`PNN`, then refreshes the current approved plan/spec/reference/principle/repository authority set. A reference/spec/plan change is routed through and approved at its owning upstream stage before task generation resumes; tasks never absorb an upstream change into a hidden local answer. A current non-conflicting authority resolution or revision-current authenticated closed `TNN` form closes the existing record. The engine regenerates the complete tasks stage, reruns global graph/coverage checks, and allocates no duplicate clarification ID. `tasks.md` remains a read-only projection.
+On a subsequent tasks run, the engine first rejects any open `SNN`/`PNN`, then refreshes the current approved plan/spec/reference/principle/repository authority set. A reference/spec/plan change is routed through and approved at its owning upstream stage before task generation resumes; tasks never absorb an upstream change into a hidden local answer. A current non-conflicting authority resolution or revision-current authenticated closed `TNN` form closes the existing record. The engine regenerates the complete tasks stage, reruns global graph/coverage checks, and allocates no duplicate clarification ID. Unresolved `TNN` forms are completely overwritten at the same IDs/paths on each rerun under Section 23.2; user-resolved forms remain unchanged. `tasks.md` remains a read-only projection.
 
 ### 19.4 Deterministic task validation
 
@@ -4117,20 +4133,37 @@ Because plan and task Markdown are projections, copying only those files does no
 
 ### 23.2 Workflow reruns and protected clarification files
 
-When any workflow is run again, it MUST overwrite its existing registered
-output files at the same engine-owned paths with the newly validated output.
-The exception is clarification files closed by the user: they MUST NOT be
-overwritten. This is the shared engine rule, not a Specify-specific option.
-Existing output files must not cause a skip, filename suffix, output-exists
-failure, or separate overwrite approval. Specify therefore overwrites `spec.md`
+When any workflow is run again, it MUST completely overwrite all its existing
+registered replaceable output files at the same engine-owned paths with the
+newly validated output. Clarification forms the user has resolved (closed)
+MUST NOT be overwritten. Clarification forms the user has not resolved MUST
+be completely overwritten from current validated clarification state at the
+same registered paths, retaining their stable subject IDs. This is the shared
+engine rule for every workflow execution, including unrelated registered
+workflows; no workflow may opt out. Existing output files must not cause an
+append, merge with old output, skip, filename suffix, output-exists failure, or
+separate overwrite approval. Specify therefore overwrites `spec.md`
 and `reference-context.md`, including prior user edits to `spec.md`; it does not
 delete and recreate the feature directory. Validation and predecessor/review
 gates still apply before commit; a blocked or failed generation does not publish
 partial replacement output.
 
+Unresolved-form replacement includes the complete question/schema/revision
+projection and controlled editable regions; an unsubmitted draft answer is not
+protected from replacement. An unchanged subject or question is not permission
+to retain the old form. Reusing a clarification means retaining its identity and
+canonical history, not preserving unresolved file bytes. Reconcile current
+inputs first, render all writable forms for the owning workflow's complete
+clarification view set, and completely replace them through the clarification
+persistence exception, including when the execution ends in `needs_user`.
+An authority-resolved or cancelled audit form remains writable under its
+existing lifecycle; only user-closed forms have byte-preservation protection.
+
 User-closed clarification files under `clarify/` are protected inputs/history,
-not replaceable outputs. Before rendering or writing, capture and validate the
-registered forms and consume applicable validated answers. Preserve each
+not replaceable outputs. A controlled user-close submission establishes file
+protection independently of answer acceptance or current applicability. Before
+rendering or writing, capture and validate the registered forms and consume
+applicable validated answers. Preserve each
 user-closed file byte-for-byte, including its question, status, answer, and
 original revision fields. Accepting a valid close records the response and
 canonical lifecycle without rewriting the submitted file; canonical answer
@@ -4139,9 +4172,9 @@ submissions are not permission to regenerate the form: reject/block without
 overwriting them. Malformed or unrecognized clarification files also block
 rather than being removed during output replacement.
 
-Complete clarification view sets include retained user-closed forms; only
-unprotected members are rendered/written. Validators distinguish a retained
-closed submission's original binding from the current registry revision and
+Complete clarification view sets include retained user-closed forms; every
+unprotected member is rendered and completely overwritten on rerun. Validators
+distinguish a retained closed submission's original binding from the current registry revision and
 check it against its recorded accepted response, which is the sole durable
 owner of the exact bounded submitted form bytes and original binding. The view
 references that response; it introduces no second byte authority or fingerprint.
@@ -4154,7 +4187,8 @@ the file and response and block for explicit user direction. If the subject is
 no longer required, retain its user closure as history without reopening it.
 A rerun cannot automatically reopen it, replace its question, or allocate a
 duplicate ID to evade protection.
-Other permitted clarification refreshes retain their existing same-ID rules.
+Clarification refreshes retain their existing same-ID rules; they never make
+unresolved-form replacement optional.
 
 Replacement covers only the selected workflow's registered replaceable outputs.
 References, principles/configuration, application code, other workflows' outputs,
@@ -4162,6 +4196,8 @@ selected-feature bindings, record identities, approvals, and immutable history r
 authorization/lifecycle rules. Section 25 owns whole-workflow atomic output.
 Interrupted executions are abandoned, not recovered; the next invocation
 regenerates from the beginning and replaces the selected outputs.
+If publication itself fails or is interrupted, already-replaced files may
+remain under Section 25.1; no new successful completion is recorded.
 
 ---
 
@@ -4205,8 +4241,10 @@ The closed downstream matrix is: plan requires no open `S`; tasks requires no op
 
 State alone never authorizes a stage.
 
-The complete clarification registry, forms and responses are retained across
-successive executions, including resolved records. Reruns use applicable
+The complete clarification registry and responses are retained across
+successive executions, including resolved records. User-closed form bytes are
+retained; unresolved forms are completely overwritten under Section 23.2 without
+resetting their identities or canonical history. Reruns use applicable
 validated answers before proposing new questions. Deduplication uses the stable
 target, earliest owner, requirement kind, subject selector and required slot;
 execution IDs, regenerated authority IDs, wording and transient gap reasons do
@@ -4283,16 +4321,16 @@ Every rework transition commits the invalidation record, affected canonical defi
 
 ### 25.1 One execution, one output boundary
 
-The selected workflow is atomic from its compiled `start` to its terminal
-outcome. Model results, repairs, implementation tasks, candidate files,
-evidence and state updates belong to that execution. Only successful
-whole-workflow completion publishes the complete validated output. No step
-or task commits independently.
+The selected workflow runs from its compiled `start` to its terminal outcome.
+Model results, repairs, implementation tasks, candidate files, evidence and
+state updates belong to that execution. Whole-workflow validation precedes
+publication; success requires the complete output to be written. No model step
+or implementation task publishes independently.
 
 There is no project-, feature-, task- or provider-level transaction subsystem:
 no WAL, transaction-ID ledger, durable checkpoint, commit-marker protocol,
 rollback/roll-forward recovery, result-handoff marker or recovery directory.
-Atomicity states the required observable behavior; it is not permission to
+Whole-execution validation is not a filesystem transaction or permission to
 introduce that machinery. Do not relocate or rename it or make an active
 feature a prerequisite solely for provider storage.
 
@@ -4300,19 +4338,30 @@ Candidate preparation still enforces path authorization, ownership,
 write-set checks, approvals, rendering and validation. These rules do not
 create intermediate publication or restart checkpoints.
 
+Validate the complete output set before the first write. Publication may replace
+files sequentially across configured roots. If a write fails or execution is
+interrupted, already-replaced files may remain; report failure when possible and
+never record new successful completion. Write successful completion state only
+after all required outputs have been written. Existing files alone do not prove
+the current run succeeded. This explicit failure rule does not relax protected
+clarification checks or authorize rollback/recovery machinery.
+
 ### 25.2 Abandonment and reruns
 
 Failure, blocking, cancellation or interruption abandons the execution and
-its candidate output. A subsequent invocation starts at `start`, revalidates
+its unpublished candidate output; files already replaced during publication
+may remain under Section 25.1. A subsequent invocation starts at `start`, revalidates
 current inputs and gates, and executes the whole selected workflow again.
 It never restores a saved task, step, model response or provider operation.
 Run-local lifecycle, leases and token accounting start fresh.
 
-Successful reruns replace existing workflow outputs at their registered paths,
-without skip, suffix or separate overwrite approval. Clarifications are the
-explicit persistence exception: preserve stable identity and relevant answers,
-do not duplicate subjects, and never overwrite user-closed forms. Section 23.2
-owns these rules. Outstanding spec, plan or tasks clarifications prevent
+Successful reruns completely overwrite all registered replaceable workflow
+outputs at their existing paths, without append, merge, skip, suffix or separate
+overwrite approval. Clarifications are the explicit persistence exception:
+preserve stable identity and relevant validated answers, completely overwrite
+unresolved forms at the same IDs/paths, do not duplicate subjects, and never
+overwrite user-resolved forms. Section 23.2 owns this rule for every workflow
+execution. Outstanding spec, plan or tasks clarifications prevent
 `implement` from executing.
 
 ### 25.3 External effects and observations
@@ -4670,8 +4719,13 @@ open `SNN`, `PNN` and `TNN` independently and together: `implement` must invoke
 zero task/model/command/overlay operations until every required answer is
 validated and closed; the normal approval gates must still pass afterward.
 
-Rerun tests MUST prove that existing registered output files are overwritten at
-the same paths without skipping, filename suffixes, or extra overwrite approval.
+Rerun tests MUST prove that all registered replaceable output files are completely
+overwritten at the same paths without append, merge, skipping, filename suffixes,
+or extra overwrite approval. Unresolved clarification forms MUST also be completely
+overwritten at the same subject IDs/paths, including unchanged questions and open
+forms containing unsubmitted draft answers. Assert that old file contents and
+trailing bytes do not survive a shorter replacement. Clarification-pause runs must
+replace their unresolved forms without publishing partial successful stage output.
 Cover Specify and an unrelated registered workflow to prove the shared rule.
 Assert byte-identical user-closed forms before and after response ingestion,
 authority refresh, output commit, failure, and
@@ -4854,9 +4908,9 @@ The new engine is ready for production evaluation when all of the following are 
 28. Operation/command evidence and candidate changes remain execution-local until the whole workflow completes; interruption cannot resume from an adapter record.
 29. A task is marked [X] only in the complete successful workflow output with its exact validated evidence and definition/runtime identities; no independent task commit is permitted.
 30. Failed and blocked executions cannot be reported as completed.
-31. The selected workflow executes atomically from start to its terminal outcome. Non-success abandons candidate output; a new invocation starts again. No project/feature transaction store, WAL, transaction-ID ledger, durable checkpoint or provider-effect recovery is permitted. Clarifications retain their explicit persistence exception.
+31. The selected workflow validates its complete output before publication. Non-success abandons unpublished candidates; a write failure/interruption may leave already-replaced files but cannot record new successful completion. A new invocation starts again. No project/feature transaction store, WAL, transaction-ID ledger, durable checkpoint or provider-effect recovery is permitted. Clarifications retain their explicit persistence exception.
 32. Stage state, recovery, comparisons, and invalidation work without storing/comparing artifact fingerprints and without depending on Git flow.
-33. Generated views exactly match canonical rendering; tampering is detected and regenerated rather than imported. Every workflow rerun MUST overwrite its existing registered output files at the same paths and MUST NOT overwrite clarification files closed by the user, as defined in Section 23.2.
+33. Generated views exactly match canonical rendering; tampering is detected and regenerated rather than imported. Every workflow rerun MUST completely overwrite all its registered replaceable output files and unresolved clarification forms at the same paths, retaining clarification subject IDs but not old unresolved form bytes. It MUST NOT overwrite clarification files resolved (closed) by the user. Section 23.2 applies to every registered workflow, with no append, merge, skip, suffix or separate overwrite approval.
 34. Prompt/response body logging cannot be enabled without the required direction/class opt-ins, redaction, truncation, retention, and sink protections.
 35. End-to-end fake-model tests cover valid flow, exact CLI/config roots,
     variable-size workflow definition registries and reserved children,

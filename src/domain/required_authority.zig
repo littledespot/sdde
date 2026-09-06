@@ -7,7 +7,7 @@ pub const DetectionStage = enum { spec, plan, tasks, implement, recovery };
 pub const Error = std.mem.Allocator.Error || error{InvalidRequiredAuthority};
 pub const version: u32 = 1;
 pub const Kind = enum { feature_intent, reference_meaning, entity_applicability, preservation, design_decision, executable_decomposition, policy_predicate };
-pub const Slot = enum { display_name, primary_user_story, text, given, when, then, condition, expected_outcome, name, business_meaning, relationship, entities, disposition, value, decision, compliance };
+pub const Slot = enum { display_name, description, primary_goal, primary_user_story, text, given, when, then, condition, expected_outcome, name, business_meaning, relationship, entities, disposition, value, decision, compliance };
 pub const Unit = union(enum) {
     feature: enum { singleton },
     record: @import("specification.zig").Id,
@@ -17,10 +17,7 @@ pub const Unit = union(enum) {
     decision: struct { ordinal: u32 },
 };
 pub const Id = struct { kind: Kind, unit: Unit, slot: Slot, member: u32 = 0, contract_version: u32 = version };
-pub const Authority = union(enum) {
-    reference: @import("reference_identity.zig").StateId,
-    canonical: @import("clarification_inputs.zig").Authority,
-};
+pub const Authority = @import("authority_identity.zig").Authority;
 pub const EvidenceId = struct { ordinal: u32 };
 pub const CandidateId = struct { ordinal: u32, revision: u64 };
 pub const Candidate = struct { id: CandidateId, requirement: Id };
@@ -41,7 +38,7 @@ pub fn policy(id: Id) ?Policy {
     if (id.contract_version != version) return null;
     return switch (id.kind) {
         .feature_intent => switch (id.unit) {
-            .feature => if (id.slot == .display_name or id.slot == .primary_user_story) .{ .owner = .spec } else null,
+            .feature => if (id.slot == .display_name or id.slot == .description or id.slot == .primary_goal or id.slot == .primary_user_story) .{ .owner = .spec } else null,
             .record => |record| if (record.ordinal != 0 and recordField(record.kind, id.slot)) .{ .owner = .spec } else null,
             else => null,
         },
@@ -83,6 +80,7 @@ pub const Inputs = struct {
     feature: @import("feature_identity.zig").FeatureId,
     projection: enum { specification, registered_obligations } = .registered_obligations,
     specification: ?@import("specification.zig").IdentifiedContent = null,
+    brief: ?@import("specification.zig").Brief = null,
     detected_at: DetectionStage,
     authorities: []const Authority,
     seeds: []const Seed,
@@ -113,7 +111,7 @@ pub const Result = struct { feature: @import("feature_identity.zig").FeatureId, 
 pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
     if (@import("feature_identity.zig").FeatureId.parse(inputs.feature.bytes) == null) return error.InvalidRequiredAuthority;
     if (inputs.projection == .specification) {
-        const expected = try @import("specification_authority.zig").project(allocator, inputs.feature, inputs.references orelse return error.InvalidRequiredAuthority, inputs.specification);
+        const expected = try @import("specification_authority.zig").project(allocator, inputs.feature, inputs.references orelse return error.InvalidRequiredAuthority, inputs.specification, inputs.brief);
         if (expected.seeds.len != inputs.seeds.len) return error.InvalidRequiredAuthority;
         for (expected.seeds, inputs.seeds) |required, actual| {
             if (!std.meta.eql(required.id, actual.id) or !std.meta.eql(required.requiredness, actual.requiredness)) return error.InvalidRequiredAuthority;
@@ -123,7 +121,7 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
     }
     try unique(Authority, inputs.authorities);
     for (inputs.authorities, 0..) |authority, index| {
-        if (!validAuthority(authority)) return error.InvalidRequiredAuthority;
+        if (!authority.valid()) return error.InvalidRequiredAuthority;
         for (inputs.authorities[0..index]) |other| {
             if (other == .canonical and authority == .canonical and other.canonical.kind == authority.canonical.kind and other.canonical.ordinal == authority.canonical.ordinal) return error.InvalidRequiredAuthority;
         }
@@ -133,7 +131,7 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
         if (!validId(seed.id)) return error.InvalidRequiredAuthority;
         for (inputs.seeds[0..index]) |other| if (std.meta.eql(other.id, seed.id)) return error.InvalidRequiredAuthority;
         try unique(Authority, seed.input_authorities);
-        for (seed.input_authorities) |authority| if (!validAuthority(authority)) return error.InvalidRequiredAuthority;
+        for (seed.input_authorities) |authority| if (!authority.valid()) return error.InvalidRequiredAuthority;
         const registered = policy(seed.id);
         if (registered != null and !validRequiredness(seed)) return error.InvalidRequiredAuthority;
         requirement.* = .{ .seed = seed, .registered_policy = registered };
@@ -324,12 +322,6 @@ fn validId(id: Id) bool {
         inline .signal, .conflict, .token, .decision => |value| value.ordinal != 0,
     };
 }
-fn validAuthority(authority: Authority) bool {
-    return switch (authority) {
-        .reference => |id| id.bytes.len != 0,
-        .canonical => |value| value.ordinal != 0 and value.revision != 0,
-    };
-}
 fn findRequirement(requirements: []const Requirement, id: Id) ?Requirement {
     for (requirements) |requirement| if (std.meta.eql(requirement.seed.id, id)) return requirement;
     return null;
@@ -357,20 +349,13 @@ fn unitOrdinal(unit: Unit) u64 {
     };
 }
 pub fn contains(comptime T: type, list: []const T, value: T) bool {
-    for (list) |item| if (if (T == Authority) sameAuthority(item, value) else std.meta.eql(item, value)) return true;
+    for (list) |item| if (if (T == Authority) item.eql(value) else std.meta.eql(item, value)) return true;
     return false;
-}
-fn sameAuthority(a: Authority, b: Authority) bool {
-    if (@as(std.meta.Tag(Authority), a) != @as(std.meta.Tag(Authority), b)) return false;
-    return switch (a) {
-        .reference => |id| id.eql(b.reference),
-        .canonical => |value| std.meta.eql(value, b.canonical),
-    };
 }
 fn sameResolution(a: Resolution, b: Resolution) bool {
     if (@as(std.meta.Tag(Resolution), a) != @as(std.meta.Tag(Resolution), b)) return false;
     return switch (a) {
-        .existing_authority => |authority| sameAuthority(authority, b.existing_authority),
+        .existing_authority => |authority| authority.eql(b.existing_authority),
         else => std.meta.eql(a, b),
     };
 }

@@ -79,7 +79,7 @@ test "nested pipeline values retain references and still copy ordinary data" {
 
 test "envelope references outlive the originating owner without identity reuse" {
     const descriptor = values.schema(key, reference.Ref, 1, 64);
-    var envelope = envelopes.PipelineEnvelope.init(&.{descriptor});
+    var envelope = envelopes.PipelineEnvelope.init(std.testing.allocator, &.{descriptor});
     defer envelope.deinit();
     const original = try reference.create(std.testing.allocator);
     const borrowed_identity = original;
@@ -142,7 +142,7 @@ fn allocationExercise(allocator: std.mem.Allocator) !void {
         nested: []const struct { identity: reference.Ref, bytes: []const u8 },
     };
     const descriptor = values.schema(key, Payload, 1, 2048);
-    var envelope = envelopes.PipelineEnvelope.init(&.{descriptor});
+    var envelope = envelopes.PipelineEnvelope.init(std.testing.allocator, &.{descriptor});
     defer envelope.deinit();
     var delta: pipeline.NodeDelta = .{};
     defer envelope.discard(&delta);

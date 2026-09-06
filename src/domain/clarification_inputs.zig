@@ -8,7 +8,7 @@ pub const max_form_bytes = 16 * 1024;
 pub const max_state_bytes = 8 * 1024 * 1024;
 pub const max_responses = 4096;
 pub const max_text_bytes = 2000;
-pub const schema_version = "clarification-state/v1";
+pub const schema_version = "clarification-state/v2";
 pub const Error = std.mem.Allocator.Error || error{InvalidClarificationInput};
 pub const Stage = enum { spec, plan, tasks };
 pub const Id = struct {
@@ -43,7 +43,7 @@ pub const Id = struct {
 pub const FormCapture = struct { id: Id, bytes: []const u8 };
 pub const Captures = struct { state: ?[]const u8, forms: []const FormCapture };
 pub const Subject = struct { requirement: []const u8, unit: []const u8, slot: []const u8 };
-pub const Authority = struct { kind: enum { reference, principles, specification, plan, tasks }, ordinal: u64, revision: u64 };
+pub const Authority = @import("authority_identity.zig").Authority;
 pub const Option = struct { key: []const u8, label: []const u8 };
 pub const AnswerSchema = union(enum) {
     bounded_business_text: usize,
@@ -133,9 +133,9 @@ pub fn validate(parsed: ParsedState, selected: feature.FeatureId) Error!Validate
             if (Id.parse(other.id).?.stage == id.stage and sameSubject(other.subject, record.subject)) return error.InvalidClarificationInput;
         }
         for (record.authority, 0..) |authority, authority_index| {
-            if (authority.ordinal == 0 or authority.revision == 0) return error.InvalidClarificationInput;
+            if (!authority.valid()) return error.InvalidClarificationInput;
             for (record.authority[0..authority_index]) |other| {
-                if (other.kind == authority.kind and other.ordinal == authority.ordinal) return error.InvalidClarificationInput;
+                if (other.eql(authority) or (other == .canonical and authority == .canonical and other.canonical.kind == authority.canonical.kind and other.canonical.ordinal == authority.canonical.ordinal)) return error.InvalidClarificationInput;
             }
         }
         try validateAnswerSchema(record.answer_schema);

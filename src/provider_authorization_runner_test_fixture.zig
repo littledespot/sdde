@@ -36,7 +36,7 @@ pub const Runner = struct {
 
     pub fn prepare(self: *Runner, facts: preparation.Facts) std.mem.Allocator.Error!Outcome {
         self.check(facts.deadline_monotonic_ms) catch |err| return rejected(facts.operation_id, err);
-        var envelope = envelope_module.PipelineEnvelope.init(&.{ binding_schema, preparation.value_schema });
+        var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{ binding_schema, preparation.value_schema });
         defer envelope.deinit();
         var input_delta: pipeline.NodeDelta = .{};
         defer envelope.discard(&input_delta);

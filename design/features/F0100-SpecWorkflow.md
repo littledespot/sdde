@@ -9,13 +9,13 @@ clarification separation are defined below. The explicit feature/reference
 invocation, shared directory preflight, read-only clarification inputs, Markdown
 ingestion, citable reference preparation, typed text, Markdown exact-value
 preservation, scripted extraction accounting and reconciliation in Sections
-3.1–3.9 are implemented. Native model input/result bridges (§3.11) and initial
-specification-unit validators (§5.7) now exist. Generated-name code is removed;
-end-to-end semantic extraction/reconciliation, generation,
-output publication and the complete definition remain unfinished.
+3.1–3.9 are implemented. Model-connected extraction/reconciliation (§3.11) and
+in-memory specification generation/validation/repair (§5.7) are implemented
+through ordinary YAML. Generated-name code is removed; applicable clarification
+handling, output publication and the complete Specify definition remain unfinished.
 The native content schema and mechanical specification Markdown codec in §5.6
 are implemented. The shared required-authority boundary and Specify projection
-in §3.10 are implemented; generation/publication integration remains open.
+in §3.10 are connected to model-assisted generation evidence; publication remains open.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -46,8 +46,8 @@ content-derived `WorkflowId` and follows its compiled typed transitions through
 runner-owned bindings; it contains no `specify` name branch.
 
 YAML-selected registered operations in the selected graph build and validate `SpecificationIR`,
-render and reparse `spec.md`, render `reference-context.md`, and commit the
-complete atomic workflow output. The generic workflow engine performs none
+render and reparse `spec.md`, render `reference-context.md`, and publish the
+complete validated workflow output under Design §25. The generic workflow engine performs none
 of that Specify-specific work. The YAML explicitly selects every operation,
 model slot, prompt/schema resource, and outcome transition. It contains no raw
 operational output path, command, adapter, capability, or executable payload.
@@ -82,8 +82,9 @@ when it crosses a registered monotonic budget operation with a finite ceiling.
 
 ## 3. Structural outline
 
-The remaining placeholders are deliberate: generation and completion contracts
-are not yet fixed. The implemented invocation contract is explicit.
+This is a structural outline of the eventual complete workflow, not an
+executable definition. The implemented generation-only definition is linked in
+§3.11; clarification persistence and completion/publication remain separate.
 
 ```yaml
 schema: workflow/v1
@@ -163,14 +164,16 @@ envelope. Inspection carries only `feature-read`; `core.directory-read@1`
 permits feature/reference inspection. The fixture selects these steps through
 ordinary YAML, accepts absent targets without creation, and rejects archive
 targets, aliases and symlinks. Generated-name code and parameters are removed.
-The next read-only input steps are implemented below; generation and output
-replacement remain unimplemented.
+The read-only input and generation steps are implemented below; output
+replacement remains H-012.
 
 Specify follows [ADR 0009](../decisions/0009-atomic-workflow-execution.md): each
 execution starts at `start`; no transaction/checkpoint/recovery prerequisite.
-Successful reruns overwrite the selected workflow's known outputs at the same
-paths without separate approval. User-closed clarification files remain
-byte-for-byte unchanged, including stale/invalid submissions; reuse applicable
+Successful reruns completely overwrite the selected workflow's registered
+replaceable outputs at the same paths without separate approval. Unresolved
+clarification forms are completely overwritten on their publication branch at
+the same IDs/paths under the shared rule for every workflow. User-closed files
+remain byte-for-byte unchanged, including stale/invalid submissions; reuse applicable
 validated answers and recheck protection immediately before writing (§23.2).
 
 ### 3.2 Read-only artifact and clarification inputs
@@ -214,6 +217,11 @@ closed bytes unchanged. Structural validation is not actor authentication or
 current-authority/applicability validation. Response acceptance, source
 reconciliation, clarification transitions/writes and publication-time
 protection checks remain later work; no stage completion is inferred.
+
+H-011 also requires selection and implementation of the trusted authentication
+mechanism for accepting submitted answers. Merely editing a form or loading an
+actor/evidence ID is not authentication. This does not affect user-close file
+protection, which applies even when acceptance is blocked.
 
 ### 3.3 Read-only Markdown ingestion
 
@@ -312,12 +320,10 @@ coverage also proves block coverage. Claim/citation IDs start at one in each
 fresh reference state and follow chunk/claim/citation order; response arrival
 order cannot change them. No ID counters or ledgers are persisted.
 
-This is not the complete `result.reference-claims/v1` production contract:
-semantic support, business-boundary review, live reconciliation and publication
-are still required before these candidates can become reference authority.
+These candidates require the later reconciliation and required-authority gates;
+the extraction validator alone does not establish semantic support.
 Markdown inline-code candidates are implemented; other format extractors remain
-future work. The native model bridge is described in §3.11; production workflow
-resources and complete model/gate integration remain open. Native values own their data
+future work. Model/resource/gate integration is described in §3.11. Native values own their data
 and retain only execution-local predecessors; they impose no model-call byte
 ceiling. The test-only YAML path runs these operations with scripted results
 and does not write artifacts, accept clarifications or mark a stage complete.
@@ -425,11 +431,12 @@ value, and an over-limit value fails explicitly.
 The closed model classifications are:
 
 ```json
-{"token_candidate_id":{"source_id":{"ordinal":1},"extractor_id":"markdown_inline_code_v1","ordinal":1},"decision":"preserve","kind":"business_exact_string"}
+{"kind":"preserve","preserve":{"token_candidate_id":{"source_id":{"ordinal":1},"extractor_id":"markdown_inline_code_v1","ordinal":1},"kind":"business_exact_string"}}
 ```
 
-or the same candidate ID with `"decision":"irrelevant"` and **no `kind`
-field**. The model never supplies scalar bytes, citations, canonical token IDs
+or `{"kind":"irrelevant","source_id":{"ordinal":1},"extractor_id":"markdown_inline_code_v1","ordinal":1}`.
+The discriminator follows ADR 0006; the preserved token's classification remains
+a separate domain field. The model never supplies scalar bytes, citations, canonical token IDs
 or obligation IDs. Unknown, duplicate, omitted, stale and cross-chunk candidates
 fail. An empty classification collection is valid only for a response whose
 chunk has no candidates. `no_feature_claim` may classify candidates irrelevant,
@@ -566,10 +573,10 @@ fingerprint or recovery mechanism.
 all Specify record families, missing/foreign/duplicate/stale support, permitted
 and prohibited dispositions, scoped exceptions, source preservation and YAML
 gate bypasses. The production reference fixture reaches the Specify projection;
-H-009/H-010 must still supply semantic evidence and generation, and H-011–H-013
-must connect gap handling, publication and the complete definition.
+H-009/H-010 now supply model-assisted evidence and generation. H-011–H-013
+still own applicable answers, protected forms, publication and the complete definition.
 
-### 3.11 Native reference/model bridge (partial H-009)
+### 3.11 Native reference/model execution (H-009)
 
 Registered operations now build immutable domain packets and collect bodies
 accepted by the existing provider-observation, envelope and result-schema
@@ -591,23 +598,40 @@ partition. Existing domain validators still own interpretation/accounting.
 `assign-model-request-id` accepts either a native `model_input_packet` or
 the declared static input resource, never both. The packet supplies an
 engine-owned unit/purpose, not a prompt, result schema or provider selection.
-Only initial-generation producers are registered in this increment.
+Initial generation, semantic review and authorized atomic repair have native producers.
 A new logical request gets an initial attempt; it does not reset the YAML
 operation's execution/retry ceiling. `more` exposes bounded collection progress
 without reusing failure outcomes.
 
-These bridges do not yet form an executable Specify path. Workflow-owned
-resources, explicit request retirement/retry, production loops and H-008 evidence
-integration remain open. In particular, current gate lineage requires every
-transient source generation to remain current: replacing a completed request
-for the next unit stales its descendants. An explicit native snapshot boundary
-that retains validated response evidence while checking current domain
-authorities has been proposed for approval; no freshness bypass is implemented.
+The ordinary [generation-only definition](../workflows/spec-generation.workflow.yaml)
+connects these operations, workflow-owned resources and H-008 review.
+`retire-model-input` and `retire-model-request` explicitly release completed
+transport slots. Native captured evidence keeps its current domain-source
+lineage, not the replaceable transport slot; source changes and mixed-generation
+joins still reject. The request ledger is runner-validated execution control,
+not business authority. All storage is execution-local.
+
+`build-model-protocol-retry` retains the original request identity, schema,
+unit and provider binding. It uses the originating assignment's optional
+`protocol-prompt`, decoder/schema diagnostic and minimum schema example.
+Its explicit `retry-limit: 0` permits one correction preparation per operation
+instance; a repeated failure ends the run. YAML checks the logical request
+phase before reusing the normal provider-operation lifecycle and accounting.
+
+Workflow schemas and the shared `model_candidate_json.zig` decoder use ADR
+0006's closed `kind` alternatives, including nested typed values. Empty, mixed
+or incomplete alternatives reject at payload validation, before request closure,
+and take the existing bounded protocol-correction path. Schema examples are
+checked against native decoding; integer spelling uses the payload validator's
+exact arithmetic. Native/persisted JSON is unchanged; no legacy model reader
+or schema-profile extension is introduced.
 
 `test-reference-model-input` checks packets, exact values, scope membership and
 allocation failures; `test-model-request-workflow` checks native packet transport
 through the fake provider and rejects packet substitution/schema rejection.
-These are boundary tests, not an end-to-end Specify completion claim.
+The fake-provider generation test covers complete read/generate/review paths,
+two business examples, protocol correction/exhaustion and semantic uncertainty.
+This is not artifact publication or an end-to-end Specify completion claim.
 
 ## 4. Required logical coverage
 
@@ -763,6 +787,14 @@ separate overwrite approval, or add a filename suffix. This uses the shared
 rerun rule in Design Section 23.2; it never deletes the feature directory or
 its clarification history.
 
+Unresolved `clarify/SNN.md` forms MUST also be completely overwritten from
+current validated state at the same paths on rerun, including their editable
+regions and any unsubmitted draft answer. Reuse the same subject ID, not the
+old form bytes, even when the question is unchanged. This replacement also
+applies to a clarification publication ending in `needs_user`; it does not
+publish a partial specification. Design Section 23.2 applies this rule to all
+workflow executions and every registered clarification family.
+
 The engine MUST NOT overwrite user-closed `clarify/SNN.md` files. Retain them
 byte-for-byte and consume applicable validated answers before generation.
 Accept a valid close into canonical state without rewriting its submitted form. A pending,
@@ -813,16 +845,21 @@ continuation lines have two structural indentation spaces, removed on parse.
 Record order is section order, preserving order within each family. The shared
 Markdown scanner owns code-span recognition. Parsing captures text/spans, not
 NFC normalization, provenance, applicability, semantic adequacy or stage success.
-H-008 implements the shared authority boundary (§3.10); H-010/H-012 still own
-generation validation and publication integration.
+H-008/H-010 connect the shared gate and generation validation; H-012 still owns publication.
 
-### 5.7 Initial generation validation (partial H-010)
+### 5.7 Generation, coverage and repair (H-010)
 
 The native generation candidate is a closed content-or-clarification union.
 Content units are a feature brief (title, description, primary goal), primary
 story, entity applicability, or one registered record family. Native validation
 normalizes typed text, rejects the wrong family and identical normalized records,
 and keeps questions outside specification content.
+
+The model's `kind` selects `brief`, `primary_user_story`, `entities`, `records`
+or `clarification`, with that variant's fields directly, without the IR's `content`
+wrapper. Repair uses the same compact codec, and its expected-value guidance
+uses the response wire shape. Existing provenance, repair and gate validators
+remain the owners of meaning and authority.
 
 The initial reference-only provenance join requires retained current claims and
 their stable unique citation union. Exact copies contain only a valid token and
@@ -831,12 +868,24 @@ clarification-response IDs are rejected; applicable-answer integration remains
 with H-011. Engine code allocates monotonic per-family record IDs; no model
 identity, completion, approval or artifact-path field is accepted.
 
-These are mechanical domain-library boundaries, tested by
-`test-specification-generation`, not a registered generation workflow or semantic
-approval. Model input/resources, coverage accounting, H-008 semantic-evidence
-production, unit-authorized repair and assembled-candidate validation remain
-open. Persistence, editable-ID reconciliation and publication are not implemented
-by these functions.
+Registered actions generate units sequentially through the generic model path.
+Every retained business claim maps to native content keys; non-spec context
+remains in identified reference signals. Every retained exact business token
+has an exact-copy target. Coverage is mechanical accounting, not semantic proof.
+Model review supplies scoped evidence for the shared gate before generation and
+after assembly, including the brief description/goal and every record field.
+
+An invalid mechanically repairable candidate authorizes one field or record in
+stable diagnostic order. The engine retains its owner, revision and old value;
+the model returns only the replacement. Merge preserves siblings, increments
+revision and repeats unit validation. Assembly revalidates all units, checks
+conditional entities and assigns IDs before coverage and final authority review.
+YAML's repair operation has an explicit bounded ceiling; exhaustion fails.
+No missing knowledge is replaced with a default or treated as deterministic proof.
+
+`test-specification-generation` and configured-root fake-provider tests cover
+these paths and negative cases. Applicable answers, persistence, editable-ID
+reconciliation and publication remain with H-011/H-012.
 
 ## 6. Diagrams
 
@@ -888,7 +937,9 @@ YAML definition.
 12. The supplied directory identifies the feature; reference changes do not select
     another directory or require an ownership lookup. A Specify rerun MUST overwrite its existing registered output files at the
     same paths under Design Section 23.2, without skipping, renaming, or separate
-    overwrite approval. It MUST NOT overwrite user-closed clarification files;
+    overwrite approval. Unresolved clarification forms MUST be completely
+    overwritten at the same IDs/paths, including open answer drafts. It MUST NOT
+    overwrite user-resolved clarification files;
     they remain byte-identical through generation, reference refresh,
     failed/cancelled runs, and commit; applicable validated
     answers are reused and no duplicate question bypasses that protection.
@@ -937,9 +988,12 @@ YAML definition.
   triplet; and
 - golden tests prove byte-stable `spec.md`, mandatory sidecar generation, and
   atomic commit before `specified`.
-- rerun tests prove existing outputs are overwritten at the same paths without
-  skipping, renaming, or separate overwrite approval, while preserving pending
-  and accepted user-closed forms, including when another question is opened;
+- rerun tests prove all registered replaceable outputs and unresolved forms are
+  completely overwritten at the same paths without append, merge, skipping,
+  renaming, or separate overwrite approval. Cover unchanged questions, open
+  answer drafts, shorter replacements with no retained trailing bytes, and
+  stable subject IDs, while preserving pending and accepted user-closed forms,
+  including when another question is opened;
   stale/invalid submissions and changed answer applicability block without rewriting, and
   a user close concurrent with commit cannot be lost.
 

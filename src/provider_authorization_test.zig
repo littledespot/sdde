@@ -23,7 +23,7 @@ test "preparation emits only a typed opaque reference through NodeDelta" {
     const outcome = try prepare_action.execute(facts, slot, .{});
     try std.testing.expect(outcome == .prepared);
     var delta = outcome.prepared;
-    var envelope = envelope_module.PipelineEnvelope.init(&.{preparation.value_schema});
+    var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{preparation.value_schema});
     defer envelope.deinit();
     defer envelope.discard(&delta);
     var writes: usize = 0;

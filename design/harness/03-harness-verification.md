@@ -122,8 +122,11 @@ Work:
 - Exercise success, malformed generation, real missing/conflicting authority,
   clarification handling, cancelled/failed execution and judge failure. Use
   separate negative fixtures rather than silently modifying `stories.md`.
-- Prove rerun replacement, protected closed clarification preservation and
-  rejection of stale-artifact evaluation after a failed/blocked rerun.
+- Prove complete rerun replacement of registered replaceable outputs and
+  unresolved clarification forms at the same IDs/paths, byte-identical
+  user-resolved form preservation, and rejection of stale-artifact evaluation
+  after a failed/blocked rerun. Include shorter replacements, unsubmitted
+  drafts and an unrelated registered workflow in the shared-boundary tests.
 
 Acceptance:
 

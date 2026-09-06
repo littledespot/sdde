@@ -29,9 +29,11 @@ pub const ProjectSpecification = struct {
         const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch return error.OperationExecutionFailed;
         const references = @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted) catch return error.OperationExecutionFailed;
         const content = if (input.step.data.contains(.identified_specification_content)) owned.read(&input.step.data, content_schema, .content) catch return error.OperationExecutionFailed else null;
+        const current = if (input.step.data.contains(.specification_generation_session)) try @import("specification_workflow.zig").readSession(&input.step.data) else null;
+        const brief = if (current) |value| if (value.units[0]) |checked| checked.response.content.brief else null else null;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted, content) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
+        owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted, content, brief) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
         return owned.publish(self.allocator, inputs_schema, owner, .ok) catch return error.OperationExecutionFailed;
     }
 };

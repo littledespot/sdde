@@ -58,6 +58,7 @@ pub const Invocation = struct {
             .parser = .{ .allocator = context.?.allocator },
             .validator = .{ .allocator = context.?.allocator },
             .arguments = arguments,
+            .envelope = .init(context.?.allocator, &schemas.schemas),
         };
         defer runner.envelope.deinit();
         if (orchestrator.run(.{ .context = &runner, .parse_fn = InvocationRunner.parse, .validate_fn = InvocationRunner.validate }) != .ok) return error.OperationExecutionFailed;
@@ -74,7 +75,7 @@ const InvocationRunner = struct {
     parser: ParseInvocation,
     validator: ValidateArguments,
     arguments: []const []const u8,
-    envelope: Envelope = .init(&schemas.schemas),
+    envelope: Envelope,
 
     fn parse(context: *anyopaque) children.Outcome {
         const self: *@This() = @ptrCast(@alignCast(context));

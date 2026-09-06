@@ -92,6 +92,14 @@ closed rejection reason. These response operations are YAML-registered.
 The registered Bedrock native profile checks exact schema representability;
 prompt-only mode retains the full engine schema without that native check.
 
+Model-facing native candidate decoders share `model_candidate_json.zig` for
+ADR 0006's closed `kind` alternatives. It reuses strict JSON checks and exact
+integer arithmetic from payload validation; it does not admit native one-key
+union wrappers as a second response format. Workflow schemas reject malformed
+alternatives before request closure, where explicit protocol retry is available.
+Tests bind schema-valid examples to the native candidate types. This does not
+change persisted JSON or turn structural validity into semantic authority.
+
 **Accepted and implemented YAML preparation:** [ADR 0012](../decisions/0012-workflow-owned-model-request.md)
 replaces mandatory SDD ownership for generic requests and per-consumer binding
 selection. The native registry exposes `build-initial-model-request-identity-ledger`,
@@ -346,6 +354,23 @@ Original candidate, protocol and provider evidence remain owned and unchanged.
 No tokens are charged, provider calls made, leases renewed or records persisted.
 Closure can run after the provider deadline or at token-budget exhaustion;
 runtime cancellation still abandons execution without a hidden closure call.
+
+**Implemented explicit protocol correction and retirement:** the originating
+`assign-model-request-id` may select a workflow-owned `protocol-prompt`.
+`build-model-protocol-retry` accepts only the exactly associated rejected
+response while that logical request remains invoked. It preserves the original
+schema, unit, model selection and request ID, appends only the selected
+correction guidance, native diagnostic and minimum schema example, and retires
+the rejected attempt. `check-model-request-phase` lets YAML skip a duplicate
+logical invocation transition while every provider attempt still receives new
+accounting/authorization. The correction step requires `retry-limit: 0`;
+repeated failure exhausts that operation without another provider call.
+
+After explicit closure, `retire-model-input` and `retire-model-request` release
+transport slots. Captured evidence retains current domain-source lineage under
+the shared gate contract (Design §12.8); no filesystem snapshot or hidden retry
+is introduced. F0100's generation-only YAML uses this same production path with
+fake-provider regression evidence; it is not a live-provider acceptance result.
 
 A consumer declares the prepared-request and request-ledger data dependencies;
 the runner supplies the retained binding, not a new selection for the consumer

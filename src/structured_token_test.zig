@@ -141,14 +141,14 @@ test "classification is total and scoped; irrelevant is explicit and blocked sta
 test "closed classifications never accept model bytes canonical IDs or mismatched kind fields" {
     const id = "\"token_candidate_id\":{\"source_id\":{\"ordinal\":1},\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":1}";
     for ([_][]const u8{
-        "{" ++ id ++ ",\"decision\":\"preserve\"}",
-        "{" ++ id ++ ",\"decision\":\"preserve\",\"kind\":\"invented\"}",
-        "{" ++ id ++ ",\"decision\":\"irrelevant\",\"kind\":null}",
-        "{" ++ id ++ ",\"decision\":\"irrelevant\",\"kind\":\"exact_identifier\"}",
-        "{" ++ id ++ ",\"decision\":\"irrelevant\",\"bytes\":\"rewritten\"}",
-        "{" ++ id ++ ",\"decision\":\"irrelevant\",\"citation_id\":1}",
-        "{" ++ id ++ ",\"decision\":\"irrelevant\",\"token_id\":1}",
-        "{" ++ id ++ ",\"decision\":\"irrelevant\",\"decision\":\"preserve\"}",
+        "{\"kind\":\"preserve\",\"preserve\":{" ++ id ++ "}}",
+        "{\"kind\":\"preserve\",\"preserve\":{" ++ id ++ ",\"kind\":\"invented\"}}",
+        "{\"kind\":\"irrelevant\",\"source_id\":{\"ordinal\":1},\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":1,\"bytes\":\"rewritten\"}",
+        "{\"kind\":\"irrelevant\",\"source_id\":{\"ordinal\":1},\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":1,\"citation_id\":1}",
+        "{\"kind\":\"irrelevant\",\"source_id\":{\"ordinal\":1},\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":1,\"token_id\":1}",
+        "{\"kind\":\"irrelevant\",\"kind\":\"preserve\"}",
+        "{\"kind\":null}",
+        "{\"kind\":\"exact_identifier\"}",
     }) |choice| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();

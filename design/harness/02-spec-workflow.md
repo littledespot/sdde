@@ -15,8 +15,8 @@ not waived by that exclusion.
 ## H-007 — Align the existing specification contract
 
 **Status:** Native content contract and mechanical Markdown codec implemented;
-the shared authority boundary is implemented in H-008; generation/identity and
-publication integration remain in H-010/H-012.
+the shared authority boundary is implemented in H-008, generation/identity in
+H-010, and publication integration remains H-012.
 **Owner:** F0100 and
 canonical specification types. **Dependencies:** none; independent of H-001.
 
@@ -95,7 +95,7 @@ evidence; semantic findings remain explicitly model-assisted.
 `zig build test-required-authority` covers schema-derived Specify fields,
 reference conflicts/preservation, unrelated policy/decomposition kinds,
 closed scripted observations, YAML gate bypasses, staleness and allocation
-failures. H-009/H-010 still supply the production semantic evidence producers;
+failures. H-009/H-010 now supply the production semantic evidence producers;
 H-011 consumes the typed gaps, and H-012/H-013 integrate publication and the
 complete workflow. This ticket does not claim those workflows execute yet.
 
@@ -130,22 +130,28 @@ Acceptance:
 
 ## H-009 — Connect reference operations to model execution
 
-**Status:** Partial — native packet/result bridges and fake-provider transport
-tests exist; the production reference/model workflow is not complete. **Owner:** registered reference/model
+**Status:** Implemented; final offline verification is recorded below. **Owner:** registered reference/model
 operations. **Dependencies:** reuse current generic request lifecycle work;
 H-008 is required at applicable production authority gates.
 
-Implemented: engine-owned chunk/reconciliation packets, exact request/result
-association, total sequential extraction collection, native operation bindings,
-non-terminal `more` progress, and per-request initial-attempt classification
-without resetting the operation ceiling.
+Implemented: engine-owned packets and exact result association, sequential
+extraction and hierarchical reconciliation, concise workflow-owned resources,
+explicit transport retirement, bounded protocol correction and H-008 evidence
+integration. The generation-only [YAML](../workflows/spec-generation.workflow.yaml)
+runs through the ordinary compiler/registry/runner and existing provider port.
+The production provider integration remains the configured Bedrock adapter;
+OpenAI judging is a separate harness concern.
 
-Still required: workflow resources, bounded production iteration/retry and
-request retirement, complete fake-provider reference-pipeline tests, and H-008
-integration. Current gate lineage treats transient request generations as
-continuing authority, so progressing to another request invalidates descendants.
-The proposed shared snapshot boundary retains validated evidence and checks
-current domain authorities; approval is pending. No freshness rule is bypassed.
+Final response-contract alignment uses the accepted ADR 0006 `kind` alternatives
+in workflow schemas and one shared native candidate codec. Malformed root or
+nested variants reject before request closure and use the existing YAML retry;
+no permissive one-key union schema or legacy model reader remains.
+
+Native captured values retain their immutable evidence and current domain
+dependencies. Retiring a request does not invalidate accepted evidence; changing
+an underlying reference or candidate still invalidates dependent gates.
+Runner bookkeeping is not semantic authority. No persisted snapshot,
+transaction directory, recovery mechanism or source-tree fallback was added.
 
 Work:
 
@@ -162,38 +168,45 @@ Work:
 
 Acceptance:
 
-- [ ] Fake provider responses traverse the same domain pipeline as live ones.
-- [ ] Production generation/reconciliation does not depend on a fixture-name
+- [x] Fake provider responses traverse the same domain pipeline as live ones.
+- [x] Production generation/reconciliation does not depend on a fixture-name
   branch, source-tree fallback or hidden built-in workflow graph.
-- [ ] Protocol failures, budget exhaustion and semantic conflicts retain their
+- [x] Protocol failures, budget exhaustion and semantic conflicts retain their
   distinct outcomes. No failed chunk or unresolved conflict disappears.
-- [ ] Source-preserved `Hello, World!` reaches downstream data unchanged.
+- [x] Source-preserved `Hello, World!` reaches downstream data unchanged.
 
 Targets: native model/reference operation bindings, F0006 and F0100; reuse the
 existing targeted extraction/reconciliation/provider tests before extending them.
 
 ## H-010 — Generate and validate specification content
 
-**Status:** Partial — initial typed unit/provenance/ID domain boundaries exist;
-production generation is not complete. **Owner:** registered specification actions and typed IR.
+**Status:** Implemented; final offline verification is recorded below.
+**Owner:** registered specification actions and typed IR.
 **Dependencies:** H-007–H-009.
 
-Implemented: closed brief/story/entity/record-family candidates, separate typed
-clarification needs, current retained-claim/citation-union joins, shared typed-text
-validation, exact-token references, duplicate normalized record rejection and
-engine-owned monotonic initial IDs. Tests cover all families and unrelated
-business examples.
+Implemented: registered brief/story/applicability/record-family generation,
+engine-owned IDs, retained-claim/citation joins, typed text and exact copies,
+total claim/token coverage, full assembled-candidate validation and model-assisted
+evidence through the shared required-authority gate. Brief description and
+primary goal are required review slots alongside title, story and applicability.
+Optional families may be empty; entities follow the evidence-backed decision.
 
-Still required: registered generation/model-input operations and resources,
-semantic evidence through H-008, complete claim/obligation coverage,
-unit-authorized bounded repair and assembled-candidate revalidation.
-Applicable clarification answers are not inferred from read-only forms.
+Repair replaces one engine-selected field or record after exact owner,
+revision and old-value checks. YAML bounds attempts; each merge repeats the
+owning validator and assembly repeats full-candidate validation. Unsupported
+knowledge remains a typed need/gap, not a repaired guess.
 
-Current boundary verification:
-`zig build test-reference-model-input test-specification-generation test-model-request-workflow verify --summary all`
-passed 111/111 build steps and 1,134/1,134 test executions, including lint,
-architecture and native-package smoke checks. `git diff --check` passed.
-No live model calls or end-to-end Specify completion are claimed.
+Protocol examples now pass both the workflow schema and native decoding. Tests
+cover empty/mixed/nested-invalid responses, unchanged request identity on retry,
+successful correction and exhaustion across extraction, reconciliation,
+generation, repair and support. JSON integer decoding reuses the schema
+validator's exact arithmetic; equivalent numeric spellings do not create a
+second schema/native mismatch. Native content/storage and semantic gates are unchanged.
+
+H-011 still owns applicable-answer consumption and protected forms. H-012
+owns rendering/publication; this generation-only definition writes no artifacts
+and does not mark a feature specified. Live generation and rubric scoring
+are not claimed by offline tests.
 
 Work:
 
@@ -208,13 +221,27 @@ Work:
 
 Acceptance:
 
-- [ ] Typed output covers the approved section families without invented filler.
-- [ ] Generator-supplied IDs, operational paths, unsupported source claims and
+- [x] Typed output covers the approved section families without invented filler.
+- [x] Generator-supplied IDs, operational paths, unsupported source claims and
   forged completion assertions cannot enter accepted workflow output.
-- [ ] Semantic principles/Node/Vitest preferences cannot invent business
+- [x] Semantic principles/Node/Vitest preferences cannot invent business
   requirements. The generation packet follows Specify's business boundary.
-- [ ] Fake tests cover supported content, malformed output, semantic uncertainty,
+- [x] Fake tests cover supported content, malformed output, semantic uncertainty,
   preservation and failed repair without fixture-specific success rules.
+
+Offline verification (2026-09-07):
+
+- `zig build test-model-candidate-json test-specification-generation test-reference-extraction test-reference-reconciliation test-structured-tokens --summary all`
+  — 15/15 steps, 226/226 test executions passed.
+- `zig build verify --summary all` — 104/104 steps, 889/889 tests passed,
+  including architecture/lint and native packaging. The packaged generation
+  definition/resources load from configured roots; absent credentials fail
+  closed without a live call. Fake-provider tests execute generation, repair and
+  the response-correction/exhaustion paths (24 scripted workflow scenarios).
+- `git diff HEAD --check` — passed.
+
+These checks do not grade business quality; that remains the LLM rubric
+evaluator. They do not claim H-011/H-012 publication or H-013 completion.
 
 ## H-011 — Complete specification clarification handling
 
@@ -222,10 +249,19 @@ Acceptance:
 clarification lifecycle with Specify registrations. **Dependencies:** H-008;
 H-010 supplies unit needs. Coordinate output handling with H-012.
 
+The trusted authentication mechanism for accepting new user submissions still
+needs selection. No concrete provider is implemented; read-only form validation
+does not authenticate the editor or invocation. User-close protection remains
+independent of that decision and of answer acceptance.
+
 Work:
 
 - Build/reuse stable subject-keyed `SNN` needs and controlled forms under
   `<paths.specs>/<feature>/clarify/`; never insert questions into `spec.md`.
+- Completely overwrite unresolved forms from current validated state on every
+  rerun at the same IDs/paths, including unsubmitted answer drafts. Reuse the
+  subject identity, not the old form bytes. This is the shared rule for all
+  workflow executions in Design §23.2 and ADR 0009.
 - Accept only current applicable authenticated answers/authority resolutions
   through the existing clarification contract, not a score or model assertion.
 - Preserve every user-closed form byte-for-byte, including stale or invalid
@@ -235,8 +271,11 @@ Work:
 
 Acceptance:
 
-- [ ] Repeated detection does not create duplicate subject IDs or overwrite a
-  user's answer. An applicable response is reused on a fresh run.
+- [ ] Repeated detection does not create duplicate subject IDs. Unresolved forms
+  are completely overwritten at the same paths, including unchanged questions
+  and unsubmitted drafts; a shorter replacement leaves no old trailing bytes.
+- [ ] A user-resolved form and its answer remain byte-identical. An applicable
+  validated response is reused on a fresh run.
 - [ ] Pending/stale/invalid closure and concurrent-close cases cannot overwrite
   the protected file or publish partial successful specification output.
 - [ ] The harness observes clarification separately from generation failure and
@@ -249,12 +288,14 @@ Acceptance:
 **Dependencies:** H-007/H-010; H-011 protection on clarification branches.
 
 The mechanical specification codec exists; full authority projection and
-publication do not. Publication also needs a governing decision: §25 requires
-all-or-nothing output across independently configured specs/workflow roots but
-forbids rollback/recovery machinery. Ordinary file writes cannot meet that
-failure/interruption guarantee. The proposed validate-first, overwrite-known-
-files, fail-without-success and fresh-rerun rule is awaiting user confirmation;
-no output-safety invariant has been silently relaxed.
+publication do not. The replacement rule is accepted in ADR 0009 and Design
+§23.2: every workflow completely overwrites its registered replaceable outputs
+and unresolved clarification forms, preserving user-resolved forms unchanged.
+The publication failure rule is now approved in ADR 0009 and Design §25:
+validate the complete output set before writing; a failed/interrupted write
+sequence may leave already-replaced files, but must not report success or record
+new successful completion. A fresh rerun replaces outputs from the beginning.
+User-closed forms remain protected; no rollback/recovery subsystem is permitted.
 
 Work:
 
@@ -264,8 +305,11 @@ Work:
   feature-log evidence using existing path/identity owners.
 - Publish only complete successful workflow output. Preserve the explicit
   clarification persistence exception and abandon unsuccessful candidates.
-- Overwrite existing registered workflow outputs at the same paths on success,
-  including previously edited specs; never overwrite user-closed clarifications.
+- Completely overwrite all registered replaceable workflow outputs at the same
+  paths on success, including previously edited specs. Completely overwrite
+  unresolved clarification forms on their publication branch at the same
+  IDs/paths; never overwrite user-resolved forms. Apply the shared rule to every
+  workflow execution, without append, merge, skip, suffix or extra approval.
 
 Acceptance:
 
@@ -275,6 +319,12 @@ Acceptance:
   pass before publication; failed runs do not expose partial success.
 - [ ] Rerun, interruption, write failure and protected-closure tests cover the
   whole output boundary without a transaction directory/WAL/checkpoint layer.
+  Fail each publication write: already-replaced files may remain, but no new
+  successful completion is recorded; a fresh rerun replaces all outputs.
+- [ ] Specify and an unrelated registered workflow prove complete replacement,
+  including unresolved forms and shorter output, while user-resolved forms
+  remain byte-identical. Clarification pauses replace unresolved forms without
+  exposing partial successful specification output.
 - [ ] Configured `paths.specs` supplies the root; neither caller nor model
   repeats/hard-codes `specs/` or chooses artifact paths.
 

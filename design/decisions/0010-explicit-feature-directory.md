@@ -45,6 +45,9 @@ Reference changes still undergo validation and downstream invalidation.
 No registry membership or separate overwrite approval is required to replace
 the selected workflow's known outputs.
 
+Every rerun completely overwrites those replaceable outputs and unresolved
+clarification forms at the same registered paths, retaining clarification IDs,
+under [ADR 0009's shared replacement rule](0009-atomic-workflow-execution.md#rerun-replacement-rule-accepted-2026-09-07).
 User-closed clarification files remain byte-for-byte unchanged, including stale
 or invalid submissions. Reuse applicable validated answers and recheck protection
 before writing. Unrelated files remain outside the write set. Publication and

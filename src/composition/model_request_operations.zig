@@ -19,7 +19,8 @@ const request_termination = @import("../application/model_request_termination_wo
 const count_observation = @import("../application/model_token_count_observation_workflow.zig");
 
 const transport = @import("../application/model_transport_workflow.zig");
-pub const count = 24;
+const protocol = @import("../application/model_protocol_retry_workflow.zig");
+pub const count = 25;
 pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema, invocation.count_schema, count_observation.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
@@ -46,7 +47,8 @@ pub const Assembly = struct {
     complete_count_operation: completion.CompleteCount,
     complete_count_request: request_completion.CompleteCount,
     retire_request: transport.Retire(.request),
-    retire_attempt: transport.Retire(.rejected_attempt),
+    protocol_retry: protocol.Build,
+    check_phase: protocol.Check,
     retire_input: transport.Retire(.input),
     entries: [count]operations.Entry,
 
@@ -74,7 +76,8 @@ pub const Assembly = struct {
             .complete_count_operation = .{},
             .complete_count_request = .{ .allocator = allocator },
             .retire_request = .{},
-            .retire_attempt = .{},
+            .protocol_retry = .{ .allocator = allocator },
+            .check_phase = .{},
             .retire_input = .{},
             .entries = undefined,
         };
@@ -101,7 +104,8 @@ pub const Assembly = struct {
             entry(completion.CompleteCount, &self.complete_count_operation),
             entry(request_completion.CompleteCount, &self.complete_count_request),
             entry(transport.Retire(.request), &self.retire_request),
-            entry(transport.Retire(.rejected_attempt), &self.retire_attempt),
+            entry(protocol.Build, &self.protocol_retry),
+            entry(protocol.Check, &self.check_phase),
             entry(transport.Retire(.input), &self.retire_input),
         };
     }

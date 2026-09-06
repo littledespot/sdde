@@ -27,10 +27,7 @@ pub fn wire(allocator: std.mem.Allocator, body: []const u8, choices: []const ext
     defer document.deinit();
     var items: std.json.Array = .init(allocator);
     for (choices) |choice| {
-        const bytes = switch (choice) {
-            .preserve => |selection| try std.json.Stringify.valueAlloc(allocator, .{ .token_candidate_id = selection.token_candidate_id, .decision = "preserve", .kind = selection.kind }, .{}),
-            .irrelevant => |id| try std.json.Stringify.valueAlloc(allocator, .{ .token_candidate_id = id, .decision = "irrelevant" }, .{}),
-        };
+        const bytes = try @import("../domain/model_candidate_json.zig").encode(extraction.tokens.Classification, allocator, choice);
         const item = try std.json.parseFromSliceLeaky(std.json.Value, allocator, bytes, .{ .allocate = .alloc_always });
         try items.append(item);
     }

@@ -28,7 +28,7 @@ pub const Initialize = struct {
 
     pub fn invoke(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const owner = self.action.execute(self.allocator, .{ .initial_generation = true, .semantic_review = true }) catch return error.OperationExecutionFailed;
+        const owner = self.action.execute(self.allocator, .{ .initial_generation = true, .semantic_review = true, .atomic_repair = true }) catch return error.OperationExecutionFailed;
         errdefer identity.deinitOwner(owner);
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(ledger_schema.key)] = adoptLedger(self.allocator, owner) catch return error.OperationExecutionFailed;
@@ -44,6 +44,7 @@ pub const Assign = struct {
         result.parameters = &([_]operation.ParameterDescriptor{
             .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
             .{ .id = "prompt", .kind = .resource, .resource_kind = .prompt, .required = true, .workflow_definition_safe = true },
+            .{ .id = "protocol-prompt", .kind = .resource, .resource_kind = .prompt, .required = false, .workflow_definition_safe = true },
             .{ .id = "result-schema", .kind = .resource, .resource_kind = .result_schema, .required = true, .workflow_definition_safe = true },
             .{ .id = "input", .kind = .resource, .resource_kind = .data, .required = false, .workflow_definition_safe = true },
         } ++ @import("../domain/workflow_model.zig").parameters);
@@ -64,7 +65,7 @@ pub const Assign = struct {
         if (packet != null and static_input != null) return error.OperationExecutionFailed;
         const assignment = self.action.execute(current, current.revision(), if (packet) |value| value.unit() else .workflow_step, selected.operation_id, if (packet) |value| value.purpose() else .initial_generation) catch return error.OperationExecutionFailed;
         defer identity.deinitOwner(assignment.owner);
-        const request = handoff.assign(self.allocator, assignment.owner, assignment.model_request_id, selected.*, prompt, result, if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null) catch return error.OperationExecutionFailed;
+        const request = handoff.assign(self.allocator, assignment.owner, assignment.model_request_id, selected.*, prompt, result, if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null, resource(step, "protocol-prompt")) catch return error.OperationExecutionFailed;
         errdefer handoff.destroy(request);
         identity.retainOwner(assignment.owner) catch return error.OperationExecutionFailed;
         const ledger_value = adoptLedger(self.allocator, assignment.owner) catch {
@@ -136,7 +137,7 @@ fn descriptor(action: pipeline.NodeContract, requires: []const pipeline.DataKey,
     return .{ .id = action.id, .kind = .step, .requires = requires, .produces = produces, .replaces = replaces, .outcomes = &.{ .ok, .failed }, .side_effect = action.side_effect };
 }
 
-fn resource(input: operations.StepInput, parameter_id: []const u8) ?compilation.CompiledResource {
+pub fn resource(input: operations.StepInput, parameter_id: []const u8) ?compilation.CompiledResource {
     for (input.step.parameters) |parameter| {
         if (!std.mem.eql(u8, parameter.id.bytes, parameter_id) or parameter.value != .resource) continue;
         for (input.resources) |value| if (std.mem.eql(u8, value.id.bytes, parameter.value.resource.bytes)) return value;
@@ -159,7 +160,7 @@ pub fn publishPacket(allocator: std.mem.Allocator, packet: *packets.Packet) oper
     return .{ .outcome = .ok, .delta = delta };
 }
 
-fn adoptRequest(allocator: std.mem.Allocator, schema: data.Schema, request: *handoff.Request) values.Error!*data.Value {
+pub fn adoptRequest(allocator: std.mem.Allocator, schema: data.Schema, request: *handoff.Request) values.Error!*data.Value {
     return values.adopt(allocator, schema, handoff.Request, handoff.Request, request, handoff.view, handoff.destroy, null);
 }
 

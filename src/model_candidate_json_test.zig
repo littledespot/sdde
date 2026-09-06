@@ -1,0 +1,70 @@
+const std = @import("std");
+const codec = @import("domain/model_candidate_json.zig");
+const Choice = union(enum) {
+    count: struct { amount: u32 },
+    note: struct { text: []const u8 },
+};
+const Document = struct { left: Choice, right: Choice, history: []const Choice };
+const sample: Document = .{ .left = .{ .count = .{ .amount = 7 } }, .right = .{ .note = .{ .text = "Café" } }, .history = &.{.{ .count = .{ .amount = 9 } }} };
+
+test "compact model JSON keeps sibling objects intact and round trips native unions" {
+    try roundTrip(std.testing.allocator);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "7", "7.0", "70e-1" }) |number| {
+        const bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"count\",\"amount\":{s}}}", .{number});
+        try std.testing.expectEqual(@as(u32, 7), (try codec.decode(Choice, a, bytes)).count.amount);
+    }
+    const Collision = union(enum) { selected: struct { kind: enum { business } }, absent: struct { reason: []const u8 } };
+    const value: Collision = .{ .selected = .{ .kind = .business } };
+    try std.testing.expectEqualDeep(value, try codec.decode(Collision, a, try codec.encode(Collision, a, value)));
+}
+
+fn roundTrip(allocator: std.mem.Allocator) !void {
+    const wire = try codec.encode(Document, allocator, sample);
+    defer allocator.free(wire);
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    try std.testing.expectEqualDeep(sample, try codec.decode(Document, arena.allocator(), wire));
+}
+
+test "compact model JSON rejects empty mixed legacy and malformed nested variants" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "{}",                                                             "{\"count\":{\"amount\":7}}",          "{\"kind\":\"count\"}",
+        "{\"kind\":\"count\",\"amount\":7,\"text\":\"foreign variant\"}", "{\"kind\":\"unknown\",\"amount\":7}", "{\"kind\":\"count\",\"kind\":\"note\",\"amount\":7}",
+        "{\"kind\":\"count\",\"amount\":\"7\"}",                          "{\"kind\":\"count\",\"amount\":7.1}", "{\"kind\":\"count\",\"amount\":-1}",
+        "{\"kind\":\"count\",\"amount\":4294967296}",                     "{\"kind\":\"note\",\"text\":[65]}",
+    }) |bytes| {
+        try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Choice, a, bytes));
+        const nested = try std.fmt.allocPrint(a, "{{\"left\":{s},\"right\":{{\"kind\":\"note\",\"text\":\"ok\"}},\"history\":[]}}", .{bytes});
+        try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Document, a, nested));
+    }
+}
+
+test "compact candidate encoding and decoding release every failed allocation" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, roundTrip, .{});
+}
+
+test "every specification model schema alternative supplies a native-decodable protocol example" {
+    inline for (.{ "extraction", "reconciliation", "generation", "repair", "support" }) |name| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/" ++ name ++ ".schema.json", a, .limited(@import("domain/model_result_schema.zig").max_bytes));
+        var adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+        const schema = try adapter.compiler().compile(a, bytes);
+        try @import("model_payload_schema_test.zig").checkDocument(bytes, .{ .bytes = "{}", .rejection = .missing_required_property });
+        const roots = if (schema.root().* == .one_of) schema.root().one_of else &.{schema.root()};
+        for (roots) |root| {
+            const minimum = try @import("domain/model_protocol_retry.zig").example(a, root);
+            const example = try std.json.Stringify.valueAlloc(a, minimum, .{});
+            try @import("model_payload_schema_test.zig").checkDocument(bytes, .{ .bytes = example });
+            const T = comptime if (std.mem.eql(u8, name, "extraction")) @import("domain/reference_extraction_parser.zig").Response else if (std.mem.eql(u8, name, "reconciliation")) @FieldType(@import("domain/reference_reconciliation.zig").Parsed, "proposal") else if (std.mem.eql(u8, name, "generation")) @import("domain/specification_generation.zig").ModelResponse else if (std.mem.eql(u8, name, "repair")) @import("domain/specification_repair.zig").Replacement else @import("domain/specification_support.zig").Review;
+            _ = try codec.decode(T, a, example);
+        }
+    }
+}

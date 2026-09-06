@@ -11,7 +11,7 @@ test "sealed native results keep identity and have one owner on apply discard an
             const owner = try Owner.create(std.testing.allocator, &destroyed);
             const schema = values.schema(.valid_toolchain, T, 1, @sizeOf(Owner));
             const native = try values.adopt(std.testing.allocator, schema, T, Owner, owner, Access(T).get, Owner.destroy, @sizeOf(Owner));
-            var store = envelope.PipelineEnvelope.init(&.{schema});
+            var store = envelope.PipelineEnvelope.init(std.testing.allocator, &.{schema});
             defer store.deinit();
             const produce: pipeline.NodeContract = .{ .id = "test.native", .kind = .action, .requires = &.{}, .produces = &.{schema.key}, .side_effect = .none };
             var delta: pipeline.NodeDelta = .{};

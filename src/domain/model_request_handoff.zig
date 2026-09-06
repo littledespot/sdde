@@ -26,6 +26,10 @@ pub const Request = opaque {
         return storage(self).prompt.content.prompt;
     }
 
+    pub fn protocolPrompt(self: *const Request) ?[]const u8 {
+        return if (storage(self).protocol_prompt) |resource| resource.content.prompt else null;
+    }
+
     pub fn input(self: *const Request) ?[]const u8 {
         return switch (storage(self).input orelse return null) {
             .resource => |resource| resource.content.data,
@@ -69,6 +73,7 @@ const Storage = struct {
     id: *const identity.ModelRequestId,
     binding: binding_module.ValidatedProviderModelBinding,
     prompt: compilation.CompiledResource,
+    protocol_prompt: ?compilation.CompiledResource,
     result: compilation.CompiledResource,
     input: ?Input,
     phase: union(enum) {
@@ -80,7 +85,8 @@ const Storage = struct {
 
 pub const Error = packets.Error || preparation.ValidationError;
 
-pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *const identity.ModelRequestId, selected: binding_module.ValidatedProviderModelBinding, prompt: compilation.CompiledResource, result: compilation.CompiledResource, input: ?Input) Error!*Request {
+pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *const identity.ModelRequestId, selected: binding_module.ValidatedProviderModelBinding, prompt: compilation.CompiledResource, result: compilation.CompiledResource, input: ?Input, protocol_prompt: ?compilation.CompiledResource) Error!*Request {
+    if (protocol_prompt) |resource| if (resource.content != .prompt) return error.ModelRequestAssociationInvalid;
     if (prompt.content != .prompt or result.content != .result_schema or
         (input != null and input.? == .resource and input.?.resource.content != .data) or
         !identity.ledger(ledger_owner).containsRequest(id) or
@@ -95,6 +101,7 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         .id = id,
         .binding = selected,
         .prompt = prompt,
+        .protocol_prompt = protocol_prompt,
         .result = result,
         .input = input,
         .phase = .assigned,

@@ -464,6 +464,21 @@ table. A sealed result carries a lease reference or closed failure/cancellation
 facts; publication and consumption checks retain the same request association.
 No provider call, refresh, retry or I/O is implicit.
 
+The native generation bindings retain immutable model evidence across explicit
+request retirement. Each native data schema declares current authority,
+captured evidence or runner execution control; YAML cannot assign that role.
+Captured evidence expands to its current domain-source lineage. A changed
+source or mixed-generation join invalidates the gate, while retiring completed
+transport does not. Gate authority itself must use current schemas.
+
+`check-model-request-phase`, `build-model-protocol-retry`,
+`retire-model-input` and `retire-model-request` expose explicit lifecycle
+coordination without a built-in workflow. Protocol guidance is selected once
+by the originating assignment's optional `protocol-prompt` resource; consumers
+cannot replace resources, model controls or slots. Retry preparation replaces
+only the prepared transport and retires the rejected attempt, retaining the
+logical request. Its required `retry-limit: 0` permits one visit.
+
 `advance-model-request-lifecycle` declares a ledger replacement and explicit
 `transition: invoked`. Its compiled contract requires the retained request,
 attempt, assignment and authorization result, permits no operational capability

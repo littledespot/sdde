@@ -11,20 +11,20 @@ const account = @import("actions/reference/validate_reference_extraction_account
 const text_fixture = @import("test_fixtures/reference_text.zig");
 const token_fixture = @import("test_fixtures/reference_tokens.zig");
 
-pub const no_claim = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"literal\":{\"value\":\"This chunk contains no feature claims.\"}}]},\"token_classifications\":[]}";
+pub const no_claim = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"kind\":\"literal\",\"value\":\"This chunk contains no feature claims.\"}]},\"token_classifications\":[]}";
 
 pub fn reply(allocator: std.mem.Allocator, chunk: evidence.Chunk, text: []const u8) ![]const u8 {
     const claim = .{
-        .content = .{ .kind = "business", .text = extraction.text.BusinessText{ .segments = &.{.{ .literal = .{ .value = text } }} } },
+        .content = extraction.ProposalContent{ .business = .{ .segments = &.{.{ .literal = .{ .value = text } }} } },
         .citations = [_]evidence.CitationProposal{.{ .source_id = chunk.source_id, .block_id = chunk.block_id, .location = chunk.span, .verbatim = null }},
     };
-    return std.json.Stringify.valueAlloc(allocator, .{ .kind = "claims", .claims = &.{claim}, .token_classifications = [0]struct {}{} }, .{});
+    return @import("domain/model_candidate_json.zig").encode(@import("domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{ .content = claim.content, .citations = &claim.citations }}, .token_classifications = &.{} } });
 }
 pub fn passiveReply(allocator: std.mem.Allocator, chunk: evidence.Chunk, ordinal: u32) ![]const u8 {
-    return std.json.Stringify.valueAlloc(allocator, .{ .kind = "claims", .claims = &.{.{
-        .content = .{ .kind = "business", .text = extraction.text.BusinessText{ .segments = &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = ordinal } } }} } },
-        .citations = [_]evidence.CitationProposal{.{ .source_id = chunk.source_id, .block_id = chunk.block_id, .location = chunk.span, .verbatim = null }},
-    }}, .token_classifications = [0]struct {}{} }, .{});
+    return @import("domain/model_candidate_json.zig").encode(@import("domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{
+        .content = .{ .business = .{ .segments = &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = ordinal } } }} } },
+        .citations = &.{.{ .source_id = chunk.source_id, .block_id = chunk.block_id, .location = chunk.span, .verbatim = null }},
+    }}, .token_classifications = &.{} } });
 }
 fn raw(inputs: evidence.Inputs, index: usize, bytes: []const u8) extraction.RawResult {
     return .{ .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[index].id }, .result = .{ .response = bytes } };
@@ -106,7 +106,7 @@ test "positive no claim evidence and valid citations are mandatory" {
     var ids: fixture.IdSource = .{};
     const inputs = try fixture.prepare(allocator, &ids, try ingest(allocator, "unicode.md", "Café\r\n"));
     try std.testing.expectError(error.InvalidReferenceExtraction, finish(allocator, inputs, &.{raw(inputs, 0, "{\"kind\":\"claims\",\"claims\":[],\"token_classifications\":[]}")}));
-    const empty_reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"literal\":{\"value\":\"  \"}}]},\"token_classifications\":[]}";
+    const empty_reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"kind\":\"literal\",\"value\":\"  \"}]},\"token_classifications\":[]}";
     try std.testing.expectError(error.InvalidTypedText, finish(allocator, inputs, &.{raw(inputs, 0, empty_reason)}));
     const parsed = try parse.execute(allocator, .{ .entries = &.{raw(inputs, 0, try reply(allocator, inputs.chunks.entries[0], "claim"))} });
     var entry = parsed.entries[0];

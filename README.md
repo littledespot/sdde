@@ -10,9 +10,19 @@ the initial workflow suite, not a fixed engine registry.
 
 The accepted execution contract is [one atomic workflow from beginning to
 end](design/decisions/0009-atomic-workflow-execution.md). Non-success abandons
-its candidate output; a new invocation starts at `start`. There are no
+its unpublished candidate output; a new invocation starts at `start`. Publication
+failure may leave already-replaced files, without reporting success or recording
+new successful completion. There are no
 project/feature transactions, provider-effect journals or saved continuations.
 Clarifications and relevant answers survive without duplication.
+
+Every workflow rerun completely overwrites its registered replaceable output
+files at the same paths. Unresolved clarification forms are also completely
+overwritten, retaining their subject IDs; forms the user has resolved remain
+byte-for-byte unchanged. This is the
+[shared rerun rule](design/design.md#232-workflow-reruns-and-protected-clarification-files),
+including for workflows outside the initial SDD suite. Publication and
+clarification-write integration remain implementation work.
 
 [Provider APIs own model-call size limits](design/decisions/0011-provider-owned-request-limits.md).
 SDDE adds no request/response byte ceilings or size-estimation gates. It records

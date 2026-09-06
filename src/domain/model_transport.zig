@@ -3,9 +3,9 @@ const pipeline = @import("pipeline.zig");
 pub const Retirement = enum { request, rejected_attempt, input };
 pub const requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result };
 pub const attempt_keys = [_]pipeline.DataKey{
-    .accounted_model_attempt, .terminal_provider_operation, .provider_authorization_result,
-    .provider_invocation_result, .provider_invocation_validation_result,
-    .model_envelope_result, .model_payload_schema_result,
+    .accounted_model_attempt,     .terminal_provider_operation,           .provider_authorization_result,
+    .provider_invocation_result,  .provider_invocation_validation_result, .model_envelope_result,
+    .model_payload_schema_result,
 };
 pub const request_keys = attempt_keys ++ [_]pipeline.DataKey{
     .assigned_model_request, .validated_model_request, .prepared_model_request,

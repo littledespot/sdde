@@ -31,12 +31,14 @@ pub fn initialize(feature: @import("feature_identity.zig").FeatureId, context: p
 }
 
 pub fn owner(allocator: std.mem.Allocator, current: Session) Error!identity.ImmutableUnitOwnerId {
-    return .{ .specification_unit = .{
-        .reference_state_id = .{ .bytes = current.reference_state.bytes },
-        // Feature directory is the feature identity; no second ownership registry.
-        .feature_request_id = .{ .bytes = current.feature.bytes },
-        .unit_slot_id = .{ .bytes = try std.fmt.allocPrint(allocator, "specification-{d}", .{current.completed + 1}) },
-    } };
+    return .{
+        .specification_unit = .{
+            .reference_state_id = .{ .bytes = current.reference_state.bytes },
+            // Feature directory is the feature identity; no second ownership registry.
+            .feature_request_id = .{ .bytes = current.feature.bytes },
+            .unit_slot_id = .{ .bytes = try std.fmt.allocPrint(allocator, "specification-{d}", .{current.completed + 1}) },
+        },
+    };
 }
 
 pub fn packet(allocator: std.mem.Allocator, current: Session, context: p.Context) Error!*packets.Packet {

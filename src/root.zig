@@ -27,6 +27,7 @@ test {
     _ = @import("reference_model_input_test.zig");
     _ = @import("specification_generation_test.zig");
     _ = @import("model_result_schema_test.zig");
+    _ = @import("model_candidate_json_test.zig");
     _ = @import("model_capabilities_test.zig");
     refAllDeclsRecursive(@This());
     _ = @import("llm_provider_registry_test.zig");

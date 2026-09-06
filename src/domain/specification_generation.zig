@@ -7,7 +7,7 @@ pub const spec = @import("specification.zig");
 const provenance = @import("specification_provenance.zig");
 pub const Error = provenance.Error || error{InvalidSpecificationUnit};
 pub const Unit = union(enum) { brief, primary_user_story, entities, records: spec.Kind };
-pub const Brief = struct { title: spec.AttributedValue, description: spec.AttributedValue, primary_goal: spec.AttributedValue };
+pub const Brief = spec.Brief;
 pub const Need = struct {
     reason: enum { missing, ambiguous, conflicting },
     question: spec.AttributedValue,
@@ -21,10 +21,34 @@ pub const Content = union(enum) {
 pub const Response = union(enum) { content: Content, clarification: Need };
 pub const Checked = struct { unit: Unit, response: Response };
 
+/// Compact model result, without the native IR's content wrapper.
+pub const ModelResponse = union(enum) {
+    brief: Brief,
+    primary_user_story: spec.AttributedValue,
+    entities: spec.ApplicabilityProposal,
+    records: struct { records: []const spec.RecordProposal },
+    clarification: Need,
+
+    pub fn from(response: Response) ModelResponse {
+        return switch (response) {
+            .clarification => |need| .{ .clarification = need },
+            .content => |content| switch (content) {
+                .records => |records| .{ .records = .{ .records = records } },
+                inline else => |value, tag| @unionInit(ModelResponse, @tagName(tag), value),
+            },
+        };
+    }
+};
+
 pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!Response {
-    return @import("strict_json.zig").decode(Response, allocator, bytes, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }) catch |err| return switch (err) {
+    const response = @import("model_candidate_json.zig").decode(ModelResponse, allocator, bytes) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         error.InvalidJsonDocument => error.InvalidSpecificationUnit,
+    };
+    return switch (response) {
+        .clarification => |need| .{ .clarification = need },
+        .records => |records| .{ .content = .{ .records = records.records } },
+        inline else => |value, tag| .{ .content = @unionInit(Content, @tagName(tag), value) },
     };
 }
 

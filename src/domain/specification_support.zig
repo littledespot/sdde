@@ -24,12 +24,12 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context
     if (inputs.projection != .specification or !a.contains(a.Authority, inputs.authorities, .{ .reference = all.state_id })) return error.InvalidRequiredAuthority;
     const slots = try scratch.alloc(struct { ordinal: u32, requirement: a.Id, permitted_not_applicable: ?a.Rule }, ledger.requirements.len);
     for (ledger.requirements, slots, 0..) |requirement, *slot, index| slot.* = .{ .ordinal = try r.ordinal(index), .requirement = requirement.seed.id, .permitted_not_applicable = if (requirement.registered_policy) |policy| policy.not_applicable else null };
-    const body = try std.json.Stringify.valueAlloc(scratch, .{ .requirements = slots, .candidate = inputs.specification, .claims = all.entries, .signals = context.references.records.signals, .conflicts = context.references.records.conflicts }, .{});
-return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_request_id = .{ .bytes = inputs.feature.bytes }, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = "source-support" } } }, .{ .semantic_review = .{ .bytes = "source-support" } });
+    const body = try std.json.Stringify.valueAlloc(scratch, .{ .requirements = slots, .candidate = inputs.specification, .brief = inputs.brief, .claims = all.entries, .signals = context.references.records.signals, .conflicts = context.references.records.conflicts }, .{});
+    return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_request_id = .{ .bytes = inputs.feature.bytes }, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = "source-support" } } }, .{ .semantic_review = .{ .bytes = "source-support" } });
 }
 
 pub fn collect(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, bytes: []const u8) Error!a.Inputs {
-    const proposed = @import("strict_json.zig").decode(Review, allocator, bytes, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }) catch |err| return switch (err) {
+    const proposed = @import("model_candidate_json.zig").decode(Review, allocator, bytes) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         error.InvalidJsonDocument => error.InvalidRequiredAuthority,
     };
@@ -47,6 +47,17 @@ pub fn collect(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Contex
         const finding = found orelse return error.InvalidRequiredAuthority;
         if (finding.finding == .supported) {
             _ = try p.scopes(allocator, context, finding.provenance);
+            if (inputs.brief) |brief| if (requirement.seed.id.unit == .feature) {
+                const expected = switch (requirement.seed.id.slot) {
+                    .description => brief.description.provenance,
+                    .primary_goal => brief.primary_goal.provenance,
+                    else => null,
+                };
+                if (expected) |scope| {
+                    try r.sameSet(r.ClaimId, scope.claim_ids, finding.provenance.claim_ids);
+                    try r.sameSet(r.CitationId, scope.citation_ids, finding.provenance.citation_ids);
+                }
+            };
             if (inputs.specification) |content| if (candidateProvenance(content, requirement.seed.id)) |expected| {
                 try r.sameSet(r.ClaimId, expected.claim_ids, finding.provenance.claim_ids);
                 try r.sameSet(r.CitationId, expected.citation_ids, finding.provenance.citation_ids);
@@ -80,10 +91,12 @@ pub fn collect(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Contex
             candidates[index] = .{ .id = .{ .ordinal = ordinal, .revision = 1 }, .requirement = requirement.seed.id };
         }
         entry.* = .{
-            .id = .{ .ordinal = ordinal }, .requirement = requirement.seed.id,
+            .id = .{ .ordinal = ordinal },
+            .requirement = requirement.seed.id,
             .authorities = requirement.seed.input_authorities,
             .resolution = if (finding.disposition == .not_applicable) .{ .not_applicable = .no_business_data } else if (inputs.specification != null) .{ .supported_candidate = candidates[index].id } else .{ .existing_authority = .{ .reference = context.inputs.corpus.state_id } },
-            .finding = finding.finding, .method = .model_assisted,
+            .finding = finding.finding,
+            .method = .model_assisted,
         };
     }
     var result = inputs;

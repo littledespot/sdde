@@ -49,7 +49,7 @@ fn safetyAllocationCase(allocator: std.mem.Allocator, input: *@import("domain/pi
         .model_binding = null,
         .log = pipeline.WorkflowLog.init(.{ .bytes = "TEST".* }),
     } }) catch return error.OutOfMemory;
-    const store = @import("application/pipeline_envelope.zig").PipelineEnvelope.init(&.{schemas.valid});
+    const store = @import("application/pipeline_envelope.zig").PipelineEnvelope.init(std.testing.allocator, &.{schemas.valid});
     defer store.discard(&candidate.delta);
     try std.testing.expectEqual(@import("domain/workflow.zig").OutcomeTag.ok, candidate.outcome);
 }

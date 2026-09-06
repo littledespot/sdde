@@ -2,7 +2,7 @@
 
 **Status:** Proposed implementation backlog; evaluator-only implementation is
 present. Human evaluation and live API verification are excluded from the
-current implementation task; neither is claimed completed. **Reviewed:** 2026-09-06,
+current implementation task; neither is claimed completed. **Reviewed:** 2026-09-07,
 including uncommitted work. [Evaluator commands and contract](evaluator.md).
 
 ## User-directed outcome
@@ -39,7 +39,10 @@ requested live, LLM-based evaluation.
 - [F0100](../features/F0100-SpecWorkflow.md) owns the Spec workflow contract.
   [ADR 0003](../decisions/0003-generic-workflow-engine.md) owns generic YAML
   execution. [ADR 0009](../decisions/0009-atomic-workflow-execution.md) rules out
-  transaction stores, checkpoints and resumable executions.
+  transaction stores, checkpoints and resumable executions. Its approved
+  publication-failure rule permits already-replaced files to remain after write
+  failure/interruption, without new successful completion; a fresh run replaces
+  outputs from the beginning.
 - The older [F0050 readiness finding](../features/F0050-SpecWorkflowEvaluationService.md)
   incorrectly defers semantic rubric scoring and refers to a missing harness
   document. Do not use those statements to replace this user-directed goal
@@ -50,10 +53,10 @@ requested live, LLM-based evaluation.
 
 | Area | Evidence at review | Remaining boundary |
 | --- | --- | --- |
-| Generic engine | YAML discovery/compiler/runner and explicit feature/reference invocation exist. | Complete Specify definition and content-producing operations. |
-| References | F0100 §§3.1–3.9 implement Markdown inputs, citations, typed text, exact-value preservation and scripted extraction/reconciliation. | Model wiring, semantic generation and final artifact/state publication. |
-| Model calls | [Native request operations](../../src/composition/model_request_operations.zig) and fake-provider tests exist; lifecycle work is changing in the worktree. | Verify/reuse that work, supply live provider integration and domain request/result bindings. |
-| Specify | H-007's content/Markdown contract and H-008's shared authority gate/Specify projection are implemented. [Native reference tests](../../src/composition/root.zig) still assert that no `spec.md` was written. | Model/generation evidence integration, clarification lifecycle and complete output publication. |
+| Generic engine | YAML discovery/compiler/runner and explicit feature/reference invocation exist. | Complete Specify definition through publication. |
+| References | Model-connected Markdown extraction/reconciliation, citations, typed text and exact-value preservation are implemented. | Applicable clarification answers and final artifact/state publication. |
+| Model calls | [Native request operations](../../src/composition/model_request_operations.zig), configured production provider, explicit retirement/protocol retry and fake-provider tests exist. | Authorized live verification; no new provider is required for H-009/H-010. |
+| Specify | H-007–H-010 implement typed content, shared gates, model-connected generation, coverage and bounded repair. [Generation tests](../../src/composition/root.zig) assert that no `spec.md` was written. | Clarification lifecycle and complete output publication. |
 | Fixture | Unchanged `stories.md`, seven principle files, `spec.case.json`, draft rubric and seven [calibration specimens](../../test/evaluation/wf-001-hello-world/node-vitest/calibration/README.md) exist. | Human rubric review/live calibration and full-workflow runtime resources. |
 | Evaluator | `test/harness/`, `harness.zig` and `evaluate-spec`/offline test/smoke build steps implement supplied-spec OpenAI grading and reports. | Authorized live acceptance; no paid API call was made during implementation. |
 | Full-workflow harness | Specify execution/handoff is still separate from the supplied-spec evaluator. `TEST_HARNESS.md` remains absent; [evaluator.md](evaluator.md) documents actual commands. | H-007–H-018 integration and live end-to-end evidence. |
@@ -82,7 +85,8 @@ not an optional phase after a golden-file harness.
 
 H-001–H-006 have an offline implementation; live acceptance and human review
 are excluded from the current task. H-007's native contract/codec and H-008's
-shared required-authority boundary are implemented; H-009–H-018 remain open.
+shared required-authority boundary and H-009/H-010 generation are implemented;
+H-011–H-018 remain open.
 Dependencies and evidence are defined in the ticket bodies.
 
 | ID | Work item | Track |
@@ -121,8 +125,10 @@ production work proceeds. H-015 joins the two tracks.
   the exact `spec.md` produced by that execution.
 - [ ] Reports distinguish workflow failure/clarification, evaluator error,
   completed low-scoring evaluation and completed satisfactory evaluation.
-- [ ] Repeated runs overwrite workflow outputs and preserve user-closed
-  clarification files; evaluation reports cannot mutate workflow authority.
+- [ ] Every workflow's repeated runs completely overwrite registered replaceable
+  outputs and unresolved clarification forms at the same paths, retaining
+  subject IDs and preserving user-resolved forms byte-for-byte; evaluation
+  reports cannot mutate workflow authority.
 - [ ] Negative tests and human calibration show that semantic variations can be
   accepted and missing/invented requirements receive appropriate findings.
 - [ ] Relevant repository verification and clean native smoke tests pass;

@@ -93,7 +93,7 @@ test "selector normalization cleans up at every allocation failure" {
 test "invocation publishes only validated owned context and rejects without output" {
     var binding: invocation_runner.Invocation = .{ .allocator = std.testing.allocator };
     var candidate = try invocation_runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{ "--reference", "hello", "--feature", "chosen" } } });
-    var envelope: Envelope = .init(&schemas.schemas);
+    var envelope: Envelope = .init(std.testing.allocator, &schemas.schemas);
     defer envelope.deinit();
     defer envelope.discard(&candidate.delta);
     const contract: @import("domain/pipeline.zig").NodeContract = .{ .id = invocation_runner.Invocation.contract.id, .kind = .orchestrator, .requires = &.{}, .produces = invocation_runner.Invocation.contract.produces, .side_effect = .none };
@@ -117,7 +117,7 @@ test "registered bindings derive only their narrow operational capabilities" {
 fn invocationAllocationCase(allocator: std.mem.Allocator) !void {
     var binding: invocation_runner.Invocation = .{ .allocator = allocator };
     var candidate = invocation_runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{ "--reference", "hello", "--feature", "chosen" } } }) catch return error.OutOfMemory;
-    var envelope: Envelope = .init(&schemas.schemas);
+    var envelope: Envelope = .init(std.testing.allocator, &schemas.schemas);
     defer envelope.deinit();
     defer envelope.discard(&candidate.delta);
     try std.testing.expect(candidate.delta.data_writes[@intFromEnum(schemas.invocation.key)] != null);

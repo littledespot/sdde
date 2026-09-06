@@ -1,578 +1,49 @@
 {
-  "type": "object",
-  "properties": {
-    "content": {
+  "oneOf": [
+    {
       "type": "object",
       "properties": {
-        "brief": {
-          "type": "object",
-          "properties": {
-            "title": {
-              "type": "object",
-              "properties": {
-                "value": {
-                  "type": "object",
-                  "properties": {
-                    "normalized": {
-                      "type": "object",
-                      "properties": {
-                        "segments": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "literal": {
-                                "type": "object",
-                                "properties": {
-                                  "value": {
-                                    "type": "string",
-                                    "maxLength": 4294967295
-                                  }
-                                },
-                                "required": [
-                                  "value"
-                                ],
-                                "additionalProperties": false
-                              },
-                              "passive": {
-                                "type": "object",
-                                "properties": {
-                                  "passive_literal_id": {
-                                    "type": "object",
-                                    "properties": {
-                                      "ordinal": {
-                                        "type": "integer",
-                                        "minimum": 1,
-                                        "maximum": 4294967295
-                                      }
-                                    },
-                                    "required": [
-                                      "ordinal"
-                                    ],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": [
-                                  "passive_literal_id"
-                                ],
-                                "additionalProperties": false
-                              }
-                            },
-                            "required": [],
-                            "additionalProperties": false
-                          },
-                          "maxItems": 4294967295
-                        }
-                      },
-                      "required": [
-                        "segments"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "exact_copy": {
-                      "type": "object",
-                      "properties": {
-                        "token_id": {
-                          "type": "object",
-                          "properties": {
-                            "ordinal": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 4294967295
-                            }
-                          },
-                          "required": [
-                            "ordinal"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "citation_id": {
-                          "type": "object",
-                          "properties": {
-                            "ordinal": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 4294967295
-                            }
-                          },
-                          "required": [
-                            "ordinal"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "token_id",
-                        "citation_id"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [],
-                  "additionalProperties": false
-                },
-                "provenance": {
-                  "type": "object",
-                  "properties": {
-                    "claim_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "maxItems": 4294967295
-                    },
-                    "citation_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "maxItems": 4294967295
-                    },
-                    "clarification_response_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "maxItems": 4294967295
-                    }
-                  },
-                  "required": [
-                    "claim_ids",
-                    "citation_ids",
-                    "clarification_response_ids"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "required": [
-                "value",
-                "provenance"
-              ],
-              "additionalProperties": false
-            },
-            "description": {
-              "type": "object",
-              "properties": {
-                "value": {
-                  "type": "object",
-                  "properties": {
-                    "normalized": {
-                      "type": "object",
-                      "properties": {
-                        "segments": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "literal": {
-                                "type": "object",
-                                "properties": {
-                                  "value": {
-                                    "type": "string",
-                                    "maxLength": 4294967295
-                                  }
-                                },
-                                "required": [
-                                  "value"
-                                ],
-                                "additionalProperties": false
-                              },
-                              "passive": {
-                                "type": "object",
-                                "properties": {
-                                  "passive_literal_id": {
-                                    "type": "object",
-                                    "properties": {
-                                      "ordinal": {
-                                        "type": "integer",
-                                        "minimum": 1,
-                                        "maximum": 4294967295
-                                      }
-                                    },
-                                    "required": [
-                                      "ordinal"
-                                    ],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": [
-                                  "passive_literal_id"
-                                ],
-                                "additionalProperties": false
-                              }
-                            },
-                            "required": [],
-                            "additionalProperties": false
-                          },
-                          "maxItems": 4294967295
-                        }
-                      },
-                      "required": [
-                        "segments"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "exact_copy": {
-                      "type": "object",
-                      "properties": {
-                        "token_id": {
-                          "type": "object",
-                          "properties": {
-                            "ordinal": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 4294967295
-                            }
-                          },
-                          "required": [
-                            "ordinal"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "citation_id": {
-                          "type": "object",
-                          "properties": {
-                            "ordinal": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 4294967295
-                            }
-                          },
-                          "required": [
-                            "ordinal"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "token_id",
-                        "citation_id"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [],
-                  "additionalProperties": false
-                },
-                "provenance": {
-                  "type": "object",
-                  "properties": {
-                    "claim_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "maxItems": 4294967295
-                    },
-                    "citation_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "maxItems": 4294967295
-                    },
-                    "clarification_response_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "maxItems": 4294967295
-                    }
-                  },
-                  "required": [
-                    "claim_ids",
-                    "citation_ids",
-                    "clarification_response_ids"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "required": [
-                "value",
-                "provenance"
-              ],
-              "additionalProperties": false
-            },
-            "primary_goal": {
-              "type": "object",
-              "properties": {
-                "value": {
-                  "type": "object",
-                  "properties": {
-                    "normalized": {
-                      "type": "object",
-                      "properties": {
-                        "segments": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "literal": {
-                                "type": "object",
-                                "properties": {
-                                  "value": {
-                                    "type": "string",
-                                    "maxLength": 4294967295
-                                  }
-                                },
-                                "required": [
-                                  "value"
-                                ],
-                                "additionalProperties": false
-                              },
-                              "passive": {
-                                "type": "object",
-                                "properties": {
-                                  "passive_literal_id": {
-                                    "type": "object",
-                                    "properties": {
-                                      "ordinal": {
-                                        "type": "integer",
-                                        "minimum": 1,
-                                        "maximum": 4294967295
-                                      }
-                                    },
-                                    "required": [
-                                      "ordinal"
-                                    ],
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "required": [
-                                  "passive_literal_id"
-                                ],
-                                "additionalProperties": false
-                              }
-                            },
-                            "required": [],
-                            "additionalProperties": false
-                          },
-                          "maxItems": 4294967295
-                        }
-                      },
-                      "required": [
-                        "segments"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "exact_copy": {
-                      "type": "object",
-                      "properties": {
-                        "token_id": {
-                          "type": "object",
-                          "properties": {
-                            "ordinal": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 4294967295
-                            }
-                          },
-                          "required": [
-                            "ordinal"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "citation_id": {
-                          "type": "object",
-                          "properties": {
-                            "ordinal": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 4294967295
-                            }
-                          },
-                          "required": [
-                            "ordinal"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "token_id",
-                        "citation_id"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [],
-                  "additionalProperties": false
-                },
-                "provenance": {
-                  "type": "object",
-                  "properties": {
-                    "claim_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "maxItems": 4294967295
-                    },
-                    "citation_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "maxItems": 4294967295
-                    },
-                    "clarification_response_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "maxItems": 4294967295
-                    }
-                  },
-                  "required": [
-                    "claim_ids",
-                    "citation_ids",
-                    "clarification_response_ids"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "required": [
-                "value",
-                "provenance"
-              ],
-              "additionalProperties": false
-            }
-          },
-          "required": [
-            "title",
-            "description",
-            "primary_goal"
-          ],
-          "additionalProperties": false
+        "kind": {
+          "const": "brief"
         },
-        "primary_user_story": {
+        "title": {
           "type": "object",
           "properties": {
             "value": {
-              "type": "object",
-              "properties": {
-                "normalized": {
+              "oneOf": [
+                {
                   "type": "object",
                   "properties": {
+                    "kind": {
+                      "const": "normalized"
+                    },
                     "segments": {
                       "type": "array",
                       "items": {
-                        "type": "object",
-                        "properties": {
-                          "literal": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "literal"
+                              },
                               "value": {
                                 "type": "string",
                                 "maxLength": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "value"
                             ],
                             "additionalProperties": false
                           },
-                          "passive": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "passive"
+                              },
                               "passive_literal_id": {
                                 "type": "object",
                                 "properties": {
@@ -589,25 +60,28 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "passive_literal_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       },
                       "maxItems": 4294967295
                     }
                   },
                   "required": [
+                    "kind",
                     "segments"
                   ],
                   "additionalProperties": false
                 },
-                "exact_copy": {
+                {
                   "type": "object",
                   "properties": {
+                    "kind": {
+                      "const": "exact_copy"
+                    },
                     "token_id": {
                       "type": "object",
                       "properties": {
@@ -638,14 +112,13 @@
                     }
                   },
                   "required": [
+                    "kind",
                     "token_id",
                     "citation_id"
                   ],
                   "additionalProperties": false
                 }
-              },
-              "required": [],
-              "additionalProperties": false
+              ]
             },
             "provenance": {
               "type": "object",
@@ -719,197 +192,788 @@
           ],
           "additionalProperties": false
         },
-        "entities": {
+        "description": {
           "type": "object",
           "properties": {
-            "disposition": {
-              "enum": [
-                "required",
-                "not_applicable"
-              ]
-            },
-            "basis": {
-              "type": "object",
-              "properties": {
-                "value": {
+            "value": {
+              "oneOf": [
+                {
                   "type": "object",
                   "properties": {
-                    "normalized": {
-                      "type": "object",
-                      "properties": {
-                        "segments": {
-                          "type": "array",
-                          "items": {
+                    "kind": {
+                      "const": "normalized"
+                    },
+                    "segments": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
-                              "literal": {
-                                "type": "object",
-                                "properties": {
-                                  "value": {
-                                    "type": "string",
-                                    "maxLength": 4294967295
-                                  }
-                                },
-                                "required": [
-                                  "value"
-                                ],
-                                "additionalProperties": false
+                              "kind": {
+                                "const": "literal"
                               },
-                              "passive": {
+                              "value": {
+                                "type": "string",
+                                "maxLength": 4294967295
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "passive"
+                              },
+                              "passive_literal_id": {
                                 "type": "object",
                                 "properties": {
-                                  "passive_literal_id": {
-                                    "type": "object",
-                                    "properties": {
-                                      "ordinal": {
-                                        "type": "integer",
-                                        "minimum": 1,
-                                        "maximum": 4294967295
-                                      }
-                                    },
-                                    "required": [
-                                      "ordinal"
-                                    ],
-                                    "additionalProperties": false
+                                  "ordinal": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 4294967295
                                   }
                                 },
                                 "required": [
-                                  "passive_literal_id"
+                                  "ordinal"
                                 ],
                                 "additionalProperties": false
                               }
                             },
-                            "required": [],
+                            "required": [
+                              "kind",
+                              "passive_literal_id"
+                            ],
                             "additionalProperties": false
-                          },
-                          "maxItems": 4294967295
-                        }
-                      },
-                      "required": [
-                        "segments"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "exact_copy": {
-                      "type": "object",
-                      "properties": {
-                        "token_id": {
-                          "type": "object",
-                          "properties": {
-                            "ordinal": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 4294967295
-                            }
-                          },
-                          "required": [
-                            "ordinal"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "citation_id": {
-                          "type": "object",
-                          "properties": {
-                            "ordinal": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 4294967295
-                            }
-                          },
-                          "required": [
-                            "ordinal"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "token_id",
-                        "citation_id"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [],
-                  "additionalProperties": false
-                },
-                "provenance": {
-                  "type": "object",
-                  "properties": {
-                    "claim_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
                           }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "maxItems": 4294967295
-                    },
-                    "citation_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "maxItems": 4294967295
-                    },
-                    "clarification_response_ids": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
+                        ]
                       },
                       "maxItems": 4294967295
                     }
                   },
                   "required": [
-                    "claim_ids",
-                    "citation_ids",
-                    "clarification_response_ids"
+                    "kind",
+                    "segments"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "exact_copy"
+                    },
+                    "token_id": {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4294967295
+                        }
+                      },
+                      "required": [
+                        "ordinal"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "citation_id": {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4294967295
+                        }
+                      },
+                      "required": [
+                        "ordinal"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "token_id",
+                    "citation_id"
                   ],
                   "additionalProperties": false
                 }
+              ]
+            },
+            "provenance": {
+              "type": "object",
+              "properties": {
+                "claim_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "ordinal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 4294967295
+                },
+                "citation_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "ordinal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 4294967295
+                },
+                "clarification_response_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "ordinal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 4294967295
+                }
               },
               "required": [
-                "value",
-                "provenance"
+                "claim_ids",
+                "citation_ids",
+                "clarification_response_ids"
               ],
               "additionalProperties": false
             }
           },
           "required": [
-            "disposition",
-            "basis"
+            "value",
+            "provenance"
           ],
           "additionalProperties": false
+        },
+        "primary_goal": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "normalized"
+                    },
+                    "segments": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "literal"
+                              },
+                              "value": {
+                                "type": "string",
+                                "maxLength": 4294967295
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "passive"
+                              },
+                              "passive_literal_id": {
+                                "type": "object",
+                                "properties": {
+                                  "ordinal": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 4294967295
+                                  }
+                                },
+                                "required": [
+                                  "ordinal"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "passive_literal_id"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "maxItems": 4294967295
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "segments"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "exact_copy"
+                    },
+                    "token_id": {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4294967295
+                        }
+                      },
+                      "required": [
+                        "ordinal"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "citation_id": {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4294967295
+                        }
+                      },
+                      "required": [
+                        "ordinal"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "token_id",
+                    "citation_id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "provenance": {
+              "type": "object",
+              "properties": {
+                "claim_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "ordinal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 4294967295
+                },
+                "citation_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "ordinal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 4294967295
+                },
+                "clarification_response_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "ordinal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 4294967295
+                }
+              },
+              "required": [
+                "claim_ids",
+                "citation_ids",
+                "clarification_response_ids"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "value",
+            "provenance"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "description",
+        "primary_goal"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "primary_user_story"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "normalized"
+                },
+                "segments": {
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "const": "literal"
+                          },
+                          "value": {
+                            "type": "string",
+                            "maxLength": 4294967295
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "const": "passive"
+                          },
+                          "passive_literal_id": {
+                            "type": "object",
+                            "properties": {
+                              "ordinal": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              }
+                            },
+                            "required": [
+                              "ordinal"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "passive_literal_id"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "maxItems": 4294967295
+                }
+              },
+              "required": [
+                "kind",
+                "segments"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "exact_copy"
+                },
+                "token_id": {
+                  "type": "object",
+                  "properties": {
+                    "ordinal": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4294967295
+                    }
+                  },
+                  "required": [
+                    "ordinal"
+                  ],
+                  "additionalProperties": false
+                },
+                "citation_id": {
+                  "type": "object",
+                  "properties": {
+                    "ordinal": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4294967295
+                    }
+                  },
+                  "required": [
+                    "ordinal"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "token_id",
+                "citation_id"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "provenance": {
+          "type": "object",
+          "properties": {
+            "claim_ids": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "ordinal": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  }
+                },
+                "required": [
+                  "ordinal"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 4294967295
+            },
+            "citation_ids": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "ordinal": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  }
+                },
+                "required": [
+                  "ordinal"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 4294967295
+            },
+            "clarification_response_ids": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "ordinal": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4294967295
+                  }
+                },
+                "required": [
+                  "ordinal"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 4294967295
+            }
+          },
+          "required": [
+            "claim_ids",
+            "citation_ids",
+            "clarification_response_ids"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "value",
+        "provenance"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "entities"
+        },
+        "disposition": {
+          "enum": [
+            "required",
+            "not_applicable"
+          ]
+        },
+        "basis": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "normalized"
+                    },
+                    "segments": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "literal"
+                              },
+                              "value": {
+                                "type": "string",
+                                "maxLength": 4294967295
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "passive"
+                              },
+                              "passive_literal_id": {
+                                "type": "object",
+                                "properties": {
+                                  "ordinal": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 4294967295
+                                  }
+                                },
+                                "required": [
+                                  "ordinal"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "passive_literal_id"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "maxItems": 4294967295
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "segments"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "exact_copy"
+                    },
+                    "token_id": {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4294967295
+                        }
+                      },
+                      "required": [
+                        "ordinal"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "citation_id": {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4294967295
+                        }
+                      },
+                      "required": [
+                        "ordinal"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "token_id",
+                    "citation_id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "provenance": {
+              "type": "object",
+              "properties": {
+                "claim_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "ordinal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 4294967295
+                },
+                "citation_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "ordinal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 4294967295
+                },
+                "clarification_response_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 4294967295
+                      }
+                    },
+                    "required": [
+                      "ordinal"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 4294967295
+                }
+              },
+              "required": [
+                "claim_ids",
+                "citation_ids",
+                "clarification_response_ids"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "value",
+            "provenance"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "disposition",
+        "basis"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "records"
         },
         "records": {
           "type": "array",
@@ -917,38 +981,48 @@
             "type": "object",
             "properties": {
               "content": {
-                "type": "object",
-                "properties": {
-                  "acceptance_criterion": {
+                "oneOf": [
+                  {
                     "type": "object",
                     "properties": {
+                      "kind": {
+                        "const": "acceptance_criterion"
+                      },
                       "given": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -965,25 +1039,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -1014,42 +1091,49 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       },
                       "when": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -1066,25 +1150,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -1115,42 +1202,49 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       },
                       "then": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -1167,25 +1261,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -1216,53 +1313,64 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       }
                     },
                     "required": [
+                      "kind",
                       "given",
                       "when",
                       "then"
                     ],
                     "additionalProperties": false
                   },
-                  "user_visible_outcome": {
+                  {
                     "type": "object",
                     "properties": {
+                      "kind": {
+                        "const": "user_visible_outcome"
+                      },
                       "text": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -1279,25 +1387,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -1328,51 +1439,62 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       }
                     },
                     "required": [
+                      "kind",
                       "text"
                     ],
                     "additionalProperties": false
                   },
-                  "edge_case": {
+                  {
                     "type": "object",
                     "properties": {
+                      "kind": {
+                        "const": "edge_case"
+                      },
                       "condition": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -1389,25 +1511,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -1438,42 +1563,49 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       },
                       "expected_outcome": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -1490,25 +1622,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -1539,52 +1674,63 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       }
                     },
                     "required": [
+                      "kind",
                       "condition",
                       "expected_outcome"
                     ],
                     "additionalProperties": false
                   },
-                  "functional_requirement": {
+                  {
                     "type": "object",
                     "properties": {
+                      "kind": {
+                        "const": "functional_requirement"
+                      },
                       "text": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -1601,25 +1747,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -1650,51 +1799,62 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       }
                     },
                     "required": [
+                      "kind",
                       "text"
                     ],
                     "additionalProperties": false
                   },
-                  "business_rule": {
+                  {
                     "type": "object",
                     "properties": {
+                      "kind": {
+                        "const": "business_rule"
+                      },
                       "text": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -1711,25 +1871,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -1760,51 +1923,62 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       }
                     },
                     "required": [
+                      "kind",
                       "text"
                     ],
                     "additionalProperties": false
                   },
-                  "assumption": {
+                  {
                     "type": "object",
                     "properties": {
+                      "kind": {
+                        "const": "assumption"
+                      },
                       "text": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -1821,25 +1995,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -1870,51 +2047,62 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       }
                     },
                     "required": [
+                      "kind",
                       "text"
                     ],
                     "additionalProperties": false
                   },
-                  "non_goal": {
+                  {
                     "type": "object",
                     "properties": {
+                      "kind": {
+                        "const": "non_goal"
+                      },
                       "text": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -1931,25 +2119,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -1980,51 +2171,62 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       }
                     },
                     "required": [
+                      "kind",
                       "text"
                     ],
                     "additionalProperties": false
                   },
-                  "prohibited_behavior": {
+                  {
                     "type": "object",
                     "properties": {
+                      "kind": {
+                        "const": "prohibited_behavior"
+                      },
                       "text": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -2041,25 +2243,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -2090,51 +2295,62 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       }
                     },
                     "required": [
+                      "kind",
                       "text"
                     ],
                     "additionalProperties": false
                   },
-                  "entity": {
+                  {
                     "type": "object",
                     "properties": {
+                      "kind": {
+                        "const": "entity"
+                      },
                       "name": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -2151,25 +2367,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -2200,42 +2419,49 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       },
                       "business_meaning": {
-                        "type": "object",
-                        "properties": {
-                          "normalized": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "normalized"
+                              },
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "literal": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
                                         "value": {
                                           "type": "string",
                                           "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "value"
                                       ],
                                       "additionalProperties": false
                                     },
-                                    "passive": {
+                                    {
                                       "type": "object",
                                       "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
                                         "passive_literal_id": {
                                           "type": "object",
                                           "properties": {
@@ -2252,25 +2478,28 @@
                                         }
                                       },
                                       "required": [
+                                        "kind",
                                         "passive_literal_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [],
-                                  "additionalProperties": false
+                                  ]
                                 },
                                 "maxItems": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "segments"
                             ],
                             "additionalProperties": false
                           },
-                          "exact_copy": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "exact_copy"
+                              },
                               "token_id": {
                                 "type": "object",
                                 "properties": {
@@ -2301,44 +2530,51 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "token_id",
                               "citation_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       },
                       "relationships": {
                         "type": "array",
                         "items": {
-                          "type": "object",
-                          "properties": {
-                            "normalized": {
+                          "oneOf": [
+                            {
                               "type": "object",
                               "properties": {
+                                "kind": {
+                                  "const": "normalized"
+                                },
                                 "segments": {
                                   "type": "array",
                                   "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "literal": {
+                                    "oneOf": [
+                                      {
                                         "type": "object",
                                         "properties": {
+                                          "kind": {
+                                            "const": "literal"
+                                          },
                                           "value": {
                                             "type": "string",
                                             "maxLength": 4294967295
                                           }
                                         },
                                         "required": [
+                                          "kind",
                                           "value"
                                         ],
                                         "additionalProperties": false
                                       },
-                                      "passive": {
+                                      {
                                         "type": "object",
                                         "properties": {
+                                          "kind": {
+                                            "const": "passive"
+                                          },
                                           "passive_literal_id": {
                                             "type": "object",
                                             "properties": {
@@ -2355,25 +2591,28 @@
                                           }
                                         },
                                         "required": [
+                                          "kind",
                                           "passive_literal_id"
                                         ],
                                         "additionalProperties": false
                                       }
-                                    },
-                                    "required": [],
-                                    "additionalProperties": false
+                                    ]
                                   },
                                   "maxItems": 4294967295
                                 }
                               },
                               "required": [
+                                "kind",
                                 "segments"
                               ],
                               "additionalProperties": false
                             },
-                            "exact_copy": {
+                            {
                               "type": "object",
                               "properties": {
+                                "kind": {
+                                  "const": "exact_copy"
+                                },
                                 "token_id": {
                                   "type": "object",
                                   "properties": {
@@ -2404,28 +2643,26 @@
                                 }
                               },
                               "required": [
+                                "kind",
                                 "token_id",
                                 "citation_id"
                               ],
                               "additionalProperties": false
                             }
-                          },
-                          "required": [],
-                          "additionalProperties": false
+                          ]
                         },
                         "maxItems": 4294967295
                       }
                     },
                     "required": [
+                      "kind",
                       "name",
                       "business_meaning",
                       "relationships"
                     ],
                     "additionalProperties": false
                   }
-                },
-                "required": [],
-                "additionalProperties": false
+                ]
               },
               "provenance": {
                 "type": "object",
@@ -2502,12 +2739,18 @@
           "maxItems": 4294967295
         }
       },
-      "required": [],
+      "required": [
+        "kind",
+        "records"
+      ],
       "additionalProperties": false
     },
-    "clarification": {
+    {
       "type": "object",
       "properties": {
+        "kind": {
+          "const": "clarification"
+        },
         "reason": {
           "enum": [
             "missing",
@@ -2519,32 +2762,40 @@
           "type": "object",
           "properties": {
             "value": {
-              "type": "object",
-              "properties": {
-                "normalized": {
+              "oneOf": [
+                {
                   "type": "object",
                   "properties": {
+                    "kind": {
+                      "const": "normalized"
+                    },
                     "segments": {
                       "type": "array",
                       "items": {
-                        "type": "object",
-                        "properties": {
-                          "literal": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "literal"
+                              },
                               "value": {
                                 "type": "string",
                                 "maxLength": 4294967295
                               }
                             },
                             "required": [
+                              "kind",
                               "value"
                             ],
                             "additionalProperties": false
                           },
-                          "passive": {
+                          {
                             "type": "object",
                             "properties": {
+                              "kind": {
+                                "const": "passive"
+                              },
                               "passive_literal_id": {
                                 "type": "object",
                                 "properties": {
@@ -2561,25 +2812,28 @@
                               }
                             },
                             "required": [
+                              "kind",
                               "passive_literal_id"
                             ],
                             "additionalProperties": false
                           }
-                        },
-                        "required": [],
-                        "additionalProperties": false
+                        ]
                       },
                       "maxItems": 4294967295
                     }
                   },
                   "required": [
+                    "kind",
                     "segments"
                   ],
                   "additionalProperties": false
                 },
-                "exact_copy": {
+                {
                   "type": "object",
                   "properties": {
+                    "kind": {
+                      "const": "exact_copy"
+                    },
                     "token_id": {
                       "type": "object",
                       "properties": {
@@ -2610,14 +2864,13 @@
                     }
                   },
                   "required": [
+                    "kind",
                     "token_id",
                     "citation_id"
                   ],
                   "additionalProperties": false
                 }
-              },
-              "required": [],
-              "additionalProperties": false
+              ]
             },
             "provenance": {
               "type": "object",
@@ -2693,12 +2946,11 @@
         }
       },
       "required": [
+        "kind",
         "reason",
         "question"
       ],
       "additionalProperties": false
     }
-  },
-  "required": [],
-  "additionalProperties": false
+  ]
 }

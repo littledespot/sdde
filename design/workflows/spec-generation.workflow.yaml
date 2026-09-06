@@ -6,12 +6,15 @@ invoke: specify-invocation
 policy: core.specification-generation@1
 start: capture-project
 resources:
+  protocol-prompt: spec/protocol.prompt.md
   extraction-prompt: spec/extraction.prompt.md
   extraction-schema: spec/extraction.schema.json
   reconciliation-prompt: spec/reconciliation.prompt.md
   reconciliation-schema: spec/reconciliation.schema.json
   generation-prompt: spec/generation.prompt.md
   generation-schema: spec/generation.schema.json
+  repair-prompt: spec/repair.prompt.md
+  repair-schema: spec/repair.schema.json
   support-prompt: spec/support.prompt.md
   support-schema: spec/support.schema.json
 steps:
@@ -54,19 +57,21 @@ steps:
   initialize-extraction: { use: initialize-reference-extraction, on: { ok: check-extraction, failed: end.failed } }
   check-extraction: { use: check-reference-extraction-progress, on: { ok: finish-extraction, more: extraction-packet, failed: end.failed } }
   extraction-packet: { use: build-reference-extraction-model-input, on: { ok: ex-assign, failed: end.failed } }
-  ex-assign: { use: assign-model-request-id, with: { slot: spec_generation, response-mode: prompt-only, prompt: extraction-prompt, result-schema: extraction-schema }, on: { ok: ex-validate, failed: end.failed } }
+  ex-assign: { use: assign-model-request-id, with: { slot: spec_generation, response-mode: prompt-only, protocol-prompt: protocol-prompt, prompt: extraction-prompt, result-schema: extraction-schema }, on: { ok: ex-validate, failed: end.failed } }
   ex-validate: { use: validate-model-request-binding, on: { ok: ex-build, failed: end.failed } }
   ex-build: { use: build-model-request, on: { ok: ex-account, failed: end.failed } }
   ex-account: { use: advance-model-attempt-accounting, with: { retry-limit: 128 }, on: { ok: ex-operation, failed: end.failed } }
   ex-operation: { use: assign-provider-operation, with: { kind: inference }, on: { ok: ex-authorize, failed: end.failed } }
-  ex-authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: ex-advance-request, failed: ex-terminate-operation, cancelled: ex-terminate-operation } }
+  ex-authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: ex-phase, failed: ex-terminate-operation, cancelled: ex-terminate-operation } }
+  ex-phase: { use: check-model-request-phase, on: { ok: ex-advance-request, more: ex-advance-operation, failed: end.failed } }
   ex-advance-request: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: ex-advance-operation, failed: end.failed } }
   ex-advance-operation: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: ex-call, failed: end.failed } }
   ex-call: { use: invoke-model, on: { ok: ex-observation, failed: ex-observation, cancelled: ex-observation } }
   ex-observation: { use: validate-provider-invocation-observation, on: { ok: ex-complete-operation, failed: ex-complete-operation, cancelled: ex-complete-operation } }
   ex-complete-operation: { use: complete-provider-operation, on: { ok: ex-decode, failed: ex-decode, cancelled: ex-decode } }
   ex-decode: { use: decode-model-envelope, on: { ok: ex-payload, invalid: ex-payload, failed: ex-payload, cancelled: ex-payload } }
-  ex-payload: { use: validate-model-payload-schema, on: { ok: ex-close, invalid: ex-close, failed: ex-close, cancelled: ex-close } }
+  ex-payload: { use: validate-model-payload-schema, on: { ok: ex-close, invalid: ex-retry, failed: ex-close, cancelled: ex-close } }
+  ex-retry: { use: build-model-protocol-retry, with: { retry-limit: 0 }, on: { ok: ex-account, failed: end.failed } }
   ex-close: { use: complete-model-request, on: { ok: collect-extraction, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
   ex-terminate-operation: { use: terminate-provider-operation, on: { failed: ex-terminate-request, cancelled: ex-terminate-request } }
   ex-terminate-request: { use: terminate-model-request, on: { failed: end.failed, cancelled: end.cancelled } }
@@ -89,19 +94,21 @@ steps:
   validate-partitions: { use: validate-reference-reconciliation-partitions, on: { ok: reconciliation-input, failed: end.failed } }
   reconciliation-input: { use: build-reference-reconciliation-input, on: { ok: reconciliation-packet, failed: end.failed } }
   reconciliation-packet: { use: build-reference-reconciliation-model-input, on: { ok: rc-assign, failed: end.failed } }
-  rc-assign: { use: assign-model-request-id, with: { slot: spec_generation, response-mode: prompt-only, prompt: reconciliation-prompt, result-schema: reconciliation-schema }, on: { ok: rc-validate, failed: end.failed } }
+  rc-assign: { use: assign-model-request-id, with: { slot: spec_generation, response-mode: prompt-only, protocol-prompt: protocol-prompt, prompt: reconciliation-prompt, result-schema: reconciliation-schema }, on: { ok: rc-validate, failed: end.failed } }
   rc-validate: { use: validate-model-request-binding, on: { ok: rc-build, failed: end.failed } }
   rc-build: { use: build-model-request, on: { ok: rc-account, failed: end.failed } }
   rc-account: { use: advance-model-attempt-accounting, with: { retry-limit: 128 }, on: { ok: rc-operation, failed: end.failed } }
   rc-operation: { use: assign-provider-operation, with: { kind: inference }, on: { ok: rc-authorize, failed: end.failed } }
-  rc-authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: rc-advance-request, failed: rc-terminate-operation, cancelled: rc-terminate-operation } }
+  rc-authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: rc-phase, failed: rc-terminate-operation, cancelled: rc-terminate-operation } }
+  rc-phase: { use: check-model-request-phase, on: { ok: rc-advance-request, more: rc-advance-operation, failed: end.failed } }
   rc-advance-request: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: rc-advance-operation, failed: end.failed } }
   rc-advance-operation: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: rc-call, failed: end.failed } }
   rc-call: { use: invoke-model, on: { ok: rc-observation, failed: rc-observation, cancelled: rc-observation } }
   rc-observation: { use: validate-provider-invocation-observation, on: { ok: rc-complete-operation, failed: rc-complete-operation, cancelled: rc-complete-operation } }
   rc-complete-operation: { use: complete-provider-operation, on: { ok: rc-decode, failed: rc-decode, cancelled: rc-decode } }
   rc-decode: { use: decode-model-envelope, on: { ok: rc-payload, invalid: rc-payload, failed: rc-payload, cancelled: rc-payload } }
-  rc-payload: { use: validate-model-payload-schema, on: { ok: rc-close, invalid: rc-close, failed: rc-close, cancelled: rc-close } }
+  rc-payload: { use: validate-model-payload-schema, on: { ok: rc-close, invalid: rc-retry, failed: rc-close, cancelled: rc-close } }
+  rc-retry: { use: build-model-protocol-retry, with: { retry-limit: 0 }, on: { ok: rc-account, failed: end.failed } }
   rc-close: { use: complete-model-request, on: { ok: collect-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
   rc-terminate-operation: { use: terminate-provider-operation, on: { failed: rc-terminate-request, cancelled: rc-terminate-request } }
   rc-terminate-request: { use: terminate-model-request, on: { failed: end.failed, cancelled: end.cancelled } }
@@ -121,19 +128,21 @@ steps:
   account-reconciliation: { use: validate-reference-reconciliation-completeness, on: { ok: pre-project, blocked: end.blocked, failed: end.failed } }
   pre-project: { use: build-specification-authority-requirements, on: { ok: pre-input, blocked: end.blocked } }
   pre-input: { use: build-specification-support-input, on: { ok: pre-assign, failed: end.failed } }
-  pre-assign: { use: assign-model-request-id, with: { slot: spec_generation, response-mode: prompt-only, prompt: support-prompt, result-schema: support-schema }, on: { ok: pre-validate, failed: end.failed } }
+  pre-assign: { use: assign-model-request-id, with: { slot: spec_generation, response-mode: prompt-only, protocol-prompt: protocol-prompt, prompt: support-prompt, result-schema: support-schema }, on: { ok: pre-validate, failed: end.failed } }
   pre-validate: { use: validate-model-request-binding, on: { ok: pre-build, failed: end.failed } }
   pre-build: { use: build-model-request, on: { ok: pre-account, failed: end.failed } }
-  pre-account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: pre-operation, failed: end.failed } }
+  pre-account: { use: advance-model-attempt-accounting, with: { retry-limit: 1 }, on: { ok: pre-operation, failed: end.failed } }
   pre-operation: { use: assign-provider-operation, with: { kind: inference }, on: { ok: pre-authorize, failed: end.failed } }
-  pre-authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: pre-advance-request, failed: pre-terminate-operation, cancelled: pre-terminate-operation } }
+  pre-authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: pre-phase, failed: pre-terminate-operation, cancelled: pre-terminate-operation } }
+  pre-phase: { use: check-model-request-phase, on: { ok: pre-advance-request, more: pre-advance-operation, failed: end.failed } }
   pre-advance-request: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: pre-advance-operation, failed: end.failed } }
   pre-advance-operation: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: pre-call, failed: end.failed } }
   pre-call: { use: invoke-model, on: { ok: pre-observation, failed: pre-observation, cancelled: pre-observation } }
   pre-observation: { use: validate-provider-invocation-observation, on: { ok: pre-complete-operation, failed: pre-complete-operation, cancelled: pre-complete-operation } }
   pre-complete-operation: { use: complete-provider-operation, on: { ok: pre-decode, failed: pre-decode, cancelled: pre-decode } }
   pre-decode: { use: decode-model-envelope, on: { ok: pre-payload, invalid: pre-payload, failed: pre-payload, cancelled: pre-payload } }
-  pre-payload: { use: validate-model-payload-schema, on: { ok: pre-close, invalid: pre-close, failed: pre-close, cancelled: pre-close } }
+  pre-payload: { use: validate-model-payload-schema, on: { ok: pre-close, invalid: pre-retry, failed: pre-close, cancelled: pre-close } }
+  pre-retry: { use: build-model-protocol-retry, with: { retry-limit: 0 }, on: { ok: pre-account, failed: end.failed } }
   pre-close: { use: complete-model-request, on: { ok: pre-collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
   pre-terminate-operation: { use: terminate-provider-operation, on: { failed: pre-terminate-request, cancelled: pre-terminate-request } }
   pre-terminate-request: { use: terminate-model-request, on: { failed: end.failed, cancelled: end.cancelled } }
@@ -147,46 +156,74 @@ steps:
   initialize-specification: { use: initialize-specification-generation, on: { ok: check-specification, failed: end.failed } }
   check-specification: { use: check-specification-generation-progress, on: { ok: assemble-specification, more: generation-input, failed: end.failed } }
   generation-input: { use: build-specification-model-input, on: { ok: gen-assign, failed: end.failed } }
-  gen-assign: { use: assign-model-request-id, with: { slot: spec_generation, response-mode: prompt-only, prompt: generation-prompt, result-schema: generation-schema }, on: { ok: gen-validate, failed: end.failed } }
+  gen-assign: { use: assign-model-request-id, with: { slot: spec_generation, response-mode: prompt-only, protocol-prompt: protocol-prompt, prompt: generation-prompt, result-schema: generation-schema }, on: { ok: gen-validate, failed: end.failed } }
   gen-validate: { use: validate-model-request-binding, on: { ok: gen-build, failed: end.failed } }
   gen-build: { use: build-model-request, on: { ok: gen-account, failed: end.failed } }
   gen-account: { use: advance-model-attempt-accounting, with: { retry-limit: 64 }, on: { ok: gen-operation, failed: end.failed } }
   gen-operation: { use: assign-provider-operation, with: { kind: inference }, on: { ok: gen-authorize, failed: end.failed } }
-  gen-authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: gen-advance-request, failed: gen-terminate-operation, cancelled: gen-terminate-operation } }
+  gen-authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: gen-phase, failed: gen-terminate-operation, cancelled: gen-terminate-operation } }
+  gen-phase: { use: check-model-request-phase, on: { ok: gen-advance-request, more: gen-advance-operation, failed: end.failed } }
   gen-advance-request: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: gen-advance-operation, failed: end.failed } }
   gen-advance-operation: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: gen-call, failed: end.failed } }
   gen-call: { use: invoke-model, on: { ok: gen-observation, failed: gen-observation, cancelled: gen-observation } }
   gen-observation: { use: validate-provider-invocation-observation, on: { ok: gen-complete-operation, failed: gen-complete-operation, cancelled: gen-complete-operation } }
   gen-complete-operation: { use: complete-provider-operation, on: { ok: gen-decode, failed: gen-decode, cancelled: gen-decode } }
   gen-decode: { use: decode-model-envelope, on: { ok: gen-payload, invalid: gen-payload, failed: gen-payload, cancelled: gen-payload } }
-  gen-payload: { use: validate-model-payload-schema, on: { ok: gen-close, invalid: gen-close, failed: gen-close, cancelled: gen-close } }
+  gen-payload: { use: validate-model-payload-schema, on: { ok: gen-close, invalid: gen-retry, failed: gen-close, cancelled: gen-close } }
+  gen-retry: { use: build-model-protocol-retry, with: { retry-limit: 0 }, on: { ok: gen-account, failed: end.failed } }
   gen-close: { use: complete-model-request, on: { ok: collect-specification, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
   gen-terminate-operation: { use: terminate-provider-operation, on: { failed: gen-terminate-request, cancelled: gen-terminate-request } }
   gen-terminate-request: { use: terminate-model-request, on: { failed: end.failed, cancelled: end.cancelled } }
   collect-specification: { use: collect-specification-model-result, on: { ok: parse-specification, failed: end.failed } }
-  parse-specification: { use: parse-specification-unit, on: { ok: validate-specification, invalid: end.invalid, failed: end.failed } }
-  validate-specification: { use: validate-specification-unit, on: { ok: advance-specification, invalid: end.invalid, needs_user: end.needs_user, failed: end.failed } }
-  advance-specification: { use: advance-specification-generation, on: { ok: gen-retire-input, failed: end.failed } }
+  parse-specification: { use: parse-specification-unit, on: { ok: gen-retire-input, invalid: end.invalid, failed: end.failed } }
+  validate-specification: { use: validate-specification-unit, on: { ok: advance-specification, invalid: authorize-repair, needs_user: end.needs_user, failed: end.failed } }
+  advance-specification: { use: advance-specification-generation, on: { ok: check-specification, failed: end.failed } }
   gen-retire-input: { use: retire-model-input, on: { ok: gen-retire, failed: end.failed } }
-  gen-retire: { use: retire-model-request, on: { ok: check-specification, failed: end.failed } }
+  gen-retire: { use: retire-model-request, on: { ok: validate-specification, failed: end.failed } }
+  authorize-repair: { use: authorize-specification-repair, on: { ok: repair-input, invalid: end.invalid, failed: end.failed } }
+  repair-input: { use: build-specification-repair-input, on: { ok: repair-assign, failed: end.failed } }
+  repair-assign: { use: assign-model-request-id, with: { slot: spec_generation, response-mode: prompt-only, protocol-prompt: protocol-prompt, prompt: repair-prompt, result-schema: repair-schema }, on: { ok: repair-validate, failed: end.failed } }
+  repair-validate: { use: validate-model-request-binding, on: { ok: repair-build, failed: end.failed } }
+  repair-build: { use: build-model-request, on: { ok: repair-account, failed: end.failed } }
+  repair-account: { use: advance-model-attempt-accounting, with: { retry-limit: 1 }, on: { ok: repair-operation, failed: end.failed } }
+  repair-operation: { use: assign-provider-operation, with: { kind: inference }, on: { ok: repair-authorize, failed: end.failed } }
+  repair-authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: repair-phase, failed: repair-terminate-operation, cancelled: repair-terminate-operation } }
+  repair-phase: { use: check-model-request-phase, on: { ok: repair-advance-request, more: repair-advance-operation, failed: end.failed } }
+  repair-advance-request: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: repair-advance-operation, failed: end.failed } }
+  repair-advance-operation: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: repair-call, failed: end.failed } }
+  repair-call: { use: invoke-model, on: { ok: repair-observation, failed: repair-observation, cancelled: repair-observation } }
+  repair-observation: { use: validate-provider-invocation-observation, on: { ok: repair-complete-operation, failed: repair-complete-operation, cancelled: repair-complete-operation } }
+  repair-complete-operation: { use: complete-provider-operation, on: { ok: repair-decode, failed: repair-decode, cancelled: repair-decode } }
+  repair-decode: { use: decode-model-envelope, on: { ok: repair-payload, invalid: repair-payload, failed: repair-payload, cancelled: repair-payload } }
+  repair-payload: { use: validate-model-payload-schema, on: { ok: repair-close, invalid: repair-retry, failed: repair-close, cancelled: repair-close } }
+  repair-retry: { use: build-model-protocol-retry, with: { retry-limit: 0 }, on: { ok: repair-account, failed: end.failed } }
+  repair-close: { use: complete-model-request, on: { ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
+  repair-terminate-operation: { use: terminate-provider-operation, on: { failed: repair-terminate-request, cancelled: repair-terminate-request } }
+  repair-terminate-request: { use: terminate-model-request, on: { failed: end.failed, cancelled: end.cancelled } }
+  parse-repair: { use: parse-specification-repair, on: { ok: merge-repair, invalid: end.invalid, failed: end.failed } }
+  merge-repair: { use: merge-specification-repair, on: { ok: repair-retire-input, invalid: end.invalid, failed: end.failed } }
+  repair-retire-input: { use: retire-model-input, on: { ok: repair-retire, failed: end.failed } }
+  repair-retire: { use: retire-model-request, on: { ok: validate-specification, failed: end.failed } }
   assemble-specification: { use: assemble-specification-content, on: { ok: validate-coverage, failed: end.failed } }
   validate-coverage: { use: validate-specification-coverage, on: { ok: retire-pre-authority, invalid: end.invalid, failed: end.failed } }
   retire-pre-authority: { use: retire-required-authority-projection, on: { ok: post-project, failed: end.failed } }
   post-project: { use: build-specification-authority-requirements, on: { ok: post-input, blocked: end.blocked } }
   post-input: { use: build-specification-support-input, on: { ok: post-assign, failed: end.failed } }
-  post-assign: { use: assign-model-request-id, with: { slot: spec_generation, response-mode: prompt-only, prompt: support-prompt, result-schema: support-schema }, on: { ok: post-validate, failed: end.failed } }
+  post-assign: { use: assign-model-request-id, with: { slot: spec_generation, response-mode: prompt-only, protocol-prompt: protocol-prompt, prompt: support-prompt, result-schema: support-schema }, on: { ok: post-validate, failed: end.failed } }
   post-validate: { use: validate-model-request-binding, on: { ok: post-build, failed: end.failed } }
   post-build: { use: build-model-request, on: { ok: post-account, failed: end.failed } }
-  post-account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: post-operation, failed: end.failed } }
+  post-account: { use: advance-model-attempt-accounting, with: { retry-limit: 1 }, on: { ok: post-operation, failed: end.failed } }
   post-operation: { use: assign-provider-operation, with: { kind: inference }, on: { ok: post-authorize, failed: end.failed } }
-  post-authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: post-advance-request, failed: post-terminate-operation, cancelled: post-terminate-operation } }
+  post-authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: post-phase, failed: post-terminate-operation, cancelled: post-terminate-operation } }
+  post-phase: { use: check-model-request-phase, on: { ok: post-advance-request, more: post-advance-operation, failed: end.failed } }
   post-advance-request: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: post-advance-operation, failed: end.failed } }
   post-advance-operation: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: post-call, failed: end.failed } }
   post-call: { use: invoke-model, on: { ok: post-observation, failed: post-observation, cancelled: post-observation } }
   post-observation: { use: validate-provider-invocation-observation, on: { ok: post-complete-operation, failed: post-complete-operation, cancelled: post-complete-operation } }
   post-complete-operation: { use: complete-provider-operation, on: { ok: post-decode, failed: post-decode, cancelled: post-decode } }
   post-decode: { use: decode-model-envelope, on: { ok: post-payload, invalid: post-payload, failed: post-payload, cancelled: post-payload } }
-  post-payload: { use: validate-model-payload-schema, on: { ok: post-close, invalid: post-close, failed: post-close, cancelled: post-close } }
+  post-payload: { use: validate-model-payload-schema, on: { ok: post-close, invalid: post-retry, failed: post-close, cancelled: post-close } }
+  post-retry: { use: build-model-protocol-retry, with: { retry-limit: 0 }, on: { ok: post-account, failed: end.failed } }
   post-close: { use: complete-model-request, on: { ok: post-collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
   post-terminate-operation: { use: terminate-provider-operation, on: { failed: post-terminate-request, cancelled: post-terminate-request } }
   post-terminate-request: { use: terminate-model-request, on: { failed: end.failed, cancelled: end.cancelled } }

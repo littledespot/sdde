@@ -22,8 +22,8 @@ pub fn validate(allocator: std.mem.Allocator, references: r.Accounted, brief: g.
         const item = r.item(items, disposition.claim_id) catch return error.InvalidSpecificationCoverage;
         var targets: std.ArrayList(Key) = .empty;
         const singletons = [_]struct { key: Key, value: spec.AttributedValue }{
-            .{ .key = .title, .value = brief.title }, .{ .key = .description, .value = brief.description },
-            .{ .key = .primary_goal, .value = brief.primary_goal }, .{ .key = .primary_user_story, .value = candidate.primary_user_story },
+            .{ .key = .title, .value = brief.title },                 .{ .key = .description, .value = brief.description },
+            .{ .key = .primary_goal, .value = brief.primary_goal },   .{ .key = .primary_user_story, .value = candidate.primary_user_story },
             .{ .key = .entities, .value = candidate.entities.basis },
         };
         for (singletons) |entry| if (r.contains(r.ClaimId, entry.value.provenance.claim_ids, item.claim.id)) try targets.append(allocator, entry.key);

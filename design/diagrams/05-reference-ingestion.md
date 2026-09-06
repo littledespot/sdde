@@ -26,7 +26,7 @@ flowchart TD
     RECORDS -->|Unresolved conflict| BLOCKED
     RECORDS -->|Structurally valid candidate| CHECK{"Required meaning supported and conflicts resolved?"}
     CHECK -->|Yes| CANDIDATE["Retain validated reference inputs<br/>for subsequent workflow steps"]
-    CHECK -->|Clarification required| CLARIFY["Save or reuse questions for the same subject;<br/>preserve protected answers and end needs_user"]
+    CHECK -->|Clarification required| CLARIFY["Reuse subject IDs; completely overwrite unresolved forms;<br/>preserve user-resolved forms and end needs_user"]
     CHECK -->|Repairable candidate defect| REPAIR["Repair the authorized unit<br/>within the declared retry limits"]
     REPAIR -->|Revalidate repaired candidate| TEXT
     REPAIR -->|Exhausted| BLOCKED["End blocked or failed"]

@@ -17,8 +17,9 @@ flowchart TD
     SPEC --> CHECK{"Mechanical checks and shared<br/>required-authority gate pass?"}
 
     CHECK -->|Yes| RENDER["Render and verify spec.md<br/>and reference-context.md"]
-    RENDER --> PUBLISH["Publish the complete artifacts and workflow state together;<br/>preserve user-closed clarification files"]
-    PUBLISH --> DONE["Mark the feature specified;<br/>ready for user review and then plan"]
+    RENDER --> PUBLISH["Completely replace registered outputs with validated artifacts and state;<br/>preserve user-resolved clarification files"]
+    PUBLISH -->|All writes succeed| DONE["Mark the feature specified;<br/>ready for user review and then plan"]
+    PUBLISH -->|Write failure or interruption| WRITEFAIL["No new successful completion;<br/>replaced files may remain; fresh rerun from start"]
 
     UNDERSTAND -->|Missing or conflicting meaning| CLARIFY
     BRIEF -->|Clarification required| CLARIFY
@@ -26,7 +27,7 @@ flowchart TD
     CHECK -->|Missing or unsupported business knowledge| CLARIFY
     CLARIFY["Resolve clarification questions;<br/>reuse existing questions for the same subject"]
     CLARIFY -->|Protected answer needs reconsideration| BLOCKED["End blocked;<br/>user direction is required"]
-    CLARIFY -->|Question can be created or refreshed| QUESTIONS["Save clarification questions in clarify/SNN.md;<br/>retain existing protected answers"]
+    CLARIFY -->|Question can be created or refreshed| QUESTIONS["Create new forms; completely overwrite unresolved clarify/SNN.md at the same IDs;<br/>preserve user-resolved forms"]
     QUESTIONS --> NEEDSUSER["End needs_user;<br/>publish no partial specification"]
     NEEDSUSER -. User answers the questions and reruns the command .-> START
 
@@ -48,10 +49,44 @@ contract and Specify projection; support is not inferred from citation presence.
 The same gate is rebuilt against current inputs before generation/publication,
 and stale source lineage cannot authorize a consumer. Group size is explicit
 in YAML; the selected reference directory defines related documents. Unresolved conflicts block;
-live model iteration, answer application, clarification writing and the complete
-Specify generation/publication flow shown here remain unfinished.
+model-connected iteration, generation, coverage and bounded repair are
+implemented by H-009/H-010. Answer application, clarification writing and
+publication remain H-011/H-012; the complete definition remains H-013.
 
-Every rerun starts the workflow from the beginning. A successful rerun replaces
-the workflow's existing outputs at the same paths while preserving user-closed
-clarification files. Failure, blocking or cancellation ends the run without
-publishing a partial successful specification.
+The current generation-only YAML stops at validated in-memory content:
+
+```mermaid
+flowchart LR
+    R["Captured references"] --> X["Model extraction and<br/>hierarchical reconciliation"]
+    X --> A["Shared source-authority gate"]
+    A --> G["Generate one typed unit"]
+    G --> W{"Closed response schema?"}
+    W -->|Malformed| Q["Bounded protocol correction;<br/>same request and valid schema example"]
+    Q --> G
+    Q -->|Exhausted| F["End failed"]
+    W -->|Valid| V{"Unit valid?"}
+    V -->|Repairable defect| P["Engine-selected replacement;<br/>bounded YAML repair"]
+    P --> V
+    V -->|Yes; more units| G
+    V -->|All units| C["Assemble, revalidate,<br/>assign IDs and account coverage"]
+    C --> S["Model-assisted field support<br/>and shared authority gate"]
+    S --> M["Validated in-memory content;<br/>no spec.md publication"]
+```
+
+Each model path uses the same request/provider operations and explicit cleanup.
+Protocol correction keeps the original request/schema; atomic repair binds a
+new request to an engine authorization. Workflow schemas and native decoding
+share the closed `kind` alternatives; malformed root/nested variants fail
+before request closure. Invalid, exhausted and unresolved paths
+cannot reach accepted content. Model review is not deterministic semantic proof.
+
+Every rerun starts the workflow from the beginning. A successful rerun completely
+overwrites all registered replaceable outputs at the same paths. Clarification
+publication completely overwrites unresolved forms at the same IDs/paths,
+including open answer drafts, while user-resolved forms remain byte-for-byte
+unchanged. This is the shared rule for every workflow execution. Failure,
+blocking or cancellation ends the run without publishing a partial successful
+specification.
+If publication itself fails or is interrupted, already-replaced files may
+remain; no new successful completion is recorded. A fresh rerun replaces the
+output set without rollback or recovery machinery (Design §25).

@@ -32,7 +32,7 @@ test "shared gate checks source lineage and renewal after source and projection 
     const project: pipeline.NodeContract = .{ .id = "test.project", .kind = .action, .requires = &.{context_schema.key}, .produces = &.{count_schema.key}, .side_effect = .none };
     const validate: pipeline.NodeContract = .{ .id = contract.issuer.bytes, .kind = .action, .requires = &.{count_schema.key}, .produces = &.{proof.key}, .side_effect = .none };
     for ([_][]const u8{ "Business source", "Repository capability" }) |text| {
-        var envelope = envelope_module.PipelineEnvelope.init(&.{ context_schema, count_schema, proof });
+        var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{ context_schema, count_schema, proof });
         defer envelope.deinit();
         var delta: pipeline.NodeDelta = .{};
         defer envelope.discard(&delta);
@@ -78,7 +78,7 @@ test "captured evidence survives transport retirement but keeps every current so
     const contract: gate.Contract = .{ .id = .{ .bytes = "test.capture@1" }, .issuer = .{ .bytes = "test.validate-capture" }, .evidence = proof.key, .authority = &.{count_schema.key} };
     const validate: pipeline.NodeContract = .{ .id = contract.issuer.bytes, .kind = .action, .requires = contract.authority, .produces = &.{proof.key}, .side_effect = .none };
     for ([_][]const u8{ "Reference business meaning", "Executable decomposition evidence" }) |text| {
-        var envelope = envelope_module.PipelineEnvelope.init(&.{ context_schema, count_schema, packet, evidence, proof });
+        var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{ context_schema, count_schema, packet, evidence, proof });
         defer envelope.deinit();
         var delta: pipeline.NodeDelta = .{};
         defer envelope.discard(&delta);
@@ -108,8 +108,50 @@ test "captured evidence survives transport retirement but keeps every current so
     }
 }
 
+test "mixed-generation captured evidence cannot refresh a gate and execution control is not evidence" {
+    const gate = @import("domain/workflow_gate.zig");
+    const proof = values.schema(.workflow_operation_registry_evidence, gate.Decision, 1, 32);
+    const contract: gate.Contract = .{ .id = .{ .bytes = "test.join@1" }, .issuer = .{ .bytes = "test.validate-join" }, .evidence = proof.key, .authority = &.{count_schema.key} };
+    for ([_]bool{ false, true }) |control| {
+        const base = values.schema(.model_input_packet, u32, 1, 32);
+        const packet = if (control) base.executionControl() else base.captured();
+        var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{ context_schema, count_schema, packet, proof });
+        defer envelope.deinit();
+        var delta: pipeline.NodeDelta = .{};
+        defer envelope.discard(&delta);
+        delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "Current business evidence", .attempts = 1 });
+        try envelope.apply(produce, &delta, .ok);
+        delta.data_writes[@intFromEnum(packet.key)] = try values.create(std.testing.allocator, packet, u32, 1);
+        try envelope.apply(.{ .id = "test.capture", .kind = .action, .requires = &.{context_schema.key}, .produces = &.{packet.key}, .side_effect = .none }, &delta, .ok);
+        delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "New business evidence", .attempts = 1 });
+        try envelope.apply(.{ .id = "test.refresh", .kind = .action, .requires = &.{}, .produces = &.{}, .replaces = &.{context_schema.key}, .side_effect = .none }, &delta, .ok);
+        delta.data_writes[@intFromEnum(count_schema.key)] = try values.create(std.testing.allocator, count_schema, u32, 1);
+        try envelope.apply(.{ .id = "test.join", .kind = .action, .requires = &.{ packet.key, context_schema.key }, .produces = &.{count_schema.key}, .side_effect = .none }, &delta, .ok);
+        delta.data_writes[@intFromEnum(proof.key)] = try values.create(std.testing.allocator, proof, gate.Decision, .accepted);
+        try envelope.apply(.{ .id = contract.issuer.bytes, .kind = .action, .requires = contract.authority, .produces = &.{proof.key}, .side_effect = .none }, &delta, .ok);
+        if (control) try std.testing.expect(envelope.checkGate(contract) == null) else try std.testing.expectEqual(.stale_authority, envelope.checkGate(contract).?);
+    }
+}
+
+test "lineage allocation failure leaves all output slots and generations unpublished" {
+    for (0..2) |index| {
+        var failing: std.testing.FailingAllocator = .init(std.testing.allocator, .{ .fail_index = index });
+        var envelope = envelope_module.PipelineEnvelope.init(failing.allocator(), &.{ context_schema, count_schema });
+        defer envelope.deinit();
+        var delta: pipeline.NodeDelta = .{};
+        defer envelope.discard(&delta);
+        delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "Original", .attempts = 1 });
+        delta.data_writes[@intFromEnum(count_schema.key)] = try values.create(std.testing.allocator, count_schema, u32, 1);
+        try std.testing.expectError(error.OutOfMemory, envelope.apply(.{ .id = "test.publish", .kind = .action, .requires = &.{}, .produces = &.{ context_schema.key, count_schema.key }, .side_effect = .none }, &delta, .ok));
+        try std.testing.expectEqual(@as(u64, 0), envelope.generation);
+        for (envelope.slots) |slot| try std.testing.expect(slot == null);
+        for (envelope.origins) |origin| try std.testing.expect(origin == null);
+        try std.testing.expect(delta.data_writes[context_index] != null);
+    }
+}
+
 test "envelope owns copied input and exposes only declared keys" {
-    var envelope = envelope_module.PipelineEnvelope.init(&schemas);
+    var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &schemas);
     defer envelope.deinit();
     var bytes = "hello".*;
     var delta: pipeline.NodeDelta = .{};
@@ -129,7 +171,7 @@ test "envelope owns copied input and exposes only declared keys" {
 }
 
 test "optional inputs expose present values without making absent values required" {
-    var envelope = envelope_module.PipelineEnvelope.init(&schemas);
+    var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &schemas);
     defer envelope.deinit();
     const optional: pipeline.NodeContract = .{
         .id = "test.optional",
@@ -150,7 +192,7 @@ test "optional inputs expose present values without making absent values require
 }
 
 test "retaining immutable pipeline data preserves its owner after invalidation" {
-    var envelope = envelope_module.PipelineEnvelope.init(&schemas);
+    var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &schemas);
     defer envelope.deinit();
     var delta: pipeline.NodeDelta = .{};
     defer envelope.discard(&delta);
@@ -172,7 +214,7 @@ test "retaining immutable pipeline data preserves its owner after invalidation" 
 }
 
 test "rejected replacements and schema mismatches preserve the complete old envelope" {
-    var envelope = envelope_module.PipelineEnvelope.init(&schemas);
+    var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &schemas);
     defer envelope.deinit();
     var initial: pipeline.NodeDelta = .{};
     defer envelope.discard(&initial);
@@ -214,7 +256,7 @@ test "rejected replacements and schema mismatches preserve the complete old enve
 }
 
 test "missing extra wrong-key and aliased values cannot satisfy a data contract" {
-    var envelope = envelope_module.PipelineEnvelope.init(&schemas);
+    var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &schemas);
     defer envelope.deinit();
     var delta: pipeline.NodeDelta = .{};
     defer envelope.discard(&delta);
@@ -249,7 +291,7 @@ test "value construction enforces native type version and allocation bounds" {
 }
 
 test "unregistered schemas invalid telemetry and conflicting effects leave values unchanged" {
-    var envelope = envelope_module.PipelineEnvelope.init(&.{});
+    var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{});
     defer envelope.deinit();
     var delta: pipeline.NodeDelta = .{};
     defer envelope.discard(&delta);
@@ -284,7 +326,7 @@ test "value and envelope ownership survives every allocation failure" {
 fn allocationExercise(allocator: std.mem.Allocator) !void {
     const Nested = struct { tags: []const []const u8, choice: union(enum) { text: []const u8, count: u32 }, context: ?*const Context };
     const nested_schema = values.schema(.workflow_invocation, Nested, 1, 1024);
-    var envelope = envelope_module.PipelineEnvelope.init(&.{nested_schema});
+    var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{nested_schema});
     defer envelope.deinit();
     var delta: pipeline.NodeDelta = .{};
     defer envelope.discard(&delta);

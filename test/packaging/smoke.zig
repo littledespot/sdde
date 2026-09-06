@@ -565,6 +565,31 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_progress.expectStdOutEqual("");
     denied_progress.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
     missing_config_command.step.dependOn(&denied_progress.step);
+    {
+        const directory = b.addTempFiles();
+        const packaged = directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+        const configured = std.mem.replaceOwned(u8, b.allocator, configuration, "\"slots\": {}", "\"slots\": {\"spec_generation\": {\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\"}}") catch @panic("allocate generation smoke config");
+        _ = directory.add(".sddtoolkit.json", configured);
+        _ = directory.add(".sddproviders.json", @embedFile("../../design/examples/.sddproviders.json"));
+        _ = directory.addCopyFile(b.path("design/workflows/spec-generation.workflow.yaml"), ".sddtoolkit/workflows/spec-generation.workflow.yaml");
+        inline for (.{ "extraction", "reconciliation", "generation", "support", "repair" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
+            _ = directory.addCopyFile(b.path("design/workflows/spec/" ++ name ++ "." ++ extension), ".sddtoolkit/workflows/spec/" ++ name ++ "." ++ extension);
+        };
+        _ = directory.addCopyFile(b.path("design/workflows/spec/protocol.prompt.md"), ".sddtoolkit/workflows/spec/protocol.prompt.md");
+        _ = directory.add(".sddtoolkit/principles/toolchain.yaml", "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n");
+        _ = directory.addCopyFile(b.path("test/evaluation/wf-001-hello-world/reference/stories.md"), "references/Hello/stories.md");
+        const check = std.Build.Step.Run.create(b, "load packaged generation YAML and resources without source assets or credentials");
+        check.addFileArg(packaged);
+        check.addArgs(&.{ "spec-generation", "--feature", "chosen", "--reference", "Hello" });
+        check.setCwd(directory.getDirectory());
+        check.clearEnvironment();
+        // No live call: the normal provider authorization boundary rejects
+        // absent credentials after discovery and compilation of the full graph.
+        check.expectExitCode(1);
+        check.expectStdOutEqual("");
+        check.expectStdErrEqual("failed\n");
+        missing_config_command.step.dependOn(&check.step);
+    }
     for ([_]bool{ false, true }) |invalid_region| {
         const directory = b.addTempFiles();
         const packaged = directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);

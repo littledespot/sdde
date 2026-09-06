@@ -45,7 +45,9 @@ fn normalizeAnswer(allocator: std.mem.Allocator, raw: []const u8, status: clarif
     switch (status) {
         .open => {
             if (raw.len == 0) return .{ .none = {} };
-            if (!std.mem.startsWith(u8, raw, "defer: ")) return error.InvalidClarificationInput;
+            // Unsubmitted open drafts are replaceable, not accepted answers.
+            // Only the explicit defer syntax submits an open-status event.
+            if (!std.mem.startsWith(u8, raw, "defer: ")) return .{ .none = {} };
             return .{ .defer_reason = try text(allocator, std.mem.trim(u8, raw["defer: ".len..], " \t"), clarification.max_text_bytes) };
         },
         .cancel => {

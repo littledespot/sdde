@@ -1,9 +1,11 @@
 {
-  "type": "object",
-  "properties": {
-    "summary": {
+  "oneOf": [
+    {
       "type": "object",
       "properties": {
+        "kind": {
+          "const": "summary"
+        },
         "member_claim_ids": {
           "type": "array",
           "items": {
@@ -69,525 +71,620 @@
                 "maxItems": 4294967295
               },
               "content": {
-                "type": "object",
-                "properties": {
-                  "model": {
+                "oneOf": [
+                  {
                     "type": "object",
                     "properties": {
-                      "business": {
-                        "type": "object",
-                        "properties": {
-                          "segments": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              },
-                              "required": [],
-                              "additionalProperties": false
-                            },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "segments"
-                        ],
-                        "additionalProperties": false
+                      "kind": {
+                        "const": "model"
                       },
-                      "design": {
-                        "type": "object",
-                        "properties": {
-                          "nodes": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "source": {
-                                  "type": "object",
-                                  "properties": {
-                                    "source_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "source_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
+                      "model": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "business"
                               },
-                              "required": [],
-                              "additionalProperties": false
+                              "segments": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
                             },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "nodes"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "technical": {
-                        "type": "object",
-                        "properties": {
-                          "nodes": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "source": {
-                                  "type": "object",
-                                  "properties": {
-                                    "source_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "source_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
+                            "required": [
+                              "kind",
+                              "segments"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "design"
                               },
-                              "required": [],
-                              "additionalProperties": false
+                              "nodes": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "source"
+                                        },
+                                        "source_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "source_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
                             },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "nodes"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "validation": {
-                        "type": "object",
-                        "properties": {
-                          "nodes": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "source": {
-                                  "type": "object",
-                                  "properties": {
-                                    "source_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "source_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
+                            "required": [
+                              "kind",
+                              "nodes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "technical"
                               },
-                              "required": [],
-                              "additionalProperties": false
+                              "nodes": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "source"
+                                        },
+                                        "source_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "source_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
                             },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "nodes"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "implementation_assumption": {
-                        "type": "object",
-                        "properties": {
-                          "nodes": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "source": {
-                                  "type": "object",
-                                  "properties": {
-                                    "source_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "source_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
+                            "required": [
+                              "kind",
+                              "nodes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "validation"
                               },
-                              "required": [],
-                              "additionalProperties": false
+                              "nodes": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "source"
+                                        },
+                                        "source_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "source_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
                             },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "nodes"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "open_question": {
-                        "type": "object",
-                        "properties": {
-                          "nodes": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "source": {
-                                  "type": "object",
-                                  "properties": {
-                                    "source_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "source_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
+                            "required": [
+                              "kind",
+                              "nodes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "implementation_assumption"
                               },
-                              "required": [],
-                              "additionalProperties": false
-                            },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "nodes"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "scope_guard": {
-                        "type": "object",
-                        "properties": {
-                          "segments": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
+                              "nodes": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
-                                        "ordinal"
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "source"
+                                        },
+                                        "source_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "source_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              },
-                              "required": [],
-                              "additionalProperties": false
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
                             },
-                            "maxItems": 4294967295
+                            "required": [
+                              "kind",
+                              "nodes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "open_question"
+                              },
+                              "nodes": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "source"
+                                        },
+                                        "source_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "source_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "nodes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "scope_guard"
+                              },
+                              "segments": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "segments"
+                            ],
+                            "additionalProperties": false
                           }
-                        },
-                        "required": [
-                          "segments"
-                        ],
-                        "additionalProperties": false
+                        ]
                       }
                     },
-                    "required": [],
+                    "required": [
+                      "kind",
+                      "model"
+                    ],
                     "additionalProperties": false
                   },
-                  "preserved_token": {
+                  {
                     "type": "object",
                     "properties": {
+                      "kind": {
+                        "const": "preserved_token"
+                      },
                       "token_id": {
                         "type": "object",
                         "properties": {
@@ -604,13 +701,12 @@
                       }
                     },
                     "required": [
+                      "kind",
                       "token_id"
                     ],
                     "additionalProperties": false
                   }
-                },
-                "required": [],
-                "additionalProperties": false
+                ]
               }
             },
             "required": [
@@ -624,15 +720,19 @@
         }
       },
       "required": [
+        "kind",
         "member_claim_ids",
         "member_summary_ids",
         "statements"
       ],
       "additionalProperties": false
     },
-    "global": {
+    {
       "type": "object",
       "properties": {
+        "kind": {
+          "const": "global"
+        },
         "claim_dispositions": {
           "type": "array",
           "items": {
@@ -730,525 +830,620 @@
                 "maxItems": 4294967295
               },
               "content": {
-                "type": "object",
-                "properties": {
-                  "model": {
+                "oneOf": [
+                  {
                     "type": "object",
                     "properties": {
-                      "business": {
-                        "type": "object",
-                        "properties": {
-                          "segments": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              },
-                              "required": [],
-                              "additionalProperties": false
-                            },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "segments"
-                        ],
-                        "additionalProperties": false
+                      "kind": {
+                        "const": "model"
                       },
-                      "design": {
-                        "type": "object",
-                        "properties": {
-                          "nodes": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "source": {
-                                  "type": "object",
-                                  "properties": {
-                                    "source_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "source_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
+                      "model": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "business"
                               },
-                              "required": [],
-                              "additionalProperties": false
+                              "segments": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
                             },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "nodes"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "technical": {
-                        "type": "object",
-                        "properties": {
-                          "nodes": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "source": {
-                                  "type": "object",
-                                  "properties": {
-                                    "source_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "source_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
+                            "required": [
+                              "kind",
+                              "segments"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "design"
                               },
-                              "required": [],
-                              "additionalProperties": false
+                              "nodes": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "source"
+                                        },
+                                        "source_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "source_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
                             },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "nodes"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "validation": {
-                        "type": "object",
-                        "properties": {
-                          "nodes": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "source": {
-                                  "type": "object",
-                                  "properties": {
-                                    "source_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "source_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
+                            "required": [
+                              "kind",
+                              "nodes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "technical"
                               },
-                              "required": [],
-                              "additionalProperties": false
+                              "nodes": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "source"
+                                        },
+                                        "source_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "source_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
                             },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "nodes"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "implementation_assumption": {
-                        "type": "object",
-                        "properties": {
-                          "nodes": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "source": {
-                                  "type": "object",
-                                  "properties": {
-                                    "source_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "source_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
+                            "required": [
+                              "kind",
+                              "nodes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "validation"
                               },
-                              "required": [],
-                              "additionalProperties": false
+                              "nodes": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "source"
+                                        },
+                                        "source_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "source_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
                             },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "nodes"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "open_question": {
-                        "type": "object",
-                        "properties": {
-                          "nodes": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "source": {
-                                  "type": "object",
-                                  "properties": {
-                                    "source_id": {
-                                      "type": "object",
-                                      "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "ordinal"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "source_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
+                            "required": [
+                              "kind",
+                              "nodes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "implementation_assumption"
                               },
-                              "required": [],
-                              "additionalProperties": false
-                            },
-                            "maxItems": 4294967295
-                          }
-                        },
-                        "required": [
-                          "nodes"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "scope_guard": {
-                        "type": "object",
-                        "properties": {
-                          "segments": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "literal": {
-                                  "type": "object",
-                                  "properties": {
-                                    "value": {
-                                      "type": "string",
-                                      "maxLength": 4294967295
-                                    }
-                                  },
-                                  "required": [
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "passive": {
-                                  "type": "object",
-                                  "properties": {
-                                    "passive_literal_id": {
+                              "nodes": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
                                       "type": "object",
                                       "properties": {
-                                        "ordinal": {
-                                          "type": "integer",
-                                          "minimum": 1,
-                                          "maximum": 4294967295
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
                                         }
                                       },
                                       "required": [
-                                        "ordinal"
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "source"
+                                        },
+                                        "source_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "source_id"
                                       ],
                                       "additionalProperties": false
                                     }
-                                  },
-                                  "required": [
-                                    "passive_literal_id"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              },
-                              "required": [],
-                              "additionalProperties": false
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
                             },
-                            "maxItems": 4294967295
+                            "required": [
+                              "kind",
+                              "nodes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "open_question"
+                              },
+                              "nodes": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "source"
+                                        },
+                                        "source_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "source_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "nodes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "scope_guard"
+                              },
+                              "segments": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "literal"
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "maxLength": 4294967295
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "const": "passive"
+                                        },
+                                        "passive_literal_id": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ordinal": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 4294967295
+                                            }
+                                          },
+                                          "required": [
+                                            "ordinal"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "passive_literal_id"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "maxItems": 4294967295
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "segments"
+                            ],
+                            "additionalProperties": false
                           }
-                        },
-                        "required": [
-                          "segments"
-                        ],
-                        "additionalProperties": false
+                        ]
                       }
                     },
-                    "required": [],
+                    "required": [
+                      "kind",
+                      "model"
+                    ],
                     "additionalProperties": false
                   },
-                  "preserved_token": {
+                  {
                     "type": "object",
                     "properties": {
+                      "kind": {
+                        "const": "preserved_token"
+                      },
                       "token_id": {
                         "type": "object",
                         "properties": {
@@ -1265,13 +1460,12 @@
                       }
                     },
                     "required": [
+                      "kind",
                       "token_id"
                     ],
                     "additionalProperties": false
                   }
-                },
-                "required": [],
-                "additionalProperties": false
+                ]
               }
             },
             "required": [
@@ -1338,24 +1532,30 @@
                   "nodes": {
                     "type": "array",
                     "items": {
-                      "type": "object",
-                      "properties": {
-                        "literal": {
+                      "oneOf": [
+                        {
                           "type": "object",
                           "properties": {
+                            "kind": {
+                              "const": "literal"
+                            },
                             "value": {
                               "type": "string",
                               "maxLength": 4294967295
                             }
                           },
                           "required": [
+                            "kind",
                             "value"
                           ],
                           "additionalProperties": false
                         },
-                        "passive": {
+                        {
                           "type": "object",
                           "properties": {
+                            "kind": {
+                              "const": "passive"
+                            },
                             "passive_literal_id": {
                               "type": "object",
                               "properties": {
@@ -1372,13 +1572,17 @@
                             }
                           },
                           "required": [
+                            "kind",
                             "passive_literal_id"
                           ],
                           "additionalProperties": false
                         },
-                        "source": {
+                        {
                           "type": "object",
                           "properties": {
+                            "kind": {
+                              "const": "source"
+                            },
                             "source_id": {
                               "type": "object",
                               "properties": {
@@ -1395,13 +1599,12 @@
                             }
                           },
                           "required": [
+                            "kind",
                             "source_id"
                           ],
                           "additionalProperties": false
                         }
-                      },
-                      "required": [],
-                      "additionalProperties": false
+                      ]
                     },
                     "maxItems": 4294967295
                   }
@@ -1430,13 +1633,12 @@
         }
       },
       "required": [
+        "kind",
         "claim_dispositions",
         "signals",
         "conflicts"
       ],
       "additionalProperties": false
     }
-  },
-  "required": [],
-  "additionalProperties": false
+  ]
 }

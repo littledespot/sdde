@@ -4,13 +4,13 @@ const authority = @import("required_authority.zig");
 const spec = @import("specification.zig");
 const reference = @import("reference_reconciliation.zig");
 
-pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: reference.Accounted, content: ?spec.IdentifiedContent) authority.Error!authority.Inputs {
+pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: reference.Accounted, content: ?spec.IdentifiedContent, brief: ?spec.Brief) authority.Error!authority.Inputs {
     const items = references.records.assignments.checked.prior.prior.input.progress.plan.layout.items;
     const sources = try allocator.alloc(authority.Authority, 1);
     sources[0] = .{ .reference = items.state_id };
     var seeds: std.ArrayList(authority.Seed) = .empty;
     var gaps: std.ArrayList(authority.ForcedGap) = .empty;
-    for ([_]authority.Slot{ .display_name, .primary_user_story, .entities }) |slot| {
+    for ([_]authority.Slot{ .display_name, .description, .primary_goal, .primary_user_story, .entities }) |slot| {
         try seeds.append(allocator, .{
             .id = .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot },
             .requiredness = .{ .schema = .specification },
@@ -50,5 +50,5 @@ pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.
             .input_authorities = sources,
         });
     }
-    return .{ .feature = feature, .projection = .specification, .specification = content, .detected_at = .spec, .authorities = sources, .seeds = try seeds.toOwnedSlice(allocator), .evidence = &.{}, .forced_gaps = try gaps.toOwnedSlice(allocator), .references = references };
+    return .{ .feature = feature, .projection = .specification, .specification = content, .brief = brief, .detected_at = .spec, .authorities = sources, .seeds = try seeds.toOwnedSlice(allocator), .evidence = &.{}, .forced_gaps = try gaps.toOwnedSlice(allocator), .references = references };
 }

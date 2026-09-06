@@ -253,11 +253,14 @@ Remaining:
 - feature-log activation, recovery, flush barriers, and finalization bound to
   exact feature/run/workflow identities.
 
-Rerun regression fixtures MUST prove that existing selected-workflow outputs
-are overwritten at the same registered paths without separate overwrite
-approval, and user-closed clarification files MUST remain byte-for-byte
-unchanged. Cover applicable validated answer reuse and rejection of stale/invalid
-or concurrent-close overwrites (Design Section 23.2). This output policy does
+Rerun regression fixtures MUST prove that all registered replaceable
+selected-workflow outputs and unresolved clarification forms are completely
+overwritten at the same paths without separate overwrite approval. Retain
+clarification subject IDs, not old unresolved form bytes or unsubmitted drafts;
+shorter replacements must leave no old trailing bytes. User-resolved clarification
+files MUST remain byte-for-byte unchanged. Cover an unrelated registered workflow
+to prove the shared rule, applicable validated answer reuse and rejection of
+stale/invalid or concurrent-close overwrites (Design Section 23.2). This output policy does
 not authorize automatic state resets, writes to unrelated files, or a generated
 feature name when the supplied directory is invalid.
 

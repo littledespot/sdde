@@ -5,7 +5,7 @@ const std = @import("std");
 const gate = @import("../domain/workflow_gate.zig");
 const workflow = @import("../domain/workflow.zig");
 
-pub const Error = pipeline.DeltaError || error{
+pub const Error = pipeline.DeltaError || std.mem.Allocator.Error || error{
     DataSchemaMismatch,
     UnregisteredDataSchema,
     AliasedDataValue,
@@ -15,13 +15,14 @@ pub const Error = pipeline.DeltaError || error{
 /// Sole owner of accumulated workflow values. A node receives only a filtered
 /// immutable view; replacements become visible together after complete validation.
 pub const PipelineEnvelope = struct {
+    allocator: std.mem.Allocator,
     schemas: []const data.Schema,
     slots: data.Slots = data.empty_slots,
-    origins: [data.key_count]?data.Origin = @splat(null),
+    origins: [data.key_count]?*data.Origin = @splat(null),
     generation: u64 = 0,
 
-    pub fn init(schemas: []const data.Schema) PipelineEnvelope {
-        return .{ .schemas = schemas };
+    pub fn init(allocator: std.mem.Allocator, schemas: []const data.Schema) PipelineEnvelope {
+        return .{ .allocator = allocator, .schemas = schemas };
     }
 
     pub fn deinit(self: *PipelineEnvelope) void {
@@ -29,7 +30,10 @@ pub const PipelineEnvelope = struct {
             if (slot.*) |value| values.destroy(value);
             slot.* = null;
         }
-        self.origins = @splat(null);
+        for (&self.origins) |*origin| {
+            if (origin.*) |value| self.allocator.destroy(value);
+            origin.* = null;
+        }
     }
 
     pub fn view(self: *const PipelineEnvelope, contract: pipeline.NodeContract) Error!data.View {
@@ -72,6 +76,15 @@ pub const PipelineEnvelope = struct {
                 }
             };
         }
+        // Prepare lineage before committing any output. Keep the quadratic
+        // authority table off the runner's stack, with explicit envelope ownership.
+        var prepared_origins: [data.key_count]?*data.Origin = @splat(null);
+        errdefer for (prepared_origins) |prepared| if (prepared) |value| self.allocator.destroy(value);
+        for (&prepared_origins, 0..) |*prepared, index| {
+            if (delta.data_writes[index] == null and delta.data_replacements[index] == null) continue;
+            prepared.* = try self.allocator.create(data.Origin);
+            prepared.*.?.* = origin;
+        }
         // No allocation or fallible operation is allowed beyond this boundary.
         self.generation = generation;
         var invalidations = delta.data_invalidations.iterator();
@@ -79,20 +92,22 @@ pub const PipelineEnvelope = struct {
             const slot = &self.slots[@intFromEnum(key)];
             values.destroy(slot.*.?);
             slot.* = null;
+            self.allocator.destroy(self.origins[@intFromEnum(key)].?);
             self.origins[@intFromEnum(key)] = null;
         }
         for (&delta.data_replacements, 0..) |*slot, index| {
             if (slot.*) |value| {
                 values.destroy(self.slots[index].?);
                 self.slots[index] = value;
-                self.origins[index] = origin;
+                self.allocator.destroy(self.origins[index].?);
+                self.origins[index] = prepared_origins[index];
                 slot.* = null;
             }
         }
         for (&delta.data_writes, 0..) |*slot, index| {
             if (slot.*) |value| {
                 self.slots[index] = value;
-                self.origins[index] = origin;
+                self.origins[index] = prepared_origins[index];
                 slot.* = null;
             }
         }
@@ -110,7 +125,7 @@ pub const PipelineEnvelope = struct {
         for (contract.authority) |key| if (self.origins[@intFromEnum(key)]) |authority| {
             current[@intFromEnum(key)] = authority.generation;
         };
-        if (gate.check(contract, decision.*, origin, current)) |rejection| return rejection;
+        if (gate.check(contract, decision.*, origin.*, current)) |rejection| return rejection;
         var checked = std.enums.EnumSet(pipeline.DataKey).initEmpty();
         for (contract.authority) |key| if (self.checkAuthorityLineage(key, &checked)) |rejection| return rejection;
         return null;

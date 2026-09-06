@@ -73,7 +73,7 @@ pub const Parse = struct {
         const source = owned.read(&input.step.data, raw_schema, .raw) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .parsed = self.action.execute(owner.arena.allocator(), source) catch |err| return reject(self.allocator, parsed_schema, owner, err) };
+        owner.payload = .{ .parsed = .{ .response = self.action.execute(owner.arena.allocator(), source) catch |err| return reject(self.allocator, parsed_schema, owner, err) } };
         return publish(self.allocator, parsed_schema, owner, .ok);
     }
 };
@@ -87,7 +87,7 @@ pub const Validate = struct {
         const proposed = owned.read(&input.step.data, parsed_schema, .parsed) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        const checked = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), try readContext(&input.step.data), proposed) catch |err| return reject(self.allocator, checked_schema, owner, err);
+        const checked = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), try readContext(&input.step.data), proposed.response) catch |err| return reject(self.allocator, checked_schema, owner, err);
         owner.payload = .{ .checked = checked };
         return publish(self.allocator, checked_schema, owner, if (checked.response == .clarification) .needs_user else .ok);
     }
