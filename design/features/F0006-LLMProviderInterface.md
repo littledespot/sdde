@@ -50,9 +50,11 @@ inference call through its native YAML binding with fake-provider acceptance
 evidence. Observation validation, strict JSON decoding and payload-schema validation
 are also YAML-integrated, together with invoked inference-operation completion
 and evidence-derived logical-request closure. Authorization-failure/cancellation
-termination of assigned operations is also YAML-integrated. Pre-call logical-request
-closure, optional count-call actions and production
-provider composition/contracts remain implementation work. No transaction store or
+termination of assigned operations and pre-call logical-request closure are also
+YAML-integrated. `CountModelInputTokensAction` and
+`ValidateModelTokenCountObservationAction` are YAML-integrated with fake-provider
+tests, count-operation completion and count failure/cancellation request closure.
+Production provider composition/contracts remain implementation work. No transaction store or
 provider-effect journal is a prerequisite.
 
 Provider-neutral capability and model-slot binding are implemented. ADR 0011's
@@ -253,8 +255,9 @@ terminal publication. No token charge, provider call, deadline renewal, retry or
 persistence occurs. Complete provider output is not JSON/schema validity,
 logical-request completion or workflow success. Decoding can run afterward from
 its retained evidence. Runtime/budget rejection abandons execution without a
-hidden terminalization call. Pre-call logical-request closure and count-call
-integration are separate work.
+hidden terminalization call. Count operations use the same completion binding
+implementation through `complete-count-operation`, with the count-specific
+validated input described below.
 
 **Implemented YAML pre-call operation termination:** `terminate-provider-operation`
 requires the current request ledger, prepared request, applied attempt,
@@ -278,6 +281,27 @@ Existing lease cleanup releases unused backing once; retained authorization
 facts and request/attempt identity remain unchanged. No provider call, token
 charge, retry, logical-request closure or persistence occurs. Runtime rejection
 abandons execution without inserting this YAML step.
+
+**Implemented YAML pre-call logical-request closure:** `terminate-model-request`
+consumes the current request ledger, prepared request, applied attempt,
+`terminal_provider_operation` and retained `provider_authorization_result`.
+It has no parameters or capabilities. The existing authorization validator
+requires the exact operation identity and matching terminal failure/cancellation
+facts; prepared results cannot authorize closure.
+
+| Request status and authorization evidence | Request terminal reason | YAML outcome |
+| --- | --- | --- |
+| Assigned + failure | `not_invoked_authorization_failure` | `failed` |
+| Invoked + failure | `failed` | `failed` |
+| Assigned or invoked + cancellation | `cancelled` | `cancelled` |
+
+`AdvanceModelRequestLifecycleAction` and the shared runner replacement path
+require every associated operation to be terminal and publish one direct ledger
+successor. Missing, foreign, stale, duplicate, inconsistent or forged evidence
+rejects without mutation. The original authorization and operation owners remain
+intact. No response-validation evidence, live lease, clock, provider call, token
+charge, retry or persistence is needed. Runtime cancellation abandons execution
+without inserting closure; failure/cancellation cannot become workflow success.
 
 **Implemented YAML logical-request closure:** `complete-model-request` consumes
 the current request ledger, prepared request, applied attempt,
@@ -905,6 +929,62 @@ port. Fake-provider tests exercise the action through observation validation,
 decoding and payload schema validation. Native YAML registration now invokes this
 same action; provider implementation binding remains explicitly required.
 
+`CountModelInputTokensAction` is implemented and YAML-callable. It forwards
+the exact request, binding, applied count-operation record and single-use lease
+reference through `LLMProviderInterface.countInputTokens` once. The existing port
+owns association/deadline checks, lease consumption and backing cleanup. Counted
+observations, failure facts, cancellation and allocation errors pass through
+unchanged; no validation, retry, fallback, inference, token charge or lifecycle
+transition occurs inside the action. Count observations borrow their request and
+binding identities, so those owners outlive their use. Counting remains optional,
+not an inference prerequisite or capacity gate.
+
+`ValidateModelTokenCountObservationAction` is pure and allocation-free. The caller
+supplies the current operation ledger and original request/binding. Validation
+reuses `requireInvoked` and `validateCountInvocation`, compares both observation
+variants with that exact operation ID (including attempt), and reuses
+`ExactInputTokenCountEvidence.fromObservation` for counted request/binding/input
+association. After validation, that shared constructor returns canonical
+request/binding references rather than observation-owned identity strings.
+Invalid context or association rejects without rewriting the input;
+provider failures retain their cause, retry class and delivery facts. Cancellation
+remains the provider port's separate `Cancelled` error, never a failure or count.
+The result copies scalar facts and borrows the original identity owners, not the
+observation container; it needs no `deinit`. Those owners must outlive the result.
+Validation is repeatable and performs no call, lease consumption, clock read,
+capacity check, token charge or lifecycle transition. Current-ledger checks reject
+terminal operations; one-time completion remains the existing lifecycle CAS's
+responsibility, not a second consumption ledger.
+
+**Implemented count YAML integration:** `count-model-input-tokens` consumes the
+current request ledger, prepared request, applied attempt, invoked count operation
+and prepared authorization result. It calls the existing action once. Its
+`provider_token_count_result` owns the raw outcome and retains the original
+request/binding owners before calling the port. The shared call binding also owns
+inference results; there is no second provider dispatcher.
+
+`validate-model-token-count-observation` consumes that result and exact invoked
+request/attempt association. It publishes `provider_token_count_validation_result`:
+validated count/failure facts, typed association rejection, or cancellation.
+The validation result independently retains the original request/binding owners;
+it need not retain the raw observation container. Revalidation makes no API call
+or token charge.
+
+`complete-count-operation` consumes the validated result with the current
+invoked operation and applied attempt. The existing lifecycle action/runner
+publishes the canonical terminal record: `counted(input_tokens)`, original
+failure facts, or `cancelled(accepted_or_unknown)`. It invalidates invocation
+evidence and releases unused lease backing through the existing table.
+`complete-count-request` consumes the matching terminal operation and validation
+result, reusing request lifecycle closure only for failure or cancellation.
+All associated operations must be terminal. Count success cannot accept the
+logical request; inference still needs its own explicit assignment and lease.
+
+All four operations are parameter-free. Missing, foreign, stale, rejected or
+duplicate completion evidence fails closed. No count step alters token usage,
+adds a capacity gate, retries, renews a deadline, persists state or selects its
+successor. Retry and cleanup transitions remain explicit in the compiled YAML.
+
 Authorization failure before the first provider call leaves the logical request
 `assigned`; a typed terminal outcome uses an amended
 `assigned -> terminal(not_invoked_authorization_failure)` transition, while the
@@ -1356,6 +1436,26 @@ F0006 does not:
 11. Inference works without a count operation or count capability. Optional
     count observations remain bound to their operation, binding and input, but
     do not authorize or prohibit inference.
+    Count-action fake-provider tests prove exact pointer/observation forwarding,
+    zero and maximal counts without capacity checks, all closed failure facts,
+    unchanged request/attempt/operation ledgers, single-use authorization,
+    foreign/substituted evidence rejection, deadline and cancellation behavior,
+    unsupported counting and allocation-error propagation with one cleanup owner.
+    Count-validation fake-provider tests prove exact evidence reuse, zero/maximal
+    counts, all failure facts, rejection of foreign/copied request IDs, wrong
+    attempts/kinds/bindings/inputs, invalid request context and non-invoked or
+    terminal operations. Independently allocated observation identities can be
+    freed after either the shared constructor or action returns. Validation
+    retains no observation allocation, changes no ledger and works after lease
+    consumption/deadline expiry or token exhaustion.
+    Cancellation produces no observation; cleanup remains exactly once.
+    Fake-provider YAML evidence additionally covers raw/validated owner retention
+    beyond runner cleanup, count completion and failure/cancellation request
+    closure, missing/foreign/stale/duplicate evidence, explicit retry exhaustion,
+    independent execution ledgers, cancellation boundaries and allocation failure.
+    A count-then-inference graph uses separate leases on the same attempt and
+    charges only actual inference usage. Registry/compiler and clean packaged
+    tests reject hidden operations, parameters and missing prerequisites.
 12. Request identity, binding, schema and control validation precede one
     reserved full-attempt ordinal. Every later ordinal requires a YAML-selected
     retry operation with its explicit compiler-validated `retry-limit`.
@@ -1421,6 +1521,14 @@ F0006 does not:
     cleanup, and zero provider calls/token charges. Terminal fact consumers need
     no clock but cannot mix lifecycle phases or bypass prepared-lease checks.
     Runtime cancellation performs no hidden termination or logical-request closure.
+    Native YAML pre-call request closure covers both operation kinds and request
+    states, exact failure/cancellation reasons, all-operation terminality,
+    prepared/missing/foreign/stale/duplicate/inconsistent evidence rejection,
+    forged successors/outcomes, cancellation and allocation cleanup, retained
+    owner lifetime and unchanged token usage. Hidden YAML assertions and altered
+    compiled contracts reject; packaged execution rejects missing prerequisites.
+    A full fake-provider YAML run closes a previously invoked request after later
+    authorization rejection, retaining its earlier response and single usage charge.
 13. Each call performs zero or one provider request with no hidden retry,
     fallback, backoff, credential acquisition/refresh, or second operation;
     any permitted credential I/O has separate accepted accounting.

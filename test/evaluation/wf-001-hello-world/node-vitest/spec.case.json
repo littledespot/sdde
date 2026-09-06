@@ -1,0 +1,11 @@
+{
+  "schema": "evaluation-case/v1",
+  "id": "wf-001-hello-world-node-vitest-spec",
+  "sources": [
+    {
+      "id": "stories",
+      "path": "test/evaluation/wf-001-hello-world/reference/stories.md"
+    }
+  ],
+  "rubric": "test/evaluation/wf-001-hello-world/node-vitest/rubric/spec.json"
+}

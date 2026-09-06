@@ -176,8 +176,18 @@ one application. It reuses the existing ledger and lease cleanup; response
 owners and token accounting do not change. Stops/failures stay `failed` and
 cancellation stays `cancelled`; provider completion proves no payload, logical
 request or workflow success. Completion may precede decoding, whose dependencies
-retain the original evidence. Optional count-call integration remains separate. A runtime/budget rejection
+retain the original evidence. A runtime/budget rejection
 abandons execution without inserting a hidden completion step.
+
+Count integration uses the same ownership and lifecycle mechanisms.
+`count-model-input-tokens` retains the original request/binding with its raw
+result; `validate-model-token-count-observation` retains those owners with
+validated count/failure facts or distinct rejection/cancellation.
+`complete-count-operation` consumes this exact evidence through the existing
+provider lifecycle action. `complete-count-request` closes only failed/cancelled
+requests after every associated operation is terminal; count success cannot
+accept a logical request. These parameter-free bindings add no count prerequisite,
+capacity gate, token charge, retry authority or completion ledger.
 
 ## Pre-call operation termination integration (implemented 2026-09-06)
 
@@ -198,8 +208,8 @@ clock for non-prepared outcomes; prepared lease checks are unchanged.
 
 The original result and request/attempt remain intact. Existing lease cleanup
 destroys backing once; no provider call, token charge, retry, persistence or
-logical-request transition is introduced. Pre-call logical-request closure
-remains separate. Runtime cancellation abandons execution without a hidden step.
+logical-request transition is introduced by this operation. Request closure uses
+the explicit binding below. Runtime cancellation abandons execution without a hidden step.
 
 ## Logical-request closure integration (implemented 2026-09-06)
 
@@ -224,6 +234,24 @@ successor and retains the exact published snapshot, without a second ledger,
 capability, call, lease renewal, token charge or persistence. Pure closure needs
 no remaining token budget or unexpired provider deadline; runtime cancellation
 still abandons execution without inserting a hidden closure step.
+
+## Pre-call logical-request closure integration (implemented 2026-09-06)
+
+`terminate-model-request` is a parameter-free binding of
+`AdvanceModelRequestLifecycleAction`. It requires the current request ledger,
+prepared request, applied attempt, terminal operation and retained authorization
+result. The existing authorization validator checks exact identity and matching
+terminal facts. Failure closes an assigned request as
+`not_invoked_authorization_failure` or an invoked request as `failed`;
+cancellation closes either as `cancelled`. YAML outcomes remain `failed` or
+`cancelled`; prepared authorization cannot authorize closure.
+
+Every associated operation must be terminal. The shared runner replacement
+validator rejects missing, foreign, stale, duplicate, inconsistent or forged
+evidence before publishing the direct request-ledger successor. Original evidence
+ownership, lease cleanup and token accounting are unchanged. No response,
+capability, live lease, clock, provider call, retry or persistence is added.
+Runtime abandonment never inserts this step or infers workflow success.
 
 ## Acceptance
 
@@ -265,3 +293,9 @@ Pre-call termination cases cover both operation kinds, failure/cancellation,
 prepared/missing/foreign/stale/duplicate rejection, forged deltas, no-clock
 terminal fact consumption, prepared-lease checks, allocation and deposited-lease
 cleanup, retained owners, and runtime abandonment without hidden termination.
+Pre-call request-closure cases additionally cover both request statuses, exact
+terminal reasons, unfinished operations, mismatched authorization/terminal facts,
+forged request successors and outcomes, immutable ledger ownership, allocation
+and cancellation cleanup, YAML assertions and compiled-contract tampering.
+An inference-then-authorization-rejection YAML run preserves the earlier response
+and token charge while closing the invoked request as failed or cancelled.

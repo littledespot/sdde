@@ -65,6 +65,17 @@ later calls. Failures and cancellation remain distinct; no counting, retry,
 response decoding or lifecycle terminalization is implicit. The native binding
 is fake-provider tested and fails closed until a real adapter is bound.
 
+`count-model-input-tokens` and `validate-model-token-count-observation` are
+parameter-free YAML bindings of the existing actions. Their typed results retain
+the original request/binding owners. `complete-count-operation` terminalizes the
+exact invoked operation from validated count/failure/cancellation evidence;
+`complete-count-request` closes the logical request only after count failure or
+cancellation and only when every associated operation is terminal. Successful
+counting does not accept a request or authorize inference. Missing, foreign,
+stale or reused completion evidence rejects. These operations reuse the existing
+ledgers, single-use lease cleanup and explicit YAML retry rules; they add no
+capacity gate or token charge. Actual inference-usage accounting remains mandatory.
+
 `validate-provider-invocation-observation` checks the retained response against
 the exact call using the existing association, usage and UTF-8 validator. It has
 no parameters, provider capability or token charge. Its owned result preserves
@@ -105,7 +116,16 @@ authorization result: failure becomes `preparation_failed`, and cancellation
 becomes `cancelled(not_sent)`. It takes no parameters, rejects prepared or
 missing/foreign/stale evidence, and uses the same terminal ledger publication
 and lease cleanup. It makes no provider call, charges no tokens and leaves the
-logical request unchanged. Pre-call logical-request closure remains separate work.
+logical request unchanged.
+
+`terminate-model-request` then explicitly closes that logical request using the
+matching terminal operation and retained authorization result. Authorization
+failure closes an assigned request as `not_invoked_authorization_failure` or an
+invoked request as `failed`; cancellation closes either as `cancelled`.
+It is parameter-free and requires every associated operation to be terminal.
+Prepared, missing, foreign, stale, duplicate or inconsistent evidence rejects.
+The existing lifecycle action and runner publish only the request-ledger successor;
+retained evidence, lease cleanup and token usage stay unchanged.
 
 ## Requirements
 
@@ -120,6 +140,7 @@ zig build lint
 zig build test
 zig build test-atomic-execution
 zig build test-model-result-schema
+zig build test-count-model-input-tokens
 zig build test-reference-preflight
 zig build test-reference-ingestion
 zig build test-reference-evidence
@@ -130,6 +151,10 @@ zig build test-path-tokens
 zig build test-typed-text
 zig build test-feature-directory
 zig build test-clarification-inputs
+zig build test-rubric-evaluator
+zig build build-rubric-evaluator
+zig build smoke-rubric-evaluator
+zig build evaluate-spec -- --help
 zig build smoke
 zig build verify
 ```
@@ -140,6 +165,14 @@ lint step and the unit tests, then copies the built executable into a clean
 temporary directory, clears its environment, and verifies its exact standard
 output. The temporary package directory is removed by the Zig build runner
 after a successful build.
+
+The development-only [rubric evaluator](design/harness/evaluator.md) grades a
+supplied specification through OpenAI using the checked-in Hello World rubric
+or another closed case/rubric. It writes evidence-backed JSON/Markdown reports
+without running Specify or changing workflow authority. Live calls require
+explicit settings, `OPENAI_API_KEY` and `--live`; ordinary tests/verification
+remain offline. The rubric is an uncalibrated draft and live API acceptance has
+not yet been demonstrated. This executable is not installed with `sdde`.
 
 Concrete domain operations and the full initial SDD workflow suite remain
 incremental work under `design/design.md` and their feature contracts.

@@ -609,6 +609,18 @@ ProviderAuthorizationResult = opaque {
 // evidence. Rejection publishes neither change. The lease is still unconsumed;
 // no API call, token charge, new timeout or persisted state is introduced.
 
+// count-model-input-tokens uses the same call binding for the invoked count kind.
+// provider_token_count_result retains the original request/binding before the
+// port call. validate-model-token-count-observation publishes independently owned
+// provider_token_count_validation_result using the existing pure validator:
+// validated(counted | failed) | rejected(association/context) | cancelled.
+// complete-count-operation consumes that result and the exact invoked operation,
+// publishing counted/failed/cancelled through the existing lifecycle runner.
+// complete-count-request permits only failed/cancelled logical closure after all
+// request operations are terminal. Success cannot accept a request or authorize
+// inference. All four bindings are parameter-free; no token charge or implicit
+// retry occurs, and stale/foreign/duplicate completion evidence rejects.
+
 // validate-provider-invocation-observation consumes the retained raw result,
 // prepared request, applied attempt and invoked operation. Its pure action
 // validates the runner-bound association, usage and UTF-8 without another
@@ -648,6 +660,13 @@ ProviderAuthorizationResult = opaque {
 // Prepared results reject. The same lifecycle action/runner terminal publication
 // replaces assignment evidence, retaining original facts and sole lease cleanup.
 // No call, token charge, retry, persistence or logical-request transition occurs.
+
+// terminate-model-request consumes the matching terminal operation and authorization
+// result after all request operations are terminal. Authorization failure closes
+// assigned -> not_invoked_authorization_failure, invoked -> failed; cancellation
+// closes either -> cancelled. Prepared or inconsistent evidence rejects. The same
+// request lifecycle action and runner publish only the direct ledger successor.
+// No parameters, response evidence, live lease, token charge or new authority.
 
 TelemetryFact =
   | RunStartedFact
@@ -4066,7 +4085,6 @@ FunctionalRequirementProjection {
   requirementId,
   specificationRecordId,
   text: BusinessValue,
-  modality,
   claimIds[], citationIds[], clarificationResponseIds[]
 }
 
@@ -5830,91 +5848,63 @@ ClarificationOwnershipRegistry {
 ## 7. Specification IR
 
 ```text
-AttributedBusinessText {
-  text: BusinessValue,
-  claimIds[],
-  citationIds[],
-  clarificationResponseIds[]
+Provenance { claim_ids[], citation_ids[], clarification_response_ids[] }
+AttributedValue { value: BusinessValue, provenance: Provenance }
+RecordProposal { content: RecordContent, provenance: Provenance }
+
+ContentProposal {
+  display_name: AttributedValue,
+  primary_user_story: AttributedValue,
+  records: RecordProposal[],
+  entities: { disposition: required | not_applicable, basis: AttributedValue }
 }
 
-FixedSpecificationField {
-  recordKey: spec.display_name | spec.primary_user_story,
-  text: BusinessValue,
-  claimIds[],
-  citationIds[],
-  clarificationResponseIds[]
-}
+RecordContent =
+  | acceptance_criterion { given: BusinessValue, when: BusinessValue, then: BusinessValue }
+  | user_visible_outcome { text: BusinessValue }
+  | edge_case { condition: BusinessValue, expected_outcome: BusinessValue }
+  | functional_requirement { text: BusinessValue }
+  | business_rule { text: BusinessValue }
+  | assumption { text: BusinessValue }
+  | non_goal { text: BusinessValue }
+  | prohibited_behavior { text: BusinessValue }
+  | entity { name: BusinessValue, business_meaning: BusinessValue, relationships: BusinessValue[] }
 
-SpecificationContentProposal {
-  displayName: AttributedBusinessText,
-  primaryUserStory: AttributedBusinessText,
-  acceptanceCriteria: {
-    // Closed typed triplet; never model-authored Markdown or free-form prose.
-    given: BusinessValue, when: BusinessValue, then: BusinessValue,
-    claimIds[], citationIds[], clarificationResponseIds[]
-  }[],
-  userVisibleOutcomes: { text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  edgeCases: { condition: BusinessValue, expectedOutcome: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  functionalRequirements: { text: BusinessValue, modality, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  businessRules: { text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  assumptions: { text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  nonGoals: { text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  prohibitedBehaviors: { text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  entities: {
-    name: BusinessValue, businessMeaning: BusinessValue,
-    relationships: BusinessValue[], claimIds[], citationIds[], clarificationResponseIds[]
-  }[],
-  openQuestions: { text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[]
-}
-
-SpecificationUnitProposal =
-  | { kind: display_name, value: AttributedBusinessText }
-  | { kind: primary_user_story, value: AttributedBusinessText }
-  | { kind: acceptance_criteria, values: SpecificationContentProposal.acceptanceCriteria }
-  | { kind: user_visible_outcomes, values: SpecificationContentProposal.userVisibleOutcomes }
-  | { kind: edge_cases, values: SpecificationContentProposal.edgeCases }
-  | { kind: functional_requirements, values: SpecificationContentProposal.functionalRequirements }
-  | { kind: business_rules, values: SpecificationContentProposal.businessRules }
-  | { kind: assumptions, values: SpecificationContentProposal.assumptions }
-  | { kind: non_goals, values: SpecificationContentProposal.nonGoals }
-  | { kind: prohibited_behaviors, values: SpecificationContentProposal.prohibitedBehaviors }
-  | { kind: entities, values: SpecificationContentProposal.entities }
-  | { kind: open_questions, values: SpecificationContentProposal.openQuestions }
-
-SpecificationUnitOperationResult =
-  | { kind: content, proposal: SpecificationUnitProposal }
-  | { kind: clarification_needed, proposal: ClarificationNeedProposal }
-
-SpecificationIR {
-  passiveLiteralRegistryStateId,
-  displayName: FixedSpecificationField,
-  primaryUserStory: FixedSpecificationField,
-  acceptanceCriteria: {
-    // Renders beneath the exact `## Acceptance Criteria` heading as one
-    // uppercase GIVEN/WHEN/THEN triplet in that order.
-    id, given: BusinessValue, when: BusinessValue, then: BusinessValue,
-    claimIds[], citationIds[], clarificationResponseIds[]
-  }[],
-  userVisibleOutcomes: { id, text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  edgeCases: { id, condition: BusinessValue, expectedOutcome: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  functionalRequirements: { id, text: BusinessValue, modality, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  businessRules: { id, text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  assumptions: { id, text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  nonGoals: { id, text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  prohibitedBehaviors: { id, text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[],
-  entities: {
-    id, name: BusinessValue, businessMeaning: BusinessValue,
-    relationships: BusinessValue[], claimIds[], citationIds[], clarificationResponseIds[]
-  }[],
-  openQuestions: { id, text: BusinessValue, claimIds[], citationIds[], clarificationResponseIds[] }[]
+IdentifiedRecord { id: { kind, ordinal }, proposal: RecordProposal }
+IdentifiedContent {
+  display_name: AttributedValue,
+  primary_user_story: AttributedValue,
+  records: IdentifiedRecord[],
+  entities: ContentProposal.entities
 }
 ```
 
-The canonical `spec.md` projection for each `SpecificationIR.acceptanceCriteria`
-record is:
+These samples describe the native [content contract](../src/domain/specification.zig),
+not a second schema. Native tagged unions encode as a single-key object, for
+example `{"functional_requirement":{"text":...}}`. Title/story retain their
+fixed structural provenance keys. `BusinessValue` is `normalized` typed text or
+an `exact_copy` containing only token/citation references. There is no separate
+functional-requirement modality: requirement wording owns that meaning.
+The complete canonical specification authority must additionally bind the
+current reference/passive/clarification/identity/provenance states; that workflow
+assembly and validation remain H-008/H-010/H-012, not authority granted by parsing
+these candidate shapes.
+
+Specification questions use only the `clarification_needed` result, never a
+content unit or rendered specification record. The `openQuestions` collection
+in `ReferenceContextIR` below remains reference context, not `spec.md` content.
+
+[F0100 §5.6](features/F0100-SpecWorkflow.md#56-native-content-and-view-contract)
+records the approved mechanical grammar and entity-applicability representation.
+The [view codec](../src/domain/specification_markdown.zig) captures text, IDs and
+section presence only; missing entity records do not prove non-applicability.
+
+The canonical `spec.md` projection for each acceptance-criterion
+record is nested under `User Scenarios & Testing` in
+[F0100's heading tree](features/F0100-SpecWorkflow.md#51-ownership-and-hierarchy):
 
 ```markdown
-## Acceptance Criteria
+### Acceptance Criteria
 
 **AC-001**
 - **GIVEN** <nonempty `given` value>

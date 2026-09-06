@@ -8,6 +8,7 @@ pub const invocation_requires = @import("workflow_provider_authorization.zig").r
 pub const termination_requires = invocation_requires;
 pub const termination_outcomes = [_]@import("workflow.zig").OutcomeTag{ .failed, .cancelled };
 pub const completion_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .invoked_provider_operation, .provider_invocation_validation_result };
+pub const count_completion_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .invoked_provider_operation, .provider_token_count_validation_result };
 pub const invocation_parameter: operation.ParameterDescriptor = .{
     .id = "transition",
     .kind = .enumeration,
@@ -45,7 +46,7 @@ pub fn validContract(contract: operation.Contract, capabilities: []const []const
 fn validCompletionEffects(inputs: []const pipeline.DataKey, produces: []const pipeline.DataKey, optional: []const pipeline.DataKey, replaces: []const pipeline.DataKey, invalidates: []const pipeline.DataKey) bool {
     // Terminal evidence comes from exactly one declared lifecycle phase.
     const assigned = terminatesAssigned(inputs);
-    const required: []const pipeline.DataKey = if (assigned) &termination_requires else &completion_requires;
+    const required: []const pipeline.DataKey = if (assigned) &termination_requires else if (std.mem.indexOfScalar(pipeline.DataKey, inputs, .provider_token_count_validation_result) != null) &count_completion_requires else &completion_requires;
     if (inputs.len != required.len) return false;
     for (required) |key| if (std.mem.indexOfScalar(pipeline.DataKey, inputs, key) == null) return false;
     return std.mem.eql(pipeline.DataKey, produces, &.{.terminal_provider_operation}) and optional.len == 0 and replaces.len == 0 and

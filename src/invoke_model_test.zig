@@ -1,9 +1,8 @@
 const std = @import("std");
 const invoke = @import("actions/model/invoke_model.zig");
-const binding = @import("domain/llm_provider_binding.zig");
 const operation = @import("domain/llm_provider_operation.zig");
-const provider_port = @import("ports/llm_provider_interface.zig");
 const Fixture = @import("provider_invocation_test_fixture.zig").Fixture;
+const Spy = @import("provider_operation_spy_test_fixture.zig").Spy;
 
 test "invoke action forwards exact request binding authorization and applied operation once" {
     var fixture: Fixture = undefined;
@@ -184,37 +183,3 @@ fn expectCalls(fixture: *const Fixture, invocations: usize, effects: usize) !voi
     try std.testing.expectEqual(@as(usize, 0), fixture.fake.count_call_count);
     try std.testing.expectEqual(effects, fixture.fake.effect_count);
 }
-
-// Records borrowed argument/content pointers only; ownership stays with the
-// existing fake and the action's caller. This is not a second fake provider.
-const Spy = struct {
-    inner: provider_port.LLMProviderInterface,
-    invoke_calls: usize = 0,
-    count_calls: usize = 0,
-    received: ?struct {
-        provider_binding: *const binding.ValidatedProviderModelBinding,
-        request: *const operation.IdentifiedProviderNeutralModelRequest,
-        authorization: *const operation.ValidatedProviderAuthorizationLeaseRef,
-        invoked: *const operation.InvokedProviderOperation,
-    } = null,
-    returned_content: ?[]const u8 = null,
-
-    fn port(self: *Spy) provider_port.LLMProviderInterface {
-        return .{ .context = @ptrCast(self), .vtable = &.{ .invoke = call, .count_input_tokens = count } };
-    }
-
-    fn call(context: *provider_port.Context, provider_binding: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, authorization: *const operation.ValidatedProviderAuthorizationLeaseRef, invoked: *const operation.InvokedProviderOperation) provider_port.Error!operation.ProviderInvocationObservation {
-        const self: *Spy = @ptrCast(@alignCast(context));
-        self.invoke_calls += 1;
-        self.received = .{ .provider_binding = provider_binding, .request = request, .authorization = authorization, .invoked = invoked };
-        const response = try self.inner.invoke(provider_binding, request, authorization, invoked);
-        if (response == .completed and response.completed.raw_result == .complete) self.returned_content = response.completed.raw_result.complete.content.bytes;
-        return response;
-    }
-
-    fn count(context: *provider_port.Context, provider_binding: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, authorization: *const operation.ValidatedProviderAuthorizationLeaseRef, invoked: *const operation.InvokedProviderOperation) provider_port.Error!operation.ProviderTokenCountObservation {
-        const self: *Spy = @ptrCast(@alignCast(context));
-        self.count_calls += 1;
-        return self.inner.countInputTokens(provider_binding, request, authorization, invoked);
-    }
-};

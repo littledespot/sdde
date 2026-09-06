@@ -15,10 +15,10 @@ pub fn validateReplacement(input: *const data.View, contract: pipeline.NodeContr
     if (selection.advances(contract.replaces, contract.produces)) {
         const request = try requests.readCurrent(input, requests.prepared_schema);
         if (selection.completes(contract.requires)) {
-            const facts = try @import("model_request_completion_workflow.zig").readCurrent(input);
+            const facts = try readClosure(input);
             if (outcome != facts.outcome) return error.InvalidModelRequestLifecycleTransition;
             try (operations orelse return error.OperationExecutionFailed).validateRequestClosure(request.id());
-            try identity.validateLifecycleSuccessor(current, next, request.id(), .invoked, .{ .terminal = facts.reason });
+            try identity.validateLifecycleSuccessor(current, next, request.id(), facts.expected_status, .{ .terminal = facts.reason });
         } else {
             if (outcome != .ok) return error.InvalidModelRequestLifecycleTransition;
             try identity.validateLifecycleSuccessor(current, next, request.id(), .assigned, .invoked);
@@ -30,4 +30,11 @@ pub fn validateReplacement(input: *const data.View, contract: pipeline.NodeContr
         try identity.validateAssignmentSuccessor(current, next, assigned.id());
     }
     return next;
+}
+
+pub fn readClosure(input: *const data.View) Error!selection.Closure {
+    return if (input.contains(.provider_authorization_result))
+        @import("model_request_termination_workflow.zig").readCurrent(input)
+    else
+        @import("model_request_completion_workflow.zig").readCurrent(input);
 }

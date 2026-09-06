@@ -7,6 +7,7 @@ const handoff = @import("../domain/model_request_handoff.zig");
 const provider = @import("../domain/llm_provider_operation.zig");
 const workflow = @import("../domain/workflow.zig");
 const pipeline = @import("../domain/pipeline.zig");
+const lifecycle = @import("../domain/provider_operation_lifecycle.zig");
 
 /// One pending preparation binding. No action dispatch or provider access.
 pub const Binding = struct {
@@ -51,12 +52,37 @@ pub const Binding = struct {
 };
 
 pub fn validateConsumer(table: *table_module.Table, value: *const result.Result, request: *const handoff.Request, id: provider.ProviderOperationId, clock: ?lease.Clock, runtime: pipeline.NodeRuntime) lease.Error!?u64 {
+    if (table.operations.record(id)) |record| {
+        if (record.state == .terminal) {
+            _ = try validateTerminal(value, record);
+            return null;
+        }
+    }
     switch (value.outcome().*) {
         .prepared => |reference| return try table.validateReference(reference, request.binding(), request.prepared().?, id, if (clock) |available| currentTime(available, runtime) else error.ClockUnavailable),
         .failed => |failure| try validateFailure(failure, id),
         .cancelled => |operation_id| if (!operation_id.eql(id)) return error.AuthorizationDenied,
     }
     return null;
+}
+
+/// Retained authorization facts must agree with the exact pre-call terminal record.
+pub fn validateTerminal(value: *const result.Result, record: *const lifecycle.Record) lease.Error!workflow.OutcomeTag {
+    if (record.state != .terminal) return error.AuthorizationDenied;
+    const terminal = record.state.terminal;
+    return switch (value.outcome().*) {
+        .failed => |failure| failed: {
+            try validateFailure(failure, record.id);
+            if (terminal != .preparation_failed or terminal.preparation_failed.cause != failure.cause or
+                terminal.preparation_failed.retry_class != failure.retry_class or terminal.preparation_failed.delivery != failure.delivery) return error.AuthorizationDenied;
+            break :failed .failed;
+        },
+        .cancelled => |id| if (id.eql(record.id) and terminal == .cancelled and terminal.cancelled == .not_sent)
+            .cancelled
+        else
+            error.AuthorizationDenied,
+        .prepared => error.AuthorizationDenied,
+    };
 }
 
 pub fn requirePrepared(value: *const result.Result) lease.Error!void {

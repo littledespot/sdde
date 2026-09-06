@@ -214,7 +214,14 @@ pub const ExactInputTokenCountEvidence = struct {
         if (!evidence.isValidFor(request, expected_binding)) {
             return error.InvalidExactTokenCountEvidence;
         }
-        return evidence;
+        // After validating observed identities, borrow only their canonical
+        // request/binding owners, never separately owned observation strings.
+        return .{
+            .count_operation_id = evidence.count_operation_id,
+            .binding_id = expected_binding,
+            .model_visible_input_id = request.model_visible_input_id,
+            .input_tokens = evidence.input_tokens,
+        };
     }
 
     pub fn isValidFor(

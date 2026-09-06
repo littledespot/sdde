@@ -12,6 +12,8 @@ preservation, scripted extraction accounting and reconciliation in Sections
 3.1–3.9 are implemented. Generated-name code is removed; live semantic
 extraction/reconciliation, generation,
 output publication and the complete definition remain unfinished.
+The native content schema and mechanical specification Markdown codec in §5.6
+are implemented; their authority/generation/publication integration remains open.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -581,19 +583,19 @@ establishes that the feature involves business data.
 
 ### 5.2 Typed content mapping
 
-| Section | `SpecificationIR` content | Purpose |
+| Section | Native content field / record kind | Purpose |
 | --- | --- | --- |
-| Document H1 | `displayName` | Reference-grounded human feature name. |
-| Primary User Story | `primaryUserStory` | Main user journey in plain business language. |
-| Acceptance Criteria | `acceptanceCriteria` / `AC-*` | Testable initial state, action, and expected outcome. |
-| User-Visible Outcomes | `userVisibleOutcomes` / `UO-*` | Results, validation, confirmation, or terminal responses a user can directly observe. |
-| Edge Cases | `edgeCases` / `EC-*` | Boundary/error condition and expected business response. |
-| Functional Requirements | `functionalRequirements` / `FR-*` | Required system or user capability in business terms. |
-| Business Rules | `businessRules` / `BR-*` | Constraint, validation rule, or policy controlling behavior. |
-| Assumptions | `assumptions` / `AS-*` | Supported assumption that keeps the feature bounded. |
-| Explicit Non-Goals | `nonGoals` / `NG-*` | Supported adjacent behavior deliberately outside scope. |
-| Prohibited Behaviors | `prohibitedBehaviors` / `PB-*` | Behavior the feature must not perform. |
-| Key Entities | validated applicability plus `entities` / `EN-*` | Business data concepts and relationships, without implementation detail. |
+| Document H1 | `display_name` | Reference-grounded human feature name. |
+| Primary User Story | `primary_user_story` | Main user journey in plain business language. |
+| Acceptance Criteria | `acceptance_criterion` / `AC-*` | Testable initial state, action, and expected outcome. |
+| User-Visible Outcomes | `user_visible_outcome` / `UO-*` | Results, validation, confirmation, or terminal responses a user can directly observe. |
+| Edge Cases | `edge_case` / `EC-*` | Boundary/error condition and expected business response. |
+| Functional Requirements | `functional_requirement` / `FR-*` | Required system or user capability in business terms. |
+| Business Rules | `business_rule` / `BR-*` | Constraint, validation rule, or policy controlling behavior. |
+| Assumptions | `assumption` / `AS-*` | Supported assumption that keeps the feature bounded. |
+| Explicit Non-Goals | `non_goal` / `NG-*` | Supported adjacent behavior deliberately outside scope. |
+| Prohibited Behaviors | `prohibited_behavior` / `PB-*` | Behavior the feature must not perform. |
+| Key Entities | `entities` applicability plus `entity` / `EN-*` | Business data concepts and relationships, without implementation detail. |
 
 The engine assigns and preserves record IDs; the model supplies neither IDs nor
 Markdown. The historical template's unnumbered example bullets do not permit
@@ -633,9 +635,10 @@ The hierarchy does not authorize invented filler:
   empty `entities` collection alone cannot prove that the feature involves no
   business data.
 
-The registered Specify contract must expose the closed Key Entities
-applicability decision before implementation; its exact contract is not yet
-defined.
+The approved native contract requires `entities.disposition` as `required` or
+`not_applicable`, plus an attributed business-text `basis`. That is a candidate
+decision: the shared authority gate must validate its support. Parsing a missing
+entity section captures only `omitted`, never a supported non-applicability fact.
 
 ### 5.5 Clarification is not specification content
 
@@ -674,27 +677,47 @@ to them. Transaction validation rechecks their preservation preconditions.
 
 There is no committed `Open Questions` section in `spec.md`. Specification-owned
 unknowns use the clarification lifecycle above; reference-context questions
-remain in their separate sidecar authority. The proposed `OQ-*` specification
-record shown elsewhere in the design must therefore be removed or narrowed
-before implementation so render/reparse remains lossless.
+remain in their separate sidecar authority. Specification content/IR samples
+have no question collection or `OQ-*` identity prefix; `clarification_needed`
+is an operation result, not a specification content unit.
 
-### 5.6 Remaining renderer/parser decisions
+### 5.6 Native content and view contract
 
-The user-approved hierarchy and clarification boundary are fixed here. Before
-implementation, the registered renderer/parser contract must additionally fix:
+The user approved the following minimal contract. Native shapes and ID syntax
+are owned by [specification.zig](../../src/domain/specification.zig); the
+mechanical codec is [specification_markdown.zig](../../src/domain/specification_markdown.zig).
 
-- synchronization of the proposed Design Sections 17.6 and 23 and the
-  illustrative SpecificationIR renderer sample from the old standalone
-  `## Acceptance Criteria` heading to Section 5.1's nested hierarchy;
-- exact Markdown grammar for non-acceptance repeatable records;
-- the closed Key Entities applicability value and its provenance;
-- exact visible identity grammar for entity records while retaining `EN-*`;
-- whether functional-requirement modality is renderer-owned or part of validated
-  semantic text; and
-- removal or narrowing of the proposed specification `openQuestions`/`OQ-*`
-  field in accordance with Section 5.5.
+- Simple records use `- **FR-001**: <text>` with the applicable prefix.
+- Edge cases use `**EC-001**`, then `- **CONDITION** <text>` and
+  `- **EXPECTED OUTCOME** <text>`.
+- Entities use `**EN-001**`, then `- **NAME** <text>`,
+  `- **BUSINESS MEANING** <text>` and zero or more
+  `- **RELATIONSHIP** <text>` lines.
+- IDs have a positive ordinal, padded to at least three digits, without
+  surplus leading zeroes. New editable records may use the kind label without
+  an ordinal, such as `**AC**` or `- **FR**: <text>`; they require engine
+  allocation before canonical rendering. Existing malformed/duplicate IDs reject.
+- `MUST`/`MUST NOT` remain semantic text. There is no second `modality` field
+  or renderer-inserted requirement wording.
+- Title/story and the entity decision are required fields. Repeatable families
+  have no arbitrary minimum population; current registered obligations, not
+  heading presence or model assertions, determine required content.
 
-These decisions cannot be inferred from historical placeholder text.
+Native proposals contain attributed title/story, `records` with one closed
+content-kind variant and provenance per record, and the entity decision/basis.
+They contain no generated IDs, paths, questions or completion fields. Ordinary
+business values use the existing typed-text shape; exact copies carry token and
+citation references, never a second copy of source bytes.
+
+The view codec receives already projected text and separated, non-overlapping
+exact inline-code spans (adjacent delimiter runs cannot preserve two identities);
+it escapes punctuation and literal control whitespace, uses deterministic
+backtick delimiters/padding, LF structural lines and one final newline. Code
+continuation lines have two structural indentation spaces, removed on parse.
+Record order is section order, preserving order within each family. The shared
+Markdown scanner owns code-span recognition. Parsing captures text/spans, not
+NFC normalization, provenance, applicability, semantic adequacy or stage success.
+H-008/H-010/H-012 still own those validation and workflow integration steps.
 
 ## 6. Diagrams
 

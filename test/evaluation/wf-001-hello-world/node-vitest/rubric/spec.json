@@ -1,0 +1,94 @@
+{
+  "schema": "evaluation-rubric/v1",
+  "id": "hello-world-spec",
+  "revision": 1,
+  "minimum_score": 0,
+  "maximum_score": 4,
+  "pass_threshold_percent": null,
+  "criteria": [
+    {
+      "id": "startup-coverage",
+      "description": "The specification preserves the requirement that the application starts successfully. Assess meaning, not one prescribed sentence or an invented startup mechanism.",
+      "evidence": "Quote the startup requirement from stories and the corresponding specification behavior, or report its absence.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        { "score": 0, "description": "Successful startup is absent or contradicted." },
+        { "score": 1, "description": "An application is mentioned, but startup behavior is only implied." },
+        { "score": 2, "description": "Starting is described, but successful startup remains unclear." },
+        { "score": 3, "description": "Successful startup is covered with minor ambiguity in its statement." },
+        { "score": 4, "description": "Successful startup is clearly preserved without requiring unsupported operational details." }
+      ]
+    },
+    {
+      "id": "greeting-fidelity",
+      "description": "When started, the application displays the user-facing text Hello, World! Preserve the exact greeting and its relationship to startup without requiring a specific UI, terminal or programming language.",
+      "evidence": "Quote the startup/display requirement and the specification's greeting and trigger, or identify the missing content.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        { "score": 0, "description": "The greeting/display behavior is absent or contradicted." },
+        { "score": 1, "description": "A generic greeting is mentioned but the required text and behavior are mostly lost." },
+        { "score": 2, "description": "The intended greeting is recognizable, but its exact text or startup trigger is wrong or missing." },
+        { "score": 3, "description": "The exact greeting is present and associated with startup, with a minor ambiguity about display." },
+        { "score": 4, "description": "The specification clearly requires displaying exactly Hello, World! when the application starts." }
+      ]
+    },
+    {
+      "id": "source-grounding",
+      "description": "Requirements and scope claims remain supported by the supplied source. Do not reward invented controls, platforms, data storage, user accounts, error policies or features, including inventions disguised as assumptions or non-goals.",
+      "evidence": "Compare source statements with relevant specification claims. When nothing unsupported is found, cite representative supported content and explain the finding.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        { "score": 0, "description": "The specification substantially replaces the requested application with unsupported functionality." },
+        { "score": 1, "description": "Several consequential unsupported requirements or constraints are added." },
+        { "score": 2, "description": "The core intent survives but at least one material unsupported requirement is introduced." },
+        { "score": 3, "description": "The specification is grounded overall with a minor unsupported implication." },
+        { "score": 4, "description": "Behavior and scope remain grounded; no unsupported business or technical commitments are introduced." }
+      ]
+    },
+    {
+      "id": "clarity-testability",
+      "description": "The stated startup and display behavior can be understood and checked by a reviewer. Judge observable meaning and consistent acceptance conditions, not executable test code or one exact Markdown rendering.",
+      "evidence": "Quote behavior/acceptance statements and explain what a reviewer could observe or what remains unclear.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        { "score": 0, "description": "The behavior cannot be meaningfully understood or checked." },
+        { "score": 1, "description": "Statements are mostly vague, contradictory or unresolved." },
+        { "score": 2, "description": "Some behavior is checkable, but important conditions or outcomes are unclear." },
+        { "score": 3, "description": "The behavior is understandable and checkable with minor imprecision." },
+        { "score": 4, "description": "Startup and the observable greeting are expressed clearly, consistently and testably." }
+      ]
+    },
+    {
+      "id": "organization",
+      "description": "The document is a readable business specification with coherently organized scenarios and requirements. Judge usefulness and consistency, not byte equality. Optional empty sections do not require filler; inline unresolved questions and template placeholders impair the specification.",
+      "evidence": "Quote representative scenario/requirement organization or unresolved content and relate it to the two source requirements.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        { "score": 0, "description": "No usable specification is provided, or unresolved template content dominates." },
+        { "score": 1, "description": "Organization seriously obscures the requested behavior." },
+        { "score": 2, "description": "The specification is usable but has substantial inconsistency or unresolved content." },
+        { "score": 3, "description": "Organization is clear overall with minor inconsistency or duplication." },
+        { "score": 4, "description": "Scenarios and requirements are easy to follow and coherent, without unresolved filler or unnecessary repetition." }
+      ]
+    },
+    {
+      "id": "proportionate-business-scope",
+      "description": "The specification stays proportionate to the simple requested application and business-facing. Node/Vitest principles must not create implementation requirements in the spec. Do not demand entities, assumptions, business rules or edge cases unsupported by the source.",
+      "evidence": "Quote representative scope/detail choices and compare them with the source's two requirements.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        { "score": 0, "description": "Unrelated scope or implementation material overwhelms the requested behavior." },
+        { "score": 1, "description": "Substantial unnecessary scope or technical prescription dominates." },
+        { "score": 2, "description": "The business goal is visible, but unnecessary detail or technical prescription is material." },
+        { "score": 3, "description": "Scope is proportionate and business-facing with minor excess detail." },
+        { "score": 4, "description": "The document is proportionate and business-facing without invented filler or technical commitments." }
+      ]
+    }
+  ]
+}

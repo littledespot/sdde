@@ -8,10 +8,40 @@ Production validation and the external rubric have different purposes. A rubric
 can judge a readable specification without a complete parser; it cannot grant
 the engine permission to bypass its current safety/publication contracts.
 
+The current task excludes human evaluator calibration and live API verification.
+Production authority, clarification protection and output-safety contracts are
+not waived by that exclusion.
+
 ## H-007 — Align the existing specification contract
 
-**Status:** Open — narrow production decisions remain. **Owner:** F0100 and
+**Status:** Native content contract and mechanical Markdown codec implemented;
+workflow authority/identity integration remains in H-008/H-010/H-012.
+**Owner:** F0100 and
 canonical specification types. **Dependencies:** none; independent of H-001.
+
+The user approved the minimal record/entity/modality/required-content contract.
+[F0100 §5.6](../features/F0100-SpecWorkflow.md#56-native-content-and-view-contract)
+records it; `src/domain/specification.zig` owns native candidate shapes and IDs,
+and `specification_markdown.zig` owns view rendering/parsing. Captured Markdown
+is not validated business authority. Entity section presence/absence cannot
+manufacture applicability evidence. Provenance resolution, monotonic identity
+allocation, registered pipeline bindings and publication remain production
+integration work; no complete Specify execution is claimed.
+
+`zig build test-specification-contract` covers every record family, empty
+optional content, exact display spans, canonical round trips, invalid labels/
+IDs, new unnumbered edits, closed JSON and allocation failures. The evaluator
+and specification reuse the same closed JSON decoder; the evaluator-local
+wire-kind validator is removed.
+
+Current targeted verification: `zig build test-specification-contract
+test-rubric-evaluator test-typed-text --summary all` passed 76 tests (12 contract,
+29 evaluator, 35 shared typed-text tests). `git diff --check` is clean.
+
+Final combined verification: `zig build test-specification-contract
+test-rubric-evaluator test-typed-text verify --summary all` passed all 853 test
+executions and 93 build steps, including lint, architecture checks and native
+engine/evaluator packaging smoke tests. No human or live API evaluation ran.
 
 Work:
 
@@ -29,11 +59,11 @@ Work:
 
 Acceptance:
 
-- [ ] One production schema/renderer/parser contract owns structure and IDs.
-- [ ] Optional empty content cannot be turned into fabricated requirements.
-- [ ] Semantic adequacy remains a model-assisted/human judgment, not a claimed
+- [x] One production schema/renderer/parser contract owns structure and IDs.
+- [x] Optional empty content cannot be turned into fabricated requirements.
+- [x] Semantic adequacy remains a model-assisted/human judgment, not a claimed
   consequence of schema or Markdown validity.
-- [ ] F0100/design/code examples agree; no legacy `OQ-*` route emits questions
+- [x] F0100/design/code examples agree; no legacy `OQ-*` route emits questions
   into `spec.md`.
 
 Targets: [F0100 §5](../features/F0100-SpecWorkflow.md#5-specmd-projection-contract),
@@ -158,6 +188,14 @@ Acceptance:
 
 **Status:** Open. **Owner:** production renderers/parser and publication boundary.
 **Dependencies:** H-007/H-010; H-011 protection on clarification branches.
+
+The mechanical specification codec exists; full authority projection and
+publication do not. Publication also needs a governing decision: §25 requires
+all-or-nothing output across independently configured specs/workflow roots but
+forbids rollback/recovery machinery. Ordinary file writes cannot meet that
+failure/interruption guarantee. The proposed validate-first, overwrite-known-
+files, fail-without-success and fresh-rerun rule is awaiting user confirmation;
+no output-safety invariant has been silently relaxed.
 
 Work:
 

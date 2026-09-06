@@ -102,6 +102,45 @@ pub fn build(b: *std.Build) void {
     run_architecture_tests.setCwd(b.path("."));
 
     const test_step = b.step("test", "Run all unit tests");
+    const evaluator_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("harness.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const run_evaluator_tests = b.addRunArtifact(evaluator_tests);
+    const evaluator_exe = b.addExecutable(.{ .name = "sdde-evaluate-spec", .root_module = b.createModule(.{
+        .root_source_file = b.path("harness.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const run_evaluator = b.addRunArtifact(evaluator_exe);
+    if (b.args) |args| run_evaluator.addArgs(args);
+    b.step("evaluate-spec", "Grade a supplied specification through OpenAI (explicit --live required)").dependOn(&run_evaluator.step);
+    b.step("build-rubric-evaluator", "Build the development-only evaluator without an API call").dependOn(&evaluator_exe.step);
+    b.step("test-rubric-evaluator", "Test development-only rubric evaluation").dependOn(&run_evaluator_tests.step);
+    test_step.dependOn(&run_evaluator_tests.step);
+    const evaluator_directory = b.addTempFiles();
+    const evaluator_binary = evaluator_directory.addCopyFile(evaluator_exe.getEmittedBin(), evaluator_exe.out_filename);
+    const evaluator_help = std.Build.Step.Run.create(b, "run standalone evaluator help without development assets or credentials");
+    evaluator_help.addFileArg(evaluator_binary);
+    evaluator_help.addArg("--help");
+    evaluator_help.setCwd(evaluator_directory.getDirectory());
+    evaluator_help.clearEnvironment();
+    evaluator_help.expectExitCode(0);
+    evaluator_help.expectStdErrEqual("");
+    const evaluator_denied = std.Build.Step.Run.create(b, "reject standalone evaluator invocation without live opt-in");
+    evaluator_denied.addFileArg(evaluator_binary);
+    evaluator_denied.setCwd(evaluator_directory.getDirectory());
+    evaluator_denied.clearEnvironment();
+    evaluator_denied.expectExitCode(1);
+    evaluator_denied.expectStdOutEqual("");
+    evaluator_denied.expectStdErrEqual("Invalid arguments; use --help. No API call made.\n");
+    const evaluator_smoke = b.step("smoke-rubric-evaluator", "Test standalone evaluator startup without API calls");
+    evaluator_smoke.dependOn(&evaluator_help.step);
+    evaluator_smoke.dependOn(&evaluator_denied.step);
+    test_step.dependOn(evaluator_smoke);
     test_step.dependOn(&run_module_tests.step);
     test_step.dependOn(&run_executable_tests.step);
     test_step.dependOn(&run_yaml_safety_tests.step);
@@ -120,6 +159,13 @@ pub fn build(b: *std.Build) void {
     });
     const result_schema_step = b.step("test-model-result-schema", "Test the closed model result-schema boundary");
     result_schema_step.dependOn(&b.addRunArtifact(result_schema_tests).step);
+
+    const specification_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/specification_contract_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    b.step("test-specification-contract", "Test the closed specification content and editable-view shapes").dependOn(&b.addRunArtifact(specification_tests).step);
 
     const request_preparation_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/model_request_preparation_test.zig"),
@@ -175,6 +221,21 @@ pub fn build(b: *std.Build) void {
     }) });
     const invoke_model_step = b.step("test-invoke-model", "Test single-call provider invocation and outcome propagation");
     invoke_model_step.dependOn(&b.addRunArtifact(invoke_model_tests).step);
+
+    const count_model_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/count_model_input_tokens_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    const count_model_step = b.step("test-count-model-input-tokens", "Test optional single-call token counting and outcome propagation");
+    count_model_step.dependOn(&b.addRunArtifact(count_model_tests).step);
+
+    const count_validation_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/model_token_count_validation_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    b.step("test-model-token-count-validation", "Test exact count observation association and outcome preservation").dependOn(&b.addRunArtifact(count_validation_tests).step);
 
     const reference_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/reference_preflight_test.zig"),
@@ -297,6 +358,7 @@ pub fn build(b: *std.Build) void {
     lint_command.setName("lint Zig source");
     lint_command.addFileArg(b.path("build.zig"));
     lint_command.addFileArg(b.path("build.zig.zon"));
+    lint_command.addFileArg(b.path("harness.zig"));
     lint_command.addDirectoryArg(b.path("build"));
     lint_command.addDirectoryArg(b.path("src"));
     lint_command.addDirectoryArg(b.path("test"));

@@ -3,9 +3,23 @@
 [Backlog index](README.md). These tickets deliver the semantic evaluator; they
 do not require a complete Spec engine or a deterministic prose oracle.
 
+Implementation and commands: [supplied-spec evaluator](evaluator.md).
+**Current task scope:** Offline implementation is complete. The user explicitly
+excluded human evaluation and live API verification; neither is a blocker for
+this implementation task. Unchecked live/calibration criteria below remain
+unverified, not passed or replaced by fake judgments. H-007 onward are separate
+production work.
+
+Remaining acceptance preparation: the [calibration set](../../test/evaluation/wf-001-hello-world/node-vitest/calibration/README.md)
+contains two equivalent specifications and five deliberate defects, with proposed
+review findings and the existing command to run them. A future live run requires
+explicit judge configuration/allowance and credentials. No live evidence or
+human approval is claimed by the offline fixtures.
+
 ## H-001 — Define the minimum evaluation contracts
 
-**Status:** Open — decisions required. **Owner:** development harness.
+**Status:** Implemented contracts; live settings remain operator-selected.
+**Owner:** development harness.
 **Dependencies:** none.
 
 Define one small evaluation case and separate run configuration. They bind the
@@ -32,11 +46,16 @@ Work:
 
 Acceptance:
 
-- [ ] Decisions have one documented owner; model, threshold, SDK/dependency and
+- [x] Decisions have one documented owner; model, threshold, SDK/dependency and
   paid-run choices are distinguishable from the user's already-fixed objective.
-- [ ] Evaluator-only and full-workflow runs share one grading contract.
-- [ ] Unknown keys, duplicate case/criterion IDs and invalid settings are rejected.
-- [ ] Workflow execution outcome and semantic evaluation result are separate.
+- [x] Evaluator-only and full-workflow runs share one grading contract.
+- [x] Unknown keys, duplicate case/criterion IDs and invalid settings are rejected.
+- [x] Workflow execution outcome and semantic evaluation result are separate.
+
+The shared grading call accepts explicit artifact provenance; full-workflow
+handoff is still H-015. Responses API/native HTTPS is implemented without a new
+dependency. Exact model/settings/budget are mandatory run configuration; numeric
+scoring choices live in the draft rubric, not evaluator code or release policy.
 
 Likely changes: harness-owned schemas/configuration and an entry point wired
 through `build.zig`; exact new source paths are chosen after inspecting reusable
@@ -44,7 +63,8 @@ contracts. No production dependency is implicitly approved by this ticket.
 
 ## H-002 — Create the Hello World rubric
 
-**Status:** Open. **Owner:** rubric author/reviewer. **Dependencies:** H-001 for
+**Status:** Draft implemented; human review/calibration outstanding.
+**Owner:** rubric author/reviewer. **Dependencies:** H-001 for
 the executable schema and scoring scale; criterion drafting can begin now.
 
 Create `test/evaluation/wf-001-hello-world/node-vitest/rubric/spec.json`.
@@ -67,12 +87,12 @@ Work:
 
 Acceptance:
 
-- [ ] Both explicit source requirements are separately assessable.
+- [x] Both explicit source requirements are separately assessable.
 - [ ] Different faithful wording can score comparably; a golden paragraph is
   not required. Exact greeting spelling matters because the source states it.
-- [ ] Missing behavior, a changed greeting and unsupported functionality have
+- [x] Missing behavior, a changed greeting and unsupported functionality have
   explicit scoring guidance; length or extra features earn no automatic credit.
-- [ ] Each criterion identifies the evidence expected and how uncertainty or
+- [x] Each criterion identifies the evidence expected and how uncertainty or
   non-applicability is reported under H-001.
 
 Tests: rubric schema/IDs/anchors, human review against the unchanged source and
@@ -81,7 +101,7 @@ because it parses.
 
 ## H-003 — Capture inputs and build the judge packet
 
-**Status:** Open. **Owner:** harness input/packet builder. **Dependencies:** H-001;
+**Status:** Implemented and offline-tested. **Owner:** harness input/packet builder. **Dependencies:** H-001;
 use H-002 for the initial case.
 
 Build one reusable input packet from the exact source requirements, candidate
@@ -105,18 +125,19 @@ Work:
 
 Acceptance:
 
-- [ ] Packet inspection proves all declared source/spec/rubric content is present
+- [x] Packet inspection proves all declared source/spec/rubric content is present
   and bound to one run; changing an input produces a newly identified evaluation.
-- [ ] Artifact content saying “ignore the rubric” cannot change criteria,
+- [x] Artifact content saying “ignore the rubric” cannot change criteria,
   requested model, tools, score policy or output destination.
-- [ ] Model-visible labels identify source versus candidate evidence without
+- [x] Model-visible labels identify source versus candidate evidence without
   granting file, process or network capabilities.
-- [ ] Supplied-spec evaluation works without importing `SpecificationIR` or
+- [x] Supplied-spec evaluation works without importing `SpecificationIR` or
   constructing production workflow state.
 
 ## H-004 — Implement the OpenAI evaluator boundary
 
-**Status:** Open. **Owner:** narrow model adapter plus harness composition.
+**Status:** Implemented and offline-tested; authorized live acceptance outstanding.
+**Owner:** narrow model adapter plus harness composition.
 **Dependencies:** H-001 and H-003; test fake before authorized live calls.
 
 Invoke OpenAI for rubric judgment. This is a separate use of the model boundary
@@ -140,20 +161,21 @@ Work:
 
 Acceptance:
 
-- [ ] Fake adapter tests cover success and every supported error/stop branch.
+- [x] Fake adapter tests cover success and every supported error/stop branch.
 - [ ] An authorized live request returns inspectable criterion judgments from
   the explicitly selected OpenAI model.
-- [ ] Retry policy is bounded; low scores do not trigger retries seeking a pass.
-- [ ] Cancellation or exhausted budget prevents additional calls; already
+- [x] Retry policy is bounded; low scores do not trigger retries seeking a pass.
+- [x] Cancellation or exhausted budget prevents additional calls; already
   reported usage is retained without claiming cross-run exactly-once billing.
 
 Structured Outputs provides response-shape assistance, not semantic truth, and
 refusals require separate handling. See [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
-This guidance does not select a model, SDK or endpoint for the project.
+The implemented endpoint and explicit per-run configuration are documented in
+[the evaluator contract](evaluator.md#run). No model or paid run was selected.
 
 ## H-005 — Validate judgments and calculate results
 
-**Status:** Open. **Owner:** evaluator result validator/scoring functions.
+**Status:** Implemented and offline-tested. **Owner:** evaluator result validator/scoring functions.
 **Dependencies:** H-001/H-002; scripted results allow work before H-004 is live.
 
 Validate the evaluator's response as untrusted data. Code owns score arithmetic
@@ -176,11 +198,11 @@ Work:
 
 Acceptance:
 
-- [ ] Fixed accepted judgments produce stable arithmetic and serialization.
-- [ ] Missing scores, bogus evidence and malformed responses produce evaluator
+- [x] Fixed accepted judgments produce stable arithmetic and serialization.
+- [x] Missing scores, bogus evidence and malformed responses produce evaluator
   errors rather than apparently complete reports.
-- [ ] A valid low score remains a completed evaluation, distinct from API failure.
-- [ ] No judgment or total can mark a workflow completed, answer a clarification,
+- [x] A valid low score remains a completed evaluation, distinct from API failure.
+- [x] No judgment or total can mark a workflow completed, answer a clarification,
   approve a plan or write back to `spec.md`.
 
 Tests: score boundaries, selected weighting/rounding/applicability rules,
@@ -188,7 +210,8 @@ criterion cardinality, evidence joins and unrelated-case IDs.
 
 ## H-006 — Report results and support supplied-spec evaluation
 
-**Status:** Open. **Owner:** harness reporting/entry point.
+**Status:** Implemented supplied-spec command/reports; live demonstration outstanding.
+**Owner:** harness reporting/entry point.
 **Dependencies:** H-003–H-005.
 
 Provide an evaluator-only path for a supplied specification and use the same
@@ -213,8 +236,12 @@ Acceptance:
 
 - [ ] An operator can supply source/spec/rubric, invoke OpenAI and inspect a result
   without waiting for H-007–H-013.
-- [ ] Report rendering uses the same parsed result as machine output.
-- [ ] API failure, failed workflow, clarification-required run and completed
+- [x] Report rendering uses the same parsed result as machine output.
+- [x] API failure, failed workflow, clarification-required run and completed
   evaluation with poor quality cannot be confused.
-- [ ] Regrading an explicitly retained artifact never reruns generation or
+- [x] Regrading an explicitly retained artifact never reruns generation or
   silently substitutes a newer `spec.md`; this is a new evaluation, not recovery.
+
+The CLI labels supplied artifacts `not_run`; recorded provenance and evaluator
+outcome are distinct fields. Running/reporting a fresh workflow, including its
+failure/clarification branches, remains H-015 rather than an implied CLI feature.

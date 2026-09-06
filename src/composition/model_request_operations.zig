@@ -15,9 +15,11 @@ const payload = @import("../application/model_payload_schema_workflow.zig");
 const completion = @import("../application/provider_operation_completion_workflow.zig");
 const request_completion = @import("../application/model_request_completion_workflow.zig");
 const termination = @import("../application/provider_operation_termination_workflow.zig");
+const request_termination = @import("../application/model_request_termination_workflow.zig");
+const count_observation = @import("../application/model_token_count_observation_workflow.zig");
 
-pub const count = 16;
-pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema };
+pub const count = 21;
+pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema, invocation.count_schema, count_observation.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
 pub const Assembly = struct {
@@ -37,6 +39,11 @@ pub const Assembly = struct {
     complete_operation: completion.Complete,
     complete_request: request_completion.Complete,
     terminate_operation: termination.Terminate,
+    terminate_request: request_termination.Terminate,
+    count_model_input: invocation.Count,
+    validate_count: count_observation.Validate,
+    complete_count_operation: completion.CompleteCount,
+    complete_count_request: request_completion.CompleteCount,
     entries: [count]operations.Entry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator) void {
@@ -57,6 +64,11 @@ pub const Assembly = struct {
             .complete_operation = .{},
             .complete_request = .{ .allocator = allocator },
             .terminate_operation = .{},
+            .terminate_request = .{ .allocator = allocator },
+            .count_model_input = .{ .allocator = allocator },
+            .validate_count = .{ .allocator = allocator },
+            .complete_count_operation = .{},
+            .complete_count_request = .{ .allocator = allocator },
             .entries = undefined,
         };
         self.entries = .{
@@ -76,6 +88,11 @@ pub const Assembly = struct {
             entry(completion.Complete, &self.complete_operation),
             entry(request_completion.Complete, &self.complete_request),
             entry(termination.Terminate, &self.terminate_operation),
+            entry(request_termination.Terminate, &self.terminate_request),
+            entry(invocation.Count, &self.count_model_input),
+            entry(count_observation.Validate, &self.validate_count),
+            entry(completion.CompleteCount, &self.complete_count_operation),
+            entry(request_completion.CompleteCount, &self.complete_count_request),
         };
     }
 };

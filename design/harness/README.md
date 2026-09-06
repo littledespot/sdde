@@ -1,7 +1,9 @@
 # Spec workflow evaluation backlog
 
-**Status:** Proposed implementation backlog; nothing below is implemented by
-creating these documents. **Reviewed:** 2026-09-06, including uncommitted work.
+**Status:** Proposed implementation backlog; evaluator-only implementation is
+present. Human evaluation and live API verification are excluded from the
+current implementation task; neither is claimed completed. **Reviewed:** 2026-09-06,
+including uncommitted work. [Evaluator commands and contract](evaluator.md).
 
 ## User-directed outcome
 
@@ -24,8 +26,10 @@ requested live, LLM-based evaluation.
 - Initial case: `test/evaluation/wf-001-hello-world/node-vitest`, using its
   sibling [stories.md](../../test/evaluation/wf-001-hello-world/reference/stories.md).
 - Initial evaluator provider: OpenAI API. The workflow's generation provider
-  and the evaluator's provider/model are separate selections; the user has not
-  selected an exact model, SDK, API endpoint, score scale or threshold.
+  and the evaluator's provider/model are separate selections. The supplied-spec
+  evaluator uses Responses/native HTTPS without a new dependency. Exact model
+  and limits are mandatory operator selections; draft rubric scoring is visible
+  in the rubric file, not a production policy or calibrated result.
 - This is development-only evaluation of the engine, not authorization to run
   against a real target project, send data externally, incur API charges, add
   dependencies or change release/CI policy.
@@ -42,16 +46,17 @@ requested live, LLM-based evaluation.
   with a conformance-only milestone. H-018 tracks reconciliation of those docs;
   it does not authorize bypassing production invariants.
 
-## Observed starting point
+## Implementation snapshot
 
 | Area | Evidence at review | Remaining boundary |
 | --- | --- | --- |
 | Generic engine | YAML discovery/compiler/runner and explicit feature/reference invocation exist. | Complete Specify definition and content-producing operations. |
 | References | F0100 §§3.1–3.9 implement Markdown inputs, citations, typed text, exact-value preservation and scripted extraction/reconciliation. | Model wiring, semantic generation and final artifact/state publication. |
 | Model calls | [Native request operations](../../src/composition/model_request_operations.zig) and fake-provider tests exist; lifecycle work is changing in the worktree. | Verify/reuse that work, supply live provider integration and domain request/result bindings. |
-| Specify | [Native reference tests](../../src/composition/root.zig) explicitly assert that no `spec.md` was written. | Specification generation, authority integration, clarification lifecycle, rendering and publication. |
-| Fixture | `stories.md` plus seven `node-vitest/principles/*.md` files exist. | Case configuration, runtime resources and `node-vitest/rubric/spec.json`. |
-| Harness | No `TEST_HARNESS.md`, executable evaluator, rubric file or harness build step was found. | Evaluator and full-workflow harness. Existing references to absent files are not implementation evidence. |
+| Specify | Native content shapes and the mechanical Markdown codec are implemented under H-007. [Native reference tests](../../src/composition/root.zig) still assert that no `spec.md` was written. | Shared authority/model/generation integration, clarification lifecycle and complete output publication. |
+| Fixture | Unchanged `stories.md`, seven principle files, `spec.case.json`, draft rubric and seven [calibration specimens](../../test/evaluation/wf-001-hello-world/node-vitest/calibration/README.md) exist. | Human rubric review/live calibration and full-workflow runtime resources. |
+| Evaluator | `test/harness/`, `harness.zig` and `evaluate-spec`/offline test/smoke build steps implement supplied-spec OpenAI grading and reports. | Authorized live acceptance; no paid API call was made during implementation. |
+| Full-workflow harness | Specify execution/handoff is still separate from the supplied-spec evaluator. `TEST_HARNESS.md` remains absent; [evaluator.md](evaluator.md) documents actual commands. | H-007–H-018 integration and live end-to-end evidence. |
 
 This is a source inspection, not a fresh test-pass claim. Recheck changing
 boundaries before implementing a ticket; do not rebuild existing functionality.
@@ -75,8 +80,10 @@ not an optional phase after a golden-file harness.
 
 ## Backlog index
 
-All tickets are open. `Decision` identifies a choice to record, not a reason to
-block unrelated work. Dependencies are defined in the ticket bodies.
+H-001–H-006 have an offline implementation; live acceptance and human review
+are excluded from the current task. H-007's native contract/codec is implemented;
+H-008–H-018 remain open.
+Dependencies and evidence are defined in the ticket bodies.
 
 | ID | Work item | Track |
 | --- | --- | --- |
@@ -99,9 +106,9 @@ block unrelated work. Dependencies are defined in the ticket bodies.
 | [H-017](03-harness-verification.md#h-017--prove-the-complete-spec-evaluation-case) | End-to-end, rerun and failure evidence | Verification |
 | [H-018](03-harness-verification.md#h-018--add-build-wiring-and-correct-the-documentation) | Commands, documentation cleanup and handoff | Delivery |
 
-Start H-001/H-002 and H-007 together. H-003–H-006 do not depend on H-007–H-013.
-H-014 can prepare fixture assembly while production work proceeds. H-015 joins
-the two tracks; H-016 can start as soon as the evaluator is callable.
+Use the callable evaluator for authorized live acceptance and H-016 calibration
+while H-007–H-013 proceed independently. H-014 can prepare fixture assembly while
+production work proceeds. H-015 joins the two tracks.
 
 ## Completion checklist
 

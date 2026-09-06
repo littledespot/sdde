@@ -382,6 +382,54 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_termination.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
     denied_closure.step.dependOn(&denied_termination.step);
 
+    const missing_pre_call_closure = b.addTempFiles();
+    const pre_call_closure_executable = missing_pre_call_closure.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+    _ = missing_pre_call_closure.add(".sddtoolkit.json", configuration);
+    _ = missing_pre_call_closure.add(".sddtoolkit/workflows/close.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: close
+        \\version: 1
+        \\shortcode: CLOS
+        \\invoke: core.empty-invocation
+        \\policy: core.model-authorization@1
+        \\start: close
+        \\steps:
+        \\  close: { use: terminate-model-request, on: { failed: end.failed, cancelled: end.cancelled } }
+    );
+    const denied_pre_call_closure = std.Build.Step.Run.create(b, "reject packaged pre-call request closure without terminal operation and authorization evidence");
+    denied_pre_call_closure.addFileArg(pre_call_closure_executable);
+    denied_pre_call_closure.addArg("close");
+    denied_pre_call_closure.setCwd(missing_pre_call_closure.getDirectory());
+    denied_pre_call_closure.clearEnvironment();
+    denied_pre_call_closure.expectExitCode(1);
+    denied_pre_call_closure.expectStdOutEqual("");
+    denied_pre_call_closure.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+    denied_termination.step.dependOn(&denied_pre_call_closure.step);
+
+    for ([_][2][]const u8{
+        .{ "count-model-input-tokens", "ok: end.ok, failed: end.failed, cancelled: end.cancelled" },
+        .{ "validate-model-token-count-observation", "ok: end.ok, failed: end.failed, cancelled: end.cancelled" },
+        .{ "complete-count-operation", "ok: end.ok, failed: end.failed, cancelled: end.cancelled" },
+        .{ "complete-count-request", "failed: end.failed, cancelled: end.cancelled" },
+    }) |contract| {
+        const missing_count_inputs = b.addTempFiles();
+        const count_executable = missing_count_inputs.addCopyFile(executable.getEmittedBin(), executable.out_filename);
+        _ = missing_count_inputs.add(".sddtoolkit.json", configuration);
+        _ = missing_count_inputs.add(".sddtoolkit/workflows/count.workflow.yaml", b.fmt(
+            "schema: workflow/v1\nid: count\nversion: 1\nshortcode: CNTT\ninvoke: core.empty-invocation\npolicy: core.model-inference@1\nstart: count\nsteps:\n  count: {{ use: {s}, on: {{{s}}} }}\n",
+            .{ contract[0], contract[1] },
+        ));
+        const denied_count = std.Build.Step.Run.create(b, b.fmt("reject packaged {s} without required evidence", .{contract[0]}));
+        denied_count.addFileArg(count_executable);
+        denied_count.addArg("count");
+        denied_count.setCwd(missing_count_inputs.getDirectory());
+        denied_count.clearEnvironment();
+        denied_count.expectExitCode(1);
+        denied_count.expectStdOutEqual("");
+        denied_count.expectStdErrEqual("WORKFLOW_GRAPH_COMPILE_INVALID\n");
+        denied_pre_call_closure.step.dependOn(&denied_count.step);
+    }
+
     const denied_toolchain = std.Build.Step.Run.create(b, "reject invalid toolchain only when selected");
     denied_toolchain.addFileArg(packaged_executable);
     denied_toolchain.addArg("toolchain-check");

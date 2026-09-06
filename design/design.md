@@ -526,9 +526,23 @@ The two singleton fields have fixed provenance keys `spec.display_name` and `spe
 | Non-goal               | `NG`   |
 | Prohibited behavior    | `PB`   |
 | Entity                 | `EN`   |
-| Open question          | `OQ`   |
 
 The renderer emits the ID as an engine-owned visible list/heading label in a fixed grammar, for example `**UO-001**`, and the parser requires/preserves it. `SpecificationIdLedger.nextOrdinalByKind` and tombstones cover every prefix; surviving IDs stay with normalized records across reorder, new unlabelled items receive the next ordinal, and removed IDs are never reused. The renderer also owns dates, headings, checklist state, and execution state. The model cannot forge a “passed” checklist.
+
+[F0100 §5](features/F0100-SpecWorkflow.md#5-specmd-projection-contract) owns the
+approved heading hierarchy and clarification separation. Specification unknowns
+are `ClarificationNeedProposal` results routed to `clarify/SNN.md`, never
+specification records or an `Open Questions` section. Reference-context question
+signals remain separate. Fixed headings do not require invented records in
+optional collections, and structural validity does not prove semantic adequacy.
+
+The approved native content contract uses one closed `records` collection of
+typed record variants, not a parallel field list. `MUST`/`MUST NOT` are part of
+functional-requirement text, without a duplicate modality field. The entity
+decision is `required | not_applicable` with attributed supporting rationale;
+the shared gate must validate it before publication. The mechanical view codec
+captures only section presence/absence and never manufactures that authority.
+See [F0100 §5.6](features/F0100-SpecWorkflow.md#56-native-content-and-view-contract).
 
 #### Reference-context IR
 
@@ -1274,6 +1288,26 @@ LLM interaction is deliberately split across actions:
 
 No one action both invokes and interprets the model. No model action reads or writes the workspace directly.
 
+Optional `CountModelInputTokensAction` is implemented and fake-provider tested.
+It forwards the exact request, binding, invoked count operation and single-use
+lease through the existing provider port once, preserving counts, failures and
+cancellation. The port owns call checks and cleanup; the action adds no capacity
+gate, inference prerequisite, retry, token charge or lifecycle transition.
+`ValidateModelTokenCountObservationAction` separately validates the current invoked
+count operation and reuses `ExactInputTokenCountEvidence.fromObservation` for
+request/binding/input checks. It preserves failures, while cancellation remains
+outside observations. The allocation-free result borrows the original identity
+owners; validation neither consumes a lease nor changes accounting/lifecycle.
+Both actions have parameter-free YAML bindings, `count-model-input-tokens` and
+`validate-model-token-count-observation`. Their typed results retain the original
+request/binding owners. `complete-count-operation` reuses the existing lifecycle
+action/runner to terminalize only the exact validated count, failure or
+cancellation. `complete-count-request` closes the logical request only for count
+failure/cancellation after all its operations are terminal. Count success cannot
+accept a request. Missing, foreign, stale or duplicate completion evidence rejects;
+lease cleanup and explicit YAML retries use the existing owners. Fake-provider
+YAML tests cover these paths without an inference prerequisite or token charge.
+
 Native YAML `validate-provider-invocation-observation` implements step 5 through
 the existing validator. Its parameter-free binding retains the exact request
 and response owners and publishes sealed evidence or typed rejection/cancellation.
@@ -1478,8 +1512,22 @@ evidence cannot authorize termination. Authorization-result consumers require
 exactly one current assigned/invoked/terminal association; non-prepared facts
 need no clock, while prepared leases retain their deadline checks. Existing
 lease cleanup remains the sole backing owner. No provider call, token charge,
-retry, persistence or logical-request transition is added; pre-call logical-request
-closure remains separate. Runtime abandonment never inserts this YAML step.
+retry, persistence or logical-request transition is added by this operation.
+Runtime abandonment never inserts this YAML step.
+
+Pre-call logical-request closure is the explicit parameter-free
+`terminate-model-request` step. It consumes the current request ledger, prepared
+request, applied attempt, terminal operation and retained authorization result.
+The shared authorization validator requires exactly matching identity and
+terminal failure/cancellation facts. Authorization failure closes an assigned
+request as `not_invoked_authorization_failure` or an invoked request as `failed`;
+cancellation closes either as `cancelled`. Outcomes remain `failed`/`cancelled`.
+The existing request lifecycle action and runner replacement validator require
+every associated operation to be terminal and publish one direct ledger
+successor. Prepared, missing, foreign, stale, duplicate, inconsistent or forged
+evidence rejects. Original evidence ownership, lease cleanup and token usage
+remain unchanged; no response-validation evidence, live lease, clock, provider
+call, retry, persistence or hidden closure is introduced.
 
 Logical-request closure is an explicit parameter-free `complete-model-request`
 step using the same lifecycle action and request ledger. It requires the
@@ -3186,13 +3234,13 @@ The engine validates:
 
 - workflow-declared operation result schema and source references;
 - nonempty mandatory IR fields;
-- fixed singleton provenance keys plus engine-assigned, unique, well-formed `AC/UO/EC/FR/BR/AS/NG/PB/EN/OQ-*` identifiers; initial generation is gap-free per prefix, while edits preserve surviving IDs, allocate new monotonically increasing IDs, and never reuse deleted IDs;
+- fixed singleton provenance keys plus engine-assigned, unique, well-formed `AC/UO/EC/FR/BR/AS/NG/PB/EN-*` identifiers; initial generation is gap-free per prefix, while edits preserve surviving IDs, allocate new monotonically increasing IDs, and never reuse deleted IDs;
 - exactly one nonempty `given`, `when`, and `then` field for each acceptance criterion; combined free-form, unlabeled, missing, duplicated, or reordered acceptance-condition content is invalid;
 - duplicate or byte-identical requirements;
 - typed clarification state rather than fragile substring matching;
 - citation validity and reference-file accounting;
 - for every spec record, each authority is either a resolvable claim/citation set, a current resolved clarification response, or an allowed combination; reference citations equal the stable unique union of selected claim citations, while user answers never receive fabricated citations;
-- every retained reference claim has exactly one closed specification disposition: mapped to one or more fixed/allocated spec record keys, context-only signal IDs, a blocking conflict, an ID-bearing open question, or an explicit non-spec reason; no claim disappears between the snapshot and specification;
+- every retained reference claim has exactly one closed specification disposition: mapped to one or more fixed/allocated spec record keys, context-only signal IDs (including reference-context question signals), a blocking conflict, a specification clarification need bound to its `SNN` record, or an explicit non-spec reason; no claim disappears between the snapshot and specification, and no question becomes a specification content record;
 - derived-feature-brief records cite the reference claims from which they were generated; a later user-authored record requires its explicit acknowledgement provenance;
 - exact user-facing copy obligations;
 - exact preserved-token propagation in `reference-context.md`, with visual/style kinds additionally requiring visual checks;
@@ -3223,11 +3271,14 @@ After validation:
 9. commit the set and durable state marker;
 10. report engine-known paths and readiness for user spec editing/validation, then `plan`.
 
-The canonical acceptance-criteria section in `spec.md` is always rendered in
-this form:
+The document follows the exact hierarchy in
+[F0100 §5.1](features/F0100-SpecWorkflow.md#51-ownership-and-hierarchy): its H1
+is the display name, and the mandatory parents are `User Scenarios & Testing`
+and `Requirements`. The acceptance-criteria subsection is nested beneath the
+first parent and is always rendered in this form:
 
 ```markdown
-## Acceptance Criteria
+### Acceptance Criteria
 
 **AC-001**
 - **GIVEN** <nonempty business precondition>
@@ -4004,8 +4055,9 @@ Renderers own:
 - front matter/header fields;
 - dates and engine-known links;
 - `AC/FR/BR/EC` and `TNNN` identifiers;
-- the exact `## Acceptance Criteria` heading and uppercase `GIVEN`, `WHEN`,
-  `THEN` labels in that order for every `AC-*` record;
+- the exact F0100 §5.1 heading tree, including `### Acceptance Criteria`
+  beneath `## User Scenarios & Testing *(mandatory)*`, and uppercase `GIVEN`,
+  `WHEN`, `THEN` labels in that order for every `AC-*` record;
 - checkboxes and phase/gate status;
 - Markdown table columns and escaping;
 - code fences around structured contracts where applicable;

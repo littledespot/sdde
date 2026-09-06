@@ -30,14 +30,17 @@ const operation_lifecycle_workflow = @import("application/provider_operation_lif
 const completion_workflow = @import("application/provider_operation_completion_workflow.zig");
 const termination_workflow = @import("application/provider_operation_termination_workflow.zig");
 const request_completion = @import("application/model_request_completion_workflow.zig");
+const request_termination = @import("application/model_request_termination_workflow.zig");
 const model_invocation = @import("application/model_invocation_workflow.zig");
-const invocation_result = @import("domain/model_invocation_result.zig");
+const invocation_result = @import("domain/model_invocation_result.zig").For(.inference);
 const observation_workflow = @import("application/provider_observation_workflow.zig");
 const envelope_workflow = @import("application/model_envelope_workflow.zig");
 const payload_workflow = @import("application/model_payload_schema_workflow.zig");
 const payload_validation = @import("domain/model_payload_schema.zig");
 const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
 const lease_port = @import("ports/provider_authorization_lease.zig");
+const count_observation = @import("application/model_token_count_observation_workflow.zig");
+const count_result = @import("domain/model_invocation_result.zig").For(.input_token_count);
 
 const yaml =
     \\schema: workflow/v1
@@ -1089,12 +1092,397 @@ fn prepareTermination(runner: *runner_module.Runner, outcome: workflow.OutcomeTa
     try std.testing.expectEqual(outcome, runner.bindings().invokeStep(.{ .bytes = "authorize" }).outcome);
 }
 
+fn requestTerminationYaml(fixture: *Fixture, kind: []const u8) ![]const u8 {
+    const allocator = fixture.arena.allocator();
+    const source = try terminationYaml(fixture, kind);
+    fixture.observer.expected_request_status = .terminal;
+    const routed = try std.mem.replaceOwned(u8, allocator, source, "use: terminate-provider-operation, on: {failed: observe, cancelled: observe}", "use: terminate-provider-operation, on: {failed: close-request, cancelled: close-request}");
+    return std.fmt.allocPrint(allocator, "{s}\n  close-request: {{ use: terminate-model-request, on: {{failed: observe, cancelled: observe}} }}\n", .{routed});
+}
+
+fn prepareRequestTermination(runner: *runner_module.Runner, cancelled: bool, invoked: bool) !void {
+    const outcome: workflow.OutcomeTag = if (cancelled) .cancelled else .failed;
+    try prepareTermination(runner, outcome);
+    if (invoked) {
+        // Seed a previously invoked request through the canonical lifecycle action.
+        // No test helper supplies terminal evidence or request-closure authority.
+        const current = try requestLedger(runner);
+        const owner = try (@import("actions/model/advance_model_request_lifecycle.zig").Action{}).execute(current, runner.model_accounting.?.current_operations, current.revision(), (try currentRequest(runner)).id(), .assigned, .invoked);
+        const value = requests.adoptLedger(std.testing.allocator, owner) catch |err| {
+            identity.deinitOwner(owner);
+            return err;
+        };
+        const key = @intFromEnum(requests.ledger_schema.key);
+        values.destroy(runner.envelope.slots[key].?);
+        runner.envelope.slots[key] = value;
+        runner.model_accounting.?.replaceRequests(try identity.retainLedger(identity.ledger(owner)));
+    }
+    try std.testing.expectEqual(outcome, runner.bindings().invokeStep(.{ .bytes = "terminate" }).outcome);
+}
+
+test "YAML pre-call request closure preserves failure and cancellation without provider calls" {
+    for ([_][]const u8{ "inference", "input-token-count" }) |kind| {
+        for ([_]@import("adapters/provider/fake_provider_authorization.zig").Plan{ .{ .failed = .authentication_failed }, .{ .failed = .authorization_denied }, .cancelled }) |plan| {
+            var fixture: Fixture = undefined;
+            try fixture.init(std.testing.allocator);
+            defer fixture.deinit();
+            fixture.authorization.plan = plan;
+            const graph = try fixture.compile(try requestTerminationYaml(&fixture, kind));
+            var runner = fixture.runner(graph, std.testing.allocator);
+            defer runner.deinit();
+            var fake = invocationProvider(&runner, std.testing.allocator);
+            fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+            var harness: Harness = .{ .runner = &runner };
+            const expected: workflow.OutcomeTag = if (plan == .cancelled) .cancelled else .failed;
+            try std.testing.expectEqual(expected, harness.run());
+            const ledger = try requestLedger(&runner);
+            const record = ledger.record((try currentRequest(&runner)).id()).?;
+            try std.testing.expectEqual(.terminal, record.status);
+            try std.testing.expectEqual(@as(identity.TerminalReason, if (plan == .cancelled) .cancelled else .not_invoked_authorization_failure), record.terminal_reason.?);
+            try std.testing.expect(ledger == identity.ledger(runner.model_accounting.?.requests));
+            try runner.model_accounting.?.current_operations.validateRequestClosure((try currentRequest(&runner)).id());
+            try std.testing.expectEqual(expected, runner.envelope.origins[@intFromEnum(requests.ledger_schema.key)].?.outcome);
+            try std.testing.expectEqual(@as(usize, 1), fixture.observer.calls);
+            try std.testing.expectEqual(@as(usize, 1), fixture.authorization.prepare_count);
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(payload_workflow.schema.key)] == null);
+            try expectNoProviderEffects(&runner, &fake);
+        }
+    }
+}
+
+test "pre-call request closure maps both request states and retains immutable owners after cleanup" {
+    for ([_]bool{ false, true }) |invoked| {
+        for ([_]bool{ false, true }) |cancelled| {
+            var fixture: Fixture = undefined;
+            try fixture.init(std.testing.allocator);
+            defer fixture.deinit();
+            var spy: RejectedDeposit = .{ .fixture = &fixture, .cancelled = cancelled };
+            fixture.native.prepare_authorization.action = .{ .authorization = spy.port() };
+            const graph = try fixture.compile(try requestTerminationYaml(&fixture, "inference"));
+            var runner = fixture.runner(graph, std.testing.allocator);
+            var active = true;
+            defer if (active) runner.deinit();
+            try prepareRequestTermination(&runner, cancelled, invoked);
+            const old_value = try values.retain(runner.envelope.slots[@intFromEnum(requests.ledger_schema.key)].?);
+            defer values.destroy(old_value);
+            const old = try requestLedger(&runner);
+            const original_operations = runner.model_accounting.?.current_operations;
+            const auth = try authorizationResult(&runner);
+            const terminal = try completedOperation(&runner);
+            runner.provider_clock = null;
+            fixture.clock.now_ms = 1001;
+            try std.testing.expectEqual(@as(workflow.OutcomeTag, if (cancelled) .cancelled else .failed), runner.bindings().invokeStep(.{ .bytes = "close-request" }).outcome);
+            try std.testing.expect(original_operations == runner.model_accounting.?.current_operations);
+            try std.testing.expect(auth == try authorizationResult(&runner));
+            try std.testing.expect(terminal == try completedOperation(&runner));
+            const retained_ledger = try values.retain(runner.envelope.slots[@intFromEnum(requests.ledger_schema.key)].?);
+            defer values.destroy(retained_ledger);
+            const retained_auth = try values.retain(runner.envelope.slots[@intFromEnum(authorization_workflow.schema.key)].?);
+            defer values.destroy(retained_auth);
+            const retained_terminal = try values.retain(runner.envelope.slots[@intFromEnum(attempt_values.terminal_schema.key)].?);
+            defer values.destroy(retained_terminal);
+            const ledger = try requestLedger(&runner);
+            const id = (try currentRequest(&runner)).id();
+            try std.testing.expectEqual(@as(u64, old.revision().value + 1), ledger.revision().value);
+            runner.deinit();
+            active = false;
+            try std.testing.expectEqual(@as(identity.TerminalReason, if (cancelled) .cancelled else if (invoked) .failed else .not_invoked_authorization_failure), ledger.record(id).?.terminal_reason.?);
+            try std.testing.expectEqual(@as(identity.RequestStatus, if (invoked) .invoked else .assigned), old.record(id).?.status);
+            try std.testing.expectEqual(@as(workflow.OutcomeTag, if (cancelled) .cancelled else .failed), try @import("application/workflow_provider_authorization.zig").validateTerminal(auth, terminal.record()));
+            try std.testing.expectEqual(@as(usize, 1), fixture.authorization.prepared_count);
+            try std.testing.expectEqual(@as(usize, 1), fixture.authorization.destroyed_count);
+        }
+    }
+}
+
+test "YAML pre-call request closure after inference preserves its response and single token charge" {
+    for ([_]bool{ false, true }) |cancelled| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const allocator = fixture.arena.allocator();
+        const source = try completionYaml(&fixture);
+        fixture.observer.expected_request_status = .invoked;
+        fixture.observer.release_terminal = true;
+        fixture.entries[fixture.entries.len - 1].contract.invalidates = &.{ .terminal_provider_operation, .provider_authorization_result };
+        const routed = try std.mem.replaceOwned(u8, allocator, source, "ok: end.ok", "ok: assign-next");
+        const bytes = try std.fmt.allocPrint(
+            allocator,
+            "{s}\n" ++
+                "  assign-next: {{ use: assign-provider-operation, with: {{kind: input-token-count}}, on: {{ok: authorize-next, failed: end.failed}} }}\n" ++
+                "  authorize-next: {{ use: prepare-provider-operation-authorization, with: {{timeout-ms: 1000}}, on: {{ok: end.ok, failed: terminate-next, cancelled: terminate-next}} }}\n" ++
+                "  terminate-next: {{ use: terminate-provider-operation, on: {{failed: close-request, cancelled: close-request}} }}\n" ++
+                "  close-request: {{ use: terminate-model-request, on: {{failed: end.failed, cancelled: end.cancelled}} }}\n",
+            .{routed},
+        );
+        var sequence: AuthorizationAfterInference = .{ .fixture = &fixture, .cancelled = cancelled };
+        fixture.native.prepare_authorization.action = .{ .authorization = sequence.port() };
+        const graph = try fixture.compile(bytes);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.invocation_plan.complete.content = "{\"answer\":\"retained\"}";
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(@as(workflow.OutcomeTag, if (cancelled) .cancelled else .failed), harness.run());
+        const request = try currentRequest(&runner);
+        try std.testing.expectEqual(@as(identity.TerminalReason, if (cancelled) .cancelled else .failed), (try requestLedger(&runner)).record(request.id()).?.terminal_reason.?);
+        try runner.model_accounting.?.current_operations.validateRequestClosure(request.id());
+        try std.testing.expectEqual(.input_token_count, (try completedOperation(&runner)).record().id.kind);
+        try std.testing.expectEqualStrings("retained", (try payloadResult(&runner)).outcome().valid.candidate().root().get("answer").?.string);
+        try std.testing.expectEqual(@as(usize, 2), fixture.authorization.prepare_count);
+        try std.testing.expectEqual(@as(usize, 1), fixture.authorization.destroyed_count);
+        try expectResponseAccounting(&runner, &fake, 7);
+    }
+}
+
+const AuthorizationAfterInference = struct {
+    fixture: *Fixture,
+    cancelled: bool,
+    fn port(self: *@This()) authorization_port.Port {
+        return .{ .context = @ptrCast(self), .prepare_fn = prepare };
+    }
+    fn prepare(context: *authorization_port.Context, facts: authorization_port.Facts, slot: authorization_port.Slot) authorization_port.Error!authorization_port.Observation {
+        const self: *@This() = @ptrCast(@alignCast(context));
+        self.fixture.authorization.plan = if (facts.operation_id.kind == .inference) .prepared else if (self.cancelled) .cancelled else .{ .failed = .authorization_denied };
+        return self.fixture.authorization.port().prepare(facts, slot);
+    }
+};
+
+test "runtime cancellation before pre-call request closure leaves no hidden ledger transition" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    fixture.authorization.plan = .{ .failed = .authentication_failed };
+    const graph = try fixture.compile(try requestTerminationYaml(&fixture, "inference"));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var harness: Harness = .{ .runner = &runner, .cancel_at = 8 };
+    runner.runtime = .{ .context = &harness, .status_fn = Harness.status };
+    try std.testing.expectEqual(.cancelled, harness.run());
+    const request = try currentRequest(&runner);
+    try std.testing.expectEqual(.assigned, (try requestLedger(&runner)).record(request.id()).?.status);
+    try std.testing.expectEqual(.preparation_failed, std.meta.activeTag((try completedOperation(&runner)).record().state.terminal));
+    try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+}
+
+test "pre-call request closure rejects missing foreign stale duplicate and prepared evidence" {
+    for ([_]bool{ false, true }) |cancelled| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        fixture.authorization.plan = if (cancelled) .cancelled else .{ .failed = .authentication_failed };
+        const graph = try fixture.compile(try requestTerminationYaml(&fixture, "inference"));
+        var first = fixture.runner(graph, std.testing.allocator);
+        defer first.deinit();
+        var second = fixture.runner(graph, std.testing.allocator);
+        defer second.deinit();
+        try prepareRequestTermination(&first, cancelled, false);
+        try prepareRequestTermination(&second, cancelled, false);
+        const original = try values.retain(first.envelope.slots[@intFromEnum(requests.ledger_schema.key)].?);
+        defer values.destroy(original);
+        for (request_termination.Terminate.contract.requires) |key| {
+            const index = @intFromEnum(key);
+            const saved = first.envelope.slots[index];
+            first.envelope.slots[index] = null;
+            const missing = first.bindings().invokeStep(.{ .bytes = "close-request" });
+            first.envelope.slots[index] = saved;
+            try std.testing.expectEqual(.invalid, missing.outcome);
+            std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[index], &second.envelope.slots[index]);
+            const foreign = first.bindings().invokeStep(.{ .bytes = "close-request" });
+            std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[index], &second.envelope.slots[index]);
+            try std.testing.expectEqual(.authority, foreign.rejected);
+            try std.testing.expect(first.envelope.slots[@intFromEnum(requests.ledger_schema.key)] == original);
+        }
+        for (0..7) |variant| {
+            var id = (try completedOperation(&first)).record().id;
+            if (variant == 0) id.kind = .input_token_count;
+            if (variant == 1) id.model_attempt_ordinal.value += 1;
+            const reference = try @import("domain/execution_reference.zig").create(std.testing.allocator);
+            defer reference.release();
+            const outcome: authorization_result.Outcome = switch (variant) {
+                5 => if (cancelled) .{ .failed = .{ .operation_id = id, .cause = .authentication_failed, .retry_class = .never, .delivery = .not_sent } } else .{ .cancelled = id },
+                6 => .{ .prepared = .{ .identity = reference } },
+                else => if (cancelled and variant < 2) .{ .cancelled = id } else .{ .failed = .{
+                    .operation_id = id,
+                    .cause = if (variant == 4) .authorization_denied else .authentication_failed,
+                    .retry_class = if (variant == 2) .policy_eligible else .never,
+                    .delivery = if (variant == 3) .response_received else .not_sent,
+                } },
+            };
+            const owner = try authorization_result.create(std.testing.allocator, try requestLedger(&first), outcome);
+            const value = try values.adopt(std.testing.allocator, authorization_workflow.schema, authorization_result.Result, authorization_result.Result, owner, authorization_result_view, authorization_result.destroy, null);
+            defer values.destroy(value);
+            const index = @intFromEnum(authorization_workflow.schema.key);
+            const saved = first.envelope.slots[index];
+            first.envelope.slots[index] = value;
+            const rejected = first.bindings().invokeStep(.{ .bytes = "close-request" });
+            first.envelope.slots[index] = saved;
+            try std.testing.expectEqual(.authority, rejected.rejected);
+            try std.testing.expect(first.envelope.slots[@intFromEnum(requests.ledger_schema.key)] == original);
+        }
+        try std.testing.expectEqual(@as(workflow.OutcomeTag, if (cancelled) .cancelled else .failed), first.bindings().invokeStep(.{ .bytes = "close-request" }).outcome);
+        const closed = try requestLedger(&first);
+        try std.testing.expectEqual(.authority, first.bindings().invokeStep(.{ .bytes = "close-request" }).rejected);
+        const index = @intFromEnum(requests.ledger_schema.key);
+        const saved = first.envelope.slots[index];
+        first.envelope.slots[index] = original;
+        const stale = first.bindings().invokeStep(.{ .bytes = "close-request" });
+        first.envelope.slots[index] = saved;
+        try std.testing.expectEqual(.authority, stale.rejected);
+        try std.testing.expect(closed == try requestLedger(&first));
+    }
+}
+
+test "pre-call request closure requires every operation terminal" {
+    for ([_]bool{ false, true }) |invoke| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        fixture.authorization.plan = .{ .failed = .authentication_failed };
+        const graph = try fixture.compile(try requestTerminationYaml(&fixture, "inference"));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        try prepareRequestTermination(&runner, false, invoke);
+        const ledger = try requestLedger(&runner);
+        const state = &runner.model_accounting.?;
+        const prepared = (try currentRequest(&runner)).prepared().?;
+        var id = (try completedOperation(&runner)).record().id;
+        id.kind = .input_token_count;
+        const authority = state.operationAuthority(ledger);
+        const assigned = try lifecycle.propose(state.current_operations, authority, state.current_operations.revision(), id, null, .{ .assign_count = .{ .binding_id = prepared.binding_id, .model_visible_input_id = prepared.model_visible_input_id } });
+        state.current_operations = try lifecycle.apply(state.current_operations, authority, assigned);
+        if (invoke) {
+            const invoked = try lifecycle.propose(state.current_operations, authority, state.current_operations.revision(), id, state.current_operations.record(id).?.revision, .{ .invoke = .{ .deadline_monotonic_ms = 1000 } });
+            state.current_operations = try lifecycle.apply(state.current_operations, authority, invoked);
+        }
+        try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "close-request" }).rejected);
+        try std.testing.expectError(error.ProviderOperationStillOpen, fixture.native.terminate_request.action.execute(ledger, state.current_operations, ledger.revision(), prepared.model_request_id, if (invoke) .invoked else .assigned, .{ .terminal = if (invoke) .failed else .not_invoked_authorization_failure }));
+        try std.testing.expect(ledger == try requestLedger(&runner));
+    }
+}
+
 fn expectNoProviderEffects(runner: *const runner_module.Runner, fake: *const fake_provider.FakeLLMProvider) !void {
     try std.testing.expectEqual(@as(usize, 0), fake.invocation_call_count);
     try std.testing.expectEqual(@as(usize, 0), fake.count_call_count);
     try std.testing.expectEqual(@as(usize, 0), fake.effect_count);
     try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
     try std.testing.expectEqual(@as(u64, 0), runner.tokenLedger().revision().value);
+}
+
+test "pre-call request closure rejects forged successors and cancellation before publication" {
+    const Spy = RequestClosureSpy(request_termination.Terminate);
+    for (std.enums.values(Spy.Fault)) |fault| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        fixture.authorization.plan = .{ .failed = .authentication_failed };
+        const graph = try fixture.compile(try requestTerminationYaml(&fixture, "inference"));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        try prepareRequestTermination(&runner, false, true);
+        var spy: Spy = .{ .inner = &fixture.native.terminate_request, .fault = fault };
+        for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, request_termination.Terminate.contract.id)) {
+            entry.binding = bindings.bind(Spy, &spy, Spy.invoke);
+        };
+        runner.runtime = .{ .context = &spy, .status_fn = Spy.status };
+        const ledger = try requestLedger(&runner);
+        const original_operations = runner.model_accounting.?.current_operations;
+        const original_authorization = try authorizationResult(&runner);
+        const result = runner.bindings().invokeStep(.{ .bytes = "close-request" });
+        switch (fault) {
+            .missing, .undeclared_invalidation => try std.testing.expectEqual(.invalid, result.outcome),
+            .suppressed_outcome => try std.testing.expectEqual(.failed, result.outcome),
+            .cancelled => try std.testing.expectEqual(.cancelled, result.rejected),
+            else => try std.testing.expectEqual(.authority, result.rejected),
+        }
+        try std.testing.expect(ledger == try requestLedger(&runner));
+        try std.testing.expect(ledger == identity.ledger(runner.model_accounting.?.requests));
+        try std.testing.expect(original_operations == runner.model_accounting.?.current_operations);
+        try std.testing.expect(original_authorization == try authorizationResult(&runner));
+    }
+}
+
+test "pre-call request closure allocation failures release every owner and deposited capability" {
+    for ([_][]const u8{ "inference", "input-token-count" }) |kind| {
+        for ([_]bool{ false, true }) |cancelled| {
+            var fixture: Fixture = undefined;
+            try fixture.init(std.testing.allocator);
+            defer fixture.deinit();
+            const graph = try fixture.compile(try requestTerminationYaml(&fixture, kind));
+            try std.testing.checkAllAllocationFailures(std.testing.allocator, requestTerminationAllocationCase, .{ &fixture, graph, cancelled });
+            try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
+        }
+    }
+}
+
+fn requestTerminationAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow, cancelled: bool) !void {
+    fixture.native.init(allocator);
+    fixture.authorization.allocator = allocator;
+    var spy: RejectedDeposit = .{ .fixture = fixture, .cancelled = cancelled };
+    fixture.native.prepare_authorization.action = .{ .authorization = spy.port() };
+    @memcpy(fixture.entries[core.entries.len .. core.entries.len + native.count], &fixture.native.entries);
+    var runner = fixture.runner(graph, allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    var harness: Harness = .{ .runner = &runner };
+    const actual = harness.run();
+    try expectNoProviderEffects(&runner, &fake);
+    const record = if (requestLedger(&runner)) |ledger| ledger.latestRecord() else |_| null;
+    if (record == null or record.?.status != .terminal) {
+        try std.testing.expectEqual(.failed, actual);
+        return error.OutOfMemory;
+    }
+    try std.testing.expectEqual(@as(workflow.OutcomeTag, if (cancelled) .cancelled else .failed), actual);
+    try std.testing.expectEqual(@as(identity.TerminalReason, if (cancelled) .cancelled else .not_invoked_authorization_failure), record.?.terminal_reason.?);
+    try runner.model_accounting.?.current_operations.validateRequestClosure((try currentRequest(&runner)).id());
+}
+
+test "pre-call request closure rejects YAML assertions missing prerequisites and forged projections" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const source = try requestTerminationYaml(&fixture, "inference");
+    for ([_][2][]const u8{
+        .{ "use: terminate-model-request,", "use: hidden-request-termination," },
+        .{ "use: terminate-model-request,", "use: terminate-model-request, with: {reason: failed}," },
+        .{ "use: terminate-model-request,", "use: terminate-model-request, with: {transition: terminal}," },
+        .{ "use: terminate-model-request,", "use: terminate-model-request, with: {retry-limit: 1}," },
+        .{ "use: terminate-model-request,", "use: terminate-model-request, with: {timeout-ms: 100}," },
+        .{ "use: terminate-model-request,", "use: terminate-model-request, with: {slot: selected}," },
+        .{ "use: terminate-provider-operation, on: {failed: close-request, cancelled: close-request}", "use: core.noop, on: {ok: close-request}" },
+        .{ "use: prepare-provider-operation-authorization, with: {timeout-ms: 1000}, on: {ok: end.ok, failed: terminate, cancelled: terminate}", "use: core.noop, on: {ok: terminate}" },
+        .{ "failed: end.failed", "failed: end.ok" },
+        .{ "cancelled: end.cancelled", "cancelled: end.ok" },
+        .{ "use: terminate-model-request, on: {failed: observe, cancelled: observe}", "use: terminate-model-request, on: {failed: observe}" },
+    }) |change| {
+        const changed = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, change[0], change[1]);
+        try std.testing.expect(!std.mem.eql(u8, changed, source));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(changed));
+    }
+    const graph = try fixture.compile(source);
+    for (0..7) |variant| {
+        var tampered = graph.*;
+        const steps = try fixture.arena.allocator().dupe(compilation.CompiledStep, graph.authority.steps);
+        for (steps) |*step| if (std.mem.eql(u8, step.operation_id.bytes, request_termination.Terminate.contract.id)) {
+            switch (variant) {
+                0 => step.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation },
+                1 => step.capabilities = &.{"provider-authorization"},
+                2 => step.replaces = &.{ .model_request_identity_ledger, .prepared_model_request },
+                3 => step.outcomes = &.{ .ok, .failed, .cancelled },
+                4 => step.optional = &.{.model_payload_schema_result},
+                5 => step.invalidates = &.{.provider_authorization_result},
+                6 => step.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result },
+                else => unreachable,
+            }
+        };
+        tampered.authority.steps = steps;
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        var runner = fixture.runner(&tampered, std.testing.allocator);
+        defer runner.deinit();
+        try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "close-request" }).rejected);
+    }
 }
 
 test "YAML pre-call termination preserves authorization failure and cancellation for both operation kinds" {
@@ -2801,7 +3189,8 @@ test "request closure needs no live lease deadline or remaining token budget and
 }
 
 test "request closure rejects forged successors suppressed outcomes and cancelled publication" {
-    for (std.enums.values(RequestClosureSpy.Fault)) |fault| {
+    const Spy = RequestClosureSpy(request_completion.Complete);
+    for (std.enums.values(Spy.Fault)) |fault| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -2812,11 +3201,11 @@ test "request closure rejects forged successors suppressed outcomes and cancelle
         fake.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 5, .output_tokens = 2 } };
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         try prepareRequestClosure(&runner, .failed);
-        var spy: RequestClosureSpy = .{ .inner = &fixture.native.complete_request, .fault = fault };
+        var spy: Spy = .{ .inner = &fixture.native.complete_request, .fault = fault };
         for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, request_completion.Complete.contract.id)) {
-            entry.binding = bindings.bind(RequestClosureSpy, &spy, RequestClosureSpy.invoke);
+            entry.binding = bindings.bind(Spy, &spy, Spy.invoke);
         };
-        runner.runtime = .{ .context = &spy, .status_fn = RequestClosureSpy.status };
+        runner.runtime = .{ .context = &spy, .status_fn = Spy.status };
         const original = try requestLedger(&runner);
         const original_operations = runner.model_accounting.?.current_operations;
         const result = runner.bindings().invokeStep(.{ .bytes = "close-request" });
@@ -2834,54 +3223,57 @@ test "request closure rejects forged successors suppressed outcomes and cancelle
     }
 }
 
-const RequestClosureSpy = struct {
-    const Fault = enum { missing, old_snapshot, accepted, needs_user, invalid_exhausted, assignment, skipped_revision, suppressed_outcome, cancelled, undeclared_invalidation };
-    inner: *request_completion.Complete,
-    fault: Fault,
-    invoked: bool = false,
+fn RequestClosureSpy(comptime Native: type) type {
+    return struct {
+        const Fault = enum { missing, old_snapshot, accepted, needs_user, invalid_exhausted, cancelled_reason, assignment, skipped_revision, suppressed_outcome, cancelled, undeclared_invalidation };
+        inner: *Native,
+        fault: Fault,
+        invoked: bool = false,
 
-    fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        var candidate = try request_completion.Complete.invoke(self.inner, input);
-        switch (self.fault) {
-            .suppressed_outcome => candidate.outcome = .ok,
-            .cancelled => {},
-            .undeclared_invalidation => candidate.delta.data_invalidations.insert(.model_payload_schema_result),
-            else => {
-                const current = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
-                const id = (try requests.readCurrent(&input.step.data, requests.prepared_schema)).id();
-                const owner: ?*identity.Owner = switch (self.fault) {
-                    .missing => null,
-                    .old_snapshot => identity.retainLedger(current) catch return error.OperationExecutionFailed,
-                    .accepted, .needs_user, .invalid_exhausted => identity.createLifecycleSuccessor(current, current.revision(), id, .invoked, .{ .terminal = switch (self.fault) {
-                        .accepted => .accepted,
-                        .needs_user => .needs_user,
-                        .invalid_exhausted => .invalid_exhausted,
+        fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+            const self = context.?;
+            var candidate = try Native.invoke(self.inner, input);
+            switch (self.fault) {
+                .suppressed_outcome => candidate.outcome = .ok,
+                .cancelled => {},
+                .undeclared_invalidation => candidate.delta.data_invalidations.insert(.model_payload_schema_result),
+                else => {
+                    const current = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+                    const id = (try requests.readCurrent(&input.step.data, requests.prepared_schema)).id();
+                    const owner: ?*identity.Owner = switch (self.fault) {
+                        .missing => null,
+                        .old_snapshot => identity.retainLedger(current) catch return error.OperationExecutionFailed,
+                        .accepted, .needs_user, .invalid_exhausted, .cancelled_reason => identity.createLifecycleSuccessor(current, current.revision(), id, .invoked, .{ .terminal = switch (self.fault) {
+                            .accepted => .accepted,
+                            .needs_user => .needs_user,
+                            .invalid_exhausted => .invalid_exhausted,
+                            .cancelled_reason => .cancelled,
+                            else => unreachable,
+                        } }) catch return error.OperationExecutionFailed,
+                        .assignment, .skipped_revision => assigned: {
+                            const assigned = identity.createSuccessor(current, current.revision(), id.immutable_unit_owner_id, id.model_operation_id, id.purpose) catch return error.OperationExecutionFailed;
+                            if (self.fault == .assignment) break :assigned assigned.owner;
+                            defer identity.deinitOwner(assigned.owner);
+                            const next = identity.ledger(assigned.owner);
+                            break :assigned identity.createLifecycleSuccessor(next, next.revision(), id, .invoked, .{ .terminal = .failed }) catch return error.OperationExecutionFailed;
+                        },
                         else => unreachable,
-                    } }) catch return error.OperationExecutionFailed,
-                    .assignment, .skipped_revision => assigned: {
-                        const assigned = identity.createSuccessor(current, current.revision(), id.immutable_unit_owner_id, id.model_operation_id, id.purpose) catch return error.OperationExecutionFailed;
-                        if (self.fault == .assignment) break :assigned assigned.owner;
-                        defer identity.deinitOwner(assigned.owner);
-                        const next = identity.ledger(assigned.owner);
-                        break :assigned identity.createLifecycleSuccessor(next, next.revision(), id, .invoked, .{ .terminal = .failed }) catch return error.OperationExecutionFailed;
-                    },
-                    else => unreachable,
-                };
-                const key = @intFromEnum(requests.ledger_schema.key);
-                values.destroy(candidate.delta.data_replacements[key].?);
-                candidate.delta.data_replacements[key] = if (owner) |value| requests.adoptLedger(std.testing.allocator, value) catch return error.OperationExecutionFailed else null;
-            },
+                    };
+                    const key = @intFromEnum(requests.ledger_schema.key);
+                    values.destroy(candidate.delta.data_replacements[key].?);
+                    candidate.delta.data_replacements[key] = if (owner) |value| requests.adoptLedger(std.testing.allocator, value) catch return error.OperationExecutionFailed else null;
+                },
+            }
+            self.invoked = true;
+            return candidate;
         }
-        self.invoked = true;
-        return candidate;
-    }
 
-    fn status(context: ?*anyopaque) pipeline.RuntimeStatus {
-        const self: *const @This() = @ptrCast(@alignCast(context.?));
-        return if (self.invoked and self.fault == .cancelled) .cancelled else .active;
-    }
-};
+        fn status(context: ?*anyopaque) pipeline.RuntimeStatus {
+            const self: *const @This() = @ptrCast(@alignCast(context.?));
+            return if (self.invoked and self.fault == .cancelled) .cancelled else .active;
+        }
+    };
+}
 
 test "request closure releases owned ledgers and responses on allocation failure for every outcome" {
     for ([_]fake_provider.InvocationPlan{
@@ -4297,12 +4689,497 @@ fn consumeInvocationLease(context: *lease_port.Context, reference: *const provid
     return port.consume_fn(port.context, reference, selected, request, invoked, now);
 }
 
+fn countYaml(fixture: *Fixture, close_request: bool) ![]const u8 {
+    const allocator = fixture.arena.allocator();
+    var source = try invocationYaml(fixture);
+    source = try std.mem.replaceOwned(u8, allocator, source, "kind: inference", "kind: input-token-count");
+    source = try std.mem.replaceOwned(u8, allocator, source, "use: invoke-model, on: {ok: observe, failed: end.failed, cancelled: end.cancelled}", "use: count-model-input-tokens, on: {ok: validate-count, failed: validate-count, cancelled: validate-count}");
+    fixture.entries[fixture.entries.len - 1].contract.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .provider_token_count_validation_result };
+    source = try std.fmt.allocPrint(allocator, "{s}\n  validate-count: {{ use: validate-model-token-count-observation, on: {{ok: complete-count, failed: complete-count, cancelled: complete-count}} }}\n  complete-count: {{ use: complete-count-operation, on: {{ok: observe, failed: {s}, cancelled: {s}}} }}\n", .{ source, if (close_request) "close-count" else "end.failed", if (close_request) "close-count" else "end.cancelled" });
+    return if (close_request) std.fmt.allocPrint(allocator, "{s}\n  close-count: {{ use: complete-count-request, on: {{failed: end.failed, cancelled: end.cancelled}} }}\n", .{source}) else source;
+}
+
+fn countObservation(runner: *const runner_module.Runner) !*const count_observation.Result {
+    return values.read(&.{ .slots = runner.envelope.slots }, count_observation.schema, count_observation.Result);
+}
+
+fn prepareCountCompletion(runner: *runner_module.Runner, outcome: workflow.OutcomeTag) !void {
+    try prepareInvocable(runner);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+    for ([_][]const u8{ "call", "validate-count" }) |step|
+        try std.testing.expectEqual(outcome, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+}
+
+const count_plans = [_]fake_provider.CountPlan{
+    .{ .counted = 0 },
+    .{ .counted = std.math.maxInt(u64) },
+    .{ .failed = .{ .cause = .request_rejected, .retry_class = .never, .delivery = .not_sent } },
+    .{ .failed = .{ .cause = .transport_failed, .retry_class = .policy_eligible, .delivery = .accepted_or_unknown } },
+    .cancelled,
+};
+
+test "YAML count path preserves exact counts failures and cancellation without charging or accepting requests" {
+    for (count_plans) |plan| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try countYaml(&fixture, true));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.count_plan = plan;
+        fixture.native.count_model_input.action = .{ .provider = fake.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        const expected: workflow.OutcomeTag = switch (plan) {
+            .counted => .ok,
+            .failed => .failed,
+            .cancelled => .cancelled,
+        };
+        try std.testing.expectEqual(expected, harness.run());
+        try std.testing.expectEqual(@as(usize, 1), fake.count_call_count);
+        try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
+        try std.testing.expectEqual(@as(usize, 0), fake.invocation_call_count);
+        try std.testing.expectEqual(@as(usize, 1), fixture.authorization.destroyed_count);
+        const source = try countObservation(&runner);
+        const request = try currentRequest(&runner);
+        const terminal = (try completedOperation(&runner)).record();
+        try std.testing.expect(terminal.id.eql(source.operationId()));
+        try runner.model_accounting.?.current_operations.validateRequestClosure(request.id());
+        const record = (try requestLedger(&runner)).record(request.id()).?;
+        switch (plan) {
+            .counted => |count| {
+                const evidence = source.outcome().validated.counted;
+                try std.testing.expect(evidence.count_operation_id.eql(terminal.id));
+                try std.testing.expect(evidence.binding_id.eql(request.prepared().?.binding_id));
+                try std.testing.expect(evidence.model_visible_input_id.eql(request.prepared().?.model_visible_input_id));
+                try std.testing.expectEqual(count, terminal.state.terminal.counted);
+                try std.testing.expectEqual(count, evidence.input_tokens);
+                try std.testing.expectEqual(.invoked, record.status);
+            },
+            .failed => |failure| {
+                try std.testing.expectEqualDeep(failure.cause, source.outcome().validated.failed.cause);
+                try std.testing.expectEqualDeep(failure.cause, terminal.state.terminal.failed.cause);
+                try std.testing.expectEqual(failure.delivery, terminal.state.terminal.failed.delivery);
+                try std.testing.expectEqual(.failed, record.terminal_reason.?);
+            },
+            .cancelled => {
+                try std.testing.expectEqual(.cancelled, source.outcome());
+                try std.testing.expectEqual(.accepted_or_unknown, terminal.state.terminal.cancelled);
+                try std.testing.expectEqual(.cancelled, record.terminal_reason.?);
+            },
+        }
+        try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(u64, 0), runner.token_accounting.current().revision().value);
+    }
+}
+
+test "YAML count completion rejects missing foreign stale and duplicate evidence" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try countYaml(&fixture, true));
+    var first = fixture.runner(graph, std.testing.allocator);
+    defer first.deinit();
+    var second = fixture.runner(graph, std.testing.allocator);
+    defer second.deinit();
+    var first_fake = invocationProvider(&first, std.testing.allocator);
+    var second_fake = invocationProvider(&second, std.testing.allocator);
+    for ([_]*runner_module.Runner{ &first, &second }, [_]*fake_provider.FakeLLMProvider{ &first_fake, &second_fake }) |runner, fake| {
+        fixture.native.count_model_input.action = .{ .provider = fake.interface() };
+        try prepareCountCompletion(runner, .ok);
+    }
+    const original = first.model_accounting.?.current_operations;
+    for (completion_workflow.CompleteCount.contract.requires) |key| {
+        const index = @intFromEnum(key);
+        const saved = first.envelope.slots[index];
+        first.envelope.slots[index] = null;
+        const missing = first.bindings().invokeStep(.{ .bytes = "complete-count" });
+        first.envelope.slots[index] = saved;
+        try std.testing.expectEqual(.invalid, missing.outcome);
+        std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[index], &second.envelope.slots[index]);
+        const foreign = first.bindings().invokeStep(.{ .bytes = "complete-count" });
+        std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[index], &second.envelope.slots[index]);
+        try std.testing.expectEqual(.authority, foreign.rejected);
+        try std.testing.expect(original == first.model_accounting.?.current_operations);
+    }
+    const invoked_key = @intFromEnum(attempt_values.invoked_schema.key);
+    const old_invoked = try values.retain(first.envelope.slots[invoked_key].?);
+    try std.testing.expectEqual(.ok, first.bindings().invokeStep(.{ .bytes = "complete-count" }).outcome);
+    const completed = first.model_accounting.?.current_operations;
+    try std.testing.expectEqual(.invalid, first.bindings().invokeStep(.{ .bytes = "complete-count" }).outcome);
+    first.envelope.slots[invoked_key] = old_invoked;
+    try std.testing.expectEqual(.authority, first.bindings().invokeStep(.{ .bytes = "complete-count" }).rejected);
+    try std.testing.expect(completed == first.model_accounting.?.current_operations);
+    // An exact successful count still cannot accept the logical request.
+    try std.testing.expectEqual(.authority, first.bindings().invokeStep(.{ .bytes = "close-count" }).rejected);
+    try std.testing.expectEqual(.invoked, (try requestLedger(&first)).record((try currentRequest(&first)).id()).?.status);
+}
+
+test "YAML count request closure rejects missing foreign stale and duplicate evidence" {
+    for ([_]bool{ false, true }) |cancelled| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try countYaml(&fixture, true));
+        var first = fixture.runner(graph, std.testing.allocator);
+        defer first.deinit();
+        var second = fixture.runner(graph, std.testing.allocator);
+        defer second.deinit();
+        var first_fake = invocationProvider(&first, std.testing.allocator);
+        var second_fake = invocationProvider(&second, std.testing.allocator);
+        const outcome: workflow.OutcomeTag = if (cancelled) .cancelled else .failed;
+        for ([_]*runner_module.Runner{ &first, &second }, [_]*fake_provider.FakeLLMProvider{ &first_fake, &second_fake }) |runner, fake| {
+            fake.count_plan = if (cancelled) .cancelled else count_plans[2];
+            fixture.native.count_model_input.action = .{ .provider = fake.interface() };
+            try prepareCountCompletion(runner, outcome);
+            try std.testing.expectEqual(outcome, runner.bindings().invokeStep(.{ .bytes = "complete-count" }).outcome);
+        }
+        const original = try values.retain(first.envelope.slots[@intFromEnum(requests.ledger_schema.key)].?);
+        defer values.destroy(original);
+        for (request_completion.CompleteCount.contract.requires) |key| {
+            const index = @intFromEnum(key);
+            const saved = first.envelope.slots[index];
+            first.envelope.slots[index] = null;
+            const missing = first.bindings().invokeStep(.{ .bytes = "close-count" });
+            first.envelope.slots[index] = saved;
+            try std.testing.expectEqual(.invalid, missing.outcome);
+            std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[index], &second.envelope.slots[index]);
+            const foreign = first.bindings().invokeStep(.{ .bytes = "close-count" });
+            std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[index], &second.envelope.slots[index]);
+            try std.testing.expectEqual(.authority, foreign.rejected);
+            try std.testing.expect(first.envelope.slots[@intFromEnum(requests.ledger_schema.key)] == original);
+        }
+        try std.testing.expectEqual(outcome, first.bindings().invokeStep(.{ .bytes = "close-count" }).outcome);
+        try std.testing.expectEqual(.authority, first.bindings().invokeStep(.{ .bytes = "close-count" }).rejected);
+        const closed = first.envelope.slots[@intFromEnum(requests.ledger_schema.key)];
+        first.envelope.slots[@intFromEnum(requests.ledger_schema.key)] = original;
+        const stale = first.bindings().invokeStep(.{ .bytes = "close-count" });
+        first.envelope.slots[@intFromEnum(requests.ledger_schema.key)] = closed;
+        try std.testing.expectEqual(.authority, stale.rejected);
+    }
+}
+
+test "YAML count validation rejects foreign raw results without fabricating completion" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try countYaml(&fixture, true));
+    var first = fixture.runner(graph, std.testing.allocator);
+    defer first.deinit();
+    var second = fixture.runner(graph, std.testing.allocator);
+    defer second.deinit();
+    var first_fake = invocationProvider(&first, std.testing.allocator);
+    var second_fake = invocationProvider(&second, std.testing.allocator);
+    for ([_]*runner_module.Runner{ &first, &second }, [_]*fake_provider.FakeLLMProvider{ &first_fake, &second_fake }) |runner, fake| {
+        fixture.native.count_model_input.action = .{ .provider = fake.interface() };
+        try prepareInvocable(runner);
+        for ([_][]const u8{ "advance-operation", "call" }) |step| try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+    }
+    const key = @intFromEnum(model_invocation.count_schema.key);
+    std.mem.swap(?*@import("domain/pipeline_data.zig").Value, &first.envelope.slots[key], &second.envelope.slots[key]);
+    for ([_]*runner_module.Runner{ &first, &second }) |runner| {
+        try std.testing.expectEqual(.failed, runner.bindings().invokeStep(.{ .bytes = "validate-count" }).outcome);
+        try std.testing.expectEqual(error.ModelTokenCountAssociationInvalid, (try countObservation(runner)).outcome().rejected);
+        try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "complete-count" }).rejected);
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(attempt_values.terminal_schema.key)] == null);
+        try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+    }
+}
+
+test "YAML count validation reuses exact operation binding and input checks" {
+    for (0..5) |variant| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try countYaml(&fixture, true));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.count_model_input.action = .{ .provider = fake.interface() };
+        try prepareInvocable(&runner);
+        for ([_][]const u8{ "advance-operation", "call" }) |step| try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        const raw = try values.read(&.{ .slots = runner.envelope.slots }, model_invocation.count_schema, count_result.Result);
+        var faulty = raw.outcome().?.observation;
+        switch (variant) {
+            0 => faulty.counted.operation_id.kind = .inference,
+            1 => faulty.counted.operation_id.model_attempt_ordinal.value += 1,
+            2 => faulty.counted.binding_id.slot_id.bytes = "foreign",
+            3 => faulty.counted.model_visible_input_id.bytes = "foreign",
+            4 => {
+                faulty = .{ .failed = .{ .operation_id = raw.operationId(), .cause = .request_rejected, .retry_class = .never, .delivery = .not_sent } };
+                faulty.failed.operation_id.model_attempt_ordinal.value += 1;
+            },
+            else => unreachable,
+        }
+        const owner = try count_result.Owner.init(std.testing.allocator, try requestLedger(&runner), raw.operationId());
+        owner.finish(.{ .observation = faulty });
+        const value = values.adopt(std.testing.allocator, model_invocation.count_schema, count_result.Result, count_result.Owner, owner, count_result.Owner.view, count_result.Owner.destroy, null) catch |err| {
+            owner.destroy();
+            return err;
+        };
+        const key = @intFromEnum(model_invocation.count_schema.key);
+        values.destroy(runner.envelope.slots[key].?);
+        runner.envelope.slots[key] = value;
+        try std.testing.expectEqual(.failed, runner.bindings().invokeStep(.{ .bytes = "validate-count" }).outcome);
+        try std.testing.expectEqual(error.ModelTokenCountAssociationInvalid, (try countObservation(&runner)).outcome().rejected);
+        try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "complete-count" }).rejected);
+        try std.testing.expectEqual(@as(usize, 1), fake.count_call_count);
+        try std.testing.expectEqual(@as(u64, 0), runner.tokenLedger().revision().value);
+    }
+}
+
+test "count YAML rejects undeclared inputs overrides hidden operations and false acceptance" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const source = try countYaml(&fixture, true);
+    for ([_][]const u8{ "count-model-input-tokens", "validate-model-token-count-observation", "complete-count-operation", "complete-count-request" }) |id| {
+        const needle = try std.fmt.allocPrint(fixture.arena.allocator(), "use: {s},", .{id});
+        for ([_][]const u8{ "count: 1", "outcome: counted", "slot: selected", "timeout-ms: 1", "retry-limit: 1" }) |parameter| {
+            const replacement = try std.fmt.allocPrint(fixture.arena.allocator(), "use: {s}, with: {{{s}}},", .{ id, parameter });
+            const changed = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, needle, replacement);
+            try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(changed));
+        }
+        const hidden = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, needle, "use: test.hidden-count,");
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(hidden));
+    }
+    for ([_][2][]const u8{
+        .{ "use: count-model-input-tokens, on: {ok: validate-count, failed: validate-count, cancelled: validate-count}", "use: core.noop, on: {ok: validate-count}" },
+        .{ "use: validate-model-token-count-observation, on: {ok: complete-count, failed: complete-count, cancelled: complete-count}", "use: core.noop, on: {ok: complete-count}" },
+        .{ "use: complete-count-request, on: {failed: end.failed, cancelled: end.cancelled}", "use: complete-count-request, on: {ok: end.ok, failed: end.failed, cancelled: end.cancelled}" },
+    }) |change| {
+        const changed = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, change[0], change[1]);
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(changed));
+    }
+}
+
+test "YAML count raw result and validation independently retain their original request owners" {
+    for ([_]pipeline.DataKey{ .provider_token_count_result, .provider_token_count_validation_result }) |key| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try countYaml(&fixture, true));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        var active = true;
+        defer if (active) runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.count_plan = .{ .counted = 47 };
+        fixture.native.count_model_input.action = .{ .provider = fake.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.ok, harness.run());
+        const retained = try values.retain(runner.envelope.slots[@intFromEnum(key)].?);
+        defer values.destroy(retained);
+        const request = try currentRequest(&runner);
+        const raw = try values.read(&.{ .slots = runner.envelope.slots }, model_invocation.count_schema, count_result.Result);
+        const validated = try countObservation(&runner);
+        runner.deinit();
+        active = false;
+        const operation_id = if (key == .provider_token_count_result) raw.operationId() else validated.operationId();
+        try std.testing.expect(operation_id.model_request_id == request.id());
+        const count = if (key == .provider_token_count_result) raw.outcome().?.observation.counted.input_tokens else validated.outcome().validated.counted.input_tokens;
+        try std.testing.expectEqual(@as(u64, 47), count);
+        try std.testing.expectEqualStrings(schema_bytes, request.prepared().?.response_schema.bytes());
+        try std.testing.expectEqualStrings("selected", request.binding().bindingId().slot_id.bytes);
+    }
+}
+
+test "YAML count and validation release ownership at every allocation failure" {
+    for (count_plans) |plan| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try countYaml(&fixture, true));
+        try std.testing.checkAllAllocationFailures(std.testing.allocator, countAllocationCase, .{ &fixture, graph, plan });
+        try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
+    }
+}
+
+fn countAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow, plan: fake_provider.CountPlan) !void {
+    fixture.native.init(allocator);
+    fixture.authorization.allocator = allocator;
+    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    @memcpy(fixture.entries[core.entries.len .. core.entries.len + native.count], &fixture.native.entries);
+    var runner = fixture.runner(graph, allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, allocator);
+    fake.count_plan = plan;
+    fixture.native.count_model_input.action = .{ .provider = fake.interface() };
+    var harness: Harness = .{ .runner = &runner };
+    const outcome = harness.run();
+    try std.testing.expect(fake.effect_count <= 1);
+    try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+    const terminal = runner.envelope.slots[@intFromEnum(attempt_values.terminal_schema.key)];
+    if (terminal == null) {
+        try std.testing.expectEqual(.failed, outcome);
+        return error.OutOfMemory;
+    }
+    const request_closed = (try requestLedger(&runner)).record((try currentRequest(&runner)).id()).?.status == .terminal;
+    if (plan != .counted and !request_closed) {
+        try std.testing.expectEqual(.failed, outcome);
+        return error.OutOfMemory;
+    }
+    try std.testing.expectEqual(@as(workflow.OutcomeTag, switch (plan) {
+        .counted => .ok,
+        .failed => .failed,
+        .cancelled => .cancelled,
+    }), outcome);
+}
+
+test "YAML count cannot reuse authorization and never marks missing inference usage" {
+    for ([_]bool{ false, true }) |expired| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try countYaml(&fixture, false));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.count_model_input.action = .{ .provider = fake.interface() };
+        try prepareInvocable(&runner);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+        if (expired) {
+            fixture.clock.now_ms = (try invokedOperation(&runner)).operation().deadline_monotonic_ms;
+            try std.testing.expectEqual(.deadline_exhausted, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected);
+        } else {
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "call" }).outcome);
+            try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected);
+        }
+        try std.testing.expectEqual(@as(usize, if (expired) 0 else 1), fake.count_call_count);
+        try std.testing.expectEqual(.available, runner.tokenLedger().status());
+        try std.testing.expectEqual(@as(u64, 0), runner.tokenLedger().revision().value);
+    }
+}
+
+test "YAML count cancellation at every boundary releases owners without hidden completion" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try countYaml(&fixture, true));
+    for (0..13) |boundary| {
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var harness: Harness = .{ .runner = &runner, .cancel_at = boundary };
+        runner.runtime = .{ .context = &harness, .status_fn = Harness.status };
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.count_model_input.action = .{ .provider = fake.interface() };
+        try std.testing.expectEqual(.cancelled, harness.run());
+        try std.testing.expectEqual(@as(u64, 0), runner.tokenLedger().revision().value);
+        if (boundary <= 11) try std.testing.expect(runner.envelope.slots[@intFromEnum(attempt_values.terminal_schema.key)] == null);
+    }
+    try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
+}
+
+test "YAML counts then independently authorizes inference on the same attempt and charges only usage" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const allocator = fixture.arena.allocator();
+    var source = try countYaml(&fixture, false);
+    source = try std.mem.replaceOwned(u8, allocator, source, "on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }", "on: { ok: assign-inference, failed: end.failed, cancelled: end.cancelled }");
+    source = try std.fmt.allocPrint(allocator, "{s}\n  assign-inference: {{ use: assign-provider-operation, with: {{kind: inference}}, on: {{ok: authorize-inference, failed: end.failed}} }}\n" ++
+        "  authorize-inference: {{ use: prepare-provider-operation-authorization, with: {{timeout-ms: 100}}, on: {{ok: advance-inference, failed: end.failed, cancelled: end.cancelled}} }}\n" ++
+        "  advance-inference: {{ use: advance-provider-operation-lifecycle, with: {{transition: invoked}}, on: {{ok: infer, failed: end.failed}} }}\n" ++
+        "  infer: {{ use: invoke-model, on: {{ok: validate-response, failed: validate-response, cancelled: validate-response}} }}\n" ++
+        "  validate-response: {{ use: validate-provider-invocation-observation, on: {{ok: complete-inference, failed: complete-inference, cancelled: complete-inference}} }}\n" ++
+        "  complete-inference: {{ use: complete-provider-operation, on: {{ok: decode, failed: decode, cancelled: decode}} }}\n" ++
+        "  decode: {{ use: decode-model-envelope, on: {{ok: validate-payload, invalid: validate-payload, failed: validate-payload, cancelled: validate-payload}} }}\n" ++
+        "  validate-payload: {{ use: validate-model-payload-schema, on: {{ok: close-request, invalid: close-request, failed: close-request, cancelled: close-request}} }}\n" ++
+        "  close-request: {{ use: complete-model-request, on: {{ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}} }}\n", .{source});
+    fixture.entries[fixture.entries.len - 1].contract.invalidates = &.{ .terminal_provider_operation, .provider_authorization_result };
+    fixture.observer.release_terminal = true;
+    const graph = try fixture.compile(source);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fake.count_plan = .{ .counted = std.math.maxInt(u64) };
+    fake.invocation_plan.complete.content = "{\"answer\":\"same request\"}";
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fixture.native.count_model_input.action = .{ .provider = fake.interface() };
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.ok, harness.run());
+    try std.testing.expectEqual(@as(usize, 1), fake.count_call_count);
+    try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
+    try std.testing.expectEqual(@as(usize, 2), fixture.authorization.prepared_count);
+    try std.testing.expectEqual(@as(usize, 2), fixture.authorization.destroyed_count);
+    try std.testing.expectEqual(@as(u128, 7), runner.tokenLedger().committed());
+    try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
+    const counted = (try countObservation(&runner)).outcome().validated.counted;
+    const inferred = (try completedOperation(&runner)).record().id;
+    try std.testing.expect(counted.count_operation_id.model_request_id == inferred.model_request_id);
+    try std.testing.expectEqual(counted.count_operation_id.model_attempt_ordinal.value, inferred.model_attempt_ordinal.value);
+    try std.testing.expectEqual(.accepted, (try requestLedger(&runner)).record(inferred.model_request_id).?.terminal_reason.?);
+    try runner.model_accounting.?.current_operations.validateRequestClosure(inferred.model_request_id);
+}
+
+test "YAML count retries follow explicit edges and operation-local limits" {
+    for ([_]bool{ false, true }) |failed| {
+        for ([_]bool{ false, true }) |exhaust| {
+            var fixture: Fixture = undefined;
+            try fixture.init(std.testing.allocator);
+            defer fixture.deinit();
+            const allocator = fixture.arena.allocator();
+            var source = try countYaml(&fixture, false);
+            source = try std.mem.replaceOwned(u8, allocator, source, "retry-limit: 0", "retry-limit: 1");
+            source = try std.mem.replaceOwned(u8, allocator, source, "ok: advance-request", "ok: route-request");
+            source = try std.mem.replaceOwned(u8, allocator, source, "on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }", "on: { ok: end.ok, invalid: account, failed: end.failed, cancelled: end.cancelled }");
+            source = try std.mem.replaceOwned(u8, allocator, source, "use: complete-count-operation, on: {ok: observe, failed: end.failed, cancelled: end.cancelled}", "use: complete-count-operation, on: {ok: observe, failed: observe, cancelled: observe}");
+            source = try std.fmt.allocPrint(allocator, "{s}\n  route-request: {{ use: test.route-request, on: {{ok: advance-request, invalid: advance-operation}} }}\n", .{source});
+            var controller: CountRetry = .{ .retry_until = if (exhaust) 3 else 2 };
+            const observer = &fixture.entries[fixture.entries.len - 1];
+            observer.contract.requires = &.{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .provider_token_count_validation_result };
+            observer.contract.outcomes = &.{ .ok, .invalid, .failed, .cancelled };
+            observer.contract.invalidates = &CountRetry.released;
+            observer.binding = bindings.bind(CountRetry, &controller, CountRetry.invoke);
+            var entries = fixture.entries ++ [_]operations.Entry{.{
+                .contract = .{ .id = "test.route-request", .kind = .step, .requires = &.{ .model_request_identity_ledger, .prepared_model_request }, .outcomes = &.{ .ok, .invalid }, .side_effect = .none },
+                .binding = bindings.bind(void, null, routeInvokedRequest),
+            }};
+            fixture.registry.operations = &entries;
+            const graph = try fixture.compile(source);
+            var runner = fixture.runner(graph, std.testing.allocator);
+            defer runner.deinit();
+            var fake = invocationProvider(&runner, std.testing.allocator);
+            fake.count_plan = if (failed) count_plans[3] else .{ .counted = 100 };
+            fixture.native.count_model_input.action = .{ .provider = fake.interface() };
+            var harness: Harness = .{ .runner = &runner };
+            try std.testing.expectEqual(@as(workflow.OutcomeTag, if (failed or exhaust) .failed else .ok), harness.run());
+            try std.testing.expectEqual(@as(usize, 2), fake.count_call_count);
+            try std.testing.expectEqual(@as(usize, 2), fixture.authorization.prepared_count);
+            try std.testing.expectEqual(@as(usize, 2), fixture.authorization.destroyed_count);
+            const request = try currentRequest(&runner);
+            try std.testing.expectEqual(@as(u32, 2), attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved(request.id()));
+            try runner.model_accounting.?.current_operations.validateRequestClosure(request.id());
+            try std.testing.expectEqual(@as(u64, 0), runner.tokenLedger().revision().value);
+        }
+    }
+}
+
+const CountRetry = struct {
+    const released = [_]pipeline.DataKey{ .accounted_model_attempt, .terminal_provider_operation, .provider_authorization_result, .provider_token_count_result, .provider_token_count_validation_result };
+    retry_until: u32,
+    fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const counted = try count_observation.readCurrent(&input.step.data);
+        const attempt = values.read(&input.step.data, attempt_values.schema, attempt_accounting.AccountedAttempt) catch return error.OperationExecutionFailed;
+        var delta: pipeline.NodeDelta = .{};
+        for (released) |key| delta.data_invalidations.insert(key);
+        return .{ .outcome = if (attempt.ordinal().value < self.retry_until) .invalid else count_observation.status(counted), .delta = delta };
+    }
+};
+
+fn routeInvokedRequest(_: ?*void, input: operations.Input) operations.Error!execution.Candidate {
+    const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
+    const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+    return .{ .outcome = if (ledger.record(request.id()).?.status == .assigned) .ok else .invalid, .delta = .{} };
+}
+
 const Observer = struct {
     calls: usize = 0,
     last_attempt: u32 = 0,
     retry_until: u32 = 1,
     consume_attempt: bool = false,
     consume_operation: bool = false,
+    release_terminal: bool = false,
     expected_request_status: ?identity.RequestStatus = null,
     fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
@@ -4338,6 +5215,10 @@ const Observer = struct {
             if (evidence.candidate().association().request() != request.prepared().?) return error.OperationExecutionFailed;
         }
         var delta: pipeline.NodeDelta = .{};
+        if (self.release_terminal) {
+            delta.data_invalidations.insert(.terminal_provider_operation);
+            delta.data_invalidations.insert(.provider_authorization_result);
+        }
         if (input.step.data.slots[@intFromEnum(pipeline.DataKey.accounted_model_attempt)] != null) {
             const evidence = values.read(&input.step.data, attempt_values.schema, attempt_accounting.AccountedAttempt) catch return error.OperationExecutionFailed;
             if (evidence.requestId() != request.id()) return error.OperationExecutionFailed;

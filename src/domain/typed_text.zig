@@ -82,7 +82,8 @@ pub const Validator = struct {
     }
 };
 
-fn validScalar(bytes: []const u8) bool {
+/// Shared scalar syntax only; this is not normalized/validated text authority.
+pub fn validScalar(bytes: []const u8) bool {
     const view = std.unicode.Utf8View.init(bytes) catch return false;
     var iterator = view.iterator();
     while (iterator.nextCodepoint()) |scalar| {

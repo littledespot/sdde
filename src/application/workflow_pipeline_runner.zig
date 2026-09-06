@@ -155,7 +155,9 @@ pub const Runner = struct {
         const invokes_operation = operation_selection.invokes(step.produces);
         const completes_operation = operation_selection.completes(step.produces);
         const calls_model = step.side_effect == .model_call;
+        const calls_count = calls_model and @import("../domain/workflow_model_invocation.zig").counts(step.produces);
         const validates_observation = @import("../domain/workflow_model_invocation.zig").validates(step.produces);
+        const validates_count = @import("../domain/workflow_model_invocation.zig").validatesCount(step.produces);
         if (self.model_accounting) |state| {
             if (input_data.contains(.model_request_identity_ledger)) {
                 const current = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
@@ -207,26 +209,27 @@ pub const Runner = struct {
             operation_id = evidence.record().id;
         }
         if (completes_request) {
-            _ = @import("model_request_completion_workflow.zig").readCurrent(&input_data) catch return .{ .rejected = .authority };
+            _ = request_lifecycle_binding.readClosure(&input_data) catch return .{ .rejected = .authority };
             self.model_accounting.?.current_operations.validateRequestClosure(retained_request.?.id()) catch return .{ .rejected = .authority };
         }
         if (input_data.contains(.provider_authorization_result)) {
             const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
             const result = values.read(&input_data, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
             authorization_deadline = authorization_binding.validateConsumer(&state.authorization_leases, result, retained_request orelse return .{ .rejected = .authority }, operation_id orelse return .{ .rejected = .authority }, self.provider_clock, self.runtime) catch |err| return authorizationRejected(err);
-            if (advances_request or invokes_operation or calls_model) authorization_binding.requirePrepared(result) catch |err| return authorizationRejected(err);
+            if ((advances_request and !completes_request) or invokes_operation or calls_model) authorization_binding.requirePrepared(result) catch |err| return authorizationRejected(err);
         }
         var resolved_binding = self.resolveModelBinding(step.*) catch {
             return .{ .outcome = .failed };
         };
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
-        const call: ?invocation_validation.Call = if (calls_model or validates_observation) call: {
+        const call: ?invocation_validation.Call = if (calls_model or validates_observation or validates_count) call: {
             const request = retained_request orelse return .{ .rejected = .authority };
             const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
             const id_value = operation_id orelse return .{ .rejected = .authority };
             const invoked = state.current_operations.requireInvoked(id_value) catch return .{ .rejected = .authority };
-            if (!provider.validateInferenceInvocation(request.binding(), request.prepared().?, invoked)) return .{ .rejected = .authority };
-            if (calls_model) self.token_accounting.prepare(id_value) catch return .{ .rejected = .operation_failed };
+            const valid = if (calls_count or validates_count) provider.validateCountInvocation(request.binding(), request.prepared().?, invoked) else provider.validateInferenceInvocation(request.binding(), request.prepared().?, invoked);
+            if (!valid) return .{ .rejected = .authority };
+            if (calls_model and !calls_count) self.token_accounting.prepare(id_value) catch return .{ .rejected = .operation_failed };
             break :call .{ .request = request.prepared().?, .provider_binding = request.binding(), .operations = state.current_operations, .operation_id = id_value };
         } else null;
         const token_revision = self.token_accounting.current().revision();
@@ -291,10 +294,11 @@ pub const Runner = struct {
             .model_attempt = attempt_input,
             .model_request_lifecycle = if (advances_request) self.model_accounting.?.current_operations else null,
             .provider_invocation = if (validates_observation) call else null,
+            .provider_token_count = if (validates_count) .{ .request = call.?.request, .provider_binding = call.?.provider_binding, .operations = call.?.operations, .operation_id = call.?.operation_id } else null,
             .provider_operation = provider_input,
             .provider_authorization = if (authorization) |bound| .{ .facts = bound.facts, .slot = bound.slot, .runtime = bound.runtime } else null,
         } }) catch {
-            if (calls_model) {
+            if (calls_model and !calls_count) {
                 const invoked = call.?;
                 if (model_invocation.reconcile(&self.token_accounting, token_revision, invoked, null)) |reason| return .{ .rejected = reason };
             }
@@ -303,7 +307,8 @@ pub const Runner = struct {
         defer self.envelope.discard(&candidate.delta);
         if (calls_model) {
             const invoked = call.?;
-            if (model_invocation.reconcile(&self.token_accounting, token_revision, invoked, &candidate)) |reason| return .{ .rejected = reason };
+            const rejection = if (calls_count) model_invocation.validateCount(invoked, &candidate) else model_invocation.reconcile(&self.token_accounting, token_revision, invoked, &candidate);
+            if (rejection) |reason| return .{ .rejected = reason };
             if (candidate.outcome != .cancelled) authorization_binding.checkDeadline(self.provider_clock.?, self.runtime, authorization_deadline.?) catch |err| return authorizationRejected(err);
         }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };

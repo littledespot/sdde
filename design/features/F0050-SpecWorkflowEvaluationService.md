@@ -99,22 +99,17 @@ engine policy.
 The following are missing or conflicting authority. They must be accepted or
 amended before the affected implementation is safe.
 
-### 3.1 Close the Specify IR and projection contract
+### 3.1 Specify content and projection contract
 
-F0100 and the proposed engine design currently disagree:
-
-- Design Section 17.6 renders a top-level `## Acceptance Criteria`, while
-  F0100 nests `### Acceptance Criteria` beneath
-  `## User Scenarios & Testing`.
-- The proposed `SpecificationIR` contains `openQuestions`/`OQ-*`, while F0100
-  prohibits committed open questions in `spec.md` and routes unresolved
-  specification authority through `SNN`.
-- F0100 still defers the exact grammar for non-acceptance records, the Key
-  Entities applicability value and provenance, the visible `EN-*` grammar, and
-  ownership of functional-requirement modality.
-
-The decision must update the governing contract and its verification together.
-An implementation or golden fixture must not choose one side locally.
+The hierarchy/question conflicts are resolved, and the user approved the
+minimal record/entity/modality/required-content contract in
+[F0100 §5.6](F0100-SpecWorkflow.md#56-native-content-and-view-contract).
+H-007 implements the native content shapes and mechanical Markdown codec;
+it does not establish semantic correctness or complete workflow publication.
+The current [workflow backlog](../harness/02-spec-workflow.md) owns remaining
+authority, generation, clarification and publication integration. The external
+rubric evaluator can grade supplied prose independently of these production
+dependencies; this historical finding is not a new evaluator prerequisite.
 
 ### 3.2 Define the exact registered Specify contracts
 

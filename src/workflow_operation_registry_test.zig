@@ -10,39 +10,41 @@ const workflow = @import("domain/workflow.zig");
 test "model-call contracts require complete invocation inputs and owned result publication" {
     const native = @import("application/model_invocation_workflow.zig");
     const selection = @import("domain/workflow_model_invocation.zig");
-    var context: native.Invoke = .{ .allocator = std.testing.allocator };
-    const entry: Entry = .{ .contract = native.Invoke.contract, .binding = bindings.bind(native.Invoke, &context, native.Invoke.invoke) };
-    const valid: Registry = .{ .operations = &.{entry}, .data_schemas = &@import("composition/model_request_operations.zig").schemas, .policies = &.{}, .gates = &.{} };
-    try std.testing.expect(valid.validate());
-    for (0..selection.requires.len) |missing| {
-        var inputs: [selection.requires.len - 1]@import("domain/pipeline.zig").DataKey = undefined;
-        var index: usize = 0;
-        for (selection.requires, 0..) |key, ordinal| {
-            if (ordinal == missing) continue;
-            inputs[index] = key;
-            index += 1;
+    inline for (.{ native.Invoke, native.Count }) |Call| {
+        var context: Call = .{ .allocator = std.testing.allocator };
+        const entry: Entry = .{ .contract = Call.contract, .binding = bindings.bind(Call, &context, Call.invoke) };
+        const valid: Registry = .{ .operations = &.{entry}, .data_schemas = &@import("composition/model_request_operations.zig").schemas, .policies = &.{}, .gates = &.{} };
+        try std.testing.expect(valid.validate());
+        for (0..selection.requires.len) |missing| {
+            var inputs: [selection.requires.len - 1]@import("domain/pipeline.zig").DataKey = undefined;
+            var index: usize = 0;
+            for (selection.requires, 0..) |key, ordinal| {
+                if (ordinal == missing) continue;
+                inputs[index] = key;
+                index += 1;
+            }
+            var changed = entry;
+            changed.contract.requires = &inputs;
+            var registry = valid;
+            registry.operations = &.{changed};
+            try std.testing.expect(!registry.validate());
         }
-        var changed = entry;
-        changed.contract.requires = &inputs;
-        var registry = valid;
-        registry.operations = &.{changed};
-        try std.testing.expect(!registry.validate());
-    }
-    for (0..7) |variant| {
-        var changed = entry;
-        switch (variant) {
-            0 => changed.contract.produces = &.{},
-            1 => changed.contract.side_effect = .none,
-            2 => changed.binding = bindings.bind(void, null, fixture.unused),
-            3 => changed.contract.invalidates = &.{.provider_authorization_result},
-            4 => changed.contract.replaces = &.{.provider_invocation_result},
-            5 => changed.contract.optional = &.{.assigned_model_request},
-            6 => changed.contract.parameters = &.{.{ .id = "hidden", .kind = .boolean, .required = true, .workflow_definition_safe = true }},
-            else => unreachable,
+        for (0..7) |variant| {
+            var changed = entry;
+            switch (variant) {
+                0 => changed.contract.produces = &.{},
+                1 => changed.contract.side_effect = .none,
+                2 => changed.binding = bindings.bind(void, null, fixture.unused),
+                3 => changed.contract.invalidates = &.{.provider_authorization_result},
+                4 => changed.contract.replaces = &.{.provider_invocation_result},
+                5 => changed.contract.optional = &.{.assigned_model_request},
+                6 => changed.contract.parameters = &.{.{ .id = "hidden", .kind = .boolean, .required = true, .workflow_definition_safe = true }},
+                else => unreachable,
+            }
+            var registry = valid;
+            registry.operations = &.{changed};
+            try std.testing.expect(!registry.validate());
         }
-        var registry = valid;
-        registry.operations = &.{changed};
-        try std.testing.expect(!registry.validate());
     }
 }
 
@@ -72,7 +74,7 @@ test "operation lookup is exact with one current contract and no version aliases
 }
 
 test "model response contracts require exact inputs without effects or overrides" {
-    inline for (.{ @import("application/provider_observation_workflow.zig").Validate, @import("application/model_envelope_workflow.zig").Decode, @import("application/model_payload_schema_workflow.zig").Validate, @import("application/provider_operation_completion_workflow.zig").Complete, @import("application/model_request_completion_workflow.zig").Complete, @import("application/provider_operation_termination_workflow.zig").Terminate }) |Native| {
+    inline for (.{ @import("application/model_token_count_observation_workflow.zig").Validate, @import("application/provider_operation_completion_workflow.zig").CompleteCount, @import("application/model_request_completion_workflow.zig").CompleteCount, @import("application/provider_observation_workflow.zig").Validate, @import("application/model_envelope_workflow.zig").Decode, @import("application/model_payload_schema_workflow.zig").Validate, @import("application/provider_operation_completion_workflow.zig").Complete, @import("application/model_request_completion_workflow.zig").Complete, @import("application/provider_operation_termination_workflow.zig").Terminate, @import("application/model_request_termination_workflow.zig").Terminate }) |Native| {
         const required = Native.contract.requires;
         var context: Native = if (@hasField(Native, "allocator")) .{ .allocator = std.testing.allocator } else .{};
         const entry: Entry = .{ .contract = Native.contract, .binding = bindings.bind(Native, &context, Native.invoke) };
