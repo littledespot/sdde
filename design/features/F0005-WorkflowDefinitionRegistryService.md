@@ -206,7 +206,8 @@ Every definition contains these exact concise fields:
 | `policy` | Exact versioned reference to one registered workflow policy profile containing the positive total model-token budget applied to each execution; it supplies no retry count. |
 | `start` | Definition-local ID of the graph entry step. |
 | `resources` | Optional map of concise local aliases to bounded workflow-root-relative resource names. |
-| `steps` | One to 256 local step IDs mapped to closed operation declarations and outcome maps. |
+| `steps` | One to 256 local step IDs mapped to closed operation declarations or local subgraph calls and outcome maps. The expanded graph also has at most 256 operations. |
+| `subgraphs` | Optional map of 1–32 local reusable operation sequences, each with `start` and `steps`. |
 
 `sourceInventoryOrdinal` is engine-derived provenance and is not accepted in a
 file. A resource name is declarative input resolved only beneath the authorized
@@ -241,7 +242,7 @@ lookup, never a range, `latest`, filename, implementation symbol or near match.
 
 ### 3.3 Steps, parameters, resources, and transitions
 
-A step contains one registered generic operation, an optional compact parameter
+An operation step contains one registered generic operation, an optional compact parameter
 map, and one outcome map:
 
 ```yaml
@@ -296,7 +297,28 @@ steps, parameters, resources, and outcomes by their typed IDs before constructin
 `CompiledWorkflowSemanticAuthority`. Reordering a file without changing its
 typed content cannot change the compiled semantic graph.
 
-### 3.4 Minimal accepted shape
+### 3.4 Definition-local reuse
+
+[ADR 0013](../decisions/0013-workflow-input-reuse.md) adds `subgraphs` to the
+same closed contract. A top-level step uses either `use` or `call`, never both.
+A call's `with` supplies exactly the parameters referenced by `{param: name}`
+inside its selected subgraph. Literals remain valid inside subgraphs. Registered
+operation contracts alone validate substituted types, resource kinds and bounds.
+
+Subgraphs contain operations only. They cannot nest, import files, use aliases,
+or execute templates. Their local `end.<outcome>` exits preserve the originating
+outcome; each call maps exactly those exits through `on`. Local step targets
+cannot escape a subgraph. Top-level targets address authored top-level steps or
+calls, never generated IDs. Unused definitions and extra bindings reject.
+
+The shared expander creates `g<call-ID-length>-<call-ID>-<local-step-ID>` identities,
+subject to the existing 64-byte step-ID bound. Collisions and an expansion above
+256 operations reject. The compiler and registry use this same projection;
+existing gates, dependencies, retry/cycle checks, capability policy and runner
+semantics apply to the complete expanded graph. Nothing is hidden in an action.
+See [the spec workflow](../workflows/spec.workflow.yaml) for parameterized reuse.
+
+### 3.5 Minimal accepted shape
 
 ```yaml
 schema: workflow/v1
@@ -498,7 +520,7 @@ invalidating assignment evidence. No consumer may fabricate, replace or reuse
 stale operation evidence. The step has no provider capability, new timeout,
 retry or token charge; cancellation/rejection publishes neither change.
 
-The selected result-schema resource describes the entire compact model result
+The selected result-schema resource or its explicitly selected local result definition describes the entire compact model result
 under [ADR 0006](../decisions/0006-minimal-model-response.md), not an inner
 payload or repeated execution metadata. The protocol version and exact resource
 identity stay in compiled authority; no new envelope field is needed in YAML.
@@ -678,7 +700,7 @@ F0005 does not implement:
 - project-authored executable code, plugins, dynamic libraries, scripts,
   adapters, commands, capabilities, retries, or concurrency;
 - JSON or another workflow encoding, YAML aliases or custom tags,
-  executable includes/imports, reusable subgraphs, display descriptions,
+  executable includes/imports, nested or external subgraphs, display descriptions,
   alternate authoring aliases, or compatibility readers;
 - bootstrap component ID allocation, persistence, registry refresh/migration,
   active-feature change classification, or recovery;

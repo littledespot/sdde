@@ -26,6 +26,21 @@ pub fn encode(comptime T: type, allocator: std.mem.Allocator, value: T) json.Err
     return std.json.Stringify.valueAlloc(allocator, wire, .{});
 }
 
+/// A single result kind is selected by retained engine authority. Its payload
+/// has no redundant root discriminator; nested unions keep their wire contract.
+pub fn decodeSelected(comptime T: type, allocator: std.mem.Allocator, tag: std.meta.Tag(T), bytes: []const u8) json.Error!T {
+    inline for (@typeInfo(T).@"union".fields) |field| {
+        if (tag == @field(std.meta.Tag(T), field.name)) return @unionInit(T, field.name, try decode(field.type, allocator, bytes));
+    }
+    unreachable;
+}
+
+pub fn encodeSelected(comptime T: type, allocator: std.mem.Allocator, value: T) json.Error![]const u8 {
+    return switch (value) {
+        inline else => |payload| encode(@TypeOf(payload), allocator, payload),
+    };
+}
+
 const Direction = enum { native, wire };
 fn transform(comptime T: type, a: std.mem.Allocator, value: std.json.Value, comptime direction: Direction) json.Error!std.json.Value {
     var result = value;

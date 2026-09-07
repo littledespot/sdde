@@ -1160,11 +1160,11 @@ const ReferenceReconciliationTestProducer = struct {
         defer arena.deinit();
         const scratch = arena.allocator();
         const response = if (packet.purpose == .summary)
-            @import("../domain/model_candidate_json.zig").encode(@FieldType(fixture.r.Parsed, "proposal"), scratch, .{ .summary = fixture.summary(scratch, packet) catch return error.OperationExecutionFailed }) catch return error.OperationExecutionFailed
+            @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(fixture.r.Parsed, "proposal"), scratch, .{ .summary = fixture.summary(scratch, packet) catch return error.OperationExecutionFailed }) catch return error.OperationExecutionFailed
         else final: {
             var proposal = if (context.?.mode == .conflict) @import("../reference_reconciliation_test.zig").conflicting(scratch, packet) catch return error.OperationExecutionFailed else fixture.global(scratch, packet) catch return error.OperationExecutionFailed;
             if (context.?.mode == .bad_reconciliation) proposal.claim_dispositions = proposal.claim_dispositions[1..];
-            break :final @import("../domain/model_candidate_json.zig").encode(@FieldType(fixture.r.Parsed, "proposal"), scratch, .{ .global = proposal }) catch return error.OperationExecutionFailed;
+            break :final @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(fixture.r.Parsed, "proposal"), scratch, .{ .global = proposal }) catch return error.OperationExecutionFailed;
         };
         const owner = try native.capture(allocator, current, response);
         errdefer @import("../domain/reference_candidate_value.zig").destroy(owner);
@@ -1314,7 +1314,7 @@ test "configured specification generation YAML executes native references models
         try project.dir.createDirPath(io, "engine/workflows/spec");
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
-        const definition = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec-generation.workflow.yaml", allocator, .limited(1_048_576));
+        const definition = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", allocator, .limited(1_048_576));
         defer allocator.free(definition);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = definition });
         const protocol_prompt = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/protocol.prompt.md", allocator, .limited(1_048_576));

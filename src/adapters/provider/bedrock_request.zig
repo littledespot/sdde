@@ -34,7 +34,7 @@ fn write(writer: *std.Io.Writer, request: *const operation.IdentifiedProviderNeu
         if (request.response_guidance_mode == .native_schema) {
             try json.objectField("outputConfig");
             try json.write(.{ .textFormat = .{ .type = "json_schema", .structure = .{ .jsonSchema = .{
-                .schema = request.response_schema.bytes(),
+                .schema = request.response_schema.modelBytes(),
                 .name = "sdde_model_envelope_v1",
             } } } });
         }
@@ -51,7 +51,7 @@ fn textInput(json: *std.json.Stringify, request: *const operation.IdentifiedProv
         .system, .guidance => |text| try json.write(.{ .text = text }),
         .user, .evidence => {},
     };
-    if (request.response_guidance_mode == .prompt_only) try json.write(.{ .text = request.response_schema.bytes() });
+    if (request.response_guidance_mode == .prompt_only) try json.write(.{ .text = request.response_schema.modelBytes() });
     try json.endArray();
     try json.objectField("messages");
     try json.beginArray();

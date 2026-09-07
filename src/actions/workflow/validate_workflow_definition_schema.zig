@@ -29,7 +29,7 @@ pub const Action = struct {
     }
 };
 
-const root_fields = [_][]const u8{ "schema", "id", "version", "shortcode", "invoke", "policy", "start", "resources", "steps" };
+const root_fields = [_][]const u8{ "schema", "id", "version", "shortcode", "invoke", "policy", "start", "resources", "steps", "subgraphs" };
 const root_required = [_][]const u8{ "schema", "id", "version", "shortcode", "invoke", "policy", "start", "steps" };
 const step_fields = [_][]const u8{ "use", "with", "on" };
 const step_required = [_][]const u8{ "use", "on" };
@@ -61,7 +61,9 @@ fn convert(
         .policy_profile_id = policy,
         .start_step_id = start,
         .resources = resources,
-        .steps = steps,
+        .steps = steps.operations,
+        .calls = steps.calls,
+        .subgraphs = try convertSubgraphs(allocator, field(map, "subgraphs")),
     };
 }
 
@@ -86,22 +88,75 @@ fn convertResources(
 fn convertSteps(
     allocator: std.mem.Allocator,
     raw: *definition.RawNode,
-) Error![]const workflow.DeclarativeStep {
+) Error!struct { operations: []const workflow.DeclarativeStep, calls: []const definition.SubgraphCall } {
     const map = mapping(raw) orelse return invalid();
     if (map.len == 0 or map.len > definition.max_steps) return invalid();
-    const steps = allocator.alloc(workflow.DeclarativeStep, map.len) catch return invalid();
-    for (map, steps) |pair, *step| {
+    var steps: std.ArrayList(workflow.DeclarativeStep) = .empty;
+    var calls: std.ArrayList(definition.SubgraphCall) = .empty;
+    for (map) |pair| {
         const id = workflow.WorkflowStepId.parse(string(pair.key) orelse return invalid()) orelse return invalid();
+        if (closedMapping(pair.value, &.{ "call", "with", "on" }, &.{ "call", "on" })) |call| {
+            calls.append(allocator, .{
+                .id = id,
+                .subgraph = definition.SubgraphId.parse(string(field(call, "call")) orelse return invalid()) orelse return invalid(),
+                .parameters = try convertParameters(allocator, field(call, "with")),
+                .outcomes = try convertOutcomes(allocator, field(call, "on") orelse return invalid()),
+            }) catch return invalid();
+            continue;
+        }
         const step_map = closedMapping(pair.value, &step_fields, &step_required) orelse return invalid();
-        step.* = .{
+        steps.append(allocator, .{
             .id = id,
             .operation_id = workflow.OperationId.parse(string(field(step_map, "use")) orelse return invalid()) orelse return invalid(),
             .parameters = try convertParameters(allocator, field(step_map, "with")),
             .outcomes = try convertOutcomes(allocator, field(step_map, "on") orelse return invalid()),
+        }) catch return invalid();
+    }
+    std.mem.sort(workflow.DeclarativeStep, steps.items, {}, stepLessThan);
+    return .{ .operations = steps.toOwnedSlice(allocator) catch return invalid(), .calls = calls.toOwnedSlice(allocator) catch return invalid() };
+}
+
+fn convertSubgraphs(allocator: std.mem.Allocator, raw: ?*definition.RawNode) Error![]const definition.Subgraph {
+    const present = raw orelse return &.{};
+    const map = mapping(present) orelse return invalid();
+    if (map.len == 0 or map.len > definition.max_subgraphs) return invalid();
+    const result = allocator.alloc(definition.Subgraph, map.len) catch return invalid();
+    for (map, result) |pair, *subgraph| {
+        const value = closedMapping(pair.value, &.{ "start", "steps" }, &.{ "start", "steps" }) orelse return invalid();
+        const entries = mapping(field(value, "steps") orelse return invalid()) orelse return invalid();
+        if (entries.len == 0 or entries.len > definition.max_steps) return invalid();
+        const steps = allocator.alloc(definition.SubgraphStep, entries.len) catch return invalid();
+        for (entries, steps) |entry, *step| {
+            const step_map = closedMapping(entry.value, &step_fields, &step_required) orelse return invalid();
+            var parameters: std.ArrayList(definition.SubgraphParameter) = .empty;
+            if (field(step_map, "with")) |with| {
+                const bindings = mapping(with) orelse return invalid();
+                if (bindings.len > definition.max_parameters) return invalid();
+                for (bindings) |binding| {
+                    const parameter: definition.SubgraphParameter = .{
+                        .id = workflow.WorkflowParameterId.parse(string(binding.key) orelse return invalid()) orelse return invalid(),
+                        .value = if (binding.value.* == .mapping) value: {
+                            const reference = closedMapping(binding.value, &.{"param"}, &.{"param"}) orelse return invalid();
+                            break :value .{ .parameter = workflow.WorkflowParameterId.parse(string(field(reference, "param")) orelse return invalid()) orelse return invalid() };
+                        } else .{ .literal = try scalarValue(binding.value) },
+                    };
+                    parameters.append(allocator, parameter) catch return invalid();
+                }
+            }
+            step.* = .{
+                .id = workflow.WorkflowStepId.parse(string(entry.key) orelse return invalid()) orelse return invalid(),
+                .operation_id = workflow.OperationId.parse(string(field(step_map, "use")) orelse return invalid()) orelse return invalid(),
+                .parameters = parameters.toOwnedSlice(allocator) catch return invalid(),
+                .outcomes = try convertOutcomes(allocator, field(step_map, "on") orelse return invalid()),
+            };
+        }
+        subgraph.* = .{
+            .id = definition.SubgraphId.parse(string(pair.key) orelse return invalid()) orelse return invalid(),
+            .start = workflow.WorkflowStepId.parse(string(field(value, "start")) orelse return invalid()) orelse return invalid(),
+            .steps = steps,
         };
     }
-    std.mem.sort(workflow.DeclarativeStep, steps, {}, stepLessThan);
-    return steps;
+    return result;
 }
 
 fn convertParameters(

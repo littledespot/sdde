@@ -23,6 +23,14 @@ in §3.10 are connected to model-assisted generation evidence; publication remai
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
 rule.
 
+**Input optimization:** [ADR 0013](../decisions/0013-workflow-input-reuse.md) is
+implemented. `spec.workflow.yaml` declares local request/retirement subgraphs;
+the compiler expands all 225 operations through the existing validators.
+Schemas share local definitions and select the current generation unit,
+reconciliation purpose or authorized repair shape. Model inputs share citation
+records and preserve their complete supplied evidence. The
+[file guide and measurements](../TODO001.md) describe the twelve-file bundle.
+
 **Classification:** Initial SDD workflow definition
 
 **Scope:** SDDE engine development. This feature defines declarative topology
@@ -607,7 +615,7 @@ A new logical request gets an initial attempt; it does not reset the YAML
 operation's execution/retry ceiling. `more` exposes bounded collection progress
 without reusing failure outcomes.
 
-The ordinary [generation-only definition](../workflows/spec-generation.workflow.yaml)
+The ordinary [generation-only definition](../workflows/spec.workflow.yaml)
 connects these operations, workflow-owned resources and H-008 review.
 `retire-model-input` and `retire-model-request` explicitly release completed
 transport slots. Native captured evidence keeps its current domain-source

@@ -58,13 +58,37 @@ test "every specification model schema alternative supplies a native-decodable p
         var adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
         const schema = try adapter.compiler().compile(a, bytes);
         try @import("model_payload_schema_test.zig").checkDocument(bytes, .{ .bytes = "{}", .rejection = .missing_required_property });
-        const roots = if (schema.root().* == .one_of) schema.root().one_of else &.{schema.root()};
-        for (roots) |root| {
-            const minimum = try @import("domain/model_protocol_retry.zig").example(a, root);
-            const example = try std.json.Stringify.valueAlloc(a, minimum, .{});
-            try @import("model_payload_schema_test.zig").checkDocument(bytes, .{ .bytes = example });
-            const T = comptime if (std.mem.eql(u8, name, "extraction")) @import("domain/reference_extraction_parser.zig").Response else if (std.mem.eql(u8, name, "reconciliation")) @FieldType(@import("domain/reference_reconciliation.zig").Parsed, "proposal") else if (std.mem.eql(u8, name, "generation")) @import("domain/specification_generation.zig").ModelResponse else if (std.mem.eql(u8, name, "repair")) @import("domain/specification_repair.zig").Replacement else @import("domain/specification_support.zig").Review;
-            _ = try codec.decode(T, a, example);
+        const selections = comptime if (std.mem.eql(u8, name, "reconciliation")) &.{ "summary", "global" } else if (std.mem.eql(u8, name, "generation")) &.{ "brief", "primary_user_story", "entities", "acceptance_criterion", "user_visible_outcome", "edge_case", "functional_requirement", "business_rule", "assumption", "non_goal", "prohibited_behavior", "entity" } else if (std.mem.eql(u8, name, "repair")) &.{ "attributed", "record_acceptance_criterion", "record_user_visible_outcome", "record_edge_case", "record_functional_requirement", "record_business_rule", "record_assumption", "record_non_goal", "record_prohibited_behavior", "record_entity" } else &.{""};
+        inline for (selections) |selection| {
+            const selected = if (selection.len == 0) schema else schema.select(.{ .bytes = selection }) orelse return error.MissingSchemaSelection;
+            const roots = if (selected.root().* == .one_of) selected.root().one_of else &.{selected.root()};
+            for (roots) |root| {
+                const minimum = try @import("domain/model_protocol_retry.zig").example(a, root);
+                const example = try std.json.Stringify.valueAlloc(a, minimum, .{});
+                try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = example });
+                const T = comptime if (std.mem.eql(u8, name, "extraction")) @import("domain/reference_extraction_parser.zig").Response else if (std.mem.eql(u8, name, "reconciliation")) @FieldType(@import("domain/reference_reconciliation.zig").Parsed, "proposal") else if (std.mem.eql(u8, name, "generation")) @import("domain/specification_generation.zig").ModelResponse else if (std.mem.eql(u8, name, "repair")) @import("domain/specification_repair.zig").Replacement else @import("domain/specification_support.zig").Review;
+                if (comptime std.mem.eql(u8, name, "reconciliation")) {
+                    _ = try codec.decodeSelected(T, a, @field(std.meta.Tag(T), selection), example);
+                } else if (comptime std.mem.eql(u8, name, "repair")) {
+                    _ = try codec.decodeSelected(T, a, if (std.mem.eql(u8, selection, "attributed")) .attributed else .record, example);
+                } else _ = try codec.decode(T, a, example);
+            }
         }
     }
+}
+
+test "retained variant decoding omits only the root discriminator and rejects legacy or foreign fields" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const value: Choice = .{ .count = .{ .amount = 7 } };
+    const bytes = try codec.encodeSelected(Choice, a, value);
+    try std.testing.expectEqualStrings("{\"amount\":7}", bytes);
+    try std.testing.expectEqualDeep(value, try codec.decodeSelected(Choice, a, .count, bytes));
+    for ([_][]const u8{ "{\"kind\":\"count\",\"amount\":7}", "{\"text\":\"foreign\"}", "{\"amount\":7.1}" }) |invalid| {
+        try std.testing.expectError(error.InvalidJsonDocument, codec.decodeSelected(Choice, a, .count, invalid));
+    }
+    const Nested = union(enum) { document: Document, empty: struct {} };
+    const nested: Nested = .{ .document = sample };
+    try std.testing.expectEqualDeep(nested, try codec.decodeSelected(Nested, a, .document, try codec.encodeSelected(Nested, a, nested)));
 }

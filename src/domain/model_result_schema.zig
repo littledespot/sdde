@@ -10,6 +10,16 @@ pub const max_properties = 256;
 pub const max_choices = 256;
 pub const max_variants = 32;
 
+pub const DefinitionId = struct {
+    bytes: []const u8,
+
+    pub fn parse(value: []const u8) ?DefinitionId {
+        if (value.len == 0 or value.len > 64 or !std.ascii.isLower(value[0])) return null;
+        for (value) |byte| if (!std.ascii.isLower(byte) and !std.ascii.isDigit(byte) and byte != '_' and byte != '-') return null;
+        return .{ .bytes = value };
+    }
+};
+
 pub const Error = error{InvalidModelResultSchema} || std.mem.Allocator.Error;
 
 pub const Scalar = union(enum) {
@@ -48,15 +58,38 @@ pub const Schema = opaque {
         return storage(self).bytes;
     }
 
+    pub fn modelBytes(self: *const Schema) []const u8 {
+        return storage(self).model_bytes;
+    }
+
+    pub fn select(self: *const Schema, id: DefinitionId) ?*const Schema {
+        for (storage(self).definitions) |entry| {
+            if (std.mem.eql(u8, entry.id.bytes, id.bytes)) return entry.result;
+        }
+        return null;
+    }
+
     // Destination allocations belong to the caller's graph/registry arena.
     pub fn clone(self: *const Schema, allocator: std.mem.Allocator) std.mem.Allocator.Error!*const Schema {
-        const copy = try allocator.create(Storage);
-        copy.* = .{ .bytes = try allocator.dupe(u8, self.bytes()), .root = try cloneNode(allocator, self.root().*) };
-        return @ptrCast(copy);
+        return cloneSchema(allocator, self, try allocator.dupe(u8, self.bytes()));
     }
 };
 
-const Storage = struct { bytes: []const u8, root: Node };
+const Definition = struct { id: DefinitionId, result: ?*const Schema };
+const Storage = struct { bytes: []const u8, model_bytes: []const u8, root: Node, definitions: []const Definition = &.{} };
+
+fn cloneSchema(allocator: std.mem.Allocator, source: *const Schema, bytes: []const u8) std.mem.Allocator.Error!*const Schema {
+    const copy = try allocator.create(Storage);
+    const definitions = try allocator.alloc(Definition, storage(source).definitions.len);
+    for (storage(source).definitions, definitions) |entry, *destination| {
+        destination.* = .{
+            .id = .{ .bytes = try allocator.dupe(u8, entry.id.bytes) },
+            .result = if (entry.result) |value| try cloneSchema(allocator, value, bytes) else null,
+        };
+    }
+    copy.* = .{ .bytes = bytes, .model_bytes = try allocator.dupe(u8, source.modelBytes()), .root = try cloneNode(allocator, source.root().*), .definitions = definitions };
+    return @ptrCast(copy);
+}
 
 fn storage(value: *const Schema) *const Storage {
     return @ptrCast(@alignCast(value));
@@ -66,32 +99,139 @@ fn storage(value: *const Schema) *const Storage {
 // exact source bytes. All output allocations belong to the caller's arena;
 // that arena must be discarded on rejection/allocation failure.
 pub fn compile(allocator: std.mem.Allocator, raw: std.json.Value, bytes: []const u8) Error!*const Schema {
+    if (raw != .object) return invalid();
     var compiler: Compiler = .{ .allocator = allocator };
-    const root = try compiler.node(raw, 1);
-    switch (root.*) {
+    var root_value = raw;
+    if (raw.object.get("$defs")) |defs| {
+        if (defs != .object or defs.object.count() == 0 or defs.object.count() > max_properties) return invalid();
+        compiler.definitions = defs.object;
+        root_value.object = try raw.object.clone(allocator);
+        _ = root_value.object.swapRemove("$defs");
+    }
+    const captured = try allocator.dupe(u8, bytes);
+    const definitions = try allocator.alloc(Definition, compiler.definitions.count());
+    var iterator = compiler.definitions.iterator();
+    var index: usize = 0;
+    while (iterator.next()) |entry| : (index += 1) {
+        const id = DefinitionId.parse(entry.key_ptr.*) orelse return invalid();
+        compiler.node_count = 0;
+        const node = try compiler.reference(id, 1);
+        definitions[index] = .{
+            .id = .{ .bytes = try allocator.dupe(u8, id.bytes) },
+            .result = if (isResult(node)) try createSchema(allocator, node, captured, &.{}) else null,
+        };
+    }
+    // The existing expansion bound applies independently to the selected root.
+    compiler.node_count = 0;
+    const root = try compiler.node(root_value, 1);
+    if (!isResult(root)) return invalid();
+    return createSchema(allocator, root, captured, definitions);
+}
+
+fn isResult(root: *const Node) bool {
+    return switch (root.*) {
         .object => |properties| {
             if (findProperty(properties, "kind")) |property| switch (property.schema.*) {
-                .constant => return invalid(),
-                .enumeration => |values| if (values.len == 1) return invalid(),
+                .constant => return false,
+                .enumeration => |values| if (values.len == 1) return false,
                 else => {},
             };
+            return true;
         },
-        .one_of => {},
-        else => return invalid(),
-    }
+        .one_of => true,
+        else => false,
+    };
+}
+
+fn createSchema(allocator: std.mem.Allocator, root: *const Node, bytes: []const u8, definitions: []const Definition) Error!*const Schema {
     const result = try allocator.create(Storage);
-    result.* = .{ .bytes = try allocator.dupe(u8, bytes), .root = root.* };
+    var scratch: std.heap.ArenaAllocator = .init(allocator);
+    defer scratch.deinit();
+    const model_bytes = try std.json.Stringify.valueAlloc(allocator, try schemaValue(scratch.allocator(), root), .{});
+    result.* = .{ .bytes = bytes, .model_bytes = model_bytes, .root = root.*, .definitions = definitions };
     return @ptrCast(result);
+}
+
+fn schemaValue(allocator: std.mem.Allocator, node: *const Node) std.mem.Allocator.Error!std.json.Value {
+    var object: std.json.ObjectMap = .{};
+    switch (node.*) {
+        .object => |properties| {
+            try object.put(allocator, "type", .{ .string = "object" });
+            var fields_value: std.json.ObjectMap = .{};
+            var required: std.array_list.Managed(std.json.Value) = .init(allocator);
+            for (properties) |property| {
+                try fields_value.put(allocator, property.name, try schemaValue(allocator, property.schema));
+                if (property.required) try required.append(.{ .string = property.name });
+            }
+            try object.put(allocator, "properties", .{ .object = fields_value });
+            try object.put(allocator, "required", .{ .array = required });
+            try object.put(allocator, "additionalProperties", .{ .bool = false });
+        },
+        .string => |bounds| {
+            try object.put(allocator, "type", .{ .string = "string" });
+            if (bounds.minimum != 0) try object.put(allocator, "minLength", .{ .integer = bounds.minimum });
+            try object.put(allocator, "maxLength", .{ .integer = bounds.maximum });
+        },
+        .integer => |bounds| {
+            try object.put(allocator, "type", .{ .string = "integer" });
+            try object.put(allocator, "minimum", .{ .integer = bounds.minimum });
+            try object.put(allocator, "maximum", .{ .integer = bounds.maximum });
+        },
+        .boolean, .null_value => try object.put(allocator, "type", .{ .string = if (node.* == .boolean) "boolean" else "null" }),
+        .constant => |value| try object.put(allocator, "const", switch (value) {
+            .string => |v| .{ .string = v },
+            .integer => |v| .{ .integer = v },
+            .boolean => |v| .{ .bool = v },
+            .null_value => .null,
+        }),
+        .enumeration => |choices| {
+            var list: std.array_list.Managed(std.json.Value) = .init(allocator);
+            for (choices) |choice| try list.append(.{ .string = choice });
+            try object.put(allocator, "enum", .{ .array = list });
+        },
+        .array => |items| {
+            try object.put(allocator, "type", .{ .string = "array" });
+            try object.put(allocator, "items", try schemaValue(allocator, items.items));
+            if (items.minimum != 0) try object.put(allocator, "minItems", .{ .integer = items.minimum });
+            try object.put(allocator, "maxItems", .{ .integer = items.maximum });
+        },
+        .one_of => |choices| {
+            var list: std.array_list.Managed(std.json.Value) = .init(allocator);
+            for (choices) |choice| try list.append(try schemaValue(allocator, choice));
+            try object.put(allocator, "oneOf", .{ .array = list });
+        },
+    }
+    return .{ .object = object };
 }
 
 const Compiler = struct {
     allocator: std.mem.Allocator,
     node_count: usize = 0,
+    definitions: std.json.ObjectMap = .{},
+    reference_stack: [max_depth]DefinitionId = undefined,
+    reference_depth: usize = 0,
+
+    fn reference(self: *Compiler, id: DefinitionId, depth: usize) Error!*const Node {
+        if (self.reference_depth == max_depth) return invalid();
+        for (self.reference_stack[0..self.reference_depth]) |prior| if (std.mem.eql(u8, prior.bytes, id.bytes)) return invalid();
+        const raw = self.definitions.get(id.bytes) orelse return invalid();
+        self.reference_stack[self.reference_depth] = id;
+        self.reference_depth += 1;
+        defer self.reference_depth -= 1;
+        return self.node(raw, depth);
+    }
 
     fn node(self: *Compiler, raw: std.json.Value, depth: usize) Error!*const Node {
-        if (depth > max_depth or self.node_count == max_nodes or raw != .object) return invalid();
-        self.node_count += 1;
+        if (depth > max_depth or raw != .object) return invalid();
         const object = raw.object;
+        if (object.get("$ref")) |ref_value| {
+            try fields(object, &.{"$ref"});
+            if (ref_value != .string or !std.mem.startsWith(u8, ref_value.string, "#/$defs/")) return invalid();
+            const id = DefinitionId.parse(ref_value.string[8..]) orelse return invalid();
+            return self.reference(id, depth);
+        }
+        if (self.node_count == max_nodes) return invalid();
+        self.node_count += 1;
         const result = try self.allocator.create(Node);
         if (object.get("oneOf")) |variants| {
             try fields(object, &.{"oneOf"});

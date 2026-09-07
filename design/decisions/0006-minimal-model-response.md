@@ -145,7 +145,14 @@ subset with JSON Schema meanings, not a general JSON Schema implementation.
 | Array | `type: "array"`, one `items` schema and required `maxItems`; optional `minItems` means zero when absent. |
 | Alternatives | Only `oneOf`, containing 2–32 closed object schemas. Each requires `kind` with a distinct nonempty string `const`; no inferred or overlapping branch is allowed. |
 
-The root must be an object or the alternatives form. A single root object
+[ADR 0013](0013-workflow-input-reuse.md) extends this profile with optional root
+`$defs` (1–256 entries) and sole-field `$ref: "#/$defs/<name>"` nodes. Names match
+`[a-z][a-z0-9_-]{0,63}`. All definitions validate, including unused helpers.
+Resolution is local, acyclic and bounded to 16 reference hops; escaped names,
+path traversal, remote resources and reference siblings reject. The existing
+node/depth guards apply after substitution to each result/definition.
+
+The resolved root must be an object or the alternatives form. A single root object
 cannot require a constant result-kind echo: a `kind` property with `const` or
 a singleton `enum` rejects. Necessary nested domain discriminators remain
 allowed. Domain field names are not globally banned, and compilation does not
@@ -158,7 +165,7 @@ explicit zero upper bounds are valid. Every nested value is constrained by one
 of the forms above; open maps and unconstrained leaves are prohibited.
 
 Unknown, duplicate or mixed-form keywords reject, including `$schema`, `$id`,
-`$ref`, definitions, recursive schemas, `anyOf`, `allOf`, `not`, conditionals,
+external references, nested definitions, recursive schemas, `anyOf`, `allOf`, `not`, conditionals,
 type arrays, `number`, regex/pattern/format rules, annotations and defaults.
 No schema fetch, coercion, ignored keyword or provider fallback is permitted.
 Guidance and examples remain explicitly declared workflow resources, not
@@ -178,8 +185,12 @@ The existing workflow compiler calls one narrow result-schema compiler port
 only for explicitly referenced resources of that kind. Its adapter checks JSON
 transport; the domain compiler owns this profile's semantic rules. A compiled
 resource is tagged: `result_schema` carries an opaque immutable schema with
-its exact captured bytes and typed tree, not an optional proof beside an
-unchecked schema string. The registry deep-owns that same authority through
+its exact captured bytes, typed tree and deterministic compact expanded JSON
+projection. `bytes()` retains source authority; `modelBytes()` supplies model
+transport for inference and counting. Providers perform no separate rewriting.
+Named definitions that satisfy the root rules are selectable views of this
+same owner; helper leaves cannot become response schemas. All clones own the
+source, trees and transport bytes for their lifetime. The registry deep-owns that same authority through
 execution. The existing provider-neutral request also references this compiled
 schema; its unchecked raw-schema constructor path is removed. Other resource
 kinds remain byte captures and are not parsed as

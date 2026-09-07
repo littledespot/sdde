@@ -23,6 +23,13 @@ token budget. This is accepted, not a pending configuration or approval decision
 removes operation versioning. Runtime operations and names below use one current
 unversioned contract per operation; retired suffixes are rejected, not aliased.
 
+**Input-reuse amendment:** [ADR 0013](../decisions/0013-workflow-input-reuse.md)
+keeps captured schema source and derives compact expanded transport in the same
+compiled owner. Inference and counting use that projection. An originating
+`result-selection: input` binds the packet's typed named result view once;
+response validation and protocol retries retain it. Full evidence projections
+share citation records without changing canonical evidence or usage accounting.
+
 **Implementation readiness:** The configured provider-document path and
 read-only byte service are accepted and implemented by F0001/F0004/F0008. The
 strict common decoder, compiler-contract registry join, immutable

@@ -15,8 +15,12 @@
     "steps"
   ],
   "properties": {
-    "schema": { "const": "workflow/v1" },
-    "id": { "$ref": "#/$defs/localId" },
+    "schema": {
+      "const": "workflow/v1"
+    },
+    "id": {
+      "$ref": "#/$defs/localId"
+    },
     "version": {
       "type": "integer",
       "minimum": 1,
@@ -26,21 +30,46 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9]{4}$"
     },
-    "invoke": { "$ref": "#/$defs/operationId" },
-    "policy": { "$ref": "#/$defs/registeredRef" },
-    "start": { "$ref": "#/$defs/localId" },
+    "invoke": {
+      "$ref": "#/$defs/operationId"
+    },
+    "policy": {
+      "$ref": "#/$defs/registeredRef"
+    },
+    "start": {
+      "$ref": "#/$defs/localId"
+    },
     "resources": {
       "type": "object",
       "maxProperties": 64,
-      "propertyNames": { "$ref": "#/$defs/localId" },
-      "additionalProperties": { "$ref": "#/$defs/resourceName" }
+      "propertyNames": {
+        "$ref": "#/$defs/localId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/resourceName"
+      }
     },
     "steps": {
       "type": "object",
       "minProperties": 1,
       "maxProperties": 256,
-      "propertyNames": { "$ref": "#/$defs/localId" },
-      "additionalProperties": { "$ref": "#/$defs/step" }
+      "propertyNames": {
+        "$ref": "#/$defs/localId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "subgraphs": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 32,
+      "propertyNames": {
+        "$ref": "#/$defs/localId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/subgraph"
+      }
     }
   },
   "$defs": {
@@ -69,7 +98,9 @@
     },
     "parameterValue": {
       "oneOf": [
-        { "type": "boolean" },
+        {
+          "type": "boolean"
+        },
         {
           "type": "integer",
           "minimum": -9223372036854775808,
@@ -84,7 +115,9 @@
     },
     "transitionTarget": {
       "oneOf": [
-        { "$ref": "#/$defs/localId" },
+        {
+          "$ref": "#/$defs/localId"
+        },
         {
           "enum": [
             "end.ok",
@@ -102,28 +135,155 @@
       "additionalProperties": false,
       "minProperties": 1,
       "properties": {
-        "ok": { "$ref": "#/$defs/transitionTarget" },
-        "more": { "$ref": "#/$defs/transitionTarget" },
-        "needs-user": { "$ref": "#/$defs/transitionTarget" },
-        "invalid": { "$ref": "#/$defs/transitionTarget" },
-        "blocked": { "$ref": "#/$defs/transitionTarget" },
-        "failed": { "$ref": "#/$defs/transitionTarget" },
-        "cancelled": { "$ref": "#/$defs/transitionTarget" }
+        "ok": {
+          "$ref": "#/$defs/transitionTarget"
+        },
+        "more": {
+          "$ref": "#/$defs/transitionTarget"
+        },
+        "needs-user": {
+          "$ref": "#/$defs/transitionTarget"
+        },
+        "invalid": {
+          "$ref": "#/$defs/transitionTarget"
+        },
+        "blocked": {
+          "$ref": "#/$defs/transitionTarget"
+        },
+        "failed": {
+          "$ref": "#/$defs/transitionTarget"
+        },
+        "cancelled": {
+          "$ref": "#/$defs/transitionTarget"
+        }
       }
     },
-    "step": {
+    "operationStep": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["use", "on"],
+      "required": [
+        "use",
+        "on"
+      ],
       "properties": {
-        "use": { "$ref": "#/$defs/operationId" },
+        "use": {
+          "$ref": "#/$defs/operationId"
+        },
         "with": {
           "type": "object",
           "maxProperties": 32,
-          "propertyNames": { "$ref": "#/$defs/localId" },
-          "additionalProperties": { "$ref": "#/$defs/parameterValue" }
+          "propertyNames": {
+            "$ref": "#/$defs/localId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/parameterValue"
+          }
         },
-        "on": { "$ref": "#/$defs/outcomes" }
+        "on": {
+          "$ref": "#/$defs/outcomes"
+        }
+      }
+    },
+    "callStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "call",
+        "on"
+      ],
+      "properties": {
+        "with": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "$ref": "#/$defs/localId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/parameterValue"
+          }
+        },
+        "on": {
+          "$ref": "#/$defs/outcomes"
+        },
+        "call": {
+          "$ref": "#/$defs/localId"
+        }
+      }
+    },
+    "step": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/operationStep"
+        },
+        {
+          "$ref": "#/$defs/callStep"
+        }
+      ]
+    },
+    "subgraphStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "use",
+        "on"
+      ],
+      "properties": {
+        "use": {
+          "$ref": "#/$defs/operationId"
+        },
+        "with": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "$ref": "#/$defs/localId"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/parameterValue"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "param"
+                ],
+                "properties": {
+                  "param": {
+                    "$ref": "#/$defs/localId"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "on": {
+          "$ref": "#/$defs/outcomes"
+        }
+      }
+    },
+    "subgraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "steps"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/localId"
+        },
+        "steps": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 256,
+          "propertyNames": {
+            "$ref": "#/$defs/localId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/subgraphStep"
+          }
+        }
       }
     }
   }

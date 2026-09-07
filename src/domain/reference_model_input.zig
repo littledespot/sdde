@@ -6,6 +6,7 @@ const extraction = @import("reference_extraction.zig");
 const reconciliation = @import("reference_reconciliation.zig");
 const literals = @import("passive_literals.zig");
 const packets = @import("model_input_packet.zig");
+const projection = @import("model_evidence.zig");
 pub const Error = packets.Error || extraction.Error;
 
 pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, registry: literals.Registry, tokens: extraction.tokens.Candidates, scope: evidence.Scope) Error!*packets.Packet {
@@ -14,10 +15,10 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
     const scratch = arena.allocator();
     const chunk = try evidence.resolve(inputs, scope);
     if (!tokens.state_id.eql(scope.state_id)) return error.InvalidReferenceExtraction;
-    var selected: std.ArrayList(extraction.tokens.Candidate) = .empty;
+    var selected: std.ArrayList(projection.ExactCandidate) = .empty;
     for (tokens.entries) |token| if (token.fact.scope.chunk_id.eql(scope.chunk_id)) {
         if (!token.fact.scope.state_id.eql(scope.state_id)) return error.InvalidReferenceExtraction;
-        try selected.append(scratch, token);
+        try selected.append(scratch, projection.exactCandidate(token));
     };
     const body = try std.json.Stringify.valueAlloc(scratch, .{
         .source_id = chunk.chunk.source_id,
@@ -27,7 +28,7 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
         .passive_literals = try passiveChoices(scratch, registry, inputs, &.{scope}),
         .exact_candidates = selected.items,
     }, .{});
-    return packets.create(allocator, body, .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } }, .initial_generation);
+    return packets.create(allocator, body, .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } }, .initial_generation, null);
 }
 
 pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry) Error!*packets.Packet {
@@ -37,17 +38,19 @@ pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.
     if (!input.progress.plan.layout.items.state_id.eql(inputs.corpus.state_id)) return error.InvalidReferenceExtraction;
     const scopes = try scratch.alloc(evidence.Scope, input.items.len);
     for (input.items, scopes) |item, *scope| scope.* = .{ .state_id = inputs.corpus.state_id, .chunk_id = item.claim.chunk_id };
+    const projected = try projection.project(scratch, input.items);
     const body = try std.json.Stringify.valueAlloc(scratch, .{
         .purpose = input.purpose,
         .level = input.partition.group.level,
         .member_claim_ids = input.partition.group.claim_ids,
         .member_summary_ids = input.member_summary_ids,
-        .claims = input.items,
+        .claims = projected.claims,
+        .citations = projected.citations,
         .summaries = input.summaries,
         .passive_literals = try passiveChoices(scratch, registry, inputs, scopes),
     }, .{});
     const slot = try std.fmt.allocPrint(scratch, "reconciliation-{d}", .{input.partition.id.ordinal});
-    return packets.create(allocator, body, .{ .reference_global = .{ .reference_state_id = .{ .bytes = inputs.corpus.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation);
+    return packets.create(allocator, body, .{ .reference_global = .{ .reference_state_id = .{ .bytes = inputs.corpus.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = @tagName(input.purpose) });
 }
 
 /// Use the same exact-scope resolver as typed-text validation. Display choices

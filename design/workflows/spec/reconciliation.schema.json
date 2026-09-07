@@ -1,44 +1,123 @@
 {
-  "oneOf": [
-    {
+  "$defs": {
+    "ordinal": {
       "type": "object",
       "properties": {
-        "kind": {
-          "const": "summary"
+        "ordinal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      },
+      "required": [
+        "ordinal"
+      ],
+      "additionalProperties": false
+    },
+    "business_segment": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "literal"
+            },
+            "value": {
+              "type": "string",
+              "maxLength": 4294967295
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
         },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "passive"
+            },
+            "passive_literal_id": {
+              "$ref": "#/$defs/ordinal"
+            }
+          },
+          "required": [
+            "kind",
+            "passive_literal_id"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "reference_node": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "literal"
+            },
+            "value": {
+              "type": "string",
+              "maxLength": 4294967295
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "passive"
+            },
+            "passive_literal_id": {
+              "$ref": "#/$defs/ordinal"
+            }
+          },
+          "required": [
+            "kind",
+            "passive_literal_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "source"
+            },
+            "source_id": {
+              "$ref": "#/$defs/ordinal"
+            }
+          },
+          "required": [
+            "kind",
+            "source_id"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
         "member_claim_ids": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "ordinal": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 4294967295
-              }
-            },
-            "required": [
-              "ordinal"
-            ],
-            "additionalProperties": false
+            "$ref": "#/$defs/ordinal"
           },
           "maxItems": 4294967295
         },
         "member_summary_ids": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "ordinal": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 4294967295
-              }
-            },
-            "required": [
-              "ordinal"
-            ],
-            "additionalProperties": false
+            "$ref": "#/$defs/ordinal"
           },
           "maxItems": 4294967295
         },
@@ -55,18 +134,7 @@
               "claim_ids": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "ordinal": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "maximum": 4294967295
-                    }
-                  },
-                  "required": [
-                    "ordinal"
-                  ],
-                  "additionalProperties": false
+                  "$ref": "#/$defs/ordinal"
                 },
                 "maxItems": 4294967295
               },
@@ -89,52 +157,7 @@
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/business_segment"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -154,79 +177,7 @@
                               "nodes": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "source"
-                                        },
-                                        "source_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "source_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/reference_node"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -246,79 +197,7 @@
                               "nodes": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "source"
-                                        },
-                                        "source_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "source_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/reference_node"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -338,79 +217,7 @@
                               "nodes": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "source"
-                                        },
-                                        "source_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "source_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/reference_node"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -430,79 +237,7 @@
                               "nodes": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "source"
-                                        },
-                                        "source_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "source_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/reference_node"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -522,79 +257,7 @@
                               "nodes": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "source"
-                                        },
-                                        "source_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "source_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/reference_node"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -614,52 +277,7 @@
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/business_segment"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -686,18 +304,7 @@
                         "const": "preserved_token"
                       },
                       "token_id": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
+                        "$ref": "#/$defs/ordinal"
                       }
                     },
                     "required": [
@@ -720,37 +327,22 @@
         }
       },
       "required": [
-        "kind",
         "member_claim_ids",
         "member_summary_ids",
         "statements"
       ],
       "additionalProperties": false
     },
-    {
+    "global": {
       "type": "object",
       "properties": {
-        "kind": {
-          "const": "global"
-        },
         "claim_dispositions": {
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
               "claim_id": {
-                "type": "object",
-                "properties": {
-                  "ordinal": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 4294967295
-                  }
-                },
-                "required": [
-                  "ordinal"
-                ],
-                "additionalProperties": false
+                "$ref": "#/$defs/ordinal"
               },
               "disposition": {
                 "enum": [
@@ -763,18 +355,7 @@
               "related_claim_ids": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "ordinal": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "maximum": 4294967295
-                    }
-                  },
-                  "required": [
-                    "ordinal"
-                  ],
-                  "additionalProperties": false
+                  "$ref": "#/$defs/ordinal"
                 },
                 "maxItems": 4294967295
               }
@@ -796,36 +377,14 @@
               "claim_ids": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "ordinal": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "maximum": 4294967295
-                    }
-                  },
-                  "required": [
-                    "ordinal"
-                  ],
-                  "additionalProperties": false
+                  "$ref": "#/$defs/ordinal"
                 },
                 "maxItems": 4294967295
               },
               "citation_ids": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "ordinal": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "maximum": 4294967295
-                    }
-                  },
-                  "required": [
-                    "ordinal"
-                  ],
-                  "additionalProperties": false
+                  "$ref": "#/$defs/ordinal"
                 },
                 "maxItems": 4294967295
               },
@@ -848,52 +407,7 @@
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/business_segment"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -913,79 +427,7 @@
                               "nodes": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "source"
-                                        },
-                                        "source_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "source_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/reference_node"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -1005,79 +447,7 @@
                               "nodes": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "source"
-                                        },
-                                        "source_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "source_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/reference_node"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -1097,79 +467,7 @@
                               "nodes": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "source"
-                                        },
-                                        "source_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "source_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/reference_node"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -1189,79 +487,7 @@
                               "nodes": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "source"
-                                        },
-                                        "source_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "source_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/reference_node"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -1281,79 +507,7 @@
                               "nodes": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "source"
-                                        },
-                                        "source_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "source_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/reference_node"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -1373,52 +527,7 @@
                               "segments": {
                                 "type": "array",
                                 "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "literal"
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                          "maxLength": 4294967295
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "value"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "kind": {
-                                          "const": "passive"
-                                        },
-                                        "passive_literal_id": {
-                                          "type": "object",
-                                          "properties": {
-                                            "ordinal": {
-                                              "type": "integer",
-                                              "minimum": 1,
-                                              "maximum": 4294967295
-                                            }
-                                          },
-                                          "required": [
-                                            "ordinal"
-                                          ],
-                                          "additionalProperties": false
-                                        }
-                                      },
-                                      "required": [
-                                        "kind",
-                                        "passive_literal_id"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                                  "$ref": "#/$defs/business_segment"
                                 },
                                 "maxItems": 4294967295
                               }
@@ -1445,18 +554,7 @@
                         "const": "preserved_token"
                       },
                       "token_id": {
-                        "type": "object",
-                        "properties": {
-                          "ordinal": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 4294967295
-                          }
-                        },
-                        "required": [
-                          "ordinal"
-                        ],
-                        "additionalProperties": false
+                        "$ref": "#/$defs/ordinal"
                       }
                     },
                     "required": [
@@ -1485,36 +583,14 @@
               "claim_ids": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "ordinal": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "maximum": 4294967295
-                    }
-                  },
-                  "required": [
-                    "ordinal"
-                  ],
-                  "additionalProperties": false
+                  "$ref": "#/$defs/ordinal"
                 },
                 "maxItems": 4294967295
               },
               "citation_ids": {
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "ordinal": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "maximum": 4294967295
-                    }
-                  },
-                  "required": [
-                    "ordinal"
-                  ],
-                  "additionalProperties": false
+                  "$ref": "#/$defs/ordinal"
                 },
                 "maxItems": 4294967295
               },
@@ -1532,79 +608,7 @@
                   "nodes": {
                     "type": "array",
                     "items": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "const": "literal"
-                            },
-                            "value": {
-                              "type": "string",
-                              "maxLength": 4294967295
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "value"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "const": "passive"
-                            },
-                            "passive_literal_id": {
-                              "type": "object",
-                              "properties": {
-                                "ordinal": {
-                                  "type": "integer",
-                                  "minimum": 1,
-                                  "maximum": 4294967295
-                                }
-                              },
-                              "required": [
-                                "ordinal"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "passive_literal_id"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "const": "source"
-                            },
-                            "source_id": {
-                              "type": "object",
-                              "properties": {
-                                "ordinal": {
-                                  "type": "integer",
-                                  "minimum": 1,
-                                  "maximum": 4294967295
-                                }
-                              },
-                              "required": [
-                                "ordinal"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "source_id"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
+                      "$ref": "#/$defs/reference_node"
                     },
                     "maxItems": 4294967295
                   }
@@ -1633,12 +637,12 @@
         }
       },
       "required": [
-        "kind",
         "claim_dispositions",
         "signals",
         "conflicts"
       ],
       "additionalProperties": false
     }
-  ]
+  },
+  "$ref": "#/$defs/summary"
 }

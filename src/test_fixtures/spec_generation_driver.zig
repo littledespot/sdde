@@ -118,7 +118,7 @@ fn response(allocator: std.mem.Allocator, view: data.View, driver: *const Driver
         },
         .reference_global => {
             const input = (try native.read(&view, @import("../application/reference_reconciliation_workflow.zig").input_schema, .reconciliation_input)).payload().reconciliation_input;
-            return @import("../domain/model_candidate_json.zig").encode(@FieldType(r.Parsed, "proposal"), allocator, if (input.purpose == .summary) .{ .summary = try @import("reference_reconciliation.zig").summary(allocator, input) } else .{ .global = try @import("reference_reconciliation.zig").global(allocator, input) });
+            return @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, if (input.purpose == .summary) .{ .summary = try @import("reference_reconciliation.zig").summary(allocator, input) } else .{ .global = try @import("reference_reconciliation.zig").global(allocator, input) });
         },
         .specification_unit => {
             const current = try @import("../application/specification_workflow.zig").readSession(&view);
@@ -128,7 +128,7 @@ fn response(allocator: std.mem.Allocator, view: data.View, driver: *const Driver
             if (request.id().purpose == .atomic_repair) {
                 var replacement = value;
                 if (driver.failed_repair) replacement.provenance.claim_ids = &.{.{ .ordinal = 999999 }};
-                return @import("../domain/model_candidate_json.zig").encode(@import("../domain/specification_repair.zig").Replacement, allocator, .{ .attributed = replacement });
+                return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_repair.zig").Replacement, allocator, .{ .attributed = replacement });
             }
             const unit = try @import("../domain/specification_session.zig").unit(current.completed);
             if (driver.generation_gap and unit == .primary_user_story) return @import("../domain/model_candidate_json.zig").encode(g.ModelResponse, allocator, .{ .clarification = .{ .reason = .missing, .question = value } });

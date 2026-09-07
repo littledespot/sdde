@@ -2,6 +2,7 @@
 //! internal; only body is model-visible. No prompt, schema or provider policy.
 const std = @import("std");
 const identity = @import("model_request_identity.zig");
+const schema = @import("model_result_schema.zig");
 pub const Error = identity.Error || error{InvalidModelInputPacket};
 pub const Packet = opaque {
     pub fn body(self: *const Packet) []const u8 {
@@ -13,6 +14,9 @@ pub const Packet = opaque {
     pub fn purpose(self: *const Packet) identity.RequestPurposeBinding {
         return storage(self).purpose;
     }
+    pub fn resultDefinition(self: *const Packet) ?schema.DefinitionId {
+        return storage(self).result_definition;
+    }
 };
 const Storage = struct {
     allocator: std.mem.Allocator,
@@ -21,10 +25,11 @@ const Storage = struct {
     body: []const u8,
     unit: identity.ImmutableUnitOwnerId,
     purpose: identity.RequestPurposeBinding,
+    result_definition: ?schema.DefinitionId = null,
     handle: Handle,
 };
 const Handle = struct { owner: *Storage };
-pub fn create(allocator: std.mem.Allocator, body: []const u8, unit: identity.ImmutableUnitOwnerId, purpose: identity.RequestPurposeBinding) Error!*Packet {
+pub fn create(allocator: std.mem.Allocator, body: []const u8, unit: identity.ImmutableUnitOwnerId, purpose: identity.RequestPurposeBinding, result_definition: ?schema.DefinitionId) Error!*Packet {
     try identity.validateUnitOwner(unit);
     if (body.len == 0 or !std.unicode.utf8ValidateSlice(body)) return error.InvalidModelInputPacket;
     // Follow-up requests retain their parent through the request ledger, not a
@@ -35,6 +40,10 @@ pub fn create(allocator: std.mem.Allocator, body: []const u8, unit: identity.Imm
     errdefer release(@ptrCast(&owner.handle));
     const arena = owner.arena.allocator();
     owner.body = try arena.dupe(u8, body);
+    if (result_definition) |id| {
+        _ = schema.DefinitionId.parse(id.bytes) orelse return error.InvalidModelInputPacket;
+        owner.result_definition = .{ .bytes = try arena.dupe(u8, id.bytes) };
+    }
     owner.unit = try identity.cloneUnitOwner(arena, unit);
     owner.purpose = switch (purpose) {
         .initial_generation => .initial_generation,

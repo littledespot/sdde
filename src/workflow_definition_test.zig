@@ -579,3 +579,148 @@ const operations: operation_registry.Registry = .{
 fn unusedOperation(_: ?*void, _: operation_registry.Input) operation_registry.Error!execution.Candidate {
     return error.OperationExecutionFailed;
 }
+
+const reusable_workflow =
+    \\schema: workflow/v1
+    \\id: reusable-check
+    \\version: 1
+    \\shortcode: REUS
+    \\invoke: test.empty
+    \\policy: test.model-policy@1
+    \\start: validate
+    \\resources: {prompt: prompts/generate.md, result-schema: schemas/result.json}
+    \\steps:
+    \\  validate: {use: test.validate, on: {ok: first}}
+    \\  first: {call: request, with: {limit: 1}, on: {ok: second, failed: end.failed, cancelled: end.cancelled}}
+    \\  second: {call: request, with: {limit: 2}, on: {ok: end.ok, failed: end.failed, cancelled: end.cancelled}}
+    \\subgraphs:
+    \\  request:
+    \\    start: generate
+    \\    steps:
+    \\      generate:
+    \\        use: model.generate
+    \\        with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: {param: limit}, response-mode: prompt-only}
+    \\        on: {ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled}
+;
+
+fn reusableDefinitions(a: std.mem.Allocator, bytes: []const u8) ![]const @import("domain/workflow_definition.zig").Definition {
+    var parser: parser_adapter.Adapter = .{};
+    const raw = try (parse.Action{ .parser = parser.parser() }).execute(a, &.{.{ .ordinal = 1, .bytes = bytes }});
+    return (validate_schema.Action{}).execute(a, raw);
+}
+
+fn reusableCompile(a: std.mem.Allocator, bytes: []const u8) !@import("domain/workflow_compilation.zig").CompiledWorkflow {
+    const definitions = try reusableDefinitions(a, bytes);
+    var parser: result_schema_parser.Adapter = .{};
+    const manifest = try (resolve_resources.Action{}).execute(a, testInventory(), definitions);
+    const graphs = try (compile.Action{ .registry = &operations, .result_schema_compiler = parser.compiler() }).execute(a, definitions, testInventory(), manifest, &.{
+        .{ .ordinal = 3, .bytes = "Generate one result." },
+        .{ .ordinal = 5, .bytes = result_schema_bytes },
+    });
+    _ = try (validate_graphs.Action{}).execute(a, graphs);
+    return graphs[0];
+}
+
+test "local reuse compiles to the identical explicit graph with separate retries and stable identities" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const reused = try reusableCompile(a, reusable_workflow);
+    const explicit = try std.mem.concat(a, u8, &.{
+        reusable_workflow[0..std.mem.indexOf(u8, reusable_workflow, "steps:").?],
+        \\steps:
+        \\  validate: {use: test.validate, on: {ok: g5-first-generate}}
+        \\  g5-first-generate:
+        \\    use: model.generate
+        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 1, response-mode: prompt-only}
+        \\    on: {ok: g6-second-generate, invalid: g5-first-generate, failed: end.failed, cancelled: end.cancelled}
+        \\  g6-second-generate:
+        \\    use: model.generate
+        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, response-mode: prompt-only}
+        \\    on: {ok: end.ok, invalid: g6-second-generate, failed: end.failed, cancelled: end.cancelled}
+    });
+    const plain = try reusableCompile(a, explicit);
+    try std.testing.expectEqualDeep(plain.authority.steps, reused.authority.steps);
+    try std.testing.expectEqualDeep(plain.authority.transitions, reused.authority.transitions);
+    try std.testing.expectEqual(plain.authority.maximum_step_executions, reused.authority.maximum_step_executions);
+    try std.testing.expectEqual(@as(u32, 1), reused.authority.steps[0].retry_authority.?.limit.value);
+    try std.testing.expectEqual(@as(u32, 2), reused.authority.steps[1].retry_authority.?.limit.value);
+    const defs = try reusableDefinitions(a, reusable_workflow);
+    var reversed = defs[0];
+    const calls = try a.dupe(@import("domain/workflow_definition.zig").SubgraphCall, reversed.calls);
+    std.mem.reverse(@import("domain/workflow_definition.zig").SubgraphCall, calls);
+    reversed.calls = calls;
+    try std.testing.expectEqualDeep(try @import("domain/workflow_subgraphs.zig").expand(a, defs[0]), try @import("domain/workflow_subgraphs.zig").expand(a, reversed));
+}
+
+test "reuse cannot bypass operation contracts gates exits or local boundaries" {
+    for ([_][2][]const u8{
+        .{ "with: {limit: 1}", "with: {}" },
+        .{ "with: {limit: 1}", "with: {limit: 1, extra: 2}" },
+        .{ "with: {limit: 1}", "with: {limit: wrong}" },
+        .{ "with: {limit: 1}", "with: {limit: 4}" },
+        .{ "call: request", "call: unknown" },
+        .{ "start: validate", "start: first" },
+        .{ "failed: end.failed, cancelled: end.cancelled}}", "failed: end.ok, cancelled: end.cancelled}}" },
+        .{ "failed: end.failed, cancelled: end.cancelled}}", "cancelled: end.cancelled}}" },
+        .{ "ok: second, failed:", "ok: second, blocked: end.blocked, failed:" },
+        .{ "invalid: generate", "invalid: validate" },
+        .{ "ok: first", "ok: g5-first-generate" },
+        .{ "invalid: generate", "invalid: end.ok" },
+    }) |change| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const bytes = try std.mem.replaceOwned(u8, arena.allocator(), reusable_workflow, change[0], change[1]);
+        try std.testing.expect(!std.mem.eql(u8, bytes, reusable_workflow));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, reusableCompile(arena.allocator(), bytes));
+    }
+}
+
+test "reuse syntax rejects nested calls unknown fields and mixed operation calls" {
+    for ([_][2][]const u8{
+        .{ "use: model.generate", "call: request" },
+        .{ "call: request, with:", "call: request, use: model.generate, with:" },
+        .{ "{param: limit}", "{param: limit, default: 1}" },
+        .{ "subgraphs:\n  request:", "subgraphs:\n  request:\n    include: external.yaml" },
+    }) |change| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const bytes = try std.mem.replaceOwned(u8, arena.allocator(), reusable_workflow, change[0], change[1]);
+        try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, reusableDefinitions(arena.allocator(), bytes));
+    }
+}
+
+test "reuse expansion enforces total step bounds unused definitions and collisions" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const defs = try reusableDefinitions(a, reusable_workflow);
+    const expand = @import("domain/workflow_subgraphs.zig").expand;
+    var source_definition = defs[0];
+    const calls = try a.alloc(@import("domain/workflow_definition.zig").SubgraphCall, 256);
+    for (calls, 0..) |*call, index| {
+        call.* = source_definition.calls[0];
+        call.id.bytes = try std.fmt.allocPrint(a, "c{d}", .{index});
+        call.outcomes = source_definition.calls[1].outcomes;
+    }
+    source_definition.steps = &.{};
+    source_definition.start_step_id = calls[0].id;
+    source_definition.calls = calls;
+    try std.testing.expectEqual(@as(usize, 256), (try expand(a, source_definition)).steps.len);
+    var doubled = source_definition.subgraphs[0];
+    const local_steps = try a.alloc(@import("domain/workflow_definition.zig").SubgraphStep, 2);
+    local_steps[0] = doubled.steps[0];
+    local_steps[1] = doubled.steps[0];
+    local_steps[1].id.bytes = "extra";
+    doubled.steps = local_steps;
+    source_definition.subgraphs = &.{doubled};
+    try std.testing.expectError(error.InvalidWorkflowSubgraph, expand(a, source_definition));
+    source_definition = defs[0];
+    source_definition.calls = &.{};
+    try std.testing.expectError(error.InvalidWorkflowSubgraph, expand(a, source_definition));
+    source_definition = defs[0];
+    var collision = source_definition.steps[0];
+    collision.id.bytes = "g5-first-generate";
+    source_definition.steps = &.{collision};
+    try std.testing.expectError(error.InvalidWorkflowSubgraph, expand(a, source_definition));
+}

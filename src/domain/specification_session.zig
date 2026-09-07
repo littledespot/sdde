@@ -55,14 +55,22 @@ pub fn packet(allocator: std.mem.Allocator, current: Session, context: p.Context
         try claims.append(a, item);
         try scopes.append(a, .{ .state_id = all.state_id, .chunk_id = item.claim.chunk_id });
     }
+    const projected = try @import("model_evidence.zig").project(a, claims.items);
     const body = try std.json.Stringify.valueAlloc(a, .{
         .unit = try unit(current.completed),
         .brief = if (current.units[0]) |checked| checked.response.content.brief else null,
-        .claims = claims.items,
+        .claims = projected.claims,
+        .citations = projected.citations,
         .signals = context.references.records.signals,
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, scopes.items),
     }, .{});
-    return packets.create(allocator, body, try owner(a, current), .initial_generation);
+    const selected = try unit(current.completed);
+    return packets.create(allocator, body, try owner(a, current), .initial_generation, .{ .bytes = switch (selected) {
+        .brief => "brief",
+        .primary_user_story => "primary_user_story",
+        .entities => "entities",
+        .records => |kind| @tagName(kind),
+    } });
 }
 
 pub fn append(current: Session, checked: g.Checked) Error!Session {

@@ -6,6 +6,7 @@ const preparation = @import("model_request_preparation.zig");
 const provider = @import("llm_provider_operation.zig");
 const packets = @import("model_input_packet.zig");
 pub const Input = union(enum) { resource: compilation.CompiledResource, packet: *const packets.Packet };
+pub const ResultSelection = enum { resource, input };
 
 /// One immutable association, carried by typed pipeline keys. Canonical IDs are
 /// retained through their ledger owner, never cloned into a second authority.
@@ -85,7 +86,7 @@ const Storage = struct {
 
 pub const Error = packets.Error || preparation.ValidationError;
 
-pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *const identity.ModelRequestId, selected: binding_module.ValidatedProviderModelBinding, prompt: compilation.CompiledResource, result: compilation.CompiledResource, input: ?Input, protocol_prompt: ?compilation.CompiledResource) Error!*Request {
+pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *const identity.ModelRequestId, selected: binding_module.ValidatedProviderModelBinding, prompt: compilation.CompiledResource, result: compilation.CompiledResource, input: ?Input, protocol_prompt: ?compilation.CompiledResource, selection: ResultSelection) Error!*Request {
     if (protocol_prompt) |resource| if (resource.content != .prompt) return error.ModelRequestAssociationInvalid;
     if (prompt.content != .prompt or result.content != .result_schema or
         (input != null and input.? == .resource and input.?.resource.content != .data) or
@@ -95,6 +96,13 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         const current = identity.ledger(ledger_owner);
         _ = identity.validateBinding(current, current.revision(), id, value.packet.unit(), selected.operation_id, value.packet.purpose()) catch return error.ModelRequestAssociationInvalid;
     };
+    var bound_result = result;
+    if (selection == .input) {
+        const packet = input orelse return error.ModelRequestAssociationInvalid;
+        if (packet != .packet or result.content != .result_schema) return error.ModelRequestAssociationInvalid;
+        const definition_id = packet.packet.resultDefinition() orelse return error.ModelRequestAssociationInvalid;
+        bound_result.content = .{ .result_schema = result.content.result_schema.select(definition_id) orelse return error.ModelRequestAssociationInvalid };
+    }
     return create(.{
         .allocator = allocator,
         .ledger_owner = ledger_owner,
@@ -102,7 +110,7 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         .binding = selected,
         .prompt = prompt,
         .protocol_prompt = protocol_prompt,
-        .result = result,
+        .result = bound_result,
         .input = input,
         .phase = .assigned,
     });

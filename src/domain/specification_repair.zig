@@ -66,6 +66,7 @@ fn make(allocator: std.mem.Allocator, current: session.Session, candidate: Candi
 
 pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p.Context, authorization: Authorization) Error!*packets.Packet {
     if (!std.meta.eql(authorization.unit, try session.unit(current.completed))) return error.InvalidSpecificationRepair;
+    if (authorization.expected == .record and authorization.unit != .records) return error.InvalidSpecificationRepair;
     const base = try session.packet(allocator, current, context);
     defer packets.release(base);
     if (!@import("model_request_identity.zig").unitOwnerEql(authorization.owner, base.unit())) return error.InvalidSpecificationRepair;
@@ -85,13 +86,16 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         error.InvalidJsonDocument => error.InvalidSpecificationRepair,
     };
     const body = try std.json.Stringify.valueAlloc(scratch, .{ .input = original, .repair = .{ .target = authorization.target, .expected = expected, .rule = authorization.rule } }, .{});
-    return packets.create(allocator, body, base.unit(), .{ .atomic_repair = authorization.id });
+    return packets.create(allocator, body, base.unit(), .{ .atomic_repair = authorization.id }, .{ .bytes = switch (authorization.expected) {
+        .attributed => "attributed",
+        .record => try std.fmt.allocPrint(scratch, "record_{s}", .{@tagName(authorization.unit.records)}),
+    } });
 }
 
 pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_value: *const packets.Packet, bytes: []const u8) Error!Replacement {
     if (!@import("model_request_identity.zig").unitOwnerEql(authorization.owner, packet_value.unit())) return error.InvalidSpecificationRepair;
     if (packet_value.purpose() != .atomic_repair or !std.mem.eql(u8, packet_value.purpose().atomic_repair.bytes, authorization.id.bytes)) return error.InvalidSpecificationRepair;
-    const result = @import("model_candidate_json.zig").decode(Replacement, allocator, bytes) catch |err| return switch (err) {
+    const result = @import("model_candidate_json.zig").decodeSelected(Replacement, allocator, std.meta.activeTag(authorization.expected), bytes) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         error.InvalidJsonDocument => error.InvalidSpecificationRepair,
     };

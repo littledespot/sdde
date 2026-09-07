@@ -46,6 +46,7 @@ pub const Assign = struct {
             .{ .id = "prompt", .kind = .resource, .resource_kind = .prompt, .required = true, .workflow_definition_safe = true },
             .{ .id = "protocol-prompt", .kind = .resource, .resource_kind = .prompt, .required = false, .workflow_definition_safe = true },
             .{ .id = "result-schema", .kind = .resource, .resource_kind = .result_schema, .required = true, .workflow_definition_safe = true },
+            .{ .id = "result-selection", .kind = .enumeration, .required = false, .allowed_values = &.{ "resource", "input" }, .workflow_definition_safe = true },
             .{ .id = "input", .kind = .resource, .resource_kind = .data, .required = false, .workflow_definition_safe = true },
         } ++ @import("../domain/workflow_model.zig").parameters);
         break :contract result;
@@ -63,9 +64,14 @@ pub const Assign = struct {
         const packet = if (step.data.contains(.model_input_packet)) values.read(&step.data, packet_schema, packets.Packet) catch return error.OperationExecutionFailed else null;
         const static_input = resource(step, "input");
         if (packet != null and static_input != null) return error.OperationExecutionFailed;
+        var selection: handoff.ResultSelection = .resource;
+        for (step.step.parameters) |parameter| if (std.mem.eql(u8, parameter.id.bytes, "result-selection")) {
+            if (parameter.value != .enumeration) return error.OperationExecutionFailed;
+            selection = std.meta.stringToEnum(handoff.ResultSelection, parameter.value.enumeration) orelse return error.OperationExecutionFailed;
+        };
         const assignment = self.action.execute(current, current.revision(), if (packet) |value| value.unit() else .workflow_step, selected.operation_id, if (packet) |value| value.purpose() else .initial_generation) catch return error.OperationExecutionFailed;
         defer identity.deinitOwner(assignment.owner);
-        const request = handoff.assign(self.allocator, assignment.owner, assignment.model_request_id, selected.*, prompt, result, if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null, resource(step, "protocol-prompt")) catch return error.OperationExecutionFailed;
+        const request = handoff.assign(self.allocator, assignment.owner, assignment.model_request_id, selected.*, prompt, result, if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null, resource(step, "protocol-prompt"), selection) catch return error.OperationExecutionFailed;
         errdefer handoff.destroy(request);
         identity.retainOwner(assignment.owner) catch return error.OperationExecutionFailed;
         const ledger_value = adoptLedger(self.allocator, assignment.owner) catch {

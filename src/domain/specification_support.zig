@@ -24,8 +24,9 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context
     if (inputs.projection != .specification or !a.contains(a.Authority, inputs.authorities, .{ .reference = all.state_id })) return error.InvalidRequiredAuthority;
     const slots = try scratch.alloc(struct { ordinal: u32, requirement: a.Id, permitted_not_applicable: ?a.Rule }, ledger.requirements.len);
     for (ledger.requirements, slots, 0..) |requirement, *slot, index| slot.* = .{ .ordinal = try r.ordinal(index), .requirement = requirement.seed.id, .permitted_not_applicable = if (requirement.registered_policy) |policy| policy.not_applicable else null };
-    const body = try std.json.Stringify.valueAlloc(scratch, .{ .requirements = slots, .candidate = inputs.specification, .brief = inputs.brief, .claims = all.entries, .signals = context.references.records.signals, .conflicts = context.references.records.conflicts }, .{});
-    return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_request_id = .{ .bytes = inputs.feature.bytes }, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = "source-support" } } }, .{ .semantic_review = .{ .bytes = "source-support" } });
+    const projected = try @import("model_evidence.zig").project(scratch, all.entries);
+    const body = try std.json.Stringify.valueAlloc(scratch, .{ .requirements = slots, .candidate = inputs.specification, .brief = inputs.brief, .claims = projected.claims, .citations = projected.citations, .signals = context.references.records.signals, .conflicts = context.references.records.conflicts }, .{});
+    return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_request_id = .{ .bytes = inputs.feature.bytes }, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = "source-support" } } }, .{ .semantic_review = .{ .bytes = "source-support" } }, null);
 }
 
 pub fn collect(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, bytes: []const u8) Error!a.Inputs {

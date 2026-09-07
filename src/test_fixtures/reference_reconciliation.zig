@@ -54,13 +54,13 @@ pub fn summaries(allocator: std.mem.Allocator, initial: r.Progress, context: Con
     while (true) {
         const input = try build_input.execute(allocator, progress);
         if (input.purpose == .global) return input;
-        const bytes = try @import("../domain/model_candidate_json.zig").encode(@FieldType(r.Parsed, "proposal"), allocator, .{ .summary = try summary(allocator, input) });
+        const bytes = try @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .summary = try summary(allocator, input) });
         const parsed = try parse.execute(allocator, .{ .input = input, .bytes = bytes });
         progress = try build_summary.execute(allocator, try assign_summary.execute(allocator, try validate_summary.execute(allocator, parsed, context)));
     }
 }
 pub fn finish(allocator: std.mem.Allocator, input: r.Input, proposal: r.Proposal, context: Context) !r.Accounted {
-    const bytes = try @import("../domain/model_candidate_json.zig").encode(@FieldType(r.Parsed, "proposal"), allocator, .{ .global = proposal });
+    const bytes = try @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .global = proposal });
     const parsed = try parse.execute(allocator, .{ .input = input, .bytes = bytes });
     const dispositions = try validate_dispositions.execute(allocator, parsed);
     const signals = try validate_signals.execute(allocator, dispositions, context);

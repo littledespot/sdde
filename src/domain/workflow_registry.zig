@@ -41,7 +41,7 @@ const OwnerStorage = struct {
 pub const Error = error{InvalidWorkflowRegistry};
 
 pub fn createValidated(allocator: std.mem.Allocator, candidate: RegistryCandidate) Error!*Owner {
-    try validateCandidate(candidate);
+    try validateCandidate(allocator, candidate);
     const owner = allocator.create(OwnerStorage) catch return error.InvalidWorkflowRegistry;
     errdefer allocator.destroy(owner);
     owner.* = .{ .backing_allocator = allocator, .arena = .init(allocator), .registry = undefined };
@@ -67,7 +67,7 @@ pub fn deinitOwner(owner: *Owner) void {
     allocator.destroy(storage);
 }
 
-fn validateCandidate(candidate: RegistryCandidate) Error!void {
+fn validateCandidate(allocator: std.mem.Allocator, candidate: RegistryCandidate) Error!void {
     inventory.validate(candidate.inventory) catch return invalid();
     inventory.validateCaptureBudget(candidate.inventory) catch return invalid();
     inventory.validateResourceCaptureBudget(candidate.inventory, candidate.resource_manifest) catch return invalid();
@@ -80,7 +80,7 @@ fn validateCandidate(candidate: RegistryCandidate) Error!void {
     try validateResourceCaptures(candidate);
     for (candidate.graphs, 0..) |graph, index| {
         const declared = findDefinition(candidate.definitions, graph.source_ordinal) orelse return invalid();
-        if (!graphProjectsDefinition(candidate, graph, declared) or
+        if (!graphProjectsDefinition(allocator, candidate, graph, declared) or
             !containsOrdinal(candidate.inventory.definition_ordinals, graph.source_ordinal)) return invalid();
         for (candidate.graphs[0..index]) |prior| {
             if (std.mem.eql(u8, graph.authority.workflow_id.bytes, prior.authority.workflow_id.bytes) or
@@ -112,10 +112,17 @@ fn validateResourceCaptures(candidate: RegistryCandidate) Error!void {
 }
 
 fn graphProjectsDefinition(
+    allocator: std.mem.Allocator,
     candidate: RegistryCandidate,
     graph: compilation.CompiledWorkflow,
-    declared: definition.Definition,
+    source: definition.Definition,
 ) bool {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const expanded = @import("workflow_subgraphs.zig").expand(arena.allocator(), source) catch return false;
+    var declared = source;
+    declared.steps = expanded.steps;
+    declared.start_step_id = expanded.start;
     if (graph.source_ordinal != declared.source_ordinal or
         !std.mem.eql(u8, graph.authority.workflow_id.bytes, declared.workflow_id.bytes) or
         graph.authority.workflow_version != declared.workflow_version or

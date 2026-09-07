@@ -34,7 +34,11 @@ pub const Action = struct {
     ) Error![]const compilation.CompiledWorkflow {
         if (!self.registry.validate()) return invalid();
         const graphs = allocator.alloc(compilation.CompiledWorkflow, definitions.len) catch return invalid();
-        for (definitions, graphs) |item, *graph| {
+        for (definitions, graphs) |source, *graph| {
+            const expanded = @import("../../domain/workflow_subgraphs.zig").expand(allocator, source) catch return invalid();
+            var item = source;
+            item.steps = expanded.steps;
+            item.start_step_id = expanded.start;
             const invocation = self.registry.resolveOperation(item.invocation_operation_id) orelse return invalid();
             if (invocation.contract.kind != .invocation) return invalid();
             const policy = self.registry.resolvePolicy(item.policy_profile_id) orelse return invalid();

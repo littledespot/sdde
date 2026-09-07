@@ -235,6 +235,10 @@ test "Bedrock projects the exact input once for both APIs without size controls 
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .bedrock);
     defer fixture.deinit();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    fixture.base.request.response_schema = try parser.compiler().compile(fixture.base.schema_arena.allocator(),
+        \\{ "$defs": {"flag": {"type":"boolean"}}, "type":"object", "properties":{"ok":{"$ref":"#/$defs/flag"}}, "required":["ok"], "additionalProperties":false }
+    );
     const encoding = @import("adapters/provider/bedrock_request.zig");
     const infer = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference);
     defer std.testing.allocator.free(infer);
@@ -253,6 +257,9 @@ test "Bedrock projects the exact input once for both APIs without size controls 
         try std.testing.expectEqualStrings(a, b);
     }
     try std.testing.expectEqual(@as(usize, 2), first.value.object.get("system").?.array.items.len);
+    try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), first.value.object.get("system").?.array.items[1].object.get("text").?.string);
+    try std.testing.expect(std.mem.indexOf(u8, infer, "$ref") == null);
+    try std.testing.expect(std.mem.indexOf(u8, infer, "$defs") == null);
     for ([_][]const u8{ "maxTokens", "model_request_id", "binding_id", "deadline", "Authorization", "outputConfig" }) |name| {
         try std.testing.expect(std.mem.indexOf(u8, infer, name) == null);
         try std.testing.expect(std.mem.indexOf(u8, count_body, name) == null);
@@ -270,6 +277,7 @@ test "Bedrock native profile proves exact representability without stripping con
     const accepted = [_][]const u8{
         "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
         "{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\"},\"value\":{\"enum\":[\"a\",\"b\"]}},\"required\":[\"ok\"],\"additionalProperties\":false}",
+        "{\"$defs\":{\"flag\":{\"type\":\"boolean\"}}, \"type\":\"object\", \"properties\":{\"ok\":{\"$ref\":\"#/$defs/flag\"}}, \"required\":[\"ok\"], \"additionalProperties\":false}",
     };
     for (accepted) |bytes| {
         fixture.base.request.response_schema = try parser.compiler().compile(fixture.base.schema_arena.allocator(), bytes);
@@ -279,7 +287,8 @@ test "Bedrock native profile proves exact representability without stripping con
         var parsed = try strict.parse(std.testing.allocator, body, .{ .maximum_depth = 32 }, false);
         defer parsed.deinit();
         const schema = parsed.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
-        try std.testing.expectEqualStrings(bytes, schema);
+        try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), schema);
+        try std.testing.expectEqualDeep(fixture.base.request.response_schema.root().*, (try parser.compiler().compile(fixture.base.schema_arena.allocator(), schema)).root().*);
         try std.testing.expectEqual(@as(usize, 1), parsed.value.object.get("system").?.array.items.len);
     }
     for ([_][]const u8{ "{\"type\":\"string\",\"maxLength\":100}", "{\"type\":\"integer\",\"minimum\":0,\"maximum\":4}", "{\"type\":\"array\",\"maxItems\":2,\"items\":{\"type\":\"boolean\"}}" }) |property| {

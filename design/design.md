@@ -65,6 +65,11 @@ template-copy boundary without adding it to the initial SDD suite.
 
 ## 1. Executive summary
 
+[ADR 0013](decisions/0013-workflow-input-reuse.md) amends workflow authoring
+and model-input representation with compiler-expanded local subgraphs, local
+schema reuse, compact schema transport and typed result/evidence projections.
+Its accepted amendment preserves the validation and authority boundaries below.
+
 The new engine must treat an LLM as an untrusted semantic content generator, not as the workflow runtime. The LLM must not choose the workflow sequence, perform filesystem operations, run arbitrary tools, declare its own output valid, or mark work complete. It receives a small typed assignment, preset-derived guidance, the relevant evidence, and an exact response schema. It returns a candidate. The engine parses, validates, repairs, renders, persists, and verifies that candidate.
 
 The design has eight defining properties:

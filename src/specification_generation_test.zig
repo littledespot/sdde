@@ -297,7 +297,7 @@ test "atomic specification repair preserves siblings and rejects stale or foreig
         const packet = try repair.packet(std.testing.allocator, current, fixture.context, authorization);
         defer packets.release(packet);
         const replacement: repair.Replacement = .{ .attributed = good };
-        const wire = try @import("domain/model_candidate_json.zig").encode(repair.Replacement, a, replacement);
+        const wire = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement);
         const parsed = try repair.parse(a, authorization, packet, wire);
         const merged = try repair.merge(a, current, candidate, authorization, parsed);
         try std.testing.expectEqual(@as(u64, 2), merged.revision);
@@ -316,7 +316,7 @@ test "atomic specification repair preserves siblings and rejects stale or foreig
         try std.testing.expectError(error.InvalidSpecificationRepair, repair.packet(a, foreign, fixture.context, authorization));
         var wrong_id = authorization;
         wrong_id.id.bytes = "foreign-repair";
-        try std.testing.expectError(error.InvalidSpecificationRepair, repair.parse(a, wrong_id, packet, try @import("domain/model_candidate_json.zig").encode(repair.Replacement, a, replacement)));
+        try std.testing.expectError(error.InvalidSpecificationRepair, repair.parse(a, wrong_id, packet, try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement)));
         const with_target = try std.fmt.allocPrint(a, "{{\"target\":\"title\",{s}", .{wire[1..]});
         try std.testing.expectError(error.InvalidSpecificationRepair, repair.parse(a, authorization, packet, with_target));
         const with_sibling = try std.fmt.allocPrint(a, "{{\"record\":{{}},{s}", .{wire[1..]});

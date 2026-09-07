@@ -1,0 +1,808 @@
+schema: workflow/v1
+id: spec-generation
+version: 1
+shortcode: SGEN
+invoke: specify-invocation
+policy: core.specification-output@1
+start: capture-project
+resources:
+  protocol-prompt: spec/protocol.prompt.md
+  extraction-prompt: spec/extraction.prompt.md
+  extraction-schema: spec/extraction.schema.json
+  reconciliation-prompt: spec/reconciliation.prompt.md
+  reconciliation-schema: spec/reconciliation.schema.json
+  generation-prompt: spec/generation.prompt.md
+  generation-schema: spec/generation.schema.json
+  repair-prompt: spec/repair.prompt.md
+  repair-schema: spec/repair.schema.json
+  support-prompt: spec/support.prompt.md
+  support-schema: spec/support.schema.json
+steps:
+  capture-project:
+    use: capture-project-toolchain
+    on:
+      ok: inventory-presets
+      failed: end.failed
+  inventory-presets:
+    use: inventory-toolchain-presets
+    on:
+      ok: capture-presets
+      failed: end.failed
+  capture-presets:
+    use: capture-toolchain-presets
+    on:
+      ok: parse-toolchain
+      failed: end.failed
+  parse-toolchain:
+    use: parse-toolchain-documents
+    on:
+      ok: validate-project
+      failed: end.failed
+  validate-project:
+    use: validate-project-toolchain-schema
+    on:
+      ok: validate-registry
+      failed: end.failed
+  validate-registry:
+    use: validate-toolchain-preset-registry
+    on:
+      ok: inherit
+      failed: end.failed
+  inherit:
+    use: resolve-toolchain-inheritance
+    on:
+      ok: compose
+      failed: end.failed
+  compose:
+    use: compose-toolchain
+    on:
+      ok: validate-safety
+      failed: end.failed
+  validate-safety:
+    use: validate-toolchain-safety
+    on:
+      ok: normalize-feature
+      failed: end.failed
+  normalize-feature:
+    use: normalize-feature-directory
+    on:
+      ok: validate-feature
+      failed: end.failed
+  validate-feature:
+    use: validate-feature-directory
+    on:
+      ok: inspect-feature
+      failed: end.failed
+  inspect-feature:
+    use: inspect-feature-directory
+    on:
+      ok: normalize-reference
+      failed: end.failed
+  normalize-reference:
+    use: normalize-reference-selector
+    on:
+      ok: validate-reference
+      failed: end.failed
+  validate-reference:
+    use: validate-reference-selector
+    on:
+      ok: inspect-reference
+      failed: end.failed
+  inspect-reference:
+    use: inspect-reference-directory
+    on:
+      ok: resolve-paths
+      failed: end.failed
+  resolve-paths:
+    use: resolve-feature-artifact-paths
+    on:
+      ok: capture-clarifications
+      failed: end.failed
+  capture-clarifications:
+    use: capture-clarification-inputs
+    on:
+      ok: parse-state
+      failed: end.failed
+  parse-state:
+    use: parse-clarification-state
+    on:
+      ok: validate-state
+      failed: end.failed
+  validate-state:
+    use: validate-clarification-state
+    on:
+      ok: validate-forms
+      failed: end.failed
+  validate-forms:
+    use: validate-clarification-forms
+    on:
+      ok: inventory-references
+      failed: end.failed
+  inventory-references:
+    use: inventory-reference-sources
+    on:
+      ok: validate-inventory
+      failed: end.failed
+  validate-inventory:
+    use: validate-reference-inventory
+    on:
+      ok: capture-references
+      failed: end.failed
+  capture-references:
+    use: capture-reference-sources
+    on:
+      ok: decode-references
+      failed: end.failed
+  decode-references:
+    use: decode-reference-markdown
+    on:
+      ok: validate-accounting
+      failed: end.failed
+  validate-accounting:
+    use: validate-reference-accounting
+    on:
+      ok: identify-references
+      failed: end.failed
+  identify-references:
+    use: assign-reference-identities
+    on:
+      ok: build-chunks
+      failed: end.failed
+  build-chunks:
+    use: build-reference-chunks
+    on:
+      ok: validate-chunks
+      failed: end.failed
+  validate-chunks:
+    use: validate-reference-chunks
+    on:
+      ok: compile-naming
+      failed: end.failed
+  compile-naming:
+    use: compile-naming-policy
+    on:
+      ok: build-grammar
+      failed: end.failed
+  build-grammar:
+    use: build-superset-path-token-grammar
+    on:
+      ok: scan-literals
+      failed: end.failed
+  scan-literals:
+    use: scan-reference-passive-literals
+    on:
+      ok: assign-literals
+      failed: end.failed
+  assign-literals:
+    use: assign-passive-literal-identities
+    on:
+      ok: validate-literals
+      failed: end.failed
+  validate-literals:
+    use: validate-reference-passive-literals
+    on:
+      ok: extract-facts
+      failed: end.failed
+  extract-facts:
+    use: extract-structured-reference-facts
+    on:
+      ok: identify-tokens
+      failed: end.failed
+  identify-tokens:
+    use: assign-structured-token-candidate-identities
+    on:
+      ok: initialize-requests
+      failed: end.failed
+  initialize-requests:
+    use: build-initial-model-request-identity-ledger
+    on:
+      ok: initialize-extraction
+      failed: end.failed
+  initialize-extraction:
+    use: initialize-reference-extraction
+    on:
+      ok: check-extraction
+      failed: end.failed
+  check-extraction:
+    use: check-reference-extraction-progress
+    on:
+      ok: finish-extraction
+      more: extraction-packet
+      failed: end.failed
+  extraction-packet:
+    use: build-reference-extraction-model-input
+    on:
+      ok: ex
+      failed: end.failed
+  ex:
+    call: model-request
+    with:
+      prompt: extraction-prompt
+      schema: extraction-schema
+      selection: resource
+      retry-limit: 128
+    on:
+      ok: collect-extraction
+      invalid: end.invalid
+      failed: end.failed
+      cancelled: end.cancelled
+  collect-extraction:
+    use: collect-reference-extraction-result
+    on:
+      ok: ex-release
+      failed: end.failed
+  ex-release:
+    call: release-request
+    on:
+      ok: check-extraction
+      failed: end.failed
+  finish-extraction:
+    use: build-reference-extraction-results
+    on:
+      ok: parse-extraction
+      failed: end.failed
+  parse-extraction:
+    use: parse-reference-extraction-results
+    on:
+      ok: validate-extraction-text
+      failed: end.failed
+  validate-extraction-text:
+    use: validate-reference-extraction-text
+    on:
+      ok: classify-tokens
+      failed: end.failed
+  classify-tokens:
+    use: validate-preserved-token-classifications
+    on:
+      ok: assign-tokens
+      failed: end.failed
+  assign-tokens:
+    use: assign-preserved-token-identities
+    on:
+      ok: build-token-claims
+      failed: end.failed
+  build-token-claims:
+    use: build-preserved-token-claims
+    on:
+      ok: validate-claims
+      failed: end.failed
+  validate-claims:
+    use: validate-reference-claims
+    on:
+      ok: assign-claims
+      failed: end.failed
+  assign-claims:
+    use: assign-reference-claim-identities
+    on:
+      ok: build-ledger
+      failed: end.failed
+  build-ledger:
+    use: build-reference-extraction-ledger
+    on:
+      ok: account-extraction
+      failed: end.failed
+  account-extraction:
+    use: validate-reference-extraction-accounting
+    on:
+      ok: build-reconciliation
+      blocked: end.blocked
+      failed: end.failed
+  build-reconciliation:
+    use: build-reference-reconciliation-items
+    on:
+      ok: partition-reconciliation
+      failed: end.failed
+  partition-reconciliation:
+    use: partition-reference-reconciliation-items
+    with:
+      group-size: 8
+    on:
+      ok: assign-partitions
+      failed: end.failed
+  assign-partitions:
+    use: assign-reference-reconciliation-partitions
+    on:
+      ok: validate-partitions
+      failed: end.failed
+  validate-partitions:
+    use: validate-reference-reconciliation-partitions
+    on:
+      ok: reconciliation-input
+      failed: end.failed
+  reconciliation-input:
+    use: build-reference-reconciliation-input
+    on:
+      ok: reconciliation-packet
+      failed: end.failed
+  reconciliation-packet:
+    use: build-reference-reconciliation-model-input
+    on:
+      ok: rc
+      failed: end.failed
+  rc:
+    call: model-request
+    with:
+      prompt: reconciliation-prompt
+      schema: reconciliation-schema
+      selection: input
+      retry-limit: 128
+    on:
+      ok: collect-reconciliation
+      invalid: end.invalid
+      failed: end.failed
+      cancelled: end.cancelled
+  collect-reconciliation:
+    use: collect-reference-reconciliation-result
+    on:
+      ok: rc-release
+      failed: end.failed
+  rc-release:
+    call: release-request
+    on:
+      ok: parse-reconciliation
+      failed: end.failed
+  parse-reconciliation:
+    use: parse-reference-reconciliation-result
+    on:
+      ok: check-reconciliation
+      failed: end.failed
+  check-reconciliation:
+    use: check-reference-reconciliation-purpose
+    on:
+      ok: validate-dispositions
+      more: validate-summary
+      failed: end.failed
+  validate-summary:
+    use: validate-reference-reconciliation-summary
+    on:
+      ok: assign-summary
+      failed: end.failed
+  assign-summary:
+    use: assign-reference-summary-identities
+    on:
+      ok: build-summary
+      failed: end.failed
+  build-summary:
+    use: build-reference-reconciliation-summary
+    on:
+      ok: reconciliation-input
+      failed: end.failed
+  validate-dispositions:
+    use: validate-reference-claim-dispositions
+    on:
+      ok: validate-signals
+      failed: end.failed
+  validate-signals:
+    use: validate-reference-signal-proposals
+    on:
+      ok: validate-conflicts
+      failed: end.failed
+  validate-conflicts:
+    use: validate-reference-conflict-proposals
+    on:
+      ok: assign-records
+      failed: end.failed
+  assign-records:
+    use: assign-reference-reconciliation-identities
+    on:
+      ok: build-records
+      failed: end.failed
+  build-records:
+    use: build-reference-reconciliation-records
+    on:
+      ok: account-reconciliation
+      failed: end.failed
+  account-reconciliation:
+    use: validate-reference-reconciliation-completeness
+    on:
+      ok: pre-project
+      blocked: end.blocked
+      failed: end.failed
+  pre-project:
+    use: build-specification-authority-requirements
+    on:
+      ok: pre-input
+      blocked: end.blocked
+  pre-input:
+    use: build-specification-support-input
+    on:
+      ok: pre
+      failed: end.failed
+  pre:
+    call: model-request
+    with:
+      prompt: support-prompt
+      schema: support-schema
+      selection: resource
+      retry-limit: 1
+    on:
+      ok: pre-collect
+      invalid: end.invalid
+      failed: end.failed
+      cancelled: end.cancelled
+  pre-collect:
+    use: collect-specification-support
+    on:
+      ok: pre-release
+      failed: end.failed
+  pre-release:
+    call: release-request
+    on:
+      ok: pre-ledger
+      failed: end.failed
+  pre-ledger:
+    use: build-required-authority-ledger
+    on:
+      ok: pre-observations
+      blocked: end.blocked
+  pre-observations:
+    use: build-required-authority-observations
+    on:
+      ok: pre-reconcile
+      failed: end.failed
+  pre-reconcile:
+    use: reconcile-required-authorities
+    on:
+      ok: pre-gate
+      needs-user: pre-gate
+      blocked: pre-gate
+  pre-gate:
+    use: validate-required-authority-reconciliation
+    on:
+      ok: initialize-specification
+      needs-user: end.needs-user
+      blocked: end.blocked
+  initialize-specification:
+    use: initialize-specification-generation
+    on:
+      ok: check-specification
+      failed: end.failed
+  check-specification:
+    use: check-specification-generation-progress
+    on:
+      ok: assemble-specification
+      more: generation-input
+      failed: end.failed
+  generation-input:
+    use: build-specification-model-input
+    on:
+      ok: gen
+      failed: end.failed
+  gen:
+    call: model-request
+    with:
+      prompt: generation-prompt
+      schema: generation-schema
+      selection: input
+      retry-limit: 64
+    on:
+      ok: collect-specification
+      invalid: end.invalid
+      failed: end.failed
+      cancelled: end.cancelled
+  collect-specification:
+    use: collect-specification-model-result
+    on:
+      ok: parse-specification
+      failed: end.failed
+  parse-specification:
+    use: parse-specification-unit
+    on:
+      ok: gen-release
+      invalid: end.invalid
+      failed: end.failed
+  validate-specification:
+    use: validate-specification-unit
+    on:
+      ok: advance-specification
+      invalid: authorize-repair
+      needs-user: build-clarification
+      failed: end.failed
+  advance-specification:
+    use: advance-specification-generation
+    on:
+      ok: check-specification
+      failed: end.failed
+  gen-release:
+    call: release-request
+    on:
+      ok: validate-specification
+      failed: end.failed
+  authorize-repair:
+    use: authorize-specification-repair
+    on:
+      ok: repair-input
+      invalid: end.invalid
+      failed: end.failed
+  repair-input:
+    use: build-specification-repair-input
+    on:
+      ok: repair
+      failed: end.failed
+  repair:
+    call: model-request
+    with:
+      prompt: repair-prompt
+      schema: repair-schema
+      selection: input
+      retry-limit: 1
+    on:
+      ok: parse-repair
+      invalid: end.invalid
+      failed: end.failed
+      cancelled: end.cancelled
+  parse-repair:
+    use: parse-specification-repair
+    on:
+      ok: merge-repair
+      invalid: end.invalid
+      failed: end.failed
+  merge-repair:
+    use: merge-specification-repair
+    on:
+      ok: repair-release
+      invalid: end.invalid
+      failed: end.failed
+  repair-release:
+    call: release-request
+    on:
+      ok: validate-specification
+      failed: end.failed
+  assemble-specification:
+    use: assemble-specification-content
+    on:
+      ok: validate-coverage
+      failed: end.failed
+  validate-coverage:
+    use: validate-specification-coverage
+    on:
+      ok: retire-pre-authority
+      invalid: end.invalid
+      failed: end.failed
+  retire-pre-authority:
+    use: retire-required-authority-projection
+    on:
+      ok: post-project
+      failed: end.failed
+  post-project:
+    use: build-specification-authority-requirements
+    on:
+      ok: post-input
+      blocked: end.blocked
+  post-input:
+    use: build-specification-support-input
+    on:
+      ok: post
+      failed: end.failed
+  post:
+    call: model-request
+    with:
+      prompt: support-prompt
+      schema: support-schema
+      selection: resource
+      retry-limit: 1
+    on:
+      ok: post-collect
+      invalid: end.invalid
+      failed: end.failed
+      cancelled: end.cancelled
+  post-collect:
+    use: collect-specification-support
+    on:
+      ok: post-release
+      failed: end.failed
+  post-release:
+    call: release-request
+    on:
+      ok: post-ledger
+      failed: end.failed
+  post-ledger:
+    use: build-required-authority-ledger
+    on:
+      ok: post-observations
+      blocked: end.blocked
+  post-observations:
+    use: build-required-authority-observations
+    on:
+      ok: post-reconcile
+      failed: end.failed
+  post-reconcile:
+    use: reconcile-required-authorities
+    on:
+      ok: post-gate
+      needs-user: post-gate
+      blocked: post-gate
+  post-gate:
+    use: validate-required-authority-reconciliation
+    on:
+      ok: project-document
+      needs-user: end.needs-user
+      blocked: end.blocked
+  project-document:
+    use: project-specification-document
+    on:
+      ok: render-specification
+      failed: end.failed
+  render-specification:
+    use: render-specification
+    on:
+      ok: validate-rendering
+      failed: end.failed
+  validate-rendering:
+    use: validate-specification-rendering
+    on:
+      ok: end.ok
+      failed: end.failed
+  build-clarification:
+    use: build-specification-clarification-need
+    on:
+      ok: refresh-clarifications
+      failed: end.failed
+  refresh-clarifications:
+    use: refresh-clarifications
+    on:
+      ok: render-clarifications
+      blocked: end.blocked
+      failed: end.failed
+  render-clarifications:
+    use: render-clarification-forms
+    on:
+      ok: prepare-clarification-output
+      failed: end.failed
+  prepare-clarification-output:
+    use: prepare-clarification-output
+    on:
+      ok: publish-clarifications
+      failed: end.failed
+  publish-clarifications:
+    use: publish-workflow-output
+    on:
+      ok: check-clarifications
+      failed: end.failed
+  check-clarifications:
+    use: check-clarification-progress
+    on:
+      ok: end.ok
+      needs-user: end.needs-user
+      blocked: end.blocked
+subgraphs:
+  model-request:
+    start: assign
+    steps:
+      assign:
+        use: assign-model-request-id
+        with:
+          slot: spec_generation
+          response-mode: prompt-only
+          protocol-prompt: protocol-prompt
+          prompt:
+            param: prompt
+          result-schema:
+            param: schema
+          result-selection:
+            param: selection
+        on:
+          ok: validate
+          failed: end.failed
+      validate:
+        use: validate-model-request-binding
+        on:
+          ok: build
+          failed: end.failed
+      build:
+        use: build-model-request
+        on:
+          ok: account
+          failed: end.failed
+      account:
+        use: advance-model-attempt-accounting
+        with:
+          retry-limit:
+            param: retry-limit
+        on:
+          ok: operation
+          failed: end.failed
+      operation:
+        use: assign-provider-operation
+        with:
+          kind: inference
+        on:
+          ok: authorize
+          failed: end.failed
+      authorize:
+        use: prepare-provider-operation-authorization
+        with:
+          timeout-ms: 60000
+        on:
+          ok: phase
+          failed: terminate-operation
+          cancelled: terminate-operation
+      phase:
+        use: check-model-request-phase
+        on:
+          ok: advance-request
+          more: advance-operation
+          failed: end.failed
+      advance-request:
+        use: advance-model-request-lifecycle
+        with:
+          transition: invoked
+        on:
+          ok: advance-operation
+          failed: end.failed
+      advance-operation:
+        use: advance-provider-operation-lifecycle
+        with:
+          transition: invoked
+        on:
+          ok: call
+          failed: end.failed
+      call:
+        use: invoke-model
+        on:
+          ok: observation
+          failed: observation
+          cancelled: observation
+      observation:
+        use: validate-provider-invocation-observation
+        on:
+          ok: complete-operation
+          failed: complete-operation
+          cancelled: complete-operation
+      complete-operation:
+        use: complete-provider-operation
+        on:
+          ok: decode
+          failed: decode
+          cancelled: decode
+      decode:
+        use: decode-model-envelope
+        on:
+          ok: payload
+          invalid: payload
+          failed: payload
+          cancelled: payload
+      payload:
+        use: validate-model-payload-schema
+        on:
+          ok: close
+          invalid: retry
+          failed: close
+          cancelled: close
+      retry:
+        use: build-model-protocol-retry
+        with:
+          retry-limit: 0
+        on:
+          ok: account
+          failed: end.failed
+      close:
+        use: complete-model-request
+        on:
+          ok: end.ok
+          invalid: end.invalid
+          failed: end.failed
+          cancelled: end.cancelled
+      terminate-operation:
+        use: terminate-provider-operation
+        on:
+          failed: terminate-request
+          cancelled: terminate-request
+      terminate-request:
+        use: terminate-model-request
+        on:
+          failed: end.failed
+          cancelled: end.cancelled
+  release-request:
+    start: input
+    steps:
+      input:
+        use: retire-model-input
+        on:
+          ok: request
+          failed: end.failed
+      request:
+        use: retire-model-request
+        on:
+          ok: end.ok
+          failed: end.failed

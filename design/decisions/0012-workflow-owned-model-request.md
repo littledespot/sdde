@@ -24,6 +24,13 @@ The internal request content contract is `model-request/v1`; it is not a second
 YAML schema resource. Prompt content and the result schema remain explicitly
 workflow-selected, never packaged defaults.
 
+[ADR 0013](0013-workflow-input-reuse.md) adds the optional originating parameter
+`result-selection: input` (default `resource`). It resolves the native packet's
+typed result-definition ID within the explicitly bound schema resource once.
+Missing packets, selectors or complete result definitions fail before invocation.
+The selector is internal; consumers retain the selected compiled schema through
+validation, retries and completion. No model-owned field selects its schema.
+
 Only a typed slot selects a new model binding. A registered consumer of the
 prepared-request data contract can use its retained binding instead. Provider
 capabilities still derive from narrow ports, require policy permission and do

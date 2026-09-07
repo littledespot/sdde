@@ -78,7 +78,7 @@ test "native domain packets traverse generic fake provider execution without res
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         const unit: identity.ImmutableUnitOwnerId = .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = "current-reference" }, .chunk_id = .{ .bytes = "selected-chunk" } } };
-        const packet = try packets.create(std.testing.allocator, "{\"text\":\"Only the selected chunk.\"}", unit, .initial_generation);
+        const packet = try packets.create(std.testing.allocator, "{\"text\":\"Only the selected chunk.\"}", unit, .initial_generation, null);
         runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = body;
@@ -95,7 +95,7 @@ test "native domain packets traverse generic fake provider execution without res
             try std.testing.expectError(error.OperationExecutionFailed, candidate_handoff.body(&view));
         }
         // Equal bytes do not authorize substituting another packet identity.
-        const foreign = try packets.create(std.testing.allocator, packet.body(), unit, .initial_generation);
+        const foreign = try packets.create(std.testing.allocator, packet.body(), unit, .initial_generation, null);
         const foreign_value = try requests.adoptPacket(std.testing.allocator, foreign);
         defer values.destroy(foreign_value);
         var changed = view;
@@ -5573,4 +5573,45 @@ fn bedrockEnvironment(allocator: std.mem.Allocator) !std.process.Environ.Map {
     defer std.crypto.secureZero(u8, &canary);
     try environment.put("AWS_BEARER_TOKEN_BEDROCK", &canary);
     return environment;
+}
+
+test "packet result selection binds one immutable named schema and fails before invocation when absent" {
+    const packets = @import("domain/model_input_packet.zig");
+    const schema_source = "{\"$defs\":{\"answer\":" ++ schema_bytes ++ ",\"flag\":{\"type\":\"boolean\"},\"decision\":{\"type\":\"object\",\"properties\":{\"approved\":{\"type\":\"boolean\"}},\"required\":[\"approved\"],\"additionalProperties\":false}},\"$ref\":\"#/$defs/answer\"}";
+    for ([_]?[]const u8{ "answer", "decision", "missing", "flag", null }) |selection| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        var definition = try std.mem.replaceOwned(u8, a, yaml, ", input: input }", ", result-selection: input }");
+        definition = try std.mem.replaceOwned(u8, a, definition, ", input: input.txt", "");
+        const graph = try fixture.compileWithAssets(definition, schema_source, false);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        const packet = try packets.create(std.testing.allocator, "{}", .workflow_step, .initial_generation, if (selection) |id| .{ .bytes = id } else null);
+        runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
+        var harness: Harness = .{ .runner = &runner };
+        const valid = selection != null and (std.mem.eql(u8, selection.?, "answer") or std.mem.eql(u8, selection.?, "decision"));
+        try std.testing.expectEqual(if (valid) workflow.OutcomeTag.ok else .failed, harness.run());
+        try std.testing.expectEqual(@as(usize, if (valid) 1 else 0), fixture.observer.calls);
+        if (valid) {
+            const request = try currentRequest(&runner);
+            const bound = request.prepared().?.response_schema;
+            try std.testing.expectEqualStrings(schema_source, bound.bytes());
+            const expected = if (std.mem.eql(u8, selection.?, "answer")) "answer" else "approved";
+            try std.testing.expectEqualStrings(expected, bound.root().object[0].name);
+            try std.testing.expectEqualStrings(selection.?, request.packet().?.resultDefinition().?.bytes);
+            try std.testing.expect(std.mem.indexOf(u8, bound.modelBytes(), "$defs") == null);
+        }
+    }
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const definition = try std.mem.replaceOwned(u8, fixture.arena.allocator(), yaml, "input: input }", "input: input, result-selection: input }");
+    const graph = try fixture.compileWithSchema(definition, schema_source);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.failed, harness.run());
+    try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
 }

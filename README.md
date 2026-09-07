@@ -51,6 +51,14 @@ the external provider catalogue; API keys come only from the invocation's
 YAML, the registry and runner use [unversioned operation IDs](design/decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06).
 Each ID selects one current contract; version suffixes are rejected without aliases.
 
+The [spec workflow](design/workflows/spec.workflow.yaml) uses block YAML and
+local reusable subgraphs. They expand before ordinary graph validation, with
+separate identities and retries for each call. The [input contract](design/decisions/0013-workflow-input-reuse.md)
+also supports local schema references, compact transport and typed per-unit
+result selection. Evidence packets retain complete claims and exact tokens
+while sharing citation records. See the [file guide and measurements](design/TODO001.md)
+for required configuration, resources and remaining publication work.
+
 `advance-model-attempt-accounting` now accounts that prepared request through
 the same YAML runner. Its explicit `retry-limit` permits retries after the
 initial execution; applied attempt evidence and ledgers remain execution-local.

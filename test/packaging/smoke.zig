@@ -73,6 +73,33 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     valid_command.expectStdOutEqual("");
     valid_command.expectStdErrEqual("");
 
+    _ = package_directory.add(".sddtoolkit/workflows/reused.workflow.yaml",
+        \\schema: workflow/v1
+        \\id: reused
+        \\version: 1
+        \\shortcode: REUS
+        \\invoke: core.empty-invocation
+        \\policy: core.capability-free@1
+        \\start: first
+        \\steps:
+        \\  first: {call: empty, on: {ok: second}}
+        \\  second: {call: empty, on: {ok: end.ok}}
+        \\subgraphs:
+        \\  empty:
+        \\    start: run
+        \\    steps:
+        \\      run: {use: core.noop, on: {ok: end.ok}}
+    );
+    const reused_command = std.Build.Step.Run.create(b, "run packaged local subgraphs without models or external resources");
+    reused_command.addFileArg(packaged_executable);
+    reused_command.addArg("reused");
+    reused_command.setCwd(package_directory.getDirectory());
+    reused_command.clearEnvironment();
+    reused_command.expectExitCode(0);
+    reused_command.expectStdOutEqual("");
+    reused_command.expectStdErrEqual("");
+    valid_command.step.dependOn(&reused_command.step);
+
     const request_ledger_command = std.Build.Step.Run.create(b, "run packaged YAML request initialization without providers or development assets");
     request_ledger_command.addFileArg(packaged_executable);
     request_ledger_command.addArg("request-ledger");
@@ -571,7 +598,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         const configured = std.mem.replaceOwned(u8, b.allocator, configuration, "\"slots\": {}", "\"slots\": {\"spec_generation\": {\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\"}}") catch @panic("allocate generation smoke config");
         _ = directory.add(".sddtoolkit.json", configured);
         _ = directory.add(".sddproviders.json", @embedFile("../../design/examples/.sddproviders.json"));
-        _ = directory.addCopyFile(b.path("design/workflows/spec-generation.workflow.yaml"), ".sddtoolkit/workflows/spec-generation.workflow.yaml");
+        _ = directory.addCopyFile(b.path("design/workflows/spec.workflow.yaml"), ".sddtoolkit/workflows/spec.workflow.yaml");
         inline for (.{ "extraction", "reconciliation", "generation", "support", "repair" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
             _ = directory.addCopyFile(b.path("design/workflows/spec/" ++ name ++ "." ++ extension), ".sddtoolkit/workflows/spec/" ++ name ++ "." ++ extension);
         };

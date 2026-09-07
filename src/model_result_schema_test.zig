@@ -74,6 +74,8 @@ test "bounded scalar collection and optional property shapes are supported" {
         const compiled = try compile(arena.allocator(), try fieldSchema(arena.allocator(), field));
         const cloned = try compiled.clone(arena.allocator());
         try std.testing.expectEqualStrings(compiled.bytes(), cloned.bytes());
+        const transported = try compile(arena.allocator(), cloned.modelBytes());
+        try std.testing.expectEqualDeep(compiled.root().*, transported.root().*);
     }
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -261,4 +263,82 @@ fn compileAndClone(allocator: std.mem.Allocator) !void {
     defer arena.deinit();
     const compiled = try compile(arena.allocator(), variants);
     _ = try compiled.clone(arena.allocator());
+    _ = try (try compile(arena.allocator(), referenced)).clone(arena.allocator());
+}
+
+const referenced =
+    \\{ "$defs": {
+    \\  "text": {"type":"string","minLength":1,"maxLength":64},
+    \\  "answer": {"type":"object","properties":{"answer":{"$ref":"#/$defs/text"}},"required":["answer"],"additionalProperties":false},
+    \\  "replacement": {"type":"object","properties":{"replacement":{"$ref":"#/$defs/text"}},"required":["replacement"],"additionalProperties":false}
+    \\}, "$ref": "#/$defs/answer" }
+;
+
+test "local definitions retain captured authority and independently owned compact result views" {
+    var original: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    var destination: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer destination.deinit();
+    const compiled = try compile(original.allocator(), referenced);
+    const copy = try compiled.clone(destination.allocator());
+    original.deinit();
+    try std.testing.expectEqualStrings(referenced, copy.bytes());
+    try std.testing.expect(copy.modelBytes().len < referenced.len);
+    try std.testing.expect(std.mem.indexOf(u8, copy.modelBytes(), "$ref") == null);
+    try std.testing.expect(std.mem.indexOf(u8, copy.modelBytes(), "$defs") == null);
+    try std.testing.expect(std.mem.indexOf(u8, copy.modelBytes(), "\n") == null);
+    try std.testing.expect(copy.select(.{ .bytes = "text" }) == null);
+    try std.testing.expect(copy.select(.{ .bytes = "missing" }) == null);
+    const selected = copy.select(.{ .bytes = "replacement" }).?;
+    try std.testing.expectEqualStrings(referenced, selected.bytes());
+    try std.testing.expectEqualStrings("replacement", selected.root().object[0].name);
+    try std.testing.expect(schema.findProperty(copy.root().object, "replacement") == null);
+    for ([_]*const schema.Schema{ copy, selected }) |view| {
+        const reparsed = try compile(destination.allocator(), view.modelBytes());
+        try std.testing.expectEqualDeep(view.root().*, reparsed.root().*);
+        try std.testing.expectEqualStrings(view.modelBytes(), reparsed.modelBytes());
+    }
+}
+
+test "local reference validation rejects unknown cyclic remote escaped and unused invalid definitions" {
+    const changes = [_][2][]const u8{
+        .{ "#/$defs/text", "#/$defs/missing" },
+        .{ "#/$defs/text", "#/$defs/answer" },
+        .{ "#/$defs/text", "https://example.invalid/text" },
+        .{ "#/$defs/text", "other.json#/$defs/text" },
+        .{ "#/$defs/text", "#/$defs/te~1xt" },
+        .{ "#/$defs/text", "#/$defs/text/properties/x" },
+        .{ "{\"$ref\":\"#/$defs/text\"}", "{\"$ref\":\"#/$defs/text\",\"maxLength\":3}" },
+        .{ "\"replacement\": {\"type\":\"object\"", "\"replacement\": {\"unknown\":true,\"type\":\"object\"" },
+        .{ "\"text\": {\"type\":\"string\"", "\"text\": {\"$defs\":{},\"type\":\"string\"" },
+        .{ "\"replacement\": {", "\"bad/name\": {" },
+    };
+    for (changes) |change| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const bytes = try std.mem.replaceOwned(u8, arena.allocator(), referenced, change[0], change[1]);
+        try std.testing.expect(!std.mem.eql(u8, bytes, referenced));
+        try std.testing.expectError(error.InvalidModelResultSchema, compile(arena.allocator(), bytes));
+    }
+}
+
+test "reference expansion enforces node and depth bounds after substitution" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const child = try objectProperties(a, 16, "{\"type\":\"boolean\"}");
+    const root = try objectProperties(a, 256, "{\"$ref\":\"#/$defs/child\"}");
+    const bytes = try std.mem.concat(a, u8, &.{ "{\"$defs\":{\"child\":", child, "},", root[1..] });
+    try std.testing.expectError(error.InvalidModelResultSchema, compile(a, bytes));
+    const bounded_child = try objectProperties(a, 15, "{\"type\":\"boolean\"}");
+    const small = try objectProperties(a, 14, "{\"type\":\"boolean\"}");
+    const exact_root = try std.mem.replaceOwned(u8, a, root, "\"p255\":{\"$ref\":\"#/$defs/child\"}", "\"p255\":{\"$ref\":\"#/$defs/small\"}");
+    // References are source syntax, not extra nodes in the expanded 4096-node tree.
+    _ = try compile(a, try std.mem.concat(a, u8, &.{ "{\"$defs\":{\"child\":", bounded_child, ",\"small\":", small, "},", exact_root[1..] }));
+    var defs: std.array_list.Managed(u8) = .init(a);
+    for (0..schema.max_depth + 1) |index| {
+        if (index != 0) try defs.append(',');
+        try defs.appendSlice(try std.fmt.allocPrint(a, "\"d{d}\":{{\"$ref\":\"#/$defs/d{d}\"}}", .{ index, index + 1 }));
+    }
+    try defs.appendSlice(try std.fmt.allocPrint(a, ",\"d{d}\":{s}", .{ schema.max_depth + 1, replacement }));
+    try std.testing.expectError(error.InvalidModelResultSchema, compile(a, try std.mem.concat(a, u8, &.{ "{\"$defs\":{", defs.items, "},\"$ref\":\"#/$defs/d0\"}" })));
 }
