@@ -136,7 +136,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     const inputs = try capture(a);
     _ = try packet.input(a, inputs);
     _ = try judgment.validate(a, inputs, good);
-    const config = try wire.parseConfig(a, config_bytes);
+    const config = try configuration.parse(a, config_bytes, test_selection);
     _ = try wire.request(a, config, inputs);
     _ = try wire.response(a, try responseBytes(a, "completed", good));
     var fake: Fake = .{ .observations = &.{observed_good} };
@@ -152,8 +152,11 @@ const wire = @import("openai.zig");
 const provider = @import("provider.zig");
 const reports = @import("report.zig");
 const evaluator = @import("evaluate.zig");
+const configuration = @import("configuration.zig");
+const test_environment = @import("environment.zig");
+const test_selection: configuration.Selection = .{ .api = .openai_responses, .model = c.ModelId.parse("scripted-judge").? };
 const config_bytes =
-    \\{"schema":"evaluation-config/v1","api":"openai_responses","model":"scripted-judge","reasoning_effort":null,"temperature":null,"timeout_ms":1000,"retry_limit":1,"retry_delay_ms":1,"total_token_budget":100}
+    \\{"schema":"evaluation-config/v1","reasoning_effort":null,"temperature":null,"timeout_ms":1000,"retry_limit":1,"retry_delay_ms":1,"total_token_budget":100}
 ;
 const Fake = struct {
     observations: []const wire.Observation,
@@ -189,7 +192,7 @@ test "API request has one native-derived schema, complete data, no tools or serv
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const config = try wire.parseConfig(a, config_bytes);
+    const config = try configuration.parse(a, config_bytes, test_selection);
     const input = try capture(a);
     const bytes = try wire.request(a, config, input);
     const root = try c.decode(std.json.Value, a, bytes);
@@ -212,23 +215,69 @@ test "configuration has no hidden model budget timeout retry or score defaults" 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    // Provider-owned model names are not restricted to harness-owned ID syntax.
-    _ = try wire.parseConfig(a, try std.mem.replaceOwned(u8, a, config_bytes, "scripted-judge", "model/version:1"));
     for ([_][2][]const u8{
         .{ "evaluation-config/v1", "evaluation-config/v2" },
-        .{ "openai_responses", "unknown_provider" },
         .{ "\"timeout_ms\":1000", "\"timeout_ms\":0" },
         .{ "\"timeout_ms\":1000", "\"timeout_ms\":\"1000\"" },
-        .{ "\"model\":\"scripted-judge\"", "\"model\":[97]" },
         .{ "\"retry_delay_ms\":1", "\"retry_delay_ms\":0" },
         .{ "\"total_token_budget\":100", "\"total_token_budget\":0" },
-        .{ "\"model\":\"scripted-judge\",", "" },
+        .{ "\"schema\":", "\"model\":\"scripted-judge\",\"schema\":" },
+        .{ "\"schema\":", "\"api\":\"openai_responses\",\"schema\":" },
         .{ "\"reasoning_effort\":null,", "" },
         .{ "\"temperature\":null", "\"temperature\":3" },
         .{ "\"schema\":", "\"api_key\":\"secret\",\"schema\":" },
     }) |replacement| {
-        try std.testing.expectError(error.InvalidEvaluationContract, wire.parseConfig(a, try std.mem.replaceOwned(u8, a, config_bytes, replacement[0], replacement[1])));
+        try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, try std.mem.replaceOwned(u8, a, config_bytes, replacement[0], replacement[1]), test_selection));
     }
+}
+
+test "evaluation selection is required from test environment and reaches requests and reports" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var environment: std.process.Environ.Map = .init(std.testing.allocator);
+    defer environment.deinit();
+    try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
+    try environment.put("TEST_EVALUATION_PROVIDER", "openai");
+    try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
+    try environment.put("TEST_EVALUATION_MODEL", "");
+    try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
+    try environment.put("TEST_EVALUATION_MODEL", "\xff");
+    try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
+    try environment.put("TEST_EVALUATION_MODEL", "model/version:1");
+    for ([_][]const u8{ "", "unknown", "bedrock", "OpenAI" }) |invalid| {
+        try environment.put("TEST_EVALUATION_PROVIDER", invalid);
+        try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
+    }
+    try environment.put("TEST_EVALUATION_PROVIDER", "openai");
+    for ([_][]const u8{ "judge-alpha", "model/version:1" }) |model| {
+        try environment.put("TEST_EVALUATION_MODEL", model);
+        const config = try configuration.parse(a, config_bytes, try test_environment.selection(&environment));
+        const inputs = try capture(a);
+        const request = try c.decode(std.json.Value, a, try wire.request(a, config, inputs));
+        try std.testing.expectEqualStrings(model, request.object.get("model").?.string);
+        var fake: Fake = .{ .observations = &.{observed_good} };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        const rendered = try c.decode(std.json.Value, a, try reports.json(a, report));
+        const recorded = rendered.object.get("configuration").?;
+        try std.testing.expectEqualStrings(model, recorded.object.get("model").?.string);
+        try std.testing.expectEqualStrings("openai_responses", recorded.object.get("api").?.string);
+    }
+}
+
+test "evaluator credentials accept only the test key without production or Bedrock fallback" {
+    var environment: std.process.Environ.Map = .init(std.testing.allocator);
+    defer environment.deinit();
+    for ([_][]const u8{ "OPENAI_API_KEY", "AWS_BEARER_TOKEN_BEDROCK", "TEST_AWS_BEARER_TOKEN_BEDROCK" }) |name| {
+        try environment.put(name, "unused-credential");
+    }
+    try std.testing.expectError(error.MissingTestApiKey, test_environment.credential(&environment));
+    for ([_][]const u8{ "", "\r\nHeader: value", "\xff" }) |invalid| {
+        try environment.put("TEST_OPENAI_API_KEY", invalid);
+        try std.testing.expectError(error.InvalidTestApiKey, test_environment.credential(&environment));
+    }
+    try environment.put("TEST_OPENAI_API_KEY", "test-only-credential");
+    try std.testing.expectEqualStrings("test-only-credential", try test_environment.credential(&environment));
 }
 
 test "provider decoding binds payload usage and observed model and handles stops" {
@@ -282,7 +331,7 @@ test "evaluator reports successful low scores and never retries to improve them"
     var observation = observed_good;
     observation.payload = try std.mem.replaceOwned(u8, a, good, "\"score\":3", "\"score\":1");
     var fake: Fake = .{ .observations = &.{observation} };
-    const report = try evaluator.run(std.testing.io, a, fake.port(), try wire.parseConfig(a, config_bytes), try capture(a));
+    const report = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), try capture(a));
     try std.testing.expectEqual(@as(usize, 1), fake.count);
     try std.testing.expectEqual(@as(f64, 0), report.outcome.evaluated.score_percent.?);
     try std.testing.expectEqual(.not_run, report.capture.generation.workflow_status);
@@ -324,7 +373,7 @@ test "all terminal errors retain no grade and unknown usage prohibits retries" {
     inline for (std.meta.fields(reports.Failure)) |field| {
         const failure: reports.Failure = @enumFromInt(field.value);
         var fake: Fake = .{ .observations = &.{.{ .failure = failure }} };
-        const result = try evaluator.run(std.testing.io, a, fake.port(), try wire.parseConfig(a, config_bytes), try capture(a));
+        const result = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), try capture(a));
         try std.testing.expectEqual(failure, result.outcome.evaluator_error);
         try std.testing.expectEqual(@as(usize, 1), fake.count);
         try std.testing.expect(result.attempts[0].usage == null);
@@ -337,7 +386,7 @@ test "retry and total-token boundaries use actual observations without score-dri
     const a = arena.allocator();
     const failed: wire.Observation = .{ .failure = .provider_failed, .usage = .{ .input_tokens = 4, .output_tokens = 1, .total_tokens = 5 } };
     var retry: Fake = .{ .observations = &.{ failed, observed_good } };
-    const config = try wire.parseConfig(a, config_bytes);
+    const config = try configuration.parse(a, config_bytes, test_selection);
     const inputs = try capture(a);
     const success = try evaluator.run(std.testing.io, a, retry.port(), config, inputs);
     try std.testing.expectEqual(@as(usize, 2), success.attempts.len);
@@ -363,7 +412,7 @@ test "bad judgments stay evaluator errors while provider usage is retained" {
     var invalid = observed_good;
     invalid.payload = "{\"results\":[]}";
     var fake: Fake = .{ .observations = &.{invalid} };
-    const report = try evaluator.run(std.testing.io, a, fake.port(), try wire.parseConfig(a, config_bytes), try capture(a));
+    const report = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), try capture(a));
     try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
     try std.testing.expectEqual(@as(u64, 30), report.attempts[0].usage.?.total_tokens);
     try std.testing.expect(std.mem.indexOf(u8, try reports.markdown(a, report), "No quality score") != null);
@@ -496,7 +545,7 @@ test "the checked-in Hello World case and rubric load without a fixture-specific
     var observed = observed_good;
     observed.payload = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = results }, .{});
     var fake: Fake = .{ .observations = &.{observed} };
-    const report = try evaluator.run(std.testing.io, a, fake.port(), try wire.parseConfig(a, config_bytes), inputs);
+    const report = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), inputs);
     try std.testing.expectEqual(.not_configured, report.outcome.evaluated.threshold);
     try std.testing.expectEqual(@as(f64, 100), report.outcome.evaluated.score_percent.?);
     // This tests accounting, not whether the specimen deserves this grade.
@@ -531,7 +580,7 @@ test "provider observations cannot invent identity usage or successful completio
     var invalid = observed_good;
     invalid.actual_model = null;
     var fake: Fake = .{ .observations = &.{invalid} };
-    const config = try wire.parseConfig(a, config_bytes);
+    const config = try configuration.parse(a, config_bytes, test_selection);
     const inputs = try capture(a);
     try std.testing.expectEqual(.invalid_response, (try evaluator.run(std.testing.io, a, fake.port(), config, inputs)).outcome.evaluator_error);
     invalid = observed_good;
@@ -573,7 +622,7 @@ test "provider cancellation stops evaluation without a retry or invented usage" 
     const a = arena.allocator();
     var cancelled: Cancelling = .{};
     const port: provider.Port = .{ .context = @ptrCast(&cancelled), .invoke_fn = Cancelling.invoke };
-    const report = try evaluator.run(std.testing.io, a, port, try wire.parseConfig(a, config_bytes), try capture(a));
+    const report = try evaluator.run(std.testing.io, a, port, try configuration.parse(a, config_bytes, test_selection), try capture(a));
     try std.testing.expectEqual(@as(usize, 1), cancelled.count);
     try std.testing.expectEqual(.cancelled, report.outcome.evaluator_error);
     try std.testing.expect(report.attempts[0].usage == null);
@@ -586,7 +635,7 @@ test "reports escape judge prose and preserve generation status separately" {
     var inputs = try capture(a);
     inputs.generation = .{ .origin = .recorded, .workflow_status = .needs_user, .execution_id = "recorded-run", .provider = null, .model = null };
     var fake: Fake = .{ .observations = &.{observed_good} };
-    var report = try evaluator.run(std.testing.io, a, fake.port(), try wire.parseConfig(a, config_bytes), inputs);
+    var report = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), inputs);
     var result = report.outcome.evaluated.results[0];
     result.explanation = "[click](https://untrusted.invalid) <script> \x1b[31m";
     report.outcome.evaluated.results = @as(*const [1]judgment.CriterionResult, &result);

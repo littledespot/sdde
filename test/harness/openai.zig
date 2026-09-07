@@ -4,30 +4,10 @@ const c = @import("contracts.zig");
 const packet = @import("packet.zig");
 const report = @import("report.zig");
 const strict_json = @import("../../src/domain/strict_json.zig");
+const configuration = @import("configuration.zig");
 
-pub const Config = struct {
-    schema: []const u8,
-    api: enum { openai_responses },
-    model: []const u8,
-    reasoning_effort: ?enum { none, minimal, low, medium, high, xhigh },
-    temperature: ?f64,
-    timeout_ms: u32,
-    retry_limit: u16,
-    retry_delay_ms: u32,
-    total_token_budget: u64,
-};
-pub fn parseConfig(a: std.mem.Allocator, bytes: []const u8) c.Error!Config {
-    const value = try c.decode(Config, a, bytes);
-    try validateConfig(value);
-    return value;
-}
-pub fn validateConfig(value: Config) c.Error!void {
-    if (!std.mem.eql(u8, value.schema, "evaluation-config/v1") or c.ModelId.parse(value.model) == null or value.timeout_ms == 0 or
-        value.total_token_budget == 0 or (value.retry_limit != 0 and value.retry_delay_ms == 0)) return error.InvalidEvaluationContract;
-    if (value.temperature) |temperature| if (!std.math.isFinite(temperature) or temperature < 0 or temperature > 2) return error.InvalidEvaluationContract;
-}
-pub fn request(a: std.mem.Allocator, config: Config, capture: c.Capture) c.Error![]const u8 {
-    try validateConfig(config);
+pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Capture) c.Error![]const u8 {
+    try configuration.validate(config);
     const schema_bytes = try packet.resultSchema(a);
     const schema = try c.decode(std.json.Value, a, schema_bytes);
     const body = try packet.input(a, capture);

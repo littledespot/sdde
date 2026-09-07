@@ -12,7 +12,10 @@ are not claimed as completed or prerequisites for offline implementation.
 ## Run
 
 From the repository root, prepare a candidate file, an existing report directory
-and a judge configuration. Then explicitly authorize the live request:
+and a judge configuration. If using the optional local `.env.e2e` credential
+file, load it into this shell with `. ./.env.e2e` first; see
+[E2E environment setup](../../README.md#e2e-environment-setup).
+Then explicitly authorize the live request:
 
 ```sh
 zig build evaluate-spec -- \
@@ -30,19 +33,34 @@ Absolute paths, traversal and symlinked input/output directories are rejected.
 The candidate must be readable, nonempty UTF-8. Missing headings, unwanted prose
 and poor requirements remain judgeable; there is no `SpecificationIR` gate.
 
-Provide `OPENAI_API_KEY` through the process environment, never in the command,
+Provide `TEST_OPENAI_API_KEY` through the process environment, never in the command,
 case or judge configuration. `--live` is mandatory and sends the complete declared
 source/spec/rubric content to OpenAI; review these inputs before authorizing it.
 No principle directories or other repository content are discovered implicitly.
 There is no alternate provider, mock fallback or model default.
 
-The closed `evaluation-config/v1` JSON object requires every field below:
+The internal test environment supplies the evaluation selection:
+
+| Variable | Required value |
+| --- | --- |
+| `TEST_EVALUATION_PROVIDER` | `openai`; unknown or missing providers reject. |
+| `TEST_EVALUATION_MODEL` | Exact operator-selected OpenAI model ID supporting Structured Outputs; missing/empty IDs reject. |
+| `TEST_OPENAI_API_KEY` | Credential for internal evaluation calls only; no fallback to `OPENAI_API_KEY`. |
+
+The test-only environment reader borrows the process's startup snapshot. It
+never reads `.env.e2e` itself. The deployed `sdde` executable does not import
+the reader/evaluator or consume any of these variables. `.env.e2e` also reserves
+`TEST_AWS_BEARER_TOKEN_BEDROCK` for internal workflow tests; the unfinished
+workflow harness does not yet consume it. It is not forwarded to production
+credential loading. No environment values are compiled into either executable.
+
+The closed `evaluation-config/v1` JSON object requires every field below.
+Provider/model selection now belongs exclusively to the test environment:
+JSON `api`, `provider`, `model` and credential fields reject as unknown fields.
 
 | Field | Value / responsibility |
 | --- | --- |
 | `schema` | `"evaluation-config/v1"` |
-| `api` | `"openai_responses"` |
-| `model` | Operator-selected exact OpenAI model ID supporting Structured Outputs. |
 | `reasoning_effort` | Explicit `null`, or `none`, `minimal`, `low`, `medium`, `high`, `xhigh`; must be supported by the selected model. |
 | `temperature` | Explicit `null`, or a number from 0 through 2 supported by the selected model. |
 | `timeout_ms` | Positive integer deadline for each network attempt. |
@@ -55,6 +73,12 @@ value. Unsupported model/settings combinations are configuration errors, not
 permission to choose another model. Judge settings/accounting are independent
 of any future generation run. No exact model or paid-run configuration has been
 selected by this implementation.
+
+This internal configuration change follows the user's 2026-09-08 direction to
+prefix both test credentials with `TEST_` and put evaluation provider/model
+selection in the test environment. Reports retain the complete resolved
+configuration, including `api: "openai_responses"` and the selected `model`;
+credentials remain separate and never enter a request body or report.
 
 The native adapter uses only `POST https://api.openai.com/v1/responses`, without
 redirects or tools. It requests strict JSON Schema results, `store: false` and
@@ -71,6 +95,7 @@ See OpenAI's [phase guidance](https://developers.openai.com/api/docs/guides/late
 ## Contracts and scoring
 
 [contracts.zig](../../test/harness/contracts.zig),
+[configuration.zig](../../test/harness/configuration.zig),
 [openai.zig](../../test/harness/openai.zig) and
 [judgment.zig](../../test/harness/judgment.zig) own the closed native contracts.
 Case, rubric, configuration and report use distinct `/v1` schema identifiers.

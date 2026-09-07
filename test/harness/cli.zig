@@ -2,7 +2,8 @@
 const std = @import("std");
 const c = @import("contracts.zig");
 const files = @import("files.zig");
-const wire = @import("openai.zig");
+const configuration = @import("configuration.zig");
+const environment = @import("environment.zig");
 const http = @import("http.zig");
 const reports = @import("report.zig");
 const directories = @import("../../src/adapters/filesystem/directory_access.zig");
@@ -42,14 +43,17 @@ pub fn main(init: std.process.Init) !void {
     var args: std.ArrayList([]const u8) = .empty;
     while (iterator.next()) |arg| try args.append(a, arg);
     if (args.items.len == 1 and std.mem.eql(u8, args.items[0], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build evaluate-spec -- --case <relative-json> --spec <relative-md> --config <relative-json> --output <existing-relative-directory> --live\nAll paths are relative to the current directory. Live execution sends source/spec/rubric to OpenAI and may incur charges. OPENAI_API_KEY is required.\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build evaluate-spec -- --case <relative-json> --spec <relative-md> --config <relative-json> --output <existing-relative-directory> --live\nAll paths are relative to the current directory. Live execution sends source/spec/rubric to OpenAI and may incur charges. TEST_OPENAI_API_KEY, TEST_EVALUATION_PROVIDER=openai and TEST_EVALUATION_MODEL are required in the process environment. No .env file is loaded automatically.\n");
         return;
     }
     const options = parse(args.items) catch return fail(io, "Invalid arguments; use --help. No API call made.");
     const config_bytes = files.read(io, a, .cwd(), options.config) catch return fail(io, "Evaluator configuration is unavailable. No API call made.");
-    const config = wire.parseConfig(a, config_bytes) catch return fail(io, "Invalid evaluator configuration. No API call made.");
-    const key = init.environ_map.get("OPENAI_API_KEY") orelse return fail(io, "OPENAI_API_KEY is missing. No API call made.");
-    if (!http.validKey(key)) return fail(io, "OPENAI_API_KEY is invalid. No API call made.");
+    const selection = environment.selection(init.environ_map) catch return fail(io, "TEST_EVALUATION_PROVIDER must be openai and TEST_EVALUATION_MODEL must be a nonempty valid model ID. No API call made.");
+    const config = configuration.parse(a, config_bytes, selection) catch return fail(io, "Invalid evaluator configuration. No API call made.");
+    const key = environment.credential(init.environ_map) catch |err| return fail(io, switch (err) {
+        error.MissingTestApiKey => "TEST_OPENAI_API_KEY is missing. No API call made.",
+        error.InvalidTestApiKey => "TEST_OPENAI_API_KEY is invalid. No API call made.",
+    });
     var random: [16]u8 = undefined;
     try io.randomSecure(&random);
     const id = try std.fmt.allocPrint(a, "eval-{s}", .{std.fmt.bytesToHex(random, .lower)});

@@ -194,7 +194,8 @@ The development-only [rubric evaluator](design/harness/evaluator.md) grades a
 supplied specification through OpenAI using the checked-in Hello World rubric
 or another closed case/rubric. It writes evidence-backed JSON/Markdown reports
 without running Specify or changing workflow authority. Live calls require
-explicit settings, `OPENAI_API_KEY` and `--live`; ordinary tests/verification
+explicit settings, `TEST_OPENAI_API_KEY`, `TEST_EVALUATION_PROVIDER`,
+`TEST_EVALUATION_MODEL` and `--live`; ordinary tests/verification
 remain offline. The rubric is an uncalibrated draft and live API acceptance has
 not yet been demonstrated. This executable is not installed with `sdde`.
 
@@ -254,3 +255,56 @@ stabilization/events have been removed under ADR 0009. Provider lifecycle and
 authorization remain in memory for one execution. Only the root `features/`
 directory is reserved during workflow discovery. Rerun output replacement and protected
 clarifications follow Design Sections 25 and 23.2.
+
+## E2E environment setup
+
+Create the local credential file once from the repository root:
+
+```sh
+cp -n .env.e2e.example .env.e2e
+chmod 600 .env.e2e
+```
+
+Edit `.env.e2e` and fill in the credentials and exact evaluation model needed
+for your run. This file is Git-ignored; the checked-in
+[.env.e2e.example](.env.e2e.example) contains empty credentials/model and the
+supported provider selection.
+
+| Variable | Consumer |
+| --- | --- |
+| `TEST_OPENAI_API_KEY` | Internal live supplied-spec rubric evaluator. |
+| `TEST_AWS_BEARER_TOKEN_BEDROCK` | Reserved for internal Bedrock workflow tests; full workflow harness wiring is pending. |
+| `TEST_EVALUATION_PROVIDER` | Required evaluation provider; currently only `openai` is supported. |
+| `TEST_EVALUATION_MODEL` | Required exact evaluation model ID; no model default. |
+
+Load it explicitly in the same shell that launches the command:
+
+```sh
+. ./.env.e2e
+zig build evaluate-spec -- --help
+```
+
+The file uses `export`, so the variables pass from your shell to `zig build`
+and its launched executable. Neither Zig build wiring nor either executable
+automatically reads `.env` files. Load the file again in each new shell, or
+after changing it; already-running processes retain their original environment.
+Sourcing this file replaces any existing values for its declared variables.
+CI can inject these same variables directly into the command environment.
+
+These variables are internal test configuration. The production `sdde`
+executable does not read them, load `.env.e2e`, or include the evaluator.
+No test values are embedded during compilation or installed with the application.
+The evaluator accepts only `TEST_OPENAI_API_KEY`; it never falls back to a
+production credential. The test Bedrock credential is not mapped into the
+production `AWS_BEARER_TOKEN_BEDROCK` variable.
+
+The help command makes no API call. Use the [evaluator run instructions](design/harness/evaluator.md#run)
+for the actual invocation, which also requires `--live`, input/output paths and
+an explicit judge JSON configuration for reasoning, temperature, timeout, retry
+and token-budget settings. Provider/model fields in that JSON are rejected;
+their sole input is the test environment. Reports retain the resolved provider
+API/model and settings, never credentials.
+`zig build test` and `zig build verify` require no credentials and remain
+offline; packaging smoke commands explicitly clear their environment.
+The full generation-to-evaluation E2E harness remains unfinished
+([harness status](design/harness/README.md#implementation-snapshot)).

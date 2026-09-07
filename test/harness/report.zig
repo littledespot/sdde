@@ -32,7 +32,7 @@ pub const Report = struct {
     prompt_revision: []const u8 = @import("packet.zig").revision,
     judgment_schema: []const u8 = j.schema_revision,
     capture: c.Capture,
-    configuration: @import("openai.zig").Config,
+    configuration: @import("configuration.zig").Config,
     attempts: []const Attempt,
     outcome: Outcome,
 };

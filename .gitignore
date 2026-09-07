@@ -2,3 +2,4 @@
 zig-pkg/
 zig-out/
 .DS_Store
+/.env.e2e

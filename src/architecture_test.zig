@@ -1,5 +1,24 @@
 const std = @import("std");
 
+test "production sources exclude internal evaluation tooling and test environment configuration" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.endsWith(u8, entry.basename, "_test.zig") or
+            std.mem.endsWith(u8, entry.basename, "_test_fixture.zig") or
+            std.mem.eql(u8, entry.basename, "runtime_tests.zig") or
+            std.mem.startsWith(u8, entry.path, "test_fixtures/")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
+        defer allocator.free(source);
+        inline for (.{ "test/harness/", "\"harness.zig\"", ".env.e2e", "TEST_OPENAI_API_KEY", "TEST_AWS_BEARER_TOKEN_BEDROCK", "TEST_EVALUATION_PROVIDER", "TEST_EVALUATION_MODEL" }) |forbidden| try expectAbsent(source, forbidden);
+    }
+}
+
 test "production provider wiring retains fact-only authority and no-I/O lease preparation" {
     const contracts_source = @embedFile("composition/provider_model_contracts.zig");
     try expectAbsent(contracts_source, "/adapters/");

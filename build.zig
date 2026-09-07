@@ -140,6 +140,26 @@ pub fn build(b: *std.Build) void {
     const evaluator_smoke = b.step("smoke-rubric-evaluator", "Test standalone evaluator startup without API calls");
     evaluator_smoke.dependOn(&evaluator_help.step);
     evaluator_smoke.dependOn(&evaluator_denied.step);
+    _ = evaluator_directory.add("judge.json", "{\"schema\":\"evaluation-config/v1\",\"reasoning_effort\":null,\"temperature\":null,\"timeout_ms\":1000,\"retry_limit\":0,\"retry_delay_ms\":0,\"total_token_budget\":100}");
+    for ([_]struct { name: []const u8, model: ?[]const u8, key: ?[]const u8, expected: []const u8 }{
+        .{ .name = "reject missing test evaluation model", .model = null, .key = null, .expected = "TEST_EVALUATION_PROVIDER must be openai and TEST_EVALUATION_MODEL must be a nonempty valid model ID. No API call made.\n" },
+        .{ .name = "reject production credential as evaluator fallback", .model = "scripted-judge", .key = null, .expected = "TEST_OPENAI_API_KEY is missing. No API call made.\n" },
+        .{ .name = "accept test environment then reject unavailable input before any API call", .model = "scripted-judge", .key = "test-only-credential", .expected = "Invalid or unavailable case, rubric, source or specification. No API call made.\n" },
+    }) |fixture| {
+        const check = std.Build.Step.Run.create(b, fixture.name);
+        check.addFileArg(evaluator_binary);
+        check.addArgs(&.{ "--case", "missing-case.json", "--spec", "missing-spec.md", "--config", "judge.json", "--output", "missing-output", "--live" });
+        check.setCwd(evaluator_directory.getDirectory());
+        check.clearEnvironment();
+        check.setEnvironmentVariable("OPENAI_API_KEY", "unused-production-credential");
+        check.setEnvironmentVariable("TEST_EVALUATION_PROVIDER", "openai");
+        if (fixture.model) |model| check.setEnvironmentVariable("TEST_EVALUATION_MODEL", model);
+        if (fixture.key) |key| check.setEnvironmentVariable("TEST_OPENAI_API_KEY", key);
+        check.expectExitCode(1);
+        check.expectStdOutEqual("");
+        check.expectStdErrEqual(fixture.expected);
+        evaluator_smoke.dependOn(&check.step);
+    }
     test_step.dependOn(evaluator_smoke);
     test_step.dependOn(&run_module_tests.step);
     test_step.dependOn(&run_executable_tests.step);

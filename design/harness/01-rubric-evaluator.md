@@ -54,7 +54,11 @@ Acceptance:
 
 The shared grading call accepts explicit artifact provenance; full-workflow
 handoff is still H-015. Responses API/native HTTPS is implemented without a new
-dependency. Exact model/settings/budget are mandatory run configuration; numeric
+dependency. Exact evaluation provider/model come only from the `TEST_`
+environment variables in [the evaluator contract](evaluator.md#run); the
+credential is `TEST_OPENAI_API_KEY`. Other settings/budget remain mandatory
+judge JSON configuration. The production executable consumes none of these
+test variables. Numeric
 scoring choices live in the draft rubric, not evaluator code or release policy.
 
 Likely changes: harness-owned schemas/configuration and an entry point wired

@@ -5,10 +5,11 @@ const wire = @import("openai.zig");
 const provider = @import("provider.zig");
 const report = @import("report.zig");
 const judgment = @import("judgment.zig");
+const configuration = @import("configuration.zig");
 pub const Error = c.Error || error{Cancelled};
 
 /// Caller retains the arena owning inputs, requests, observations and report.
-pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: wire.Config, capture: c.Capture) Error!report.Report {
+pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: configuration.Config, capture: c.Capture) Error!report.Report {
     const request = try wire.request(a, config, capture);
     var attempts: std.ArrayList(report.Attempt) = .empty;
     defer attempts.deinit(a);
