@@ -37,7 +37,7 @@ test "Hello World references receive citable identities with exact chunk coverag
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "test/evaluation/wf-001-hello-world/reference/stories.md", allocator, .limited(reference.limits.source_file_bytes));
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "test/e2e/wf-001-hello-world/reference/stories.md", allocator, .limited(reference.limits.source_file_bytes));
     var ids: IdSource = .{};
     const inputs = try prepare(allocator, &ids, try read(allocator, "stories.md", bytes));
     try std.testing.expectEqual(@as(u8, 1), ids.calls);

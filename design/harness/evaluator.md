@@ -16,7 +16,7 @@ and a judge configuration. Then explicitly authorize the live request:
 
 ```sh
 zig build evaluate-spec -- \
-  --case test/evaluation/wf-001-hello-world/node-vitest/spec.case.json \
+  --case test/e2e/wf-001-hello-world/node-vitest/spec.case.json \
   --spec evaluation-input/spec.md \
   --config evaluation-input/judge.json \
   --output evaluation-output \
@@ -108,7 +108,7 @@ produces no score. The stored score is not rounded before threshold comparison;
 the Markdown view displays two decimal places. A null rubric threshold means no
 pass/fail decision. Neither a low score nor a missed threshold is an API failure.
 
-The initial [Hello World rubric](../../test/evaluation/wf-001-hello-world/node-vitest/rubric/spec.json)
+The initial [Hello World rubric](../../test/e2e/wf-001-hello-world/node-vitest/rubric/spec.json)
 is an **uncalibrated draft**: 0–4 integer anchors, equal weights, no pass threshold
 and no non-applicable criteria. These are visible rubric-author choices, not
 engine defaults or approved release policy. Its six criteria address startup,
@@ -117,7 +117,7 @@ business scope. It does not demand Node/Vitest implementation details, invented
 entities or filler for empty sections. Human review and live calibration remain
 open under H-002/H-016.
 
-The [calibration set and review procedure](../../test/evaluation/wf-001-hello-world/node-vitest/calibration/README.md)
+The [calibration set and review procedure](../../test/e2e/wf-001-hello-world/node-vitest/calibration/README.md)
 provide equivalent wording plus missing behavior, changed greeting, unsupported
 scope and embedded-instruction specimens. They use this same evaluator and
 rubric; reviewer expectations are not included in judge inputs. Human approval

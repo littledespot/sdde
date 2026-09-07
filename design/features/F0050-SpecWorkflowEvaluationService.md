@@ -46,7 +46,7 @@ blocking boundaries:
    execution foundations;
 2. the proposed harness contract evaluates one YAML-declared model operation,
    not one complete compiled workflow and its durable effects; and
-3. `test/evaluation/wf-001-hello-world/node-vitest/` does not contain, and
+3. `test/e2e/wf-001-hello-world/node-vitest/` does not contain, and
    should not itself become, a complete runtime project.
 
 The causal defect is therefore not a missing fixture-specific command. A
@@ -355,7 +355,7 @@ and release-threshold decisions must be accepted separately.
 The tracked source bundle contains:
 
 - one sibling reference file,
-  `test/evaluation/wf-001-hello-world/reference/stories.md`;
+  `test/e2e/wf-001-hello-world/reference/stories.md`;
 - seven Markdown principle files beneath `node-vitest/principles/`; and
 - no tracked rubric file. The local empty `rubric/` directory is not durable Git
   fixture content.

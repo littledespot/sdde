@@ -24,8 +24,8 @@ requested live, LLM-based evaluation.
 
 ## Scope and authority
 
-- Initial case: `test/evaluation/wf-001-hello-world/node-vitest`, using its
-  sibling [stories.md](../../test/evaluation/wf-001-hello-world/reference/stories.md).
+- Initial case: `test/e2e/wf-001-hello-world/node-vitest`, using its
+  sibling [stories.md](../../test/e2e/wf-001-hello-world/reference/stories.md).
 - Initial evaluator provider: OpenAI API. The workflow's generation provider
   and the evaluator's provider/model are separate selections. The supplied-spec
   evaluator uses Responses/native HTTPS without a new dependency. Exact model
@@ -58,7 +58,7 @@ requested live, LLM-based evaluation.
 | References | Model-connected Markdown extraction/reconciliation, citations, typed text and exact-value preservation are implemented. | Applicable clarification answers and final artifact/state publication. |
 | Model calls | [Native request operations](../../src/composition/model_request_operations.zig), configured production provider, explicit retirement/protocol retry and fake-provider tests exist. | Authorized live verification; no new provider is required for H-009/H-010. |
 | Specify | H-007–H-010 implement typed content, gates, generation, coverage and bounded repair. H-011/H-012 add in-memory Markdown projection and unit-need form publication. [Tests](../../src/composition/root.zig) still assert no successful `spec.md` publication. | Authenticated/current answers, remaining gap routes, complete sidecar/state/log publication and failure/rerun evidence. |
-| Fixture | Unchanged `stories.md`, seven principle files, `spec.case.json`, draft rubric and seven [calibration specimens](../../test/evaluation/wf-001-hello-world/node-vitest/calibration/README.md) exist. | Human rubric review/live calibration and full-workflow runtime resources. |
+| Fixture | Unchanged `stories.md`, seven principle files, `spec.case.json`, draft rubric and seven [calibration specimens](../../test/e2e/wf-001-hello-world/node-vitest/calibration/README.md) exist. | Human rubric review/live calibration and full-workflow runtime resources. |
 | Evaluator | `test/harness/`, `harness.zig` and `evaluate-spec`/offline test/smoke build steps implement supplied-spec OpenAI grading and reports. | Authorized live acceptance; no paid API call was made during implementation. |
 | Full-workflow harness | Specify execution/handoff is still separate from the supplied-spec evaluator. `TEST_HARNESS.md` remains absent; [evaluator.md](evaluator.md) documents actual commands. | H-007–H-018 integration and live end-to-end evidence. |
 

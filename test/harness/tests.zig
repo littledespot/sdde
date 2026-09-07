@@ -462,9 +462,9 @@ test "the checked-in Hello World case and rubric load without a fixture-specific
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const case_data = @embedFile("../evaluation/wf-001-hello-world/node-vitest/spec.case.json");
-    const rubric_data = @embedFile("../evaluation/wf-001-hello-world/node-vitest/rubric/spec.json");
-    const source = @embedFile("../evaluation/wf-001-hello-world/reference/stories.md");
+    const case_data = @embedFile("../e2e/wf-001-hello-world/node-vitest/spec.case.json");
+    const rubric_data = @embedFile("../e2e/wf-001-hello-world/node-vitest/rubric/spec.json");
+    const source = @embedFile("../e2e/wf-001-hello-world/reference/stories.md");
     const selected = try c.parseCase(a, case_data);
     const rubric = try c.parseRubric(a, rubric_data);
     try std.testing.expectEqual(@as(usize, 6), rubric.criteria.len);
@@ -506,16 +506,16 @@ test "all calibration specimens reach the ordinary packet without semantic prefi
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const root = "test/evaluation/wf-001-hello-world/node-vitest/";
+    const root = "test/e2e/wf-001-hello-world/node-vitest/";
     const names = .{
         "faithful-a.md",     "faithful-b.md",     "missing-startup.md",       "missing-greeting.md",
         "wrong-greeting.md", "invented-scope.md", "embedded-instructions.md",
     };
     inline for (names) |name| {
         const input = try @import("files.zig").capture(std.testing.io, a, .cwd(), root ++ "spec.case.json", root ++ "calibration/" ++ name, "calibration-" ++ name, (try capture(a)).generation);
-        try std.testing.expectEqualStrings(@embedFile("../evaluation/wf-001-hello-world/node-vitest/calibration/" ++ name), input.specification);
+        try std.testing.expectEqualStrings(@embedFile("../e2e/wf-001-hello-world/node-vitest/calibration/" ++ name), input.specification);
         try std.testing.expectEqual(@as(usize, 1), input.sources.len);
-        try std.testing.expectEqualStrings(@embedFile("../evaluation/wf-001-hello-world/reference/stories.md"), input.sources[0].text);
+        try std.testing.expectEqualStrings(@embedFile("../e2e/wf-001-hello-world/reference/stories.md"), input.sources[0].text);
         const message = try c.decode(std.json.Value, a, try packet.input(a, input));
         try std.testing.expectEqualStrings(input.specification, message.object.get("specification").?.object.get("text").?.string);
         try std.testing.expectEqual(.supplied, input.generation.origin);

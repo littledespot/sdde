@@ -10,7 +10,7 @@ this implementation task. Unchecked live/calibration criteria below remain
 unverified, not passed or replaced by fake judgments. H-007 onward are separate
 production work.
 
-Remaining acceptance preparation: the [calibration set](../../test/evaluation/wf-001-hello-world/node-vitest/calibration/README.md)
+Remaining acceptance preparation: the [calibration set](../../test/e2e/wf-001-hello-world/node-vitest/calibration/README.md)
 contains two equivalent specifications and five deliberate defects, with proposed
 review findings and the existing command to run them. A future live run requires
 explicit judge configuration/allowance and credentials. No live evidence or
@@ -67,7 +67,7 @@ contracts. No production dependency is implicitly approved by this ticket.
 **Owner:** rubric author/reviewer. **Dependencies:** H-001 for
 the executable schema and scoring scale; criterion drafting can begin now.
 
-Create `test/evaluation/wf-001-hello-world/node-vitest/rubric/spec.json`.
+Create `test/e2e/wf-001-hello-world/node-vitest/rubric/spec.json`.
 Keep that file the sole runtime source of criterion wording, scoring anchors,
 weights and thresholds; do not copy them into prompts or code.
 

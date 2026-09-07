@@ -824,7 +824,7 @@ fn writeReferenceIngestionFixture(io: std.Io, project: std.Io.Dir) !void {
     try project.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = changed });
     try project.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = @embedFile("../test_fixtures/reference-ingestion.workflow.yaml") });
     try project.createDirPath(io, "source-material/first");
-    const stories = try std.Io.Dir.cwd().readFileAlloc(io, "test/evaluation/wf-001-hello-world/reference/stories.md", std.testing.allocator, .limited(1024 * 1024));
+    const stories = try std.Io.Dir.cwd().readFileAlloc(io, "test/e2e/wf-001-hello-world/reference/stories.md", std.testing.allocator, .limited(1024 * 1024));
     defer std.testing.allocator.free(stories);
     try project.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = stories });
 }

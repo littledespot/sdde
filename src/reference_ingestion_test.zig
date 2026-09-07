@@ -61,7 +61,7 @@ test "reference inventory rejects Unicode case normalization physical aliases an
 test "Hello World reference preserves exact content and source locations" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "test/evaluation/wf-001-hello-world/reference/stories.md", arena.allocator(), .limited(reference.limits.source_file_bytes));
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "test/e2e/wf-001-hello-world/reference/stories.md", arena.allocator(), .limited(reference.limits.source_file_bytes));
     const inputs = try read(arena.allocator(), "stories.md", bytes);
     try std.testing.expectEqual(@as(usize, 1), inputs.documents.len);
     const document = inputs.documents[0];

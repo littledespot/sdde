@@ -65,8 +65,8 @@ Run from the repository root, with an approved config and existing output folder
 
 ```sh
 zig build evaluate-spec -- \
-  --case test/evaluation/wf-001-hello-world/node-vitest/spec.case.json \
-  --spec test/evaluation/wf-001-hello-world/node-vitest/calibration/faithful-a.md \
+  --case test/e2e/wf-001-hello-world/node-vitest/spec.case.json \
+  --spec test/e2e/wf-001-hello-world/node-vitest/calibration/faithful-a.md \
   --config evaluation-input/judge.json \
   --output evaluation-output \
   --live

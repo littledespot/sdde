@@ -52,7 +52,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     _ = package_directory.add(".sddtoolkit/workflows/preflight.workflow.yaml", @embedFile("../../src/test_fixtures/reference-preflight.workflow.yaml"));
     _ = package_directory.add(".sddtoolkit/workflows/feature-input.workflow.yaml", @embedFile("../../src/test_fixtures/feature-input-preflight.workflow.yaml"));
     _ = package_directory.add(".sddtoolkit/workflows/reference-ingestion.workflow.yaml", @embedFile("../../src/test_fixtures/reference-ingestion.workflow.yaml"));
-    _ = package_directory.addCopyFile(b.path("test/evaluation/wf-001-hello-world/reference/stories.md"), "references/Hello/stories.md");
+    _ = package_directory.addCopyFile(b.path("test/e2e/wf-001-hello-world/reference/stories.md"), "references/Hello/stories.md");
     _ = package_directory.add("references/Unsupported/story.md", "# Valid sibling\n");
     _ = package_directory.add("references/Unsupported/.hidden.json", "{}");
     const clarification = @import("../../src/test_fixtures/clarification_inputs.zig").closed(b.allocator, "P01", true) catch @panic("allocate packaging clarification fixture");
@@ -604,7 +604,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         };
         _ = directory.addCopyFile(b.path("design/workflows/spec/protocol.prompt.md"), ".sddtoolkit/workflows/spec/protocol.prompt.md");
         _ = directory.add(".sddtoolkit/principles/toolchain.yaml", "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n");
-        _ = directory.addCopyFile(b.path("test/evaluation/wf-001-hello-world/reference/stories.md"), "references/Hello/stories.md");
+        _ = directory.addCopyFile(b.path("test/e2e/wf-001-hello-world/reference/stories.md"), "references/Hello/stories.md");
         const check = std.Build.Step.Run.create(b, "load packaged generation YAML and resources without source assets or credentials");
         check.addFileArg(packaged);
         check.addArgs(&.{ "spec-generation", "--feature", "chosen", "--reference", "Hello" });
