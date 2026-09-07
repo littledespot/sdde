@@ -1,0 +1,26 @@
+{
+  "logs": {
+    "level": "debug",
+    "console": true,
+    "promptCapture": []
+  },
+  "models": {
+    "slots": {
+      "audit_analysis": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
+      "drift_analysis": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
+      "spec_generation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
+      "design_section_generation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
+      "implementation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" }
+    }
+  },
+  "paths": {
+    "specs": "specs/",
+    "references": "references/",
+    "specsArchive": "specs/_archive/",
+    "workflows": ".sddtoolkit/workflows",
+    "toolchainPreset": ".sddtoolkit/toolchainPreset",
+    "principles": ".sddtoolkit/principles",
+    "templates": ".sddtoolkit/templates",
+    "providers": ".sddproviders.json"
+  }
+}
