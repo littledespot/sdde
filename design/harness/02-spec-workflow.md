@@ -245,7 +245,8 @@ evaluator. They do not claim H-011/H-012 publication or H-013 completion.
 
 ## H-011 — Complete specification clarification handling
 
-**Status:** Open — read-only input/form validation exists. **Owner:** shared
+**Status:** Partial — subject-keyed refresh, form replacement and protected-input
+checks are implemented; authenticated answer application is not. **Owner:** shared
 clarification lifecycle with Specify registrations. **Dependencies:** H-008;
 H-010 supplies unit needs. Coordinate output handling with H-012.
 
@@ -253,6 +254,18 @@ The trusted authentication mechanism for accepting new user submissions still
 needs selection. No concrete provider is implemented; read-only form validation
 does not authenticate the editor or invocation. User-close protection remains
 independent of that decision and of answer acceptance.
+
+Implemented: generation-unit needs use engine subjects and `SNN` IDs; the shared
+refresh/renderer supports all three stages and replaces open drafts completely.
+The generation YAML publishes forms plus `clarification-state/v2` through the
+registered output writer before ending `needs_user`. No spec is published on
+that branch. Recorded closed forms remain retained inputs, not write targets;
+pending submissions block acceptance without a trusted authentication provider.
+
+Remaining: authenticated acceptance, current answer/authority applicability and
+generation provenance, forms for all shared-gate/brief gaps, and complete pause
+state/log evidence. These are not supplied by read-only validation or by file
+existence. The complete H-011 acceptance list below remains the completion gate.
 
 Work:
 
@@ -284,11 +297,16 @@ Acceptance:
 
 ## H-012 — Render and publish the complete workflow output
 
-**Status:** Open. **Owner:** production renderers/parser and publication boundary.
+**Status:** Partial. **Owner:** production renderers/parser and publication boundary.
 **Dependencies:** H-007/H-010; H-011 protection on clarification branches.
 
-The mechanical specification codec exists; full authority projection and
-publication do not. The replacement rule is accepted in ADR 0009 and Design
+The authority-checked specification projection, existing Markdown codec and
+normalized round-trip check are connected to generation. A shared registered
+writer publishes prepared clarification output with exact captured-input
+rechecks and complete replacement. Successful specification publication remains
+unfinished: reference-context rendering, canonical reference/provenance/workflow
+state joins and feature-log evidence are not yet assembled into a complete set.
+The replacement rule is accepted in ADR 0009 and Design
 §23.2: every workflow completely overwrites its registered replaceable outputs
 and unresolved clarification forms, preserving user-resolved forms unchanged.
 The publication failure rule is now approved in ADR 0009 and Design §25:
@@ -296,6 +314,15 @@ validate the complete output set before writing; a failed/interrupted write
 sequence may leave already-replaced files, but must not report success or record
 new successful completion. A fresh rerun replaces outputs from the beginning.
 User-closed forms remain protected; no rollback/recovery subsystem is permitted.
+
+The writer has no raw destination parameter, journal or recovery directory.
+It rejects duplicate targets, changed captures, unsafe filesystem aliases and
+completion state ordered before other files. Current tests cover normal
+clarification reruns, shorter replacements, concurrent closes and a failed
+ordinary output write. Exhaustive interruption/failpoint and whole-output rerun
+evidence remains open. An interrupted clarification write can leave forms and
+registry inconsistent; current strict input validation blocks that condition
+rather than resetting state or inventing recovery authority.
 
 Work:
 
@@ -327,6 +354,19 @@ Acceptance:
   exposing partial successful specification output.
 - [ ] Configured `paths.specs` supplies the root; neither caller nor model
   repeats/hard-codes `specs/` or chooses artifact paths.
+
+### H-011/H-012 implementation checks
+
+- `zig build test-specification-generation --global-cache-dir .zig-cache/global --summary all`
+  — 52 tests passed (projection, exact/passive values and generation contracts).
+- `zig build verify --global-cache-dir .zig-cache/global --summary all`
+  — 104/104 steps and 898/898 tests passed, including lint, architecture and
+  packaged execution checks. Two fake-provider knowledge-gap scenarios persist
+  forms without a spec; filesystem tests exercise all three clarification stages.
+- `git diff --check` — passed.
+
+These checks verify the implemented increment, not all unchecked acceptance
+criteria or live/human evaluation. H-011/H-012 remain partial.
 
 ## H-013 — Supply the executable Spec workflow definition
 

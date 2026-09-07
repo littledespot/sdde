@@ -16,6 +16,12 @@ pub const Adapter = struct {
     fn capture(context: *anyopaque, capability: *const roots.FeatureInputReadCapability, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!clarification.Captures {
         const self: *Adapter = @ptrCast(@alignCast(context));
         const binding = roots.bindFeatureInputAdapter(capability);
+        return self.captureBound(binding, allocator, observed, paths);
+    }
+
+    /// Adapter-local reuse for write-time rechecks after authorized creation.
+    /// The caller has opened/revalidated these exact physical root identities.
+    pub fn captureBound(self: *Adapter, binding: roots.FeatureInputAdapterBinding, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!clarification.Captures {
         if (!std.mem.eql(u8, observed.selector.feature_id.bytes, paths.feature.feature_id.bytes) or
             !std.mem.eql(u8, observed.selector.project_relative_path, paths.feature.project_relative_path) or
             !std.meta.eql(observed.root_observation, binding.specs_observation)) return error.FeatureInputUnavailable;

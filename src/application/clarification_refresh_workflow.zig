@@ -8,7 +8,7 @@ const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const publish = @import("workflow_candidate.zig").publish;
 pub const needs_schema = values.schema(.clarification_needs, refresh.Needs, 1, c.max_state_bytes);
-pub const state_schema = values.schema(.refreshed_clarification_state, c.ValidatedState, 1, c.max_state_bytes * 4);
+pub const state_schema = values.schema(.refreshed_clarification_state, refresh.Result, 1, c.max_state_bytes * 4);
 pub const views_schema = values.schema(.clarification_views, []const views.View, 1, c.max_forms * c.max_form_bytes * 4);
 pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ needs_schema, state_schema, views_schema };
 
@@ -37,11 +37,18 @@ pub const Refresh = struct {
         const needs = values.read(&input.step.data, needs_schema, refresh.Needs) catch return error.OperationExecutionFailed;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), captured.*, needs.*) catch |err| switch (err) {
-            error.AuthenticationRequired, error.ProtectedClarification, error.ClarificationLimitExceeded => return .{ .outcome = .blocked, .delta = .{} },
-            else => return error.OperationExecutionFailed,
+        const result: refresh.Result = result: {
+            const state = self.action.execute(arena.allocator(), captured.*, needs.*) catch |err| switch (err) {
+                error.AuthenticationRequired => break :result .{ .blocked = .authentication_required },
+                error.ProtectedClarification => break :result .{ .blocked = .protected_clarification },
+                error.ClarificationLimitExceeded => break :result .{ .blocked = .limit_exceeded },
+                else => return error.OperationExecutionFailed,
+            };
+            break :result .{ .ready = state };
         };
-        return publish(self.allocator, state_schema, c.ValidatedState, result);
+        var candidate = try publish(self.allocator, state_schema, refresh.Result, result);
+        candidate.outcome = if (result == .ready) .ok else .blocked;
+        return candidate;
     }
 };
 pub const Render = struct {
@@ -51,10 +58,21 @@ pub const Render = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const captured = values.read(&input.step.data, inputs.inputs_schema, c.Inputs) catch return error.OperationExecutionFailed;
-        const state = values.read(&input.step.data, state_schema, c.ValidatedState) catch return error.OperationExecutionFailed;
+        const state = values.read(&input.step.data, state_schema, refresh.Result) catch return error.OperationExecutionFailed;
+        if (state.* != .ready) return error.OperationExecutionFailed;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), state.*, captured.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(arena.allocator(), state.ready, captured.*) catch return error.OperationExecutionFailed;
         return publish(self.allocator, views_schema, []const views.View, result);
+    }
+};
+
+pub const Check = struct {
+    pub const Action = @import("../actions/clarification/check_clarification_progress.zig").Action;
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .needs_user, .blocked };
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const result = values.read(&input.step.data, state_schema, refresh.Result) catch return error.OperationExecutionFailed;
+        return .{ .outcome = context.?.action.execute(result.*), .delta = .{} };
     }
 };

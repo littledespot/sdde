@@ -25,6 +25,7 @@ pub const Driver = struct {
     omit_exact: bool = false,
     brief_uncertain: bool = false,
     entities_required: bool = false,
+    generation_gap: bool = false,
     calls: usize = 0,
     fault: ?Fault = null,
     fault_calls: usize = 0,
@@ -130,6 +131,7 @@ fn response(allocator: std.mem.Allocator, view: data.View, driver: *const Driver
                 return @import("../domain/model_candidate_json.zig").encode(@import("../domain/specification_repair.zig").Replacement, allocator, .{ .attributed = replacement });
             }
             const unit = try @import("../domain/specification_session.zig").unit(current.completed);
+            if (driver.generation_gap and unit == .primary_user_story) return @import("../domain/model_candidate_json.zig").encode(g.ModelResponse, allocator, .{ .clarification = .{ .reason = .missing, .question = value } });
             var proposed: g.Response = .{ .content = switch (unit) {
                 .brief => .{ .brief = .{ .title = value, .description = value, .primary_goal = value } },
                 .primary_user_story => .{ .primary_user_story = value },

@@ -7,12 +7,13 @@ pub const toolchain_parser = "toolchain-parser";
 pub const reference_read = "reference-read";
 pub const feature_read = "feature-read";
 pub const feature_input_read = "feature-input-read";
+pub const feature_output_write = "feature-output-write";
 pub const reference_content_read = "reference-content-read";
 pub const reference_decode = "reference-decode";
 pub const reference_identity = "reference-identity";
 
 pub fn known(id: []const u8) bool {
-    inline for (.{ model_provider, provider_authorization, toolchain_read, toolchain_parser, reference_read, feature_read, feature_input_read, reference_content_read, reference_decode, reference_identity }) |known_id| {
+    inline for (.{ model_provider, provider_authorization, toolchain_read, toolchain_parser, reference_read, feature_read, feature_input_read, feature_output_write, reference_content_read, reference_decode, reference_identity }) |known_id| {
         if (std.mem.eql(u8, id, known_id)) return true;
     }
     return false;

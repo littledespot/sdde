@@ -91,11 +91,13 @@ fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, p
     var feature_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
     var native_bindings: @import("native_workflow_operations.zig").Assembly = undefined;
     var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project_root };
+    var feature_outputs: @import("../adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project_root };
     var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project_root };
     var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
     var reference_ids: @import("../adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
     native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
     var boot = runInProjectWithRegistry(io, allocator, project_root, runtime, &native_bindings.registry);
+    native_bindings.publish_output.action.writer = feature_outputs.port();
     if (boot == .ready) native_bindings.bindRoots(boot.ready.roots.registry());
     defer boot.deinit();
     var provider_bootstrap = model_provider_bootstrap.Assembly.init(
@@ -1302,8 +1304,8 @@ test "configured specification generation YAML executes native references models
         .{ .stage = .generation, .shape = .empty, .persistent = true },
         .{ .stage = .repair, .shape = .empty, .persistent = true },
     };
-    for (0..12 + faults.len) |scenario| {
-        const fault: ?@TypeOf(faults[0]) = if (scenario >= 12) faults[scenario - 12] else null;
+    for (0..14 + faults.len) |scenario| {
+        const fault: ?@TypeOf(faults[0]) = if (scenario >= 14) faults[scenario - 14] else null;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
@@ -1311,7 +1313,7 @@ test "configured specification generation YAML executes native references models
         try project.dir.createDirPath(io, ".sdd/presets");
         try project.dir.createDirPath(io, "engine/workflows/spec");
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
-        if (scenario == 1 or scenario >= 8) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
+        if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         const definition = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec-generation.workflow.yaml", allocator, .limited(1_048_576));
         defer allocator.free(definition);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = definition });
@@ -1335,6 +1337,8 @@ test "configured specification generation YAML executes native references models
         native.init(allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
         var boot = runInProjectWithRegistry(io, allocator, project.dir, .{}, &native.registry);
         defer boot.deinit();
+        var feature_outputs: @import("../adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        native.publish_output.action.writer = feature_outputs.port();
         if (boot != .ready) std.debug.print("generation bootstrap: {any}\n", .{boot});
         try std.testing.expect(boot == .ready);
         native.bindRoots(boot.ready.roots.registry());
@@ -1354,8 +1358,9 @@ test "configured specification generation YAML executes native references models
             driver.fault = selected_fault;
             driver.repair = selected_fault.stage == .repair;
         }
+        driver.generation_gap = scenario == 12 or scenario == 13;
         const result = driver.run();
-        const expected: workflow.OutcomeTag = if (scenario == 2 or scenario == 6 or (fault != null and fault.?.persistent)) .failed else if (scenario == 3 or scenario == 10) .needs_user else if (scenario == 7) .invalid else .ok;
+        const expected: workflow.OutcomeTag = if (scenario == 2 or scenario == 6 or (fault != null and fault.?.persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap) .needs_user else if (scenario == 7) .invalid else .ok;
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (fault) |selected_fault| try std.testing.expectEqual(@as(usize, if (selected_fault.persistent) 2 else 1), driver.fault_calls);
         if (expected == .ok) {
@@ -1364,6 +1369,26 @@ test "configured specification generation YAML executes native references models
             try std.testing.expectEqual(@as(@TypeOf(content.entities.disposition), if (scenario == 11) .required else .not_applicable), content.entities.disposition);
             try std.testing.expect(runner.envelope.checkGate(@import("../application/required_authority_workflow.zig").gate_contract) == null);
             try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.prepared_model_request)] == null);
+            const rendered = try @import("../application/specification_values.zig").storage.read(&.{ .slots = runner.envelope.slots }, @import("../application/specification_rendering_workflow.zig").rendered_schema, .rendered);
+            var arena: std.heap.ArenaAllocator = .init(allocator);
+            defer arena.deinit();
+            _ = try @import("../domain/specification_markdown.zig").parse(arena.allocator(), rendered);
+            try std.testing.expect((try @import("../application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/specification_rendering_workflow.zig").validated_schema, bool)).*);
+        }
+        if (driver.generation_gap) {
+            const views = try @import("../application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/clarification_refresh_workflow.zig").views_schema, []const @import("../domain/clarification_views.zig").View);
+            try std.testing.expectEqual(@as(usize, 1), views.len);
+            try std.testing.expectEqualStrings("S01.md", &views.*[0].id.filename());
+            try std.testing.expect(views.*[0].content == .replace);
+            const bytes = try project.dir.readFileAlloc(io, "requirements/current/chosen/clarify/S01.md", allocator, .limited(16_384));
+            defer allocator.free(bytes);
+            try std.testing.expectEqualStrings(views.*[0].content.replace, bytes);
+            const persisted = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/clarifications.json", allocator, .limited(8_388_608));
+            defer allocator.free(persisted);
+            var parsed = try std.json.parseFromSlice(@import("../domain/clarification_inputs.zig").State, allocator, persisted, .{});
+            defer parsed.deinit();
+            try std.testing.expectEqual(@as(usize, 1), parsed.value.records.len);
+            try std.testing.expectEqualStrings("specification", parsed.value.records[0].subject.requirement);
         }
         try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/chosen/spec.md", .{}));
     }
@@ -1549,6 +1574,125 @@ test "feature input capture rechecks target binding paths and physical root obse
     try project.dir.createDirPath(io, "specs/chosen");
     try std.testing.expectError(error.FeatureInputUnavailable, source.capture(allocator, observed, paths));
 }
+
+test "clarification publication refreshes stable paths and protects concurrent closes across stages" {
+    const c = @import("../domain/clarification_inputs.zig");
+    const fixture = @import("../test_fixtures/clarification_inputs.zig");
+    const forms = @import("../domain/clarification_form.zig");
+    const refresh = @import("../domain/clarification_refresh.zig");
+    const parser = @import("../adapters/parsers/clarification_inputs.zig");
+    const io = std.testing.io;
+    for ([_][]const u8{ "S01", "P01", "T01" }) |name| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeFeatureInputFixture(io, project.dir);
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = output_test_bootstrap });
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        for (0..3) |iteration| {
+            var boot = runInProject(io, std.testing.allocator, project.dir);
+            defer boot.deinit();
+            try std.testing.expect(boot == .ready);
+            const registry = boot.ready.roots.registry();
+            const selected = try @import("../domain/feature_directory.zig").validate(a, .{ .bytes = "Chosen/Café" }, registry.featureDirectoryRoots());
+            var inspector_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+            var inspector = inspector_adapter.inspector();
+            inspector.capability = registry.featureDirectoryRead();
+            const observed = try inspector.inspect(a, selected);
+            const paths = try @import("../domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, registry.featureArtifactRoots(), selected);
+            var source_adapter: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+            var source = source_adapter.capturer();
+            source.capability = registry.featureInputRead();
+            const captured = try source.capture(a, observed, paths);
+            const parsed = try (@import("../actions/clarification/parse_clarification_state.zig").Action{ .parser = parser.stateParser() }).execute(a, captured);
+            const state = try c.validate(parsed, selected.feature_id);
+            const inputs = try (@import("../actions/clarification/validate_clarification_forms.zig").Action{ .parser = parser.formParser() }).execute(a, state, captured);
+            const record = fixture.record(name);
+            const need: refresh.Need = .{ .stage = c.Id.parse(name).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema };
+            const next = try refresh.refresh(a, inputs, .{ .feature = selected.feature_id, .entries = &.{need} });
+            const views = try @import("../domain/clarification_views.zig").render(a, next, inputs.protected_forms);
+            const prepared = try (@import("../actions/clarification/prepare_clarification_output.zig").Action{}).execute(a, observed, paths, captured, inputs, .{ .ready = next }, views);
+            const form_path = try std.mem.concat(a, u8, &.{ selected.project_relative_path, "/clarify/", name, ".md" });
+            var writer_adapter: @import("../adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
+            var writer = writer_adapter.port();
+            try std.testing.expectError(error.OutputWriteFailed, writer.publish(a, prepared));
+            writer.capability = registry.featureOutputWrite();
+            if (iteration == 2) {
+                const old = state.value.?;
+                // Even an invalid/empty concurrent close is never overwritten.
+                const closed = try forms.render(a, old.records[0], fixture.binding(old, old.records[0]), .closed, "");
+                try project.dir.writeFile(io, .{ .sub_path = form_path, .data = closed });
+                try std.testing.expectError(error.OutputChanged, writer.publish(a, prepared));
+                try std.testing.expectEqualStrings(closed, try project.dir.readFileAlloc(io, form_path, a, .limited(c.max_form_bytes)));
+                try std.testing.expectEqualStrings(captured.state.?, try project.dir.readFileAlloc(io, paths.get(.clarification_state).project_relative, a, .limited(c.max_state_bytes)));
+            } else {
+                try writer.publish(a, prepared);
+                try std.testing.expectEqualStrings(views[0].content.replace, try project.dir.readFileAlloc(io, form_path, a, .limited(c.max_form_bytes)));
+                try std.testing.expectEqualStrings(name, next.value.?.records[0].id);
+                try std.testing.expectEqual(@as(usize, 1), next.value.?.records.len);
+                const old = next.value.?;
+                try project.dir.writeFile(io, .{ .sub_path = form_path, .data = try forms.render(a, old.records[0], fixture.binding(old, old.records[0]), .open, "An unsubmitted long draft that will disappear completely on rerun." ** 8) });
+            }
+            try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, paths.get(.specification).project_relative, .{}));
+            try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, paths.get(.workflow_state).project_relative, .{}));
+        }
+    }
+}
+
+test "registered output writer validates the complete set and never writes completion after a failed file" {
+    const output = @import("../domain/workflow_output.zig");
+    const io = std.testing.io;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try writeFeatureInputFixture(io, project.dir);
+    try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = output_test_bootstrap });
+    try project.dir.createDirPath(io, "requirements/current/Chosen/Café/spec.md");
+    var boot = runInProject(io, std.testing.allocator, project.dir);
+    defer boot.deinit();
+    try std.testing.expect(boot == .ready);
+    const registry = boot.ready.roots.registry();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const selected = try @import("../domain/feature_directory.zig").validate(a, .{ .bytes = "Chosen/Café" }, registry.featureDirectoryRoots());
+    var inspector_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var inspector = inspector_adapter.inspector();
+    inspector.capability = registry.featureDirectoryRead();
+    const observed = try inspector.inspect(a, selected);
+    const paths = try @import("../domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, registry.featureArtifactRoots(), selected);
+    const view: output.File = .{ .target = .{ .artifact = .reference_context }, .bytes = "reference view\n" };
+    const state: output.File = .{ .target = .{ .artifact = .workflow_state }, .bytes = "test completion\n" };
+    var prepared: output.Prepared = .{ .feature = observed, .paths = paths, .prior = .{ .state = null, .forms = &.{} }, .files = &.{ state, view } };
+    var writer_adapter: @import("../adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
+    var writer = writer_adapter.port();
+    writer.capability = registry.featureOutputWrite();
+    try std.testing.expectError(error.InvalidWorkflowOutput, writer.publish(a, prepared));
+    prepared.files = &.{ view, view };
+    try std.testing.expectError(error.InvalidWorkflowOutput, writer.publish(a, prepared));
+    try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, paths.get(.reference_context).project_relative, .{}));
+    prepared.files = &.{ view, .{ .target = .{ .artifact = .specification }, .bytes = "test view\n" }, state };
+    try std.testing.expectError(error.OutputWriteFailed, writer.publish(a, prepared));
+    try std.testing.expectEqualStrings(view.bytes, try project.dir.readFileAlloc(io, paths.get(.reference_context).project_relative, a, .limited(128)));
+    try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, paths.get(.workflow_state).project_relative, .{}));
+    // A new validated output replaces prior bytes completely, without a journal.
+    prepared.files = &.{.{ .target = view.target, .bytes = "x\n" }};
+    try writer.publish(a, prepared);
+    try std.testing.expectEqualStrings("x\n", try project.dir.readFileAlloc(io, paths.get(.reference_context).project_relative, a, .limited(128)));
+}
+
+// Writer tests need configured roots, not the native input-preflight graph.
+const output_test_bootstrap =
+    \\schema: workflow/v1
+    \\id: output-test
+    \\version: 1
+    \\shortcode: OUTP
+    \\invoke: core.empty-invocation
+    \\policy: core.capability-free@1
+    \\start: run
+    \\steps:
+    \\  run: { use: core.noop, on: { ok: end.ok } }
+;
 
 test "feature input preparation cancellation never creates artifacts" {
     const io = std.testing.io;

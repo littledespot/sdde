@@ -21,8 +21,10 @@ files at the same paths. Unresolved clarification forms are also completely
 overwritten, retaining their subject IDs; forms the user has resolved remain
 byte-for-byte unchanged. This is the
 [shared rerun rule](design/design.md#232-workflow-reruns-and-protected-clarification-files),
-including for workflows outside the initial SDD suite. Publication and
-clarification-write integration remain implementation work.
+including for workflows outside the initial SDD suite. The shared writer and
+generation-unit clarification replacement are connected; authenticated answer
+application and complete specification publication remain unfinished
+([implementation status](design/features/F0100-SpecWorkflow.md#312-clarification-refresh-and-registered-publication)).
 
 [Provider APIs own model-call size limits](design/decisions/0011-provider-owned-request-limits.md).
 SDDE adds no request/response byte ceilings or size-estimation gates. It records
@@ -212,15 +214,16 @@ workflow. Native extraction-result parsing, citation-backed candidate validation
 engine-assigned claim/citation IDs and complete chunk accounting are also tested
 through YAML with scripted results. Hierarchical reconciliation now preserves
 claim membership, validates dispositions and signal/conflict joins, assigns
-engine IDs and blocks unresolved conflicts. Live model extraction/reconciliation,
-semantic review and snapshot publication remain future work. See
+engine IDs and blocks unresolved conflicts. Production model requests now drive
+extraction/reconciliation and generation; snapshot publication remains unfinished. See
 [F0100](design/features/F0100-SpecWorkflow.md#35-extraction-candidate-accounting).
 The shared required-authority boundary now projects registered Specify fields
 and reference obligations, checks complete current support, and routes gaps to
 their earliest owner. Its YAML-visible gate uses existing runner provenance to
 reject stale inputs and sources. Scripted tests cover unrelated requirement
 kinds; no rubric score, citation alone or model success assertion grants gate
-authority. Generation/clarification/publication wiring remains separate work.
+authority. Generation is connected, as are unit-need forms and protected writes;
+authenticated answers and complete artifact/state publication remain open.
 See [F0100 §3.10](design/features/F0100-SpecWorkflow.md#310-shared-required-authority-boundary).
 Registered toolchain naming rules now feed a shared, YAML-addressable path-token
 grammar and detector, including current reference basenames. Source-backed

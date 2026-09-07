@@ -11,8 +11,10 @@ ingestion, citable reference preparation, typed text, Markdown exact-value
 preservation, scripted extraction accounting and reconciliation in Sections
 3.1–3.9 are implemented. Model-connected extraction/reconciliation (§3.11) and
 in-memory specification generation/validation/repair (§5.7) are implemented
-through ordinary YAML. Generated-name code is removed; applicable clarification
-handling, output publication and the complete Specify definition remain unfinished.
+through ordinary YAML. Generation needs now refresh and publish controlled
+clarification forms (§3.12); validated specification content renders and reparses
+in memory. Answer application, complete artifact/state publication and the final
+Specify definition remain unfinished. Generated-name code is removed.
 The native content schema and mechanical specification Markdown codec in §5.6
 are implemented. The shared required-authority boundary and Specify projection
 in §3.10 are connected to model-assisted generation evidence; publication remains open.
@@ -84,7 +86,7 @@ when it crosses a registered monotonic budget operation with a finite ceiling.
 
 This is a structural outline of the eventual complete workflow, not an
 executable definition. The implemented generation-only definition is linked in
-§3.11; clarification persistence and completion/publication remain separate.
+§3.11; §3.12 adds clarification persistence, not successful Specify completion.
 
 ```yaml
 schema: workflow/v1
@@ -164,8 +166,8 @@ envelope. Inspection carries only `feature-read`; `core.directory-read@1`
 permits feature/reference inspection. The fixture selects these steps through
 ordinary YAML, accepts absent targets without creation, and rejects archive
 targets, aliases and symlinks. Generated-name code and parameters are removed.
-The read-only input and generation steps are implemented below; output
-replacement remains H-012.
+Input, generation and clarification replacement steps are implemented below;
+complete specification output remains H-012.
 
 Specify follows [ADR 0009](../decisions/0009-atomic-workflow-execution.md): each
 execution starts at `start`; no transaction/checkpoint/recovery prerequisite.
@@ -196,9 +198,11 @@ not the complete Specify workflow.
 
 The single native persisted schema is
 [`clarification_inputs.State`](../../src/domain/clarification_inputs.zig):
-strict JSON tagged `clarification-state/v1`, bound to the selected feature,
+strict JSON tagged `clarification-state/v2`, bound to the selected feature,
 with registry/record revisions, stage ID counters, stable subjects, authority
-bindings, bounded answer schemas and recorded responses. A response owns its
+bindings, bounded answer schemas and recorded responses. Reference authority
+uses the real reference state identity; other authorities use the shared
+canonical kind/ordinal/revision contract. A response owns its
 original form bytes and revision binding. No second persisted byte copy or
 compatibility reader exists. The
 [canonical form renderer](../../src/domain/clarification_form.zig) owns all
@@ -214,9 +218,9 @@ binding and must match the response's exact saved bytes.
 
 The result distinguishes new submissions from recorded responses and retains
 closed bytes unchanged. Structural validation is not actor authentication or
-current-authority/applicability validation. Response acceptance, source
-reconciliation, clarification transitions/writes and publication-time
-protection checks remain later work; no stage completion is inferred.
+current-authority/applicability validation. Response acceptance and applicability
+remain open. §3.12 implements refresh, rendering and write-time protection;
+no stage completion is inferred.
 
 H-011 also requires selection and implementation of the trusted authentication
 mechanism for accepting submitted answers. Merely editing a form or loading an
@@ -632,6 +636,31 @@ through the fake provider and rejects packet substitution/schema rejection.
 The fake-provider generation test covers complete read/generate/review paths,
 two business examples, protocol correction/exhaustion and semantic uncertainty.
 This is not artifact publication or an end-to-end Specify completion claim.
+
+### 3.12 Clarification refresh and registered publication
+
+The generation definition now routes validated unit needs through
+`build-specification-clarification-need`, `refresh-clarifications`,
+`render-clarification-forms`, `prepare-clarification-output`,
+`publish-workflow-output` and `check-clarification-progress`. The shared refresh
+retains subject IDs across invocations and replaces open drafts, including when
+the question is unchanged. New submitted answers remain blocked pending trusted
+authentication and applicability validation; loading a response is not acceptance.
+
+Preparation joins the complete rendered form set to validated registry state,
+retains protected bytes and serializes canonical JSON. The writer has only a
+`feature-output-write` capability and registered destinations, never model paths.
+It rechecks the complete captured clarification input set before replacement,
+uses no-follow file access, rejects hard links, truncates shorter output and
+verifies written bytes. User-closed files are not replacement candidates. No
+transaction directory, append/merge path or recovery subsystem is introduced.
+
+The YAML's successful content branch projects current-authority-checked typed
+content through the existing Markdown codec and reparses it in memory. It does
+not yet publish a successful specification: reference-context, complete canonical
+state/provenance joins and completion/log evidence remain H-012. Clarification
+publication likewise does not claim a completed Specify workflow. See the
+[remaining acceptance work](../harness/02-spec-workflow.md#h-011--complete-specification-clarification-handling).
 
 ## 4. Required logical coverage
 

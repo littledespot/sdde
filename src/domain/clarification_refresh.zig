@@ -12,6 +12,10 @@ pub const Need = struct {
     answer_schema: c.AnswerSchema,
 };
 pub const Needs = struct { feature: @import("feature_identity.zig").FeatureId, entries: []const Need };
+pub const Result = union(enum) {
+    ready: c.ValidatedState,
+    blocked: enum { authentication_required, protected_clarification, limit_exceeded },
+};
 
 /// Caller arena owns new records; unchanged history continues to borrow input.
 /// Missing prior subjects are retained, never inferred resolved from absence.

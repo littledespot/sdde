@@ -3,6 +3,48 @@ const std = @import("std");
 const identity = @import("file_identity.zig");
 const Observation = @import("../../domain/filesystem_identity.zig").FileObservation;
 pub const Error = std.mem.Allocator.Error || error{ FileUnavailable, Cancelled };
+pub const Expected = union(enum) { any, absent, exact: []const u8 };
+
+/// Ordinary full replacement with no-follow, single-link and exact-input
+/// preconditions checked before truncation. A failed write may leave bytes.
+pub fn replace(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, name: []const u8, expected: Expected, bytes: []const u8) Error!void {
+    try validateLeaf(name);
+    const named = parent.statFile(io, name, .{ .follow_symlinks = false }) catch |err| switch (err) {
+        error.FileNotFound => null,
+        error.Canceled => return error.Cancelled,
+        else => return error.FileUnavailable,
+    };
+    if (named) |stat| if (stat.kind != .file) return error.FileUnavailable;
+    switch (expected) {
+        .any => {},
+        .absent => if (named != null) return error.FileUnavailable,
+        .exact => |value| if (named == null or named.?.size != value.len) return error.FileUnavailable,
+    }
+    const before = if (named != null) try observe(io, parent, name) else null;
+    const handle = std.posix.openat(parent.handle, name, .{ .ACCMODE = .RDWR, .CLOEXEC = true, .NOFOLLOW = true, .NOCTTY = true, .NONBLOCK = true, .CREAT = named == null, .EXCL = named == null }, 0o600) catch return error.FileUnavailable;
+    var file: std.Io.File = .{ .handle = handle, .flags = .{ .nonblocking = true } };
+    defer file.close(io);
+    var stat: std.c.Stat = undefined;
+    if (std.c.fstat(handle, &stat) != 0 or stat.nlink != 1) return error.FileUnavailable;
+    const opened = try inspect(io, file);
+    if (before) |observed| {
+        if (!same(observed, opened)) return error.FileUnavailable;
+    }
+    try requireExactName(io, parent, name);
+    if (expected == .exact) {
+        const current = (try capture(io, allocator, parent, name, opened, expected.exact.len)) orelse return error.FileUnavailable;
+        defer allocator.free(current);
+        if (!std.mem.eql(u8, expected.exact, current)) return error.FileUnavailable;
+    }
+    if (!same(opened, try observe(io, parent, name))) return error.FileUnavailable;
+    file.setLength(io, 0) catch return error.FileUnavailable;
+    file.writePositionalAll(io, bytes, 0) catch return error.FileUnavailable;
+    file.sync(io) catch return error.FileUnavailable;
+    const after = try inspect(io, file);
+    const verified = (try capture(io, allocator, parent, name, after, bytes.len)) orelse return error.FileUnavailable;
+    defer allocator.free(verified);
+    if (!std.mem.eql(u8, bytes, verified)) return error.FileUnavailable;
+}
 
 pub fn observe(io: std.Io, parent: std.Io.Dir, name: []const u8) Error!Observation {
     var file = try openLeaf(parent, name);
@@ -39,6 +81,11 @@ pub fn capture(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, nam
     const after = parent.statFile(io, name, .{ .follow_symlinks = false }) catch return error.FileUnavailable;
     if (after.kind != .file or after.inode != before.identity.file_id or after.size != before.size or
         after.mtime.nanoseconds != before.modified_ns or after.ctime.nanoseconds != before.changed_ns) return error.FileUnavailable;
+    try requireExactName(io, parent, name);
+    return bytes;
+}
+
+fn requireExactName(io: std.Io, parent: std.Io.Dir, name: []const u8) Error!void {
     var path_buffer: [std.Io.Dir.max_path_bytes]u8 = undefined;
     const length = parent.realPathFile(io, name, &path_buffer) catch return error.FileUnavailable;
     var scratch: [std.Io.Dir.max_name_bytes * 34 + 16]u8 = undefined;
@@ -46,14 +93,12 @@ pub fn capture(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, nam
     const actual = @import("unicode_normalization").nfc(fixed.allocator(), std.fs.path.basename(path_buffer[0..length]), std.Io.Dir.max_name_bytes) catch return error.FileUnavailable;
     const wanted = @import("unicode_normalization").nfc(fixed.allocator(), name, std.Io.Dir.max_name_bytes) catch return error.FileUnavailable;
     if (!std.mem.eql(u8, actual, wanted)) return error.FileUnavailable;
-    return bytes;
 }
 
 /// NONBLOCK prevents a raced-in FIFO/device from hanging before fstat rejects
 /// its kind. A single validated leaf and NOFOLLOW keep lookup under this parent.
 fn openLeaf(parent: std.Io.Dir, name: []const u8) Error!std.Io.File {
-    @import("../../domain/relative_directory_path.zig").validate(name) catch return error.FileUnavailable;
-    if (std.mem.indexOfScalar(u8, name, '/') != null) return error.FileUnavailable;
+    try validateLeaf(name);
     const handle = std.posix.openat(parent.handle, name, .{
         .ACCMODE = .RDONLY,
         .CLOEXEC = true,
@@ -62,6 +107,11 @@ fn openLeaf(parent: std.Io.Dir, name: []const u8) Error!std.Io.File {
         .NONBLOCK = true,
     }, 0) catch return error.FileUnavailable;
     return .{ .handle = handle, .flags = .{ .nonblocking = true } };
+}
+
+fn validateLeaf(name: []const u8) Error!void {
+    @import("../../domain/relative_directory_path.zig").validate(name) catch return error.FileUnavailable;
+    if (std.mem.indexOfScalar(u8, name, '/') != null) return error.FileUnavailable;
 }
 
 test "regular-file capture rejects missing aliases special nodes and stale observations" {
@@ -81,4 +131,24 @@ test "regular-file capture rejects missing aliases special nodes and stale obser
     try std.testing.expectError(error.FileUnavailable, capture(io, std.testing.allocator, project.dir, "source.md", observed, 5));
     try std.testing.expectError(error.FileUnavailable, capture(io, std.testing.allocator, project.dir, "source.md", null, 4));
     try std.testing.expectError(error.FileUnavailable, observe(io, project.dir, "../source.md"));
+}
+
+test "registered-file replacement truncates and refuses stale preconditions aliases and special files" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try replace(io, a, project.dir, "view.md", .absent, "long original output\n");
+    try std.testing.expectError(error.FileUnavailable, replace(io, a, project.dir, "view.md", .absent, "bad"));
+    try std.testing.expectError(error.FileUnavailable, replace(io, a, project.dir, "view.md", .{ .exact = "stale" }, "bad"));
+    try replace(io, a, project.dir, "view.md", .{ .exact = "long original output\n" }, "x\n");
+    const bytes = (try capture(io, a, project.dir, "view.md", null, 2)).?;
+    defer a.free(bytes);
+    try std.testing.expectEqualStrings("x\n", bytes);
+    try project.dir.symLink(io, "view.md", "alias.md", .{});
+    try std.testing.expectError(error.FileUnavailable, replace(io, a, project.dir, "alias.md", .any, "bad"));
+    try project.dir.createDirPath(io, "directory");
+    try std.testing.expectError(error.FileUnavailable, replace(io, a, project.dir, "directory", .any, "bad"));
+    try std.testing.expectError(error.FileUnavailable, replace(io, a, project.dir, "../view.md", .any, "bad"));
+    try replace(io, a, project.dir, "view.md", .any, "ok\n");
 }

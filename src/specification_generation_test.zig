@@ -42,11 +42,13 @@ test "specification display resolves exact values without normalization and pass
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var fixture = try Fixture.init(a, "Show `Cafe\u{301}` and consult sample.txt.");
+    var fixture = try Fixture.init(a, "Show `Cafe\u{301}` and consult stories.md.");
     defer fixture.deinit();
     const items = try provenance.items(fixture.context);
+    var exact_count: usize = 0;
     for (items.entries) |item| {
         if (item.claim.content != .preserved_token) continue;
+        exact_count += 1;
         const token = item.claim.content.preserved_token;
         const value: spec.AttributedValue = .{ .value = .{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } }, .provenance = .{ .claim_ids = &.{item.claim.id}, .citation_ids = item.claim.citation_ids, .clarification_response_ids = &.{} } };
         try std.testing.expectEqualStrings("Cafe\u{301}", (try projection.scalar(a, fixture.context, value)).bytes);
@@ -54,14 +56,18 @@ test "specification display resolves exact values without normalization and pass
         invalid.value.exact_copy.citation_id.ordinal = 999;
         try std.testing.expectError(error.InvalidSpecification, projection.scalar(a, fixture.context, invalid));
     }
+    try std.testing.expectEqual(@as(usize, 1), exact_count);
+    var passive_count: usize = 0;
     for (fixture.context.registry.records) |record| {
-        if (!std.mem.eql(u8, record.value, "sample.txt")) continue;
+        if (!std.mem.eql(u8, record.value, "stories.md")) continue;
+        passive_count += 1;
         var value = try fixture.value("unused");
         value.value = .{ .normalized = .{ .segments = &.{.{ .passive = .{ .passive_literal_id = record.id } }} } };
         const scalar = try projection.scalar(a, fixture.context, value);
-        try std.testing.expectEqualStrings("sample.txt", scalar.bytes);
+        try std.testing.expectEqualStrings("stories.md", scalar.bytes);
         try std.testing.expectEqual(@as(usize, 1), scalar.code_spans.len);
     }
+    try std.testing.expectEqual(@as(usize, 1), passive_count);
 }
 
 test "complete specification sessions preserve unit order provenance and conditional entities" {

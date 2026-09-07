@@ -50,10 +50,12 @@ The same gate is rebuilt against current inputs before generation/publication,
 and stale source lineage cannot authorize a consumer. Group size is explicit
 in YAML; the selected reference directory defines related documents. Unresolved conflicts block;
 model-connected iteration, generation, coverage and bounded repair are
-implemented by H-009/H-010. Answer application, clarification writing and
-publication remain H-011/H-012; the complete definition remains H-013.
+implemented by H-009/H-010. H-011/H-012 now connect unit-need forms to the shared
+writer and render/reparse specifications in memory. Answer application and
+complete specification publication remain open; the final definition is H-013.
 
-The current generation-only YAML stops at validated in-memory content:
+The current generation YAML publishes unit-need forms; successful specification
+content remains in memory until the complete sidecar/state set is available:
 
 ```mermaid
 flowchart LR
@@ -69,8 +71,13 @@ flowchart LR
     P --> V
     V -->|Yes; more units| G
     V -->|All units| C["Assemble, revalidate,<br/>assign IDs and account coverage"]
+    V -->|Knowledge gap| N["Refresh subject-keyed form<br/>and retain protected history"]
+    N --> O["Prepare complete clarification view/state set"]
+    O --> B["Recheck captured inputs;<br/>replace writable forms and registry"]
+    B --> U["End needs_user; no spec.md"]
+    B -->|Write failure| F
     C --> S["Model-assisted field support<br/>and shared authority gate"]
-    S --> M["Validated in-memory content;<br/>no spec.md publication"]
+    S --> M["Project, render and reparse in memory;<br/>no spec.md publication"]
 ```
 
 Each model path uses the same request/provider operations and explicit cleanup.

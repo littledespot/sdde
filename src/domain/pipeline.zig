@@ -91,6 +91,8 @@ pub const DataKey = enum {
     clarification_needs,
     refreshed_clarification_state,
     clarification_views,
+    prepared_workflow_output,
+    published_workflow_output,
     raw_reference_inventory,
     reference_inventory,
     captured_reference_corpus,

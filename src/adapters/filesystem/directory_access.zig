@@ -30,6 +30,27 @@ pub fn open(io: std.Io, base: std.Io.Dir, relative: []const u8) Error!std.Io.Dir
     return current;
 }
 
+/// Materialize only missing components, then use the same exact-name/no-follow
+/// reader. An unexpected concurrent creation is rejected rather than adopted.
+pub fn ensure(io: std.Io, base: std.Io.Dir, relative: []const u8) Error!std.Io.Dir {
+    @import("../../domain/relative_directory_path.zig").validate(relative) catch return error.DirectoryUnavailable;
+    var current = base;
+    var owned = false;
+    errdefer if (owned) current.close(io);
+    var segments = std.mem.splitScalar(u8, relative, '/');
+    while (segments.next()) |segment| {
+        const next = open(io, current, segment) catch |err| blk: {
+            if (err != error.DirectoryMissing) return err;
+            current.createDir(io, segment, .default_dir) catch return error.DirectoryUnavailable;
+            break :blk try open(io, current, segment);
+        };
+        if (owned) current.close(io);
+        current = next;
+        owned = true;
+    }
+    return current;
+}
+
 /// Compare the opened descriptor's actual name, not a directory inventory.
 /// NFC-equivalent spellings are the same normalized input; case/other aliases
 /// cannot silently select a differently named directory on the active filesystem.

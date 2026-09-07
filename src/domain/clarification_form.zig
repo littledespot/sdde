@@ -3,6 +3,18 @@ const clarification = @import("clarification_inputs.zig");
 
 pub const answer_start = "<!-- sdd:answer:start -->\n";
 pub const answer_end = "\n<!-- sdd:answer:end -->\n";
+
+/// Conservative write protection only, never form validity or answer authority.
+/// Full controlled-region validation is still required before preparation.
+pub fn isClosed(bytes: []const u8) bool {
+    var lines = std.mem.splitScalar(u8, bytes, '\n');
+    if (!std.mem.eql(u8, lines.next() orelse return false, "---")) return false;
+    while (lines.next()) |line| {
+        if (std.mem.eql(u8, line, "---")) break;
+        if (std.mem.startsWith(u8, line, "requestedStatus:") and std.mem.eql(u8, std.mem.trim(u8, line["requestedStatus:".len..], " \t\r"), "closed")) return true;
+    }
+    return false;
+}
 pub const Binding = struct { state_ordinal: u64, state_revision: u64, record_revision: u64, status: clarification.EngineStatus };
 pub const Template = struct {
     before_status: []const u8,

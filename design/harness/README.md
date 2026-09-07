@@ -1,7 +1,8 @@
 # Spec workflow evaluation backlog
 
-**Status:** Proposed implementation backlog; evaluator-only implementation is
-present. Human evaluation and live API verification are excluded from the
+**Status:** Proposed implementation backlog; evaluator and in-memory generation
+are implemented, with partial clarification/publication integration. Human
+evaluation and live API verification are excluded from the
 current implementation task; neither is claimed completed. **Reviewed:** 2026-09-07,
 including uncommitted work. [Evaluator commands and contract](evaluator.md).
 
@@ -56,7 +57,7 @@ requested live, LLM-based evaluation.
 | Generic engine | YAML discovery/compiler/runner and explicit feature/reference invocation exist. | Complete Specify definition through publication. |
 | References | Model-connected Markdown extraction/reconciliation, citations, typed text and exact-value preservation are implemented. | Applicable clarification answers and final artifact/state publication. |
 | Model calls | [Native request operations](../../src/composition/model_request_operations.zig), configured production provider, explicit retirement/protocol retry and fake-provider tests exist. | Authorized live verification; no new provider is required for H-009/H-010. |
-| Specify | H-007–H-010 implement typed content, shared gates, model-connected generation, coverage and bounded repair. [Generation tests](../../src/composition/root.zig) assert that no `spec.md` was written. | Clarification lifecycle and complete output publication. |
+| Specify | H-007–H-010 implement typed content, gates, generation, coverage and bounded repair. H-011/H-012 add in-memory Markdown projection and unit-need form publication. [Tests](../../src/composition/root.zig) still assert no successful `spec.md` publication. | Authenticated/current answers, remaining gap routes, complete sidecar/state/log publication and failure/rerun evidence. |
 | Fixture | Unchanged `stories.md`, seven principle files, `spec.case.json`, draft rubric and seven [calibration specimens](../../test/evaluation/wf-001-hello-world/node-vitest/calibration/README.md) exist. | Human rubric review/live calibration and full-workflow runtime resources. |
 | Evaluator | `test/harness/`, `harness.zig` and `evaluate-spec`/offline test/smoke build steps implement supplied-spec OpenAI grading and reports. | Authorized live acceptance; no paid API call was made during implementation. |
 | Full-workflow harness | Specify execution/handoff is still separate from the supplied-spec evaluator. `TEST_HARNESS.md` remains absent; [evaluator.md](evaluator.md) documents actual commands. | H-007–H-018 integration and live end-to-end evidence. |

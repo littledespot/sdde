@@ -24,6 +24,7 @@ pub const ConfiguredBaseRootCapability = opaque {
 pub const LLMProviderConfigCapability = opaque {};
 pub const FeatureDirectoryReadCapability = opaque {};
 pub const FeatureInputReadCapability = opaque {};
+pub const FeatureOutputWriteCapability = opaque {};
 pub const ReferenceContentReadCapability = opaque {};
 
 pub const BootstrapRootRegistry = opaque {
@@ -31,6 +32,9 @@ pub const BootstrapRootRegistry = opaque {
         return @ptrCast(self.referenceSources());
     }
     pub fn featureInputRead(self: *const BootstrapRootRegistry) *const FeatureInputReadCapability {
+        return @ptrCast(self);
+    }
+    pub fn featureOutputWrite(self: *const BootstrapRootRegistry) *const FeatureOutputWriteCapability {
         return @ptrCast(self);
     }
 
@@ -194,6 +198,13 @@ pub fn bindFeatureInputAdapter(capability: *const FeatureInputReadCapability) Fe
         .specs_observation = capabilityStorage(registry_value.specsArtifacts()).observation,
         .workflows_identity = capabilityStorage(registry_value.workflowAuthority()).observation.directory,
     };
+}
+
+/// The write adapter receives only the selected roots needed for registered
+/// outputs and protected-input rechecks, not an arbitrary project write grant.
+pub fn bindFeatureOutputAdapter(capability: *const FeatureOutputWriteCapability) FeatureInputAdapterBinding {
+    const registry_value: *const BootstrapRootRegistry = @ptrCast(capability);
+    return bindFeatureInputAdapter(registry_value.featureInputRead());
 }
 
 /// Internal handoff restricted to the read-only feature directory inspector.

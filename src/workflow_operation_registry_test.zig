@@ -277,9 +277,11 @@ test "bindings derive reachable port capabilities and reject erased or executabl
     const pure = comptime bindings.inspect(Pure, &.{});
     const nested = comptime bindings.inspect(Nested, &.{});
     const recursive = comptime bindings.inspect(Recursive, &.{});
+    const output = comptime bindings.inspect(@import("application/workflow_output_binding.zig").Publish, &.{});
     try std.testing.expect(pure.valid and !pure.model_provider);
     try std.testing.expect(nested.valid and nested.model_provider);
     try std.testing.expect(recursive.valid and recursive.model_provider);
+    try std.testing.expect(output.valid and output.feature_output_write and !output.model_provider and !output.feature_input_read);
     inline for (.{ anyopaque, *anyopaque, *const fn () void, [*]u8, struct { hidden: ?*anyopaque } }) |T| {
         try std.testing.expect(!(comptime bindings.inspect(T, &.{})).valid);
     }

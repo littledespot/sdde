@@ -3,7 +3,7 @@ id: spec-generation
 version: 1
 shortcode: SGEN
 invoke: specify-invocation
-policy: core.specification-generation@1
+policy: core.specification-output@1
 start: capture-project
 resources:
   protocol-prompt: spec/protocol.prompt.md
@@ -176,7 +176,7 @@ steps:
   gen-terminate-request: { use: terminate-model-request, on: { failed: end.failed, cancelled: end.cancelled } }
   collect-specification: { use: collect-specification-model-result, on: { ok: parse-specification, failed: end.failed } }
   parse-specification: { use: parse-specification-unit, on: { ok: gen-retire-input, invalid: end.invalid, failed: end.failed } }
-  validate-specification: { use: validate-specification-unit, on: { ok: advance-specification, invalid: authorize-repair, needs_user: end.needs_user, failed: end.failed } }
+  validate-specification: { use: validate-specification-unit, on: { ok: advance-specification, invalid: authorize-repair, needs_user: build-clarification, failed: end.failed } }
   advance-specification: { use: advance-specification-generation, on: { ok: check-specification, failed: end.failed } }
   gen-retire-input: { use: retire-model-input, on: { ok: gen-retire, failed: end.failed } }
   gen-retire: { use: retire-model-request, on: { ok: validate-specification, failed: end.failed } }
@@ -233,4 +233,13 @@ steps:
   post-ledger: { use: build-required-authority-ledger, on: { ok: post-observations, blocked: end.blocked } }
   post-observations: { use: build-required-authority-observations, on: { ok: post-reconcile, failed: end.failed } }
   post-reconcile: { use: reconcile-required-authorities, on: { ok: post-gate, needs_user: post-gate, blocked: post-gate } }
-  post-gate: { use: validate-required-authority-reconciliation, on: { ok: end.ok, needs_user: end.needs_user, blocked: end.blocked } }
+  post-gate: { use: validate-required-authority-reconciliation, on: { ok: project-document, needs_user: end.needs_user, blocked: end.blocked } }
+  project-document: { use: project-specification-document, on: { ok: render-specification, failed: end.failed } }
+  render-specification: { use: render-specification, on: { ok: validate-rendering, failed: end.failed } }
+  validate-rendering: { use: validate-specification-rendering, on: { ok: end.ok, failed: end.failed } }
+  build-clarification: { use: build-specification-clarification-need, on: { ok: refresh-clarifications, failed: end.failed } }
+  refresh-clarifications: { use: refresh-clarifications, on: { ok: render-clarifications, blocked: end.blocked, failed: end.failed } }
+  render-clarifications: { use: render-clarification-forms, on: { ok: prepare-clarification-output, failed: end.failed } }
+  prepare-clarification-output: { use: prepare-clarification-output, on: { ok: publish-clarifications, failed: end.failed } }
+  publish-clarifications: { use: publish-workflow-output, on: { ok: check-clarifications, failed: end.failed } }
+  check-clarifications: { use: check-clarification-progress, on: { ok: end.ok, needs_user: end.needs_user, blocked: end.blocked } }
