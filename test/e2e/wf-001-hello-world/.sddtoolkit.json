@@ -21,6 +21,6 @@
     "toolchainPreset": ".sddtoolkit/toolchainPreset",
     "principles": ".sddtoolkit/principles",
     "templates": ".sddtoolkit/templates",
-    "providers": ".sddproviders.json"
+    "providers": "../config/.sddproviders.json"
   }
 }
