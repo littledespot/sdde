@@ -9,7 +9,7 @@ including uncommitted work. [Evaluator commands and contract](evaluator.md).
 ## User-directed outcome
 
 Run the ordinary `spec.workflow.yaml` against the Hello World reference, then
-evaluate the **actual generated `spec.md`** using the **OpenAI API and a rubric**.
+evaluate the **actual generated `spec.md`** using the **selected OpenAI or Bedrock API and a rubric**.
 Report criterion-level judgments, scores, evidence and explanations.
 
 The LLM evaluates semantic quality: coverage, correctness, unsupported additions,
@@ -26,9 +26,10 @@ requested live, LLM-based evaluation.
 
 - Initial case: `test/e2e/wf-001-hello-world/node-vitest`, using its
   sibling [stories.md](../../test/e2e/wf-001-hello-world/reference/stories.md).
-- Initial evaluator provider: OpenAI API. The workflow's generation provider
+- Evaluator providers: OpenAI Responses or Bedrock Converse, explicitly selected
+  through the internal test environment. The workflow's generation provider
   and the evaluator's provider/model are separate selections. The supplied-spec
-  evaluator uses Responses/native HTTPS without a new dependency. Exact model
+  evaluator uses Responses/Converse with native HTTPS without a new dependency. Exact model
   and limits are mandatory operator selections; draft rubric scoring is visible
   in the rubric file, not a production policy or calibrated result.
 - This is development-only evaluation of the engine, not authorization to run
@@ -59,7 +60,7 @@ requested live, LLM-based evaluation.
 | Model calls | [Native request operations](../../src/composition/model_request_operations.zig), configured production provider, explicit retirement/protocol retry and fake-provider tests exist. | Authorized live verification; no new provider is required for H-009/H-010. |
 | Specify | H-007–H-010 implement typed content, gates, generation, coverage and bounded repair. H-011/H-012 add in-memory Markdown projection and unit-need form publication. [Tests](../../src/composition/root.zig) still assert no successful `spec.md` publication. | Authenticated/current answers, remaining gap routes, complete sidecar/state/log publication and failure/rerun evidence. |
 | Fixture | Unchanged `stories.md`, seven principle files, `spec.case.json`, draft rubric and seven [calibration specimens](../../test/e2e/wf-001-hello-world/node-vitest/calibration/README.md) exist. | Human rubric review/live calibration and full-workflow runtime resources. |
-| Evaluator | `test/harness/`, `harness.zig` and `evaluate-spec`/offline test/smoke build steps implement supplied-spec OpenAI grading and reports. | Authorized live acceptance; no paid API call was made during implementation. |
+| Evaluator | `test/harness/`, `harness.zig` and `evaluate-spec`/offline test/smoke build steps implement supplied-spec OpenAI/Bedrock grading and reports. | Authorized live acceptance; no paid API call was made during implementation. |
 | Full-workflow harness | Specify execution/handoff is still separate from the supplied-spec evaluator. `TEST_HARNESS.md` remains absent; [evaluator.md](evaluator.md) documents actual commands. | H-007–H-018 integration and live end-to-end evidence. |
 
 This is a source inspection, not a fresh test-pass claim. Recheck changing
@@ -68,14 +69,14 @@ boundaries before implementing a ticket; do not rebuild existing functionality.
 ## Delivery sequence
 
 1. **Evaluator first:** agree the small case/rubric/result contracts, create the
-   rubric, and grade a supplied specimen through OpenAI. Label supplied,
+   rubric, and grade a supplied specimen through the selected provider. Label supplied,
    recorded, scripted and freshly generated artifacts honestly. This work can
    proceed while Specify is unfinished.
 2. **Runnable Specify:** finish only its production dependencies and connect the
    ordinary YAML workflow to the isolated-project harness. Fake-provider tests
    prove integration before authorized live generation.
 3. **Requested milestone:** run real Spec generation for the original reference,
-   grade that run's output through OpenAI, and produce an inspectable report.
+   grade that run's output through the selected provider, and produce an inspectable report.
    A low score is a valid evaluation result, not an excuse to hide the run.
 
 Neither a supplied-spec evaluation nor a fake-generation end-to-end test alone
@@ -95,7 +96,7 @@ Dependencies and evidence are defined in the ticket bodies.
 | [H-001](01-rubric-evaluator.md#h-001--define-the-minimum-evaluation-contracts) | Minimum case/configuration contracts and explicit decisions | Evaluator |
 | [H-002](01-rubric-evaluator.md#h-002--create-the-hello-world-rubric) | Hello World rubric and scoring anchors | Evaluator |
 | [H-003](01-rubric-evaluator.md#h-003--capture-inputs-and-build-the-judge-packet) | Exact source/spec/rubric capture and judge packet | Evaluator |
-| [H-004](01-rubric-evaluator.md#h-004--implement-the-openai-evaluator-boundary) | OpenAI invocation, credentials and failure handling | Evaluator |
+| [H-004](01-rubric-evaluator.md#h-004--implement-the-evaluator-provider-boundary) | Selected-provider invocation, credentials and failure handling | Evaluator |
 | [H-005](01-rubric-evaluator.md#h-005--validate-judgments-and-calculate-results) | Closed response validation and score calculation | Evaluator |
 | [H-006](01-rubric-evaluator.md#h-006--report-results-and-support-supplied-spec-evaluation) | Reports and evaluator-only entry point | Evaluator |
 | [H-007](02-spec-workflow.md#h-007--align-the-existing-specification-contract) | Existing production contract alignment | Workflow |
@@ -118,11 +119,11 @@ production work proceeds. H-015 joins the two tracks.
 ## Completion checklist
 
 - [ ] A checked-in rubric evaluates the original reference without a prose golden.
-- [ ] An authorized OpenAI call evaluates an explicitly supplied spec and reports
+- [ ] An authorized call to the selected provider evaluates an explicitly supplied spec and reports
   criterion evidence; this is clearly labelled evaluator-only evidence.
 - [ ] The ordinary Spec YAML executes through the production engine with fake
   model observations, without a fixture-specific execution path.
-- [ ] The original Hello World case completes real generation, and OpenAI grades
+- [ ] The original Hello World case completes real generation, and the selected provider grades
   the exact `spec.md` produced by that execution.
 - [ ] Reports distinguish workflow failure/clarification, evaluator error,
   completed low-scoring evaluation and completed satisfactory evaluation.

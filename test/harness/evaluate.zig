@@ -1,7 +1,7 @@
 //! One sequential evaluation. Attempt observations are the sole usage record.
 const std = @import("std");
 const c = @import("contracts.zig");
-const wire = @import("openai.zig");
+const request_encoding = @import("request.zig");
 const provider = @import("provider.zig");
 const report = @import("report.zig");
 const judgment = @import("judgment.zig");
@@ -10,7 +10,7 @@ pub const Error = c.Error || error{Cancelled};
 
 /// Caller retains the arena owning inputs, requests, observations and report.
 pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: configuration.Config, capture: c.Capture) Error!report.Report {
-    const request = try wire.request(a, config, capture);
+    const request = try request_encoding.encode(a, config, capture);
     var attempts: std.ArrayList(report.Attempt) = .empty;
     defer attempts.deinit(a);
     var ordinal: u32 = 1;
@@ -23,7 +23,7 @@ pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: config
         try attempts.ensureUnusedCapacity(a, 1);
         var observation = port.invoke(a, request, config.timeout_ms) catch |err| blk: {
             if (err == error.OutOfMemory) return error.OutOfMemory;
-            break :blk wire.Observation{ .failure = .cancelled };
+            break :blk provider.Observation{ .failure = .cancelled };
         };
         // A narrow adapter is still an untrusted observation producer.
         if (observation.usage) |usage| {
@@ -33,27 +33,20 @@ pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: config
                 observation.payload = null;
             }
         }
-        inline for (.{ "request_id", "response_id" }) |field| {
-            if (@field(observation, field)) |value| if (!c.id(value)) {
-                @field(observation, field) = null;
-                observation.failure = .invalid_response;
-                observation.payload = null;
-            };
-        }
-        if (observation.actual_model) |model| if (c.ModelId.parse(model) == null) {
-            observation.actual_model = null;
+        if (observation.request_id) |id| if (!c.id(id)) {
+            observation.request_id = null;
             observation.failure = .invalid_response;
             observation.payload = null;
         };
-        if (observation.failure == null and (observation.response_id == null or observation.actual_model == null)) {
+        if (!observation.identity.validFor(config) and (observation.failure == null or observation.identity != .unavailable)) {
+            observation.identity = .unavailable;
             observation.failure = .invalid_response;
             observation.payload = null;
         }
         attempts.appendAssumeCapacity(.{
             .ordinal = ordinal,
             .request_id = observation.request_id,
-            .response_id = observation.response_id,
-            .actual_model = observation.actual_model,
+            .identity = observation.identity,
             .usage = observation.usage,
             .failure = observation.failure,
         });

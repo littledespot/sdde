@@ -102,11 +102,16 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
             }
             if (response.head.content_encoding != .identity) return error.InvalidResponse;
             var exception: ?[]const u8 = null;
+            var request_id: ?[]const u8 = null;
             var headers = response.head.iterateHeaders();
             while (headers.next()) |header| {
                 if (std.ascii.eqlIgnoreCase(header.name, "x-amzn-errortype")) {
                     if (exception != null) return error.InvalidResponse;
                     exception = try allocator.dupe(u8, header.value);
+                }
+                if (std.ascii.eqlIgnoreCase(header.name, "x-amzn-requestid")) {
+                    if (request_id != null) return error.InvalidResponse;
+                    request_id = try allocator.dupe(u8, header.value);
                 }
             }
             var bytes: std.Io.Writer.Allocating = .init(allocator);
@@ -126,7 +131,7 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
                 .ready, .body_none => {},
                 else => return error.EndOfStream,
             }
-            state.response = .{ .received = .{ .status = @intFromEnum(response.head.status), .exception = exception, .body = try bytes.toOwnedSlice() } };
+            state.response = .{ .received = .{ .status = @intFromEnum(response.head.status), .exception = exception, .request_id = request_id, .body = try bytes.toOwnedSlice() } };
         }
     };
 }

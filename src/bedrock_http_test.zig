@@ -3,6 +3,26 @@ const fixture_module = @import("bedrock_http_test_fixture.zig");
 const transport = @import("adapters/provider/bedrock_transport.zig");
 const good = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";
 
+test "concrete HTTP captures request identity and rejects duplicate identity headers" {
+    for ([_]bool{ false, true }) |duplicate| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const bytes = try std.fmt.allocPrint(arena.allocator(), "HTTP/1.1 200 OK\r\nX-Amzn-RequestId: request-one\r\n{s}Content-Length: 5\r\n\r\nhello", .{if (duplicate) "x-amzn-requestid: request-two\r\n" else ""});
+        var fixture: fixture_module.Fixture = undefined;
+        fixture.init(bytes);
+        defer fixture.deinit();
+        var adapter = fixture.adapter();
+        const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+        if (duplicate) {
+            try std.testing.expectEqual(.response_invalid, result.failed.cause);
+        } else {
+            try std.testing.expectEqualStrings("request-one", result.received.request_id.?);
+            try std.testing.expectEqualStrings("hello", result.received.body);
+        }
+        try fixture.expectJoined();
+    }
+}
+
 test "concrete HTTP sends each API once and owns a complete fragmented response" {
     for ([_]@import("domain/llm_provider_operation.zig").ProviderOperationKind{ .input_token_count, .inference }) |kind| {
         var fixture: fixture_module.Fixture = undefined;

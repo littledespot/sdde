@@ -143,6 +143,14 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
     _ = try reports.json(a, report);
     _ = try reports.markdown(a, report);
+    const bedrock_config = try configuration.parse(a, config_bytes, bedrock_selection);
+    _ = try bedrock.request(a, bedrock_config, inputs);
+    var observation = try bedrock.response(a, .{ .received = .{ .status = 200, .body = try bedrockResponseBytes(a, "end_turn", good) } });
+    observation.identity = .{ .bedrock_target = .{ .model = bedrock_config.model, .region = bedrock_config.region.? } };
+    fake = .{ .observations = &.{observation} };
+    const bedrock_report = try evaluator.run(std.testing.io, a, fake.port(), bedrock_config, inputs);
+    _ = try reports.json(a, bedrock_report);
+    _ = try reports.markdown(a, bedrock_report);
 }
 test "all allocation failures release candidate data" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
@@ -155,16 +163,18 @@ const evaluator = @import("evaluate.zig");
 const configuration = @import("configuration.zig");
 const test_environment = @import("environment.zig");
 const test_selection: configuration.Selection = .{ .api = .openai_responses, .model = c.ModelId.parse("scripted-judge").? };
+const bedrock = @import("bedrock.zig");
+const bedrock_selection: configuration.Selection = .{ .api = .bedrock_converse, .model = c.ModelId.parse("openai.gpt-oss-20b-1:0").?, .region = .@"ap-southeast-2" };
 const config_bytes =
     \\{"schema":"evaluation-config/v1","reasoning_effort":null,"temperature":null,"timeout_ms":1000,"retry_limit":1,"retry_delay_ms":1,"total_token_budget":100}
 ;
 const Fake = struct {
-    observations: []const wire.Observation,
+    observations: []const provider.Observation,
     count: usize = 0,
     fn port(self: *Fake) provider.Port {
         return .{ .context = @ptrCast(self), .invoke_fn = invoke };
     }
-    fn invoke(context: *provider.Context, _: std.mem.Allocator, body: []const u8, timeout: u32) provider.Error!wire.Observation {
+    fn invoke(context: *provider.Context, _: std.mem.Allocator, body: []const u8, timeout: u32) provider.Error!provider.Observation {
         const self: *Fake = @ptrCast(@alignCast(context));
         std.debug.assert(body.len > 0 and timeout > 0);
         std.debug.assert(self.count < self.observations.len);
@@ -173,7 +183,7 @@ const Fake = struct {
         return result;
     }
 };
-const observed_good: wire.Observation = .{ .request_id = "req-test", .response_id = "resp-test", .actual_model = "scripted-judge", .usage = .{ .input_tokens = 10, .output_tokens = 20, .total_tokens = 30 }, .payload = good };
+const observed_good: provider.Observation = .{ .request_id = "req-test", .identity = .{ .openai_response = .{ .response_id = "resp-test", .actual_model = "scripted-judge" } }, .usage = .{ .input_tokens = 10, .output_tokens = 20, .total_tokens = 30 }, .payload = good };
 
 fn responseBytes(a: std.mem.Allocator, status: []const u8, payload: []const u8) ![]const u8 {
     return std.json.Stringify.valueAlloc(a, .{
@@ -223,6 +233,8 @@ test "configuration has no hidden model budget timeout retry or score defaults" 
         .{ "\"total_token_budget\":100", "\"total_token_budget\":0" },
         .{ "\"schema\":", "\"model\":\"scripted-judge\",\"schema\":" },
         .{ "\"schema\":", "\"api\":\"openai_responses\",\"schema\":" },
+        .{ "\"schema\":", "\"provider\":\"bedrock\",\"schema\":" },
+        .{ "\"schema\":", "\"region\":\"ap-southeast-2\",\"schema\":" },
         .{ "\"reasoning_effort\":null,", "" },
         .{ "\"temperature\":null", "\"temperature\":3" },
         .{ "\"schema\":", "\"api_key\":\"secret\",\"schema\":" },
@@ -245,7 +257,7 @@ test "evaluation selection is required from test environment and reaches request
     try environment.put("TEST_EVALUATION_MODEL", "\xff");
     try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
     try environment.put("TEST_EVALUATION_MODEL", "model/version:1");
-    for ([_][]const u8{ "", "unknown", "bedrock", "OpenAI" }) |invalid| {
+    for ([_][]const u8{ "", "unknown", "Bedrock", "OpenAI" }) |invalid| {
         try environment.put("TEST_EVALUATION_PROVIDER", invalid);
         try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
     }
@@ -271,13 +283,224 @@ test "evaluator credentials accept only the test key without production or Bedro
     for ([_][]const u8{ "OPENAI_API_KEY", "AWS_BEARER_TOKEN_BEDROCK", "TEST_AWS_BEARER_TOKEN_BEDROCK" }) |name| {
         try environment.put(name, "unused-credential");
     }
-    try std.testing.expectError(error.MissingTestApiKey, test_environment.credential(&environment));
+    try std.testing.expectError(error.MissingTestApiKey, test_environment.credential(&environment, .openai_responses));
     for ([_][]const u8{ "", "\r\nHeader: value", "\xff" }) |invalid| {
         try environment.put("TEST_OPENAI_API_KEY", invalid);
-        try std.testing.expectError(error.InvalidTestApiKey, test_environment.credential(&environment));
+        try std.testing.expectError(error.InvalidTestApiKey, test_environment.credential(&environment, .openai_responses));
     }
     try environment.put("TEST_OPENAI_API_KEY", "test-only-credential");
-    try std.testing.expectEqualStrings("test-only-credential", try test_environment.credential(&environment));
+    try std.testing.expectEqualStrings("test-only-credential", try test_environment.credential(&environment, .openai_responses));
+}
+
+test "Bedrock evaluation validates explicit test selection and registered controls" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var environment: std.process.Environ.Map = .init(std.testing.allocator);
+    defer environment.deinit();
+    try environment.put("TEST_EVALUATION_PROVIDER", "bedrock");
+    try environment.put("TEST_EVALUATION_MODEL", bedrock_selection.model.bytes);
+    try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
+    for ([_][]const u8{ "", "unknown", "us-west-2.evil.invalid" }) |region| {
+        try environment.put("TEST_EVALUATION_REGION", region);
+        try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
+    }
+    for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
+        try environment.put("TEST_EVALUATION_MODEL", entry.model.bytes);
+        try environment.put("TEST_EVALUATION_REGION", @tagName(entry.bedrock_regions[0]));
+        const config = try configuration.parse(a, config_bytes, try test_environment.selection(&environment));
+        try std.testing.expectEqual(.bedrock_converse, config.api);
+        try std.testing.expectEqualStrings(entry.model.bytes, config.model);
+        var invalid = config;
+        invalid.region = null;
+        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
+        invalid = config;
+        invalid.region = if (config.region == .@"us-west-2") .@"ap-southeast-2" else .@"us-west-2";
+        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
+        invalid = config;
+        invalid.model = "unregistered-model";
+        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
+        invalid = config;
+        invalid.reasoning_effort = .high;
+        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
+        invalid = config;
+        invalid.temperature = 1.01;
+        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
+    }
+    try environment.put("TEST_EVALUATION_PROVIDER", "openai");
+    try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
+    try environment.put("TEST_EVALUATION_REGION", "");
+    _ = try test_environment.selection(&environment);
+}
+
+test "Bedrock evaluator reads only its test credential without other provider or production fallback" {
+    var environment: std.process.Environ.Map = .init(std.testing.allocator);
+    defer environment.deinit();
+    for ([_][]const u8{ "AWS_BEARER_TOKEN_BEDROCK", "OPENAI_API_KEY", "TEST_OPENAI_API_KEY" }) |name| try environment.put(name, "unused-credential");
+    try std.testing.expectError(error.MissingTestApiKey, test_environment.credential(&environment, .bedrock_converse));
+    for ([_][]const u8{ "", "bad key", "\r\n", "\xff" }) |invalid| {
+        try environment.put("TEST_AWS_BEARER_TOKEN_BEDROCK", invalid);
+        try std.testing.expectError(error.InvalidTestApiKey, test_environment.credential(&environment, .bedrock_converse));
+    }
+    try environment.put("TEST_AWS_BEARER_TOKEN_BEDROCK", "test-only-bedrock-credential");
+    try std.testing.expectEqualStrings("test-only-bedrock-credential", try test_environment.credential(&environment, .bedrock_converse));
+}
+
+fn bedrockResponseBytes(a: std.mem.Allocator, stop: []const u8, payload: []const u8) ![]const u8 {
+    return std.json.Stringify.valueAlloc(a, .{
+        .output = .{ .message = .{ .role = "assistant", .content = [_]struct { text: []const u8 }{.{ .text = payload }} } },
+        .stopReason = stop,
+        .usage = .{ .inputTokens = 10, .outputTokens = 20, .totalTokens = 30 },
+        .metrics = .{ .latencyMs = 1 },
+    }, .{});
+}
+
+test "Bedrock evaluation runs through concrete HTTP codecs grading and reports for both registered targets" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const body = try bedrockResponseBytes(a, "end_turn", good);
+    const response = try std.fmt.allocPrint(a, "HTTP/1.1 200 OK\r\nX-Amzn-RequestId: bedrock-request-1\r\nContent-Length: {d}\r\n\r\n{s}", .{ body.len, body });
+    const fixture_module = @import("../../src/bedrock_http_test_fixture.zig");
+    for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
+        var socket: fixture_module.Fixture = undefined;
+        socket.init(response);
+        defer socket.deinit();
+        socket.expected_host = try std.fmt.allocPrint(a, "bedrock-runtime.{s}.amazonaws.com", .{@tagName(entry.bedrock_regions[0])});
+        var transport = socket.adapter();
+        var adapter: bedrock.Adapter = .{ .transport = transport.port(), .clock = transport.clock, .model = entry.model, .region = entry.bedrock_regions[0], .api_key = &socket.canary };
+        var config = try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = entry.model, .region = entry.bedrock_regions[0] });
+        config.timeout_ms = 100;
+        config.temperature = 0.25;
+        const inputs = try capture(a);
+        const encoded = try @import("request.zig").encode(a, config, inputs);
+        const root = try c.decode(std.json.Value, a, encoded);
+        try std.testing.expectEqualStrings(packet.instructions, root.object.get("system").?.array.items[0].object.get("text").?.string);
+        try std.testing.expectEqualStrings(try packet.resultSchema(a), root.object.get("system").?.array.items[2].object.get("text").?.string);
+        try std.testing.expectEqualStrings(try packet.input(a, inputs), root.object.get("messages").?.array.items[0].object.get("content").?.array.items[0].object.get("text").?.string);
+        try std.testing.expectEqual(@as(f64, 0.25), root.object.get("inferenceConfig").?.object.get("temperature").?.float);
+        for ([_][]const u8{ "tools", "toolConfig", "outputConfig", "maxTokens", "reasoning" }) |forbidden| try std.testing.expect(std.mem.indexOf(u8, encoded, forbidden) == null);
+        const report = try evaluator.run(std.testing.io, a, adapter.port(), config, inputs);
+        try std.testing.expectEqual(.scored, report.outcome.evaluated.assessment);
+        try std.testing.expectEqual(@as(usize, 1), report.attempts.len);
+        try std.testing.expectEqual(@as(u64, 30), report.attempts[0].usage.?.total_tokens);
+        try std.testing.expectEqualStrings("bedrock-request-1", report.attempts[0].request_id.?);
+        try std.testing.expectEqualStrings(entry.model.bytes, report.attempts[0].identity.bedrock_target.model);
+        try std.testing.expectEqual(entry.bedrock_regions[0], report.attempts[0].identity.bedrock_target.region);
+        const json = try reports.json(a, report);
+        const markdown = try reports.markdown(a, report);
+        for ([_][]const u8{ json, markdown, encoded }) |bytes| try std.testing.expect(std.mem.indexOf(u8, bytes, &socket.canary) == null);
+        try std.testing.expect(std.mem.indexOf(u8, json, "actual_model") == null);
+        try std.testing.expect(std.mem.indexOf(u8, json, "response_id") == null);
+        try std.testing.expect(std.mem.indexOf(u8, markdown, "model identity not echoed by API") != null);
+        try socket.expectJoined();
+        try std.testing.expect(std.mem.endsWith(u8, socket.wire.items, encoded));
+        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, socket.wire.items, &socket.canary));
+    }
+}
+
+test "Bedrock stop error and malformed response observations never produce a grade" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const config = try configuration.parse(a, config_bytes, bedrock_selection);
+    const inputs = try capture(a);
+    for ([_]struct { stop: []const u8, failure: reports.Failure }{
+        .{ .stop = "max_tokens", .failure = .incomplete },
+        .{ .stop = "model_context_window_exceeded", .failure = .incomplete },
+        .{ .stop = "guardrail_intervened", .failure = .refused },
+        .{ .stop = "content_filtered", .failure = .refused },
+        .{ .stop = "tool_use", .failure = .invalid_response },
+        .{ .stop = "malformed_model_output", .failure = .invalid_response },
+        .{ .stop = "unknown", .failure = .invalid_response },
+    }) |fixture| {
+        var observation = try bedrock.response(a, .{ .received = .{ .status = 200, .body = try bedrockResponseBytes(a, fixture.stop, good) } });
+        try std.testing.expectEqual(@as(u64, 30), observation.usage.?.total_tokens);
+        try std.testing.expect(observation.payload == null);
+        observation.identity = .{ .bedrock_target = .{ .model = config.model, .region = config.region.? } };
+        var fake: Fake = .{ .observations = &.{observation} };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        try std.testing.expectEqual(fixture.failure, report.outcome.evaluator_error);
+        try std.testing.expectEqual(@as(usize, 1), fake.count);
+    }
+    for ([_]struct { status: u16, name: []const u8, failure: reports.Failure }{
+        .{ .status = 403, .name = "AccessDeniedException", .failure = .authentication },
+        .{ .status = 429, .name = "ThrottlingException", .failure = .rate_limited },
+        .{ .status = 400, .name = "ValidationException", .failure = .configuration },
+        .{ .status = 408, .name = "ModelTimeoutException", .failure = .timeout },
+        .{ .status = 503, .name = "ServiceUnavailableException", .failure = .provider_failed },
+        .{ .status = 200, .name = "AccessDeniedException", .failure = .invalid_response },
+    }) |fixture| {
+        var observation = try bedrock.response(a, .{ .received = .{ .status = fixture.status, .exception = fixture.name, .body = "{}" } });
+        try std.testing.expect(observation.usage == null);
+        observation.identity = .{ .bedrock_target = .{ .model = config.model, .region = config.region.? } };
+        var fake: Fake = .{ .observations = &.{observation} };
+        try std.testing.expectEqual(fixture.failure, (try evaluator.run(std.testing.io, a, fake.port(), config, inputs)).outcome.evaluator_error);
+        try std.testing.expectEqual(@as(usize, 1), fake.count);
+    }
+    const valid = try bedrockResponseBytes(a, "end_turn", good);
+    for ([_][]const u8{ "{", "{\"usage\":{},\"usage\":{}}", try std.mem.replaceOwned(u8, a, valid, "\"totalTokens\":30", "\"totalTokens\":31") }) |bytes| {
+        const observation = try bedrock.response(a, .{ .received = .{ .status = 200, .body = bytes } });
+        try std.testing.expectEqual(.invalid_response, observation.failure.?);
+        try std.testing.expect(observation.payload == null and observation.usage == null);
+    }
+    const malformed = try bedrock.response(a, .{ .received = .{ .status = 200, .body = try std.mem.replaceOwned(u8, a, valid, "\"role\":\"assistant\"", "\"role\":\"user\"") } });
+    try std.testing.expectEqual(.invalid_response, malformed.failure.?);
+    try std.testing.expectEqual(@as(u64, 30), malformed.usage.?.total_tokens);
+}
+
+test "Bedrock concrete HTTP cancellation and deadlines stop without retry or invented usage" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture_module = @import("../../src/bedrock_http_test_fixture.zig");
+    const body = try bedrockResponseBytes(a, "end_turn", good);
+    const response = try std.fmt.allocPrint(a, "HTTP/1.1 200 OK\r\nContent-Length: {d}\r\n\r\n{s}", .{ body.len, body });
+    for ([_]fixture_module.Fault{ .cancelled, .deadline }) |fault| {
+        var socket: fixture_module.Fixture = undefined;
+        socket.init(response);
+        defer socket.deinit();
+        socket.fault = fault;
+        var transport = socket.adapter();
+        var adapter: bedrock.Adapter = .{ .transport = transport.port(), .clock = transport.clock, .model = bedrock_selection.model, .region = bedrock_selection.region.?, .api_key = &socket.canary };
+        var config = try configuration.parse(a, config_bytes, bedrock_selection);
+        config.timeout_ms = 100;
+        const report = try evaluator.run(std.testing.io, a, adapter.port(), config, try capture(a));
+        try std.testing.expectEqual(if (fault == .cancelled) reports.Failure.cancelled else .timeout, report.outcome.evaluator_error);
+        try std.testing.expectEqual(@as(usize, 1), report.attempts.len);
+        try std.testing.expect(report.attempts[0].usage == null);
+        try socket.expectCleaned();
+    }
+}
+
+test "provider identity validation rejects cross-provider and foreign Bedrock targets" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const config = try configuration.parse(a, config_bytes, bedrock_selection);
+    const inputs = try capture(a);
+    for ([_]provider.Identity{
+        .unavailable,
+        observed_good.identity,
+        .{ .bedrock_target = .{ .model = "foreign-model", .region = config.region.? } },
+        .{ .bedrock_target = .{ .model = config.model, .region = .@"us-west-2" } },
+    }) |identity| {
+        var observation = observed_good;
+        observation.identity = identity;
+        var fake: Fake = .{ .observations = &.{observation} };
+        try std.testing.expectEqual(.invalid_response, (try evaluator.run(std.testing.io, a, fake.port(), config, inputs)).outcome.evaluator_error);
+    }
+    var observation = observed_good;
+    observation.identity = .{ .bedrock_target = .{ .model = config.model, .region = config.region.? } };
+    var fake: Fake = .{ .observations = &.{observation} };
+    try std.testing.expectEqual(.invalid_response, (try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), inputs)).outcome.evaluator_error);
+    var exhausted = config;
+    exhausted.total_token_budget = 29;
+    fake = .{ .observations = &.{observation} };
+    const result = try evaluator.run(std.testing.io, a, fake.port(), exhausted, inputs);
+    try std.testing.expectEqual(.budget_exceeded, result.outcome.evaluator_error);
+    try std.testing.expectEqual(@as(u64, 30), result.attempts[0].usage.?.total_tokens);
+    try std.testing.expectEqual(@as(usize, 1), fake.count);
 }
 
 test "provider decoding binds payload usage and observed model and handles stops" {
@@ -384,7 +607,7 @@ test "retry and total-token boundaries use actual observations without score-dri
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const failed: wire.Observation = .{ .failure = .provider_failed, .usage = .{ .input_tokens = 4, .output_tokens = 1, .total_tokens = 5 } };
+    const failed: provider.Observation = .{ .failure = .provider_failed, .usage = .{ .input_tokens = 4, .output_tokens = 1, .total_tokens = 5 } };
     var retry: Fake = .{ .observations = &.{ failed, observed_good } };
     const config = try configuration.parse(a, config_bytes, test_selection);
     const inputs = try capture(a);
@@ -578,7 +801,7 @@ test "provider observations cannot invent identity usage or successful completio
     defer arena.deinit();
     const a = arena.allocator();
     var invalid = observed_good;
-    invalid.actual_model = null;
+    invalid.identity = .unavailable;
     var fake: Fake = .{ .observations = &.{invalid} };
     const config = try configuration.parse(a, config_bytes, test_selection);
     const inputs = try capture(a);
@@ -611,7 +834,7 @@ test "HTTP statuses remain evaluator errors and never become a score" {
 test "provider cancellation stops evaluation without a retry or invented usage" {
     const Cancelling = struct {
         count: usize = 0,
-        fn invoke(context: *provider.Context, _: std.mem.Allocator, _: []const u8, _: u32) provider.Error!wire.Observation {
+        fn invoke(context: *provider.Context, _: std.mem.Allocator, _: []const u8, _: u32) provider.Error!provider.Observation {
             const self: *@This() = @ptrCast(@alignCast(context));
             self.count += 1;
             return error.Cancelled;

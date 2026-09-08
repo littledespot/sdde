@@ -4,13 +4,32 @@ const operation = @import("../../domain/llm_provider_operation.zig");
 pub const Error = std.mem.Allocator.Error || error{InvalidRequest};
 
 pub fn encode(allocator: std.mem.Allocator, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind) Error![]const u8 {
+    return encodeText(allocator, .{
+        .content = request.content,
+        .schema = request.response_schema.modelBytes(),
+        .response_mode = request.response_guidance_mode,
+        .schema_name = "sdde_model_envelope_v1",
+        .temperature = if (request.controls.temperature) |temperature| @as(f64, @floatFromInt(temperature.value)) / 1000.0 else null,
+    }, kind);
+}
+
+pub const TextRequest = struct {
+    content: []const operation.ModelVisibleContent,
+    schema: []const u8,
+    response_mode: @import("../../domain/model_controls.zig").ResponseGuidanceMode,
+    schema_name: []const u8,
+    temperature: ?f64,
+};
+
+// Shared text serialization; callers supply validated settings and schema.
+pub fn encodeText(allocator: std.mem.Allocator, request: TextRequest, kind: operation.ProviderOperationKind) Error![]const u8 {
     var output: std.Io.Writer.Allocating = .init(allocator);
     defer output.deinit();
     write(&output.writer, request, kind) catch |err| return if (err == error.InvalidRequest) error.InvalidRequest else error.OutOfMemory;
     return output.toOwnedSlice();
 }
 
-fn write(writer: *std.Io.Writer, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind) !void {
+fn write(writer: *std.Io.Writer, request: TextRequest, kind: operation.ProviderOperationKind) !void {
     var json: std.json.Stringify = .{ .writer = writer, .options = .{} };
     try json.beginObject();
     if (kind == .input_token_count) {
@@ -24,18 +43,18 @@ fn write(writer: *std.Io.Writer, request: *const operation.IdentifiedProviderNeu
         try json.endObject();
         try json.endObject();
     } else {
-        if (request.controls.temperature) |temperature| {
+        if (request.temperature) |temperature| {
             try json.objectField("inferenceConfig");
             try json.beginObject();
             try json.objectField("temperature");
-            try json.write(@as(f64, @floatFromInt(temperature.value)) / 1000.0);
+            try json.write(temperature);
             try json.endObject();
         }
-        if (request.response_guidance_mode == .native_schema) {
+        if (request.response_mode == .native_schema) {
             try json.objectField("outputConfig");
             try json.write(.{ .textFormat = .{ .type = "json_schema", .structure = .{ .jsonSchema = .{
-                .schema = request.response_schema.modelBytes(),
-                .name = "sdde_model_envelope_v1",
+                .schema = request.schema,
+                .name = request.schema_name,
             } } } });
         }
     }
@@ -44,14 +63,14 @@ fn write(writer: *std.Io.Writer, request: *const operation.IdentifiedProviderNeu
 
 // One projection for both APIs. The result schema is sent once: as guidance
 // for prompt-only, or as native outputConfig for registered native support.
-fn textInput(json: *std.json.Stringify, request: *const operation.IdentifiedProviderNeutralModelRequest) !void {
+fn textInput(json: *std.json.Stringify, request: TextRequest) !void {
     try json.objectField("system");
     try json.beginArray();
     for (request.content) |part| switch (part) {
         .system, .guidance => |text| try json.write(.{ .text = text }),
         .user, .evidence => {},
     };
-    if (request.response_guidance_mode == .prompt_only) try json.write(.{ .text = request.response_schema.modelBytes() });
+    if (request.response_mode == .prompt_only) try json.write(.{ .text = request.schema });
     try json.endArray();
     try json.objectField("messages");
     try json.beginArray();

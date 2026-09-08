@@ -19,7 +19,7 @@ pub const Failure = struct {
     delivery: operation.ProviderDeliveryDisposition,
 };
 pub const Response = union(enum) {
-    received: struct { status: u16, exception: ?[]const u8 = null, body: []const u8 },
+    received: struct { status: u16, exception: ?[]const u8 = null, request_id: ?[]const u8 = null, body: []const u8 },
     failed: Failure,
 };
 pub const Error = std.mem.Allocator.Error || error{Cancelled};

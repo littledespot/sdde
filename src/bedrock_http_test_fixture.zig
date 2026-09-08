@@ -13,6 +13,7 @@ pub const Fixture = struct {
     threaded: std.Io.Threaded,
     vtable: std.Io.VTable,
     response: []const u8,
+    expected_host: []const u8 = "bedrock-runtime.ap-southeast-2.amazonaws.com",
     point: Point = .body,
     fault: Fault = .none,
     finish_after_cancel: bool = false,
@@ -133,7 +134,7 @@ pub const Fixture = struct {
     fn lookup(context: ?*anyopaque, host: std.Io.net.HostName, resolved: *std.Io.Queue(std.Io.net.HostName.LookupResult), options: std.Io.net.HostName.LookupOptions) std.Io.net.HostName.LookupError!void {
         const self = cast(context);
         defer resolved.close(self.io());
-        std.debug.assert(std.mem.eql(u8, host.bytes, "bedrock-runtime.ap-southeast-2.amazonaws.com"));
+        std.debug.assert(std.mem.eql(u8, host.bytes, self.expected_host));
         resolved.putOne(self.io(), .{ .address = .{ .ip4 = .loopback(options.port) } }) catch |err| switch (err) {
             error.Canceled => return error.Canceled,
             error.Closed => unreachable,

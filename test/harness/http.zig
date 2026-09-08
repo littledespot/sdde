@@ -10,10 +10,10 @@ pub const Adapter = struct {
     pub fn port(self: *Adapter) provider.Port {
         return .{ .context = @ptrCast(self), .invoke_fn = invoke };
     }
-    fn invoke(context: *provider.Context, a: std.mem.Allocator, body: []const u8, timeout_ms: u32) provider.Error!wire.Observation {
+    fn invoke(context: *provider.Context, a: std.mem.Allocator, body: []const u8, timeout_ms: u32) provider.Error!provider.Observation {
         const self: *Adapter = @ptrCast(@alignCast(context));
         if (!validKey(self.api_key)) return .{ .failure = .authentication };
-        var result: wire.Observation = .{ .failure = .timeout };
+        var result: provider.Observation = .{ .failure = .timeout };
         const Event = union(enum) { network: provider.Error!void, timer: std.Io.Cancelable!void };
         var buffer: [2]Event = undefined;
         var selection: std.Io.Select(Event) = .init(self.io, &buffer);
@@ -49,7 +49,7 @@ pub const Adapter = struct {
     fn sleep(io: std.Io, timeout_ms: u32) std.Io.Cancelable!void {
         try io.sleep(.fromMilliseconds(timeout_ms), .awake);
     }
-    fn fetch(self: *Adapter, a: std.mem.Allocator, body: []const u8, result: *wire.Observation) provider.Error!void {
+    fn fetch(self: *Adapter, a: std.mem.Allocator, body: []const u8, result: *provider.Observation) provider.Error!void {
         exchange(self, a, body, result) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
             result.failure = switch (err) {
@@ -60,7 +60,7 @@ pub const Adapter = struct {
             result.payload = null;
         };
     }
-    fn exchange(self: *Adapter, a: std.mem.Allocator, body: []const u8, result: *wire.Observation) !void {
+    fn exchange(self: *Adapter, a: std.mem.Allocator, body: []const u8, result: *provider.Observation) !void {
         const authorization = try std.fmt.allocPrint(a, "Bearer {s}", .{self.api_key});
         defer {
             std.crypto.secureZero(u8, authorization);

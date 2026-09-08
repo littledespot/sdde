@@ -21,8 +21,7 @@ pub const Usage = @import("../../src/domain/llm_provider_operation.zig").Provide
 pub const Attempt = struct {
     ordinal: u32,
     request_id: ?[]const u8,
-    response_id: ?[]const u8,
-    actual_model: ?[]const u8,
+    identity: @import("provider.zig").Identity,
     usage: ?Usage,
     failure: ?Failure,
 };
@@ -57,12 +56,28 @@ fn render(out: *std.Io.Writer, report: Report) std.Io.Writer.Error!void {
     try escape(out, report.capture.rubric.id);
     try out.print(" (revision {d}; scale {d}–{d})\n\n", .{ report.capture.rubric.revision, report.capture.rubric.minimum_score, report.capture.rubric.maximum_score });
     for (report.attempts) |attempt| {
-        try out.print("Attempt {d}: model ", .{attempt.ordinal});
-        try escape(out, attempt.actual_model orelse "unavailable");
+        try out.print("Attempt {d}: ", .{attempt.ordinal});
+        switch (attempt.identity) {
+            .unavailable => try out.writeAll("provider identity unavailable"),
+            .openai_response => |value| {
+                try out.writeAll("reported model ");
+                try escape(out, value.actual_model);
+            },
+            .bedrock_target => |value| {
+                try out.writeAll("requested Bedrock target ");
+                try escape(out, value.model);
+                try out.print(" in {s}; model identity not echoed by API", .{@tagName(value.region)});
+            },
+        }
         try out.writeAll("; request ");
         try escape(out, attempt.request_id orelse "unavailable");
-        try out.writeAll("; response ");
-        try escape(out, attempt.response_id orelse "unavailable");
+        switch (attempt.identity) {
+            .openai_response => |value| {
+                try out.writeAll("; response ");
+                try escape(out, value.response_id);
+            },
+            .bedrock_target, .unavailable => {},
+        }
         if (attempt.usage) |usage| {
             try out.print("; tokens {d} input + {d} output = {d}", .{ usage.input_tokens, usage.output_tokens, usage.total_tokens });
         } else try out.writeAll("; usage unavailable");

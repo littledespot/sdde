@@ -140,7 +140,7 @@ explicit transport retirement, bounded protocol correction and H-008 evidence
 integration. The generation-only [YAML](../workflows/spec.workflow.yaml)
 runs through the ordinary compiler/registry/runner and existing provider port.
 The production provider integration remains the configured Bedrock adapter;
-OpenAI judging is a separate harness concern.
+OpenAI/Bedrock judging is a separate harness concern.
 
 Final response-contract alignment uses the accepted ADR 0006 `kind` alternatives
 in workflow schemas and one shared native candidate codec. Malformed root or
@@ -163,7 +163,7 @@ Work:
 - Supply concise workflow-owned prompts/result schemas and explicitly bounded
   iteration/retry transitions. Preserve all claim/citation/token membership.
 - Integrate an approved live generation provider behind the production port.
-  OpenAI is required for judging, not implicitly chosen for generation; record
+  The judging provider is selected independently of generation; record
   the generation provider/model separately and do not force AWS infrastructure.
 
 Acceptance:

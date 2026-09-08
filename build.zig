@@ -117,7 +117,7 @@ pub fn build(b: *std.Build) void {
     }) });
     const run_evaluator = b.addRunArtifact(evaluator_exe);
     if (b.args) |args| run_evaluator.addArgs(args);
-    b.step("evaluate-spec", "Grade a supplied specification through OpenAI (explicit --live required)").dependOn(&run_evaluator.step);
+    b.step("evaluate-spec", "Grade a supplied specification through OpenAI or Bedrock (explicit --live required)").dependOn(&run_evaluator.step);
     b.step("build-rubric-evaluator", "Build the development-only evaluator without an API call").dependOn(&evaluator_exe.step);
     b.step("test-rubric-evaluator", "Test development-only rubric evaluation").dependOn(&run_evaluator_tests.step);
     test_step.dependOn(&run_evaluator_tests.step);
@@ -141,10 +141,14 @@ pub fn build(b: *std.Build) void {
     evaluator_smoke.dependOn(&evaluator_help.step);
     evaluator_smoke.dependOn(&evaluator_denied.step);
     _ = evaluator_directory.add("judge.json", "{\"schema\":\"evaluation-config/v1\",\"reasoning_effort\":null,\"temperature\":null,\"timeout_ms\":1000,\"retry_limit\":0,\"retry_delay_ms\":0,\"total_token_budget\":100}");
-    for ([_]struct { name: []const u8, model: ?[]const u8, key: ?[]const u8, expected: []const u8 }{
-        .{ .name = "reject missing test evaluation model", .model = null, .key = null, .expected = "TEST_EVALUATION_PROVIDER must be openai and TEST_EVALUATION_MODEL must be a nonempty valid model ID. No API call made.\n" },
+    for ([_]struct { name: []const u8, provider: []const u8 = "openai", region: ?[]const u8 = null, model: ?[]const u8, key: ?[]const u8, key_name: []const u8 = "TEST_OPENAI_API_KEY", expected: []const u8 }{
+        .{ .name = "reject missing test evaluation model", .model = null, .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.\n" },
         .{ .name = "reject production credential as evaluator fallback", .model = "scripted-judge", .key = null, .expected = "TEST_OPENAI_API_KEY is missing. No API call made.\n" },
         .{ .name = "accept test environment then reject unavailable input before any API call", .model = "scripted-judge", .key = "test-only-credential", .expected = "Invalid or unavailable case, rubric, source or specification. No API call made.\n" },
+        .{ .name = "reject Bedrock evaluator without an explicit region", .provider = "bedrock", .model = "openai.gpt-oss-20b-1:0", .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.\n" },
+        .{ .name = "reject production Bedrock credential as evaluator fallback", .provider = "bedrock", .region = "ap-southeast-2", .model = "openai.gpt-oss-20b-1:0", .key = null, .expected = "TEST_AWS_BEARER_TOKEN_BEDROCK is missing. No API call made.\n" },
+        .{ .name = "reject unregistered Bedrock evaluation model", .provider = "bedrock", .region = "ap-southeast-2", .model = "unregistered-model", .key = null, .expected = "Invalid evaluator configuration. No API call made.\n" },
+        .{ .name = "accept Bedrock test environment then reject unavailable input before any API call", .provider = "bedrock", .region = "ap-southeast-2", .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = "test-only-credential", .expected = "Invalid or unavailable case, rubric, source or specification. No API call made.\n" },
     }) |fixture| {
         const check = std.Build.Step.Run.create(b, fixture.name);
         check.addFileArg(evaluator_binary);
@@ -152,9 +156,11 @@ pub fn build(b: *std.Build) void {
         check.setCwd(evaluator_directory.getDirectory());
         check.clearEnvironment();
         check.setEnvironmentVariable("OPENAI_API_KEY", "unused-production-credential");
-        check.setEnvironmentVariable("TEST_EVALUATION_PROVIDER", "openai");
+        check.setEnvironmentVariable("AWS_BEARER_TOKEN_BEDROCK", "unused-production-credential");
+        check.setEnvironmentVariable("TEST_EVALUATION_PROVIDER", fixture.provider);
+        if (fixture.region) |region| check.setEnvironmentVariable("TEST_EVALUATION_REGION", region);
         if (fixture.model) |model| check.setEnvironmentVariable("TEST_EVALUATION_MODEL", model);
-        if (fixture.key) |key| check.setEnvironmentVariable("TEST_OPENAI_API_KEY", key);
+        if (fixture.key) |key| check.setEnvironmentVariable(fixture.key_name, key);
         check.expectExitCode(1);
         check.expectStdOutEqual("");
         check.expectStdErrEqual(fixture.expected);

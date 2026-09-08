@@ -4,10 +4,12 @@ const c = @import("contracts.zig");
 const packet = @import("packet.zig");
 const report = @import("report.zig");
 const strict_json = @import("../../src/domain/strict_json.zig");
+const provider = @import("provider.zig");
 const configuration = @import("configuration.zig");
 
 pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Capture) c.Error![]const u8 {
     try configuration.validate(config);
+    if (config.api != .openai_responses) return error.InvalidEvaluationContract;
     const schema_bytes = try packet.resultSchema(a);
     const schema = try c.decode(std.json.Value, a, schema_bytes);
     const body = try packet.input(a, capture);
@@ -26,18 +28,9 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
     }, .{ .emit_null_optional_fields = false }) catch return error.OutOfMemory;
 }
 
-pub const Observation = struct {
-    request_id: ?[]const u8 = null,
-    response_id: ?[]const u8 = null,
-    actual_model: ?[]const u8 = null,
-    usage: ?report.Usage = null,
-    failure: ?report.Failure = null,
-    payload: ?[]const u8 = null,
-};
-
 /// API envelope fields are allowlisted independently of the closed judgment
 /// schema. Unknown output kinds (including tool calls) are rejected.
-pub fn response(a: std.mem.Allocator, bytes: []const u8) c.Error!Observation {
+pub fn response(a: std.mem.Allocator, bytes: []const u8) c.Error!provider.Observation {
     var parsed = strict_json.parse(a, bytes, .{ .maximum_depth = 32 }, true) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidEvaluationContract;
     defer parsed.deinit();
     const root = parsed.value;
@@ -45,7 +38,7 @@ pub fn response(a: std.mem.Allocator, bytes: []const u8) c.Error!Observation {
     const id = try string(root, "id");
     const model = try string(root, "model");
     if (!c.id(id) or c.ModelId.parse(model) == null or !std.mem.eql(u8, try string(root, "object"), "response")) return error.InvalidEvaluationContract;
-    var result: Observation = .{ .response_id = try a.dupe(u8, id), .actual_model = try a.dupe(u8, model) };
+    var result: provider.Observation = .{ .identity = .{ .openai_response = .{ .response_id = try a.dupe(u8, id), .actual_model = try a.dupe(u8, model) } } };
     if (root.object.get("usage")) |usage| if (usage != .null) {
         try fields(usage, &.{ "input_tokens", "output_tokens", "total_tokens", "input_tokens_details", "output_tokens_details" });
         result.usage = report.Usage.init(try integer(usage, "input_tokens"), try integer(usage, "output_tokens"), try integer(usage, "total_tokens")) orelse return error.InvalidEvaluationContract;
@@ -58,7 +51,7 @@ pub fn response(a: std.mem.Allocator, bytes: []const u8) c.Error!Observation {
     };
     return result;
 }
-fn readOutput(a: std.mem.Allocator, root: std.json.Value, result: *Observation) c.Error!void {
+fn readOutput(a: std.mem.Allocator, root: std.json.Value, result: *provider.Observation) c.Error!void {
     const status = try string(root, "status");
     if (std.mem.eql(u8, status, "incomplete")) {
         result.failure = .incomplete;

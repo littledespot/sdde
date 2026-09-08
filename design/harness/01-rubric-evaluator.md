@@ -1,4 +1,4 @@
-# Rubric and OpenAI evaluator backlog
+# Rubric and provider evaluator backlog
 
 [Backlog index](README.md). These tickets deliver the semantic evaluator; they
 do not require a complete Spec engine or a deterministic prose oracle.
@@ -34,13 +34,13 @@ Work:
 - Record the harness entry point and configuration location using repository
   build conventions. `node-vitest` names a target fixture, not the harness's
   implementation language or a requirement to execute Vitest.
-- Record exact OpenAI model/settings, API surface, credential source, timeout,
+- Record exact selected-provider model/settings, API surface, credential source, timeout,
   total evaluation budget and bounded retry policy before live implementation.
   Generation and judging have distinct settings and accounting.
 - Select one score scale, criterion anchors, weighting/aggregation,
   not-applicable treatment and optional quality thresholds. Do not invent
   production release policy or silently choose numeric defaults.
-- Define what source/spec content may be sent to OpenAI and how local evidence
+- Define what source/spec content may be sent to the selected provider and how local evidence
   is retained. Require explicit live execution; missing credentials must not
   trigger a different provider, model or mock result.
 
@@ -53,10 +53,11 @@ Acceptance:
 - [x] Workflow execution outcome and semantic evaluation result are separate.
 
 The shared grading call accepts explicit artifact provenance; full-workflow
-handoff is still H-015. Responses API/native HTTPS is implemented without a new
+handoff is still H-015. Responses/Converse APIs with native HTTPS are implemented without a new
 dependency. Exact evaluation provider/model come only from the `TEST_`
 environment variables in [the evaluator contract](evaluator.md#run); the
-credential is `TEST_OPENAI_API_KEY`. Other settings/budget remain mandatory
+credential is `TEST_OPENAI_API_KEY` or `TEST_AWS_BEARER_TOKEN_BEDROCK` for the
+selected provider. Bedrock additionally requires `TEST_EVALUATION_REGION`. Other settings/budget remain mandatory
 judge JSON configuration. The production executable consumes none of these
 test variables. Numeric
 scoring choices live in the draft rubric, not evaluator code or release policy.
@@ -138,13 +139,13 @@ Acceptance:
 - [x] Supplied-spec evaluation works without importing `SpecificationIR` or
   constructing production workflow state.
 
-## H-004 — Implement the OpenAI evaluator boundary
+## H-004 — Implement the evaluator provider boundary
 
 **Status:** Implemented and offline-tested; authorized live acceptance outstanding.
 **Owner:** narrow model adapter plus harness composition.
 **Dependencies:** H-001 and H-003; test fake before authorized live calls.
 
-Invoke OpenAI for rubric judgment. This is a separate use of the model boundary
+Invoke the explicitly selected OpenAI or Bedrock provider for rubric judgment. This is a separate use of the model boundary
 from generating the specification, not a second workflow engine.
 
 Work:
@@ -167,7 +168,7 @@ Acceptance:
 
 - [x] Fake adapter tests cover success and every supported error/stop branch.
 - [ ] An authorized live request returns inspectable criterion judgments from
-  the explicitly selected OpenAI model.
+  the explicitly selected provider/model.
 - [x] Retry policy is bounded; low scores do not trigger retries seeking a pass.
 - [x] Cancellation or exhausted budget prevents additional calls; already
   reported usage is retained without claiming cross-run exactly-once billing.
@@ -238,7 +239,7 @@ Work:
 
 Acceptance:
 
-- [ ] An operator can supply source/spec/rubric, invoke OpenAI and inspect a result
+- [ ] An operator can supply source/spec/rubric, invoke the selected provider and inspect a result
   without waiting for H-007–H-013.
 - [x] Report rendering uses the same parsed result as machine output.
 - [x] API failure, failed workflow, clarification-required run and completed

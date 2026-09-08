@@ -395,7 +395,7 @@ test "Bedrock environment source accepts only its exact key and owns an immutabl
     std.testing.io.random(&canary);
     for (&canary) |*byte| byte.* = 'A' + byte.* % 26;
     defer std.crypto.secureZero(u8, &canary);
-    for ([_][]const u8{ "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "BEDROCK_API_KEY", "AWS_REGION", "AWS_ENDPOINT_URL", "HTTPS_PROXY", "AWS_CA_BUNDLE", "TEST_AWS_BEARER_TOKEN_BEDROCK", "TEST_OPENAI_API_KEY", "TEST_EVALUATION_PROVIDER", "TEST_EVALUATION_MODEL" }) |name| try environment.put(name, &canary);
+    for ([_][]const u8{ "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "BEDROCK_API_KEY", "AWS_REGION", "AWS_ENDPOINT_URL", "HTTPS_PROXY", "AWS_CA_BUNDLE", "TEST_AWS_BEARER_TOKEN_BEDROCK", "TEST_OPENAI_API_KEY", "TEST_EVALUATION_PROVIDER", "TEST_EVALUATION_MODEL", "TEST_EVALUATION_REGION" }) |name| try environment.put(name, &canary);
     var ignored = source.read(std.testing.allocator, &environment);
     defer ignored.deinit();
     try std.testing.expect(ignored == .unavailable);

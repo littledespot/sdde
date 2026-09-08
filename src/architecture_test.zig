@@ -15,7 +15,7 @@ test "production sources exclude internal evaluation tooling and test environmen
             std.mem.startsWith(u8, entry.path, "test_fixtures/")) continue;
         const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
         defer allocator.free(source);
-        inline for (.{ "test/harness/", "\"harness.zig\"", ".env.e2e", "TEST_OPENAI_API_KEY", "TEST_AWS_BEARER_TOKEN_BEDROCK", "TEST_EVALUATION_PROVIDER", "TEST_EVALUATION_MODEL" }) |forbidden| try expectAbsent(source, forbidden);
+        inline for (.{ "test/harness/", "\"harness.zig\"", ".env.e2e", "TEST_OPENAI_API_KEY", "TEST_AWS_BEARER_TOKEN_BEDROCK", "TEST_EVALUATION_PROVIDER", "TEST_EVALUATION_MODEL", "TEST_EVALUATION_REGION" }) |forbidden| try expectAbsent(source, forbidden);
     }
 }
 

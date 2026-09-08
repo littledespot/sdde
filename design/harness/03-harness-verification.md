@@ -1,7 +1,7 @@
 # Workflow harness, verification and delivery
 
 [Backlog index](README.md). The delivery test joins actual Spec generation to
-the OpenAI rubric evaluator. Mechanical tests and live semantic calibration
+the selected-provider rubric evaluator. Mechanical tests and live semantic calibration
 are separate evidence classes; both are needed, and neither replaces the other.
 
 ## H-014 — Assemble the isolated Hello World project
@@ -115,7 +115,7 @@ Work:
 - First exercise the ordinary full workflow and evaluator handoff with fake
   providers. Then, with explicit credentials/network/spend approval, generate
   the original Hello World spec using the selected real generation provider
-  and grade it with the selected OpenAI judge and checked-in rubric.
+  and grade it with the selected OpenAI or Bedrock judge and checked-in rubric.
 - Capture the generated `spec.md`, sidecar, relevant workflow outcome and
   evaluator report. Do not substitute a hand-authored spec, fake generation or
   a preselected best run in the live milestone's evidence.
@@ -130,7 +130,7 @@ Work:
 
 Acceptance:
 
-- [ ] Actual live generation followed by OpenAI rubric judgment completes for
+- [ ] Actual live generation followed by the selected provider's rubric judgment completes for
   the unchanged Hello World case; report all findings, including low scores.
 - [ ] A clarification-required result is reported honestly but does not stand
   in for the requested successful-generation-and-evaluation milestone.
@@ -152,7 +152,7 @@ Work:
 - Add repository-owned development harness entry points using `build.zig`
   conventions, with explicit case selection and separate offline/live modes.
   Settle command names once; do not document invented commands as available.
-- Keep ordinary verification offline. Live OpenAI/generation runs are explicit
+- Keep ordinary verification offline. Live evaluation/generation runs are explicit
   opt-in, have approved credentials/spend settings and never silently run in CI.
   Any release-gating/CI policy change needs its own approval.
 - Update F0050 to remove its conformance-only goal and deferred-rubric claims.

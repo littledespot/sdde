@@ -191,11 +191,12 @@ output. The temporary package directory is removed by the Zig build runner
 after a successful build.
 
 The development-only [rubric evaluator](design/harness/evaluator.md) grades a
-supplied specification through OpenAI using the checked-in Hello World rubric
+supplied specification through OpenAI or Bedrock using the checked-in Hello World rubric
 or another closed case/rubric. It writes evidence-backed JSON/Markdown reports
 without running Specify or changing workflow authority. Live calls require
-explicit settings, `TEST_OPENAI_API_KEY`, `TEST_EVALUATION_PROVIDER`,
-`TEST_EVALUATION_MODEL` and `--live`; ordinary tests/verification
+explicit settings, the selected provider's `TEST_` credential,
+`TEST_EVALUATION_PROVIDER`, `TEST_EVALUATION_MODEL` and `--live`; Bedrock also
+requires `TEST_EVALUATION_REGION`. Ordinary tests/verification
 remain offline. The rubric is an uncalibrated draft and live API acceptance has
 not yet been demonstrated. This executable is not installed with `sdde`.
 
@@ -273,9 +274,23 @@ supported provider selection.
 | Variable | Consumer |
 | --- | --- |
 | `TEST_OPENAI_API_KEY` | Internal live supplied-spec rubric evaluator. |
-| `TEST_AWS_BEARER_TOKEN_BEDROCK` | Reserved for internal Bedrock workflow tests; full workflow harness wiring is pending. |
-| `TEST_EVALUATION_PROVIDER` | Required evaluation provider; currently only `openai` is supported. |
+| `TEST_AWS_BEARER_TOKEN_BEDROCK` | Internal live Bedrock rubric evaluator and Bedrock workflow tests. |
+| `TEST_EVALUATION_PROVIDER` | Required evaluation provider: `openai` or `bedrock`. |
 | `TEST_EVALUATION_MODEL` | Required exact evaluation model ID; no model default. |
+| `TEST_EVALUATION_REGION` | Required registered region for Bedrock; empty/unset for OpenAI. |
+
+Bedrock uses the existing registered model/region pairs:
+
+| `TEST_EVALUATION_MODEL` | `TEST_EVALUATION_REGION` |
+| --- | --- |
+| `openai.gpt-oss-20b-1:0` | `ap-southeast-2` |
+| `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` |
+
+Set `TEST_EVALUATION_PROVIDER='bedrock'`, choose one exact pair, and fill in
+`TEST_AWS_BEARER_TOKEN_BEDROCK`. Bedrock judge JSON requires
+`reasoning_effort: null` and permits `temperature: null` or a value from 0 to 1.
+Unsupported models, mismatched regions or unsupported controls fail before an
+API call. Region, provider and model remain environment-only selections.
 
 Load it explicitly in the same shell that launches the command:
 
@@ -294,14 +309,15 @@ CI can inject these same variables directly into the command environment.
 These variables are internal test configuration. The production `sdde`
 executable does not read them, load `.env.e2e`, or include the evaluator.
 No test values are embedded during compilation or installed with the application.
-The evaluator accepts only `TEST_OPENAI_API_KEY`; it never falls back to a
-production credential. The test Bedrock credential is not mapped into the
+The evaluator reads only the selected provider's `TEST_` credential; it never
+falls back to another provider's credential or a production credential.
+The test Bedrock credential is not mapped into the
 production `AWS_BEARER_TOKEN_BEDROCK` variable.
 
 The help command makes no API call. Use the [evaluator run instructions](design/harness/evaluator.md#run)
 for the actual invocation, which also requires `--live`, input/output paths and
 an explicit judge JSON configuration for reasoning, temperature, timeout, retry
-and token-budget settings. Provider/model fields in that JSON are rejected;
+and token-budget settings. Provider/model/region fields in that JSON are rejected;
 their sole input is the test environment. Reports retain the resolved provider
 API/model and settings, never credentials.
 `zig build test` and `zig build verify` require no credentials and remain
