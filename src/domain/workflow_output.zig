@@ -9,6 +9,7 @@ pub const Prepared = struct {
     feature: @import("feature_directory.zig").Directory,
     paths: artifacts.FeaturePaths,
     prior: c.Captures,
+    prior_workflow_state: union(enum) { unselected, captured: ?[]const u8 } = .unselected,
     files: []const File,
 };
 pub const Error = std.mem.Allocator.Error || error{ InvalidWorkflowOutput, OutputChanged, OutputWriteFailed };
@@ -35,7 +36,8 @@ pub fn validateShape(output: Prepared) Error!void {
         if (file.bytes.len == 0) return error.InvalidWorkflowOutput;
         if (file.target == .form and (file.target.form.ordinal == 0 or file.target.form.ordinal > 99 or file.bytes.len > c.max_form_bytes)) return error.InvalidWorkflowOutput;
         // Completion state is the last replacement, never an intermediate write.
-        if (file.target == .artifact and file.target.artifact == .workflow_state and index + 1 != output.files.len) return error.InvalidWorkflowOutput;
+        if (file.target == .artifact and file.target.artifact == .workflow_state and
+            (index + 1 != output.files.len or output.prior_workflow_state == .unselected)) return error.InvalidWorkflowOutput;
         for (output.files[0..index]) |other| if (std.meta.eql(file.target, other.target)) return error.InvalidWorkflowOutput;
     }
 }
@@ -45,4 +47,9 @@ pub fn sameCapture(expected: c.Captures, actual: c.Captures) bool {
     if (expected.state) |bytes| if (!std.mem.eql(u8, bytes, actual.state.?)) return false;
     for (expected.forms, actual.forms) |left, right| if (!std.meta.eql(left.id, right.id) or !std.mem.eql(u8, left.bytes, right.bytes)) return false;
     return true;
+}
+
+pub fn sameBytes(expected: ?[]const u8, actual: ?[]const u8) bool {
+    if (expected) |bytes| return actual != null and std.mem.eql(u8, bytes, actual.?);
+    return actual == null;
 }

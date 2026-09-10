@@ -27,7 +27,8 @@ pub const Initialize = struct {
         const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .session = self.action.execute(feature.feature_id, try readContext(&input.step.data)) catch return error.OperationExecutionFailed };
+        const prior = owned.read(&input.step.data, @import("specification_publication_workflow.zig").prior_schema, .prior_state) catch return error.OperationExecutionFailed;
+        owner.payload = .{ .session = self.action.execute(feature.feature_id, try readContext(&input.step.data), prior) catch return error.OperationExecutionFailed };
         return publish(self.allocator, session_schema, owner, .ok);
     }
 };

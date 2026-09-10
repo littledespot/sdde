@@ -121,6 +121,24 @@ pub fn build(b: *std.Build) void {
     b.step("build-rubric-evaluator", "Build the development-only evaluator without an API call").dependOn(&evaluator_exe.step);
     b.step("test-rubric-evaluator", "Test development-only rubric evaluation").dependOn(&run_evaluator_tests.step);
     test_step.dependOn(&run_evaluator_tests.step);
+    const e2e_module = b.createModule(.{
+        .root_source_file = b.path("e2e.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
+        },
+    });
+    const e2e_tests = b.addTest(.{ .root_module = e2e_module });
+    const run_e2e_tests = b.addRunArtifact(e2e_tests);
+    b.step("test-e2e-harness", "Test single-case E2E fixture and publication checks").dependOn(&run_e2e_tests.step);
+    test_step.dependOn(&run_e2e_tests.step);
+    const e2e_executable = b.addExecutable(.{ .name = "sdde-e2e-spec", .root_module = e2e_module });
+    const run_e2e = b.addRunArtifact(e2e_executable);
+    run_e2e.has_side_effects = true;
+    if (b.args) |args| run_e2e.addArgs(args);
+    b.step("e2e-spec", "Run one declared Spec E2E case with a scripted provider").dependOn(&run_e2e.step);
     const evaluator_directory = b.addTempFiles();
     const evaluator_binary = evaluator_directory.addCopyFile(evaluator_exe.getEmittedBin(), evaluator_exe.out_filename);
     const evaluator_help = std.Build.Step.Run.create(b, "run standalone evaluator help without development assets or credentials");
@@ -423,6 +441,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("build.zig"));
     lint_command.addFileArg(b.path("build.zig.zon"));
     lint_command.addFileArg(b.path("harness.zig"));
+    lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addDirectoryArg(b.path("build"));
     lint_command.addDirectoryArg(b.path("src"));
     lint_command.addDirectoryArg(b.path("test"));

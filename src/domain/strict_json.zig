@@ -43,6 +43,11 @@ fn wireTypes(comptime T: type, value: std.json.Value) Error!void {
             }
         },
         .optional => |o| if (value != .null) try wireTypes(o.child, value),
+        .array => |a| {
+            if (value != .array or value.array.items.len != a.len) return error.InvalidJsonDocument;
+            for (value.array.items) |item| try wireTypes(a.child, item);
+        },
+        .void => if (value != .object or value.object.count() != 0) return error.InvalidJsonDocument,
         .@"enum" => {
             if (value != .string or std.meta.stringToEnum(T, value.string) == null) return error.InvalidJsonDocument;
         },
@@ -106,4 +111,19 @@ test "JSON syntax validation preserves explicit resource caps without requiring 
     try std.testing.expectError(error.InvalidJsonDocument, parse(std.testing.allocator, "{\"a\":true}", .{ .maximum_bytes = 2, .maximum_depth = 2 }, false));
     try std.testing.expectError(error.InvalidJsonDocument, parse(std.testing.allocator, "{\"a\":{}}", .{ .maximum_depth = 1 }, false));
     try std.testing.expectError(error.InvalidJsonDocument, parse(std.testing.allocator, "{\"a\":true,\"a\":false}", .{ .maximum_depth = 2 }, false));
+}
+
+test "closed fixed arrays and empty tagged variants reject length wire-kind and unknown-member changes" {
+    const Value = struct { counters: [2]u32, unit: union(enum) { feature: void } };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    _ = try decode(Value, a, "{\"counters\":[1,2],\"unit\":{\"feature\":{}}}", .{ .maximum_depth = 8 });
+    for ([_][]const u8{
+        "{\"counters\":[1],\"unit\":{\"feature\":{}}}",
+        "{\"counters\":[1,2,3],\"unit\":{\"feature\":{}}}",
+        "{\"counters\":[1,\"2\"],\"unit\":{\"feature\":{}}}",
+        "{\"counters\":[1,2],\"unit\":{\"feature\":null}}",
+        "{\"counters\":[1,2],\"unit\":{\"feature\":{\"approved\":true}}}",
+    }) |bytes| try std.testing.expectError(error.InvalidJsonDocument, decode(Value, a, bytes, .{ .maximum_depth = 8 }));
 }

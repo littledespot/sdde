@@ -26,6 +26,49 @@ const identity = @import("domain/model_request_identity.zig");
 const pipeline = @import("domain/pipeline.zig");
 const workflow = @import("domain/workflow.zig");
 
+test "specification request ownership preserves validated feature directories for generation review and repair" {
+    var runner = runner_module.Runner.init(std.testing.allocator);
+    defer runner.deinit();
+    try runner.initialize(identity.RequestPurposeRegistry.all());
+    for ([_][]const u8{ "hello-world", "Loans/Café", "Library renewals/" ++ "a" ** 160 }) |directory| {
+        const unit: identity.SpecificationUnitOwner = .{
+            .reference_state_id = .{ .bytes = "reference-1" },
+            .feature_id = @import("domain/feature_identity.zig").FeatureId.parse(directory).?,
+            .unit_slot_id = .{ .bytes = "requirements" },
+        };
+        const owner: identity.ImmutableUnitOwnerId = .{ .specification_unit = unit };
+        const operation = modelOperation("generate");
+        const request = try runner.assign(runner.ledger().?.revision(), owner, operation, .initial_generation);
+        _ = try runner.validate(runner.ledger().?.revision(), request, owner, operation, .initial_generation);
+        try std.testing.expectEqualStrings(directory, request.immutable_unit_owner_id.specification_unit.feature_id.bytes);
+        const repair = try runner.assign(runner.ledger().?.revision(), owner, operation, .{ .atomic_repair = .{ .bytes = "repair-1" } });
+        try std.testing.expect(identity.unitOwnerEql(owner, repair.immutable_unit_owner_id));
+        const review_owner: identity.ImmutableUnitOwnerId = .{ .semantic_review = .{
+            .parent_unit_owner_id = .{ .specification_unit = unit },
+            .review_slot_id = .{ .bytes = "support" },
+        } };
+        const review = try runner.assign(runner.ledger().?.revision(), review_owner, operation, .{ .semantic_review = .{ .bytes = "support" } });
+        try std.testing.expect(identity.unitOwnerEql(review_owner, review.immutable_unit_owner_id));
+    }
+    for ([_][]const u8{ "", "/absolute", "../escape", "nested/../escape", "nested//empty", "nested/./dot" }) |directory| {
+        const unit: identity.SpecificationUnitOwner = .{
+            .reference_state_id = .{ .bytes = "reference-1" },
+            .feature_id = .{ .bytes = directory },
+            .unit_slot_id = .{ .bytes = "requirements" },
+        };
+        try std.testing.expectError(error.InvalidImmutableUnitOwnerId, identity.validateUnitOwner(.{ .specification_unit = unit }));
+        try std.testing.expectError(error.InvalidImmutableUnitOwnerId, identity.validateUnitOwner(.{ .semantic_review = .{
+            .parent_unit_owner_id = .{ .specification_unit = unit },
+            .review_slot_id = .{ .bytes = "support" },
+        } }));
+    }
+    try std.testing.expectError(error.InvalidImmutableUnitOwnerId, identity.validateUnitOwner(.{ .specification_unit = .{
+        .reference_state_id = .{ .bytes = "référence" },
+        .feature_id = .{ .bytes = "Loans/Café" },
+        .unit_slot_id = .{ .bytes = "requirements" },
+    } }));
+}
+
 test "request purpose registry is closed and duplicate free" {
     const registry = try identity.RequestPurposeRegistry.init(&.{
         .initial_generation,

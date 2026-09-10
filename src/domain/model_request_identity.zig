@@ -11,7 +11,7 @@ pub const StageRunEpochId = struct {
 pub const ReferenceStateId = @import("reference_identity.zig").StateId;
 pub const ReferenceChunkId = @import("reference_identity.zig").ChunkId;
 pub const UnitSlotId = struct { bytes: []const u8 };
-pub const FeatureRequestId = struct { bytes: []const u8 };
+const FeatureId = @import("feature_identity.zig").FeatureId;
 pub const PlanInputAuthorityStateId = struct { bytes: []const u8 };
 pub const PlanStateId = struct { bytes: []const u8 };
 pub const ObligationClusterId = struct { bytes: []const u8 };
@@ -52,7 +52,7 @@ pub const ReferenceGlobalOwner = struct {
 };
 pub const SpecificationUnitOwner = struct {
     reference_state_id: ReferenceStateId,
-    feature_request_id: FeatureRequestId,
+    feature_id: FeatureId,
     unit_slot_id: UnitSlotId,
 };
 pub const PlanUnitOwner = struct {
@@ -676,7 +676,7 @@ fn validateContentOwner(owner: ContentUnitOwnerId) ValidationError!void {
         },
         .specification_unit => |value| {
             try validateAuthorityId(value.reference_state_id.bytes, error.InvalidImmutableUnitOwnerId);
-            try validateAuthorityId(value.feature_request_id.bytes, error.InvalidImmutableUnitOwnerId);
+            _ = FeatureId.parse(value.feature_id.bytes) orelse return error.InvalidImmutableUnitOwnerId;
             try validateAuthorityId(value.unit_slot_id.bytes, error.InvalidImmutableUnitOwnerId);
         },
         .plan_unit => |value| {
@@ -723,7 +723,7 @@ fn cloneContentOwner(allocator: std.mem.Allocator, owner: ContentUnitOwnerId) st
         } },
         .specification_unit => |value| .{ .specification_unit = .{
             .reference_state_id = .{ .bytes = try allocator.dupe(u8, value.reference_state_id.bytes) },
-            .feature_request_id = .{ .bytes = try allocator.dupe(u8, value.feature_request_id.bytes) },
+            .feature_id = .{ .bytes = try allocator.dupe(u8, value.feature_id.bytes) },
             .unit_slot_id = .{ .bytes = try allocator.dupe(u8, value.unit_slot_id.bytes) },
         } },
         .plan_unit => |value| .{ .plan_unit = .{
@@ -784,7 +784,7 @@ fn contentOwnerEql(left: ContentUnitOwnerId, right: ContentUnitOwnerId) bool {
         .reference_global => |value| authorityIdEql(value.reference_state_id.bytes, right.reference_global.reference_state_id.bytes) and
             authorityIdEql(value.unit_slot_id.bytes, right.reference_global.unit_slot_id.bytes),
         .specification_unit => |value| authorityIdEql(value.reference_state_id.bytes, right.specification_unit.reference_state_id.bytes) and
-            authorityIdEql(value.feature_request_id.bytes, right.specification_unit.feature_request_id.bytes) and
+            authorityIdEql(value.feature_id.bytes, right.specification_unit.feature_id.bytes) and
             authorityIdEql(value.unit_slot_id.bytes, right.specification_unit.unit_slot_id.bytes),
         .plan_unit => |value| authorityIdEql(value.plan_input_authority_state_id.bytes, right.plan_unit.plan_input_authority_state_id.bytes) and
             authorityIdEql(value.unit_slot_id.bytes, right.plan_unit.unit_slot_id.bytes),

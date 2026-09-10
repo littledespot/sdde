@@ -53,15 +53,24 @@ requested live, LLM-based evaluation.
 
 ## Implementation snapshot
 
+The [single-case E2E command](e2e.md) now executes one declared reference/feature
+case in one isolated project, with scripted observations at the provider
+boundary. It retains a UTC-dated folder beneath `zig-out/e2e-spec/` and checks
+actual engine publication and expected files. The Hello World run now passes:
+the ordinary YAML publishes specification and reference views, clarification
+state and canonical specification state. The 26-scenario regression suite
+remains independent and no longer writes review folders. H-012 feature-log
+integration and the H-015 evaluator handoff remain unfinished.
+
 | Area | Evidence at review | Remaining boundary |
 | --- | --- | --- |
-| Generic engine | YAML discovery/compiler/runner and explicit feature/reference invocation exist. | Complete Specify definition through publication. |
-| References | Model-connected Markdown extraction/reconciliation, citations, typed text and exact-value preservation are implemented. | Applicable clarification answers and final artifact/state publication. |
+| Generic engine | YAML discovery/compiler/runner and explicit feature/reference invocation reach registered publication. | Remaining clarification routes and feature-log integration. |
+| References | Model-connected extraction/reconciliation, citations, typed text and exact-value preservation are retained in canonical state and rendered in the sidecar. | Applicable clarification answers. |
 | Model calls | [Native request operations](../../src/composition/model_request_operations.zig), configured production provider, explicit retirement/protocol retry and fake-provider tests exist. | Authorized live verification; no new provider is required for H-009/H-010. |
-| Specify | H-007–H-010 implement typed content, gates, generation, coverage and bounded repair. H-011/H-012 add in-memory Markdown projection and unit-need form publication. [Tests](../../src/composition/root.zig) still assert no successful `spec.md` publication. | Authenticated/current answers, remaining gap routes, complete sidecar/state/log publication and failure/rerun evidence. |
+| Specify | H-007–H-012 connect content, gates, generation, repair, sidecar/state publication and protected form writes. Tests cover shorter rerun replacements, monotonic IDs, invalid state and every publication write failure. | Authenticated/current answers, remaining gap routes, feature logs and interruption evidence. |
 | Fixture | Unchanged `stories.md`, seven principle files, `spec.case.json`, draft rubric and seven [calibration specimens](../../test/e2e/wf-001-hello-world/node-vitest/calibration/README.md) exist. | Human rubric review/live calibration and full-workflow runtime resources. |
 | Evaluator | `test/harness/`, `harness.zig` and `evaluate-spec`/offline test/smoke build steps implement supplied-spec OpenAI/Bedrock grading and reports. | Authorized live acceptance; no paid API call was made during implementation. |
-| Full-workflow harness | Specify execution/handoff is still separate from the supplied-spec evaluator. `TEST_HARNESS.md` remains absent; [evaluator.md](evaluator.md) documents actual commands. | H-007–H-018 integration and live end-to-end evidence. |
+| Full-workflow harness | [One-case scripted invocation](e2e.md), explicit fixture mapping, source preservation checks and publication/file checks now exist. Missing publication exits nonzero. | Remaining H-012 integration, H-015 evaluator handoff and live end-to-end evidence. |
 
 This is a source inspection, not a fresh test-pass claim. Recheck changing
 boundaries before implementing a ticket; do not rebuild existing functionality.

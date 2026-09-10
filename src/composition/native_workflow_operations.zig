@@ -39,6 +39,7 @@ const specification_repair = @import("../application/specification_repair_workfl
 const specification_rendering = @import("../application/specification_rendering_workflow.zig");
 const output = @import("../application/workflow_output_binding.zig");
 const clarification_refresh = @import("../application/clarification_refresh_workflow.zig");
+const publication = @import("../application/specification_publication_workflow.zig");
 
 /// Composition of native implementations, not a workflow graph. No setup action
 /// executes until the selected YAML reaches its registered operation.
@@ -147,7 +148,14 @@ pub const Assembly = struct {
     check_clarifications: clarification_refresh.Check,
     prepare_clarification_output: output.PrepareClarifications,
     publish_output: output.Publish,
-    entries: [core.entries.len + 103 + model_request.count]operations.Entry,
+    capture_workflow_state: publication.Capture,
+    parse_specification_state: publication.Parse,
+    build_resolved_needs: publication.ResolvedNeeds,
+    build_specification_state: publication.Build,
+    build_reference_snapshot: publication.BuildSnapshot,
+    render_reference_context: publication.RenderReference,
+    prepare_specification_output: publication.Prepare,
+    entries: [core.entries.len + 110 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -238,6 +246,13 @@ pub const Assembly = struct {
             .check_clarifications = .{},
             .prepare_clarification_output = .{ .allocator = allocator },
             .publish_output = .{ .allocator = allocator },
+            .capture_workflow_state = .{ .allocator = allocator },
+            .parse_specification_state = .{ .allocator = allocator },
+            .build_resolved_needs = .{ .allocator = allocator },
+            .build_specification_state = .{ .allocator = allocator },
+            .build_reference_snapshot = .{ .allocator = allocator },
+            .render_reference_context = .{ .allocator = allocator },
+            .prepare_specification_output = .{ .allocator = allocator },
             .render_specification = .{ .allocator = allocator },
             .validate_specification_rendering = .{ .allocator = allocator },
             .authorize_specification_repair = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
@@ -364,6 +379,13 @@ pub const Assembly = struct {
             entry(clarification_refresh.Check, &self.check_clarifications),
             entry(output.PrepareClarifications, &self.prepare_clarification_output),
             entry(output.Publish, &self.publish_output),
+            entry(publication.Capture, &self.capture_workflow_state),
+            entry(publication.Parse, &self.parse_specification_state),
+            entry(publication.ResolvedNeeds, &self.build_resolved_needs),
+            entry(publication.Build, &self.build_specification_state),
+            entry(publication.BuildSnapshot, &self.build_reference_snapshot),
+            entry(publication.RenderReference, &self.render_reference_context),
+            entry(publication.Prepare, &self.prepare_specification_output),
         };
         self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{authority.gate_contract} };
     }
@@ -377,13 +399,14 @@ pub const Assembly = struct {
         self.inspect_feature.action.inspector.capability = registry.featureDirectoryRead();
         self.resolve_feature_paths.action.roots = registry.featureArtifactRoots();
         self.capture_clarifications.action.source.capability = registry.featureInputRead();
+        if (self.capture_workflow_state.action.source) |*reader| reader.capability = registry.featureInputRead();
         if (self.publish_output.action.writer) |*writer| writer.capability = registry.featureOutputWrite();
         self.inventory_references.action.source.capability = registry.referenceContentRead();
         self.capture_references.action.source.capability = registry.referenceContentRead();
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation.schemas ++ authority.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation.schemas ++ authority.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write },

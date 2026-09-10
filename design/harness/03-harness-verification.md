@@ -6,8 +6,15 @@ are separate evidence classes; both are needed, and neither replaces the other.
 
 ## H-014 — Assemble the isolated Hello World project
 
-**Status:** Open. **Owner:** generic harness fixture builder.
+**Status:** Partial. **Owner:** generic harness fixture builder.
 **Dependencies:** H-001 case mapping; consume H-013 when the workflow is ready.
+
+The [single-case scripted E2E harness](e2e.md) now copies explicit resource
+mappings into a retained dated project and checks the original source bytes
+after execution. The Hello World case passes ordinary bootstrap and reaches
+generation. Harness tests exercise a separate library-reference fixture for
+copying, source preservation and path safety; a second complete workflow case
+remains unverified.
 
 Work:
 
@@ -38,8 +45,15 @@ to make a test or judge pass.
 
 ## H-015 — Run the workflow and evaluate its actual output
 
-**Status:** Open. **Owner:** harness coordinator and production invocation adapter.
+**Status:** Partial. **Owner:** harness coordinator and production invocation adapter.
 **Dependencies:** H-006/H-013/H-014. Fakes allow integration without live charges.
+
+The ordinary single-workflow invocation and publication/file checks are
+implemented by [the E2E command](e2e.md). The Hello World graph now publishes
+its validated specification, reference sidecar and canonical states before
+reaching `ok`; the scripted E2E command passes. Remaining H-012 feature-log
+integration, evaluator artifact identity binding and evaluator handoff are
+outstanding.
 
 Work:
 

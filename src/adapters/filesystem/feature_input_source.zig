@@ -13,6 +13,17 @@ pub const Adapter = struct {
     pub fn capturer(self: *Adapter) source.Capturer {
         return .{ .context = self, .capture_fn = capture };
     }
+    pub fn workflowStateCapturer(self: *Adapter) @import("../../ports/workflow_state_source.zig").Capturer {
+        return .{ .context = self, .capture_fn = captureWorkflowState };
+    }
+    fn captureWorkflowState(context: *anyopaque, capability: *const roots.FeatureInputReadCapability, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!?[]const u8 {
+        const self: *Adapter = @ptrCast(@alignCast(context));
+        return self.captureWorkflowStateBound(roots.bindFeatureInputAdapter(capability), allocator, observed, paths);
+    }
+    pub fn captureWorkflowStateBound(self: *Adapter, binding: roots.FeatureInputAdapterBinding, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!?[]const u8 {
+        try validateBinding(binding, allocator, observed, paths);
+        return self.captureState(binding, allocator, paths.get(.workflow_state), @import("../../domain/specification_state.zig").max_bytes);
+    }
     fn capture(context: *anyopaque, capability: *const roots.FeatureInputReadCapability, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!clarification.Captures {
         const self: *Adapter = @ptrCast(@alignCast(context));
         const binding = roots.bindFeatureInputAdapter(capability);
@@ -22,6 +33,10 @@ pub const Adapter = struct {
     /// Adapter-local reuse for write-time rechecks after authorized creation.
     /// The caller has opened/revalidated these exact physical root identities.
     pub fn captureBound(self: *Adapter, binding: roots.FeatureInputAdapterBinding, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!clarification.Captures {
+        try validateBinding(binding, allocator, observed, paths);
+        return self.captureClarifications(binding, allocator, observed, paths);
+    }
+    fn validateBinding(binding: roots.FeatureInputAdapterBinding, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!void {
         if (!std.mem.eql(u8, observed.selector.feature_id.bytes, paths.feature.feature_id.bytes) or
             !std.mem.eql(u8, observed.selector.project_relative_path, paths.feature.project_relative_path) or
             !std.meta.eql(observed.root_observation, binding.specs_observation)) return error.FeatureInputUnavailable;
@@ -34,6 +49,8 @@ pub const Adapter = struct {
             if (expected.root != supplied.root or !std.mem.eql(u8, expected.root_relative, supplied.root_relative) or
                 !std.mem.eql(u8, expected.project_relative, supplied.project_relative)) return error.FeatureInputUnavailable;
         }
+    }
+    fn captureClarifications(self: *Adapter, binding: roots.FeatureInputAdapterBinding, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!clarification.Captures {
         var forms: std.ArrayList(clarification.FormCapture) = .empty;
         errdefer {
             for (forms.items) |form| allocator.free(form.bytes);
@@ -66,19 +83,21 @@ pub const Adapter = struct {
         std.mem.sort(clarification.FormCapture, forms.items, {}, lessForm);
         for (forms.items, 0..) |form, index| if (index > 0 and form.id.index() == forms.items[index - 1].id.index()) return error.FeatureInputUnavailable;
 
+        const state = try self.captureState(binding, allocator, paths.get(.clarification_state), clarification.max_state_bytes);
+        errdefer if (state) |bytes| allocator.free(bytes);
+        return .{ .state = state, .forms = try forms.toOwnedSlice(allocator) };
+    }
+    fn captureState(self: *Adapter, binding: roots.FeatureInputAdapterBinding, allocator: std.mem.Allocator, state_path: artifacts.ArtifactPath, maximum: usize) source.Error!?[]const u8 {
         const workflow_root = (directories.openObserved(self.io, self.project_root, binding.paths.workflows, .{ .directory = binding.workflows_identity }) catch return error.FeatureInputUnavailable) orelse return error.FeatureInputUnavailable;
         defer workflow_root.close(self.io);
-        const state_path = paths.get(.clarification_state);
         const parent = directories.open(self.io, workflow_root, std.fs.path.dirname(state_path.root_relative).?) catch |err| switch (err) {
             error.DirectoryMissing => null,
             else => return error.FeatureInputUnavailable,
         };
-        const state = if (parent) |folder| blk: {
+        return if (parent) |folder| blk: {
             defer folder.close(self.io);
-            break :blk try readFile(self.io, allocator, folder, std.fs.path.basename(state_path.root_relative), clarification.max_state_bytes);
+            break :blk try readFile(self.io, allocator, folder, std.fs.path.basename(state_path.root_relative), maximum);
         } else null;
-        errdefer if (state) |bytes| allocator.free(bytes);
-        return .{ .state = state, .forms = try forms.toOwnedSlice(allocator) };
     }
 };
 

@@ -12,12 +12,13 @@ preservation, scripted extraction accounting and reconciliation in Sections
 3.1–3.9 are implemented. Model-connected extraction/reconciliation (§3.11) and
 in-memory specification generation/validation/repair (§5.7) are implemented
 through ordinary YAML. Generation needs now refresh and publish controlled
-clarification forms (§3.12); validated specification content renders and reparses
-in memory. Answer application, complete artifact/state publication and the final
-Specify definition remain unfinished. Generated-name code is removed.
+clarification forms (§3.12); validated specification content renders, reparses
+and publishes alongside its reference sidecar and canonical state. Answer
+application, feature-log integration and remaining clarification routes are
+unfinished. Generated-name code is removed.
 The native content schema and mechanical specification Markdown codec in §5.6
 are implemented. The shared required-authority boundary and Specify projection
-in §3.10 are connected to model-assisted generation evidence; publication remains open.
+in §3.10 are connected to model-assisted generation and publication evidence.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -25,7 +26,7 @@ rule.
 
 **Input optimization:** [ADR 0013](../decisions/0013-workflow-input-reuse.md) is
 implemented. `spec.workflow.yaml` declares local request/retirement subgraphs;
-the compiler expands all 225 operations through the existing validators.
+the compiler expands their operations through the existing validators.
 Schemas share local definitions and select the current generation unit,
 reconciliation purpose or authorized repair shape. Model inputs share citation
 records and preserve their complete supplied evidence. The
@@ -664,11 +665,30 @@ verifies written bytes. User-closed files are not replacement candidates. No
 transaction directory, append/merge path or recovery subsystem is introduced.
 
 The YAML's successful content branch projects current-authority-checked typed
-content through the existing Markdown codec and reparses it in memory. It does
-not yet publish a successful specification: reference-context, complete canonical
-state/provenance joins and completion/log evidence remain H-012. Clarification
-publication likewise does not claim a completed Specify workflow. See the
-[remaining acceptance work](../harness/02-spec-workflow.md#h-011--complete-specification-clarification-handling).
+content through the existing Markdown codec and reparses it. It renders
+`reference-context.md` from an accepted reference snapshot, refreshes the
+clarification registry through the shared refresh operation, and prepares all
+four registered outputs before the writer runs. `workflow.json` is written last.
+
+The native closed `specification-state/v1` singleton contains the feature key,
+revision, `specified` stage, captured reference sources/chunks/claims/citations,
+reconciliation and passive-literal records, accepted brief/content/provenance,
+coverage, record-ID counters, clarification state/revision and required-authority
+review evidence. Model-assisted support retains that label. The snapshot contains
+no raw model response, filesystem handle, runner state or saved continuation.
+`capture-workflow-state` and `parse-specification-state` validate this singleton
+before generation; reruns reuse only the canonical record-ID counters, increment
+the publication revision and regenerate the candidate from current inputs.
+Malformed or foreign state blocks before model calls. Generated Markdown is not
+imported as authority. Specification request owners use the same lossless
+`FeatureId` directory contract for generation, review and repair.
+
+Publication checks exact captured workflow-state bytes as well as clarification
+inputs; stale captures reject. Every write failure prevents new completion, and
+a fresh invocation starts from the beginning. Feature-log integration and
+[remaining clarification work](../harness/02-spec-workflow.md#h-011--complete-specification-clarification-handling)
+remain open. A clarification publication ending in `needs_user` still does not
+claim a completed Specify workflow.
 
 ## 4. Required logical coverage
 
@@ -921,8 +941,9 @@ YAML's repair operation has an explicit bounded ceiling; exhaustion fails.
 No missing knowledge is replaced with a default or treated as deterministic proof.
 
 `test-specification-generation` and configured-root fake-provider tests cover
-these paths and negative cases. Applicable answers, persistence, editable-ID
-reconciliation and publication remain with H-011/H-012.
+these paths and negative cases. Section 3.12 connects canonical persistence and
+publication. Applicable answers and remaining workflow integration stay with
+H-011/H-012; reruns regenerate views using the persisted record-ID counters.
 
 ## 6. Diagrams
 

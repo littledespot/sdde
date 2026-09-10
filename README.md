@@ -21,9 +21,10 @@ files at the same paths. Unresolved clarification forms are also completely
 overwritten, retaining their subject IDs; forms the user has resolved remain
 byte-for-byte unchanged. This is the
 [shared rerun rule](design/design.md#232-workflow-reruns-and-protected-clarification-files),
-including for workflows outside the initial SDD suite. The shared writer and
-generation-unit clarification replacement are connected; authenticated answer
-application and complete specification publication remain unfinished
+including for workflows outside the initial SDD suite. The shared writer publishes validated specification, reference and clarification
+output with canonical state written last. Generation-unit clarification
+replacement is connected; authenticated answer application and feature-log
+integration remain unfinished
 ([implementation status](design/features/F0100-SpecWorkflow.md#312-clarification-refresh-and-registered-publication)).
 
 [Provider APIs own model-call size limits](design/decisions/0011-provider-owned-request-limits.md).
@@ -57,7 +58,7 @@ separate identities and retries for each call. The [input contract](design/decis
 also supports local schema references, compact transport and typed per-unit
 result selection. Evidence packets retain complete claims and exact tokens
 while sharing citation records. See the [file guide and measurements](design/TODO001.md)
-for required configuration, resources and remaining publication work.
+for required configuration, resources and remaining workflow work.
 
 `advance-model-attempt-accounting` now accounts that prepared request through
 the same YAML runner. Its explicit `retry-limit` permits retries after the
@@ -175,6 +176,8 @@ zig build test-path-tokens
 zig build test-typed-text
 zig build test-feature-directory
 zig build test-clarification-inputs
+zig build test-e2e-harness
+zig build e2e-spec -- --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json
 zig build test-rubric-evaluator
 zig build build-rubric-evaluator
 zig build smoke-rubric-evaluator
@@ -189,6 +192,31 @@ lint step and the unit tests, then copies the built executable into a clean
 temporary directory, clears its environment, and verifies its exact standard
 output. The temporary package directory is removed by the Zig build runner
 after a successful build.
+
+Run `./scripts/e2e-spec.sh` for the checked-in Hello World Spec E2E case.
+The script locates this checkout from its own path, so it also works when
+invoked by absolute path from another directory. Pass `--case
+<repository-relative-workflow.case.json>` to select another case, or `--help`
+for the harness usage. It preserves the harness exit status and report output.
+
+`zig build e2e-spec -- --case <workflow.case.json>` runs exactly one selected
+case with scripted provider observations through ordinary bootstrap, workflow
+selection and YAML execution. Each invocation creates one retained folder under
+`zig-out/e2e-spec/YYYY-MM-DDTHH-MM-SSZ-<unique-id>/`, containing `report.json`,
+`report.md` and one isolated `project/`. A successful workflow produces one
+`spec.md` at its configured feature path; for Hello World this is
+`project/specs/hello-world/spec.md`. The harness observes published files and
+never exports an in-memory candidate. Non-success exits nonzero and cannot
+report an earlier or partially written specification as successful output.
+
+The Hello World case passes through the production publication boundary,
+writing `spec.md`, `reference-context.md`, `clarifications.json` and
+`workflow.json`. Fresh reruns replace the views and retain monotonic record IDs.
+No live calls or rubric evaluation run through this command. See
+[single-case E2E instructions](design/harness/e2e.md).
+`zig build test-e2e-harness` tests the harness's mechanics. Ordinary
+`zig build test`/`verify` include those checks and the separate regression suite;
+they do not launch the selected E2E case or retain regression review folders.
 
 The development-only [rubric evaluator](design/harness/evaluator.md) grades a
 supplied specification through OpenAI or Bedrock using the checked-in Hello World rubric
@@ -225,7 +253,8 @@ engine-assigned claim/citation IDs and complete chunk accounting are also tested
 through YAML with scripted results. Hierarchical reconciliation now preserves
 claim membership, validates dispositions and signal/conflict joins, assigns
 engine IDs and blocks unresolved conflicts. Production model requests now drive
-extraction/reconciliation and generation; snapshot publication remains unfinished. See
+extraction/reconciliation and generation; successful publication retains their
+canonical source, claim, citation and provenance records. See
 [F0100](design/features/F0100-SpecWorkflow.md#35-extraction-candidate-accounting).
 The shared required-authority boundary now projects registered Specify fields
 and reference obligations, checks complete current support, and routes gaps to
@@ -233,7 +262,7 @@ their earliest owner. Its YAML-visible gate uses existing runner provenance to
 reject stale inputs and sources. Scripted tests cover unrelated requirement
 kinds; no rubric score, citation alone or model success assertion grants gate
 authority. Generation is connected, as are unit-need forms and protected writes;
-authenticated answers and complete artifact/state publication remain open.
+authenticated answers and feature-log integration remain open.
 See [F0100 §3.10](design/features/F0100-SpecWorkflow.md#310-shared-required-authority-boundary).
 Registered toolchain naming rules now feed a shared, YAML-addressable path-token
 grammar and detector, including current reference basenames. Source-backed

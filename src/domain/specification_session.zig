@@ -11,6 +11,7 @@ pub const Session = struct {
     revision: u64 = 1,
     completed: usize = 0,
     units: [unit_count]?g.Checked = @splat(null),
+    starting_ledger: @import("specification_identity.zig").Ledger = .{},
 };
 pub const Error = g.Error || packets.Error;
 
@@ -35,7 +36,7 @@ pub fn owner(allocator: std.mem.Allocator, current: Session) Error!identity.Immu
         .specification_unit = .{
             .reference_state_id = .{ .bytes = current.reference_state.bytes },
             // Feature directory is the feature identity; no second ownership registry.
-            .feature_request_id = .{ .bytes = current.feature.bytes },
+            .feature_id = current.feature,
             .unit_slot_id = .{ .bytes = try std.fmt.allocPrint(allocator, "specification-{d}", .{current.completed + 1}) },
         },
     };
@@ -107,5 +108,5 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
         .primary_user_story = current.units[1].?.response.content.primary_user_story,
         .entities = entities,
         .records = records.items,
-    }, .{});
+    }, current.starting_ledger);
 }

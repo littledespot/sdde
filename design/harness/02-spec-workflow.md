@@ -204,9 +204,8 @@ validator's exact arithmetic; equivalent numeric spellings do not create a
 second schema/native mismatch. Native content/storage and semantic gates are unchanged.
 
 H-011 still owns applicable-answer consumption and protected forms. H-012
-owns rendering/publication; this generation-only definition writes no artifacts
-and does not mark a feature specified. Live generation and rubric scoring
-are not claimed by offline tests.
+connects rendering and publication after successful generation and authority
+validation. Live generation and rubric scoring are not claimed by offline tests.
 
 Work:
 
@@ -303,9 +302,12 @@ Acceptance:
 The authority-checked specification projection, existing Markdown codec and
 normalized round-trip check are connected to generation. A shared registered
 writer publishes prepared clarification output with exact captured-input
-rechecks and complete replacement. Successful specification publication remains
-unfinished: reference-context rendering, canonical reference/provenance/workflow
-state joins and feature-log evidence are not yet assembled into a complete set.
+rechecks and complete replacement. The successful YAML branch now renders the
+reference sidecar, builds closed `specification-state/v1`, and prepares the
+specification, sidecar, clarification registry and canonical state together.
+Preparation rechecks normalized Markdown and state/view joins; the writer
+rechecks captured clarification and workflow state before each replacement and
+writes completion state last. Feature-log integration remains unfinished.
 The replacement rule is accepted in ADR 0009 and Design
 §23.2: every workflow completely overwrites its registered replaceable outputs
 and unresolved clarification forms, preserving user-resolved forms unchanged.
@@ -318,9 +320,11 @@ User-closed forms remain protected; no rollback/recovery subsystem is permitted.
 The writer has no raw destination parameter, journal or recovery directory.
 It rejects duplicate targets, changed captures, unsafe filesystem aliases and
 completion state ordered before other files. Current tests cover normal
-clarification reruns, shorter replacements, concurrent closes and a failed
-ordinary output write. Exhaustive interruption/failpoint and whole-output rerun
-evidence remains open. An interrupted clarification write can leave forms and
+clarification reruns, shorter replacements, concurrent closes, all four
+successful-output write failpoints, and fresh reruns of Hello World and an
+unrelated library reference under a nested Unicode feature directory. Prior
+canonical state retains monotonic specification IDs; malformed state rejects
+before model invocation. Process-interruption evidence remains open. An interrupted clarification write can leave forms and
 registry inconsistent; current strict input validation blocks that condition
 rather than resetting state or inventing recovery authority.
 

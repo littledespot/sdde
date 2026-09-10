@@ -98,6 +98,7 @@ fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, p
     native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
     var boot = runInProjectWithRegistry(io, allocator, project_root, runtime, &native_bindings.registry);
     native_bindings.publish_output.action.writer = feature_outputs.port();
+    native_bindings.capture_workflow_state.action.source = feature_inputs.workflowStateCapturer();
     if (boot == .ready) native_bindings.bindRoots(boot.ready.roots.registry());
     defer boot.deinit();
     var provider_bootstrap = model_provider_bootstrap.Assembly.init(
@@ -174,7 +175,7 @@ fn runInProjectWithRuntime(
     return runInProjectWithRegistry(io, allocator, project_root, runtime, &core_workflow_operations.registry);
 }
 
-fn runInProjectWithRegistry(
+pub fn runInProjectWithRegistry(
     io: std.Io,
     allocator: std.mem.Allocator,
     project_root: std.Io.Dir,
@@ -1339,6 +1340,7 @@ test "configured specification generation YAML executes native references models
         defer boot.deinit();
         var feature_outputs: @import("../adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
         native.publish_output.action.writer = feature_outputs.port();
+        native.capture_workflow_state.action.source = feature_inputs.workflowStateCapturer();
         if (boot != .ready) std.debug.print("generation bootstrap: {any}\n", .{boot});
         try std.testing.expect(boot == .ready);
         native.bindRoots(boot.ready.roots.registry());
@@ -1390,7 +1392,12 @@ test "configured specification generation YAML executes native references models
             try std.testing.expectEqual(@as(usize, 1), parsed.value.records.len);
             try std.testing.expectEqualStrings("specification", parsed.value.records[0].subject.requirement);
         }
-        try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/chosen/spec.md", .{}));
+        if (expected == .ok) {
+            const bytes = try project.dir.readFileAlloc(io, "requirements/current/chosen/spec.md", allocator, .limited(8_388_608));
+            defer allocator.free(bytes);
+            const rendered = try @import("../application/specification_values.zig").storage.read(&.{ .slots = runner.envelope.slots }, @import("../application/specification_rendering_workflow.zig").rendered_schema, .rendered);
+            try std.testing.expectEqualStrings(rendered, bytes);
+        } else try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/chosen/spec.md", .{}));
     }
 }
 
@@ -1663,7 +1670,7 @@ test "registered output writer validates the complete set and never writes compl
     const paths = try @import("../domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, registry.featureArtifactRoots(), selected);
     const view: output.File = .{ .target = .{ .artifact = .reference_context }, .bytes = "reference view\n" };
     const state: output.File = .{ .target = .{ .artifact = .workflow_state }, .bytes = "test completion\n" };
-    var prepared: output.Prepared = .{ .feature = observed, .paths = paths, .prior = .{ .state = null, .forms = &.{} }, .files = &.{ state, view } };
+    var prepared: output.Prepared = .{ .feature = observed, .paths = paths, .prior = .{ .state = null, .forms = &.{} }, .prior_workflow_state = .{ .captured = null }, .files = &.{ state, view } };
     var writer_adapter: @import("../adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
     var writer = writer_adapter.port();
     writer.capability = registry.featureOutputWrite();
@@ -1682,6 +1689,83 @@ test "registered output writer validates the complete set and never writes compl
 }
 
 // Writer tests need configured roots, not the native input-preflight graph.
+test "every registered publication write failure prevents completion and a fresh run replaces the complete set" {
+    const access = @import("../adapters/filesystem/file_access.zig");
+    const output = @import("../domain/workflow_output.zig");
+    const Failing = struct {
+        var calls: usize = 0;
+        var fail_at: ?usize = null;
+        fn replace(io: std.Io, allocator: std.mem.Allocator, parent: std.Io.Dir, name: []const u8, expected: access.Expected, bytes: []const u8) access.Error!void {
+            const index = calls;
+            calls += 1;
+            if (fail_at == index) return error.FileUnavailable;
+            return access.replace(io, allocator, parent, name, expected, bytes);
+        }
+    };
+    const io = std.testing.io;
+    const files = [_]output.File{
+        .{ .target = .{ .artifact = .specification }, .bytes = "specification\n" },
+        .{ .target = .{ .artifact = .reference_context }, .bytes = "reference\n" },
+        .{ .target = .{ .artifact = .clarification_state }, .bytes = "state\n" },
+        .{ .target = .{ .artifact = .workflow_state }, .bytes = "completion\n" },
+    };
+    for (0..files.len) |failure_index| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try writeFeatureInputFixture(io, project.dir);
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = output_test_bootstrap });
+        for (0..2) |run_index| {
+            var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+            defer arena.deinit();
+            const a = arena.allocator();
+            // Fresh bootstrap and physical observations after abandoned output.
+            var boot = runInProject(io, std.testing.allocator, project.dir);
+            defer boot.deinit();
+            try std.testing.expect(boot == .ready);
+            const registry = boot.ready.roots.registry();
+            const selected = try @import("../domain/feature_directory.zig").validate(a, .{ .bytes = "Chosen/Café" }, registry.featureDirectoryRoots());
+            var inspector_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
+            var inspector = inspector_adapter.inspector();
+            inspector.capability = registry.featureDirectoryRead();
+            const observed = try inspector.inspect(a, selected);
+            const paths = try @import("../domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, registry.featureArtifactRoots(), selected);
+            var source: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+            var capture = source.capturer();
+            capture.capability = registry.featureInputRead();
+            var capture_state = source.workflowStateCapturer();
+            capture_state.capability = registry.featureInputRead();
+            var prepared: output.Prepared = .{ .feature = observed, .paths = paths, .prior = try capture.capture(a, observed, paths), .prior_workflow_state = .{ .captured = try capture_state.capture(a, observed, paths) }, .files = &files };
+            var adapter: @import("../adapters/filesystem/workflow_output.zig").Writer(Failing.replace) = .{ .io = io, .project_root = project.dir };
+            var writer = adapter.port();
+            writer.capability = registry.featureOutputWrite();
+            Failing.calls = 0;
+            Failing.fail_at = if (run_index == 0) failure_index else null;
+            if (run_index == 0) {
+                prepared.prior_workflow_state = .unselected;
+                try std.testing.expectError(error.InvalidWorkflowOutput, writer.publish(a, prepared));
+                prepared.prior_workflow_state = .{ .captured = "foreign previous state" };
+                try std.testing.expectError(error.OutputChanged, writer.publish(a, prepared));
+                try std.testing.expectEqual(@as(usize, 0), Failing.calls);
+                prepared.prior_workflow_state = .{ .captured = null };
+                try std.testing.expectError(error.OutputWriteFailed, writer.publish(a, prepared));
+                for (files, 0..) |file, index| {
+                    const path = try output.path(a, paths, file.target);
+                    if (index < failure_index) {
+                        try std.testing.expectEqualStrings(file.bytes, try project.dir.readFileAlloc(io, path.project_relative, a, .limited(128)));
+                    } else try std.testing.expectError(error.FileNotFound, project.dir.access(io, path.project_relative, .{}));
+                }
+            } else {
+                try writer.publish(a, prepared);
+                try std.testing.expectEqual(files.len, Failing.calls);
+                for (files) |file| {
+                    const path = try output.path(a, paths, file.target);
+                    try std.testing.expectEqualStrings(file.bytes, try project.dir.readFileAlloc(io, path.project_relative, a, .limited(128)));
+                }
+            }
+        }
+    }
+}
+
 const output_test_bootstrap =
     \\schema: workflow/v1
     \\id: output-test

@@ -151,7 +151,7 @@ fn inlineField(w: *std.Io.Writer, prefix: []const u8, value: spec.Scalar) Error!
     try literal(w, value.bytes[offset..]);
     try write(w, "\n");
 }
-fn literal(w: *std.Io.Writer, bytes: []const u8) Error!void {
+pub fn literal(w: *std.Io.Writer, bytes: []const u8) Error!void {
     for (bytes) |byte| switch (byte) {
         '\n' => try write(w, "&#10;"),
         '\r' => try write(w, "&#13;"),
@@ -162,7 +162,7 @@ fn literal(w: *std.Io.Writer, bytes: []const u8) Error!void {
         },
     };
 }
-fn code(w: *std.Io.Writer, bytes: []const u8) Error!void {
+pub fn code(w: *std.Io.Writer, bytes: []const u8) Error!void {
     var longest: usize = 0;
     var run: usize = 0;
     for (bytes) |byte| {

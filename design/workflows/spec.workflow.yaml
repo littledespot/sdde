@@ -96,6 +96,16 @@ steps:
   resolve-paths:
     use: resolve-feature-artifact-paths
     on:
+      ok: capture-workflow-state
+      failed: end.failed
+  capture-workflow-state:
+    use: capture-workflow-state
+    on:
+      ok: parse-specification-state
+      failed: end.failed
+  parse-specification-state:
+    use: parse-specification-state
+    on:
       ok: capture-clarifications
       failed: end.failed
   capture-clarifications:
@@ -630,6 +640,74 @@ steps:
       failed: end.failed
   validate-rendering:
     use: validate-specification-rendering
+    on:
+      ok: resolved-clarification-needs
+      failed: end.failed
+  resolved-clarification-needs:
+    use: build-resolved-clarification-needs
+    on:
+      ok: refresh-output-clarifications
+      failed: end.failed
+  refresh-output-clarifications:
+    use: refresh-clarifications
+    on:
+      ok: check-output-clarifications
+      blocked: end.blocked
+      failed: end.failed
+  check-output-clarifications:
+    use: check-clarification-progress
+    on:
+      ok: render-output-clarifications
+      needs-user: render-pending-clarifications
+      blocked: end.blocked
+  render-pending-clarifications:
+    use: render-clarification-forms
+    on:
+      ok: prepare-pending-clarifications
+      failed: end.failed
+  prepare-pending-clarifications:
+    use: prepare-clarification-output
+    on:
+      ok: publish-pending-clarifications
+      failed: end.failed
+  publish-pending-clarifications:
+    use: publish-workflow-output
+    on:
+      ok: check-pending-clarifications
+      failed: end.failed
+  check-pending-clarifications:
+    use: check-clarification-progress
+    on:
+      ok: end.ok
+      needs-user: end.needs-user
+      blocked: end.blocked
+  render-output-clarifications:
+    use: render-clarification-forms
+    on:
+      ok: build-reference-snapshot
+      failed: end.failed
+  build-reference-snapshot:
+    use: build-reference-snapshot
+    on:
+      ok: build-specification-state
+      failed: end.failed
+  build-specification-state:
+    use: build-specification-state
+    on:
+      ok: render-reference-context
+      failed: end.failed
+  render-reference-context:
+    use: render-reference-context
+    on:
+      ok: prepare-specification-output
+      failed: end.failed
+  prepare-specification-output:
+    use: prepare-specification-output
+    on:
+      ok: publish-specification
+      failed: end.failed
+  publish-specification:
+    use: publish-workflow-output
     on:
       ok: end.ok
       failed: end.failed

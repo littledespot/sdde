@@ -8,12 +8,6 @@
           "config": {
             "region": "ap-southeast-2"
           }
-        },
-        {
-          "model": "mistral.voxtral-mini-3b-2507",
-          "config": {
-            "region": "ap-southeast-2"
-          }
         }
       ]
     }

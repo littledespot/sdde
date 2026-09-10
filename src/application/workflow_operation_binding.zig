@@ -46,6 +46,7 @@ pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
     if (T == @import("../ports/reference_directory_inspector.zig").Inspector) return .{ .reference_read = true };
     if (T == @import("../ports/feature_directory_inspector.zig").Inspector) return .{ .feature_read = true };
     if (T == @import("../ports/feature_input_source.zig").Capturer) return .{ .feature_input_read = true };
+    if (T == @import("../ports/workflow_state_source.zig").Capturer) return .{ .feature_input_read = true };
     if (T == @import("../ports/workflow_output.zig").Port) return .{ .feature_output_write = true };
     const clarification_parser = @import("../ports/clarification_input_parser.zig");
     if (T == clarification_parser.StateParser or T == clarification_parser.FormParser) return .{};

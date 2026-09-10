@@ -33,7 +33,7 @@ The engine derives, rather than separately configures, these storage children:
 | Derived path | Purpose |
 | --- | --- |
 | `<paths.workflows>/features/` | Engine-owned canonical per-feature workflow and execution state. |
-| `<paths.workflows>/features/<feature-directory>/state/workflow.json` | Fixed workflow-state singleton; bound but not imported by read-only clarification preparation. |
+| `<paths.workflows>/features/<feature-directory>/state/workflow.json` | Fixed workflow-state singleton; Specify captures/validates `specification-state/v1` separately from read-only clarification preparation (see [F0100 §3.12](features/F0100-SpecWorkflow.md#312-clarification-refresh-and-registered-publication)). |
 | `<paths.workflows>/features/<feature-directory>/state/clarifications.json` | Native clarification registry/response input; closed schema and limits are documented in [F0100 §3.2](features/F0100-SpecWorkflow.md#32-read-only-artifact-and-clarification-inputs). |
 
 `--feature` supplies a directory relative to `.sddtoolkit.json`'s `paths.specs`.

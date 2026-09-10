@@ -1,0 +1,108 @@
+{
+  "schema": "spec-e2e-case/v1",
+  "id": "wf-001-hello-world-node-vitest-spec",
+  "workflow_id": "spec-generation",
+  "feature": "hello-world",
+  "reference": "hello-world",
+  "config": "test/e2e/wf-001-hello-world/.sddtoolkit.json",
+  "directories": [
+    ".sddtoolkit/toolchainPreset",
+    ".sddtoolkit/templates"
+  ],
+  "files": [
+    {
+      "source": "test/e2e/config/.sddproviders.json",
+      "destination": ".sddtoolkit/providers/.sddproviders.json"
+    },
+    {
+      "source": "test/e2e/wf-001-hello-world/reference/stories.md",
+      "destination": "references/hello-world/stories.md"
+    },
+    {
+      "source": "design/workflows/spec.workflow.yaml",
+      "destination": ".sddtoolkit/workflows/spec.workflow.yaml"
+    },
+    {
+      "source": "design/workflows/spec/protocol.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/protocol.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/extraction.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/extraction.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/extraction.schema.json",
+      "destination": ".sddtoolkit/workflows/spec/extraction.schema.json"
+    },
+    {
+      "source": "design/workflows/spec/reconciliation.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/reconciliation.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/reconciliation.schema.json",
+      "destination": ".sddtoolkit/workflows/spec/reconciliation.schema.json"
+    },
+    {
+      "source": "design/workflows/spec/generation.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/generation.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/generation.schema.json",
+      "destination": ".sddtoolkit/workflows/spec/generation.schema.json"
+    },
+    {
+      "source": "design/workflows/spec/support.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/support.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/support.schema.json",
+      "destination": ".sddtoolkit/workflows/spec/support.schema.json"
+    },
+    {
+      "source": "design/workflows/spec/repair.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/repair.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/repair.schema.json",
+      "destination": ".sddtoolkit/workflows/spec/repair.schema.json"
+    },
+    {
+      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/architecture.md",
+      "destination": ".sddtoolkit/principles/architecture.md"
+    },
+    {
+      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/core.md",
+      "destination": ".sddtoolkit/principles/core.md"
+    },
+    {
+      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/observability.md",
+      "destination": ".sddtoolkit/principles/observability.md"
+    },
+    {
+      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/project-structure.md",
+      "destination": ".sddtoolkit/principles/project-structure.md"
+    },
+    {
+      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/security.md",
+      "destination": ".sddtoolkit/principles/security.md"
+    },
+    {
+      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/user-interface.md",
+      "destination": ".sddtoolkit/principles/user-interface.md"
+    },
+    {
+      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/validation.md",
+      "destination": ".sddtoolkit/principles/validation.md"
+    },
+    {
+      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/toolchain.yaml",
+      "destination": ".sddtoolkit/principles/toolchain.yaml"
+    }
+  ],
+  "expected_artifacts": [
+    "specification",
+    "reference_context",
+    "clarification_state",
+    "workflow_state"
+  ]
+}
