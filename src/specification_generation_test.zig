@@ -378,3 +378,47 @@ test "claim coverage rejects omitted business claims and unfulfilled exact-copy 
         try std.testing.expectError(error.InvalidSpecificationCoverage, coverage.validate(a, fixture.context.references, .{ .title = missing, .description = missing, .primary_goal = missing }, content));
     }
 }
+
+test "mandatory content gaps survive positive model review and scenario coverage has a shared gate" {
+    const authority = @import("domain/required_authority.zig");
+    const support = @import("domain/specification_support.zig");
+    const project = @import("domain/specification_authority.zig");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "An application starts successfully.", "A librarian renews a loan." }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        const value = try fixture.value(source);
+        for (0..5) |mode| {
+            var records: std.ArrayList(spec.IdentifiedRecord) = .empty;
+            if (mode & 1 != 0 or mode == 4) try records.append(a, .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .proposal = .{ .content = .{ .acceptance_criterion = .{ .given = value.value, .when = value.value, .then = value.value } }, .provenance = value.provenance } });
+            if (mode & 2 != 0 or mode == 4) try records.append(a, .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .proposal = .{ .content = .{ .functional_requirement = .{ .text = value.value } }, .provenance = value.provenance } });
+            const content: spec.IdentifiedContent = .{ .display_name = value, .primary_user_story = value, .entities = .{ .disposition = .not_applicable, .basis = value }, .records = records.items };
+            const inputs = try project.project(a, .{ .bytes = "chosen" }, fixture.context.references, content, .{ .title = value, .description = value, .primary_goal = value });
+            const ledger = try authority.build(a, inputs);
+            const findings = try a.alloc(support.Finding, ledger.requirements.len);
+            for (ledger.requirements, findings, 0..) |requirement, *finding, index| finding.* = .{
+                .requirement_ordinal = @intCast(index + 1),
+                .finding = if (mode == 4 and requirement.seed.id.slot == .scenario_coverage) .unsupported else .supported,
+                .disposition = if (requirement.seed.id.kind == .entity_applicability) .not_applicable else .supported,
+                .provenance = value.provenance,
+            };
+            const reviewed = try support.collect(a, inputs, fixture.context, try std.json.Stringify.valueAlloc(a, support.Review{ .entries = findings }, .{}));
+            const checked = try authority.build(a, reviewed);
+            const observations = try (@import("actions/authority/build_required_authority_observations.zig").Action{}).execute(a, checked);
+            const result = try authority.reconcile(a, checked, observations);
+            try std.testing.expectEqual(@as(@TypeOf(result.continuation), if (mode == 3) .all_resolved else .needs_user), result.continuation);
+            try std.testing.expectEqual(mode == 3, try authority.validate(a, reviewed, observations, result));
+            for (result.entries) |entry| if (entry.outcome == .clarification_required) {
+                try std.testing.expectEqual(.spec, entry.outcome.clarification_required.owner);
+                try std.testing.expectEqual(@as(authority.GapReason, if (mode == 4) .unsupported else .missing), entry.outcome.clarification_required.reason);
+            };
+            if (inputs.forced_gaps.len != 0) {
+                var bypass = reviewed;
+                bypass.forced_gaps = &.{};
+                try std.testing.expectError(error.InvalidRequiredAuthority, authority.build(a, bypass));
+            }
+        }
+    }
+}

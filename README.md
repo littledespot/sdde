@@ -212,6 +212,10 @@ report an earlier or partially written specification as successful output.
 The Hello World case passes through the production publication boundary,
 writing `spec.md`, `reference-context.md`, `clarifications.json` and
 `workflow.json`. Fresh reruns replace the views and retain monotonic record IDs.
+Each case supplies authored provider observations and an independent expected
+business specification. A passing run must match that content after publication;
+monotonic record ordinals may change on reruns. Reports separately show the
+publication check, fixture-content check and `semantic_quality: not_evaluated`.
 No live calls or rubric evaluation run through this command. See
 [single-case E2E instructions](design/harness/e2e.md).
 `zig build test-e2e-harness` tests the harness's mechanics. Ordinary

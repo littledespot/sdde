@@ -128,7 +128,7 @@ fn roundTrip(allocator: std.mem.Allocator) !void {
     records[3].content.functional_requirement.text = exact;
     const document: spec.CapturedDocument = .{ .display_name = .{ .bytes = "A café" }, .primary_user_story = plain, .records = &records, .entity_section = .present };
     const rendered = try markdown.render(a, document);
-    try testing.expect(std.mem.indexOf(u8, rendered, "## User Scenarios & Testing *(mandatory)*\n") != null);
+    try testing.expect(std.mem.indexOf(u8, rendered, "## User Scenarios & Testing _(mandatory)_\n") != null);
     try testing.expect(std.mem.indexOf(u8, rendered, "\n### Acceptance Criteria\n") != null);
     try testing.expect(std.mem.indexOf(u8, rendered, "**EN-1001**") != null);
     try testing.expect(std.mem.endsWith(u8, rendered, "\n") and !std.mem.endsWith(u8, rendered, "\n\n"));
@@ -151,9 +151,9 @@ test "editable grammar rejects structural drift but permits an unnumbered new re
     const rendered = try markdown.render(a, document);
     inline for (.{
         .{ "### Acceptance Criteria", "## Acceptance Criteria" },
-        .{ "**GIVEN**", "**Given**" },
-        .{ "**WHEN**", "**GIVEN**" },
-        .{ "**THEN**", "**FOREIGN**" },
+        .{ "**Given**", "**GIVEN**" },
+        .{ "**When**", "**Given**" },
+        .{ "**Then**", "**FOREIGN**" },
         .{ "**AC-001**", "**AC-000**" },
         .{ "**AC-001**", "**AC-01**" },
         .{ "**AC-001**", "**OQ-001**" },
@@ -198,6 +198,55 @@ test "duplicate identities and invalid display spans cannot render" {
     try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
     document.display_name = .{ .bytes = "bad\x00value" };
     try testing.expectError(error.InvalidSpecification, spec.validateDocument(document, true));
+}
+
+test "every optional-section combination round trips without empty headings" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const value: spec.Scalar = .{ .bytes = "Supported business behavior" };
+    const optional = [_]spec.Kind{ .user_visible_outcome, .edge_case, .business_rule, .assumption, .non_goal, .prohibited_behavior, .entity };
+    for (0..1 << optional.len) |mask| {
+        var records: std.ArrayList(spec.CapturedRecord) = .empty;
+        inline for (comptime std.meta.tags(spec.Kind)) |kind| {
+            const include = spec.requiresRecords(kind) or mask & (@as(usize, 1) << @intCast(std.mem.indexOfScalar(spec.Kind, &optional, kind).?)) != 0;
+            if (include) {
+                var body: @FieldType(spec.Content(spec.Scalar), @tagName(kind)) = undefined;
+                inline for (@typeInfo(@TypeOf(body)).@"struct".fields) |field| @field(body, field.name) = if (field.type == spec.Scalar) value else &.{value};
+                try records.append(a, .{ .id = .{ .kind = kind, .ordinal = 1 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body) });
+            }
+        }
+        const document: spec.CapturedDocument = .{ .display_name = value, .primary_user_story = value, .records = records.items, .entity_section = if (mask & 64 != 0) .present else .omitted };
+        const bytes = try markdown.render(a, document);
+        try testing.expect(std.mem.startsWith(u8, bytes, "# Feature Specification: "));
+        try testing.expectEqualDeep(document, try markdown.parse(a, bytes));
+        for (optional, 0..) |kind, bit| try testing.expectEqual(mask & (@as(usize, 1) << @intCast(bit)) != 0, std.mem.indexOf(u8, bytes, kind.heading()) != null);
+        try testing.expectEqual(mask & (8 | 16 | 32) != 0, std.mem.indexOf(u8, bytes, "### Assumptions & Scope Boundaries") != null);
+    }
+}
+
+test "compact acceptance criteria preserve exact label text and reject malformed triplets" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const copy = "literal, **When** token\nwith **Then** and `quotes`";
+    const value: spec.Scalar = .{ .bytes = copy, .code_spans = &.{.{ .start = 0, .end = copy.len }} };
+    const plain: spec.Scalar = .{ .bytes = "an action occurs" };
+    const document: spec.CapturedDocument = .{ .display_name = plain, .primary_user_story = plain, .entity_section = .omitted, .records = &.{.{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = value, .when = plain, .then = value } } }} };
+    try testing.expectEqualDeep(document, try markdown.parse(a, try markdown.render(a, document)));
+    const start = "# Feature Specification: Example\n\n## User Scenarios & Testing _(mandatory)_\n\n### Primary User Story\n\nA person acts.\n\n### Acceptance Criteria\n\n";
+    const end = "\n\n## Requirements _(mandatory)_\n\n### Functional Requirements\n";
+    for ([_][]const u8{
+        "- **AC-001**: **Given** state, **When** action, **Then** result, **Given** extra",
+        "- **AC-001**: **Given** state, **When** action **When** extra, **Then** result",
+        "- **AC-001**: **Given** state, **Then** result, **When** action",
+        "- **AC-001**: **Given** , **When** action, **Then** result",
+        "- **AC-001**: **Given** state, **When** action, **Then** ",
+        "**AC-001**\n- **GIVEN** state\n- **WHEN** action\n- **THEN** result",
+    }) |record| try testing.expectError(error.InvalidSpecification, markdown.parse(a, try std.mem.concat(a, u8, &.{ start, record, end })));
+    const valid = try std.mem.concat(a, u8, &.{ start, "- **AC-001**: **Given** state, **When** action, **Then** result", end });
+    for ([_][]const u8{ "## User Scenarios & Testing _(mandatory)_\n", "### Acceptance Criteria\n", "## Requirements _(mandatory)_\n", "### Functional Requirements\n" }) |required| try testing.expectError(error.InvalidSpecification, markdown.parse(a, try std.mem.replaceOwned(u8, a, valid, required, "")));
+    for ([_][]const u8{ "\n### Business Rules\n", "\n### Assumptions & Scope Boundaries\n", "\n#### Explicit Non-Goals\n\n- **NG-001**: An excluded behavior.\n" }) |extra| try testing.expectError(error.InvalidSpecification, markdown.parse(a, try std.mem.concat(a, u8, &.{ valid, extra })));
 }
 
 fn parseAllocated(allocator: std.mem.Allocator) !void {

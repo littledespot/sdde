@@ -3326,19 +3326,27 @@ first parent and is always rendered in this form:
 ```markdown
 ### Acceptance Criteria
 
-**AC-001**
-- **GIVEN** <nonempty business precondition>
-- **WHEN** <nonempty business event or action>
-- **THEN** <nonempty observable business outcome>
+- **AC-001**: **Given** <nonempty business precondition>, **When** <nonempty business event or action>, **Then** <nonempty observable business outcome>
 ```
 
-Every criterion has one engine-owned `AC-*` identity followed by exactly those
-three uppercase labels in `GIVEN`, `WHEN`, `THEN` order. The renderer owns the
-heading, labels, order, and Markdown structure; the typed values supply only
-their business text. The editable-specification parser accepts only this
-canonical structure and rejects prose-only bullets, unlabeled scenarios,
-lowercase or mixed-case labels, missing or duplicate labels, reordered labels,
-and additional unlabeled content within a criterion.
+Every criterion has one engine-owned `AC-*` identity followed by the compact
+`Given`, `When`, `Then` triplet. The renderer owns labels, casing, separators,
+order and structure. The editable parser rejects missing, duplicated, reordered
+or foreign labels and the superseded multiline uppercase form. Exact code
+spans may contain label-shaped text without becoming structure.
+
+The user-approved 2026-09-11 amendment restores the original template's
+`Feature Specification:` title prefix and omission of inapplicable sections.
+Mandatory parents, primary story, acceptance criteria and functional requirements
+remain present; optional empty families and an empty scope parent are omitted.
+The shared required-authority projection requires supported acceptance criteria,
+functional requirements and complete scenario coverage. Missing mandatory record
+families in an assembled candidate force a `missing` gap through that gate;
+positive model evidence cannot override absence. Scenario coverage remains
+model-assisted, requiring comparison with source claims/citations, including
+triggers, outcomes and exact copy. The persisted specification-state validator
+also enforces the canonical required-family contract. Display omission never
+proves non-applicability or removes a source obligation.
 
 The initial acknowledgement state is present even when its `entries` array is empty. Its ID, the feature-request-state ID, passive-literal-registry ID, and their engine-derived paths are stored in workflow metadata and bound by `SpecificationIR`, `SpecificationProvenanceState`, and any reference snapshot; stage gates and recovery load and validate all authorities before model selection, provenance acceptance, or rendering. No fingerprint is written. If the engine process is restarted, later stages reload and revalidate the current artifacts.
 
@@ -3865,7 +3873,7 @@ This catalogue is normative for the first engine version. A project may add vali
 | Citation                 | Source ID, bounds, and verbatim text exist                                                                                        | Whether citation proves claim                    |
 | Required sections        | Typed required fields and renderer contract                                                                                       | Whether prose is adequate                        |
 | Requirement IDs          | Engine-assigned type/uniqueness; stable surviving IDs and monotonic new IDs                                                       | Whether the requirement is substantively correct |
-| Acceptance form          | Exactly one nonempty typed `given`/`when`/`then` value; `spec.md` uses only the canonical uppercase `GIVEN`/`WHEN`/`THEN` labels in that order | Whether scenario is truly testable               |
+| Acceptance form          | Exactly one nonempty typed `given`/`when`/`then` value; `spec.md` uses only the canonical compact `Given`/`When`/`Then` labels in that order | Whether scenario is truly testable               |
 | Clarification state      | No unresolved typed clarification at success                                                                                      | Whether all ambiguity was discovered             |
 | Business-only lint       | No obvious code/path/framework/CSS leakage                                                                                        | Nuanced business/technical classification        |
 | Exact-copy propagation   | Byte-for-byte value from source ledger                                                                                            | Whether source copy is actually required         |
@@ -4097,13 +4105,13 @@ The engine, not the LLM, renders persistent artifacts. `spec.md` is the only fre
 
 Renderers own:
 
-- fixed headings and section order;
+- fixed mandatory headings and relative order of applicable optional sections;
 - front matter/header fields;
 - dates and engine-known links;
 - `AC/FR/BR/EC` and `TNNN` identifiers;
 - the exact F0100 §5.1 heading tree, including `### Acceptance Criteria`
-  beneath `## User Scenarios & Testing *(mandatory)*`, and uppercase `GIVEN`,
-  `WHEN`, `THEN` labels in that order for every `AC-*` record;
+  beneath `## User Scenarios & Testing _(mandatory)_`, and compact title-case
+  `Given`, `When`, `Then` labels in that order for every `AC-*` record;
 - checkboxes and phase/gate status;
 - Markdown table columns and escaping;
 - code fences around structured contracts where applicable;
@@ -4126,7 +4134,7 @@ Validation regenerates with the version recorded by the state/view and compares 
 
 `spec.md` is reparsed and normalized at the plan boundary; its IR must pass the full specification gate. The parser first captures each semantic field's exact UTF-8 bytes and record key. When current provenance marks a leaf as `ExactBusinessCopy`, `RebindExactBusinessCopyAction` compares the captured unescaped scalar byte-for-byte with the referenced preserved token and reconstructs the typed variant; any difference loses the binding and produces an exact-copy diagnostic. Every other leaf is deterministically segmented into NFC-normalized `BusinessLiteralText` and inert inline-code passive-literal spans. A known span resolves by exact `(kind, NFC bytes)` against the registry bound by the specification. A new user-written filename/path/URI cannot become a model repair or operational path: it requires a new engine-assigned passive ID and occurrence tied to the same authenticated specification acknowledgement, and the registry/acknowledgement/provenance/spec revisions commit together. A rejected or failed allocation is retired.
 
-A user may edit semantic fields and add, remove, or reorder semantic records, but engine-owned headings, status/checklist fields, acceptance-criterion labels/order, and existing ID syntax remain protected by validation. Each acceptance criterion must remain an explicit `GIVEN`/`WHEN`/`THEN` triplet; free-form or partially labeled criteria do not normalize into authority. Surviving IDs stay attached to their records; an un-ID'd new record receives the next monotonic ID; deleted IDs are not reused. A duplicate, malformed, or reassigned ID blocks with targeted guidance. Formatting is normalized by deterministic rendering, and that normalized spec plus exact passive-registry binding is staged with plan-input state so a crash cannot record a different planning input.
+A user may edit semantic fields and add, remove, or reorder semantic records, but engine-owned headings, status/checklist fields, acceptance-criterion labels/order, and existing ID syntax remain protected by validation. Each acceptance criterion must remain an explicit compact `Given`/`When`/`Then` triplet; free-form or partially labeled criteria do not normalize into authority. Surviving IDs stay attached to their records; an un-ID'd new record receives the next monotonic ID; deleted IDs are not reused. A duplicate, malformed, or reassigned ID blocks with targeted guidance. Formatting is normalized by deterministic rendering, and that normalized spec plus exact passive-registry binding is staged with plan-input state so a crash cannot record a different planning input.
 
 Reference citations are not rendered into the business-only file. On reparse, the engine joins the persisted `SpecificationProvenanceState` only when the fixed/allocated record key and `BusinessContentIdentity` still equal the entry: ordered literal segment bytes plus self-contained passive `(ID, kind, bytes)` identities for normalized content, or exact token ID plus exact UTF-8 bytes for source-copy content. The containing state's exact registry validator must resolve every passive tuple, but adding an unrelated literal in a later registry revision does not change an existing record identity. Fixed singleton keys come from their protected structural slots; all repeatable records carry their rendered ID label. A changed or new record loses inherited provenance and must be re-attributed from the persisted `ReferenceSnapshot`, explicitly marked user-authored through a validated acknowledgement, or blocked when reference support is mandatory; the next passive-registry/provenance/acknowledgement revisions are committed with the normalized spec/plan input. If the spec is edited after downstream canonical state exists, the next gate invokes `CompareSpecificationIRAction` against the exact specification stored in canonical `PlanState`. A difference invalidates plan/task approvals and requires regeneration from `specified`; this is direct typed-state comparison, not fingerprinting.
 
@@ -4706,8 +4714,8 @@ Tests verify schema validity, detection ambiguity, roots, extensions, naming, pl
 - Markdown escaping and code-fence safety;
 - exact token/copy preservation;
 - fixed heading order;
-- exact uppercase `GIVEN`/`WHEN`/`THEN` acceptance-criterion rendering and
-  parser rejection of unlabeled, free-form, lowercase/mixed-case, missing,
+- exact compact `Given`/`When`/`Then` acceptance-criterion rendering and
+  parser rejection of unlabeled, free-form, wrong-case, missing,
   duplicate, additional, and reordered criterion fields;
 - correct engine-derived checklist/progress state;
 - no `tasks.md` during plan;
@@ -4902,7 +4910,7 @@ The new engine is ready for production evaluation when all of the following are 
 17. Persisted reference citations, provenance, claims, conflicts, and exact preserved tokens are mechanically verifiable across restart without a content fingerprint.
 18. An unsupported semantic assertion is converted only through the one-use no-invention repair authorization into `clarification_needed`; the engine and model never invent a plausible requirement, architecture decision, task fact, path, command, or resolution.
 19. Clarifications use only registered `<feature>/clarify/S01..S99.md`, `P01..P99.md`, and `T01..T99.md` identities/paths; exact subject keys prevent duplicates, open forms expose only controlled fields, closed historical views are read-only, reruns reconsider current reference/principle/answer authorities and regenerate the complete owning stage, and open `S`, `S/P`, or `S/P/T` sets respectively make plan, tasks, or implement emit `ERROR` and exit nonzero.
-20. `spec.md` is the sole freely editable stage artifact, every acceptance criterion uses the canonical uppercase `GIVEN`/`WHEN`/`THEN` triplet, and the file round-trips to normalized specification IR; plan/design and task files are deterministic read-only review projections, are never parsed as authority, and require approvals bound to the current canonical state IDs.
+20. `spec.md` is the sole freely editable stage artifact, every acceptance criterion uses the canonical compact `Given`/`When`/`Then` triplet, and the file round-trips to normalized specification IR; plan/design and task files are deterministic read-only review projections, are never parsed as authority, and require approvals bound to the current canonical state IDs.
 21. `spec.md` is business-only according to deterministic lint and configured semantic review, while technical/reference data remains in the sidecar.
 22. Semantic Markdown principle filenames are category hints only, their complete bounded bodies remain free text, and the exact current principle registry is loaded/selected/cited at plan, tasks, implement, recovery, and clarification-resume gates but never used to invent specification requirements; exact `toolchain.yaml` is instead closed mechanical policy inherited from validated preset packages and never enters semantic guidance.
 23. Plan file records match real repository environments, all planned paths were preset-validated before rendering, and all requirements/scenarios/preserved-token obligations have coverage.

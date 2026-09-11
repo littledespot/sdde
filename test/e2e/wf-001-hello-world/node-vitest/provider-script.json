@@ -1,0 +1,82 @@
+{
+  "schema": "specification-script/v1",
+  "description": "An application that starts successfully and displays Hello, World!",
+  "primary_goal": "Display Hello, World! when the application starts successfully.",
+  "entity_basis": "The source requires startup and a displayed greeting, with no business data entities.",
+  "document": {
+    "display_name": {
+      "bytes": "Hello World Application",
+      "code_spans": []
+    },
+    "primary_user_story": {
+      "bytes": "A user starts the application successfully and sees Hello, World!",
+      "code_spans": []
+    },
+    "records": [
+      {
+        "id": null,
+        "content": {
+          "acceptance_criterion": {
+            "given": {
+              "bytes": "the application",
+              "code_spans": []
+            },
+            "when": {
+              "bytes": "it is started",
+              "code_spans": []
+            },
+            "then": {
+              "bytes": "the application starts successfully and displays Hello, World!",
+              "code_spans": []
+            }
+          }
+        }
+      },
+      {
+        "id": null,
+        "content": {
+          "user_visible_outcome": {
+            "text": {
+              "bytes": "Hello, World!",
+              "code_spans": [
+                {
+                  "start": 0,
+                  "end": 13
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": null,
+        "content": {
+          "functional_requirement": {
+            "text": {
+              "bytes": "The application MUST start successfully.",
+              "code_spans": []
+            }
+          }
+        }
+      },
+      {
+        "id": null,
+        "content": {
+          "functional_requirement": {
+            "text": {
+              "bytes": "When started, the application MUST display Hello, World!",
+              "code_spans": []
+            }
+          }
+        }
+      }
+    ],
+    "entity_section": "omitted"
+  },
+  "extractions": [
+    {
+      "source": "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n",
+      "claim": "The application must start successfully and display Hello, World! when started."
+    }
+  ]
+}

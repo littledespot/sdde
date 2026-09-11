@@ -48,6 +48,7 @@ pub fn validate(allocator: std.mem.Allocator, state: State, feature: @import("fe
         !state.reference.inputs.corpus.state_id.eql(state.reference.extraction.state_id) or
         state.reference.conflicts.len != 0) return error.InvalidSpecificationState;
     var largest: [std.meta.tags(spec.Kind).len]u32 = @splat(0);
+    for (spec.required_record_families) |kind| if (!spec.hasRecords(state.content, kind)) return error.InvalidSpecificationState;
     for (state.content.records) |record| {
         const index = @intFromEnum(record.id.kind);
         if (record.id.kind != std.meta.activeTag(record.proposal.content) or record.id.ordinal <= largest[index]) return error.InvalidSpecificationState;

@@ -718,15 +718,19 @@ contracts; this feature does not invent their IDs.
 
 ### 5.1 Ownership and hierarchy
 
+The 2026-09-11 user-approved presentation amendment restores the business
+layout of the original `ai_base/.specify/templates/spec-template.md`. The
+original is design source material, not a runtime template dependency.
+
 `spec.md` is a business-facing renderer projection, never a model-authored
 Markdown response. To preserve the existing fixed `displayName` field and a
 valid heading tree, the renderer emits the display name as the document H1,
-then these sections in exact order:
+then applicable sections in this exact relative order:
 
 ```markdown
-# <display name>
+# Feature Specification: <display name>
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### Primary User Story
 
@@ -736,7 +740,7 @@ then these sections in exact order:
 
 ### Edge Cases
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -750,13 +754,24 @@ then these sections in exact order:
 
 #### Prohibited Behaviors
 
-### Key Entities *(include if feature involves data)*
+### Key Entities _(include if feature involves data)_
 ```
 
 The angle-bracketed display-name token above documents the renderer slot; it is
 not emitted literally. `User Scenarios & Testing` and `Requirements` are always
-present. `Key Entities` is present only after a validated applicability decision
-establishes that the feature involves business data.
+present. Primary User Story, Acceptance Criteria and Functional Requirements
+are mandatory. Other record families appear only when they contain supported
+content. The scope parent appears only when at least one of its children is
+present. `Key Entities` additionally requires the validated business-data
+applicability decision.
+
+The original template's execution flow and generation guidelines are workflow
+instructions, not specification content. Review checklist and execution status
+are represented by actual validation evidence and workflow state; this view
+never invents checked boxes. Branch, creation date, draft status and original
+command metadata are not fields in the current content contract and are not
+fabricated or inferred from the feature title. The feature directory remains
+the identity; the human title is reference-grounded.
 
 ### 5.2 Typed content mapping
 
@@ -780,22 +795,19 @@ anonymous persisted records.
 
 ### 5.3 Acceptance-criterion rendering
 
-The historical inline `Given`/`When`/`Then` example describes semantic fields.
-The canonical engine-rendered form retains the governing uppercase triplet and
-nests it under the restored section hierarchy:
+The renderer restores the original compact acceptance-criterion form while
+retaining three separate typed values and engine-assigned identities:
 
 ```markdown
 ### Acceptance Criteria
 
-**AC-001**
-- **GIVEN** <nonempty business precondition>
-- **WHEN** <nonempty business event or action>
-- **THEN** <nonempty observable business outcome>
+- **AC-001**: **Given** <precondition>, **When** <action>, **Then** <observable outcome>
 ```
 
-Every criterion contains exactly one nonempty value for each label in that
-order. The renderer owns the heading, identity, labels, casing, order, and
-Markdown structure.
+The labels, casing, separators and order are canonical. Missing, duplicate,
+reordered or foreign labels reject; label-shaped bytes inside exact Markdown
+code spans remain inert content. Multiline exact values retain the shared
+continuation encoding. No legacy multiline uppercase reader is retained.
 
 ### 5.4 Empty and conditional collections
 
@@ -803,9 +815,10 @@ The hierarchy does not authorize invented filler:
 
 - `displayName`, `primaryUserStory`, and every contract-required record must be
   supported by current reference or resolved clarification authority;
-- a repeatable collection with zero supported records renders its fixed heading
-  with no bullet, placeholder, or synthetic `None` entry unless its registered
-  requiredness policy requires content;
+- acceptance criteria and functional requirements each require supported
+  records before successful publication; their headings remain mandatory;
+- other empty collections render no heading, bullet, placeholder or synthetic
+  `None` entry; an empty scope group is omitted with its children;
 - if required content is absent, the workflow takes the clarification path in
   Section 5.5 rather than rendering an empty successful specification; and
 - `Key Entities` is omitted only from a validated `not_applicable` decision. An
@@ -884,9 +897,18 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   allocation before canonical rendering. Existing malformed/duplicate IDs reject.
 - `MUST`/`MUST NOT` remain semantic text. There is no second `modality` field
   or renderer-inserted requirement wording.
-- Title/story and the entity decision are required fields. Repeatable families
-  have no arbitrary minimum population; current registered obligations, not
-  heading presence or model assertions, determine required content.
+- Title/story, the entity decision, acceptance criteria and functional
+  requirements are required. Other record families have no minimum population.
+  Schema presence never proves support, completeness or testability.
+- The Specify authority projection always includes acceptance-criteria,
+  functional-requirement and scenario-coverage obligations. On an assembled
+  candidate, missing mandatory records produce engine-owned `missing` gaps
+  through the shared authority gate even if model evidence says `supported`.
+  The scenario-coverage obligation requires model-assisted comparison of the
+  complete candidate with source claims/citations, including distinct observable
+  flows and their triggers/results. Missing behavior cannot be satisfied by
+  citation presence or a title. Canonical-state parsing rejects missing mandatory
+  families through the same specification required-family contract.
 
 Native proposals contain attributed title/story, `records` with one closed
 content-kind variant and provenance per record, and the entity decision/basis.
@@ -950,7 +972,7 @@ H-011/H-012; reruns regenerate views using the persisted record-ID counters.
 - [Specify workflow logical topology](../diagrams/10-spec-workflow.md) shows
   selection, typed generation, clarification, rendering, and commit.
 - [`spec.md` projection structure](../diagrams/11-spec-document-structure.md)
-  shows the fixed heading hierarchy and conditional entities section.
+  shows the mandatory hierarchy, optional sections and conditional entities.
 - [Reference ingestion and Specify completion](../diagrams/05-reference-ingestion.md)
   owns the detailed reference/generation transaction flow.
 - [Clarification lifecycle](../diagrams/07-clarification-lifecycle.md) owns the
@@ -979,8 +1001,9 @@ YAML definition.
    definition.
 6. A model returns typed candidate content only; the engine owns IDs, paths,
    headings, validation, rendering, repair scope, persistence, and completion.
-7. `spec.md` renders the exact Section 5.1 hierarchy, with both mandatory parent
-   sections and a policy-validated conditional Key Entities section.
+7. `spec.md` renders the Section 5.1 hierarchy, omits empty optional sections,
+   retains mandatory parent/content sections and validates conditional entities.
+   Empty mandatory content cannot pass the shared authority gate or state load.
 8. `spec.md` contains no template placeholder, inline clarification marker, or
    unresolved specification question; all such needs use `clarify/SNN.md` and
    terminal `needs_user` with no partial specification.
@@ -1038,7 +1061,8 @@ YAML definition.
   closure, typed data flow, preserved gates, and capability limits;
 - fake-model tests cover valid generation, `SNN` clarification, atomic repair
   and exhaustion, malformed output, and failure propagation;
-- renderer/parser fixtures cover exact heading order, missing mandatory groups,
+- renderer/parser fixtures cover applicable heading order, omitted/empty optional
+  groups, compact criteria with exact-code delimiters, missing mandatory groups,
   zero-record collections without filler, data-required entities, validated
   non-data omission, and render/parse equality;
 - negative fixtures reject every placeholder spelling, inline clarification,

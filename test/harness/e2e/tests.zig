@@ -12,6 +12,8 @@ const selected: c.Case = .{
     .feature = "chosen",
     .reference = "first",
     .config = "config.json",
+    .provider_script = "script.json",
+    .expected_specification = "expected.md",
     .directories = &.{"empty"},
     .files = &.{.{ .source = "source.md", .destination = "references/first/source.md" }},
     .expected_artifacts = &expected,
@@ -87,6 +89,8 @@ test "fixture copy preserves declared reference bytes and rejects preseeded outp
     defer project.cleanup();
     try repository.dir.writeFile(io, .{ .sub_path = "config.json", .data = "declared config" });
     try repository.dir.writeFile(io, .{ .sub_path = "source.md", .data = "The library renews a loan.\n" });
+    try repository.dir.writeFile(io, .{ .sub_path = "script.json", .data = @embedFile("fixtures/library-script.json") });
+    try repository.dir.writeFile(io, .{ .sub_path = "expected.md", .data = @embedFile("fixtures/library-spec.md") });
     const captured = try fixture.capture(io, a, repository.dir, selected);
     try fixture.materialize(io, project.dir, captured);
     const copy = try project.dir.readFileAlloc(io, "references/first/source.md", a, .limited(1024));
@@ -149,6 +153,10 @@ test "ordinary publication persists canonical evidence and reruns replace views 
         const a = arena.allocator();
         const case_bytes = try std.Io.Dir.cwd().readFileAlloc(io, "test/e2e/wf-001-hello-world/node-vitest/workflow.case.json", a, .limited(1_048_576));
         var choice = try c.parse(a, case_bytes);
+        if (example == 1) {
+            choice.provider_script = "test/harness/e2e/fixtures/library-script.json";
+            choice.expected_specification = "test/harness/e2e/fixtures/library-spec.md";
+        }
         const captured = try fixture.capture(io, a, .cwd(), choice);
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
@@ -158,7 +166,8 @@ test "ordinary publication persists canonical evidence and reruns replace views 
             choice.feature = "Loans/Café";
             const definition = try project.dir.readFileAlloc(io, ".sddtoolkit/workflows/spec.workflow.yaml", a, .limited(1_048_576));
             try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit/workflows/spec.workflow.yaml", .data = try std.mem.replaceOwned(u8, a, definition, "id: spec-generation\n", "id: library-reference\n") });
-            try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/stories.md", .data = "A librarian renews a loan. Display `Loan renewed!`.\n" });
+            try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/stories.md", .data = captured.script.extractions[0].source });
+            try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/confirmation.md", .data = captured.script.extractions[1].source });
         }
         const specification_path = try std.fmt.allocPrint(a, "specs/{s}/spec.md", .{choice.feature});
         const reference_path = try std.fmt.allocPrint(a, "specs/{s}/reference-context.md", .{choice.feature});
@@ -169,6 +178,9 @@ test "ordinary publication persists canonical evidence and reruns replace views 
             try @import("invoke.zig").run(io, a, project.dir, choice, captured, &report);
             if (report.status != .passed) std.debug.print("publication example {d}, run {d}: {any}\n", .{ example, run_index, report });
             try std.testing.expectEqual(.passed, report.status);
+            try std.testing.expectEqual(.passed, report.publication_check);
+            try std.testing.expectEqual(.matched, report.fixture_content_check);
+            try std.testing.expectEqual(.not_evaluated, report.semantic_quality);
             try std.testing.expectEqualStrings(specification_path, report.specification.?);
             try std.testing.expect(report.model_calls > 0);
             const bytes = try project.dir.readFileAlloc(io, state_path, a, .limited(state.max_bytes));
@@ -199,6 +211,14 @@ test "ordinary publication persists canonical evidence and reruns replace views 
                 for (invalids) |invalid| try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, invalid, .{ .bytes = choice.feature }));
                 try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, bytes, .{ .bytes = "foreign-feature" }));
                 var bad = parsed;
+                for (@import("../../../src/domain/specification.zig").required_record_families) |kind| {
+                    var retained: std.ArrayList(@import("../../../src/domain/specification.zig").IdentifiedRecord) = .empty;
+                    for (parsed.content.records) |record| if (record.proposal.content != kind) try retained.append(a, record);
+                    bad = parsed;
+                    bad.content.records = retained.items;
+                    try std.testing.expectError(error.InvalidSpecificationState, state.validate(a, bad, parsed.feature));
+                }
+                bad = parsed;
                 bad.id_ledger.next = @splat(1);
                 try std.testing.expectError(error.InvalidSpecificationState, state.validate(a, bad, parsed.feature));
                 bad = parsed;
@@ -217,5 +237,93 @@ test "ordinary publication persists canonical evidence and reruns replace views 
             }
         }
         try fixture.verifySources(io, a, .cwd(), captured);
+    }
+}
+
+test "fixture content comparison rejects omissions changed meaning and noncanonical output" {
+    const content = @import("content.zig");
+    const codec = @import("../../../src/domain/specification_markdown.zig");
+    const spec = @import("../../../src/domain/specification.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ @embedFile("fixtures/library-spec.md"), @embedFile("../../e2e/wf-001-hello-world/node-vitest/expected-spec.md") }) |expected_bytes| {
+        const expected_document = try codec.parse(a, expected_bytes);
+        const canonical = try codec.render(a, expected_document);
+        try std.testing.expect(try content.matches(a, expected_bytes, canonical));
+        for (spec.required_record_families) |kind| {
+            var retained: std.ArrayList(spec.CapturedRecord) = .empty;
+            for (expected_document.records) |record| if (record.content != kind) try retained.append(a, record);
+            var changed = expected_document;
+            changed.records = retained.items;
+            try std.testing.expect(!try content.matches(a, expected_bytes, try codec.render(a, changed)));
+        }
+        var changed = expected_document;
+        changed.primary_user_story.bytes = "An unrelated activity occurs.";
+        try std.testing.expect(!try content.matches(a, expected_bytes, try codec.render(a, changed)));
+        try std.testing.expect(!try content.matches(a, expected_bytes, try std.mem.concat(a, u8, &.{ canonical, "\n" })));
+        try std.testing.expect(!try content.matches(a, expected_bytes, "arbitrary published bytes"));
+        try std.testing.expect(!try content.matches(a, expected_bytes, try std.mem.replaceOwned(u8, a, canonical, "AC-001", "AC")));
+    }
+}
+
+test "scripted success cannot override changed source or independent expected content" {
+    const io = std.testing.io;
+    for ([_]enum { source, expected }{ .source, .expected }) |mutation| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "test/e2e/wf-001-hello-world/node-vitest/workflow.case.json", a, .limited(1_048_576));
+        const choice = try c.parse(a, bytes);
+        var captured = try fixture.capture(io, a, .cwd(), choice);
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try fixture.materialize(io, project.dir, captured);
+        switch (mutation) {
+            .source => captured.script.extractions = &.{.{ .source = "A different source.\n", .claim = "A different behavior." }},
+            .expected => captured.expected_bytes = try std.mem.replaceOwned(u8, a, captured.expected_bytes, "Hello, World!", "An unsupported greeting!"),
+        }
+        var report: c.Report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .harness_error };
+        try @import("invoke.zig").run(io, a, project.dir, choice, captured, &report);
+        switch (mutation) {
+            .source => {
+                try std.testing.expectEqual(.workflow_failed, report.status);
+                try std.testing.expectEqual(.failed, report.publication_check);
+                try std.testing.expectEqual(.not_run, report.fixture_content_check);
+                try std.testing.expect(report.specification == null);
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "specs/hello-world/spec.md", .{}));
+            },
+            .expected => {
+                try std.testing.expectEqual(.content_mismatch, report.status);
+                try std.testing.expectEqual(.passed, report.publication_check);
+                try std.testing.expectEqual(.mismatched, report.fixture_content_check);
+                try std.testing.expectEqual(.ok, report.workflow_outcome.?);
+                try std.testing.expect(report.specification != null);
+            },
+        }
+        try std.testing.expectEqual(.not_evaluated, report.semantic_quality);
+    }
+}
+
+test "authored provider scripts reject unknown fields versions and supplied identities" {
+    const script = @import("../../../src/test_fixtures/specification_script.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const bytes = @embedFile("fixtures/library-script.json");
+    _ = try script.parse(a, bytes);
+    var duplicate = try script.parse(a, bytes);
+    duplicate.extractions = &.{ duplicate.extractions[0], duplicate.extractions[0] };
+    try std.testing.expectError(error.InvalidSpecificationScript, script.parse(a, try std.json.Stringify.valueAlloc(a, duplicate, .{})));
+    for ([_][2][]const u8{
+        .{ "specification-script/v1", "specification-script/v2" },
+        .{ "\"schema\":", "\"unknown\":true,\"schema\":" },
+        .{ "\"schema\":", "\"schema\":\"duplicate\",\"schema\":" },
+        .{ "\"id\": null", "\"id\": {\"kind\":\"acceptance_criterion\",\"ordinal\":1}" },
+    }) |mutation| {
+        if (script.parse(a, try std.mem.replaceOwned(u8, a, bytes, mutation[0], mutation[1]))) |_| return error.AcceptedInvalidProviderScript else |err| switch (err) {
+            error.InvalidSpecificationScript, error.InvalidJsonDocument, error.InvalidSpecification => {},
+            else => return err,
+        }
     }
 }

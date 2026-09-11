@@ -104,5 +104,7 @@
     "reference_context",
     "clarification_state",
     "workflow_state"
-  ]
+  ],
+  "provider_script": "test/e2e/wf-001-hello-world/node-vitest/provider-script.json",
+  "expected_specification": "test/e2e/wf-001-hello-world/node-vitest/expected-spec.md"
 }

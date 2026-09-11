@@ -10,6 +10,8 @@ pub const Case = struct {
     feature: []const u8,
     reference: []const u8,
     config: []const u8,
+    provider_script: []const u8,
+    expected_specification: []const u8,
     directories: []const []const u8,
     files: []const Copy,
     expected_artifacts: []const Artifact,
@@ -24,6 +26,8 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) !Case {
     try evaluator.path(value.feature);
     try evaluator.path(value.reference);
     try evaluator.path(value.config);
+    try evaluator.path(value.provider_script);
+    try evaluator.path(value.expected_specification);
     for (value.directories, 0..) |directory, index| {
         try evaluator.path(directory);
         if (relative.contains(".sddtoolkit.json", directory)) return error.InvalidE2ECase;
@@ -54,6 +58,7 @@ pub const Status = enum {
     artifact_missing,
     artifact_unreadable,
     fixture_changed,
+    content_mismatch,
 };
 pub const Report = struct {
     schema: []const u8 = "spec-e2e-report/v1",
@@ -67,4 +72,7 @@ pub const Report = struct {
     diagnostic: ?[]const u8 = null,
     missing_artifact: ?Artifact = null,
     specification: ?[]const u8 = null,
+    publication_check: enum { not_run, passed, failed } = .not_run,
+    fixture_content_check: enum { not_run, matched, mismatched } = .not_run,
+    semantic_quality: enum { not_evaluated } = .not_evaluated,
 };

@@ -7,7 +7,7 @@ pub const DetectionStage = enum { spec, plan, tasks, implement, recovery };
 pub const Error = std.mem.Allocator.Error || error{InvalidRequiredAuthority};
 pub const version: u32 = 1;
 pub const Kind = enum { feature_intent, reference_meaning, entity_applicability, preservation, design_decision, executable_decomposition, policy_predicate };
-pub const Slot = enum { display_name, description, primary_goal, primary_user_story, text, given, when, then, condition, expected_outcome, name, business_meaning, relationship, entities, disposition, value, decision, compliance };
+pub const Slot = enum { display_name, description, primary_goal, primary_user_story, acceptance_criteria, functional_requirements, scenario_coverage, text, given, when, then, condition, expected_outcome, name, business_meaning, relationship, entities, disposition, value, decision, compliance };
 pub const Unit = union(enum) {
     feature: enum { singleton },
     record: @import("specification.zig").Id,
@@ -38,7 +38,10 @@ pub fn policy(id: Id) ?Policy {
     if (id.contract_version != version) return null;
     return switch (id.kind) {
         .feature_intent => switch (id.unit) {
-            .feature => if (id.slot == .display_name or id.slot == .description or id.slot == .primary_goal or id.slot == .primary_user_story) .{ .owner = .spec } else null,
+            .feature => switch (id.slot) {
+                .display_name, .description, .primary_goal, .primary_user_story, .acceptance_criteria, .functional_requirements, .scenario_coverage => .{ .owner = .spec },
+                else => null,
+            },
             .record => |record| if (record.ordinal != 0 and recordField(record.kind, id.slot)) .{ .owner = .spec } else null,
             else => null,
         },

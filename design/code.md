@@ -4076,8 +4076,8 @@ RawSourceScalarProposal {
 AcceptanceCriterionRequirementProjection {
   requirementId,
   specificationRecordId,
-  // Typed values only. The specification renderer owns the uppercase
-  // GIVEN, WHEN, THEN labels and their fixed order.
+  // Typed values only. The specification renderer owns the title-case
+  // Given, When, Then labels and their fixed order.
   given: BusinessValue,
   when: BusinessValue,
   then: BusinessValue,
@@ -5921,17 +5921,15 @@ record is nested under `User Scenarios & Testing` in
 ```markdown
 ### Acceptance Criteria
 
-**AC-001**
-- **GIVEN** <nonempty `given` value>
-- **WHEN** <nonempty `when` value>
-- **THEN** <nonempty `then` value>
+- **AC-001**: **Given** <nonempty `given` value>, **When** <nonempty `when` value>, **Then** <nonempty `then` value>
 ```
 
 The heading appears once and each subsequent `AC-*` record repeats only the
-identity and three labeled lines. The renderer owns the labels and order. The
+identity and compact labeled triplet. The renderer owns the labels and order. The
 editable-specification parser rejects any acceptance criterion that is
 free-form, unlabeled, partially labeled, duplicated, reordered, or uses label
-casing other than the exact uppercase form.
+casing other than the exact title-case form. Optional empty sections are omitted
+under F0100 §5.4; mandatory content remains a shared authority obligation.
 
 ---
 

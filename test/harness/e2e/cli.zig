@@ -67,15 +67,18 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, case_path: []const u8, proj
 fn save(io: std.Io, allocator: std.mem.Allocator, dir: std.Io.Dir, report: c.Report) !void {
     const json = try @import("../../../src/domain/canonical_json.zig").encode(c.Report, allocator, report);
     try write(io, dir, "report.json", json);
-    const markdown = try std.fmt.allocPrint(allocator, "# Spec E2E run\n\nStatus: **{s}**\n\n" ++
+    const markdown = try std.fmt.allocPrint(allocator, "# Spec E2E run\n\nE2E checks: **{s}**\n\n" ++
         "Provider observations: scripted.\n\n" ++
+        "Publication check: **{s}**.\n\n" ++
+        "Authored fixture content: **{s}**.\n\n" ++
+        "Semantic quality: **not evaluated**. No rubric evaluation was run.\n\n" ++
         "Workflow outcome: `{s}`. Model calls: {d}.\n\n" ++
         "Diagnostic: `{s}`.\n\n" ++
         "This folder contains one isolated project and one workflow invocation. " ++
         "Only a specification published by that invocation can satisfy this test. " ++
         "The harness does not export in-memory candidates.\n\n" ++
         "See report.json for the selected case, UTC start time and any published specification path. " ++
-        "No rubric evaluation was run.\n", .{ @tagName(report.status), if (report.workflow_outcome) |tag| @tagName(tag) else "not_run", report.model_calls, report.diagnostic orelse "none" });
+        "Fixture conformance does not establish live model quality.\n", .{ @tagName(report.status), @tagName(report.publication_check), @tagName(report.fixture_content_check), if (report.workflow_outcome) |tag| @tagName(tag) else "not_run", report.model_calls, report.diagnostic orelse "none" });
     try write(io, dir, "report.md", markdown);
 }
 

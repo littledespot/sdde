@@ -10,6 +10,7 @@ const scripted = @import("../../../src/test_fixtures/spec_generation_responses.z
 pub const Provider = struct {
     allocator: std.mem.Allocator,
     invocation: *@import("../../../src/composition/engine_invocation.zig").Assembly,
+    script: @import("../../../src/test_fixtures/specification_script.zig").Script,
     calls: usize = 0,
 
     pub fn port(self: *Provider) api.LLMProviderInterface {
@@ -23,7 +24,7 @@ pub const Provider = struct {
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
         const runner = &self.invocation.pipeline_runner.?;
-        const body = scripted.build(arena.allocator(), .{ .slots = runner.envelope.slots }, .{}) catch |err| return switch (err) {
+        const body = scripted.build(arena.allocator(), .{ .slots = runner.envelope.slots }, .{ .script = self.script }) catch |err| return switch (err) {
             error.OutOfMemory => error.OutOfMemory,
             else => .{ .failed = rejected(invoked.id) },
         };

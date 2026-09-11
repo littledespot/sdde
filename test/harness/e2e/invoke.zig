@@ -47,7 +47,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     var clock: @import("../../../src/adapters/system/provider_operation_clock.zig").Adapter = .{ .io = io };
     invocation.provider_clock = clock.clock();
     var authorization: @import("../../../src/adapters/provider/fake_provider_authorization.zig").FakeProviderAuthorization = .{ .allocator = allocator };
-    var provider: @import("scripted_provider.zig").Provider = .{ .allocator = allocator, .invocation = &invocation };
+    var provider: @import("scripted_provider.zig").Provider = .{ .allocator = allocator, .invocation = &invocation, .script = captured.script };
     native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
     native.model_requests.invoke_model.action = .{ .provider = provider.port() };
     native.model_requests.count_model_input.action = .{ .provider = provider.port() };
@@ -78,5 +78,15 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     report.status = observed.status;
     report.missing_artifact = observed.missing_artifact;
     report.specification = observed.specification;
+    report.publication_check = if (observed.status == .passed) .passed else .failed;
     if (observed.status == .publication_missing) report.diagnostic = "WORKFLOW_OUTPUT_NOT_PUBLISHED";
+    if (observed.status == .passed) {
+        const specification = try @import("../files.zig").read(io, allocator, project, observed.specification.?);
+        const matches = try @import("content.zig").matches(allocator, captured.expected_bytes, specification);
+        report.fixture_content_check = if (matches) .matched else .mismatched;
+        if (!matches) {
+            report.status = .content_mismatch;
+            report.diagnostic = "SCRIPTED_CONTENT_MISMATCH";
+        }
+    }
 }

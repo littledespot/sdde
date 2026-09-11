@@ -10,12 +10,24 @@ pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.
     sources[0] = .{ .reference = items.state_id };
     var seeds: std.ArrayList(authority.Seed) = .empty;
     var gaps: std.ArrayList(authority.ForcedGap) = .empty;
-    for ([_]authority.Slot{ .display_name, .description, .primary_goal, .primary_user_story, .entities }) |slot| {
+    for ([_]authority.Slot{ .display_name, .description, .primary_goal, .primary_user_story, .entities, .acceptance_criteria, .functional_requirements, .scenario_coverage }) |slot| {
         try seeds.append(allocator, .{
             .id = .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot },
             .requiredness = .{ .schema = .specification },
             .input_authorities = sources,
         });
+        // Missing mandatory families are an engine-observed gap. A model's
+        // positive review cannot authorize an empty successful specification.
+        if (content) |candidate| {
+            const kind: ?spec.Kind = switch (slot) {
+                .acceptance_criteria => .acceptance_criterion,
+                .functional_requirements => .functional_requirement,
+                else => null,
+            };
+            if (kind) |required| {
+                if (!spec.hasRecords(candidate, required)) try gaps.append(allocator, .{ .requirement = seeds.items[seeds.items.len - 1].id, .reason = .missing });
+            }
+        }
     }
     if (content) |candidate| for (candidate.records) |record| {
         switch (record.proposal.content) {

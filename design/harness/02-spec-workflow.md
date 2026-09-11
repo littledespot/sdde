@@ -53,8 +53,9 @@ Work:
   needed by the renderer/parser. Resolve duplicate ownership of requirement
   modality between structured data and rendering.
 - Identify actual schema-required fields separately from optional collections.
-  No universal catalogue of business requirements, invented minimum section
-  population or fixture-specific exception is authorized.
+  The 2026-09-11 user-approved template amendment requires supported acceptance
+  criteria and functional requirements and omits empty optional sections.
+  There is no universal catalogue of business requirements or fixture exception.
 - Mark genuinely unsettled production policies explicitly. They affect the
   relevant engine operation, not whether the external rubric may judge a spec.
 
@@ -190,6 +191,12 @@ total claim/token coverage, full assembled-candidate validation and model-assist
 evidence through the shared required-authority gate. Brief description and
 primary goal are required review slots alongside title, story and applicability.
 Optional families may be empty; entities follow the evidence-backed decision.
+The 2026-09-11 amendment adds mandatory-family and whole-scenario-coverage
+obligations to the shared authority gate. Missing acceptance criteria or
+functional requirements create engine-observed gaps despite positive model
+review; scenario coverage remains model-assisted. State loading also checks
+required families. The view restores compact title-case criteria and omits empty
+optional sections under F0100 §5.
 
 Repair replaces one engine-selected field or record after exact owner,
 revision and old-value checks. YAML bounds attempts; each merge repeats the

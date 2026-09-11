@@ -1,0 +1,102 @@
+{
+  "schema": "specification-script/v1",
+  "description": "A librarian can renew a loan and see its confirmation.",
+  "primary_goal": "Renew a loan with visible confirmation.",
+  "entity_basis": "The source identifies a loan as the business data being renewed.",
+  "document": {
+    "display_name": {
+      "bytes": "Loan Renewal",
+      "code_spans": []
+    },
+    "primary_user_story": {
+      "bytes": "A librarian renews a loan and sees Loan renewed!",
+      "code_spans": []
+    },
+    "records": [
+      {
+        "id": null,
+        "content": {
+          "acceptance_criterion": {
+            "given": {
+              "bytes": "a loan",
+              "code_spans": []
+            },
+            "when": {
+              "bytes": "the librarian renews it",
+              "code_spans": []
+            },
+            "then": {
+              "bytes": "the loan is renewed and Loan renewed! is displayed",
+              "code_spans": []
+            }
+          }
+        }
+      },
+      {
+        "id": null,
+        "content": {
+          "user_visible_outcome": {
+            "text": {
+              "bytes": "Loan renewed!",
+              "code_spans": [
+                {
+                  "start": 0,
+                  "end": 13
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": null,
+        "content": {
+          "functional_requirement": {
+            "text": {
+              "bytes": "A librarian MUST be able to renew a loan.",
+              "code_spans": []
+            }
+          }
+        }
+      },
+      {
+        "id": null,
+        "content": {
+          "functional_requirement": {
+            "text": {
+              "bytes": "Renewing a loan MUST display Loan renewed!",
+              "code_spans": []
+            }
+          }
+        }
+      },
+      {
+        "id": null,
+        "content": {
+          "entity": {
+            "name": {
+              "bytes": "Loan",
+              "code_spans": []
+            },
+            "business_meaning": {
+              "bytes": "A library loan that can be renewed.",
+              "code_spans": []
+            },
+            "relationships": []
+          }
+        }
+      }
+    ],
+    "entity_section": "present"
+  },
+  "extractions": [
+    {
+      "source": "A librarian renews a loan.\n",
+      "claim": "A librarian can renew a loan."
+    },
+    {
+      "source": "After renewal, display `Loan renewed!`.\n",
+      "claim": "After a loan is renewed, display Loan renewed!"
+    }
+  ]
+}

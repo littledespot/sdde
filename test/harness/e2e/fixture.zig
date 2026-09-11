@@ -4,7 +4,17 @@ const files = @import("../files.zig");
 const directories = @import("../../../src/adapters/filesystem/directory_access.zig");
 const relative = @import("../../../src/domain/relative_directory_path.zig");
 pub const CapturedFile = struct { mapping: contracts.Copy, bytes: []const u8 };
-pub const Capture = struct { config_source: []const u8, config: []const u8, directories: []const []const u8, files: []const CapturedFile };
+pub const Capture = struct {
+    config_source: []const u8,
+    config: []const u8,
+    directories: []const []const u8,
+    files: []const CapturedFile,
+    script_source: []const u8,
+    script_bytes: []const u8,
+    script: @import("../../../src/test_fixtures/specification_script.zig").Script,
+    expected_source: []const u8,
+    expected_bytes: []const u8,
+};
 
 /// The caller owns one arena for the case, captured bytes and invocation.
 pub fn capture(io: std.Io, allocator: std.mem.Allocator, repository: std.Io.Dir, selected: contracts.Case) !Capture {
@@ -14,7 +24,11 @@ pub fn capture(io: std.Io, allocator: std.mem.Allocator, repository: std.Io.Dir,
         .mapping = mapping,
         .bytes = try files.read(io, allocator, repository, mapping.source),
     };
-    return .{ .config_source = selected.config, .config = config, .directories = selected.directories, .files = captured };
+    const script_bytes = try files.read(io, allocator, repository, selected.provider_script);
+    const script = try @import("../../../src/test_fixtures/specification_script.zig").parse(allocator, script_bytes);
+    const expected_bytes = try files.read(io, allocator, repository, selected.expected_specification);
+    _ = try @import("../../../src/domain/specification_markdown.zig").parse(allocator, expected_bytes);
+    return .{ .config_source = selected.config, .config = config, .directories = selected.directories, .files = captured, .script_source = selected.provider_script, .script_bytes = script_bytes, .script = script, .expected_source = selected.expected_specification, .expected_bytes = expected_bytes };
 }
 
 pub fn materialize(io: std.Io, project: std.Io.Dir, captured: Capture) !void {
@@ -37,6 +51,14 @@ pub fn validateOutputs(captured: Capture, roots: @import("../../../src/domain/wo
 }
 
 pub fn verifySources(io: std.Io, allocator: std.mem.Allocator, repository: std.Io.Dir, captured: Capture) !void {
+    for ([_]struct { path: []const u8, bytes: []const u8 }{
+        .{ .path = captured.script_source, .bytes = captured.script_bytes },
+        .{ .path = captured.expected_source, .bytes = captured.expected_bytes },
+    }) |input| {
+        const current = try files.read(io, allocator, repository, input.path);
+        defer allocator.free(current);
+        if (!std.mem.eql(u8, current, input.bytes)) return error.FixtureChanged;
+    }
     const config = try files.read(io, allocator, repository, captured.config_source);
     defer allocator.free(config);
     if (!std.mem.eql(u8, config, captured.config)) return error.FixtureChanged;

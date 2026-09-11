@@ -206,7 +206,7 @@ test "Specify projects registered native fields and complete reference obligatio
     const accounted = try f.finish(allocator, final, try f.global(allocator, final), reference.context());
     const project: @import("actions/authority/build_specification_authority_requirements.zig").Action = .{};
     const before = try project.execute(allocator, .{ .bytes = "hello-world" }, accounted, null, null);
-    try std.testing.expectEqual(@as(usize, 8), before.seeds.len); // Five mandatory slots, two signals, one exact value.
+    try std.testing.expectEqual(@as(usize, 11), before.seeds.len); // Eight mandatory slots, two signals, one exact value.
     try std.testing.expectEqual(.needs_user, (try run(allocator, before)).continuation);
     try std.testing.expectEqualStrings("Hello, World!", before.references.?.records.assignments.checked.prior.prior.input.progress.plan.layout.items.entries[1].claim.content.preserved_token.value.raw_value.bytes);
     const spec = @import("domain/specification.zig");

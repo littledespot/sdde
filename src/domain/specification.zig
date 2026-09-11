@@ -41,10 +41,21 @@ pub const Kind = enum {
             .assumption => "#### Assumptions",
             .non_goal => "#### Explicit Non-Goals",
             .prohibited_behavior => "#### Prohibited Behaviors",
-            .entity => "### Key Entities *(include if feature involves data)*",
+            .entity => "### Key Entities _(include if feature involves data)_",
         };
     }
 };
+
+/// Mandatory business-content families; optional section presence never changes
+/// this contract. Semantic support and completeness remain authority obligations.
+pub const required_record_families = [_]Kind{ .acceptance_criterion, .functional_requirement };
+pub fn requiresRecords(kind: Kind) bool {
+    return std.mem.indexOfScalar(Kind, &required_record_families, kind) != null;
+}
+pub fn hasRecords(content: IdentifiedContent, kind: Kind) bool {
+    for (content.records) |record| if (record.proposal.content == kind) return true;
+    return false;
+}
 
 pub const Id = struct {
     kind: Kind,
