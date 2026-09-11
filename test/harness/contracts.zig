@@ -9,12 +9,12 @@ pub const Error = std.mem.Allocator.Error || error{InvalidEvaluationContract};
 pub const Source = struct { id: []const u8, path: []const u8 };
 pub const Origin = enum { supplied, recorded, scripted_generation, live_generation };
 pub const WorkflowStatus = enum { not_run, completed, needs_user, failed, blocked, cancelled };
+pub const GenerationModel = struct { slot: []const u8, provider: []const u8, model: []const u8 };
 pub const Generation = struct {
     origin: Origin,
     workflow_status: WorkflowStatus,
     execution_id: ?[]const u8,
-    provider: ?[]const u8,
-    model: ?[]const u8,
+    models: []const GenerationModel,
 };
 pub const Case = struct {
     schema: []const u8,
@@ -94,14 +94,17 @@ pub fn validateCapture(value: Capture) Error!void {
     }
     const g = value.generation;
     if (g.origin == .supplied) {
-        if (g.workflow_status != .not_run or g.execution_id != null or g.provider != null or g.model != null) return error.InvalidEvaluationContract;
+        if (g.workflow_status != .not_run or g.execution_id != null or g.models.len != 0) return error.InvalidEvaluationContract;
     } else if (g.origin == .live_generation or g.origin == .scripted_generation) {
         if (g.workflow_status != .completed or g.execution_id == null or !id(g.execution_id.?)) return error.InvalidEvaluationContract;
-        if (g.origin == .live_generation and (g.provider == null or g.model == null)) return error.InvalidEvaluationContract;
+        if (g.origin == .live_generation and g.models.len == 0) return error.InvalidEvaluationContract;
     }
     if (g.execution_id) |v| if (!id(v)) return error.InvalidEvaluationContract;
-    if (g.provider) |v| if (ProviderId.parse(v) == null) return error.InvalidEvaluationContract;
-    if (g.model) |v| if (ModelId.parse(v) == null) return error.InvalidEvaluationContract;
+    for (g.models, 0..) |model, index| {
+        if (@import("../../src/domain/llm_provider_identity.zig").ModelSlotId.parse(model.slot) == null or
+            ProviderId.parse(model.provider) == null or ModelId.parse(model.model) == null) return error.InvalidEvaluationContract;
+        for (g.models[0..index]) |prior| if (std.mem.eql(u8, prior.slot, model.slot)) return error.InvalidEvaluationContract;
+    }
 }
 pub fn path(value: []const u8) Error!void {
     relative.validate(value) catch return error.InvalidEvaluationContract;

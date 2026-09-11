@@ -193,44 +193,37 @@ temporary directory, clears its environment, and verifies its exact standard
 output. The temporary package directory is removed by the Zig build runner
 after a successful build.
 
-Run `./scripts/e2e-spec.sh` for the checked-in Hello World Spec E2E case.
-The script locates this checkout from its own path, so it also works when
-invoked by absolute path from another directory. Pass `--case
-<repository-relative-workflow.case.json>` to select another case, or `--help`
-for the harness usage. It preserves the harness exit status and report output.
+Run the live Hello World Spec E2E case from the repository root:
 
-`zig build e2e-spec -- --case <workflow.case.json>` runs exactly one selected
-case with scripted provider observations through ordinary bootstrap, workflow
-selection and YAML execution. Each invocation creates one retained folder under
-`zig-out/e2e-spec/YYYY-MM-DDTHH-MM-SSZ-<unique-id>/`, containing `report.json`,
-`report.md` and one isolated `project/`. A successful workflow produces one
-`spec.md` at its configured feature path; for Hello World this is
-`project/specs/hello-world/spec.md`. The harness observes published files and
-never exports an in-memory candidate. Non-success exits nonzero and cannot
-report an earlier or partially written specification as successful output.
+```sh
+./scripts/e2e-spec.sh
+```
 
-The Hello World case passes through the production publication boundary,
-writing `spec.md`, `reference-context.md`, `clarifications.json` and
-`workflow.json`. Fresh reruns replace the views and retain monotonic record IDs.
-Each case supplies authored provider observations and an independent expected
-business specification. A passing run must match that content after publication;
-monotonic record ordinals may change on reruns. Reports separately show the
-publication check, fixture-content check and `semantic_quality: not_evaluated`.
-No live calls or rubric evaluation run through this command. See
-[single-case E2E instructions](design/harness/e2e.md).
-`zig build test-e2e-harness` tests the harness's mechanics. Ordinary
-`zig build test`/`verify` include those checks and the separate regression suite;
-they do not launch the selected E2E case or retain regression review folders.
+`zig build e2e-spec -- --case <workflow.case.json>` selects another case.
+Generation uses the real LLM configured in that test's `.sddtoolkit.json`.
+The harness then grades the exact published specification using the selected
+OpenAI or Bedrock judge and the case's rubric. No scripted provider or golden
+specification substitutes for either step.
 
-The development-only [rubric evaluator](design/harness/evaluator.md) grades a
-supplied specification through OpenAI or Bedrock using the checked-in Hello World rubric
-or another closed case/rubric. It writes evidence-backed JSON/Markdown reports
-without running Specify or changing workflow authority. Live calls require
-explicit settings, the selected provider's `TEST_` credential,
-`TEST_EVALUATION_PROVIDER`, `TEST_EVALUATION_MODEL` and `--live`; Bedrock also
-requires `TEST_EVALUATION_REGION`. Ordinary tests/verification
-remain offline. The rubric is an uncalibrated draft and live API acceptance has
-not yet been demonstrated. This executable is not installed with `sdde`.
+Each invocation retains captured inputs, JSON/Markdown reports and one isolated
+project under `zig-out/e2e-spec/YYYY-MM-DDTHH-MM-SSZ-<unique-id>/`. Reports separate
+engine outcome, publication evidence, evaluator failures and semantic scores.
+Failure or clarification cannot grade an earlier specification as fresh output.
+A completed low-scoring evaluation remains visible; the draft rubric has no
+adopted quality threshold and requires human calibration.
+
+Generation uses `TEST_AWS_BEARER_TOKEN_BEDROCK`. Judge selection uses
+`TEST_EVALUATION_PROVIDER`, `TEST_EVALUATION_MODEL`, its `TEST_` credential and,
+for Bedrock, `TEST_EVALUATION_REGION`. The wrapper loads the checkout's
+`.env.e2e` when present; exported values in that file replace caller values.
+Direct Zig invocations require you to load the file explicitly. See [E2E instructions](design/harness/e2e.md).
+
+`zig build test-e2e-harness` tests harness mechanics. Ordinary `test`/`verify`
+include those checks and standalone smoke tests without making live calls.
+Passing them is not E2E evidence. The separate development-only
+[rubric evaluator](design/harness/evaluator.md) grades a supplied specification
+with `zig build evaluate-spec -- ... --live`; it does not run the engine or
+claim generation. Neither harness is installed with `sdde`.
 
 Concrete domain operations and the full initial SDD workflow suite remain
 incremental work under `design/design.md` and their feature contracts.
@@ -306,7 +299,7 @@ supported provider selection.
 
 | Variable | Consumer |
 | --- | --- |
-| `TEST_OPENAI_API_KEY` | Internal live supplied-spec rubric evaluator. |
+| `TEST_OPENAI_API_KEY` | Internal OpenAI rubric grading, supplied-spec or E2E. |
 | `TEST_AWS_BEARER_TOKEN_BEDROCK` | Internal live Bedrock rubric evaluator and Bedrock workflow tests. |
 | `TEST_EVALUATION_PROVIDER` | Required evaluation provider: `openai` or `bedrock`. |
 | `TEST_EVALUATION_MODEL` | Required exact evaluation model ID; no model default. |
@@ -320,8 +313,10 @@ Bedrock uses the existing registered model/region pairs:
 | `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` |
 
 Set `TEST_EVALUATION_PROVIDER='bedrock'`, choose one exact pair, and fill in
-`TEST_AWS_BEARER_TOKEN_BEDROCK`. Bedrock judge JSON requires
-`reasoning_effort: null` and permits `temperature: null` or a value from 0 to 1.
+`TEST_AWS_BEARER_TOKEN_BEDROCK`. Bedrock judge JSON permits
+`reasoning_effort: null`; GPT-OSS also supports `"low"`, `"medium"` and `"high"`.
+The live E2E case selects `"low"` for generation and evaluation.
+Both models permit `temperature: null` or a value from 0 to 1.
 Unsupported models, mismatched regions or unsupported controls fail before an
 API call. Region, provider and model remain environment-only selections.
 
@@ -333,9 +328,11 @@ zig build evaluate-spec -- --help
 ```
 
 The file uses `export`, so the variables pass from your shell to `zig build`
-and its launched executable. Neither Zig build wiring nor either executable
-automatically reads `.env` files. Load the file again in each new shell, or
-after changing it; already-running processes retain their original environment.
+and its launched executable. The `scripts/e2e-spec.sh` launcher loads the checkout's `.env.e2e` on each live
+invocation; `--help` does not evaluate it. Without that file, the launcher uses
+the caller's environment. Direct Zig invocations and the supplied-spec evaluator
+do not load environment files. Load the file in each shell used for those
+commands; already-running processes retain their original environment.
 Sourcing this file replaces any existing values for its declared variables.
 CI can inject these same variables directly into the command environment.
 
@@ -355,5 +352,6 @@ their sole input is the test environment. Reports retain the resolved provider
 API/model and settings, never credentials.
 `zig build test` and `zig build verify` require no credentials and remain
 offline; packaging smoke commands explicitly clear their environment.
-The full generation-to-evaluation E2E harness remains unfinished
-([harness status](design/harness/README.md#implementation-snapshot)).
+For generation followed by rubric grading, run `./scripts/e2e-spec.sh` in that
+same configured shell. See [harness status](design/harness/README.md#implementation-snapshot)
+for remaining calibration and broader acceptance work.

@@ -6,15 +6,13 @@ are separate evidence classes; both are needed, and neither replaces the other.
 
 ## H-014 — Assemble the isolated Hello World project
 
-**Status:** Partial. **Owner:** generic harness fixture builder.
+**Status:** Implemented with mechanical verification. **Owner:** generic harness fixture builder.
 **Dependencies:** H-001 case mapping; consume H-013 when the workflow is ready.
 
-The [single-case scripted E2E harness](e2e.md) now copies explicit resource
-mappings into a retained dated project and checks the original source bytes
-after execution. The Hello World case passes ordinary bootstrap and reaches
-generation. Harness tests exercise a separate library-reference fixture for
-copying, source preservation and path safety; a second complete workflow case
-remains unverified.
+The [live E2E harness](e2e.md) copies explicit resources into a retained dated
+project and verifies source preservation. Source/rubric/settings snapshots are
+retained before network calls. Mechanical tests exercise unrelated references,
+configured models, path safety and one-to-one engine/judge source mapping.
 
 Work:
 
@@ -39,21 +37,19 @@ Acceptance:
 - [ ] Invalid mappings, traversal/symlinks and writes outside the declared
   temporary/report roots fail before execution or data transmission.
 
-Missing fixture artifacts are deliberate backlog outputs, not assumed existing
-files. The original source remains two requirements; do not enrich it merely
-to make a test or judge pass.
+Use the current user-authored source verbatim, including later requirement
+changes. Do not enrich or trim it to make the engine or judge pass.
 
 ## H-015 — Run the workflow and evaluate its actual output
 
-**Status:** Partial. **Owner:** harness coordinator and production invocation adapter.
-**Dependencies:** H-006/H-013/H-014. Fakes allow integration without live charges.
+**Status:** Implemented; live evidence is recorded per execution. **Owner:** harness coordinator and production invocation adapter.
+**Dependencies:** H-006/H-013/H-014. Offline tests verify mechanical boundaries only.
 
-The ordinary single-workflow invocation and publication/file checks are
-implemented by [the E2E command](e2e.md). The Hello World graph now publishes
-its validated specification, reference sidecar and canonical states before
-reaching `ok`; the scripted E2E command passes. Remaining H-012 feature-log
-integration, evaluator artifact identity binding and evaluator handoff are
-outstanding.
+The [E2E command](e2e.md) uses real production model binding, authorization and
+HTTPS transport. Successful publication hands exact captured output to the live
+evaluator, with execution identity and each generation slot/provider/model.
+Reports retain failures and inputs; stale or replaced output cannot be graded
+as fresh generation. Remaining H-012 production work is separate.
 
 Work:
 
@@ -122,6 +118,11 @@ The calibration set and acceptance decisions here remain project-owned.
 ## H-017 — Prove the complete Spec evaluation case
 
 **Status:** Open. **Owner:** end-to-end tests and live evaluation evidence.
+
+Live execution now reaches the configured Bedrock model. The latest run passed
+extraction, then failed with `InvalidModelEnvelope` at reconciliation;
+generation plus live grading
+remains unmet. See [retained run evidence](e2e.md#live-evidence--2026-09-11).
 **Dependencies:** H-015/H-016; reuse H-011/H-012 negative-path tests.
 
 Work:
@@ -157,14 +158,15 @@ Acceptance:
 
 ## H-018 — Add build wiring and correct the documentation
 
-**Status:** Open. **Owner:** repository build/test entry points and documentation.
+**Status:** Build wiring and documentation implemented; acceptance evidence below. **Owner:** repository build/test entry points and documentation.
 **Dependencies:** H-001 for command decisions; deliver alongside H-006/H-015,
 complete after H-017. Documentation correction can start immediately.
 
 Work:
 
 - Add repository-owned development harness entry points using `build.zig`
-  conventions, with explicit case selection and separate offline/live modes.
+  conventions, with explicit case selection and offline mechanical checks
+  separate from live E2E execution. The E2E executable has no mock mode.
   Settle command names once; do not document invented commands as available.
 - Keep ordinary verification offline. Live evaluation/generation runs are explicit
   opt-in, have approved credentials/spend settings and never silently run in CI.
@@ -192,7 +194,8 @@ Acceptance:
 - [ ] Removed/obsolete documentation and code have no competing fallback,
   compatibility shim, unused entry point or duplicate rubric authority.
 
-Current commands that exist include `zig build test-reference-reconciliation`,
-`zig build test-reference-extraction`, `zig build test-clarification-inputs`,
-`zig build smoke` and `zig build verify`. They are supporting engine checks,
-**not** an implemented harness command. New harness commands remain H-018 work.
+Current harness commands are `e2e-spec`, `evaluate-spec`, `test-e2e-harness`,
+`test-rubric-evaluator`, `build-e2e-harness`, `build-rubric-evaluator`,
+`smoke-e2e-harness` and `smoke-rubric-evaluator`. `zig build verify` includes
+the offline mechanical and smoke checks. Live commands are explicit and retain
+results separately; see [E2E instructions](e2e.md).

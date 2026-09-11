@@ -10,8 +10,8 @@ pub const Case = struct {
     feature: []const u8,
     reference: []const u8,
     config: []const u8,
-    provider_script: []const u8,
-    expected_specification: []const u8,
+    evaluation_case: []const u8,
+    evaluation_config: []const u8,
     directories: []const []const u8,
     files: []const Copy,
     expected_artifacts: []const Artifact,
@@ -26,8 +26,8 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) !Case {
     try evaluator.path(value.feature);
     try evaluator.path(value.reference);
     try evaluator.path(value.config);
-    try evaluator.path(value.provider_script);
-    try evaluator.path(value.expected_specification);
+    try evaluator.path(value.evaluation_case);
+    try evaluator.path(value.evaluation_config);
     for (value.directories, 0..) |directory, index| {
         try evaluator.path(directory);
         if (relative.contains(".sddtoolkit.json", directory)) return error.InvalidE2ECase;
@@ -58,21 +58,34 @@ pub const Status = enum {
     artifact_missing,
     artifact_unreadable,
     fixture_changed,
-    content_mismatch,
+    artifact_changed,
+    generated,
+    evaluator_failed,
+    quality_unresolved,
 };
 pub const Report = struct {
     schema: []const u8 = "spec-e2e-report/v1",
-    origin: enum { scripted } = .scripted,
+    origin: enum { live } = .live,
     started_at_utc: []const u8,
+    execution_id: ?[]const u8 = null,
+    case_source: ?[]const u8 = null,
     case_id: ?[]const u8 = null,
     workflow_id: ?[]const u8 = null,
     status: Status,
     workflow_outcome: ?@import("../../../src/domain/workflow.zig").OutcomeTag = null,
     model_calls: usize = 0,
+    last_model_step: ?[]const u8 = null,
+    models: []const evaluator.GenerationModel = &.{},
+    total_tokens: u128 = 0,
+    last_model_usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage = null,
+    usage_complete: bool = true,
     diagnostic: ?[]const u8 = null,
+    provider_diagnostic: ?[]const u8 = null,
+    model_diagnostic: ?[]const u8 = null,
     missing_artifact: ?Artifact = null,
     specification: ?[]const u8 = null,
     publication_check: enum { not_run, passed, failed } = .not_run,
-    fixture_content_check: enum { not_run, matched, mismatched } = .not_run,
-    semantic_quality: enum { not_evaluated } = .not_evaluated,
+    semantic_quality: enum { not_evaluated, scored, unresolved, evaluator_error } = .not_evaluated,
+    evaluation_configuration: ?@import("../configuration.zig").Config = null,
+    evaluation: ?@import("../report.zig").Report = null,
 };

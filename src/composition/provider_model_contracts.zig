@@ -11,6 +11,7 @@ pub const registry: contracts.Registry = .{ .entries = &.{
         .implementation_id = bedrock_implementation,
         .config_schema = .aws_bedrock,
         .bedrock_regions = &.{.@"ap-southeast-2"},
+        .supported_reasoning_efforts = &.{ "low", "medium", "high" },
         .capabilities = .{ .input_token_count = false, .inference = true, .exact_token_counter = .unavailable, .structured_response = .bedrock_json_schema, .temperature = true },
     },
     .{

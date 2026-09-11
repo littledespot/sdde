@@ -12,17 +12,17 @@ const selected: c.Case = .{
     .feature = "chosen",
     .reference = "first",
     .config = "config.json",
-    .provider_script = "script.json",
-    .expected_specification = "expected.md",
+    .evaluation_case = "evaluation.case.json",
+    .evaluation_config = "evaluation.json",
     .directories = &.{"empty"},
     .files = &.{.{ .source = "source.md", .destination = "references/first/source.md" }},
     .expected_artifacts = &expected,
 };
 
-test "E2E command selects exactly one case and rejects suite and live arguments" {
+test "E2E command selects one live case and rejects mock modes and extra cases" {
     const parse = @import("cli.zig").parse;
     try std.testing.expectEqualStrings("case.json", try parse(&.{ "--case", "case.json" }));
-    for ([_][]const []const u8{ &.{}, &.{"case.json"}, &.{ "--case", "one.json", "--case", "two.json" }, &.{ "--case", "case.json", "--live" }, &.{ "--suite", "suite.json" }, &.{ "--case", "../case.json" }, &.{ "--case", "/case.json" } }) |arguments| {
+    for ([_][]const []const u8{ &.{}, &.{"case.json"}, &.{ "--case", "one.json", "--case", "two.json" }, &.{ "--case", "case.json", "--mock" }, &.{ "--case", "case.json", "--scripted" }, &.{ "--suite", "suite.json" }, &.{ "--case", "../case.json" }, &.{ "--case", "/case.json" } }) |arguments| {
         if (parse(arguments)) |_| return error.AcceptedInvalidE2EArguments else |err| switch (err) {
             error.InvalidArguments, error.InvalidEvaluationContract => {},
             else => return err,
@@ -39,6 +39,8 @@ test "E2E case is closed and cannot preseed arbitrary destination collisions" {
     for ([_][2][]const u8{
         .{ "\"spec-e2e-case/v1\"", "\"spec-e2e-case/v2\"" },
         .{ "\"id\":", "\"unknown\":true,\"id\":" },
+        .{ "\"id\":", "\"provider_script\":\"script.json\",\"id\":" },
+        .{ "\"id\":", "\"expected_specification\":\"expected.md\",\"id\":" },
         .{ "\"id\":", "\"id\":\"duplicate\",\"id\":" },
         .{ "references/first/source.md", "../spec.md" },
         .{ "references/first/source.md", ".sddtoolkit.json" },
@@ -58,6 +60,152 @@ test "E2E case is closed and cannot preseed arbitrary destination collisions" {
         .{ .source = "two.md", .destination = "refs/source.md/child" },
     };
     try std.testing.expectError(error.InvalidE2ECase, c.parse(a, try std.json.Stringify.valueAlloc(a, collision, .{})));
+}
+
+fn writeEvaluation(io: std.Io, repository: std.Io.Dir) !void {
+    try repository.writeFile(io, .{ .sub_path = "evaluation.case.json", .data =
+        \\{"schema":"evaluation-case/v1","id":"one-reference","sources":[{"id":"source","path":"source.md"}],"rubric":"rubric.json"}
+    });
+    try repository.writeFile(io, .{ .sub_path = "rubric.json", .data = @embedFile("../../e2e/wf-001-hello-world/node-vitest/rubric/spec.json") });
+    try repository.writeFile(io, .{ .sub_path = "evaluation.json", .data = @embedFile("../../e2e/config/evaluation.json") });
+}
+
+fn preparedOutput(allocator: std.mem.Allocator, paths: artifacts.FeaturePaths) !@import("../../../src/domain/workflow_output.zig").Prepared {
+    const output = @import("../../../src/domain/workflow_output.zig");
+    const files = try allocator.alloc(output.File, expected.len);
+    inline for (expected, 0..) |artifact, index| files[index] = .{
+        .target = .{ .artifact = @field(@FieldType(output.Target, "artifact"), @tagName(artifact)) },
+        .bytes = "published bytes\n",
+    };
+    return .{
+        .feature = .{ .selector = paths.feature, .root_observation = .absent, .observation = .absent },
+        .paths = paths,
+        .prior = .{ .state = null, .forms = &.{} },
+        .prior_workflow_state = .{ .captured = null },
+        .files = files,
+    };
+}
+
+test "production E2E binding honors configured models and cannot succeed without real credentials" {
+    const io = std.testing.io;
+    for (0..2) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+        const captured = try fixture.capture(io, a, .cwd(), choice);
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try fixture.materialize(io, project.dir, captured);
+        const model = if (example == 0) "openai.gpt-oss-20b-1:0" else "anthropic.claude-3-5-haiku-20241022-v1:0";
+        if (example == 1) {
+            const model_config = try std.mem.replaceOwned(u8, a, captured.config, "openai.gpt-oss-20b-1:0", model);
+            // Claude has no registered reasoning-effort control.
+            try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.mem.replaceOwned(u8, a, model_config, "\"reasoningEffort\": \"low\"", "\"reasoningEffort\": null") });
+            const catalogue = try @import("../files.zig").read(io, a, project.dir, ".sddtoolkit/providers/.sddproviders.json");
+            const replaced = try std.mem.replaceOwned(u8, a, catalogue, "openai.gpt-oss-20b-1:0", model);
+            try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit/providers/.sddproviders.json", .data = try std.mem.replaceOwned(u8, a, replaced, "ap-southeast-2", "us-west-2") });
+            try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/stories.md", .data = "A library user renews a loan and sees its new due date.\n" });
+        }
+        var report: c.Report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+        const output = try @import("invoke.zig").run(io, a, project.dir, choice, captured, null, &report);
+        try std.testing.expect(output == null);
+        try std.testing.expectEqual(.live, report.origin);
+        try std.testing.expectEqual(.workflow_failed, report.status);
+        try std.testing.expectEqual(.failed, report.workflow_outcome.?);
+        try std.testing.expectEqualStrings("failed", report.diagnostic.?);
+        try std.testing.expectEqualStrings("authentication_failed", report.provider_diagnostic.?);
+        try std.testing.expectEqual(@as(usize, 0), report.model_calls);
+        try std.testing.expectEqualStrings(model, report.models[0].model);
+        try std.testing.expectEqualStrings("aws-bedrock", report.models[0].provider);
+        try std.testing.expectEqual(.not_evaluated, report.semantic_quality);
+        try std.testing.expect(report.evaluation == null);
+        try std.testing.expectError(error.FileNotFound, project.dir.access(io, "specs/hello-world/spec.md", .{}));
+        try fixture.verifySources(io, a, .cwd(), captured);
+    }
+}
+
+test "evaluation source capture accounts every selected reference and remains immutable" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var repository = std.testing.tmpDir(.{});
+    defer repository.cleanup();
+    try repository.dir.writeFile(io, .{ .sub_path = "config.json", .data = "config" });
+    try repository.dir.writeFile(io, .{ .sub_path = "source.md", .data = "New UTC requirement.\n" });
+    try writeEvaluation(io, repository.dir);
+    const captured = try fixture.capture(io, a, repository.dir, selected);
+    try std.testing.expectEqualStrings("New UTC requirement.\n", captured.evaluation.sources[0].text);
+    try fixture.validateEvaluationSources(a, captured, "references/", "first");
+    try std.testing.expectError(error.EvaluationSourceMismatch, fixture.validateEvaluationSources(a, captured, "references", "other"));
+    var extra = captured;
+    extra.files = &.{ captured.files[0], .{ .mapping = .{ .source = "extra.md", .destination = "references/first/extra.md" }, .bytes = "Unrepresented requirement." } };
+    try std.testing.expectError(error.EvaluationSourceMismatch, fixture.validateEvaluationSources(a, extra, "references", "first"));
+    // Equal counts must not hide one source duplicated and another omitted.
+    extra.evaluation.case.sources = &.{ .{ .id = "source", .path = "source.md" }, .{ .id = "other", .path = "other.md" } };
+    extra.evaluation.sources = &.{ captured.evaluation.sources[0], .{ .id = "other", .text = "Other requirement." } };
+    extra.files = &.{ captured.files[0], .{ .mapping = .{ .source = "source.md", .destination = "references/first/duplicate.md" }, .bytes = captured.files[0].bytes } };
+    try std.testing.expectError(error.EvaluationSourceMismatch, fixture.validateEvaluationSources(a, extra, "references", "first"));
+    try repository.dir.writeFile(io, .{ .sub_path = "source.md", .data = "Changed later." });
+    try std.testing.expectEqualStrings("New UTC requirement.\n", captured.evaluation.sources[0].text);
+    try std.testing.expectError(error.FixtureChanged, fixture.verifySources(io, a, repository.dir, captured));
+}
+
+test "published artifact replacement cannot be graded as the generating execution" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    const paths = try resolve(a);
+    const prepared = try preparedOutput(a, paths);
+    inline for (expected) |artifact| {
+        const path = paths.get(@field(artifacts.Artifact, @tagName(artifact))).project_relative;
+        try project.dir.createDirPath(io, std.fs.path.dirname(path).?);
+        try project.dir.writeFile(io, .{ .sub_path = path, .data = "published bytes\n" });
+    }
+    const first = try oracle.inspect(io, a, project.dir, .ok, .{ .confirmed = &prepared }, &expected, paths);
+    try std.testing.expectEqualStrings("published bytes\n", first.specification_bytes.?);
+    try project.dir.writeFile(io, .{ .sub_path = paths.get(.specification).project_relative, .data = "An unrelated replacement." });
+    const changed = try oracle.inspect(io, a, project.dir, .ok, .{ .confirmed = &prepared }, &expected, paths);
+    try std.testing.expectEqual(.artifact_changed, changed.status);
+    try std.testing.expect(changed.specification_bytes == null);
+    try std.testing.expectEqualStrings("published bytes\n", first.specification_bytes.?);
+}
+
+test "rubric handoff preserves poor output and scores without changing workflow authority" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+    const captured = try fixture.capture(io, a, .cwd(), choice);
+    const evaluation = @import("evaluation.zig");
+    var report: c.Report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed, .specification = "specs/hello-world/spec.md", .models = &.{.{ .slot = "spec_generation", .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0" }} };
+    const inputs = try evaluation.inputs(a, report, captured.evaluation, "Readable but poor output.", "run-123");
+    try std.testing.expectEqualStrings("Readable but poor output.", inputs.specification);
+    try std.testing.expectEqualStrings("run-123", inputs.generation.execution_id.?);
+    try std.testing.expectEqual(.live_generation, inputs.generation.origin);
+    for ([_]@import("../../../src/domain/workflow.zig").OutcomeTag{ .failed, .invalid, .blocked, .cancelled, .needs_user }) |outcome| {
+        var failed = report;
+        failed.workflow_outcome = outcome;
+        try std.testing.expectError(error.GenerationNotCompleted, evaluation.inputs(a, failed, captured.evaluation, "stale output", "run-124"));
+    }
+    const config = try @import("../configuration.zig").parse(a, captured.evaluation.config_bytes, .{ .api = .bedrock_converse, .model = @import("../contracts.zig").ModelId.parse("openai.gpt-oss-20b-1:0").?, .region = .@"ap-southeast-2" });
+    const result: @import("../report.zig").Report = .{ .capture = inputs, .configuration = config, .attempts = &.{}, .outcome = .{ .evaluated = .{ .results = &.{}, .assessment = .scored, .score_percent = 10, .threshold = .not_met } } };
+    evaluation.apply(&report, result);
+    try std.testing.expectEqual(.scored, report.semantic_quality);
+    try std.testing.expectEqual(.ok, report.workflow_outcome.?);
+    try std.testing.expectEqual(@as(f64, 10), report.evaluation.?.outcome.evaluated.score_percent.?);
+    var failed_judge = result;
+    failed_judge.outcome = .{ .evaluator_error = .authentication };
+    evaluation.apply(&report, failed_judge);
+    try std.testing.expectEqual(.evaluator_failed, report.status);
+    try std.testing.expectEqual(.ok, report.workflow_outcome.?);
+    try std.testing.expect(report.specification != null);
+    try std.testing.expectEqual(.evaluator_error, report.semantic_quality);
 }
 
 test "one dated E2E directory retains one isolated project per invocation" {
@@ -89,8 +237,7 @@ test "fixture copy preserves declared reference bytes and rejects preseeded outp
     defer project.cleanup();
     try repository.dir.writeFile(io, .{ .sub_path = "config.json", .data = "declared config" });
     try repository.dir.writeFile(io, .{ .sub_path = "source.md", .data = "The library renews a loan.\n" });
-    try repository.dir.writeFile(io, .{ .sub_path = "script.json", .data = @embedFile("fixtures/library-script.json") });
-    try repository.dir.writeFile(io, .{ .sub_path = "expected.md", .data = @embedFile("fixtures/library-spec.md") });
+    try writeEvaluation(io, repository.dir);
     const captured = try fixture.capture(io, a, repository.dir, selected);
     try fixture.materialize(io, project.dir, captured);
     const copy = try project.dir.readFileAlloc(io, "references/first/source.md", a, .limited(1024));
@@ -121,209 +268,80 @@ test "E2E oracle requires actual publication and every expected file" {
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
     const paths = try resolve(a);
+    const prepared = try preparedOutput(a, paths);
     try std.testing.expectEqual(.publication_missing, (try oracle.inspect(io, a, project.dir, .ok, .not_observed, &expected, paths)).status);
-    try std.testing.expectEqual(.artifact_missing, (try oracle.inspect(io, a, project.dir, .ok, .confirmed, &expected, paths)).status);
+    try std.testing.expectEqual(.artifact_missing, (try oracle.inspect(io, a, project.dir, .ok, .{ .confirmed = &prepared }, &expected, paths)).status);
     inline for (expected) |artifact| {
         const path = paths.get(@field(artifacts.Artifact, @tagName(artifact))).project_relative;
         try project.dir.createDirPath(io, std.fs.path.dirname(path).?);
         try project.dir.writeFile(io, .{ .sub_path = path, .data = "published bytes\n" });
     }
     try std.testing.expectEqual(.publication_missing, (try oracle.inspect(io, a, project.dir, .ok, .not_observed, &expected, paths)).status);
-    const passed = try oracle.inspect(io, a, project.dir, .ok, .confirmed, &expected, paths);
-    try std.testing.expectEqual(.passed, passed.status);
+    const passed = try oracle.inspect(io, a, project.dir, .ok, .{ .confirmed = &prepared }, &expected, paths);
+    try std.testing.expectEqual(.generated, passed.status);
     try std.testing.expectEqualStrings("outputs/chosen/spec.md", passed.specification.?);
     for ([_]@import("../../../src/domain/workflow.zig").OutcomeTag{ .failed, .invalid, .blocked, .cancelled, .needs_user, .more }) |outcome| {
-        const result = try oracle.inspect(io, a, project.dir, outcome, .confirmed, &expected, paths);
+        const result = try oracle.inspect(io, a, project.dir, outcome, .{ .confirmed = &prepared }, &expected, paths);
         try std.testing.expectEqual(.workflow_failed, result.status);
         try std.testing.expect(result.specification == null);
     }
     try project.dir.deleteFile(io, paths.get(.workflow_state).project_relative);
-    const missing = try oracle.inspect(io, a, project.dir, .ok, .confirmed, &expected, paths);
+    const missing = try oracle.inspect(io, a, project.dir, .ok, .{ .confirmed = &prepared }, &expected, paths);
     try std.testing.expectEqual(.artifact_missing, missing.status);
     try std.testing.expectEqual(.workflow_state, missing.missing_artifact.?);
     try std.testing.expect(missing.specification == null);
 }
 
-test "ordinary publication persists canonical evidence and reruns replace views with monotonic IDs" {
+test "failure reports preserve separate engine provider and model evidence" {
     const io = std.testing.io;
-    const state = @import("../../../src/domain/specification_state.zig");
-    for (0..2) |example| {
-        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-        defer arena.deinit();
-        const a = arena.allocator();
-        const case_bytes = try std.Io.Dir.cwd().readFileAlloc(io, "test/e2e/wf-001-hello-world/node-vitest/workflow.case.json", a, .limited(1_048_576));
-        var choice = try c.parse(a, case_bytes);
-        if (example == 1) {
-            choice.provider_script = "test/harness/e2e/fixtures/library-script.json";
-            choice.expected_specification = "test/harness/e2e/fixtures/library-spec.md";
-        }
-        const captured = try fixture.capture(io, a, .cwd(), choice);
-        var project = std.testing.tmpDir(.{});
-        defer project.cleanup();
-        try fixture.materialize(io, project.dir, captured);
-        if (example == 1) {
-            choice.workflow_id = "library-reference";
-            choice.feature = "Loans/Café";
-            const definition = try project.dir.readFileAlloc(io, ".sddtoolkit/workflows/spec.workflow.yaml", a, .limited(1_048_576));
-            try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit/workflows/spec.workflow.yaml", .data = try std.mem.replaceOwned(u8, a, definition, "id: spec-generation\n", "id: library-reference\n") });
-            try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/stories.md", .data = captured.script.extractions[0].source });
-            try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/confirmation.md", .data = captured.script.extractions[1].source });
-        }
-        const specification_path = try std.fmt.allocPrint(a, "specs/{s}/spec.md", .{choice.feature});
-        const reference_path = try std.fmt.allocPrint(a, "specs/{s}/reference-context.md", .{choice.feature});
-        const state_path = try std.fmt.allocPrint(a, ".sddtoolkit/workflows/features/{s}/state/workflow.json", .{choice.feature});
-        var previous: ?state.State = null;
-        for (0..2) |run_index| {
-            var report: c.Report = .{ .started_at_utc = "2026-09-10T00:00:00Z", .status = .harness_error };
-            try @import("invoke.zig").run(io, a, project.dir, choice, captured, &report);
-            if (report.status != .passed) std.debug.print("publication example {d}, run {d}: {any}\n", .{ example, run_index, report });
-            try std.testing.expectEqual(.passed, report.status);
-            try std.testing.expectEqual(.passed, report.publication_check);
-            try std.testing.expectEqual(.matched, report.fixture_content_check);
-            try std.testing.expectEqual(.not_evaluated, report.semantic_quality);
-            try std.testing.expectEqualStrings(specification_path, report.specification.?);
-            try std.testing.expect(report.model_calls > 0);
-            const bytes = try project.dir.readFileAlloc(io, state_path, a, .limited(state.max_bytes));
-            const parsed = (try state.parse(a, bytes, .{ .bytes = choice.feature })).state.?;
-            try std.testing.expectEqual(run_index + 1, parsed.revision);
-            try std.testing.expectEqual(.specified, parsed.stage);
-            try std.testing.expect(parsed.review.evidence.len != 0);
-            for (parsed.review.evidence) |evidence| try std.testing.expectEqual(.model_assisted, evidence.method);
-            const spec_bytes = try project.dir.readFileAlloc(io, specification_path, a, .limited(8_388_608));
-            _ = try @import("../../../src/domain/specification_markdown.zig").parse(a, spec_bytes);
-            const reference_bytes = try project.dir.readFileAlloc(io, reference_path, a, .limited(8_388_608));
-            try std.testing.expectEqualStrings(try @import("../../../src/domain/reference_context.zig").render(a, parsed.reference), reference_bytes);
-            const exact = if (example == 0) "Hello, World!" else "Loan renewed!";
-            try std.testing.expect(std.mem.indexOf(u8, reference_bytes, exact) != null);
-            if (previous) |prior| {
-                for (parsed.content.records) |record| try std.testing.expect(record.id.ordinal >= prior.id_ledger.next[@intFromEnum(record.id.kind)]);
-                try std.testing.expect(std.mem.indexOf(u8, spec_bytes, "stale user edit") == null);
-            }
-            previous = parsed;
-            if (run_index == 0) {
-                try project.dir.writeFile(io, .{ .sub_path = specification_path, .data = "stale user edit\n" ** 100 });
-                try project.dir.writeFile(io, .{ .sub_path = reference_path, .data = "stale sidecar\n" ** 100 });
-            } else {
-                const invalids = [_][]const u8{
-                    try std.mem.concat(a, u8, &.{ "{\"unknown\":true,", bytes[1..] }),
-                    try std.mem.replaceOwned(u8, a, bytes, "specification-state/v1", "specification-state/v2"),
-                };
-                for (invalids) |invalid| try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, invalid, .{ .bytes = choice.feature }));
-                try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, bytes, .{ .bytes = "foreign-feature" }));
-                var bad = parsed;
-                for (@import("../../../src/domain/specification.zig").required_record_families) |kind| {
-                    var retained: std.ArrayList(@import("../../../src/domain/specification.zig").IdentifiedRecord) = .empty;
-                    for (parsed.content.records) |record| if (record.proposal.content != kind) try retained.append(a, record);
-                    bad = parsed;
-                    bad.content.records = retained.items;
-                    try std.testing.expectError(error.InvalidSpecificationState, state.validate(a, bad, parsed.feature));
-                }
-                bad = parsed;
-                bad.id_ledger.next = @splat(1);
-                try std.testing.expectError(error.InvalidSpecificationState, state.validate(a, bad, parsed.feature));
-                bad = parsed;
-                const citations = try a.dupe(@import("../../../src/domain/reference_extraction.zig").Citation, bad.reference.extraction.citations);
-                citations[0].value.source_id.ordinal = 999;
-                bad.reference.extraction.citations = citations;
-                try std.testing.expectError(error.InvalidSpecificationState, state.validate(a, bad, parsed.feature));
-                // Invalid persisted input rejects before another model call and
-                // never gets reset to a fresh successful state.
-                try project.dir.writeFile(io, .{ .sub_path = state_path, .data = invalids[0] });
-                report = .{ .started_at_utc = "2026-09-10T00:00:00Z", .status = .harness_error };
-                try @import("invoke.zig").run(io, a, project.dir, choice, captured, &report);
-                try std.testing.expectEqual(.workflow_failed, report.status);
-                try std.testing.expectEqual(@as(usize, 0), report.model_calls);
-                try std.testing.expectEqualStrings(spec_bytes, try project.dir.readFileAlloc(io, specification_path, a, .limited(8_388_608)));
-            }
-        }
-        try fixture.verifySources(io, a, .cwd(), captured);
-    }
-}
-
-test "fixture content comparison rejects omissions changed meaning and noncanonical output" {
-    const content = @import("content.zig");
-    const codec = @import("../../../src/domain/specification_markdown.zig");
-    const spec = @import("../../../src/domain/specification.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    for ([_][]const u8{ @embedFile("fixtures/library-spec.md"), @embedFile("../../e2e/wf-001-hello-world/node-vitest/expected-spec.md") }) |expected_bytes| {
-        const expected_document = try codec.parse(a, expected_bytes);
-        const canonical = try codec.render(a, expected_document);
-        try std.testing.expect(try content.matches(a, expected_bytes, canonical));
-        for (spec.required_record_families) |kind| {
-            var retained: std.ArrayList(spec.CapturedRecord) = .empty;
-            for (expected_document.records) |record| if (record.content != kind) try retained.append(a, record);
-            var changed = expected_document;
-            changed.records = retained.items;
-            try std.testing.expect(!try content.matches(a, expected_bytes, try codec.render(a, changed)));
-        }
-        var changed = expected_document;
-        changed.primary_user_story.bytes = "An unrelated activity occurs.";
-        try std.testing.expect(!try content.matches(a, expected_bytes, try codec.render(a, changed)));
-        try std.testing.expect(!try content.matches(a, expected_bytes, try std.mem.concat(a, u8, &.{ canonical, "\n" })));
-        try std.testing.expect(!try content.matches(a, expected_bytes, "arbitrary published bytes"));
-        try std.testing.expect(!try content.matches(a, expected_bytes, try std.mem.replaceOwned(u8, a, canonical, "AC-001", "AC")));
-    }
+    var dir = std.testing.tmpDir(.{});
+    defer dir.cleanup();
+    const output = try @import("report.zig").Output.reserve(io, dir.dir);
+    defer output.close(io);
+    const report: c.Report = .{
+        .started_at_utc = "2026-09-11T00:00:00Z",
+        .execution_id = "run-failed",
+        .case_source = "chosen.case.json",
+        .status = .workflow_failed,
+        .workflow_outcome = .failed,
+        .diagnostic = "ENGINE_REJECTION",
+        .provider_diagnostic = "output_limit",
+        .model_diagnostic = "InvalidModelEnvelope",
+        .last_model_usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage.init(100, 512, 612).?,
+    };
+    try output.save(io, a, report);
+    const bytes = try @import("../files.zig").read(io, a, dir.dir, "report.json");
+    const retained = try @import("../contracts.zig").decode(c.Report, a, bytes);
+    try std.testing.expectEqualStrings("ENGINE_REJECTION", retained.diagnostic.?);
+    try std.testing.expectEqualStrings("output_limit", retained.provider_diagnostic.?);
+    try std.testing.expectEqualStrings("InvalidModelEnvelope", retained.model_diagnostic.?);
+    try std.testing.expectEqualStrings("run-failed", retained.execution_id.?);
+    try std.testing.expectEqual(.not_evaluated, retained.semantic_quality);
+    try std.testing.expect(retained.evaluation == null);
+    const view = try @import("../files.zig").read(io, a, dir.dir, "report.md");
+    try std.testing.expect(std.mem.indexOf(u8, view, "provider stopped generation at its output limit") != null);
+    try std.testing.expect(std.mem.indexOf(u8, view, "100 input + 512 output = 612 tokens") != null);
+    try std.testing.expect(std.mem.indexOf(u8, view, "No rubric grade is available") != null);
+    try std.testing.expectError(error.PathAlreadyExists, @import("report.zig").Output.reserve(io, dir.dir));
 }
 
-test "scripted success cannot override changed source or independent expected content" {
-    const io = std.testing.io;
-    for ([_]enum { source, expected }{ .source, .expected }) |mutation| {
-        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-        defer arena.deinit();
-        const a = arena.allocator();
-        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "test/e2e/wf-001-hello-world/node-vitest/workflow.case.json", a, .limited(1_048_576));
-        const choice = try c.parse(a, bytes);
-        var captured = try fixture.capture(io, a, .cwd(), choice);
-        var project = std.testing.tmpDir(.{});
-        defer project.cleanup();
-        try fixture.materialize(io, project.dir, captured);
-        switch (mutation) {
-            .source => captured.script.extractions = &.{.{ .source = "A different source.\n", .claim = "A different behavior." }},
-            .expected => captured.expected_bytes = try std.mem.replaceOwned(u8, a, captured.expected_bytes, "Hello, World!", "An unsupported greeting!"),
-        }
-        var report: c.Report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .harness_error };
-        try @import("invoke.zig").run(io, a, project.dir, choice, captured, &report);
-        switch (mutation) {
-            .source => {
-                try std.testing.expectEqual(.workflow_failed, report.status);
-                try std.testing.expectEqual(.failed, report.publication_check);
-                try std.testing.expectEqual(.not_run, report.fixture_content_check);
-                try std.testing.expect(report.specification == null);
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "specs/hello-world/spec.md", .{}));
-            },
-            .expected => {
-                try std.testing.expectEqual(.content_mismatch, report.status);
-                try std.testing.expectEqual(.passed, report.publication_check);
-                try std.testing.expectEqual(.mismatched, report.fixture_content_check);
-                try std.testing.expectEqual(.ok, report.workflow_outcome.?);
-                try std.testing.expect(report.specification != null);
-            },
-        }
-        try std.testing.expectEqual(.not_evaluated, report.semantic_quality);
-    }
-}
-
-test "authored provider scripts reject unknown fields versions and supplied identities" {
-    const script = @import("../../../src/test_fixtures/specification_script.zig");
+test "input failure report explains environment setup and escapes untrusted labels" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const a = arena.allocator();
-    const bytes = @embedFile("fixtures/library-script.json");
-    _ = try script.parse(a, bytes);
-    var duplicate = try script.parse(a, bytes);
-    duplicate.extractions = &.{ duplicate.extractions[0], duplicate.extractions[0] };
-    try std.testing.expectError(error.InvalidSpecificationScript, script.parse(a, try std.json.Stringify.valueAlloc(a, duplicate, .{})));
-    for ([_][2][]const u8{
-        .{ "specification-script/v1", "specification-script/v2" },
-        .{ "\"schema\":", "\"unknown\":true,\"schema\":" },
-        .{ "\"schema\":", "\"schema\":\"duplicate\",\"schema\":" },
-        .{ "\"id\": null", "\"id\": {\"kind\":\"acceptance_criterion\",\"ordinal\":1}" },
-    }) |mutation| {
-        if (script.parse(a, try std.mem.replaceOwned(u8, a, bytes, mutation[0], mutation[1]))) |_| return error.AcceptedInvalidProviderScript else |err| switch (err) {
-            error.InvalidSpecificationScript, error.InvalidJsonDocument, error.InvalidSpecification => {},
-            else => return err,
-        }
-    }
+    const report: c.Report = .{
+        .started_at_utc = "2026-09-12T00:00:00Z",
+        .case_id = "<script> [click](untrusted)",
+        .status = .input_invalid,
+        .diagnostic = "InvalidEvaluationEnvironment",
+    };
+    const view = try @import("report.zig").renderMarkdown(arena.allocator(), report);
+    try std.testing.expect(std.mem.indexOf(u8, view, "Input setup failed before workflow execution") != null);
+    try std.testing.expect(std.mem.indexOf(u8, view, "scripts/e2e-spec.sh") != null);
+    try std.testing.expect(std.mem.indexOf(u8, view, "workflow: not_run") == null);
+    try std.testing.expect(std.mem.indexOf(u8, view, "Workflow outcome: not_run") != null);
+    try std.testing.expect(std.mem.indexOf(u8, view, "<script>") == null);
+    try std.testing.expect(std.mem.indexOf(u8, view, "\\[click\\]") != null);
 }

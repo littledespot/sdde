@@ -105,6 +105,6 @@
     "clarification_state",
     "workflow_state"
   ],
-  "provider_script": "test/e2e/wf-001-hello-world/node-vitest/provider-script.json",
-  "expected_specification": "test/e2e/wf-001-hello-world/node-vitest/expected-spec.md"
+  "evaluation_case": "test/e2e/wf-001-hello-world/node-vitest/spec.case.json",
+  "evaluation_config": "test/e2e/config/evaluation.json"
 }

@@ -3,6 +3,13 @@ const operation = @import("../../domain/llm_provider_operation.zig");
 
 pub const Error = std.mem.Allocator.Error || error{InvalidRequest};
 
+pub const ReasoningEffort = enum { low, medium, high };
+
+pub fn reasoningEffort(value: ?[]const u8) error{InvalidRequest}!?ReasoningEffort {
+    const selected = value orelse return null;
+    return std.meta.stringToEnum(ReasoningEffort, selected) orelse error.InvalidRequest;
+}
+
 pub fn encode(allocator: std.mem.Allocator, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind) Error![]const u8 {
     return encodeText(allocator, .{
         .content = request.content,
@@ -10,6 +17,7 @@ pub fn encode(allocator: std.mem.Allocator, request: *const operation.Identified
         .response_mode = request.response_guidance_mode,
         .schema_name = "sdde_model_envelope_v1",
         .temperature = if (request.controls.temperature) |temperature| @as(f64, @floatFromInt(temperature.value)) / 1000.0 else null,
+        .reasoning_effort = try reasoningEffort(request.binding_id.reasoning_effort),
     }, kind);
 }
 
@@ -19,6 +27,7 @@ pub const TextRequest = struct {
     response_mode: @import("../../domain/model_controls.zig").ResponseGuidanceMode,
     schema_name: []const u8,
     temperature: ?f64,
+    reasoning_effort: ?ReasoningEffort,
 };
 
 // Shared text serialization; callers supply validated settings and schema.
@@ -43,6 +52,10 @@ fn write(writer: *std.Io.Writer, request: TextRequest, kind: operation.ProviderO
         try json.endObject();
         try json.endObject();
     } else {
+        if (request.reasoning_effort) |effort| {
+            try json.objectField("additionalModelRequestFields");
+            try json.write(.{ .reasoning_effort = effort });
+        }
         if (request.temperature) |temperature| {
             try json.objectField("inferenceConfig");
             try json.beginObject();

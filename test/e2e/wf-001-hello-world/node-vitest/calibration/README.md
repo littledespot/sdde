@@ -2,13 +2,14 @@
 
 **Status:** Specimens prepared; human review and live grading pending.
 
-Human review and live grading are excluded from the current implementation task;
-these unperformed checks do not block offline evaluator development.
+Human review and live calibration remain pending. The specimens predate the
+user-added UTC date/time requirement; all omit it and should receive a coverage
+finding under rubric revision 2. Their names do not imply current completeness.
 
 These are assistant-authored, supplied test specimens for
 [H-002/H-004/H-006](../../../../../design/harness/01-rubric-evaluator.md), not
 generated workflow outputs or golden specifications. The source remains the
-unchanged [stories.md](../../reference/stories.md). The existing
+current [stories.md](../../reference/stories.md). The existing
 [spec.case.json](../spec.case.json) and [rubric](../rubric/spec.json) are reused.
 
 ## Review before grading
@@ -19,7 +20,7 @@ before authorizing calibration. No reviewer approval has been recorded.
 
 | Specimen | Intended difference | Expected finding for review |
 | --- | --- | --- |
-| [faithful-a.md](faithful-a.md) | Concise scenarios and two explicit requirements. | Both source behaviors are covered without technical prescriptions or unsupported scope. |
+| [faithful-a.md](faithful-a.md) | Concise scenarios and two explicit requirements. | The original startup/greeting behaviors are covered; UTC date/time is absent without technical prescriptions or unsupported scope. |
 | [faithful-b.md](faithful-b.md) | Equivalent meaning, different wording/order and combined acceptance criterion. | Comparable coverage, greeting fidelity and grounding to faithful-a; wording alone should not cause a material quality penalty. |
 | [missing-startup.md](missing-startup.md) | Greeting remains, but successful startup and the display trigger are absent. | Lower startup coverage; greeting assessment should identify the missing startup relationship. |
 | [missing-greeting.md](missing-greeting.md) | Successful startup remains; display behavior is omitted. | Startup coverage is retained; greeting fidelity identifies absence rather than inventing a candidate quotation. |
@@ -43,7 +44,7 @@ the official [OpenAI evaluation guidance](https://developers.openai.com/api/docs
 
 1. Record the human review of these expectations and the draft rubric. Record
    the exact approved judge configuration, permitted calls/spend and report
-   directory. Make `OPENAI_API_KEY` available securely; never commit or paste it.
+   directory. Make the selected provider's `TEST_` credential available securely; never commit or paste it.
 2. Use the existing command below for each approved specimen, changing only
    `--spec`. An initial pass over this set is seven evaluations, not seven
    retries. Keep the same source, rubric, model and settings for comparability.

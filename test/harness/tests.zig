@@ -22,7 +22,7 @@ fn capture(allocator: std.mem.Allocator) !c.Capture {
         .rubric_bytes = rubric_bytes,
         .sources = &.{.{ .id = "requirements", .text = "Store the message." }},
         .specification = "The user can store the message.",
-        .generation = .{ .origin = .supplied, .workflow_status = .not_run, .execution_id = null, .provider = null, .model = null },
+        .generation = .{ .origin = .supplied, .workflow_status = .not_run, .execution_id = null, .models = &.{} },
     };
 }
 
@@ -321,7 +321,7 @@ test "Bedrock evaluation validates explicit test selection and registered contro
         invalid.model = "unregistered-model";
         try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
         invalid = config;
-        invalid.reasoning_effort = .high;
+        invalid.reasoning_effort = .xhigh;
         try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
         invalid = config;
         invalid.temperature = 1.01;
@@ -346,6 +346,30 @@ test "Bedrock evaluator reads only its test credential without other provider or
     try std.testing.expectEqualStrings("test-only-bedrock-credential", try test_environment.credential(&environment, .bedrock_converse));
 }
 
+test "Bedrock evaluator preserves registered reasoning effort and rejects unsupported controls" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const inputs = try capture(a);
+    for (@import("../../src/composition/provider_model_contracts.zig").registry.entries, 0..) |entry, index| {
+        var config = try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = entry.model, .region = entry.bedrock_regions[0] });
+        inline for (.{ .low, .medium, .high, .none, .minimal, .xhigh }) |effort| {
+            config.reasoning_effort = effort;
+            if (index == 1 or effort == .none or effort == .minimal or effort == .xhigh) {
+                try std.testing.expectError(error.InvalidEvaluationContract, bedrock.request(a, config, inputs));
+            } else {
+                const encoded = try bedrock.request(a, config, inputs);
+                const root = try c.decode(std.json.Value, a, encoded);
+                const additional = root.object.get("additionalModelRequestFields").?;
+                try std.testing.expectEqual(@as(usize, 1), additional.object.count());
+                try std.testing.expectEqualStrings(@tagName(effort), additional.object.get("reasoning_effort").?.string);
+                try std.testing.expect(root.object.get("inferenceConfig") == null);
+                try std.testing.expect(std.mem.indexOf(u8, encoded, "maxTokens") == null);
+            }
+        }
+    }
+}
+
 fn bedrockResponseBytes(a: std.mem.Allocator, stop: []const u8, payload: []const u8) ![]const u8 {
     return std.json.Stringify.valueAlloc(a, .{
         .output = .{ .message = .{ .role = "assistant", .content = [_]struct { text: []const u8 }{.{ .text = payload }} } },
@@ -359,7 +383,9 @@ test "Bedrock evaluation runs through concrete HTTP codecs grading and reports f
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const body = try bedrockResponseBytes(a, "end_turn", good);
+    const text_body = try bedrockResponseBytes(a, "end_turn", good);
+    const reasoning_body = try std.mem.replaceOwned(u8, a, text_body, "\"content\":[", "\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"non-candidate metadata\"}}},");
+    const body = try std.mem.replaceOwned(u8, a, reasoning_body, "\"usage\":{", "\"usage\":{\"serverToolUsage\":{},");
     const response = try std.fmt.allocPrint(a, "HTTP/1.1 200 OK\r\nX-Amzn-RequestId: bedrock-request-1\r\nContent-Length: {d}\r\n\r\n{s}", .{ body.len, body });
     const fixture_module = @import("../../src/bedrock_http_test_fixture.zig");
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
@@ -389,6 +415,7 @@ test "Bedrock evaluation runs through concrete HTTP codecs grading and reports f
         try std.testing.expectEqual(entry.bedrock_regions[0], report.attempts[0].identity.bedrock_target.region);
         const json = try reports.json(a, report);
         const markdown = try reports.markdown(a, report);
+        try std.testing.expect(std.mem.indexOf(u8, json, "non-candidate metadata") == null);
         for ([_][]const u8{ json, markdown, encoded }) |bytes| try std.testing.expect(std.mem.indexOf(u8, bytes, &socket.canary) == null);
         try std.testing.expect(std.mem.indexOf(u8, json, "actual_model") == null);
         try std.testing.expect(std.mem.indexOf(u8, json, "response_id") == null);
@@ -739,9 +766,11 @@ test "the checked-in Hello World case and rubric load without a fixture-specific
     const source = @embedFile("../e2e/wf-001-hello-world/reference/stories.md");
     const selected = try c.parseCase(a, case_data);
     const rubric = try c.parseRubric(a, rubric_data);
-    try std.testing.expectEqual(@as(usize, 6), rubric.criteria.len);
+    try std.testing.expectEqual(@as(usize, 7), rubric.criteria.len);
     try std.testing.expectEqualStrings("startup-coverage", rubric.criteria[0].id);
     try std.testing.expectEqualStrings("greeting-fidelity", rubric.criteria[1].id);
+    try std.testing.expectEqualStrings("utc-date-time-coverage", rubric.criteria[2].id);
+    try std.testing.expectEqual(@as(u32, 2), rubric.revision);
     const inputs: c.Capture = .{
         .evaluation_id = "eval-hello",
         .case = selected,
@@ -856,7 +885,7 @@ test "reports escape judge prose and preserve generation status separately" {
     defer arena.deinit();
     const a = arena.allocator();
     var inputs = try capture(a);
-    inputs.generation = .{ .origin = .recorded, .workflow_status = .needs_user, .execution_id = "recorded-run", .provider = null, .model = null };
+    inputs.generation = .{ .origin = .recorded, .workflow_status = .needs_user, .execution_id = "recorded-run", .models = &.{} };
     var fake: Fake = .{ .observations = &.{observed_good} };
     var report = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), inputs);
     var result = report.outcome.evaluated.results[0];
@@ -871,5 +900,24 @@ test "reports escape judge prose and preserve generation status separately" {
     inputs.generation.origin = .live_generation;
     try std.testing.expectError(error.InvalidEvaluationContract, c.validateCapture(inputs));
     inputs.generation.origin = .supplied;
+    try std.testing.expectError(error.InvalidEvaluationContract, c.validateCapture(inputs));
+}
+
+test "live generation capture requires completed identity and distinct valid model slots" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var inputs = try capture(arena.allocator());
+    const models = [_]c.GenerationModel{
+        .{ .slot = "spec_generation", .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0" },
+        .{ .slot = "audit_analysis", .provider = "aws-bedrock", .model = "anthropic.claude-3-5-haiku-20241022-v1:0" },
+    };
+    inputs.generation = .{ .origin = .live_generation, .workflow_status = .completed, .execution_id = "run-123", .models = &models };
+    try c.validateCapture(inputs);
+    for ([_][]const c.GenerationModel{ &.{}, &.{ models[0], models[0] }, &.{.{ .slot = "", .provider = "aws-bedrock", .model = models[0].model }} }) |invalid| {
+        inputs.generation.models = invalid;
+        try std.testing.expectError(error.InvalidEvaluationContract, c.validateCapture(inputs));
+    }
+    inputs.generation.models = &models;
+    inputs.generation.execution_id = null;
     try std.testing.expectError(error.InvalidEvaluationContract, c.validateCapture(inputs));
 }

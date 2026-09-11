@@ -1,7 +1,7 @@
 {
   "schema": "evaluation-rubric/v1",
   "id": "hello-world-spec",
-  "revision": 1,
+  "revision": 2,
   "minimum_score": 0,
   "maximum_score": 4,
   "pass_threshold_percent": null,
@@ -35,6 +35,20 @@
       ]
     },
     {
+      "id": "utc-date-time-coverage",
+      "description": "The application also outputs the date and time in UTC. Preserve the date, time and UTC requirements without prescribing an unsupported timestamp format or adding a timezone selection feature.",
+      "evidence": "Quote the UTC date/time requirement from stories and its corresponding specification behavior, or identify each missing part.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        { "score": 0, "description": "Date/time output is absent or contradicted." },
+        { "score": 1, "description": "A timestamp is implied but neither its content nor UTC basis is clear." },
+        { "score": 2, "description": "Date/time output is present but a required part or UTC basis is missing or wrong." },
+        { "score": 3, "description": "Date, time and UTC are covered with a minor ambiguity in the output requirement." },
+        { "score": 4, "description": "Output of both the date and time in UTC is clearly preserved without unsupported formatting requirements." }
+      ]
+    },
+    {
       "id": "source-grounding",
       "description": "Requirements and scope claims remain supported by the supplied source. Do not reward invented controls, platforms, data storage, user accounts, error policies or features, including inventions disguised as assumptions or non-goals.",
       "evidence": "Compare source statements with relevant specification claims. When nothing unsupported is found, cite representative supported content and explain the finding.",
@@ -50,7 +64,7 @@
     },
     {
       "id": "clarity-testability",
-      "description": "The stated startup and display behavior can be understood and checked by a reviewer. Judge observable meaning and consistent acceptance conditions, not executable test code or one exact Markdown rendering.",
+      "description": "The stated startup, greeting and UTC date/time behavior can be understood and checked by a reviewer. Judge observable meaning and consistent acceptance conditions, not executable test code or one exact Markdown rendering.",
       "evidence": "Quote behavior/acceptance statements and explain what a reviewer could observe or what remains unclear.",
       "weight": 1,
       "allow_not_applicable": false,
@@ -59,13 +73,13 @@
         { "score": 1, "description": "Statements are mostly vague, contradictory or unresolved." },
         { "score": 2, "description": "Some behavior is checkable, but important conditions or outcomes are unclear." },
         { "score": 3, "description": "The behavior is understandable and checkable with minor imprecision." },
-        { "score": 4, "description": "Startup and the observable greeting are expressed clearly, consistently and testably." }
+        { "score": 4, "description": "Startup, the greeting and UTC date/time output are expressed clearly, consistently and testably." }
       ]
     },
     {
       "id": "organization",
       "description": "The document is a readable business specification with coherently organized scenarios and requirements. Judge usefulness and consistency, not byte equality. Optional empty sections do not require filler; inline unresolved questions and template placeholders impair the specification.",
-      "evidence": "Quote representative scenario/requirement organization or unresolved content and relate it to the two source requirements.",
+      "evidence": "Quote representative scenario/requirement organization or unresolved content and relate it to the source requirements.",
       "weight": 1,
       "allow_not_applicable": false,
       "anchors": [
@@ -79,7 +93,7 @@
     {
       "id": "proportionate-business-scope",
       "description": "The specification stays proportionate to the simple requested application and business-facing. Node/Vitest principles must not create implementation requirements in the spec. Do not demand entities, assumptions, business rules or edge cases unsupported by the source.",
-      "evidence": "Quote representative scope/detail choices and compare them with the source's two requirements.",
+      "evidence": "Quote representative scope/detail choices and compare them with the source requirements.",
       "weight": 1,
       "allow_not_applicable": false,
       "anchors": [

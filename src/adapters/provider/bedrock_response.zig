@@ -57,7 +57,10 @@ pub fn decodeConverse(raw: std.json.Value) Invalid!Inference {
     try fields(raw, &.{ "output", "stopReason", "usage", "metrics" });
     const stop = try string(try field(raw, "stopReason"));
     const usage = try field(raw, "usage");
-    try fields(usage, &.{ "inputTokens", "outputTokens", "totalTokens" });
+    try fields(usage, &.{ "inputTokens", "outputTokens", "totalTokens", "serverToolUsage" });
+    // No server tools are configured or authorized by this adapter. Bedrock
+    // may still emit the empty usage object on an ordinary text response.
+    if (usage.object.get("serverToolUsage")) |tools| try fields(tools, &.{});
     const reported = operation.ProviderUsage.init(
         try integer(try field(usage, "inputTokens")),
         try integer(try field(usage, "outputTokens")),
@@ -79,13 +82,32 @@ fn decodeOutput(raw: std.json.Value, stop: []const u8) Invalid!@FieldType(Infere
         try fields(message, &.{ "role", "content" });
         if (!std.mem.eql(u8, try string(try field(message, "role")), "assistant")) return error.InvalidResponse;
         const content = try field(message, "content");
-        if (content != .array or content.array.items.len != 1) return error.InvalidResponse;
-        try fields(content.array.items[0], &.{"text"});
-        const text = try string(try field(content.array.items[0], "text"));
-        return .{ .text = text };
+        if (content != .array) return error.InvalidResponse;
+        var text: ?[]const u8 = null;
+        for (content.array.items) |block| {
+            try fields(block, &.{ "text", "reasoningContent" });
+            if (block.object.count() != 1) return error.InvalidResponse;
+            if (block.object.get("text")) |value| {
+                if (text != null) return error.InvalidResponse;
+                text = try string(value);
+            } else {
+                try reasoning(try field(block, "reasoningContent"));
+            }
+        }
+        return .{ .text = text orelse return error.InvalidResponse };
     }
     const reason: operation.ProviderNonCandidateStopReason = if (std.mem.eql(u8, stop, "max_tokens")) .output_limit else if (std.mem.eql(u8, stop, "tool_use")) .unsupported_tool_request else if (std.mem.eql(u8, stop, "guardrail_intervened") or std.mem.eql(u8, stop, "content_filtered")) .content_filtered else if (std.mem.eql(u8, stop, "malformed_model_output") or std.mem.eql(u8, stop, "malformed_tool_use")) .malformed_output else if (std.mem.eql(u8, stop, "model_context_window_exceeded")) .context_limit else return error.InvalidResponse;
     return .{ .stopped = reason };
+}
+
+// Converse reasoning is provider metadata, not the workflow result. Validate
+// its closed wire shape without exposing it as candidate text or authority.
+fn reasoning(raw: std.json.Value) Invalid!void {
+    try fields(raw, &.{"reasoningText"});
+    const value = try field(raw, "reasoningText");
+    try fields(value, &.{ "text", "signature" });
+    _ = try string(try field(value, "text"));
+    if (value.object.get("signature")) |signature| _ = try string(signature);
 }
 
 fn decodeInference(allocator: std.mem.Allocator, raw: std.json.Value, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) (Invalid || std.mem.Allocator.Error)!operation.ProviderInvocationObservation {

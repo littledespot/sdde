@@ -1,0 +1,9 @@
+{
+  "schema": "evaluation-config/v1",
+  "reasoning_effort": "low",
+  "temperature": null,
+  "timeout_ms": 120000,
+  "retry_limit": 0,
+  "retry_delay_ms": 0,
+  "total_token_budget": 100000
+}

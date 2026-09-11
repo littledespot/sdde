@@ -20,6 +20,12 @@ The native content schema and mechanical specification Markdown codec in §5.6
 are implemented. The shared required-authority boundary and Specify projection
 in §3.10 are connected to model-assisted generation and publication evidence.
 
+**E2E evaluation:** The [development harness](../harness/e2e.md) invokes the
+configured production LLM and grades the exact published specification through
+a separate live rubric evaluator. Generation/publication evidence and semantic
+scores remain separate; neither offline integration tests nor supplied-spec
+grading establish a successful live workflow.
+
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
 rule.

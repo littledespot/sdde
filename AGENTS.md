@@ -347,8 +347,14 @@ task.
   transaction convergence.
 - Fault injection: malformed model output, parser/command/filesystem failure,
   every transaction phase, interruption, stale approval, and retry exhaustion.
-- End to end: each increment must work with a fake `LLMProviderInterface` before using a
-  real provider.
+- Unit and integration tests may use fakes; their results are not E2E evidence.
+- End to end: execute the complete production path, including the real LLM
+  selected by the test's `.sddtoolkit.json`, configured external services, and
+  required rubric evaluation of the engine's actual published output. Scripted
+  provider responses, prewritten outputs, and golden-document comparisons cannot
+  substitute for E2E execution or quality assessment. If live execution or
+  evaluation cannot finish, report the unmet acceptance criteria; do not
+  substitute a narrower test or claim E2E completion.
 - Native packaging: build and run the packaged executable from a clean
   temporary directory without the source tree, Zig toolchain, build cache, or
   development-only assets whenever packaging/runtime behavior is affected.

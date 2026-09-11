@@ -111,7 +111,7 @@ fn render(out: *std.Io.Writer, report: Report) std.Io.Writer.Error!void {
     }
     try out.writeAll("\nThis is a model-assisted assessment, not workflow approval or semantic proof.\n");
 }
-fn escape(out: *std.Io.Writer, bytes: []const u8) std.Io.Writer.Error!void {
+pub fn escape(out: *std.Io.Writer, bytes: []const u8) std.Io.Writer.Error!void {
     for (bytes) |b| switch (b) {
         '<' => try out.writeAll("&lt;"),
         '>' => try out.writeAll("&gt;"),

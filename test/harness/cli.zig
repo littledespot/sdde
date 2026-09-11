@@ -4,10 +4,6 @@ const c = @import("contracts.zig");
 const files = @import("files.zig");
 const configuration = @import("configuration.zig");
 const environment = @import("environment.zig");
-const http = @import("http.zig");
-const bedrock = @import("bedrock.zig");
-const bedrock_http = @import("../../src/adapters/provider/bedrock_http.zig");
-const clock = @import("../../src/adapters/system/provider_operation_clock.zig");
 const reports = @import("report.zig");
 const directories = @import("../../src/adapters/filesystem/directory_access.zig");
 pub const Options = struct { case: []const u8, spec: []const u8, config: []const u8, output: []const u8 };
@@ -64,8 +60,7 @@ pub fn main(init: std.process.Init) !void {
         .origin = .supplied,
         .workflow_status = .not_run,
         .execution_id = null,
-        .provider = null,
-        .model = null,
+        .models = &.{},
     }) catch return fail(io, "Invalid or unavailable case, rubric, source or specification. No API call made.");
     const output = directories.open(io, .cwd(), options.output) catch return fail(io, "Output must be an existing safe directory. No API call made.");
     defer output.close(io);
@@ -76,17 +71,7 @@ pub fn main(init: std.process.Init) !void {
     defer json_file.close(io);
     const md_file = output.createFile(io, md_name, .{ .exclusive = true, .permissions = .fromMode(0o600) }) catch return fail(io, "Cannot create the report view. No API call made; an empty JSON report may remain.");
     defer md_file.close(io);
-    var timer: clock.Adapter = .{ .io = io };
-    var transport: bedrock_http.Adapter = .{ .io = io, .clock = timer.clock(), .runtime = .{} };
-    var adapter: union(configuration.Api) { openai_responses: http.Adapter, bedrock_converse: bedrock.Adapter } = switch (selection.api) {
-        .openai_responses => .{ .openai_responses = .{ .io = io, .api_key = key } },
-        .bedrock_converse => .{ .bedrock_converse = .{ .transport = transport.port(), .clock = timer.clock(), .model = selection.model, .region = selection.region.?, .api_key = key } },
-    };
-    const port = switch (adapter) {
-        .openai_responses => |*value| value.port(),
-        .bedrock_converse => |*value| value.port(),
-    };
-    const result = @import("evaluate.zig").run(io, a, port, config, inputs) catch return fail(io, "Evaluator aborted; reserved report files may be incomplete. No quality result is available.");
+    const result = @import("live.zig").run(io, a, config, key, inputs) catch return fail(io, "Evaluator aborted; reserved report files may be incomplete. No quality result is available.");
     try json_file.writeStreamingAll(io, try reports.json(a, result));
     try json_file.sync(io);
     try md_file.writeStreamingAll(io, try reports.markdown(a, result));

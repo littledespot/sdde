@@ -59,8 +59,9 @@ The initial registered contracts are:
 | `openai.gpt-oss-20b-1:0` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; representable native schemas |
 | `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` | Yes | Yes | Prompt-only |
 
-Both support the registered temperature control; neither registers a reasoning-
-effort option. Unknown models, source regions, configuration fields, controls
+Both support the registered temperature control. GPT-OSS registers the explicit
+reasoning-effort values `low`, `medium` and `high`; Claude registers none.
+Unknown models, source regions, configuration fields, controls
 and capability claims reject. Only these in-region foundation-model targets
 are installed; geographic/global profiles and their data-routing policies are
 not silently enabled. Future support requires another trusted contract, not
@@ -110,7 +111,11 @@ Converse uses `/model/<encoded-model>/converse`; CountTokens uses
 ordered system/guidance blocks and ordered user/evidence blocks. A Bedrock
 request needs explicit user/evidence input; the adapter invents no input text.
 CountTokens wraps this projection in `input.converse` and sends no inference
-controls. Converse sends optional supported temperature only when selected.
+controls. Converse sends supported temperature and reasoning effort only when
+selected. Reasoning effort uses the closed
+`additionalModelRequestFields.reasoning_effort` projection described by the
+[AWS OpenAI model parameters](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-openai.html);
+the adapter accepts no arbitrary additional parameters.
 Neither sends `maxTokens`, a workflow-budget-derived ceiling, tools, stop
 sequences, arbitrary wire parameters or model-visible engine identities.
 
@@ -137,6 +142,9 @@ operation, binding and input. No tokenizer approximation is used.
 Inference requires nonnegative integer input/output/total usage with checked
 `input + output == total`. `end_turn` requires one assistant message and one
 complete text block; the returned owned content remains an untrusted candidate.
+Validated reasoning-text metadata may accompany that single text block and is
+discarded. Empty server-tool usage is accepted; nonempty tool use, malformed
+reasoning metadata and missing or multiple final text blocks reject.
 Recognized non-candidate stops discard content and retain usage:
 
 | AWS stop | F0006 outcome |

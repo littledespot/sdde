@@ -28,7 +28,9 @@ pub const Provider = struct {
             .input_token_count => operation.validateCountInvocation(selected, request, invoked),
             .inference => operation.validateInferenceInvocation(selected, request, invoked),
         };
-        if (!valid or selected.registry_entry.config != .aws_bedrock or selected.reasoning_effort != null) return .{ .failed = .{ .cause = .request_rejected, .retry_class = .never, .delivery = .not_sent } };
+        if (!valid or selected.registry_entry.config != .aws_bedrock or
+            !@import("../../domain/llm_provider_contracts.zig").supportsReasoningEffort(selected.registry_entry.supported_reasoning_efforts, selected.reasoning_effort))
+            return .{ .failed = .{ .cause = .request_rejected, .retry_class = .never, .delivery = .not_sent } };
         const secret = authorization.secret(&capability) orelse return .{ .failed = .{ .cause = .authorization_denied, .retry_class = .never, .delivery = .not_sent } };
         const body = encoding.encode(allocator, request, kind) catch |err| return switch (err) {
             error.OutOfMemory => error.OutOfMemory,

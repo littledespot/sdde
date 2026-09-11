@@ -5,8 +5,8 @@ It sends captured requirements, a supplied specification and its rubric to
 OpenAI or Bedrock, validates the returned judgments, and writes JSON/Markdown reports.
 It does **not** run Specify or require a deterministic definition of good prose.
 
-The current implementation task explicitly excludes human calibration and live
-API verification. The existing opt-in live command is unchanged; those checks
+The [live E2E harness](e2e.md) now joins production generation to this evaluator.
+Human rubric calibration and broader live acceptance
 are not claimed as completed or prerequisites for offline implementation.
 
 ## Run
@@ -161,8 +161,8 @@ pass/fail decision. Neither a low score nor a missed threshold is an API failure
 The initial [Hello World rubric](../../test/e2e/wf-001-hello-world/node-vitest/rubric/spec.json)
 is an **uncalibrated draft**: 0–4 integer anchors, equal weights, no pass threshold
 and no non-applicable criteria. These are visible rubric-author choices, not
-engine defaults or approved release policy. Its six criteria address startup,
-exact greeting, grounding, clarity/testability, organization and proportionate
+engine defaults or approved release policy. Revision 2 adds the user-authored UTC requirement. Its seven criteria address
+startup, exact greeting, UTC date/time, grounding, clarity/testability, organization and proportionate
 business scope. It does not demand Node/Vitest implementation details, invented
 entities or filler for empty sections. Human review and live calibration remain
 open under H-002/H-016.
@@ -212,9 +212,10 @@ sensitive local data. An input overwritten later cannot alter this capture.
 
 The CLI always labels its candidate `supplied` and workflow status `not_run`.
 It never claims to have generated that file. The shared grading call accepts
-explicit recorded/scripted/live provenance for H-015; fresh generation requires
-a completed execution identity, with provider/model also required for live
-generation. Recorded artifacts can preserve a previous failed/needs-user status
+explicit recorded/scripted/live provenance; fresh generation requires
+a completed execution identity and live generation records each configured
+slot/provider/model in `generation.models`. The E2E entry point supplies this
+identity and the exact published artifact directly. Recorded artifacts can preserve a previous failed/needs-user status
 without changing that status through grading. Full workflow execution and its
 failure reports are not implemented by this entry point.
 
@@ -260,10 +261,10 @@ immutable file capture, unsafe paths and report escaping. The clean-directory
 smoke runs the standalone binary without credentials or development assets.
 Ordinary `test`/`verify` include offline evaluator checks; they never invoke an API.
 
-No paid provider request or live rubric calibration was performed during this
-implementation. Passing mechanical tests does not establish that a live judge
-grades correctly. H-004's authorized live acceptance and H-016's calibration
-remain outstanding; H-007–H-015 still own producing and handing off a fresh spec.
+Passing mechanical tests does not establish that a live judge grades correctly.
+Live execution evidence is recorded with the [E2E results](e2e.md). Human
+H-016 calibration remains outstanding. The handoff is implemented, but the
+latest live generation failed before a specification was available to grade.
 
 Recorded offline verification (2026-09-06):
 

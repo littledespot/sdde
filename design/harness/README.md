@@ -1,10 +1,8 @@
 # Spec workflow evaluation backlog
 
-**Status:** Proposed implementation backlog; evaluator and in-memory generation
-are implemented, with partial clarification/publication integration. Human
-evaluation and live API verification are excluded from the
-current implementation task; neither is claimed completed. **Reviewed:** 2026-09-07,
-including uncommitted work. [Evaluator commands and contract](evaluator.md).
+**Status:** Live generation and rubric handoff are implemented. Human rubric
+calibration and broader acceptance remain open. **Reviewed:** 2026-09-11.
+[Run instructions and result interpretation](e2e.md).
 
 ## User-directed outcome
 
@@ -32,9 +30,9 @@ requested live, LLM-based evaluation.
   evaluator uses Responses/Converse with native HTTPS without a new dependency. Exact model
   and limits are mandatory operator selections; draft rubric scoring is visible
   in the rubric file, not a production policy or calibrated result.
-- This is development-only evaluation of the engine, not authorization to run
-  against a real target project, send data externally, incur API charges, add
-  dependencies or change release/CI policy.
+- This is development-only evaluation of the engine in isolated test projects.
+  Live runs transmit their declared inputs and use configured API credentials.
+  They are explicitly invoked and are not part of offline verification or CI.
 - [Engine design](../design.md) remains Proposed. Its production safety and
   publication rules still apply. This backlog does not make rubric scores into
   workflow approvals, clarification answers or permission to publish.
@@ -45,35 +43,32 @@ requested live, LLM-based evaluation.
   publication-failure rule permits already-replaced files to remain after write
   failure/interruption, without new successful completion; a fresh run replaces
   outputs from the beginning.
-- The older [F0050 readiness finding](../features/F0050-SpecWorkflowEvaluationService.md)
-  incorrectly defers semantic rubric scoring and refers to a missing harness
-  document. Do not use those statements to replace this user-directed goal
-  with a conformance-only milestone. H-018 tracks reconciliation of those docs;
-  it does not authorize bypassing production invariants.
+- [F0050](../features/F0050-SpecWorkflowEvaluationService.md) points to this
+  harness contract. Rubric grading is part of the E2E path.
 
 ## Implementation snapshot
 
-The [single-case E2E command](e2e.md) now executes one declared reference/feature
-case in one isolated project, with scripted observations at the provider
-boundary. It retains a UTC-dated folder beneath `zig-out/e2e-spec/` and checks
-actual engine publication and expected files. The Hello World run now passes:
-the ordinary YAML publishes specification and reference views, clarification
-state and canonical specification state. The 26-scenario regression suite
-remains independent and no longer writes review folders. H-012 feature-log
-integration and the H-015 evaluator handoff remain unfinished.
+The [single-case E2E command](e2e.md) runs the selected test's configured LLM
+through the production runtime, validates actual publication, and submits that
+exact specification to the selected live rubric evaluator. It retains immutable
+input captures and separate generation/publication/quality results in one dated
+folder. Scripted-generation and golden-document E2E paths have been removed.
 
-| Area | Evidence at review | Remaining boundary |
+| Area | Implemented | Remaining evidence/work |
 | --- | --- | --- |
-| Generic engine | YAML discovery/compiler/runner and explicit feature/reference invocation reach registered publication. | Remaining clarification routes and feature-log integration. |
-| References | Model-connected extraction/reconciliation, citations, typed text and exact-value preservation are retained in canonical state and rendered in the sidecar. | Applicable clarification answers. |
-| Model calls | [Native request operations](../../src/composition/model_request_operations.zig), configured production provider, explicit retirement/protocol retry and fake-provider tests exist. | Authorized live verification; no new provider is required for H-009/H-010. |
-| Specify | H-007–H-012 connect content, gates, generation, repair, sidecar/state publication and protected form writes. Tests cover shorter rerun replacements, monotonic IDs, invalid state and every publication write failure. | Authenticated/current answers, remaining gap routes, feature logs and interruption evidence. |
-| Fixture | Unchanged `stories.md`, seven principle files, `spec.case.json`, draft rubric and seven [calibration specimens](../../test/e2e/wf-001-hello-world/node-vitest/calibration/README.md) exist. | Human rubric review/live calibration and full-workflow runtime resources. |
-| Evaluator | `test/harness/`, `harness.zig` and `evaluate-spec`/offline test/smoke build steps implement supplied-spec OpenAI/Bedrock grading and reports. | Authorized live acceptance; no paid API call was made during implementation. |
-| Full-workflow harness | [One-case scripted invocation](e2e.md), explicit fixture mapping, source preservation checks and publication/file checks now exist. Missing publication exits nonzero. | Remaining H-012 integration, H-015 evaluator handoff and live end-to-end evidence. |
+| Generic engine | Ordinary YAML compilation, model requests, validators and publication. | Remaining production clarification and feature-log routes tracked in H-011/H-012. |
+| Fixture | Explicit project/resource mapping, original reference capture, rubric/settings capture and source preservation checks. | Broader live workflow cases. |
+| Evaluator | Supplied-spec and joined E2E grading through OpenAI/Bedrock with closed result/evidence validation. | Human rubric review and H-016 calibration. |
+| Full-workflow harness | Real configured generation, publication identity checks, live grading and failure reports. | H-017 broader live/rerun/failure evidence; see retained run results. |
 
-This is a source inspection, not a fresh test-pass claim. Recheck changing
-boundaries before implementing a ticket; do not rebuild existing functionality.
+The latest live run completed extraction with low reasoning, then rejected an
+invalid JSON reconciliation response (3 calls; 8,472 accounted tokens). It
+produced no specification or
+grade. [Run evidence](e2e.md#live-evidence--2026-09-11) retains this unmet acceptance.
+
+Mechanical tests establish the harness contracts. A completed live execution
+and its scores must be reported separately; a source inspection is not a test
+pass or proof of semantic quality.
 
 ## Delivery sequence
 
@@ -88,16 +83,16 @@ boundaries before implementing a ticket; do not rebuild existing functionality.
    grade that run's output through the selected provider, and produce an inspectable report.
    A low score is a valid evaluation result, not an excuse to hide the run.
 
-Neither a supplied-spec evaluation nor a fake-generation end-to-end test alone
+Neither a supplied-spec evaluation nor a fake-generation integration test alone
 completes milestone 3. Rubric work and evaluator calibration are core delivery,
 not an optional phase after a golden-file harness.
 
 ## Backlog index
 
-H-001–H-006 have an offline implementation; live acceptance and human review
-are excluded from the current task. H-007's native contract/codec and H-008's
+H-001–H-006 are implemented; human review/calibration remains open. H-007's native contract/codec and H-008's
 shared required-authority boundary and H-009/H-010 generation are implemented;
-H-011–H-018 remain open.
+H-014/H-015 and H-018 code/documentation are implemented; H-011/H-012 gaps,
+H-016 human calibration and H-017 broader acceptance remain open.
 Dependencies and evidence are defined in the ticket bodies.
 
 | ID | Work item | Track |
@@ -121,20 +116,19 @@ Dependencies and evidence are defined in the ticket bodies.
 | [H-017](03-harness-verification.md#h-017--prove-the-complete-spec-evaluation-case) | End-to-end, rerun and failure evidence | Verification |
 | [H-018](03-harness-verification.md#h-018--add-build-wiring-and-correct-the-documentation) | Commands, documentation cleanup and handoff | Delivery |
 
-Use the callable evaluator for authorized live acceptance and H-016 calibration
-while H-007–H-013 proceed independently. H-014 can prepare fixture assembly while
-production work proceeds. H-015 joins the two tracks.
+Use `e2e-spec` for live generation plus grading and `evaluate-spec` for explicit
+supplied-spec grading. Neither changes production workflow authority.
 
 ## Completion checklist
 
-- [ ] A checked-in rubric evaluates the original reference without a prose golden.
+- [x] A checked-in rubric evaluates the original reference without a prose golden.
 - [ ] An authorized call to the selected provider evaluates an explicitly supplied spec and reports
   criterion evidence; this is clearly labelled evaluator-only evidence.
 - [ ] The ordinary Spec YAML executes through the production engine with fake
   model observations, without a fixture-specific execution path.
 - [ ] The original Hello World case completes real generation, and the selected provider grades
   the exact `spec.md` produced by that execution.
-- [ ] Reports distinguish workflow failure/clarification, evaluator error,
+- [x] Reports distinguish workflow failure/clarification, evaluator error,
   completed low-scoring evaluation and completed satisfactory evaluation.
 - [ ] Every workflow's repeated runs completely overwrite registered replaceable
   outputs and unresolved clarification forms at the same paths, retaining

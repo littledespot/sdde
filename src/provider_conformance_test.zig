@@ -303,6 +303,51 @@ test "Bedrock native profile proves exact representability without stripping con
     }
 }
 
+test "Bedrock reasoning effort is explicit registered and serialized only for inference" {
+    const encoding = @import("adapters/provider/bedrock_request.zig");
+    for ([_]?[]const u8{ null, "low", "medium", "high" }) |effort| {
+        for (contracts.registry.entries, 0..) |contract, index| {
+            var fixture: Fixture = undefined;
+            try fixture.init(std.testing.allocator, .bedrock);
+            defer fixture.deinit();
+            fixture.base.registry_entry.provider = contract.provider;
+            fixture.base.registry_entry.model = contract.model;
+            fixture.base.registry_entry.capabilities = contract.capabilities;
+            fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0] } };
+            fixture.base.registry_entry.supported_reasoning_efforts = contract.supported_reasoning_efforts;
+            fixture.base.provider_binding.reasoning_effort = effort;
+            fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
+            const authorized = try fixture.start(.inference);
+            var observed = try fixture.call(authorized);
+            defer observed.deinit();
+            if (index == 1 and effort != null) {
+                try std.testing.expectEqual(.request_rejected, observed.failed.cause);
+                try std.testing.expectEqual(.not_sent, observed.failed.delivery);
+                try std.testing.expectEqual(@as(usize, 0), fixture.effects());
+                continue;
+            }
+            try std.testing.expect(observed == .completed);
+            try std.testing.expectEqual(@as(usize, 1), fixture.effects());
+            const bytes = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference);
+            defer std.testing.allocator.free(bytes);
+            var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 32 }, false);
+            defer parsed.deinit();
+            const additional = parsed.value.object.get("additionalModelRequestFields");
+            if (effort) |value| {
+                try std.testing.expectEqual(@as(usize, 1), additional.?.object.count());
+                try std.testing.expectEqualStrings(value, additional.?.object.get("reasoning_effort").?.string);
+            } else try std.testing.expect(additional == null);
+            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count);
+            defer std.testing.allocator.free(counted);
+            for ([_][]const u8{ "additionalModelRequestFields", "reasoning_effort", "inferenceConfig", "maxTokens" }) |field|
+                try std.testing.expect(std.mem.indexOf(u8, counted, field) == null);
+            try std.testing.expect(std.mem.indexOf(u8, bytes, "maxTokens") == null);
+        }
+    }
+    for ([_][]const u8{ "", "LOW", "none", "minimal", "xhigh", "low\n", "unknown" }) |invalid|
+        try std.testing.expectError(error.InvalidRequest, encoding.reasoningEffort(invalid));
+}
+
 test "Bedrock response rejects malformed UTF8 identity-shaped unknown data and inconsistent usage" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .bedrock);
@@ -326,6 +371,43 @@ test "Bedrock response rejects malformed UTF8 identity-shaped unknown data and i
         defer observed.deinit();
         try std.testing.expectEqual(.response_invalid, observed.failed.cause);
         try std.testing.expectEqual(.response_received, observed.failed.delivery);
+    }
+}
+
+test "Bedrock text normalization validates reasoning metadata without making it candidate authority" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator, .bedrock);
+    defer fixture.deinit();
+    const original = @import("bedrock_transport_test_fixture.zig").complete;
+    const cases = [_]struct { content: []const u8, usage: []const u8 = "{}", accepted: bool }{
+        .{ .content = "[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}},{\"text\":\"{}\"}]", .accepted = true },
+        .{ .content = "[{\"text\":\"{}\"},{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\",\"signature\":\"sig\"}}}]", .accepted = true },
+        .{ .content = "[{\"text\":\"{}\"}]", .accepted = true },
+        .{ .content = "[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"{}\"}}}]", .accepted = false },
+        .{ .content = "[{\"text\":\"{}\"},{\"text\":\"{}\"}]", .accepted = false },
+        .{ .content = "[{\"text\":\"{}\",\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]", .accepted = false },
+        .{ .content = "[{\"text\":\"{}\"},{\"reasoningContent\":{\"reasoningText\":{\"text\":true}}}]", .accepted = false },
+        .{ .content = "[{\"text\":\"{}\"},{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\",\"signature\":false}}}]", .accepted = false },
+        .{ .content = "[{\"text\":\"{}\"},{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\",\"authority\":true}}}]", .accepted = false },
+        .{ .content = "[{\"text\":\"{}\"},{\"toolUse\":{}}]", .accepted = false },
+        .{ .content = "[{\"text\":\"{}\"}]", .usage = "null", .accepted = false },
+        .{ .content = "[{\"text\":\"{}\"}]", .usage = "{\"webSearchRequests\":1}", .accepted = false },
+    };
+    for (cases) |case| {
+        const changed = try std.mem.replaceOwned(u8, std.testing.allocator, original, "[{\"text\":\"{}\"}]", case.content);
+        defer std.testing.allocator.free(changed);
+        const usage = try std.fmt.allocPrint(std.testing.allocator, "\"serverToolUsage\":{s},\"inputTokens\":10", .{case.usage});
+        defer std.testing.allocator.free(usage);
+        const bytes = try std.mem.replaceOwned(u8, std.testing.allocator, changed, "\"inputTokens\":10", usage);
+        defer std.testing.allocator.free(bytes);
+        var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
+        defer observed.deinit();
+        if (case.accepted) {
+            try std.testing.expectEqualStrings("{}", observed.completed.raw_result.complete.content.bytes);
+            try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.complete.usage.total_tokens);
+        } else {
+            try std.testing.expectEqual(.response_invalid, observed.failed.cause);
+        }
     }
 }
 
