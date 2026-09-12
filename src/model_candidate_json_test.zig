@@ -7,6 +7,23 @@ const Choice = union(enum) {
 const Document = struct { left: Choice, right: Choice, history: []const Choice };
 const sample: Document = .{ .left = .{ .count = .{ .amount = 7 } }, .right = .{ .note = .{ .text = "Café" } }, .history = &.{.{ .count = .{ .amount = 9 } }} };
 
+test "reconciliation rejects the observed native union response and accepts the canonical content shapes" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const schema = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .limited(@import("domain/model_result_schema.zig").max_bytes));
+    const check = @import("model_payload_schema_test.zig").checkDocument;
+    const prefix = "{\"member_claim_ids\":[{\"ordinal\":1}],\"member_summary_ids\":[],\"statements\":[{\"local_key\":1,\"claim_ids\":[{\"ordinal\":1}],\"content\":";
+    for ([_][]const u8{
+        "{\"model\":{\"kind\":\"business\",\"segments\":[{\"kind\":\"literal\",\"value\":\"Display the greeting.\"}]}}",
+        "{\"preserved_token\":{\"id\":{\"ordinal\":1},\"kind\":\"business_exact_string\",\"value\":\"Hello, World!\"}}",
+    }) |content| try check(schema, .{ .bytes = try std.mem.concat(a, u8, &.{ prefix, content, "}]}" }), .rejection = .missing_required_property, .path = "/statements/0/content/kind" });
+    for ([_][]const u8{
+        "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[{\"kind\":\"literal\",\"value\":\"Display the greeting.\"}]}}",
+        "{\"kind\":\"preserved_token\",\"token_id\":{\"ordinal\":1}}",
+    }) |content| try check(schema, .{ .bytes = try std.mem.concat(a, u8, &.{ prefix, content, "}]}" }) });
+}
+
 test "compact model JSON keeps sibling objects intact and round trips native unions" {
     try roundTrip(std.testing.allocator);
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);

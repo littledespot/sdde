@@ -10,7 +10,7 @@ const values = @import("pipeline_values.zig");
 pub const schema = values.schema(.model_payload_schema_result, Result, 1, null).captured();
 pub const Outcome = union(enum) {
     valid: *const validation.Evidence,
-    schema_rejected: validation.Rejection,
+    schema_rejected: validation.Diagnostic,
     not_validated: *const envelope.Result,
 };
 

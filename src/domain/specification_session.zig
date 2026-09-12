@@ -13,7 +13,7 @@ pub const Session = struct {
     units: [unit_count]?g.Checked = @splat(null),
     starting_ledger: @import("specification_identity.zig").Ledger = .{},
 };
-pub const Error = g.Error || packets.Error;
+pub const Error = @import("strict_json.zig").Error || g.Error || packets.Error;
 
 pub fn unit(index: usize) error{InvalidSpecificationUnit}!g.Unit {
     return switch (index) {
@@ -57,14 +57,16 @@ pub fn packet(allocator: std.mem.Allocator, current: Session, context: p.Context
         try scopes.append(a, .{ .state_id = all.state_id, .chunk_id = item.claim.chunk_id });
     }
     const projected = try @import("model_evidence.zig").project(a, claims.items);
-    const body = try std.json.Stringify.valueAlloc(a, .{
+    const payload = .{
         .unit = try unit(current.completed),
         .brief = if (current.units[0]) |checked| checked.response.content.brief else null,
         .claims = projected.claims,
         .citations = projected.citations,
-        .signals = context.references.records.signals,
+        .preserved_tokens = projected.preserved_tokens,
+        .signals = try @import("model_evidence.zig").signals(a, context.references.records.signals),
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, scopes.items),
-    }, .{});
+    };
+    const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), a, payload);
     const selected = try unit(current.completed);
     return packets.create(allocator, body, try owner(a, current), .initial_generation, .{ .bytes = switch (selected) {
         .brief => "brief",

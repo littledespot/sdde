@@ -1,4 +1,5 @@
-//! ADR 0006 model wire encoding, separate from native/persisted Zig JSON.
+//! Shared model input/response wire encoding, separate from native/persisted
+//! Zig JSON. Evidence projections remove internal validation wrappers first.
 //! Discriminated objects become native unions; strict_json remains the closed
 //! type/transport validator. No inferred variants or legacy wire reader.
 //! Decoded values belong to the caller's arena; encoded bytes are caller-owned.
@@ -10,7 +11,7 @@ pub fn decode(comptime T: type, allocator: std.mem.Allocator, bytes: []const u8)
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const parsed = try json.parse(a, bytes, limits, false);
+    const parsed = try json.parse(a, bytes, limits, false, null);
     const native = try transform(T, a, parsed.value, .native);
     const encoded = try std.json.Stringify.valueAlloc(a, native, .{});
     return json.decode(T, allocator, encoded, limits);
@@ -21,7 +22,7 @@ pub fn encode(comptime T: type, allocator: std.mem.Allocator, value: T) json.Err
     defer arena.deinit();
     const a = arena.allocator();
     const bytes = try std.json.Stringify.valueAlloc(a, value, .{});
-    const parsed = try json.parse(a, bytes, limits, false);
+    const parsed = try json.parse(a, bytes, limits, false, null);
     const wire = try transform(T, a, parsed.value, .wire);
     return std.json.Stringify.valueAlloc(allocator, wire, .{});
 }

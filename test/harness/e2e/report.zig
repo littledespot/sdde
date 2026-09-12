@@ -26,11 +26,53 @@ pub const Output = struct {
     }
 };
 
-pub fn write(io: std.Io, dir: std.Io.Dir, name: []const u8, bytes: []const u8) !void {
-    const file = try dir.createFile(io, name, .{ .exclusive = true, .permissions = .fromMode(0o600) });
-    defer file.close(io);
-    try file.writeStreamingAll(io, bytes);
-    try file.sync(io);
+/// Terminal and Markdown share the same parser diagnostic projection.
+pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8, run: []const u8) ![]const u8 {
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    defer out.deinit();
+    const writer = &out.writer;
+    try writer.print("E2E result: {s}\n", .{@tagName(report.status)});
+    const fields = [_]struct { label: []const u8, value: ?[]const u8 }{
+        .{ .label = "Model step", .value = report.last_model_step },
+        .{ .label = "Engine/harness error", .value = report.diagnostic },
+        .{ .label = "Provider error", .value = report.provider_diagnostic },
+        .{ .label = "Model validation error", .value = report.model_diagnostic },
+        .{ .label = "Evidence capture error", .value = report.evidence_error },
+    };
+    for (fields) |field| if (field.value) |value| {
+        try writer.print("{s}: ", .{field.label});
+        // JSON escaping prevents model/config text from injecting terminal controls.
+        try std.json.Stringify.value(value, .{}, writer);
+        try writer.writeByte('\n');
+    };
+    if (report.candidate_error) |diagnostic| {
+        try writeCandidateError(writer, diagnostic);
+        try writer.writeAll("\n\n");
+    }
+    if (report.schema_error) |diagnostic| {
+        try writer.writeAll("Schema validation: ");
+        try std.json.Stringify.value(diagnostic, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    if (report.json_error) |diagnostic| {
+        try writeJsonError(writer, diagnostic);
+        try writer.writeByte('\n');
+    }
+    if (report.last_model_output) |path| try writer.print("Model output: {s}/{s}/{s}\n", .{ root, run, path });
+    if (report.events_file) |path| try writer.print("Events: {s}/{s}/{s}\n", .{ root, run, path });
+    try writer.print("Report: {s}/{s}/report.md\nDetails: {s}/{s}/report.json\n", .{ root, run, root, run });
+    return out.toOwnedSlice();
+}
+
+fn writeCandidateError(writer: *std.Io.Writer, diagnostic: @import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic) !void {
+    try writer.writeAll("Candidate validation: ");
+    try std.json.Stringify.value(diagnostic, .{}, writer);
+}
+
+fn writeJsonError(writer: *std.Io.Writer, diagnostic: @import("../../../src/domain/strict_json.zig").Diagnostic) !void {
+    try writer.print("JSON error: {s}", .{@tagName(diagnostic.reason)});
+    if (diagnostic.location) |position|
+        try writer.print(" at line {d}, column {d} (byte offset {d})", .{ position.line, position.column, position.byte_offset });
 }
 
 /// Human view of the same structured report; it introduces no workflow verdict.
@@ -55,7 +97,31 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     try escape(writer, report.provider_diagnostic orelse "none");
     try writer.writeAll("; model validation: ");
     try escape(writer, report.model_diagnostic orelse "none");
-    try writer.print(".\n\nModel calls: {d}. Accounted tokens: {d}. Usage complete: {}.\n\n", .{ report.model_calls, report.total_tokens, report.usage_complete });
+    try writer.writeAll(".\n\n");
+    if (report.candidate_error) |diagnostic| {
+        try writeCandidateError(writer, diagnostic);
+        try writer.writeAll("\n\n");
+    }
+    if (report.schema_error) |diagnostic| {
+        try writer.writeAll("Schema validation: ");
+        try std.json.Stringify.value(diagnostic, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    if (report.json_error) |diagnostic| {
+        try writeJsonError(writer, diagnostic);
+        try writer.writeAll("\n\n");
+    }
+    if (report.last_model_output) |path| {
+        try writer.print("Rejected or completed model output: [open text]({s}). This is untrusted diagnostic data.\n\n", .{path});
+    }
+    if (report.events_file) |path| try writer.print("Every step and validation result: [events]({s}).\n\n", .{path});
+    if (report.evidence_root) |path| try writer.print("Model-call inputs and responses: [{s}/]({s}/).\n\n", .{ path, path });
+    if (report.evidence_error) |reason| {
+        try writer.writeAll("Evidence capture failed: ");
+        try escape(writer, reason);
+        try writer.writeAll(". This run has incomplete evidence.\n\n");
+    }
+    try writer.print("Model calls: {d}. Accounted tokens: {d}. Usage complete: {}.\n\n", .{ report.model_calls, report.total_tokens, report.usage_complete });
     if (report.last_model_usage) |usage| try writer.print("Last model call: {d} input + {d} output = {d} tokens.\n\n", .{ usage.input_tokens, usage.output_tokens, usage.total_tokens });
     for (report.models) |model| {
         try writer.writeAll("Generation slot ");

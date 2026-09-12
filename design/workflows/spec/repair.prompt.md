@@ -1,5 +1,4 @@
-Replace only the engine-selected field or record identified by repair.target.
-Use the supplied claims, citation joins and exact-copy token references.
-Correct the reported mechanical rule; preserve the business meaning and all siblings.
+Replace only the engine-selected unit in repair.target.
+Correct repair.rule using the supplied evidence and allowed IDs.
+Preserve business meaning and all other data.
 Return only the replacement matching repair.expected and the selected schema.
-Do not return targets, IDs, revisions, paths, decisions or completion assertions.

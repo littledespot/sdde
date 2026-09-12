@@ -461,6 +461,25 @@ fail. An empty classification collection is valid only for a response whose
 chunk has no candidates. `no_feature_claim` may classify candidates irrelevant,
 but cannot preserve any.
 
+Compiled graphs retain a fixed 512-step capacity, including expanded subgraph
+instances; the Specify definition uses 264 steps with both repair paths. This
+capacity is independent of operation retry limits and the workflow token budget.
+
+The reference-ingestion policy permits a distinct `invalid` terminal outcome.
+The validator publishes `invalid` with the chunk scope, candidate revision,
+`token_classifications` field and all missing, duplicate, unknown or forbidden
+candidate IDs. Invalid source authority remains a failure. A repair authorization
+selects only that chunk's classification collection; the model cannot change
+claims, source bytes, other chunks or the target. The replacement uses the
+existing extraction schema's `classification_replacement` definition, which
+references the same classification schema as generation. After compare-and-swap
+merge, classification validation runs again before the ordinary claim and full
+ledger checks. The text-validated candidate and classification result use captured retention,
+like specification repair: descendants retain candidate evidence while current
+source/policy generations remain in their authority lineage. Retiring an old
+repair slot cannot invalidate its retained evidence, and changing source authority
+still blocks later gates. This is an in-memory candidate repair, not a source correction.
+
 Each preserved value produces one claim through the ordinary claim/citation
 pipeline. The final ledger binds its exact scalar to its citation ID and derives
 the downstream obligation identity from the token identity. Final accounting
@@ -965,7 +984,15 @@ stable diagnostic order. The engine retains its owner, revision and old value;
 the model returns only the replacement. Merge preserves siblings, increments
 revision and repeats unit validation. Assembly revalidates all units, checks
 conditional entities and assigns IDs before coverage and final authority review.
-YAML's repair operation has an explicit bounded ceiling; exhaustion fails.
+Classification collections and specification fields/records use the same
+`atomic_repair.Contract`: immutable authorization IDs bind owner, revision,
+target, expected value and validator rule; response parsing verifies the exact
+repair packet, and merge checks the old value before incrementing the revision.
+Native domain actions only select and apply their typed units. Both paths use
+the existing `model-request` subgraph and one replacement prompt. JSON/schema
+protocol retry remains separate from semantic repair.
+YAML's repair operations each have an explicit bounded ceiling; exhaustion fails.
+Only the workflow's cumulative actual token budget limits model tokens.
 No missing knowledge is replaced with a default or treated as deterministic proof.
 
 `test-specification-generation` and configured-root fake-provider tests cover

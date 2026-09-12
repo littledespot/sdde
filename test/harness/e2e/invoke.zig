@@ -5,7 +5,7 @@ const fixture = @import("fixture.zig");
 const root = @import("../../../src/composition/root.zig");
 const values = @import("../../../src/application/pipeline_values.zig");
 
-pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, selected: c.Case, captured: fixture.Capture, key: ?[]const u8, report: *c.Report) !?[]const u8 {
+pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, selected: c.Case, captured: fixture.Capture, key: ?[]const u8, store: @import("../evidence.zig").Store, report: *c.Report) !?[]const u8 {
     var toolchain = @import("../../../src/adapters/filesystem/toolchain_authority_source.zig").Adapter.init(io, project);
     var parser: @import("../../../src/adapters/parsers/toolchain_documents.zig").Adapter = .{};
     var reference: @import("../../../src/adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project };
@@ -60,9 +60,22 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     invocation.provider_clock = clock.clock();
     invocation.provider_runtime = &provider_runtime;
 
-    // Exactly one ordinary invocation. No scenario loop or substituted selection
-    // callbacks, and no call to the regression driver's run/step methods.
-    const result = @import("../../../src/application/workflow_engine_orchestrator.zig").run(invocation.bindings());
+    var trace = try @import("trace.zig").Trace.init(store, &invocation);
+    defer trace.close();
+    report.events_file = "events.jsonl";
+    report.evidence_root = "evidence";
+    // One production invocation. The observer forwards every selection, step
+    // and HTTPS exchange unchanged, retaining diagnostic evidence as it occurs.
+    const result = @import("../../../src/application/workflow_engine_orchestrator.zig").run(trace.port());
+    if (trace.calls != 0) {
+        report.last_model_call = trace.calls;
+        if (trace.output_written) report.last_model_output = try @import("../evidence.zig").Store.path(allocator, .generation, trace.calls, .model_output);
+    }
+    if (trace.failure) |failure| {
+        report.status = .harness_error;
+        report.evidence_error = @errorName(failure);
+        return error.EvidenceCaptureFailed;
+    }
     report.workflow_outcome = result.executionStatus();
     switch (result) {
         .execution => |outcome| if (outcome != .ok) {

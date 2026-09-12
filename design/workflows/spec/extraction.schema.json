@@ -153,6 +153,94 @@
         "ordinal"
       ],
       "additionalProperties": false
+    },
+    "token_classifications": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "preserve"
+              },
+              "preserve": {
+                "type": "object",
+                "properties": {
+                  "token_candidate_id": {
+                    "$ref": "#/$defs/token_candidate_id"
+                  },
+                  "kind": {
+                    "enum": [
+                      "visual_color",
+                      "visual_spacing",
+                      "visual_dimension",
+                      "visual_typography",
+                      "visual_radius",
+                      "visual_shadow",
+                      "visual_motion",
+                      "business_exact_string",
+                      "numeric_constraint",
+                      "exact_identifier"
+                    ]
+                  }
+                },
+                "required": [
+                  "token_candidate_id",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "kind",
+              "preserve"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "irrelevant"
+              },
+              "source_id": {
+                "$ref": "#/$defs/ordinal"
+              },
+              "extractor_id": {
+                "enum": [
+                  "markdown_inline_code_v1"
+                ]
+              },
+              "ordinal": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            },
+            "required": [
+              "kind",
+              "source_id",
+              "extractor_id",
+              "ordinal"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "maxItems": 4294967295
+    },
+    "classification_replacement": {
+      "type": "object",
+      "properties": {
+        "token_classifications": {
+          "$ref": "#/$defs/token_classifications"
+        }
+      },
+      "required": [
+        "token_classifications"
+      ],
+      "additionalProperties": false
     }
   },
   "oneOf": [
@@ -363,80 +451,7 @@
           "maxItems": 4294967295
         },
         "token_classifications": {
-          "type": "array",
-          "items": {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "preserve"
-                  },
-                  "preserve": {
-                    "type": "object",
-                    "properties": {
-                      "token_candidate_id": {
-                        "$ref": "#/$defs/token_candidate_id"
-                      },
-                      "kind": {
-                        "enum": [
-                          "visual_color",
-                          "visual_spacing",
-                          "visual_dimension",
-                          "visual_typography",
-                          "visual_radius",
-                          "visual_shadow",
-                          "visual_motion",
-                          "business_exact_string",
-                          "numeric_constraint",
-                          "exact_identifier"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "token_candidate_id",
-                      "kind"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "required": [
-                  "kind",
-                  "preserve"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "irrelevant"
-                  },
-                  "source_id": {
-                    "$ref": "#/$defs/ordinal"
-                  },
-                  "extractor_id": {
-                    "enum": [
-                      "markdown_inline_code_v1"
-                    ]
-                  },
-                  "ordinal": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 4294967295
-                  }
-                },
-                "required": [
-                  "kind",
-                  "source_id",
-                  "extractor_id",
-                  "ordinal"
-                ],
-                "additionalProperties": false
-              }
-            ]
-          },
-          "maxItems": 4294967295
+          "$ref": "#/$defs/token_classifications"
         }
       },
       "required": [
@@ -469,80 +484,7 @@
           "additionalProperties": false
         },
         "token_classifications": {
-          "type": "array",
-          "items": {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "preserve"
-                  },
-                  "preserve": {
-                    "type": "object",
-                    "properties": {
-                      "token_candidate_id": {
-                        "$ref": "#/$defs/token_candidate_id"
-                      },
-                      "kind": {
-                        "enum": [
-                          "visual_color",
-                          "visual_spacing",
-                          "visual_dimension",
-                          "visual_typography",
-                          "visual_radius",
-                          "visual_shadow",
-                          "visual_motion",
-                          "business_exact_string",
-                          "numeric_constraint",
-                          "exact_identifier"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "token_candidate_id",
-                      "kind"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "required": [
-                  "kind",
-                  "preserve"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "irrelevant"
-                  },
-                  "source_id": {
-                    "$ref": "#/$defs/ordinal"
-                  },
-                  "extractor_id": {
-                    "enum": [
-                      "markdown_inline_code_v1"
-                    ]
-                  },
-                  "ordinal": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 4294967295
-                  }
-                },
-                "required": [
-                  "kind",
-                  "source_id",
-                  "extractor_id",
-                  "ordinal"
-                ],
-                "additionalProperties": false
-              }
-            ]
-          },
-          "maxItems": 4294967295
+          "$ref": "#/$defs/token_classifications"
         }
       },
       "required": [

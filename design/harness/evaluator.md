@@ -106,6 +106,11 @@ or a fallback from failed native mode. No tools, `maxTokens`, truncation or
 provider-specific retry policy is added. Stopped and malformed output never
 becomes a grade; validated usage is retained even when content is rejected.
 
+Both evaluator providers reuse the engine's
+[universal JSON framing instruction](../decisions/0014-universal-response-format-guidance.md)
+once per serialized request. There is no evaluator-specific copy of the framing
+text. The rubric and native-derived schema retain their existing authority.
+
 Attempt identity is a closed `unavailable` / `openai_response` / `bedrock_target`
 union. OpenAI retains the response's ID and actual model; Bedrock retains only
 the exact requested model/region plus the HTTP request ID when present. Converse

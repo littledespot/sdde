@@ -168,8 +168,10 @@ Unknown, duplicate or mixed-form keywords reject, including `$schema`, `$id`,
 external references, nested definitions, recursive schemas, `anyOf`, `allOf`, `not`, conditionals,
 type arrays, `number`, regex/pattern/format rules, annotations and defaults.
 No schema fetch, coercion, ignored keyword or provider fallback is permitted.
-Guidance and examples remain explicitly declared workflow resources, not
-implicit schema annotations. Decoded duplicate property names and duplicate
+Task guidance and examples remain explicitly declared workflow resources, not
+implicit schema annotations. [ADR 0014](0014-universal-response-format-guidance.md)
+adds the engine-owned JSON framing instruction shared by every model request.
+Decoded duplicate property names and duplicate
 required/enum/kind values also reject, including equivalent JSON escapes.
 
 The compiler reuses the existing 1,048,576-byte workflow-resource ceiling and

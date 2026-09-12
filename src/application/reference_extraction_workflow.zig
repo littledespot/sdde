@@ -10,7 +10,8 @@ const pipeline = @import("../domain/pipeline.zig");
 
 pub const raw_schema = values.schema(.raw_reference_extraction, owned.Value, 1, null);
 pub const parsed_schema = values.schema(.parsed_reference_extraction, owned.Value, 1, null);
-pub const text_schema = values.schema(.text_validated_reference_extraction, owned.Value, 1, null);
+// Repair retains this immutable candidate; source/policy lineage stays current.
+pub const text_schema = values.schema(.text_validated_reference_extraction, owned.Value, 1, null).captured();
 pub const validated_schema = values.schema(.validated_reference_claims, owned.Value, 1, null);
 pub const assigned_schema = values.schema(.reference_claim_identities, owned.Value, 1, null);
 pub const ledger_schema = values.schema(.reference_extraction_ledger, owned.Value, 1, null);

@@ -86,6 +86,7 @@ test "complete specification sessions preserve unit order provenance and conditi
             const unit = try sessions.unit(current.completed);
             const packet = try sessions.packet(std.testing.allocator, current, fixture.context);
             defer @import("domain/model_input_packet.zig").release(packet);
+            try @import("reference_model_input_test.zig").checkProjectedPacket(a, packet.body());
             try std.testing.expect(std.mem.indexOf(u8, packet.body(), "principles") == null);
             const response: g.Response = .{ .content = switch (unit) {
                 .brief => .{ .brief = .{ .title = value, .description = value, .primary_goal = value } },
@@ -296,6 +297,7 @@ test "atomic specification repair preserves siblings and rejects stale or foreig
         try std.testing.expect(authorization.target == .description);
         const packet = try repair.packet(std.testing.allocator, current, fixture.context, authorization);
         defer packets.release(packet);
+        try @import("reference_model_input_test.zig").checkProjectedPacket(a, packet.body());
         const replacement: repair.Replacement = .{ .attributed = good };
         const wire = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement);
         const parsed = try repair.parse(a, authorization, packet, wire);
@@ -306,21 +308,21 @@ test "atomic specification repair preserves siblings and rejects stale or foreig
         try std.testing.expectEqualDeep(bad, candidate.response.content.brief.description);
         _ = try g.validate(a, text.validator, fixture.context, .brief, merged.response);
         try std.testing.expectError(error.InvalidSpecificationRepair, repair.authorize(a, text.validator, fixture.context, current, merged));
-        try std.testing.expectError(error.InvalidSpecificationRepair, repair.merge(a, current, merged, authorization, parsed));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, current, merged, authorization, parsed));
         var changed = candidate;
         changed.response.content.brief.description = good;
-        try std.testing.expectError(error.InvalidSpecificationRepair, repair.merge(a, current, changed, authorization, parsed));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, current, changed, authorization, parsed));
         var foreign = current;
         foreign.feature.bytes = "another-feature";
-        try std.testing.expectError(error.InvalidSpecificationRepair, repair.merge(a, foreign, candidate, authorization, parsed));
-        try std.testing.expectError(error.InvalidSpecificationRepair, repair.packet(a, foreign, fixture.context, authorization));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, foreign, candidate, authorization, parsed));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.packet(a, foreign, fixture.context, authorization));
         var wrong_id = authorization;
         wrong_id.id.bytes = "foreign-repair";
-        try std.testing.expectError(error.InvalidSpecificationRepair, repair.parse(a, wrong_id, packet, try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement)));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.parse(a, wrong_id, packet, try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement)));
         const with_target = try std.fmt.allocPrint(a, "{{\"target\":\"title\",{s}", .{wire[1..]});
-        try std.testing.expectError(error.InvalidSpecificationRepair, repair.parse(a, authorization, packet, with_target));
+        try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, with_target));
         const with_sibling = try std.fmt.allocPrint(a, "{{\"record\":{{}},{s}", .{wire[1..]});
-        try std.testing.expectError(error.InvalidSpecificationRepair, repair.parse(a, authorization, packet, with_sibling));
+        try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, with_sibling));
         const still_invalid = try repair.merge(a, current, candidate, authorization, .{ .attributed = bad });
         try std.testing.expectError(error.InvalidReferenceReconciliation, g.validate(a, text.validator, fixture.context, .brief, still_invalid.response));
     }
@@ -347,7 +349,7 @@ test "record repair selects one duplicate without changing IDs or valid sibling 
         const merged = try repair.merge(a, current, proposed, authorization, .{ .record = replacement });
         try std.testing.expectEqualDeep(record, merged.response.content.records[0]);
         _ = try g.validate(a, text.validator, fixture.context, .{ .records = kind }, merged.response);
-        try std.testing.expectError(error.InvalidSpecificationRepair, repair.merge(a, current, proposed, authorization, .{ .attributed = value }));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, current, proposed, authorization, .{ .attributed = value }));
     }
 }
 

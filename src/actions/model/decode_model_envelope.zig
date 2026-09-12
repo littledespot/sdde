@@ -12,7 +12,7 @@ pub const Action = struct {
         .side_effect = .none,
     };
 
-    pub fn execute(_: Action, allocator: std.mem.Allocator, complete: *const invocation.CompleteCandidate) envelope.Error!envelope.Owned {
-        return envelope.decode(allocator, complete);
+    pub fn execute(_: Action, allocator: std.mem.Allocator, complete: *const invocation.CompleteCandidate, diagnostic: ?*?envelope.Diagnostic) envelope.Error!envelope.Owned {
+        return envelope.decode(allocator, complete, diagnostic);
     }
 };

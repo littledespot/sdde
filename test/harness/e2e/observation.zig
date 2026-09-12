@@ -30,6 +30,7 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
         }
     }
     const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+    report.candidate_error = if (try @import("../../../src/application/candidate_validation_diagnostics.zig").read(&view)) |diagnostic| try diagnostic.copy(allocator) else null;
     if (view.slots[@intFromEnum(requests.prepared_schema.key)] != null) {
         const request = try requests.readCurrent(&view, requests.prepared_schema);
         report.last_model_step = try allocator.dupe(u8, request.binding().operation_id.workflow_step_id.bytes);
@@ -72,7 +73,10 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
             if (view.slots[@intFromEnum(envelope.schema.key)] != null) {
                 const result = try values.read(&view, envelope.schema, envelope.Result);
                 if (result.source().operationId().model_request_id == request.id()) switch (result.outcome()) {
-                    .protocol_rejected => |reason| report.model_diagnostic = @errorName(reason),
+                    .protocol_rejected => |rejection| {
+                        report.model_diagnostic = @errorName(rejection.reason);
+                        report.json_error = rejection.diagnostic;
+                    },
                     .decoded, .not_decoded => {},
                 };
             }
@@ -80,7 +84,10 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
             if (view.slots[@intFromEnum(payload.schema.key)] != null) {
                 const result = try values.read(&view, payload.schema, payload.Result);
                 if (result.source().source().operationId().model_request_id == request.id()) switch (result.outcome()) {
-                    .schema_rejected => |reason| report.model_diagnostic = @tagName(reason),
+                    .schema_rejected => |diagnostic| {
+                        report.model_diagnostic = @tagName(diagnostic.reason);
+                        report.schema_error = try diagnostic.describe(allocator);
+                    },
                     .valid, .not_validated => {},
                 };
             }

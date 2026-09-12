@@ -14,6 +14,8 @@ pub const Options = struct {
     repair: bool = false,
     failed_repair: bool = false,
     omit_exact: bool = false,
+    missing_classifications: bool = false,
+    failed_classification_repair: bool = false,
     entities_required: bool = false,
     generation_gap: bool = false,
 };
@@ -26,9 +28,13 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
             const selected_chunk = try r.evidence.resolve(inputs, .{ .state_id = .{ .bytes = scope.reference_state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } });
             const chunk = selected_chunk.chunk;
             const candidates = (try values.read(&view, @import("../application/structured_token_workflow.zig").candidates_schema, r.extraction.tokens.Candidates)).*;
+            if (request.id().purpose == .atomic_repair) {
+                const choices = if (options.failed_classification_repair) &.{} else try @import("reference_tokens.zig").classifications(allocator, candidates, chunk);
+                return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/token_classification_repair.zig").Replacement, allocator, .{ .classifications = .{ .token_classifications = choices } });
+            }
             const claim = if (options.script) |script| (try @import("specification_script.zig").extraction(script, selected_chunk.bytes)).claim else try std.fmt.allocPrint(allocator, "The outcome from reference unit {s} is observable.", .{chunk.id.bytes});
             const body = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = claim } }} } }, .citations = &.{.{ .source_id = chunk.source_id, .block_id = chunk.block_id, .location = chunk.span, .verbatim = selected_chunk.bytes }} }}, .token_classifications = &.{} } });
-            return @import("reference_tokens.zig").wire(allocator, body, try @import("reference_tokens.zig").classifications(allocator, candidates, chunk));
+            return @import("reference_tokens.zig").wire(allocator, body, if (options.missing_classifications) &.{} else try @import("reference_tokens.zig").classifications(allocator, candidates, chunk));
         },
         .reference_global => {
             const input = (try native.read(&view, @import("../application/reference_reconciliation_workflow.zig").input_schema, .reconciliation_input)).payload().reconciliation_input;

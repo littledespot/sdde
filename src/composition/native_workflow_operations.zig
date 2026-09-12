@@ -29,6 +29,7 @@ const identity_source = @import("../ports/reference_state_identity.zig");
 const extraction = @import("../application/reference_extraction_workflow.zig");
 const path_tokens = @import("../application/path_token_workflow.zig");
 const passive_literals = @import("../application/passive_literal_workflow.zig");
+const token_repair = @import("../application/token_classification_repair_workflow.zig");
 const structured_tokens = @import("../application/structured_token_workflow.zig");
 const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
 const authority = @import("../application/required_authority_workflow.zig");
@@ -91,6 +92,10 @@ pub const Assembly = struct {
     extract_structured_facts: structured_tokens.Extract,
     assign_token_candidates: structured_tokens.AssignCandidates,
     validate_token_classifications: structured_tokens.Validate,
+    authorize_token_repair: token_repair.Authorize,
+    build_token_repair: token_repair.BuildInput,
+    parse_token_repair: token_repair.Parse,
+    merge_token_repair: token_repair.Merge,
     assign_preserved_tokens: structured_tokens.AssignTokens,
     build_preserved_claims: structured_tokens.BuildClaims,
     build_reconciliation_items: reconciliation.BuildItems,
@@ -155,7 +160,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 110 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 114 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -204,6 +209,10 @@ pub const Assembly = struct {
             .extract_structured_facts = .{ .allocator = allocator },
             .assign_token_candidates = .{ .allocator = allocator },
             .validate_token_classifications = .{ .allocator = allocator },
+            .authorize_token_repair = .{ .allocator = allocator },
+            .build_token_repair = .{ .allocator = allocator },
+            .parse_token_repair = .{ .allocator = allocator },
+            .merge_token_repair = .{ .allocator = allocator },
             .assign_preserved_tokens = .{ .allocator = allocator },
             .build_preserved_claims = .{ .allocator = allocator },
             .build_reconciliation_items = .{ .allocator = allocator },
@@ -337,6 +346,10 @@ pub const Assembly = struct {
             entry(structured_tokens.Extract, &self.extract_structured_facts),
             entry(structured_tokens.AssignCandidates, &self.assign_token_candidates),
             entry(structured_tokens.Validate, &self.validate_token_classifications),
+            entry(token_repair.Authorize, &self.authorize_token_repair),
+            entry(token_repair.BuildInput, &self.build_token_repair),
+            entry(token_repair.Parse, &self.parse_token_repair),
+            entry(token_repair.Merge, &self.merge_token_repair),
             entry(structured_tokens.AssignTokens, &self.assign_preserved_tokens),
             entry(structured_tokens.BuildClaims, &self.build_preserved_claims),
             entry(reconciliation.BuildItems, &self.build_reconciliation_items),
@@ -406,7 +419,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation.schemas ++ authority.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ token_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write },
@@ -435,7 +448,7 @@ const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig")
 }, .{
     .id = "core.reference-ingestion@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser },
-    .allowed_terminal_outcomes = &.{ .ok, .blocked, .failed, .cancelled },
+    .allowed_terminal_outcomes = &.{ .ok, .invalid, .blocked, .failed, .cancelled },
     .total_model_token_budget = .{ .value = 100_000 },
 } };
 

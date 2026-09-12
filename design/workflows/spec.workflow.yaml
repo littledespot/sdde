@@ -265,7 +265,27 @@ steps:
     use: validate-preserved-token-classifications
     on:
       ok: assign-tokens
+      invalid: authorize-token-repair
       failed: end.failed
+  authorize-token-repair:
+    use: authorize-token-classification-repair
+    on: { ok: token-repair-input, invalid: end.invalid, failed: end.failed }
+  token-repair-input:
+    use: build-token-classification-repair-input
+    on: { ok: token-repair, failed: end.failed }
+  token-repair:
+    call: model-request
+    with: { prompt: repair-prompt, schema: extraction-schema, selection: input, retry-limit: 1 }
+    on: { ok: parse-token-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled }
+  parse-token-repair:
+    use: parse-token-classification-repair
+    on: { ok: merge-token-repair, invalid: end.invalid, failed: end.failed }
+  merge-token-repair:
+    use: merge-token-classification-repair
+    on: { ok: token-repair-release, invalid: end.invalid, failed: end.failed }
+  token-repair-release:
+    call: release-request
+    on: { ok: classify-tokens, failed: end.failed }
   assign-tokens:
     use: assign-preserved-token-identities
     on:

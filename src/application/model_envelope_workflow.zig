@@ -8,9 +8,13 @@ const data = @import("../domain/pipeline_data.zig");
 const values = @import("pipeline_values.zig");
 
 pub const schema = values.schema(.model_envelope_result, Result, 1, null).captured();
+pub const Rejection = struct {
+    reason: envelope.Rejection,
+    diagnostic: envelope.Diagnostic,
+};
 pub const Outcome = union(enum) {
     decoded: *const envelope.Candidate,
-    protocol_rejected: envelope.Rejection,
+    protocol_rejected: Rejection,
     not_decoded: *const observation.Result,
 };
 
@@ -57,9 +61,10 @@ pub const Decode = struct {
             .outcome = switch (source.outcome()) {
                 .validated => |evidence| switch (evidence.result()) {
                     .complete => |complete| decoded: {
-                        const parsed = self.action.execute(self.allocator, complete) catch |err| break :decoded switch (err) {
+                        var diagnostic: ?envelope.Diagnostic = null;
+                        const parsed = self.action.execute(self.allocator, complete, &diagnostic) catch |err| break :decoded switch (err) {
                             error.OutOfMemory => return error.OperationExecutionFailed,
-                            error.InvalidModelEnvelope => .{ .protocol_rejected = error.InvalidModelEnvelope },
+                            error.InvalidModelEnvelope => .{ .protocol_rejected = .{ .reason = error.InvalidModelEnvelope, .diagnostic = diagnostic orelse return error.OperationExecutionFailed } },
                         };
                         break :decoded .{ .decoded = parsed };
                     },
@@ -95,7 +100,7 @@ const Owner = struct {
     allocator: std.mem.Allocator,
     retained: *data.Value,
     source: *const observation.Result,
-    outcome: union(enum) { decoded: envelope.Owned, protocol_rejected: envelope.Rejection, not_decoded },
+    outcome: union(enum) { decoded: envelope.Owned, protocol_rejected: Rejection, not_decoded },
 
     fn view(self: *const Owner) *const Result {
         return @ptrCast(self);

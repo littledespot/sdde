@@ -501,8 +501,9 @@ test "model decoding consumes sealed complete evidence and exposes only immutabl
     try std.testing.expect(decoder.contract.side_effect == .none);
     try std.testing.expect(decoder.contract.runner_accounting == .none);
     const execute = @typeInfo(@TypeOf(decoder.execute)).@"fn";
-    try std.testing.expectEqual(@as(usize, 3), execute.params.len);
+    try std.testing.expectEqual(@as(usize, 4), execute.params.len);
     try std.testing.expect(execute.params[2].type.? == *const validated.CompleteCandidate);
+    try std.testing.expect(execute.params[3].type.? == ?*?decoded.Diagnostic);
     inline for (.{ decoded.Candidate, decoded.Object, decoded.Array }) |T| {
         switch (@typeInfo(T)) {
             .@"opaque" => {},
@@ -544,7 +545,9 @@ test "payload validation uses only the retained schema and produces allocation-f
     try std.testing.expect(execute.params[1].type.? == *const envelope.Candidate);
     try std.testing.expect(execute.return_type.? == validation.Result);
     try std.testing.expect(@FieldType(validation.Result, "valid") == *const validation.Evidence);
-    try std.testing.expect(@FieldType(validation.Result, "invalid") == validation.Rejection);
+    try std.testing.expect(@FieldType(validation.Result, "invalid") == validation.Diagnostic);
+    try std.testing.expect(@FieldType(validation.Diagnostic, "reason") == validation.Rejection);
+    try std.testing.expect(@FieldType(validation.Diagnostic, "expected") == *const @import("domain/model_result_schema.zig").Node);
     try std.testing.expectEqual(@as(usize, 2), @typeInfo(validation.Result).@"union".fields.len);
     switch (@typeInfo(validation.Evidence)) {
         .@"opaque" => {},
@@ -719,6 +722,7 @@ test "YAML decoding reuses the pure decoder without schema validation or account
     try std.testing.expect(@typeInfo(native.Result) == .@"opaque");
     try std.testing.expect(@FieldType(native.Outcome, "decoded") == *const @import("domain/model_envelope.zig").Candidate);
     try std.testing.expect(@FieldType(native.Outcome, "not_decoded") == *const @import("application/provider_observation_workflow.zig").Result);
+    try std.testing.expect(@FieldType(native.Rejection, "diagnostic") == @import("domain/model_envelope.zig").Diagnostic);
     try std.testing.expect(native.schema.maximum_bytes == null);
     const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(native.Decode, &.{});
     try std.testing.expect(capabilities.valid and !capabilities.model_provider and !capabilities.provider_authorization);
@@ -1883,4 +1887,22 @@ fn countOccurrences(source: []const u8, needle: []const u8) usize {
         remaining = remaining[index + needle.len ..];
     }
     return count;
+}
+
+test "classification and specification repair share authority and expose only native replacement operations" {
+    const binding = @import("application/workflow_operation_binding.zig");
+    const tokens = @import("application/token_classification_repair_workflow.zig");
+    const spec = @import("application/specification_repair_workflow.zig");
+    inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge }) |T| {
+        try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
+        try std.testing.expectEqual(.none, T.Action.contract.side_effect);
+    }
+    inline for (.{ @embedFile("domain/token_classification_repair.zig"), @embedFile("domain/specification_repair.zig") }) |source| {
+        try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic_repair.zig"));
+        try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic.checkMerge("));
+        try expectAbsent(source, "candidate.revision + 1");
+        try expectAbsent(source, "retry_limit");
+    }
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.text_validated_reference_extraction}, tokens.Merge.Action.contract.replaces);
+    try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .ok, .invalid, .failed }, &@import("application/structured_token_workflow.zig").Validate.outcomes);
 }

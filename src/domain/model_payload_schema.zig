@@ -2,21 +2,12 @@ const std = @import("std");
 const envelope = @import("model_envelope.zig");
 const schema = @import("model_result_schema.zig");
 
-pub const Rejection = enum {
-    type_mismatch,
-    missing_required_property,
-    unknown_property,
-    string_length,
-    integer_range,
-    array_length,
-    constant_mismatch,
-    enum_mismatch,
-    unknown_variant,
-};
+pub const Rejection = @import("model_schema_diagnostic.zig").Reason;
+pub const Diagnostic = @import("model_schema_diagnostic.zig").Diagnostic;
 
 pub const Result = union(enum) {
     valid: *const Evidence,
-    invalid: Rejection,
+    invalid: Diagnostic,
 };
 
 /// A schema-valid view of the original candidate, not semantic correctness,
@@ -36,39 +27,39 @@ pub fn validate(candidate: *const envelope.Candidate) Result {
 
 // Traversal is bounded by the already compiled schema and captured response.
 // Only the schema compiler owns shape, variant uniqueness and structural limits.
-fn validateValue(value: envelope.Value, node: *const schema.Node) ?Rejection {
+fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnostic {
     switch (node.*) {
         .object => |properties| {
-            if (value != .object) return .type_mismatch;
+            if (value != .object) return reject(.type_mismatch, node);
             const object = value.object;
-            if (object.count() > properties.len) return .unknown_property;
             for (0..object.count()) |index| {
-                if (schema.findProperty(properties, object.at(index).?.name) == null) return .unknown_property;
+                const name = object.at(index).?.name;
+                if (schema.findProperty(properties, name) == null) return (reject(.unknown_property, node)).property(name);
             }
             for (properties) |property| {
                 const child = object.get(property.name) orelse {
-                    if (property.required) return .missing_required_property;
+                    if (property.required) return (reject(.missing_required_property, node)).property(property.name);
                     continue;
                 };
-                if (validateValue(child, property.schema)) |reason| return reason;
+                if (validateValue(child, property.schema)) |diagnostic| return diagnostic.within(.{ .property = property.name });
             }
         },
         .string => |bounds| {
-            if (value != .string) return .type_mismatch;
+            if (value != .string) return reject(.type_mismatch, node);
             // The decoder has already proven complete Unicode strings.
             const length = std.unicode.utf8CountCodepoints(value.string) catch unreachable;
-            if (length < bounds.minimum or length > bounds.maximum) return .string_length;
+            if (length < bounds.minimum or length > bounds.maximum) return reject(.string_length, node);
         },
         .integer => |bounds| {
-            if (value != .number) return .type_mismatch;
+            if (value != .number) return reject(.type_mismatch, node);
             const number = exactInteger(value.number) catch |err| return switch (err) {
-                error.NotInteger => .type_mismatch,
-                error.IntegerOutOfRange => .integer_range,
+                error.NotInteger => reject(.type_mismatch, node),
+                error.IntegerOutOfRange => reject(.integer_range, node),
             };
-            if (number < bounds.minimum or number > bounds.maximum) return .integer_range;
+            if (number < bounds.minimum or number > bounds.maximum) return reject(.integer_range, node);
         },
-        .boolean => if (value != .boolean) return .type_mismatch,
-        .null_value => if (value != .null_value) return .type_mismatch,
+        .boolean => if (value != .boolean) return reject(.type_mismatch, node),
+        .null_value => if (value != .null_value) return reject(.type_mismatch, node),
         .constant => |expected| {
             const matches = switch (expected) {
                 .string => |text| value == .string and std.mem.eql(u8, value.string, text),
@@ -76,35 +67,39 @@ fn validateValue(value: envelope.Value, node: *const schema.Node) ?Rejection {
                 .boolean => |boolean| value == .boolean and value.boolean == boolean,
                 .null_value => value == .null_value,
             };
-            if (!matches) return .constant_mismatch;
+            if (!matches) return reject(.constant_mismatch, node);
         },
         .enumeration => |choices| {
-            if (value != .string) return .type_mismatch;
+            if (value != .string) return reject(.type_mismatch, node);
             for (choices) |choice| {
                 if (std.mem.eql(u8, value.string, choice)) return null;
             }
-            return .enum_mismatch;
+            return reject(.enum_mismatch, node);
         },
         .array => |contract| {
-            if (value != .array) return .type_mismatch;
+            if (value != .array) return reject(.type_mismatch, node);
             const count = value.array.count();
-            if (count < contract.minimum or count > contract.maximum) return .array_length;
+            if (count < contract.minimum or count > contract.maximum) return reject(.array_length, node);
             for (0..count) |index| {
-                if (validateValue(value.array.at(index).?, contract.items)) |reason| return reason;
+                if (validateValue(value.array.at(index).?, contract.items)) |diagnostic| return diagnostic.within(.{ .index = index });
             }
         },
         .one_of => |variants| {
-            if (value != .object) return .type_mismatch;
-            const kind = value.object.get("kind") orelse return .missing_required_property;
-            if (kind != .string) return .type_mismatch;
+            if (value != .object) return reject(.type_mismatch, node);
+            const kind = value.object.get("kind") orelse return (reject(.missing_required_property, node)).property("kind");
+            if (kind != .string) return (reject(.type_mismatch, node)).property("kind");
             for (variants) |variant| {
                 const declared = schema.findProperty(variant.object, "kind").?.schema.constant.string;
                 if (std.mem.eql(u8, kind.string, declared)) return validateValue(value, variant);
             }
-            return .unknown_variant;
+            return (reject(.unknown_variant, node)).property("kind");
         },
     }
     return null;
+}
+
+fn reject(reason: Rejection, node: *const schema.Node) Diagnostic {
+    return .{ .reason = reason, .expected = node };
 }
 
 fn integerEquals(number: []const u8, expected: i64) bool {

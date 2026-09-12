@@ -3884,7 +3884,7 @@ test "YAML payload validation uses each exact compiled schema and retains the sa
         const decoded = try envelopeResult(&runner);
         try std.testing.expect(result.source() == decoded);
         if (case.rejection) |reason| {
-            try std.testing.expectEqual(reason, result.outcome().schema_rejected);
+            try std.testing.expectEqual(reason, result.outcome().schema_rejected.reason);
             try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
         } else {
             try std.testing.expect(result.outcome().valid.candidate() == decoded.outcome().decoded);
@@ -3932,7 +3932,7 @@ fn checkUnvalidatedPayload(plan: fake_provider.InvocationPlan, invalid_utf8: boo
     try std.testing.expect(result.source() == decoded);
     try std.testing.expect(result.outcome().not_validated == decoded);
     try std.testing.expectEqual(expected, runner.envelope.origins[@intFromEnum(payload_workflow.schema.key)].?.outcome);
-    if (expected == .invalid) try std.testing.expectEqual(error.InvalidModelEnvelope, decoded.outcome().protocol_rejected) else try std.testing.expect(decoded.outcome().not_decoded == try observationResult(&runner));
+    if (expected == .invalid) try std.testing.expectEqual(error.InvalidModelEnvelope, decoded.outcome().protocol_rejected.reason) else try std.testing.expect(decoded.outcome().not_decoded == try observationResult(&runner));
     try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
     try expectResponseAccounting(&runner, &fake, if (plan == .complete or plan == .stopped) 7 else 0);
 }
@@ -3972,8 +3972,8 @@ test "YAML schema evidence retains the tree request and response after all upstr
         try std.testing.expectEqualStrings(schema_bytes, request.response_schema.bytes());
         switch (result.outcome()) {
             .valid => |evidence| try std.testing.expectEqualStrings("retained", evidence.candidate().root().get("answer").?.string),
-            .schema_rejected => |reason| try std.testing.expectEqual(.missing_required_property, reason),
-            .not_validated => |source| try std.testing.expectEqual(error.InvalidModelEnvelope, source.outcome().protocol_rejected),
+            .schema_rejected => |reason| try std.testing.expectEqual(.missing_required_property, reason.reason),
+            .not_validated => |source| try std.testing.expectEqual(error.InvalidModelEnvelope, source.outcome().protocol_rejected.reason),
         }
         try std.testing.expectEqual(@as(usize, 1), fixture.authorization.destroyed_count);
     }
@@ -4059,7 +4059,7 @@ fn payloadAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph:
     }
     try std.testing.expectEqual(@as(workflow.OutcomeTag, if (body.len > 2) .ok else .invalid), outcome);
     const result = try payloadResult(&runner);
-    if (body.len > 2) try std.testing.expect(result.outcome() == .valid) else if (body.len == 2) try std.testing.expectEqual(.missing_required_property, result.outcome().schema_rejected) else try std.testing.expectEqual(error.InvalidModelEnvelope, result.outcome().not_validated.outcome().protocol_rejected);
+    if (body.len > 2) try std.testing.expect(result.outcome() == .valid) else if (body.len == 2) try std.testing.expectEqual(.missing_required_property, result.outcome().schema_rejected.reason) else try std.testing.expectEqual(error.InvalidModelEnvelope, result.outcome().not_validated.outcome().protocol_rejected.reason);
     try expectResponseAccounting(&runner, &fake, 7);
 }
 
@@ -4206,7 +4206,7 @@ test "YAML decoding returns protocol invalid for malformed duplicate non-object 
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(.invalid, harness.run());
-        try std.testing.expectEqual(error.InvalidModelEnvelope, (try envelopeResult(&runner)).outcome().protocol_rejected);
+        try std.testing.expectEqual(error.InvalidModelEnvelope, (try envelopeResult(&runner)).outcome().protocol_rejected.reason);
         try std.testing.expectEqual(.invalid, runner.envelope.origins[@intFromEnum(envelope_workflow.schema.key)].?.outcome);
         try std.testing.expectEqualStrings(bytes, (try observationResult(&runner)).outcome().validated.result().complete.content());
         try std.testing.expectEqual(@as(u128, 7), runner.tokenLedger().committed());
@@ -4367,7 +4367,7 @@ fn envelopeAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph
         try std.testing.expectEqualStrings("value", decoded.outcome().decoded.root().get("answer").?.string);
     } else {
         try std.testing.expectEqual(.invalid, outcome);
-        try std.testing.expectEqual(error.InvalidModelEnvelope, decoded.outcome().protocol_rejected);
+        try std.testing.expectEqual(error.InvalidModelEnvelope, decoded.outcome().protocol_rejected.reason);
     }
     try std.testing.expectEqual(@as(u128, 7), runner.tokenLedger().committed());
     try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);

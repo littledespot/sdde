@@ -83,6 +83,7 @@ fn textInput(json: *std.json.Stringify, request: TextRequest) !void {
         .system, .guidance => |text| try json.write(.{ .text = text }),
         .user, .evidence => {},
     };
+    try json.write(.{ .text = @import("../../domain/model_controls.zig").response_format_guidance });
     if (request.response_mode == .prompt_only) try json.write(.{ .text = request.schema });
     try json.endArray();
     try json.objectField("messages");

@@ -36,7 +36,7 @@ pub const TextValidatedResult = struct {
     token_classifications: []const tokens.Classification,
     outcome: union(enum) { claims: []const TextValidatedProposal, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
-pub const TextValidated = struct { entries: []const TextValidatedResult };
+pub const TextValidated = struct { revision: u64 = 1, entries: []const TextValidatedResult };
 pub const Classified = struct { text_validated: TextValidated, selections: []const tokens.Selected };
 pub const TokenAssignments = struct { classified: Classified, entries: []const tokens.Assignment, next_token_ordinal: u32 };
 pub const PreparedResult = struct {

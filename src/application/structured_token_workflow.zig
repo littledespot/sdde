@@ -11,7 +11,7 @@ const owned = @import("../domain/reference_candidate_value.zig");
 // Source-derived bounds only. Model candidate values use the sealed owner below.
 pub const facts_schema = values.schema(.structured_reference_facts, tokens.Facts, 1, 64 * 1024 * 1024);
 pub const candidates_schema = values.schema(.structured_token_candidates, tokens.Candidates, 1, 64 * 1024 * 1024);
-pub const classified_schema = values.schema(.classified_reference_tokens, owned.Value, 1, null);
+pub const classified_schema = values.schema(.classified_reference_tokens, owned.Value, 1, null).captured();
 pub const assigned_schema = values.schema(.preserved_token_identities, owned.Value, 1, null);
 pub const prepared_schema = values.schema(.prepared_reference_claims, owned.Value, 1, null);
 pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ facts_schema, candidates_schema, classified_schema, assigned_schema, prepared_schema };
@@ -44,6 +44,7 @@ pub const AssignCandidates = struct {
     }
 };
 pub const Validate = struct {
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     pub const Action = @import("../actions/reference/validate_preserved_token_classifications.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -54,8 +55,12 @@ pub const Validate = struct {
         const prior = try extraction_values.read(&input.step.data, extraction_values.text_schema, .text_validated);
         const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .token_classified = self.action.execute(owner.arena.allocator(), source.*, candidates.*, prior.payload().text_validated) catch return error.OperationExecutionFailed };
-        return extraction_values.publish(self.allocator, classified_schema, owner, .ok);
+        const result = self.action.execute(owner.arena.allocator(), source.*, candidates.*, prior.payload().text_validated) catch return error.OperationExecutionFailed;
+        owner.payload = switch (result) {
+            .valid => |accepted| .{ .token_classified = accepted },
+            .invalid => |diagnostic| .{ .token_classification_rejected = diagnostic },
+        };
+        return extraction_values.publish(self.allocator, classified_schema, owner, if (result == .valid) .ok else .invalid);
     }
 };
 pub const AssignTokens = struct {

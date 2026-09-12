@@ -3,7 +3,7 @@ const std = @import("std");
 const c = @import("contracts.zig");
 const configuration = @import("configuration.zig");
 
-pub fn run(io: std.Io, allocator: std.mem.Allocator, config: configuration.Config, key: []const u8, inputs: c.Capture) !@import("report.zig").Report {
+pub fn run(io: std.Io, allocator: std.mem.Allocator, config: configuration.Config, key: []const u8, inputs: c.Capture, store: ?@import("evidence.zig").Store) !@import("report.zig").Report {
     try configuration.validate(config);
     var clock: @import("../../src/adapters/system/provider_operation_clock.zig").Adapter = .{ .io = io };
     var transport: @import("../../src/adapters/provider/bedrock_http.zig").Adapter = .{ .io = io, .clock = clock.clock(), .runtime = .{} };
@@ -18,5 +18,11 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, config: configuration.Confi
         .openai_responses => |*value| value.port(),
         .bedrock_converse => |*value| value.port(),
     };
+    if (store) |destination| {
+        var trace: @import("evaluation_trace.zig").Trace = .{ .store = destination, .inner = port };
+        const result = try @import("evaluate.zig").run(io, allocator, trace.port(), config, inputs);
+        if (trace.failure != null) return error.EvidenceCaptureFailed;
+        return result;
+    }
     return @import("evaluate.zig").run(io, allocator, port, config, inputs);
 }

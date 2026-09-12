@@ -18,7 +18,6 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
     if (config.api != .bedrock_converse) return error.InvalidEvaluationContract;
     const content = [_]operation.ModelVisibleContent{
         .{ .system = packet.instructions },
-        .{ .guidance = "Return one JSON object matching the supplied result schema, without Markdown fences or additional text." },
         .{ .user = try packet.input(a, capture) },
     };
     return encoding.encodeText(a, .{
@@ -59,7 +58,10 @@ pub const Adapter = struct {
             .deadline_monotonic_ms = deadline,
         });
         var result = try response(a, received);
-        if (received == .received) result.request_id = received.received.request_id;
+        if (received == .received) {
+            result.request_id = received.received.request_id;
+            result.response_body = received.received.body;
+        }
         // Converse has no response/model identity fields. Record only the
         // exact transport target; do not invent an echoed model or response ID.
         result.identity = .{ .bedrock_target = .{ .model = self.model.bytes, .region = self.region } };
@@ -76,7 +78,7 @@ pub fn response(a: std.mem.Allocator, received: transport.Response) std.mem.Allo
         .service_unavailable, .transport_failed => .provider_failed,
         .response_invalid, .exact_token_count_unavailable => .invalid_response,
     } };
-    var parsed = strict.parse(a, received.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else .{ .failure = .invalid_response };
+    var parsed = strict.parse(a, received.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else .{ .failure = .invalid_response };
     defer parsed.deinit();
     const decoded = decoding.decodeConverse(parsed.value) catch return .{ .failure = .invalid_response };
     return switch (decoded.output) {

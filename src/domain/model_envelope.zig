@@ -5,6 +5,7 @@ const json = @import("strict_json.zig");
 
 pub const Rejection = error{InvalidModelEnvelope};
 pub const Error = Rejection || std.mem.Allocator.Error;
+pub const Diagnostic = json.Diagnostic;
 
 /// Read-only views of the one parsed tree. Numbers retain their exact JSON
 /// lexemes: decoding neither rounds them nor decides schema type/range validity.
@@ -80,16 +81,19 @@ const Storage = struct {
     parsed: std.json.Parsed(std.json.Value),
 };
 
-pub fn decode(allocator: std.mem.Allocator, complete: *const invocation.CompleteCandidate) Error!Owned {
+pub fn decode(allocator: std.mem.Allocator, complete: *const invocation.CompleteCandidate, diagnostic: ?*?Diagnostic) Error!Owned {
     const association = complete.association();
     var parsed = json.parse(allocator, complete.content(), .{
         .maximum_depth = schema.max_json_depth,
-    }, false) catch |err| return switch (err) {
+    }, false, diagnostic) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         error.InvalidJsonDocument => error.InvalidModelEnvelope,
     };
     errdefer parsed.deinit();
-    if (parsed.value != .object) return error.InvalidModelEnvelope;
+    if (parsed.value != .object) {
+        if (diagnostic) |out| out.* = .{ .reason = .ExpectedObject };
+        return error.InvalidModelEnvelope;
+    }
     const state = try allocator.create(Storage);
     state.* = .{ .association = association, .parsed = parsed };
     return .{ .allocator = allocator, .candidate = @ptrCast(state) };

@@ -1347,6 +1347,12 @@ authority is implicit.
 
 ### 12.2 Initial guidance packet
 
+Every model request includes the short engine-owned JSON framing instruction
+defined by [ADR 0014](decisions/0014-universal-response-format-guidance.md), once
+per serialized call. It applies to all workflows, response modes and retries.
+Task guidance and the exact result schema remain workflow-selected; the schema
+alone defines the permitted response fields and values.
+
 Each generation request contains only what the current unit needs:
 
 [View the Initial guidance packet sample](code.md#initial-guidance-packet).
@@ -4047,12 +4053,18 @@ The engine never trusts a model field such as `valid: true`.
 
 ### 22.6 Unparseable output
 
-When no IR exists because the model output cannot be decoded, no atomic pointer is available. The YAML-declared protocol-retry operation permits one narrowly defined response-level retry containing:
+When a model response fails JSON decoding or its bound result schema, no valid
+IR is available. The YAML-declared protocol-retry operation permits one narrowly
+defined response-level retry containing:
 
 - the original schema;
-- decoder diagnostics only;
+- the exact rejected response, retained through its original invocation
+  association and supplied as untrusted evidence;
+- decoder position or schema rejection reason and JSON Pointer;
 - no request to reconsider semantics;
-- one valid minimal example.
+- schema-derived shape examples. Syntax examples include an array item when
+  permitted, so nested fields remain visible. Schema rejections show the
+  rejected shape's alternatives. Example values supply no business facts.
 
 When that protocol-retry operation instance's explicit compiler-validated
 `retry-limit` is exhausted, the unit fails with

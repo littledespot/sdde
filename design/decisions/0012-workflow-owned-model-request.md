@@ -21,8 +21,10 @@ resources and content; they do not rebind to their own step or repeat selection
 parameters. The existing data-dependency compiler proves the required handoff.
 There is no new route registry, implicit graph or YAML transport syntax.
 The internal request content contract is `model-request/v1`; it is not a second
-YAML schema resource. Prompt content and the result schema remain explicitly
-workflow-selected, never packaged defaults.
+YAML schema resource. Task prompt content and the result schema remain explicitly
+workflow-selected, never packaged defaults. [ADR 0014](0014-universal-response-format-guidance.md)
+adds one engine-owned response-framing instruction to every serialized request;
+it does not select task content or a schema.
 
 [ADR 0013](0013-workflow-input-reuse.md) adds the optional originating parameter
 `result-selection: input` (default `resource`). It resolves the native packet's

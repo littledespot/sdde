@@ -6,7 +6,7 @@ const p = @import("specification_provenance.zig");
 const spec = @import("specification.zig");
 const packets = @import("model_input_packet.zig");
 const r = @import("reference_reconciliation.zig");
-pub const Error = a.Error || p.Error || packets.Error;
+pub const Error = @import("strict_json.zig").Error || a.Error || p.Error || packets.Error;
 pub const Review = struct { entries: []const Finding };
 pub const Finding = struct {
     requirement_ordinal: u32,
@@ -25,7 +25,8 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context
     const slots = try scratch.alloc(struct { ordinal: u32, requirement: a.Id, permitted_not_applicable: ?a.Rule }, ledger.requirements.len);
     for (ledger.requirements, slots, 0..) |requirement, *slot, index| slot.* = .{ .ordinal = try r.ordinal(index), .requirement = requirement.seed.id, .permitted_not_applicable = if (requirement.registered_policy) |policy| policy.not_applicable else null };
     const projected = try @import("model_evidence.zig").project(scratch, all.entries);
-    const body = try std.json.Stringify.valueAlloc(scratch, .{ .requirements = slots, .candidate = inputs.specification, .brief = inputs.brief, .claims = projected.claims, .citations = projected.citations, .signals = context.references.records.signals, .conflicts = context.references.records.conflicts }, .{});
+    const payload = .{ .requirements = slots, .candidate = inputs.specification, .brief = inputs.brief, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = try @import("model_evidence.zig").signals(scratch, context.references.records.signals), .conflicts = try @import("model_evidence.zig").conflicts(scratch, context.references.records.conflicts) };
+    const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
     return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = "source-support" } } }, .{ .semantic_review = .{ .bytes = "source-support" } }, null);
 }
 

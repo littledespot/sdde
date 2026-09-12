@@ -23,7 +23,7 @@ test "fake response decodes one compact object and preserves exact trusted assoc
         const ledger = fixture.base.ledger();
         const attempts = fixture.base.attempts.current();
         {
-            var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete);
+            var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null);
             defer decoded.deinit();
             const association = decoded.candidate.association();
             try std.testing.expect(association == validated.evidence);
@@ -52,7 +52,7 @@ test "read-only views retain decoded keys Unicode scalars arrays and objects" {
     defer response.deinit();
     var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
     defer validated.deinit();
-    var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete);
+    var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null);
     defer decoded.deinit();
     const root = decoded.candidate.root();
     try std.testing.expectEqual(@as(usize, 3), root.count());
@@ -85,7 +85,7 @@ test "decoding preserves exact numeric lexemes without rounding coercion or rang
         defer response.deinit();
         var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
         defer validated.deinit();
-        var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete);
+        var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null);
         defer decoded.deinit();
         try std.testing.expectEqualStrings(number, decoded.candidate.root().get("n").?.number);
     }
@@ -159,9 +159,9 @@ test "separate decoded candidates own their trees and retain their own associati
     defer first_validation.deinit();
     var second_validation = try (validate.Action{}).execute(std.testing.allocator, second.call, &second_response);
     defer second_validation.deinit();
-    var one = try (action.Action{}).execute(std.testing.allocator, first_validation.evidence.result().complete);
+    var one = try (action.Action{}).execute(std.testing.allocator, first_validation.evidence.result().complete, null);
     defer one.deinit();
-    var two = try (action.Action{}).execute(std.testing.allocator, second_validation.evidence.result().complete);
+    var two = try (action.Action{}).execute(std.testing.allocator, second_validation.evidence.result().complete, null);
     defer two.deinit();
     try std.testing.expect(one.candidate.association() == first_validation.evidence);
     try std.testing.expect(two.candidate.association() == second_validation.evidence);
@@ -195,12 +195,20 @@ test "every decoding allocation failure and syntax rejection frees partial trees
 }
 
 fn allocationCase(allocator: std.mem.Allocator, complete: *const invocation.CompleteCandidate, accepted: bool) !void {
-    var decoded = (action.Action{}).execute(allocator, complete) catch |err| switch (err) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.InvalidModelEnvelope => return std.testing.expect(!accepted),
+    var diagnostic: ?@import("domain/strict_json.zig").Diagnostic = null;
+    var decoded = (action.Action{}).execute(allocator, complete, &diagnostic) catch |err| switch (err) {
+        error.OutOfMemory => {
+            try std.testing.expect(diagnostic == null);
+            return error.OutOfMemory;
+        },
+        error.InvalidModelEnvelope => {
+            try std.testing.expect(diagnostic != null);
+            return std.testing.expect(!accepted);
+        },
     };
     defer decoded.deinit();
     try std.testing.expect(accepted);
+    try std.testing.expect(diagnostic == null);
     try std.testing.expect(decoded.candidate.association() == complete.association());
 }
 

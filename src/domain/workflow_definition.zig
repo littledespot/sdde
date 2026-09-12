@@ -6,7 +6,9 @@ pub const max_definitions: usize = 256;
 pub const max_definition_bytes: usize = 1_048_576;
 pub const max_resource_bytes: usize = 1_048_576;
 pub const max_total_resource_bytes: usize = 16_777_216;
-pub const max_steps: usize = 256;
+// Includes expanded subgraph instances, not only handwritten YAML steps.
+// Fixed graph storage supports complete validation/repair paths at this bound.
+pub const max_steps: usize = 512;
 pub const max_parameters: usize = 32;
 pub const max_resources: usize = 64;
 pub const max_subgraphs: usize = 32;

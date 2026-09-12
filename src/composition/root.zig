@@ -1202,7 +1202,7 @@ test "native YAML validates citations extraction and reconciliation before conti
             "  propose-extraction: { use: test.propose-extraction, on: { ok: parse-extraction } }\n" ++
             "  parse-extraction: { use: parse-reference-extraction-results, on: { ok: validate-text, failed: end.failed } }\n" ++
             "  validate-text: { use: validate-reference-extraction-text, on: { ok: validate-classifications, failed: end.failed } }\n" ++
-            "  validate-classifications: { use: validate-preserved-token-classifications, on: { ok: assign-tokens, failed: end.failed } }\n" ++
+            "  validate-classifications: { use: validate-preserved-token-classifications, on: { ok: assign-tokens, invalid: end.invalid, failed: end.failed } }\n" ++
             "  assign-tokens: { use: assign-preserved-token-identities, on: { ok: build-token-claims, failed: end.failed } }\n" ++
             "  build-token-claims: { use: build-preserved-token-claims, on: { ok: validate-claims, failed: end.failed } }\n" ++
             "  validate-claims: { use: validate-reference-claims, on: { ok: assign-claims, failed: end.failed } }\n" ++
@@ -1263,7 +1263,8 @@ test "native YAML validates citations extraction and reconciliation before conti
         const expected: workflow.OutcomeTag = if (mode) |selected| switch (selected) {
             .claims, .no_claim, .passive, .preserved, .irrelevant, .reconciled => .ok,
             .blocked, .conflict => .blocked,
-            .malformed, .missing, .duplicate, .invalid_citation, .unbound, .unknown_literal, .legacy, .missing_classification, .positive_empty_preserved, .bad_reconciliation => .failed,
+            .missing_classification, .positive_empty_preserved => .invalid,
+            .malformed, .missing, .duplicate, .invalid_citation, .unbound, .unknown_literal, .legacy, .bad_reconciliation => .failed,
         } else if (invalid) .failed else .ok;
         try std.testing.expectEqual(expected, result.executionStatus().?);
         try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), if (reconcile) reconciliation_producer.observed else if (mode != null) extraction_producer.observed else producer.observed);
@@ -1305,8 +1306,10 @@ test "configured specification generation YAML executes native references models
         .{ .stage = .generation, .shape = .empty, .persistent = true },
         .{ .stage = .repair, .shape = .empty, .persistent = true },
     };
-    for (0..14 + faults.len) |scenario| {
-        const fault: ?@TypeOf(faults[0]) = if (scenario >= 14) faults[scenario - 14] else null;
+    const classification_repair_start = 14 + faults.len;
+    for (0..classification_repair_start + 3) |scenario| {
+        const classification_scenario = scenario >= classification_repair_start;
+        const fault: ?@TypeOf(faults[0]) = if (scenario >= 14 and !classification_scenario) faults[scenario - 14] else null;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
@@ -1361,9 +1364,20 @@ test "configured specification generation YAML executes native references models
             driver.repair = selected_fault.stage == .repair;
         }
         driver.generation_gap = scenario == 12 or scenario == 13;
+        driver.missing_classifications = classification_scenario;
+        driver.malformed_classification_repair_once = scenario == classification_repair_start + 1;
+        driver.failed_classification_repair = scenario == classification_repair_start + 2;
         const result = driver.run();
-        const expected: workflow.OutcomeTag = if (scenario == 2 or scenario == 6 or (fault != null and fault.?.persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap) .needs_user else if (scenario == 7) .invalid else .ok;
+        const expected: workflow.OutcomeTag = if (scenario == 2 or scenario == 6 or driver.failed_classification_repair or (fault != null and fault.?.persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap) .needs_user else if (scenario == 7) .invalid else .ok;
         try std.testing.expectEqual(expected, result.executionStatus().?);
+        if (classification_scenario) {
+            try std.testing.expectEqual(@as(usize, if (scenario == classification_repair_start) 1 else 2), driver.classification_repair_calls);
+            const diagnostic = try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots });
+            if (driver.failed_classification_repair) {
+                try std.testing.expect(diagnostic != null and diagnostic.? == .token_classifications);
+                try std.testing.expect(diagnostic.?.token_classifications.issues.missing.len != 0);
+            } else try std.testing.expect(diagnostic == null);
+        }
         if (fault) |selected_fault| try std.testing.expectEqual(@as(usize, if (selected_fault.persistent) 2 else 1), driver.fault_calls);
         if (expected == .ok) {
             const content = try @import("../application/required_authority_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/required_authority_workflow.zig").content_schema, .content);
@@ -1397,6 +1411,18 @@ test "configured specification generation YAML executes native references models
             defer allocator.free(bytes);
             const rendered = try @import("../application/specification_values.zig").storage.read(&.{ .slots = runner.envelope.slots }, @import("../application/specification_rendering_workflow.zig").rendered_schema, .rendered);
             try std.testing.expectEqualStrings(rendered, bytes);
+            if (classification_scenario) {
+                // Capturing repaired candidates must not exempt their source
+                // authority from the ordinary stale-generation gate.
+                const source_schema = @import("../application/reference_evidence_workflow.zig").inputs_schema;
+                const pipeline_values = @import("../application/pipeline_values.zig");
+                const source = try pipeline_values.read(&.{ .slots = runner.envelope.slots }, source_schema, @import("../domain/reference_evidence.zig").Inputs);
+                var changed: pipeline.NodeDelta = .{};
+                defer runner.envelope.discard(&changed);
+                changed.data_replacements[@intFromEnum(source_schema.key)] = try pipeline_values.create(allocator, source_schema, @import("../domain/reference_evidence.zig").Inputs, source.*);
+                try runner.envelope.apply(.{ .id = "test.refresh-source", .kind = .action, .requires = &.{.citable_reference_inputs}, .produces = &.{}, .replaces = &.{.citable_reference_inputs}, .side_effect = .none }, &changed, .ok);
+                try std.testing.expectEqual(@import("../domain/workflow_gate.zig").Rejection.stale_authority, runner.envelope.checkGate(@import("../application/required_authority_workflow.zig").gate_contract).?);
+            }
         } else try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, "requirements/current/chosen/spec.md", .{}));
     }
 }

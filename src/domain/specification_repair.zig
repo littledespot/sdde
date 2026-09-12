@@ -9,16 +9,9 @@ pub const Candidate = struct { revision: u64 = 1, response: g.Response };
 pub const Target = union(enum) { title, description, primary_goal, story, entity_basis, record: usize };
 pub const Replacement = union(enum) { attributed: g.spec.AttributedValue, record: g.spec.RecordProposal };
 pub const Rule = enum { provenance, typed_text, record_kind, duplicate_record };
-pub const Authorization = struct {
-    id: @import("model_request_identity.zig").RepairAuthorizationId,
-    owner: @import("model_request_identity.zig").ImmutableUnitOwnerId,
-    unit: g.Unit,
-    revision: u64,
-    target: Target,
-    expected: Replacement,
-    rule: Rule,
-};
-pub const Error = session.Error || error{InvalidSpecificationRepair};
+const atomic = @import("atomic_repair.zig").Contract(Target, Replacement, Rule);
+pub const Authorization = atomic.Authorization;
+pub const Error = session.Error || atomic.Error || error{InvalidSpecificationRepair};
 
 pub fn authorize(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: session.Session, candidate: Candidate) Error!Authorization {
     if (candidate.revision == 0 or candidate.response != .content) return error.InvalidSpecificationRepair;
@@ -61,59 +54,29 @@ fn rule(err: p.Error) Error!Rule {
     };
 }
 fn make(allocator: std.mem.Allocator, current: session.Session, candidate: Candidate, target: Target, selected_rule: Rule) Error!Authorization {
-    return .{ .id = .{ .bytes = try std.fmt.allocPrint(allocator, "spec-repair-{d}-{d}", .{ current.completed + 1, candidate.revision }) }, .owner = try session.owner(allocator, current), .unit = try session.unit(current.completed), .revision = candidate.revision, .target = target, .expected = try select(candidate.response, target), .rule = selected_rule };
+    return atomic.authorize(allocator, try session.owner(allocator, current), candidate.revision, target, try select(candidate.response, target), selected_rule);
 }
 
 pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p.Context, authorization: Authorization) Error!*packets.Packet {
-    if (!std.meta.eql(authorization.unit, try session.unit(current.completed))) return error.InvalidSpecificationRepair;
-    if (authorization.expected == .record and authorization.unit != .records) return error.InvalidSpecificationRepair;
+    const unit = try session.unit(current.completed);
+    if (authorization.expected == .record and unit != .records) return error.InvalidSpecificationRepair;
     const base = try session.packet(allocator, current, context);
     defer packets.release(base);
-    if (!@import("model_request_identity.zig").unitOwnerEql(authorization.owner, base.unit())) return error.InvalidSpecificationRepair;
-    var arena: std.heap.ArenaAllocator = .init(allocator);
-    defer arena.deinit();
-    const scratch = arena.allocator();
-    const original = @import("strict_json.zig").decode(std.json.Value, scratch, base.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.InvalidJsonDocument => error.InvalidSpecificationRepair,
-    };
-    const expected_bytes = @import("model_candidate_json.zig").encode(Replacement, scratch, authorization.expected) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.InvalidJsonDocument => error.InvalidSpecificationRepair,
-    };
-    const expected = @import("strict_json.zig").decode(std.json.Value, scratch, expected_bytes, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.InvalidJsonDocument => error.InvalidSpecificationRepair,
-    };
-    const body = try std.json.Stringify.valueAlloc(scratch, .{ .input = original, .repair = .{ .target = authorization.target, .expected = expected, .rule = authorization.rule } }, .{});
-    return packets.create(allocator, body, base.unit(), .{ .atomic_repair = authorization.id }, .{ .bytes = switch (authorization.expected) {
+    const definition = switch (authorization.expected) {
         .attributed => "attributed",
-        .record => try std.fmt.allocPrint(scratch, "record_{s}", .{@tagName(authorization.unit.records)}),
-    } });
+        .record => try std.fmt.allocPrint(allocator, "record_{s}", .{@tagName(unit.records)}),
+    };
+    defer if (authorization.expected == .record) allocator.free(definition);
+    return atomic.packet(allocator, authorization, base, .{ .bytes = definition });
 }
 
 pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_value: *const packets.Packet, bytes: []const u8) Error!Replacement {
-    if (!@import("model_request_identity.zig").unitOwnerEql(authorization.owner, packet_value.unit())) return error.InvalidSpecificationRepair;
-    if (packet_value.purpose() != .atomic_repair or !std.mem.eql(u8, packet_value.purpose().atomic_repair.bytes, authorization.id.bytes)) return error.InvalidSpecificationRepair;
-    const result = @import("model_candidate_json.zig").decodeSelected(Replacement, allocator, std.meta.activeTag(authorization.expected), bytes) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.InvalidJsonDocument => error.InvalidSpecificationRepair,
-    };
-    if (std.meta.activeTag(result) != std.meta.activeTag(authorization.expected)) return error.InvalidSpecificationRepair;
-    return result;
+    return atomic.parse(allocator, authorization, packet_value, bytes);
 }
 
 pub fn merge(allocator: std.mem.Allocator, current: session.Session, candidate: Candidate, authorization: Authorization, replacement: Replacement) Error!Candidate {
-    if (!@import("model_request_identity.zig").unitOwnerEql(authorization.owner, try session.owner(allocator, current))) return error.InvalidSpecificationRepair;
-    if (candidate.revision != authorization.revision or !std.meta.eql(authorization.unit, try session.unit(current.completed)) or
-        std.meta.activeTag(replacement) != std.meta.activeTag(authorization.expected)) return error.InvalidSpecificationRepair;
-    const old = try std.json.Stringify.valueAlloc(allocator, try select(candidate.response, authorization.target), .{});
-    defer allocator.free(old);
-    const expected = try std.json.Stringify.valueAlloc(allocator, authorization.expected, .{});
-    defer allocator.free(expected);
-    if (!std.mem.eql(u8, old, expected)) return error.InvalidSpecificationRepair;
     var result = candidate;
-    result.revision = std.math.add(u64, candidate.revision, 1) catch return error.InvalidSpecificationRepair;
+    result.revision = try atomic.checkMerge(allocator, try session.owner(allocator, current), candidate.revision, try select(candidate.response, authorization.target), authorization, replacement);
     switch (authorization.target) {
         .title => result.response.content.brief.title = replacement.attributed,
         .description => result.response.content.brief.description = replacement.attributed,
@@ -128,6 +91,7 @@ pub fn merge(allocator: std.mem.Allocator, current: session.Session, candidate: 
     }
     return result;
 }
+
 fn select(response: g.Response, target: Target) Error!Replacement {
     if (response != .content) return error.InvalidSpecificationRepair;
     const content = response.content;

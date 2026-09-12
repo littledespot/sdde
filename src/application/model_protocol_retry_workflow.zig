@@ -19,14 +19,18 @@ pub const Build = struct {
         var delta = @import("../domain/model_transport.zig").retire(.rejected_attempt, ledger, current.id(), @import("model_payload_schema_workflow.zig").status(payload)) catch return error.OperationExecutionFailed;
         const diagnostic: @import("../domain/model_protocol_retry.zig").Diagnostic = switch (payload.outcome()) {
             .schema_rejected => |reason| .{ .schema = reason },
-            .not_validated => |source| if (source.outcome() == .protocol_rejected) .{ .decoder = .invalid_json_object } else return error.OperationExecutionFailed,
+            .not_validated => |source| if (source.outcome() == .protocol_rejected) .{ .decoder = source.outcome().protocol_rejected.diagnostic } else return error.OperationExecutionFailed,
             .valid => return error.OperationExecutionFailed,
         };
         var input_id: [64]u8 = undefined;
         const input_bytes = std.fmt.bufPrint(&input_id, "protocol-{d}", .{ledger.revision().value}) catch return error.OperationExecutionFailed;
         const source = validated.source(.{ .bytes = input_bytes }) catch return error.OperationExecutionFailed;
         const prompt = current.protocolPrompt() orelse return error.OperationExecutionFailed;
-        var prepared = self.action.execute(self.allocator, source, current.prepared() orelse return error.OperationExecutionFailed, diagnostic, prompt) catch return error.OperationExecutionFailed;
+        const observation = payload.source().source().outcome();
+        if (observation != .validated or observation.validated.result() != .complete) return error.OperationExecutionFailed;
+        const rejected = observation.validated.result().complete;
+        if (rejected.association().request() != current.prepared()) return error.OperationExecutionFailed;
+        var prepared = self.action.execute(self.allocator, source, rejected, diagnostic, prompt) catch return error.OperationExecutionFailed;
         const next = @import("../domain/model_request_handoff.zig").prepared(validated, prepared) catch {
             prepared.deinit();
             return error.OperationExecutionFailed;

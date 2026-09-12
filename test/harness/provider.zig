@@ -22,6 +22,7 @@ pub const Observation = struct {
     usage: ?report.Usage = null,
     failure: ?report.Failure = null,
     payload: ?[]const u8 = null,
+    response_body: ?[]const u8 = null,
 };
 pub const Context = opaque {};
 pub const Error = std.mem.Allocator.Error || error{Cancelled};

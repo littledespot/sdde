@@ -7,7 +7,7 @@ const reconciliation = @import("reference_reconciliation.zig");
 const literals = @import("passive_literals.zig");
 const packets = @import("model_input_packet.zig");
 const projection = @import("model_evidence.zig");
-pub const Error = packets.Error || extraction.Error;
+pub const Error = @import("strict_json.zig").Error || packets.Error || extraction.Error;
 
 pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, registry: literals.Registry, tokens: extraction.tokens.Candidates, scope: evidence.Scope) Error!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -20,14 +20,15 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
         if (!token.fact.scope.state_id.eql(scope.state_id)) return error.InvalidReferenceExtraction;
         try selected.append(scratch, projection.exactCandidate(token));
     };
-    const body = try std.json.Stringify.valueAlloc(scratch, .{
+    const payload = .{
         .source_id = chunk.chunk.source_id,
         .block_id = chunk.chunk.block_id,
         .location = chunk.chunk.span,
         .text = chunk.bytes,
         .passive_literals = try passiveChoices(scratch, registry, inputs, &.{scope}),
         .exact_candidates = selected.items,
-    }, .{});
+    };
+    const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
     return packets.create(allocator, body, .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } }, .initial_generation, null);
 }
 
@@ -39,16 +40,18 @@ pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.
     const scopes = try scratch.alloc(evidence.Scope, input.items.len);
     for (input.items, scopes) |item, *scope| scope.* = .{ .state_id = inputs.corpus.state_id, .chunk_id = item.claim.chunk_id };
     const projected = try projection.project(scratch, input.items);
-    const body = try std.json.Stringify.valueAlloc(scratch, .{
+    const payload = .{
         .purpose = input.purpose,
         .level = input.partition.group.level,
         .member_claim_ids = input.partition.group.claim_ids,
         .member_summary_ids = input.member_summary_ids,
         .claims = projected.claims,
         .citations = projected.citations,
-        .summaries = input.summaries,
+        .preserved_tokens = projected.preserved_tokens,
+        .summaries = try projection.summaries(scratch, input.summaries),
         .passive_literals = try passiveChoices(scratch, registry, inputs, scopes),
-    }, .{});
+    };
+    const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
     const slot = try std.fmt.allocPrint(scratch, "reconciliation-{d}", .{input.partition.id.ordinal});
     return packets.create(allocator, body, .{ .reference_global = .{ .reference_state_id = .{ .bytes = inputs.corpus.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = @tagName(input.purpose) });
 }

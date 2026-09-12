@@ -18,6 +18,10 @@ pub const Driver = struct {
     repair: bool = false,
     failed_repair: bool = false,
     omit_exact: bool = false,
+    missing_classifications: bool = false,
+    failed_classification_repair: bool = false,
+    malformed_classification_repair_once: bool = false,
+    classification_repair_calls: usize = 0,
     brief_uncertain: bool = false,
     entities_required: bool = false,
     generation_gap: bool = false,
@@ -48,8 +52,13 @@ pub const Driver = struct {
         defer arena.deinit();
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             self.fake.invocation_plan.complete.content = if (self.malformed or (self.malformed_once and self.calls == 0)) "{" else body;
+            const current_request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
+            if (current_request.id().immutable_unit_owner_id == .reference_chunk and current_request.id().purpose == .atomic_repair) {
+                if (self.malformed_classification_repair_once and self.classification_repair_calls == 0) self.fake.invocation_plan.complete.content = "{}";
+                self.classification_repair_calls += 1;
+            }
             if (self.fault) |fault| {
                 const request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
                 const stage: @FieldType(Fault, "stage") = switch (request.id().immutable_unit_owner_id) {

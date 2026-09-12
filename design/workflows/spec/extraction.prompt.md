@@ -1,4 +1,4 @@
-Extract claims from this source chunk only. Return the declared JSON shape.
+Extract claims from this source chunk only.
 Keep business intent separate from design, technical context and questions.
 Cite exact source/block spans; quote the cited bytes unchanged. Classify every
 exact candidate once as preserve (with its kind) or irrelevant; never rewrite

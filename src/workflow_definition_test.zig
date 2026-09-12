@@ -697,7 +697,8 @@ test "reuse expansion enforces total step bounds unused definitions and collisio
     const defs = try reusableDefinitions(a, reusable_workflow);
     const expand = @import("domain/workflow_subgraphs.zig").expand;
     var source_definition = defs[0];
-    const calls = try a.alloc(@import("domain/workflow_definition.zig").SubgraphCall, 256);
+    const maximum = @import("domain/workflow_definition.zig").max_steps;
+    const calls = try a.alloc(@import("domain/workflow_definition.zig").SubgraphCall, maximum);
     for (calls, 0..) |*call, index| {
         call.* = source_definition.calls[0];
         call.id.bytes = try std.fmt.allocPrint(a, "c{d}", .{index});
@@ -706,7 +707,7 @@ test "reuse expansion enforces total step bounds unused definitions and collisio
     source_definition.steps = &.{};
     source_definition.start_step_id = calls[0].id;
     source_definition.calls = calls;
-    try std.testing.expectEqual(@as(usize, 256), (try expand(a, source_definition)).steps.len);
+    try std.testing.expectEqual(maximum, (try expand(a, source_definition)).steps.len);
     var doubled = source_definition.subgraphs[0];
     const local_steps = try a.alloc(@import("domain/workflow_definition.zig").SubgraphStep, 2);
     local_steps[0] = doubled.steps[0];

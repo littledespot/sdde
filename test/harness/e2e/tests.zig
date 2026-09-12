@@ -108,7 +108,10 @@ test "production E2E binding honors configured models and cannot succeed without
             try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/stories.md", .data = "A library user renews a loan and sees its new due date.\n" });
         }
         var report: c.Report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
-        const output = try @import("invoke.zig").run(io, a, project.dir, choice, captured, null, &report);
+        var evidence_run = std.testing.tmpDir(.{});
+        defer evidence_run.cleanup();
+        const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_run.dir, .secrets = &.{} };
+        const output = try @import("invoke.zig").run(io, a, project.dir, choice, captured, null, store, &report);
         try std.testing.expect(output == null);
         try std.testing.expectEqual(.live, report.origin);
         try std.testing.expectEqual(.workflow_failed, report.status);
@@ -119,6 +122,9 @@ test "production E2E binding honors configured models and cannot succeed without
         try std.testing.expectEqualStrings(model, report.models[0].model);
         try std.testing.expectEqualStrings("aws-bedrock", report.models[0].provider);
         try std.testing.expectEqual(.not_evaluated, report.semantic_quality);
+        const events = try @import("../files.zig").read(io, a, evidence_run.dir, report.events_file.?);
+        try std.testing.expect(std.mem.indexOf(u8, events, "authentication_failed") != null);
+        try std.testing.expect(report.last_model_call == null);
         try std.testing.expect(report.evaluation == null);
         try std.testing.expectError(error.FileNotFound, project.dir.access(io, "specs/hello-world/spec.md", .{}));
         try fixture.verifySources(io, a, .cwd(), captured);
@@ -310,6 +316,13 @@ test "failure reports preserve separate engine provider and model evidence" {
         .diagnostic = "ENGINE_REJECTION",
         .provider_diagnostic = "output_limit",
         .model_diagnostic = "InvalidModelEnvelope",
+        .json_error = .{ .reason = .SyntaxError, .location = .{ .byte_offset = 9, .line = 2, .column = 8 } },
+        .schema_error = .{ .reason = .missing_required_property, .path = "/statements/0/content/kind" },
+        .candidate_error = .{ .token_classifications = .{
+            .scope = .{ .state_id = .{ .bytes = "current-state" }, .chunk_id = .{ .bytes = "chunk-2" } },
+            .revision = 3,
+            .issues = .{ .missing = &.{.{ .source_id = .{ .ordinal = 2 }, .extractor_id = .markdown_inline_code_v1, .ordinal = 7 }}, .duplicate = &.{}, .unknown = &.{}, .forbidden = &.{} },
+        } },
         .last_model_usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage.init(100, 512, 612).?,
     };
     try output.save(io, a, report);
@@ -318,6 +331,9 @@ test "failure reports preserve separate engine provider and model evidence" {
     try std.testing.expectEqualStrings("ENGINE_REJECTION", retained.diagnostic.?);
     try std.testing.expectEqualStrings("output_limit", retained.provider_diagnostic.?);
     try std.testing.expectEqualStrings("InvalidModelEnvelope", retained.model_diagnostic.?);
+    try std.testing.expectEqualDeep(report.json_error, retained.json_error);
+    try std.testing.expectEqualDeep(report.schema_error, retained.schema_error);
+    try std.testing.expectEqualDeep(report.candidate_error, retained.candidate_error);
     try std.testing.expectEqualStrings("run-failed", retained.execution_id.?);
     try std.testing.expectEqual(.not_evaluated, retained.semantic_quality);
     try std.testing.expect(retained.evaluation == null);
@@ -325,7 +341,39 @@ test "failure reports preserve separate engine provider and model evidence" {
     try std.testing.expect(std.mem.indexOf(u8, view, "provider stopped generation at its output limit") != null);
     try std.testing.expect(std.mem.indexOf(u8, view, "100 input + 512 output = 612 tokens") != null);
     try std.testing.expect(std.mem.indexOf(u8, view, "No rubric grade is available") != null);
+    const terminal = try @import("report.zig").terminal(a, report, "runs", "example");
+    for ([_][]const u8{ view, terminal }) |rendered|
+        try std.testing.expect(std.mem.indexOf(u8, rendered, "JSON error: SyntaxError at line 2, column 8 (byte offset 9)") != null);
+    const diagnostic = try std.json.Stringify.valueAlloc(a, report.candidate_error.?, .{});
+    for ([_][]const u8{ view, terminal }) |rendered| try std.testing.expect(std.mem.indexOf(u8, rendered, diagnostic) != null);
+    const schema_diagnostic = try std.json.Stringify.valueAlloc(a, report.schema_error.?, .{});
+    for ([_][]const u8{ view, terminal }) |rendered| try std.testing.expect(std.mem.indexOf(u8, rendered, schema_diagnostic) != null);
+    try std.testing.expect(std.mem.indexOf(u8, terminal, "runs/example/report.json") != null);
     try std.testing.expectError(error.PathAlreadyExists, @import("report.zig").Output.reserve(io, dir.dir));
+}
+
+test "evidence store retains distinct attempts excludes credentials and refuses overwrites" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const io = std.testing.io;
+    var run = std.testing.tmpDir(.{});
+    defer run.cleanup();
+    var secret: [32]u8 = undefined;
+    io.random(&secret);
+    for (&secret) |*byte| byte.* = 'A' + byte.* % 26;
+    const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = run.dir, .secrets = &.{&secret} };
+    for ([_][]const u8{ "```json\n{}\n```", "{\"unrelated\": }" }, 1..) |body, ordinal| {
+        try store.write(.generation, ordinal, .model_output, body);
+        const path = try @import("../evidence.zig").Store.path(a, .generation, ordinal, .model_output);
+        try std.testing.expectEqualStrings(body, try @import("../files.zig").read(io, a, run.dir, path));
+        try std.testing.expectError(error.PathAlreadyExists, store.write(.generation, ordinal, .model_output, "replacement"));
+    }
+    const body = try std.fmt.allocPrint(a, "{{\"echo\":\"{s}\",\"result\":42}}", .{secret});
+    try store.write(.evaluation, 1, .response, body);
+    const saved = try @import("../files.zig").read(io, a, run.dir, "evidence/evaluation/call-000001/response.json");
+    try std.testing.expect(std.mem.indexOf(u8, saved, &secret) == null);
+    try std.testing.expectEqualStrings("{\"echo\":\"[REDACTED_CREDENTIAL]\",\"result\":42}", saved);
 }
 
 test "input failure report explains environment setup and escapes untrusted labels" {

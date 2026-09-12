@@ -146,6 +146,8 @@ pub const DataKey = enum {
     specification_document,
     rendered_specification,
     validated_specification_rendering,
+    token_classification_repair_authorization,
+    token_classification_repair_result,
     specification_repair_authorization,
     specification_repair_result,
     required_authority_inputs,

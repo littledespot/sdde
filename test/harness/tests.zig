@@ -207,6 +207,9 @@ test "API request has one native-derived schema, complete data, no tools or serv
     const bytes = try wire.request(a, config, input);
     const root = try c.decode(std.json.Value, a, bytes);
     try std.testing.expectEqualStrings("scripted-judge", root.object.get("model").?.string);
+    const framing = @import("../../src/domain/model_controls.zig").response_format_guidance;
+    try std.testing.expectEqualStrings(packet.instructions ++ "\n" ++ framing, root.object.get("instructions").?.string);
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, bytes, framing));
     try std.testing.expectEqualStrings("disabled", root.object.get("truncation").?.string);
     try std.testing.expectEqual(false, root.object.get("store").?.bool);
     try std.testing.expectEqual(@as(usize, 0), root.object.get("tools").?.array.items.len);
@@ -402,11 +405,22 @@ test "Bedrock evaluation runs through concrete HTTP codecs grading and reports f
         const encoded = try @import("request.zig").encode(a, config, inputs);
         const root = try c.decode(std.json.Value, a, encoded);
         try std.testing.expectEqualStrings(packet.instructions, root.object.get("system").?.array.items[0].object.get("text").?.string);
+        const framing = @import("../../src/domain/model_controls.zig").response_format_guidance;
+        try std.testing.expectEqualStrings(framing, root.object.get("system").?.array.items[1].object.get("text").?.string);
+        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, encoded, framing));
         try std.testing.expectEqualStrings(try packet.resultSchema(a), root.object.get("system").?.array.items[2].object.get("text").?.string);
         try std.testing.expectEqualStrings(try packet.input(a, inputs), root.object.get("messages").?.array.items[0].object.get("content").?.array.items[0].object.get("text").?.string);
         try std.testing.expectEqual(@as(f64, 0.25), root.object.get("inferenceConfig").?.object.get("temperature").?.float);
         for ([_][]const u8{ "tools", "toolConfig", "outputConfig", "maxTokens", "reasoning" }) |forbidden| try std.testing.expect(std.mem.indexOf(u8, encoded, forbidden) == null);
-        const report = try evaluator.run(std.testing.io, a, adapter.port(), config, inputs);
+        var evidence_run = std.testing.tmpDir(.{});
+        defer evidence_run.cleanup();
+        const store: @import("evidence.zig").Store = .{ .io = std.testing.io, .allocator = a, .run = evidence_run.dir, .secrets = &.{&socket.canary} };
+        var trace: @import("evaluation_trace.zig").Trace = .{ .store = store, .inner = adapter.port() };
+        const report = try evaluator.run(std.testing.io, a, trace.port(), config, inputs);
+        try std.testing.expect(trace.failure == null);
+        try std.testing.expectEqualStrings(encoded, try @import("files.zig").read(std.testing.io, a, evidence_run.dir, "evidence/evaluation/call-000001/request.json"));
+        try std.testing.expectEqualStrings(body, try @import("files.zig").read(std.testing.io, a, evidence_run.dir, "evidence/evaluation/call-000001/response.json"));
+        try std.testing.expectEqualStrings(good, try @import("files.zig").read(std.testing.io, a, evidence_run.dir, "evidence/evaluation/call-000001/model_output.txt"));
         try std.testing.expectEqual(.scored, report.outcome.evaluated.assessment);
         try std.testing.expectEqual(@as(usize, 1), report.attempts.len);
         try std.testing.expectEqual(@as(u64, 30), report.attempts[0].usage.?.total_tokens);
@@ -424,6 +438,54 @@ test "Bedrock evaluation runs through concrete HTTP codecs grading and reports f
         try std.testing.expect(std.mem.endsWith(u8, socket.wire.items, encoded));
         try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, socket.wire.items, &socket.canary));
     }
+}
+
+test "evaluation trace retains failed attempts before retry and malformed judgment rejection" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const io = std.testing.io;
+    var run = std.testing.tmpDir(.{});
+    defer run.cleanup();
+    var first = observed_good;
+    first.failure = .provider_failed;
+    first.payload = null;
+    first.response_body = "untrusted provider failure body";
+    var second = observed_good;
+    second.payload = "```json\n{}\n```";
+    second.response_body = "untrusted provider completion body";
+    var fake: Fake = .{ .observations = &.{ first, second } };
+    var trace: @import("evaluation_trace.zig").Trace = .{
+        .store = .{ .io = io, .allocator = a, .run = run.dir, .secrets = &.{} },
+        .inner = fake.port(),
+    };
+    const config = try configuration.parse(a, config_bytes, test_selection);
+    const inputs = try capture(a);
+    const report = try evaluator.run(io, a, trace.port(), config, inputs);
+    try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
+    try std.testing.expectEqual(@as(usize, 2), fake.count);
+    try std.testing.expectEqual(@as(usize, 2), report.attempts.len);
+    try std.testing.expect(trace.failure == null);
+    for ([_]provider.Observation{ first, second }, 1..) |observation, ordinal| {
+        const path = try @import("evidence.zig").Store.path(a, .evaluation, ordinal, .response);
+        try std.testing.expectEqualStrings(observation.response_body.?, try @import("files.zig").read(io, a, run.dir, path));
+    }
+    try std.testing.expectEqualStrings(second.payload.?, try @import("files.zig").read(io, a, run.dir, "evidence/evaluation/call-000002/model_output.txt"));
+}
+
+test "evidence write failure prevents a new evaluator call" {
+    const io = std.testing.io;
+    var run = std.testing.tmpDir(.{});
+    defer run.cleanup();
+    try run.dir.writeFile(io, .{ .sub_path = "evidence", .data = "not a directory" });
+    var fake: Fake = .{ .observations = &.{observed_good} };
+    var trace: @import("evaluation_trace.zig").Trace = .{
+        .store = .{ .io = io, .allocator = std.testing.allocator, .run = run.dir, .secrets = &.{} },
+        .inner = fake.port(),
+    };
+    try std.testing.expectError(error.Cancelled, trace.port().invoke(std.testing.allocator, "{}", 100));
+    try std.testing.expectEqual(@as(usize, 0), fake.count);
+    try std.testing.expect(trace.failure != null);
 }
 
 test "Bedrock stop error and malformed response observations never produce a grade" {

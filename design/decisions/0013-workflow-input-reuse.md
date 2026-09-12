@@ -62,6 +62,14 @@ projection owner. Complete evidence is retained when no deterministic rule
 proves a smaller scope; there is no similarity filter, arbitrary summary,
 truncation, new model-call size gate, or weakened coverage rule.
 
+Model-facing inputs and responses use the same ADR 0006 `kind` wire codec.
+Evidence projections unwrap validated text into its existing content contract;
+native validation wrappers never become model instructions. Claims, summary
+statements and signals use the same content shape. Preserved-token content is
+an ID reference; a separate deduplicated `preserved_tokens` collection retains
+the exact value, classification and citation. Generation, review and repair
+reuse these projections without changing native or persisted authority.
+
 Workflow examples use block YAML. Prompts remain short and task-specific.
 The specification example is `spec.workflow.yaml`; its filename does not
 determine its workflow ID. Configuration, provider catalogue, toolchain and

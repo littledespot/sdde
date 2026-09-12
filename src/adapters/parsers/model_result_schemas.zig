@@ -12,7 +12,7 @@ pub const Adapter = struct {
         var parsed = json.parse(allocator, bytes, .{
             .maximum_bytes = schema.max_bytes,
             .maximum_depth = schema.max_json_depth,
-        }, true) catch |err| return switch (err) {
+        }, true, null) catch |err| return switch (err) {
             error.OutOfMemory => error.OutOfMemory,
             error.InvalidJsonDocument => error.InvalidModelResultSchema,
         };

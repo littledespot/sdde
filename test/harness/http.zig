@@ -89,11 +89,8 @@ pub const Adapter = struct {
             if (result.request_id != null or !contracts.id(header.value)) return error.InvalidEvaluationContract;
             result.request_id = try a.dupe(u8, header.value);
         };
-        if (statusFailure(@intFromEnum(response.head.status))) |failure| {
-            result.failure = failure;
-            // Error bodies and credentials are not copied into reports.
-            return;
-        }
+        const status_failure = statusFailure(@intFromEnum(response.head.status));
+        result.failure = status_failure;
         if (response.head.content_encoding != .identity) return error.InvalidEvaluationContract;
         var bytes: std.Io.Writer.Allocating = .init(a);
         defer bytes.deinit();
@@ -103,8 +100,12 @@ pub const Adapter = struct {
             error.ReadFailed => return response.bodyErr().?,
             else => return err,
         };
+        const response_body = try a.dupe(u8, bytes.written());
+        result.response_body = response_body;
+        if (status_failure != null) return;
         const request_id = result.request_id;
         result.* = try wire.response(a, bytes.written());
+        result.response_body = response_body;
         result.request_id = request_id;
     }
 };

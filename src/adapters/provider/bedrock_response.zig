@@ -19,7 +19,7 @@ fn transportFailure(cause: operation.ProviderFailureCause, delivery: operation.P
 
 pub fn count(allocator: std.mem.Allocator, response: transport.Response, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) std.mem.Allocator.Error!operation.ProviderTokenCountObservation {
     if (try errorResponse(allocator, response, id)) |rejected| return .{ .failed = rejected };
-    var parsed = strict.parse(allocator, response.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false) catch |err| return switch (err) {
+    var parsed = strict.parse(allocator, response.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         else => .{ .failed = failure(id, .exact_token_count_unavailable, .response_received) },
     };
@@ -35,7 +35,7 @@ fn decodeCount(value: std.json.Value) Invalid!u64 {
 
 pub fn inference(allocator: std.mem.Allocator, response: transport.Response, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) std.mem.Allocator.Error!operation.ProviderInvocationObservation {
     if (try errorResponse(allocator, response, id)) |rejected| return .{ .failed = rejected };
-    var parsed = strict.parse(allocator, response.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false) catch |err| return switch (err) {
+    var parsed = strict.parse(allocator, response.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         else => .{ .failed = failure(id, .response_invalid, .response_received) },
     };
@@ -143,7 +143,7 @@ pub fn classifyResponse(allocator: std.mem.Allocator, response: transport.Respon
     };
     if (received.status == 200 and received.exception == null) return null;
     const invalid = transportFailure(.response_invalid, .response_received);
-    var parsed = strict.parse(allocator, received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else invalid;
+    var parsed = strict.parse(allocator, received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else invalid;
     defer parsed.deinit();
     const cause = decodeError(parsed.value, received.status, received.exception) catch return invalid;
     return transportFailure(cause, .response_received);

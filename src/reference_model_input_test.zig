@@ -45,6 +45,7 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
     const global = try reconciliation.summaries(a, initial, context);
     const packet = try input.reconciliationPacket(allocator, global, inputs, passive.registry);
     defer packets.release(packet);
+    try checkProjectedPacket(a, packet.body());
     try std.testing.expectEqual(.reference_global, std.meta.activeTag(packet.unit()));
     try std.testing.expectEqualStrings("global", packet.resultDefinition().?.bytes);
     const projected = try @import("domain/model_evidence.zig").project(a, global.items);
@@ -57,10 +58,12 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
         try std.testing.expectEqualDeep(item.claim.id, claim.id);
         try std.testing.expectEqualDeep(item.claim.citation_ids, claim.citation_ids);
         switch (item.claim.content) {
-            .model => |value| try std.testing.expectEqualDeep(value, claim.content.model),
+            .model => |value| try std.testing.expectEqualDeep(@import("domain/model_evidence.zig").modelContent(value), claim.content.model),
             .preserved_token => |token| {
-                try std.testing.expectEqualStrings(token.value.raw_value.bytes, claim.content.preserved_token.value);
-                try std.testing.expectEqualDeep(token.value.id, claim.content.preserved_token.id);
+                try std.testing.expectEqualDeep(token.value.id, claim.content.preserved_token.token_id);
+                const copy = projected.preserved_tokens[0];
+                try std.testing.expectEqualStrings(token.value.raw_value.bytes, copy.value);
+                try std.testing.expectEqualDeep(token.value.id, copy.id);
             },
         }
         for (item.citations) |citation| {
@@ -78,6 +81,67 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
     const accounted = try reconciliation.finish(a, global, try reconciliation.global(a, global), context);
     try std.testing.expectEqual(.complete, accounted.outcome);
     try std.testing.expectEqual(extracted.ledger.claims.len, global.items.len);
+}
+
+/// The same model content must decode under the response contract wherever it
+/// appears as evidence. This checks production packet bytes, not native views.
+pub fn checkProjectedPacket(a: std.mem.Allocator, bytes: []const u8) !void {
+    const r = @import("domain/reference_reconciliation.zig");
+    const codec = @import("domain/model_candidate_json.zig");
+    const parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
+    const body = if (parsed.value.object.get("input")) |base| base.object else parsed.value.object;
+    for (body.get("claims").?.array.items) |claim| {
+        const raw = try std.json.Stringify.valueAlloc(a, claim.object.get("content").?, .{});
+        const content = try codec.decode(r.ContentProposal, a, raw);
+        if (content == .preserved_token) {
+            const id = content.preserved_token.token_id;
+            for (body.get("preserved_tokens").?.array.items) |token| {
+                if (token.object.get("id").?.object.get("ordinal").?.integer == id.ordinal) {
+                    try std.testing.expect(token.object.get("value").?.string.len != 0);
+                    break;
+                }
+            } else return error.MissingTokenEvidence;
+        }
+    }
+    if (body.get("summaries")) |summaries| for (summaries.array.items) |summary| {
+        for (summary.object.get("statements").?.array.items) |statement| {
+            _ = try codec.decode(r.ContentProposal, a, try std.json.Stringify.valueAlloc(a, statement.object.get("content").?, .{}));
+        }
+    };
+    if (body.get("signals")) |signals| for (signals.array.items) |signal| {
+        _ = try codec.decode(r.SignalProposal, a, try std.json.Stringify.valueAlloc(a, signal.object.get("value").?, .{}));
+    };
+    if (body.get("conflicts")) |conflicts| for (conflicts.array.items) |conflict| {
+        _ = try codec.decode(r.ConflictProposal, a, try std.json.Stringify.valueAlloc(a, conflict.object.get("value").?, .{}));
+    };
+    if (body.get("brief")) |brief| if (brief != .null) {
+        _ = try codec.decode(@import("domain/specification.zig").Brief, a, try std.json.Stringify.valueAlloc(a, brief, .{}));
+    };
+}
+
+test "every reference content kind projects validated text into the shared model wire contract" {
+    const r = @import("domain/reference_reconciliation.zig");
+    const projection = @import("domain/model_evidence.zig");
+    const codec = @import("domain/model_candidate_json.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    inline for (comptime std.meta.tags(r.extraction.Kind)) |kind| {
+        const value: r.Content = .{ .model = @unionInit(r.extraction.Content, @tagName(kind), switch (kind) {
+            .business, .scope_guard => .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A librarian renews a loan." } }} } },
+            else => .{ .value = .{ .nodes = &.{.{ .literal = .{ .value = "A librarian renews a loan." } }} } },
+        }) };
+        const projected = projection.content(value);
+        const wire = try codec.encode(r.ContentProposal, a, projected);
+        try std.testing.expectEqualDeep(projected, try codec.decode(r.ContentProposal, a, wire));
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
+        try std.testing.expectEqualStrings("model", parsed.value.object.get("kind").?.string);
+        const model = parsed.value.object.get("model").?.object;
+        try std.testing.expectEqualStrings(@tagName(kind), model.get("kind").?.string);
+        try std.testing.expect(model.get("value") == null);
+        const nodes = model.get(if (kind == .business or kind == .scope_guard) "segments" else "nodes").?.array.items;
+        try std.testing.expectEqualStrings("literal", nodes[0].object.get("kind").?.string);
+    }
 }
 test "extraction collection rejects missing duplicate foreign and out of order scope" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);

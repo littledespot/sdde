@@ -16,7 +16,7 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
     const Reasoning = struct { effort: []const u8 };
     return std.json.Stringify.valueAlloc(a, .{
         .model = config.model,
-        .instructions = packet.instructions,
+        .instructions = packet.instructions ++ "\n" ++ @import("../../src/domain/model_controls.zig").response_format_guidance,
         .input = [_]struct { role: []const u8, content: []const u8 }{.{ .role = "user", .content = body }},
         .text = .{ .format = .{ .type = "json_schema", .name = "rubric_judgment", .strict = true, .schema = schema } },
         .reasoning = if (config.reasoning_effort) |effort| @as(?Reasoning, .{ .effort = @tagName(effort) }) else null,
@@ -31,7 +31,7 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
 /// API envelope fields are allowlisted independently of the closed judgment
 /// schema. Unknown output kinds (including tool calls) are rejected.
 pub fn response(a: std.mem.Allocator, bytes: []const u8) c.Error!provider.Observation {
-    var parsed = strict_json.parse(a, bytes, .{ .maximum_depth = 32 }, true) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidEvaluationContract;
+    var parsed = strict_json.parse(a, bytes, .{ .maximum_depth = 32 }, true, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidEvaluationContract;
     defer parsed.deinit();
     const root = parsed.value;
     try fields(root, &.{ "id", "object", "created_at", "completed_at", "status", "background", "error", "incomplete_details", "instructions", "max_output_tokens", "max_tool_calls", "model", "output", "parallel_tool_calls", "previous_response_id", "prompt", "reasoning", "service_tier", "store", "temperature", "text", "tool_choice", "tools", "top_p", "top_logprobs", "truncation", "usage", "user", "metadata", "safety_identifier", "prompt_cache_key", "prompt_cache_retention", "context_management", "conversation", "moderation", "prompt_cache_options", "prompt_cache_diagnostics" });

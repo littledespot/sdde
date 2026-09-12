@@ -244,9 +244,9 @@ test "Bedrock projects the exact input once for both APIs without size controls 
     defer std.testing.allocator.free(infer);
     const count_body = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count);
     defer std.testing.allocator.free(count_body);
-    var first = try strict.parse(std.testing.allocator, infer, .{ .maximum_depth = 32 }, false);
+    var first = try strict.parse(std.testing.allocator, infer, .{ .maximum_depth = 32 }, false, null);
     defer first.deinit();
-    var second = try strict.parse(std.testing.allocator, count_body, .{ .maximum_depth = 32 }, false);
+    var second = try strict.parse(std.testing.allocator, count_body, .{ .maximum_depth = 32 }, false, null);
     defer second.deinit();
     const counted = second.value.object.get("input").?.object.get("converse").?;
     for ([_][]const u8{ "system", "messages" }) |name| {
@@ -256,8 +256,12 @@ test "Bedrock projects the exact input once for both APIs without size controls 
         defer std.testing.allocator.free(b);
         try std.testing.expectEqualStrings(a, b);
     }
-    try std.testing.expectEqual(@as(usize, 2), first.value.object.get("system").?.array.items.len);
-    try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), first.value.object.get("system").?.array.items[1].object.get("text").?.string);
+    try std.testing.expectEqual(@as(usize, 3), first.value.object.get("system").?.array.items.len);
+    const framing = @import("domain/model_controls.zig").response_format_guidance;
+    try std.testing.expectEqualStrings(framing, first.value.object.get("system").?.array.items[1].object.get("text").?.string);
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, infer, framing));
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, count_body, framing));
+    try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), first.value.object.get("system").?.array.items[2].object.get("text").?.string);
     try std.testing.expect(std.mem.indexOf(u8, infer, "$ref") == null);
     try std.testing.expect(std.mem.indexOf(u8, infer, "$defs") == null);
     for ([_][]const u8{ "maxTokens", "model_request_id", "binding_id", "deadline", "Authorization", "outputConfig" }) |name| {
@@ -284,12 +288,15 @@ test "Bedrock native profile proves exact representability without stripping con
         try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
         const body = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, &fixture.base.request, .inference);
         defer std.testing.allocator.free(body);
-        var parsed = try strict.parse(std.testing.allocator, body, .{ .maximum_depth = 32 }, false);
+        var parsed = try strict.parse(std.testing.allocator, body, .{ .maximum_depth = 32 }, false, null);
         defer parsed.deinit();
         const schema = parsed.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
         try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), schema);
         try std.testing.expectEqualDeep(fixture.base.request.response_schema.root().*, (try parser.compiler().compile(fixture.base.schema_arena.allocator(), schema)).root().*);
-        try std.testing.expectEqual(@as(usize, 1), parsed.value.object.get("system").?.array.items.len);
+        try std.testing.expectEqual(@as(usize, 2), parsed.value.object.get("system").?.array.items.len);
+        const framing = @import("domain/model_controls.zig").response_format_guidance;
+        try std.testing.expectEqualStrings(framing, parsed.value.object.get("system").?.array.items[1].object.get("text").?.string);
+        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, body, framing));
     }
     for ([_][]const u8{ "{\"type\":\"string\",\"maxLength\":100}", "{\"type\":\"integer\",\"minimum\":0,\"maximum\":4}", "{\"type\":\"array\",\"maxItems\":2,\"items\":{\"type\":\"boolean\"}}" }) |property| {
         const bytes = try std.fmt.allocPrint(fixture.base.schema_arena.allocator(), "{{\"type\":\"object\",\"properties\":{{\"value\":{s}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{property});
@@ -330,7 +337,7 @@ test "Bedrock reasoning effort is explicit registered and serialized only for in
             try std.testing.expectEqual(@as(usize, 1), fixture.effects());
             const bytes = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference);
             defer std.testing.allocator.free(bytes);
-            var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 32 }, false);
+            var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 32 }, false, null);
             defer parsed.deinit();
             const additional = parsed.value.object.get("additionalModelRequestFields");
             if (effort) |value| {

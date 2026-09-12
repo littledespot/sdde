@@ -41,7 +41,7 @@ fn command(init: std.process.Init) !bool {
         report.diagnostic = @errorName(err);
     };
     try output.save(io, allocator, report);
-    const message = try std.fmt.allocPrint(allocator, "E2E result: {s}\nReport: {s}/{s}/report.md\n", .{ @tagName(report.status), output_root, run.name });
+    const message = try @import("report.zig").terminal(allocator, report, output_root, &run.name);
     try std.Io.File.stdout().writeStreamingAll(io, message);
     if (report.specification) |path| try std.Io.File.stdout().writeStreamingAll(io, try std.fmt.allocPrint(allocator, "Specification: {s}/{s}/project/{s}\n", .{ output_root, run.name, path }));
     return report.status == .passed;
@@ -49,12 +49,12 @@ fn command(init: std.process.Init) !bool {
 
 fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.process.Environ.Map, case_path: []const u8, run: std.Io.Dir, project: std.Io.Dir, execution_id: []const u8, report: *c.Report) !void {
     const case_bytes = try @import("../files.zig").read(io, allocator, .cwd(), case_path);
-    try @import("report.zig").write(io, run, "case.json", case_bytes);
+    try @import("../output.zig").write(io, run, "case.json", case_bytes);
     const selected = try c.parse(allocator, case_bytes);
     report.case_id = selected.id;
     report.workflow_id = selected.workflow_id;
     const captured = try fixture.capture(io, allocator, .cwd(), selected);
-    try @import("report.zig").write(io, run, "inputs.json", try @import("../../../src/domain/canonical_json.zig").encode(fixture.Capture, allocator, captured));
+    try @import("../output.zig").write(io, run, "inputs.json", try @import("../../../src/domain/canonical_json.zig").encode(fixture.Capture, allocator, captured));
     try fixture.materialize(io, project, captured);
     const selection = @import("../environment.zig").selection(environment) catch return error.InvalidEvaluationEnvironment;
     const config = @import("../configuration.zig").parse(allocator, captured.evaluation.config_bytes, selection) catch return error.InvalidEvaluationConfiguration;
@@ -62,15 +62,18 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     const judge_key = try @import("../environment.zig").credential(environment, selection.api);
     const generation_key = try @import("../environment.zig").credential(environment, .bedrock_converse);
     try std.Io.File.stdout().writeStreamingAll(io, "Generating with the selected project's configured LLM...\n");
-    const specification = try @import("invoke.zig").run(io, allocator, project, selected, captured, generation_key, report);
+    const secrets = [_][]const u8{ generation_key, judge_key };
+    const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = allocator, .run = run, .secrets = &secrets };
+    const specification = try @import("invoke.zig").run(io, allocator, project, selected, captured, generation_key, store, report);
     if (!try verifySources(io, allocator, case_path, case_bytes, captured, report)) return;
     const published = specification orelse return;
     const inputs = try @import("evaluation.zig").inputs(allocator, report.*, captured.evaluation, published, execution_id);
     try std.Io.File.stdout().writeStreamingAll(io, "Grading the published specification against the selected rubric...\n");
-    const result = @import("../live.zig").run(io, allocator, config, judge_key, inputs) catch |err| {
+    const result = @import("../live.zig").run(io, allocator, config, judge_key, inputs, store) catch |err| {
         report.status = .evaluator_failed;
         report.semantic_quality = .evaluator_error;
         report.diagnostic = @errorName(err);
+        if (err == error.EvidenceCaptureFailed) report.evidence_error = @errorName(err);
         return;
     };
     @import("evaluation.zig").apply(report, result);

@@ -44,6 +44,10 @@ now have native YAML initialization, assignment, binding-validation and building
 operations. One request retains its originating slot/resources across steps;
 generic preparation needs no SDD feature or task. Native inference, observation
 validation, JSON decoding and payload-schema validation are YAML-callable.
+Every serialized model request includes the same short
+[JSON framing instruction](design/decisions/0014-universal-response-format-guidance.md),
+once, including retries. Task prompts and result schemas remain workflow-owned;
+strict decoding and schema validation still reject invalid model output.
 Production [Bedrock support](design/features/F0007-AWSBedrockProvider.md) is
 connected through the same port and runner. Model and region are selected in
 the external provider catalogue; API keys come only from the invocation's
@@ -89,6 +93,13 @@ later calls. Failures and cancellation remain distinct; no counting, retry,
 response decoding or lifecycle terminalization is implicit. Shared fake/Bedrock
 conformance and production-composition YAML tests exercise the same boundary.
 
+Mechanically invalid candidates can enter engine-authorized atomic repair.
+Classification collections and specification fields/records share one owner,
+revision, request-association and old-value checking contract. Repair changes only
+the selected unit, then reruns its validators and the downstream full-candidate
+checks. The workflow owns bounded repetition; no model decision grants authority.
+See [classification and repair contracts](design/features/F0100-SpecWorkflow.md#38-exact-value-preservation).
+
 `count-model-input-tokens` and `validate-model-token-count-observation` are
 parameter-free YAML bindings of the existing actions. Their typed results retain
 the original request/binding owners. `complete-count-operation` terminalizes the
@@ -118,6 +129,17 @@ original request's compiled result schema. Its parameter-free result retains the
 candidate and publishes valid evidence or typed schema rejection. Protocol errors,
 provider stops/failures and cancellation pass through unchanged. It neither
 reparses nor charges tokens; schema validity grants no semantic or commit authority.
+
+Model inputs and responses share one `kind` wire codec. Reference evidence
+projects validated text without internal wrappers; exact tokens remain ID
+references with separate value/citation evidence. The same projection serves
+reconciliation, generation, review and repair.
+
+Protocol retries retain the full rejected response as untrusted evidence and
+reuse the original schema. Diagnostics identify JSON syntax positions or exact
+schema field paths, with schema-derived examples that expose nested shapes.
+The same schema reason and JSON Pointer appear in E2E events, reports and the
+terminal. Strict validation and existing retry/token accounting still apply.
 
 `complete-provider-operation` explicitly closes an invoked inference operation
 using its validated provider observation. It takes no parameters and retains
@@ -208,6 +230,9 @@ specification substitutes for either step.
 Each invocation retains captured inputs, JSON/Markdown reports and one isolated
 project under `zig-out/e2e-spec/YYYY-MM-DDTHH-MM-SSZ-<unique-id>/`. Reports separate
 engine outcome, publication evidence, evaluator failures and semantic scores.
+`events.jsonl` records step outcomes; `evidence/` retains generation and grading
+exchanges by attempt. JSON parser errors appear in the terminal and reports
+with available positions and a link to the saved response.
 Failure or clarification cannot grade an earlier specification as fresh output.
 A completed low-scoring evaluation remains visible; the draft rubric has no
 adopted quality threshold and requires human calibration.
