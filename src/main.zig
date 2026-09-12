@@ -33,7 +33,10 @@ pub fn main(init: std.process.Init) !void {
             std.process.exit(1);
         },
         .execution_rejected => |reason| {
-            try writeFailure(init.io, reason.diagnostic());
+            if (reason == .retry_limit) {
+                const failure = reason.retry_limit;
+                try writeFailure(init.io, try std.fmt.allocPrint(init.arena.allocator(), "RetryLimitExhausted: {s}; retry-limit={d}; completed executions={d}", .{ failure.operation().bytes, failure.limit.value, failure.completed_executions }));
+            } else try writeFailure(init.io, reason.diagnostic());
             std.process.exit(1);
         },
         .invocation_invalid => {

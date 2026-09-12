@@ -11,10 +11,9 @@ const owned = @import("../domain/reference_candidate_value.zig");
 // Source-derived bounds only. Model candidate values use the sealed owner below.
 pub const facts_schema = values.schema(.structured_reference_facts, tokens.Facts, 1, 64 * 1024 * 1024);
 pub const candidates_schema = values.schema(.structured_token_candidates, tokens.Candidates, 1, 64 * 1024 * 1024);
-pub const classified_schema = values.schema(.classified_reference_tokens, owned.Value, 1, null).captured();
 pub const assigned_schema = values.schema(.preserved_token_identities, owned.Value, 1, null);
 pub const prepared_schema = values.schema(.prepared_reference_claims, owned.Value, 1, null);
-pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ facts_schema, candidates_schema, classified_schema, assigned_schema, prepared_schema };
+pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ facts_schema, candidates_schema, assigned_schema, prepared_schema };
 
 pub const Extract = struct {
     pub const Action = @import("../actions/reference/extract_structured_reference_facts.zig").Action;
@@ -43,36 +42,16 @@ pub const AssignCandidates = struct {
         return @import("workflow_candidate.zig").publish(self.allocator, candidates_schema, tokens.Candidates, result);
     }
 };
-pub const Validate = struct {
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
-    pub const Action = @import("../actions/reference/validate_preserved_token_classifications.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const source = values.read(&input.step.data, source_values.inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
-        const candidates = values.read(&input.step.data, candidates_schema, tokens.Candidates) catch return error.OperationExecutionFailed;
-        const prior = try extraction_values.read(&input.step.data, extraction_values.text_schema, .text_validated);
-        const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
-        errdefer owned.destroy(owner);
-        const result = self.action.execute(owner.arena.allocator(), source.*, candidates.*, prior.payload().text_validated) catch return error.OperationExecutionFailed;
-        owner.payload = switch (result) {
-            .valid => |accepted| .{ .token_classified = accepted },
-            .invalid => |diagnostic| .{ .token_classification_rejected = diagnostic },
-        };
-        return extraction_values.publish(self.allocator, classified_schema, owner, if (result == .valid) .ok else .invalid);
-    }
-};
 pub const AssignTokens = struct {
     pub const Action = @import("../actions/reference/assign_preserved_token_identities.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const prior = try extraction_values.read(&input.step.data, classified_schema, .token_classified);
+        const prior = try extraction_values.read(&input.step.data, extraction_values.selections_schema, .selections_validated);
         const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .tokens_assigned = self.action.execute(owner.arena.allocator(), prior.payload().token_classified) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .tokens_assigned = self.action.execute(owner.arena.allocator(), prior.payload().selections_validated) catch return error.OperationExecutionFailed };
         return extraction_values.publish(self.allocator, assigned_schema, owner, .ok);
     }
 };

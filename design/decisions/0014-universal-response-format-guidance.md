@@ -39,7 +39,8 @@ reported separately from mechanical conformance tests.
 
 - Serialized requests contain the shared instruction exactly once, including
   retries, both response modes and both evaluator providers.
-- Unrelated result schemas retain their exact schema and input bytes.
+- Unrelated result schemas retain their complete schema guidance and input bytes;
+  native generation constraints follow ADR 0006's registered projection.
 - Inference and explicit counting project the same model-visible content.
 - Malformed JSON and schema violations still reject under existing validators.
 - Live evidence retains the actual outbound instruction and returned result;

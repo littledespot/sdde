@@ -104,32 +104,6 @@
         }
       ]
     },
-    "position": {
-      "type": "object",
-      "properties": {
-        "byte": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 4294967295
-        },
-        "line": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4294967295
-        },
-        "column": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4294967295
-        }
-      },
-      "required": [
-        "byte",
-        "line",
-        "column"
-      ],
-      "additionalProperties": false
-    },
     "token_candidate_id": {
       "type": "object",
       "properties": {
@@ -239,6 +213,41 @@
       },
       "required": [
         "token_classifications"
+      ],
+      "additionalProperties": false
+    },
+    "source_selections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source_selection_replacement"
+      },
+      "maxItems": 4294967295
+    },
+    "citation_replacement": {
+      "type": "object",
+      "properties": {
+        "citations": {
+          "$ref": "#/$defs/source_selections"
+        }
+      },
+      "required": [
+        "citations"
+      ],
+      "additionalProperties": false
+    },
+    "source_selection_replacement": {
+      "type": "object",
+      "properties": {
+        "first": {
+          "$ref": "#/$defs/ordinal"
+        },
+        "last": {
+          "$ref": "#/$defs/ordinal"
+        }
+      },
+      "required": [
+        "first",
+        "last"
       ],
       "additionalProperties": false
     }
@@ -400,46 +409,7 @@
                 ]
               },
               "citations": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "source_id": {
-                      "$ref": "#/$defs/ordinal"
-                    },
-                    "block_id": {
-                      "$ref": "#/$defs/ordinal"
-                    },
-                    "location": {
-                      "type": "object",
-                      "properties": {
-                        "start": {
-                          "$ref": "#/$defs/position"
-                        },
-                        "end": {
-                          "$ref": "#/$defs/position"
-                        }
-                      },
-                      "required": [
-                        "start",
-                        "end"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "verbatim": {
-                      "type": "string",
-                      "maxLength": 4294967295
-                    }
-                  },
-                  "required": [
-                    "source_id",
-                    "block_id",
-                    "location",
-                    "verbatim"
-                  ],
-                  "additionalProperties": false
-                },
-                "maxItems": 4294967295
+                "$ref": "#/$defs/source_selections"
               }
             },
             "required": [

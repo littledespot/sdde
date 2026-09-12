@@ -310,7 +310,7 @@ explicit in the selected YAML:
 | --- | --- |
 | `parse-reference-extraction-results` | Engine-scoped raw observations → closed parsed candidates. |
 | `validate-reference-extraction-text` | Parsed candidates, current toolchain, citable inputs and source-backed literal registry → text-validated candidates (§3.7). |
-| `validate-reference-claims` | Citable inputs and prepared model/preserved-token claims → structurally validated claims. Reuses the same citation validator as §3.4. |
+| `validate-reference-claims` | Citable inputs and prepared claims → validated canonical citations or typed `invalid` selection diagnostics. Exact-token citations retain §3.4 validation. |
 | `assign-reference-claim-identities` | Validated candidates → state-local claim/citation ordinals; no model-selected IDs. |
 | `build-reference-extraction-ledger` | Assigned identities → in-memory claims, citations and chunk outcomes; binds preserved tokens to their assigned citation IDs. |
 | `validate-reference-extraction-accounting` | Citable inputs, preserved-token assignments and ledger → exact total chunk/claim/citation/token coverage, with explicit `ok` or `blocked`; malformed coverage fails. |
@@ -319,8 +319,10 @@ The current lossless-Markdown candidate body is exactly one JSON object:
 `{kind: claims, claims: [...], token_classifications: [...]}` or
 `{kind: no_feature_claim, reason: ReferenceSemanticText, token_classifications: [...]}`.
 These are shape descriptions, not literal JSON examples. Each claim has only
-`content: {kind, text}` and a nonempty `citations` collection using §3.4's typed
-proposal shape. Content kinds are `business`, `design`, `technical`,
+typed `content` and a `citations` collection of inclusive `{first, last}`
+source-line IDs supplied in the request. Missing citations are a typed repairable
+rejection. The engine reconstructs exact bytes and coordinates; no quotation or
+coordinate echo is accepted. Content kinds are `business`, `design`, `technical`,
 `validation`, `implementation_assumption`, `open_question` and `scope_guard`.
 `business` and `scope_guard` use `BusinessText`; other kinds use
 `ReferenceSemanticText`. Text validation establishes syntax and permitted
@@ -443,7 +445,7 @@ value, and an over-limit value fails explicitly.
 | --- | --- |
 | `extract-structured-reference-facts` | Current captured sources → source-ordered, citation-validated exact facts from registered extractors. |
 | `assign-structured-token-candidate-identities` | Current sources and verified complete facts → transient `(source_id, extractor_id, ordinal)` candidates. Ordinals are source/extractor-local. |
-| `validate-preserved-token-classifications` | Current candidates and text-validated responses → exactly one current chunk-local `preserve` or `irrelevant` decision per candidate. Engine-blocked chunks retain blocked candidate dispositions. |
+| `validate-reference-selections` | Current candidates and text-validated responses → complete chunk-local token classifications and valid scoped citation selections, or typed rejection. Engine-blocked chunks retain blocked candidate dispositions. |
 | `assign-preserved-token-identities` | Validated decisions → state-local token ordinals in source order; irrelevant/blocked candidates allocate none. |
 | `build-preserved-token-claims` | Token assignments → prepared deterministic claims alongside unchanged model claims, before common citation validation, claim-ID assignment and ledger construction. |
 
@@ -469,12 +471,14 @@ The reference-ingestion policy permits a distinct `invalid` terminal outcome.
 The validator publishes `invalid` with the chunk scope, candidate revision,
 `token_classifications` field and all missing, duplicate, unknown or forbidden
 candidate IDs. Invalid source authority remains a failure. A repair authorization
-selects only that chunk's classification collection; the model cannot change
-claims, source bytes, other chunks or the target. The replacement uses the
-existing extraction schema's `classification_replacement` definition, which
-references the same classification schema as generation. After compare-and-swap
-merge, classification validation runs again before the ordinary claim and full
-ledger checks. The text-validated candidate and classification result use captured retention,
+selects that chunk's classification collection, one invalid citation selection,
+or an empty claim-citation collection. The model cannot change claim meaning,
+source bytes, other selections/chunks or the target. The selected replacement schema reuses the corresponding generation definition:
+`classification_replacement`, `source_selection_replacement`, or
+`citation_replacement`. Citation requests also include the unchanged claim. After compare-and-swap
+merge, the shared reference-selection validation runs again before token and
+claim construction and full ledger checks. The text-validated candidate and
+selection result use captured retention,
 like specification repair: descendants retain candidate evidence while current
 source/policy generations remain in their authority lineage. Retiring an old
 repair slot cannot invalidate its retained evidence, and changing source authority
@@ -627,8 +631,8 @@ validators:
   `check-reference-reconciliation-purpose`,
   `collect-reference-reconciliation-result`.
 
-Each extraction packet contains one exact captured chunk, its citation span,
-scoped passive choices and token candidates. Reconciliation packets retain all
+Each extraction packet contains the complete captured chunk as lossless
+`source_lines` with request-local IDs, scoped passive choices and token candidates. Reconciliation packets retain all
 partition claim/summary membership and exact-token references. Collection checks
 the immutable request/packet association; models cannot select another chunk or
 partition. Existing domain validators still own interpretation/accounting.
@@ -652,9 +656,11 @@ not business authority. All storage is execution-local.
 `build-model-protocol-retry` retains the original request identity, schema,
 unit and provider binding. It uses the originating assignment's optional
 `protocol-prompt`, decoder/schema diagnostic and minimum schema example.
-Its explicit `retry-limit: 0` permits one correction preparation per operation
-instance; a repeated failure ends the run. YAML checks the logical request
-phase before reusing the normal provider-operation lifecycle and accounting.
+It rebuilds from the retained original inputs and latest rejection, without
+accumulating correction history. YAML checks the logical request phase before
+reusing the normal provider-operation lifecycle and accounting. The accounting
+step's configured limit and total token budget own exhaustion; the correction
+builder has no separate counter or limit (Design §22.6).
 
 Workflow schemas and the shared `model_candidate_json.zig` decoder use ADR
 0006's closed `kind` alternatives, including nested typed values. Empty, mixed

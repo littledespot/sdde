@@ -99,6 +99,10 @@ test "ledger replacement validation binds one direct successor and one exact req
     const invoked = try identity.createLifecycleSuccessor(current, current.revision(), first.model_request_id, .assigned, .invoked);
     defer identity.deinitOwner(invoked);
     const next = identity.ledger(invoked);
+    try std.testing.expectEqual(@as(usize, 1), current.indexOf(first.model_request_id).?.value);
+    try std.testing.expectEqual(current.indexOf(first.model_request_id), next.indexOf(first.model_request_id));
+    try std.testing.expectEqual(@as(usize, 2), next.indexOf(second.model_request_id).?.value);
+    try std.testing.expect(identity.ledger(first.owner).indexOf(second.model_request_id) == null);
     try identity.validateLifecycleSuccessor(current, next, first.model_request_id, .assigned, .invoked);
     try std.testing.expectEqual(.assigned, next.record(second.model_request_id).?.status);
     try std.testing.expect(next.canonicalRequestId(first.model_request_id) == first.model_request_id);
@@ -115,6 +119,7 @@ test "ledger replacement validation binds one direct successor and one exact req
     defer identity.deinitOwner(foreign);
     const foreign_request = try identity.createSuccessor(identity.ledger(foreign), .initial, .workflow_step, modelOperation("first"), .initial_generation);
     defer identity.deinitOwner(foreign_request.owner);
+    try std.testing.expect(next.indexOf(foreign_request.model_request_id) == null);
     try std.testing.expectError(error.ModelRequestRevisionConflict, identity.validateAssignmentSuccessor(identity.ledger(initial), identity.ledger(foreign_request.owner), foreign_request.model_request_id));
 }
 
@@ -172,6 +177,27 @@ test "runner assigns monotonic request identities by unit operation and purpose"
         .initial_generation,
     );
     try std.testing.expect(evidence.modelRequestId() == first);
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const ProviderOperationId = @import("domain/llm_provider_operation.zig").ProviderOperationId;
+    const original: ProviderOperationId = .{ .model_request_id = first, .model_attempt_ordinal = .{ .value = 1 }, .kind = .inference };
+    const source = Origin.from(runner.ledger().?, original).?;
+    try std.testing.expect(source.matches(runner.ledger().?, original));
+    for ([_]*const identity.ModelRequestId{ first, second, repair, other_unit }, 1..) |request, index| {
+        try std.testing.expectEqual(index, runner.ledger().?.indexOf(request).?.value);
+        var operation_id = original;
+        operation_id.model_request_id = request;
+        try std.testing.expectEqual(request == first, source.matches(runner.ledger().?, operation_id));
+    }
+    var different = original;
+    different.kind = .input_token_count;
+    try std.testing.expect(!source.matches(runner.ledger().?, different));
+    different = original;
+    different.model_attempt_ordinal.value = 2;
+    try std.testing.expect(!source.matches(runner.ledger().?, different));
+    const copied = first.*;
+    different.model_request_id = &copied;
+    try std.testing.expect(Origin.from(runner.ledger().?, different) == null);
+    try std.testing.expect(!source.matches(runner.ledger().?, different));
 }
 
 test "every closed request purpose binds its required authority" {

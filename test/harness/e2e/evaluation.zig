@@ -34,7 +34,7 @@ pub fn apply(report: *c.Report, result: @import("../report.zig").Report) void {
             report.diagnostic = @tagName(failure);
         },
         .evaluated => |judgment| {
-            report.status = if (judgment.assessment == .scored) .passed else .quality_unresolved;
+            report.status = if (judgment.assessment == .scored) .evaluated else .quality_unresolved;
             report.semantic_quality = if (judgment.assessment == .scored) .scored else .unresolved;
         },
     }

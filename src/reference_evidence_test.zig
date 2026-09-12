@@ -33,6 +33,70 @@ fn proposal(chunk: evidence.Chunk) evidence.CitationProposal {
     return .{ .source_id = chunk.source_id, .block_id = chunk.block_id, .location = chunk.span, .verbatim = null };
 }
 
+test "source selections preserve original line endings Unicode repeated text and discontiguous evidence" {
+    const selections = @import("domain/source_selections.zig");
+    for ([_][]const u8{
+        "Hello, World!\n",
+        "Café\r\n日本語\r\n",
+        "Cafe\u{301}\rrepeated\rrepeated",
+        "| key | value |\n| a | b |\n",
+        "```\ncode\n```\n",
+        "no final newline",
+        "é" ** 12000 ++ "\r\nA final line.\n",
+    }) |bytes| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var ids: IdSource = .{};
+        const inputs = try prepare(a, &ids, try read(a, "evidence.md", bytes));
+        var reconstructed: std.ArrayList(u8) = .empty;
+        for (inputs.chunks.entries, 0..) |chunk, index| {
+            const scope = proposals(inputs, index).scope;
+            const choices = try selections.project(a, inputs, scope);
+            for (choices) |choice| {
+                try reconstructed.appendSlice(a, choice.text);
+                const result = try selections.validate(a, inputs, scope, &.{.{ .first = choice.id, .last = choice.id }});
+                try std.testing.expectEqualStrings(choice.text, result.valid.entries[0].verbatim.?);
+            }
+            const whole = try selections.validate(a, inputs, scope, &.{.{ .first = choices[0].id, .last = choices[choices.len - 1].id }});
+            try std.testing.expectEqualStrings(bytes[chunk.span.start.byte..chunk.span.end.byte], whole.valid.entries[0].verbatim.?);
+            try std.testing.expectEqualDeep(chunk.span, whole.valid.entries[0].location);
+            const separate = try selections.validate(a, inputs, scope, &.{ .{ .first = choices[0].id, .last = choices[0].id }, .{ .first = choices[choices.len - 1].id, .last = choices[choices.len - 1].id } });
+            try std.testing.expectEqual(@as(usize, 2), separate.valid.entries.len);
+            try std.testing.expectEqualStrings(choices[choices.len - 1].text, separate.valid.entries[1].verbatim.?);
+        }
+        try std.testing.expectEqualStrings(bytes, reconstructed.items);
+    }
+}
+
+test "source selection diagnostics distinguish missing unknown reversed and stale scope" {
+    const selections = @import("domain/source_selections.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var ids: IdSource = .{};
+    const inputs = try prepare(a, &ids, try read(a, "shipping.md", "Accept shipments.\nReject expired permits.\n"));
+    const scope = proposals(inputs, 0).scope;
+    try std.testing.expectEqual(.missing_selection, (try selections.validate(a, inputs, scope, &.{})).invalid.reason);
+    const valid: selections.Selection = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 2 } };
+    for ([_]u32{ 0, 3, std.math.maxInt(u32) }) |ordinal| {
+        var invalid = valid;
+        invalid.last.ordinal = ordinal;
+        const result = (try selections.validate(a, inputs, scope, &.{ valid, invalid })).invalid;
+        try std.testing.expectEqual(.unknown_selection, result.reason);
+        try std.testing.expectEqual(@as(usize, 1), result.index);
+        try std.testing.expectEqualDeep(invalid, result.rejected.?);
+        try std.testing.expectEqualDeep(valid, result.available);
+    }
+    try std.testing.expectEqual(.reversed_selection, (try selections.validate(a, inputs, scope, &.{.{ .first = .{ .ordinal = 2 }, .last = .{ .ordinal = 1 } }})).invalid.reason);
+    var foreign = scope;
+    foreign.state_id.bytes = "foreign";
+    try std.testing.expectError(error.InvalidSourceCitation, selections.validate(a, inputs, foreign, &.{valid}));
+    foreign = scope;
+    foreign.chunk_id.bytes = "foreign";
+    try std.testing.expectError(error.InvalidSourceCitation, selections.project(a, inputs, foreign));
+}
+
 test "Hello World references receive citable identities with exact chunk coverage" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

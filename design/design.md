@@ -1382,10 +1382,14 @@ the schema through execution. Unsupported or unbounded schemas reject before
 provider preparation. Request construction and candidate validation reuse that
 same compiled contract.
 
-Native structured output and prompt-only guidance describe that same complete
-compact response. The engine validates the trusted call association separately
-from model-data decoding and validation. Native schema compliance, an echoed
-ID or a model claim never proves correctness or authority.
+Native structured output uses a registered structural projection of that same
+compiled schema (ADR 0006's 2026-09-12 amendment). The complete schema remains
+model guidance and the sole acceptance contract; provider-unsupported bounds
+are still enforced by the engine. Provider projections retain closed fields,
+types and disjoint alternatives and cannot be supplied by workflows or models.
+The engine validates trusted call association separately from model-data
+decoding and validation. Native schema compliance, an echoed ID or a model
+claim never proves correctness or authority.
 
 Allowed variants come from the workflow-declared result schema and selected
 generic operation. A generation operation cannot return a patch; a repair
@@ -3108,6 +3112,17 @@ Specification attribution is a separate versioned `SpecificationProvenanceState 
 
 ### 16.3 Structured facts and exact tokens
 
+Source citations in model extraction select engine-issued source-line IDs using
+an inclusive `first`/`last` range; separate ranges express discontiguous support.
+IDs are local to the immutable request's source/chunk scope. Each selectable
+unit preserves one original line, including its line ending, or the remaining
+line fragment at a chunk boundary. The engine derives exact bytes and all
+coordinates from captured source data; models supply neither quotations nor
+coordinates. Exact-token citations retain their finer extractor-owned spans.
+Canonical citation IDs are still assigned only after validation. This shared
+source-selection contract applies to every workflow using reference evidence;
+it grants no semantic approval, file permission, or execution authority.
+
 Where a parser can decide mechanically, the engine extracts facts before involving the LLM:
 
 - JSON/YAML/XML key/value leaves;
@@ -3977,6 +3992,14 @@ An atomic repair changes the smallest independently valid IR unit associated wit
 
 Atomicity means unrelated valid units cannot change.
 
+Reference extraction uses the shared replacement authorization for a chunk's
+coupled token-classification collection, one invalid source selection, or an
+empty claim-citation collection. Citation repair includes the unchanged claim
+and scoped source choices. Both selection checks run before derived claims are
+built. Merge invalidates the selection result; the same checks run again before
+token/claim construction, ledger validation and full-candidate publication.
+Missing semantic support remains an authority gap, not a selection repair.
+
 ### 22.2 Repair classification
 
 Every diagnostic declares one class:
@@ -4054,21 +4077,32 @@ The engine never trusts a model field such as `valid: true`.
 ### 22.6 Unparseable output
 
 When a model response fails JSON decoding or its bound result schema, no valid
-IR is available. The YAML-declared protocol-retry operation permits one narrowly
-defined response-level retry containing:
+IR is available. The YAML-declared protocol-retry builder prepares a narrowly
+defined response-level correction containing:
 
 - the original schema;
 - the exact rejected response, retained through its original invocation
   association and supplied as untrusted evidence;
-- decoder position or schema rejection reason and JSON Pointer;
+- decoder position and available object/key context, or schema rejection
+  reason and JSON Pointer; duplicate-field diagnostics identify the first and
+  repeated key locations without inferring a repair or accepting changed data;
 - no request to reconsider semantics;
 - schema-derived shape examples. Syntax examples include an array item when
   permitted, so nested fields remain visible. Schema rejections show the
   rejected shape's alternatives. Example values supply no business facts.
 
-When that protocol-retry operation instance's explicit compiler-validated
-`retry-limit` is exhausted, the unit fails with
-`MODEL_RESPONSE_SCHEMA_INVALID`. Whole-stage regeneration is not used.
+The builder owns no retry counter or limit. Each correction returns through the
+existing `advance-model-attempt-accounting` step, whose compiler-validated local
+limit owns further model attempts. The execution's total-token budget continues
+across all requests and corrections. Request IDs cannot reset either authority.
+Every correction starts with the original retained task/schema/evidence inputs
+and the latest rejected response and diagnostic; previous correction prompts
+are not accumulated. All attempts remain available as execution evidence.
+
+Runner retry exhaustion retains the owning compiled operation, declared limit
+and completed execution count alongside the last response diagnostic. It is a
+typed terminal rejection, never an ordinary YAML outcome that could continue
+to success. Whole-stage regeneration is not used.
 
 ### 22.7 Repair retry limit and escalation
 
@@ -4513,6 +4547,14 @@ logging actions described in Section 13.9.
 [View the feature logging pipeline](diagrams/06-feature-logging.md).
 
 Event fields include the validated four-character workflow shortcode, run/feature/stage/node IDs, parent/correlation IDs, attempt, duration, workflow model-operation/model-slot identity, token usage, diagnostic codes, repair unit kind, command ID, exit code, and evidence status. Field definitions are registry-owned and sensitive content is excluded or redacted before serialization.
+
+Candidate diagnostics retain typed rule, target, rejected value and admissible
+scope. The producing request's assignment position in the existing identity
+ledger, attempt ordinal and operation kind survive request-body release and
+join only to the current execution's operation ledger. Repair updates origin
+only for its selected replacement; untouched siblings retain their original
+call attribution. Console, event and report projections consume this evidence
+without parsing model text again or creating repair authority.
 
 Useful metrics:
 
@@ -5002,7 +5044,7 @@ The following implementation choices are accepted:
   retry selection remains explicit in compiled YAML, and
   authorization preparation is restricted to a preloaded, non-refreshing,
   no-I/O lease. Production Bedrock contracts, closed configuration, native-schema
-  representability and concrete adapters are included in F0006 completion.
+  projection and concrete adapters are included in F0006 completion.
 - [F0007](features/F0007-AWSBedrockProvider.md) implements the accepted production
   integration and environment-only credential choice: a narrow infrastructure source
   reads only `AWS_BEARER_TOKEN_BEDROCK` into an invocation-owned snapshot before

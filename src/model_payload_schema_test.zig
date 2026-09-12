@@ -13,6 +13,38 @@ const variants =
 ;
 const Case = struct { bytes: []const u8, rejection: ?validation.Rejection = null, path: ?[]const u8 = null };
 
+test "native generation projection preserves variants while full schema retains bound authority" {
+    const contract =
+        \\{"type":"object","properties":{"items":{"type":"array","minItems":2,"maxItems":3,"items":{"oneOf":[{"type":"object","properties":{"kind":{"const":"text"},"value":{"type":"string","minLength":1,"maxLength":2}},"required":["kind","value"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"count"},"value":{"type":"integer","minimum":1,"maximum":9}},"required":["kind","value"],"additionalProperties":false}]}}},"required":["items"],"additionalProperties":false}
+    ;
+    var fixture: Fixture = undefined;
+    try fixture.initWithSchema(contract);
+    defer fixture.deinit();
+    const source = fixture.resource.content.result_schema;
+    const projection = try @import("domain/model_schema_projection.zig").render(std.testing.allocator, source, .bedrock);
+    defer std.testing.allocator.free(projection);
+    var projected = try @import("domain/strict_json.zig").parse(std.testing.allocator, projection, .{ .maximum_depth = 32 }, true, null);
+    defer projected.deinit();
+    const items = projected.value.object.get("properties").?.object.get("items").?.object;
+    try std.testing.expectEqual(@as(i64, 1), items.get("minItems").?.integer);
+    const choices = items.get("items").?.object.get("anyOf").?.array.items;
+    try std.testing.expectEqual(@as(usize, 2), choices.len);
+    for (choices, [_][]const u8{ "text", "count" }) |choice, tag| {
+        try std.testing.expectEqualStrings(tag, choice.object.get("properties").?.object.get("kind").?.object.get("const").?.string);
+        try std.testing.expect(!choice.object.get("additionalProperties").?.bool);
+        try std.testing.expectEqual(@as(usize, 2), choice.object.get("required").?.array.items.len);
+    }
+    for ([_][]const u8{ "oneOf", "minLength", "maxLength", "minimum", "maximum", "maxItems" }) |keyword|
+        try std.testing.expect(std.mem.indexOf(u8, projection, keyword) == null);
+    for ([_]Case{
+        .{ .bytes = "{\"items\":[{\"kind\":\"text\",\"value\":\"ok\"},{\"kind\":\"count\",\"value\":3}]}" },
+        .{ .bytes = "{\"items\":[{\"kind\":\"count\",\"value\":3}]}", .rejection = .array_length },
+        .{ .bytes = "{\"items\":[{\"kind\":\"text\",\"value\":\"long\"},{\"kind\":\"count\",\"value\":3}]}", .rejection = .string_length },
+        .{ .bytes = "{\"items\":[{\"kind\":\"text\",\"value\":\"ok\"},{\"kind\":\"count\",\"value\":10}]}", .rejection = .integer_range },
+        .{ .bytes = "{\"items\":[{\"value\":\"ok\"},{\"kind\":\"count\",\"value\":3}]}", .rejection = .missing_required_property },
+    }) |case| try checkDocument(contract, case);
+}
+
 test "schema diagnostics identify nested fields and array indices without relaxing closed validation" {
     const contract =
         \\{"type":"object","properties":{"entries":{"type":"array","maxItems":4,"items":{"oneOf":[{"type":"object","properties":{"kind":{"const":"text"},"value":{"type":"string","maxLength":8}},"required":["kind","value"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"reference"},"id":{"type":"integer","minimum":1,"maximum":9}},"required":["kind","id"],"additionalProperties":false}]}}},"required":["entries"],"additionalProperties":false}
@@ -78,12 +110,12 @@ test "protocol retry retains exact request schema and identity and releases ever
     try other.initWithSchema(empty);
     defer other.deinit();
     source.result_resource = &other.resource;
-    try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, source, rejected, .{ .decoder = .{ .reason = .ExpectedObject } }, "Correct syntax only."));
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, source, fixture.prepared.request.content, rejected, .{ .decoder = .{ .reason = .ExpectedObject } }, "Correct syntax only."));
 }
 
 fn retryAllocation(allocator: std.mem.Allocator, fixture: *Fixture, rejected: *const @import("domain/provider_invocation_validation.zig").CompleteCandidate) !void {
     const source = try fixture.requestSource();
-    var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(allocator, source, rejected, .{ .schema = .{ .reason = .missing_required_property, .expected = fixture.prepared.request.response_schema.root() } }, "Correct syntax only.");
+    var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(allocator, source, fixture.prepared.request.content, rejected, .{ .schema = .{ .reason = .missing_required_property, .expected = fixture.prepared.request.response_schema.root() } }, "Correct syntax only.");
     defer retried.deinit();
     try std.testing.expect(retried.request.model_request_id == fixture.prepared.request.model_request_id);
     try std.testing.expect(retried.request.response_schema == fixture.prepared.request.response_schema);
@@ -104,8 +136,9 @@ test "protocol retries expose the original parser reason and position for unrela
         var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
         defer captured.deinit();
         var diagnostic: ?strict.Diagnostic = null;
+        defer if (diagnostic) |value| value.deinit(std.testing.allocator);
         try std.testing.expectError(error.InvalidJsonDocument, strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 64 }, false, &diagnostic));
-        var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), captured.evidence.result().complete, .{ .decoder = diagnostic.? }, "Correct syntax only.");
+        var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence.result().complete, .{ .decoder = diagnostic.? }, "Correct syntax only.");
         defer retried.deinit();
         const content = retried.request.content;
         var guidance = try strict.parse(std.testing.allocator, content[content.len - 2].guidance, .{ .maximum_depth = 64 }, true, null);
@@ -115,6 +148,11 @@ test "protocol retries expose the original parser reason and position for unrela
         try std.testing.expectEqualStrings(bytes, evidence.value.object.get("rejected_response").?.string);
         const supplied = guidance.value.object.get("diagnostic").?.object.get("decoder").?.object;
         try std.testing.expectEqualStrings(@tagName(diagnostic.?.reason), supplied.get("reason").?.string);
+        const context = try std.json.Stringify.valueAlloc(std.testing.allocator, diagnostic.?.context, .{});
+        defer std.testing.allocator.free(context);
+        const encoded_context = try std.json.Stringify.valueAlloc(std.testing.allocator, supplied.get("context").?, .{});
+        defer std.testing.allocator.free(encoded_context);
+        try std.testing.expectEqualStrings(context, encoded_context);
         const position = supplied.get("location").?.object;
         try std.testing.expectEqual(@as(i128, diagnostic.?.location.?.byte_offset), position.get("byte_offset").?.integer);
         try std.testing.expectEqual(@as(i128, diagnostic.?.location.?.line), position.get("line").?.integer);
@@ -137,7 +175,7 @@ test "unrelated schemas retain one universal framing instruction across initial 
         defer response.deinit();
         var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
         defer captured.deinit();
-        var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), captured.evidence.result().complete, .{ .schema = .{ .reason = .missing_required_property, .expected = fixture.prepared.request.response_schema.root() } }, "Correct syntax only.");
+        var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence.result().complete, .{ .schema = .{ .reason = .missing_required_property, .expected = fixture.prepared.request.response_schema.root() } }, "Correct syntax only.");
         defer retried.deinit();
         for ([_]*const provider.IdentifiedProviderNeutralModelRequest{ fixture.prepared.request, retried.request }) |request| {
             // Retry-owned content retains task guidance only; serialization adds framing.
@@ -404,7 +442,7 @@ pub fn checkDocument(contract: []const u8, case: Case) !void {
             const description = try result.invalid.describe(std.testing.allocator);
             defer std.testing.allocator.free(description.path);
             try std.testing.expectEqualStrings(path, description.path);
-            var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), validated.evidence.result().complete, .{ .schema = result.invalid }, "Correct syntax only.");
+            var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence.result().complete, .{ .schema = result.invalid }, "Correct syntax only.");
             defer retried.deinit();
             const parts = retried.request.content;
             var guidance = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, parts[parts.len - 2].guidance, .{});

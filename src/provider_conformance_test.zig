@@ -270,7 +270,7 @@ test "Bedrock projects the exact input once for both APIs without size controls 
     }
 }
 
-test "Bedrock native profile proves exact representability without stripping constraints or fallback" {
+test "Bedrock native projection retains complete guidance and registered mode without fallback" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .bedrock);
     defer fixture.deinit();
@@ -293,7 +293,7 @@ test "Bedrock native profile proves exact representability without stripping con
         const schema = parsed.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
         try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), schema);
         try std.testing.expectEqualDeep(fixture.base.request.response_schema.root().*, (try parser.compiler().compile(fixture.base.schema_arena.allocator(), schema)).root().*);
-        try std.testing.expectEqual(@as(usize, 2), parsed.value.object.get("system").?.array.items.len);
+        try std.testing.expectEqual(@as(usize, 3), parsed.value.object.get("system").?.array.items.len);
         const framing = @import("domain/model_controls.zig").response_format_guidance;
         try std.testing.expectEqualStrings(framing, parsed.value.object.get("system").?.array.items[1].object.get("text").?.string);
         try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, body, framing));
@@ -301,7 +301,14 @@ test "Bedrock native profile proves exact representability without stripping con
     for ([_][]const u8{ "{\"type\":\"string\",\"maxLength\":100}", "{\"type\":\"integer\",\"minimum\":0,\"maximum\":4}", "{\"type\":\"array\",\"maxItems\":2,\"items\":{\"type\":\"boolean\"}}" }) |property| {
         const bytes = try std.fmt.allocPrint(fixture.base.schema_arena.allocator(), "{{\"type\":\"object\",\"properties\":{{\"value\":{s}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{property});
         fixture.base.request.response_schema = try parser.compiler().compile(fixture.base.schema_arena.allocator(), bytes);
-        try std.testing.expect(!fixture.base.request.matchesBinding(fixture.base.provider_binding));
+        try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
+        const native = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, &fixture.base.request, .inference);
+        defer std.testing.allocator.free(native);
+        var wire = try strict.parse(std.testing.allocator, native, .{ .maximum_depth = 32 }, false, null);
+        defer wire.deinit();
+        try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), wire.value.object.get("system").?.array.items[2].object.get("text").?.string);
+        const projection = wire.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
+        for ([_][]const u8{ "maxLength", "minimum", "maximum", "maxItems" }) |unsupported| try std.testing.expect(std.mem.indexOf(u8, projection, unsupported) == null);
         fixture.base.request.response_guidance_mode = .prompt_only;
         fixture.base.provider_binding.response_mode = .prompt_only;
         try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));

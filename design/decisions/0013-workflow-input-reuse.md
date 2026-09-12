@@ -70,6 +70,12 @@ an ID reference; a separate deduplicated `preserved_tokens` collection retains
 the exact value, classification and citation. Generation, review and repair
 reuse these projections without changing native or persisted authority.
 
+The 2026-09-12 source-selection amendment replaces model-owned extraction
+quotes/coordinates with scoped source-line IDs, as defined in
+[design section 16.3](../design.md#163-structured-facts-and-exact-tokens).
+The lossless line projection replaces the packet's duplicate whole-chunk text;
+canonical citations and exact-token spans retain their existing authority.
+
 Workflow examples use block YAML. Prompts remain short and task-specific.
 The specification example is `spec.workflow.yaml`; its filename does not
 determine its workflow ID. Configuration, provider catalogue, toolchain and

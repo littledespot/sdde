@@ -24,7 +24,7 @@ fn run(allocator: std.mem.Allocator, inputs: evidence.Inputs, available: tokens.
     const parsed = try parse.execute(allocator, .{ .entries = entries });
     const assigned = try fixture.assign.execute(allocator, try fixture.classify.execute(allocator, inputs, available, try text.check(allocator, inputs, parsed)));
     const valid = try validate.execute(allocator, inputs, try fixture.build.execute(allocator, assigned));
-    const ledger = try build.execute(allocator, try assign.execute(allocator, valid));
+    const ledger = try build.execute(allocator, try assign.execute(allocator, valid.valid));
     _ = try account.execute(inputs, assigned, ledger);
     return .{ .assigned = assigned, .ledger = ledger };
 }
@@ -276,7 +276,7 @@ test "classification diagnostics retain every missing duplicate and unknown ID i
     unknown.irrelevant.ordinal = 999;
     const raw = try fixture.wire(a, token_only, &.{ duplicate, duplicate, unknown });
     const candidate = try text.check(a, inputs, try parse.execute(a, .{ .entries = &.{result(inputs, inputs.chunks.entries[0], raw)} }));
-    const checked = try (@import("actions/reference/validate_preserved_token_classifications.zig").Action{}).execute(a, inputs, available, candidate);
+    const checked = try validation.validate(a, inputs, available, candidate);
     try std.testing.expect(checked == .invalid);
     try std.testing.expectEqual(.token_classifications, checked.invalid.field);
     try std.testing.expectEqualDeep(&[_]tokens.CandidateId{ available.entries[1].id, available.entries[2].id }, checked.invalid.issues.missing);
@@ -290,7 +290,7 @@ test "classification diagnostics retain every missing duplicate and unknown ID i
 }
 
 test "atomic classification repair preserves claims and other chunks and revalidates replacement candidates" {
-    const repair = @import("domain/token_classification_repair.zig");
+    const repair = @import("domain/reference_extraction_repair.zig");
     const validation = @import("domain/token_classification_validation.zig");
     const packets = @import("domain/model_input_packet.zig");
     const wire_json = @import("domain/model_candidate_json.zig");
@@ -310,7 +310,7 @@ test "atomic classification repair preserves claims and other chunks and revalid
         };
         const candidate = try text.check(a, inputs, try parse.execute(a, .{ .entries = &raw }));
         const authorization = try repair.authorize(a, inputs, available, candidate);
-        try std.testing.expectEqualDeep(&[_]tokens.CandidateId{available.entries[0].id}, authorization.rule.missing);
+        try std.testing.expectEqualDeep(&[_]tokens.CandidateId{available.entries[0].id}, authorization.rule.token_classifications.missing);
         const prepared = try text.prepare(a, inputs);
         defer prepared.deinit();
         const packet = try repair.packet(std.testing.allocator, inputs, prepared.registry, available, candidate, authorization);
@@ -321,19 +321,19 @@ test "atomic classification repair preserves claims and other chunks and revalid
         const replacement: repair.Replacement = .{ .classifications = .{ .token_classifications = try fixture.classifications(a, available, first) } };
         const wire = try wire_json.encodeSelected(repair.Replacement, a, replacement);
         const parsed = try repair.parse(a, authorization, packet, wire);
-        const merged = try repair.merge(a, candidate, authorization, parsed);
+        const merged = try repair.merge(a, candidate, authorization, parsed, null);
         try std.testing.expectEqual(@as(u64, 2), merged.revision);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome, merged.entries[0].outcome);
         try std.testing.expectEqualDeep(candidate.entries[1], merged.entries[1]);
         try std.testing.expectEqual(@as(usize, 0), candidate.entries[0].token_classifications.len);
         try std.testing.expect((try validation.validate(a, inputs, available, merged)) == .valid);
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, merged, authorization, parsed));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, merged, authorization, parsed, null));
         var changed = candidate;
         changed.entries = merged.entries;
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, changed, authorization, parsed));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, changed, authorization, parsed, null));
         var foreign = authorization;
         foreign.owner.reference_chunk.reference_state_id.bytes = "other-state";
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, candidate, foreign, parsed));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, candidate, foreign, parsed, null));
         try std.testing.expectError(error.InvalidAtomicRepair, repair.parse(a, foreign, packet, wire));
         var wrong_id = authorization;
         wrong_id.id.bytes = "unrelated-authorization";
@@ -341,7 +341,7 @@ test "atomic classification repair preserves claims and other chunks and revalid
         for ([_][]const u8{ "\"target\":\"claims\",", "\"claims\":[],", "\"revision\":2," }) |extra| {
             try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, try std.fmt.allocPrint(a, "{{{s}{s}", .{ extra, wire[1..] })));
         }
-        const still_invalid = try repair.merge(a, candidate, authorization, .{ .classifications = .{ .token_classifications = &.{} } });
+        const still_invalid = try repair.merge(a, candidate, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, null);
         try std.testing.expect((try validation.validate(a, inputs, available, still_invalid)) == .invalid);
         const retry = try repair.authorize(a, inputs, available, still_invalid);
         try std.testing.expect(!std.mem.eql(u8, retry.id.bytes, authorization.id.bytes));

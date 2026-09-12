@@ -49,7 +49,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) !Case {
 }
 
 pub const Status = enum {
-    passed,
+    evaluated,
     input_invalid,
     harness_error,
     bootstrap_failed,
@@ -83,7 +83,11 @@ pub const Report = struct {
     provider_diagnostic: ?[]const u8 = null,
     model_diagnostic: ?[]const u8 = null,
     candidate_error: ?@import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic = null,
+    candidate_model_call: ?usize = null,
+    candidate_model_step: ?[]const u8 = null,
+    candidate_model_output: ?[]const u8 = null,
     schema_error: ?@import("../../../src/domain/model_schema_diagnostic.zig").Description = null,
+    retry_error: ?@import("../../../src/domain/workflow_retry.zig").Exhaustion.Description = null,
     json_error: ?@import("../../../src/domain/strict_json.zig").Diagnostic = null,
     events_file: ?[]const u8 = null,
     evidence_root: ?[]const u8 = null,

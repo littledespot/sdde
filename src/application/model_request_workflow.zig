@@ -115,15 +115,10 @@ pub const Build = struct {
         const request = try readCurrent(&input.step.data, validated_schema);
         // These resources were selected once by the originating compiled step.
         var parts: [2]provider.ModelVisibleContent = undefined;
-        parts[0] = .{ .guidance = request.prompt() };
-        const count: usize = if (request.input()) |bytes| count: {
-            parts[1] = .{ .user = bytes };
-            break :count 2;
-        } else 1;
         var input_id: [32]u8 = undefined;
         const id_bytes = std.fmt.bufPrint(&input_id, "input-{d}", .{request.ledger().revision().value}) catch return error.OperationExecutionFailed;
         const source = request.source(.{ .bytes = id_bytes }) catch return error.OperationExecutionFailed;
-        var owned = self.action.execute(self.allocator, source, parts[0..count]) catch return error.OperationExecutionFailed;
+        var owned = self.action.execute(self.allocator, source, request.content(&parts)) catch return error.OperationExecutionFailed;
         const next = handoff.prepared(request, owned) catch {
             owned.deinit();
             return error.OperationExecutionFailed;

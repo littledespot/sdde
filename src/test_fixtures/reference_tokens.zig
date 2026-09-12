@@ -6,7 +6,7 @@ pub const extract = @import("../actions/reference/extract_structured_reference_f
 pub const identify = @import("../actions/reference/assign_structured_token_candidate_identities.zig").Action{};
 pub const classify = struct {
     pub fn execute(_: @This(), allocator: std.mem.Allocator, inputs: evidence.Inputs, available: extraction.tokens.Candidates, candidate: extraction.TextValidated) !extraction.Classified {
-        return switch (try (@import("../actions/reference/validate_preserved_token_classifications.zig").Action{}).execute(allocator, inputs, available, candidate)) {
+        return switch (try @import("../domain/token_classification_validation.zig").validate(allocator, inputs, available, candidate)) {
             .valid => |accepted| accepted,
             .invalid => error.InvalidStructuredTokens,
         };

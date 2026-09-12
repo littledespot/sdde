@@ -32,10 +32,16 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
         try std.testing.expectEqualStrings(chunk.id.bytes, packet.unit().reference_chunk.chunk_id.bytes);
         var body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
         defer body.deinit();
-        try std.testing.expectEqualStrings(inputs.corpus.sources[0].bytes[chunk.span.start.byte..chunk.span.end.byte], body.value.object.get("text").?.string);
+        var reconstructed: std.ArrayList(u8) = .empty;
+        defer reconstructed.deinit(a);
+        for (body.value.object.get("source_lines").?.array.items, 1..) |line, ordinal| {
+            try std.testing.expectEqual(@as(i64, @intCast(ordinal)), line.object.get("id").?.object.get("ordinal").?.integer);
+            try reconstructed.appendSlice(a, line.object.get("text").?.string);
+        }
+        try std.testing.expectEqualStrings(inputs.corpus.sources[0].bytes[chunk.span.start.byte..chunk.span.end.byte], reconstructed.items);
         try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Hello, World!") != null);
         const response = try tokens.wire(a, try extraction.reply(a, chunk, "The application displays a greeting."), try tokens.classifications(a, candidates, chunk));
-        progress = try iteration.append(a, progress, scope, response);
+        progress = try iteration.append(a, progress, scope, response, null);
     }
     try std.testing.expect(iteration.current(progress) == null);
     const raw = try iteration.finish(a, progress);
@@ -151,14 +157,14 @@ test "extraction collection rejects missing duplicate foreign and out of order s
     const inputs = try source.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "renewals.md", "A librarian renews loans.\n" ** 70));
     const initial = try iteration.initialize(a, inputs);
     try std.testing.expectError(error.InvalidReferenceExtraction, iteration.finish(a, initial));
-    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, initial, initial.scopes[1], extraction.no_claim));
+    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, initial, initial.scopes[1], extraction.no_claim, null));
     var foreign = initial.scopes[0];
     foreign.state_id.bytes = "foreign";
-    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, initial, foreign, extraction.no_claim));
-    const once = try iteration.append(a, initial, initial.scopes[0], extraction.no_claim);
-    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, once, initial.scopes[0], extraction.no_claim));
-    const complete = try iteration.append(a, once, initial.scopes[1], extraction.no_claim);
-    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, complete, initial.scopes[1], extraction.no_claim));
+    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, initial, foreign, extraction.no_claim, null));
+    const once = try iteration.append(a, initial, initial.scopes[0], extraction.no_claim, null);
+    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, once, initial.scopes[0], extraction.no_claim, null));
+    const complete = try iteration.append(a, once, initial.scopes[1], extraction.no_claim, null);
+    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, complete, initial.scopes[1], extraction.no_claim, null));
     try std.testing.expectEqual(@as(usize, 2), (try iteration.finish(a, complete)).entries.len);
 }
 test "packet body and domain identity are owned independently of caller allocations" {

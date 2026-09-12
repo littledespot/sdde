@@ -48,6 +48,11 @@ Every serialized model request includes the same short
 [JSON framing instruction](design/decisions/0014-universal-response-format-guidance.md),
 once, including retries. Task prompts and result schemas remain workflow-owned;
 strict decoding and schema validation still reject invalid model output.
+Reference extraction selects supplied source-line IDs; the shared evidence
+resolver reconstructs exact quotations and coordinates from captured bytes.
+Invalid selections use the existing atomic repair contract, preserving other
+citations and their producing-call evidence. See the
+[prompt and response flow](design/diagrams/17-model-prompt-response-flow.md).
 Production [Bedrock support](design/features/F0007-AWSBedrockProvider.md) is
 connected through the same port and runner. Model and region are selected in
 the external provider catalogue; API keys come only from the invocation's
@@ -67,6 +72,9 @@ for required configuration, resources and remaining workflow work.
 `advance-model-attempt-accounting` now accounts that prepared request through
 the same YAML runner. Its explicit `retry-limit` permits retries after the
 initial execution; applied attempt evidence and ledgers remain execution-local.
+Protocol corrections use this same limit and the total token budget. They reuse
+the original inputs with only the latest rejection; exhaustion reports the
+owning step and count alongside the retained JSON/schema error.
 `assign-provider-operation` then explicitly selects `inference` or
 `input-token-count` and publishes sealed assignment evidence for that attempt.
 Assignment makes no API call, prepares no authorization and charges no tokens.
@@ -138,6 +146,9 @@ reconciliation, generation, review and repair.
 Protocol retries retain the full rejected response as untrusted evidence and
 reuse the original schema. Diagnostics identify JSON syntax positions or exact
 schema field paths, with schema-derived examples that expose nested shapes.
+Native Bedrock requests derive structural constraints from the same compiled
+schema. Complete bounds remain in guidance and engine validation. JSON errors
+include the container path, active key and duplicate-key occurrence locations.
 The same schema reason and JSON Pointer appear in E2E events, reports and the
 terminal. Strict validation and existing retry/token accounting still apply.
 

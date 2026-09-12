@@ -4,7 +4,7 @@
 
 **Production completion scope:** The user explicitly includes production
 provider/model registration, Bedrock configuration and concrete authorization/
-count/inference wiring, applicable native-schema representability and shared
+count/inference wiring, registered native-schema projection and shared
 fake/real-adapter conformance. These are F0006 completion requirements, not
 work deferred behind the F0007 label. The implementation uses the existing
 composition boundary, runner ledgers and pinned Zig HTTP transport. See
@@ -96,8 +96,9 @@ input into an owned, read-only JSON object retaining the same association and
 compiled schema. `ValidateModelPayloadSchemaAction` now checks that tree against
 only its retained schema and returns allocation-free candidate evidence or a
 closed rejection reason. These response operations are YAML-registered.
-The registered Bedrock native profile checks exact schema representability;
-prompt-only mode retains the full engine schema without that native check.
+The registered Bedrock native profile derives provider-supported generation
+constraints from the compiled schema. Both modes retain complete schema guidance
+and the same strict engine acceptance checks (ADR 0006).
 
 Model-facing native candidate decoders share `model_candidate_json.zig` for
 ADR 0006's closed `kind` alternatives. It reuses strict JSON checks and exact
@@ -370,8 +371,13 @@ schema, unit, model selection and request ID, appends only the selected
 correction guidance, native diagnostic and minimum schema example, and retires
 the rejected attempt. `check-model-request-phase` lets YAML skip a duplicate
 logical invocation transition while every provider attempt still receives new
-accounting/authorization. The correction step requires `retry-limit: 0`;
-repeated failure exhausts that operation without another provider call.
+accounting/authorization. Correction has no separate limit: the existing
+`advance-model-attempt-accounting` step and total token budget bound further
+calls, including corrections of later logical requests through the same step.
+Each correction starts from retained original inputs and includes only the
+latest rejected response and diagnostic; prior attempts remain in the evidence
+log. Exhaustion reports the owning step, configured limit and execution count
+alongside the retained model error.
 
 After explicit closure, `retire-model-input` and `retire-model-request` release
 transport slots. Captured evidence retains current domain-source lineage under
@@ -714,12 +720,11 @@ internally consistent but insufficient contract may remain catalogued, but
 cannot produce a usable model binding.
 
 Response support admits `unavailable | prompt_only | bedrock_json_schema`.
-Only the registered native profile permits native mode, and exact schema
-representability is checked against the request's retained compiled schema.
-Unsupported constraints reject without being dropped or falling back to prompt
-guidance. Prompt-only is not subjected to a native representability check.
-Prompt guidance representability does not prove schema validity or candidate
-validity: those remain the request/schema validators' responsibilities.
+Only the registered native profile permits native mode. Its projection preserves
+closed fields, required members, types, enums and disjoint tagged alternatives.
+Bedrock receives supported structural constraints; the complete schema, including
+all bounds, remains in guidance and deterministic validation. Unsupported modes
+reject without fallback. Provider grammar never establishes candidate validity.
 
 Every union variant conforms directly to `LLMProviderInterface`; dispatch
 forwards exactly one operation and introduces no second port. Adding a provider
@@ -809,9 +814,8 @@ facts. Decoded strings alone grant no provider authority.
    policy and selected operation support are valid; counting support is optional;
 4. every selected option, including `reasoningEffort`, is explicitly supported
    and representable rather than silently ignored;
-5. the complete `model-envelope/v1` response schema and YAML-declared result schema are
-   the same compact result-object contract under ADR 0006 and are representable
-   by the registered response mode.
+5. the request retains the complete compiled result schema under ADR 0006;
+   native generation constraints derive from it through the registered profile.
 
 Request-origin contracts declare one repository slot and explicit `response-mode`
 (`prompt-only | native-schema`). Optional `temperature` is an integer in

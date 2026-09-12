@@ -23,8 +23,7 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
     const payload = .{
         .source_id = chunk.chunk.source_id,
         .block_id = chunk.chunk.block_id,
-        .location = chunk.chunk.span,
-        .text = chunk.bytes,
+        .source_lines = try @import("source_selections.zig").project(scratch, inputs, scope),
         .passive_literals = try passiveChoices(scratch, registry, inputs, &.{scope}),
         .exact_candidates = selected.items,
     };

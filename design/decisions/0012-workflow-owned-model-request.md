@@ -64,6 +64,12 @@ accounting step, not the request origin. Consumers retain that original request
 and must invalidate consumed attempt evidence before a YAML retry revisits the
 accounting step. A second initial attempt cannot reset an existing request.
 
+The 2026-09-12 protocol-retry amendment makes that accounting step the sole
+attempt limit on the model-request correction path. The protocol-retry builder
+only prepares a corrected request from retained original inputs and the latest
+rejection; it has no separate execution limit. Runner exhaustion retains the
+compiled owner, limit and consumed execution count as a terminal rejection.
+
 The attempt and provider-operation ledgers share the request execution identity
 and have one cleanup owner. Rejected deltas publish neither accounting changes
 nor attempt evidence. No provider call, lifecycle advancement, lease preparation

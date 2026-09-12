@@ -81,7 +81,10 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
         .execution => |outcome| if (outcome != .ok) {
             report.diagnostic = @tagName(outcome);
         },
-        .execution_rejected => |reason| report.diagnostic = reason.diagnostic(),
+        .execution_rejected => |reason| {
+            report.diagnostic = reason.diagnostic();
+            if (reason == .retry_limit) report.retry_error = try reason.retry_limit.describe(allocator);
+        },
         .bootstrap_failed => |reason| {
             report.status = .bootstrap_failed;
             report.diagnostic = @tagName(reason);
@@ -100,6 +103,8 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     var publication: @import("oracle.zig").Publication = .not_observed;
     if (invocation.pipeline_runner) |*runner| {
         try @import("observation.zig").capture(allocator, runner, report);
+        try trace.last_rejection.project(allocator, trace.calls, report);
+        try trace.correlate(allocator, report);
         if (runner.envelope.slots[@intFromEnum(@import("../../../src/domain/pipeline.zig").DataKey.published_workflow_output)] != null) {
             const published = try values.read(&.{ .slots = runner.envelope.slots }, @import("../../../src/application/workflow_output_binding.zig").published_schema, bool);
             if (published.*) publication = .{ .confirmed = try values.read(&.{ .slots = runner.envelope.slots }, @import("../../../src/application/workflow_output_binding.zig").prepared_schema, @import("../../../src/domain/workflow_output.zig").Prepared) };

@@ -22,8 +22,7 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
     };
     return encoding.encodeText(a, .{
         .content = &content,
-        .schema = try packet.resultSchema(a),
-        .response_mode = .prompt_only,
+        .schema = .{ .prompt_only = try packet.resultSchema(a) },
         .schema_name = "rubric_judgment",
         .temperature = config.temperature,
         .reasoning_effort = encoding.reasoningEffort(if (config.reasoning_effort) |effort| @tagName(effort) else null) catch return error.InvalidEvaluationContract,

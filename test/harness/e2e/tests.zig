@@ -205,6 +205,9 @@ test "rubric handoff preserves poor output and scores without changing workflow 
     try std.testing.expectEqual(.scored, report.semantic_quality);
     try std.testing.expectEqual(.ok, report.workflow_outcome.?);
     try std.testing.expectEqual(@as(f64, 10), report.evaluation.?.outcome.evaluated.score_percent.?);
+    try std.testing.expectEqual(.evaluated, report.status);
+    const terminal = try @import("report.zig").terminal(a, report, "runs", "sample");
+    try std.testing.expect(std.mem.indexOf(u8, terminal, "threshold: not_met; score: 10.00%") != null);
     var failed_judge = result;
     failed_judge.outcome = .{ .evaluator_error = .authentication };
     evaluation.apply(&report, failed_judge);
@@ -314,6 +317,7 @@ test "failure reports preserve separate engine provider and model evidence" {
         .status = .workflow_failed,
         .workflow_outcome = .failed,
         .diagnostic = "ENGINE_REJECTION",
+        .retry_error = .{ .operation_instance_id = .{ .bytes = "request-account" }, .retry_limit = 4, .completed_executions = 5 },
         .provider_diagnostic = "output_limit",
         .model_diagnostic = "InvalidModelEnvelope",
         .json_error = .{ .reason = .SyntaxError, .location = .{ .byte_offset = 9, .line = 2, .column = 8 } },
@@ -332,6 +336,7 @@ test "failure reports preserve separate engine provider and model evidence" {
     try std.testing.expectEqualStrings("output_limit", retained.provider_diagnostic.?);
     try std.testing.expectEqualStrings("InvalidModelEnvelope", retained.model_diagnostic.?);
     try std.testing.expectEqualDeep(report.json_error, retained.json_error);
+    try std.testing.expectEqualDeep(report.retry_error, retained.retry_error);
     try std.testing.expectEqualDeep(report.schema_error, retained.schema_error);
     try std.testing.expectEqualDeep(report.candidate_error, retained.candidate_error);
     try std.testing.expectEqualStrings("run-failed", retained.execution_id.?);
@@ -348,8 +353,92 @@ test "failure reports preserve separate engine provider and model evidence" {
     for ([_][]const u8{ view, terminal }) |rendered| try std.testing.expect(std.mem.indexOf(u8, rendered, diagnostic) != null);
     const schema_diagnostic = try std.json.Stringify.valueAlloc(a, report.schema_error.?, .{});
     for ([_][]const u8{ view, terminal }) |rendered| try std.testing.expect(std.mem.indexOf(u8, rendered, schema_diagnostic) != null);
+    const retry_diagnostic = try std.json.Stringify.valueAlloc(a, report.retry_error.?, .{});
+    for ([_][]const u8{ view, terminal }) |rendered| try std.testing.expect(std.mem.indexOf(u8, rendered, retry_diagnostic) != null);
     try std.testing.expect(std.mem.indexOf(u8, terminal, "runs/example/report.json") != null);
     try std.testing.expectError(error.PathAlreadyExists, @import("report.zig").Output.reserve(io, dir.dir));
+}
+
+test "retired protocol rejection survives exhaustion and is superseded by a new call" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var snapshot: @import("observation.zig").LastModelRejection = .{};
+    defer snapshot.deinit(std.testing.allocator);
+    const empty: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
+    var rejected = empty;
+    rejected.model_diagnostic = "InvalidModelEnvelope";
+    var key = "local_key".*;
+    rejected.json_error = .{ .reason = .DuplicateField, .location = .{ .byte_offset = 437, .line = 1, .column = 438 }, .context = .{
+        .path = "/statements/0",
+        .key = &key,
+        .first_occurrence = .{ .byte_offset = 16, .line = 1, .column = 17 },
+        .repeated_occurrence = .{ .byte_offset = 426, .line = 1, .column = 427 },
+    } };
+    try snapshot.observe(std.testing.allocator, 5, rejected);
+    // Transport retirement has removed the active decoder/payload slots.
+    try snapshot.observe(std.testing.allocator, 5, empty);
+    var exhausted = empty;
+    exhausted.diagnostic = "RetryLimitExhausted";
+    exhausted.retry_error = .{ .operation_instance_id = .{ .bytes = "account" }, .retry_limit = 4, .completed_executions = 5 };
+    try snapshot.project(a, 5, &exhausted);
+    try std.testing.expectEqualStrings("InvalidModelEnvelope", exhausted.model_diagnostic.?);
+    try std.testing.expectEqualDeep(rejected.json_error, exhausted.json_error);
+    @memset(&key, 'x');
+    try std.testing.expectEqualStrings("local_key", snapshot.json_error.?.context.?.key.?);
+    try std.testing.expectEqualStrings("local_key", exhausted.json_error.?.context.?.key.?);
+    // A later call's schema error replaces the earlier syntax error.
+    var path = "/items/0/kind".*;
+    rejected.model_diagnostic = "missing_required_property";
+    rejected.json_error = null;
+    rejected.schema_error = .{ .reason = .missing_required_property, .path = &path };
+    try snapshot.observe(std.testing.allocator, 6, rejected);
+    @memset(&path, 'x');
+    var later = empty;
+    try snapshot.project(a, 6, &later);
+    try std.testing.expect(later.json_error == null);
+    try std.testing.expectEqualStrings("/items/0/kind", later.schema_error.?.path);
+    var complete = empty;
+    complete.workflow_outcome = .ok;
+    try snapshot.project(a, 6, &complete);
+    try std.testing.expect(complete.model_diagnostic == null);
+    try snapshot.observe(std.testing.allocator, 7, empty);
+    var fresh = empty;
+    try snapshot.project(a, 7, &fresh);
+    try std.testing.expect(fresh.model_diagnostic == null);
+    // The final report owns its data after the observer releases the snapshot.
+    try std.testing.expectEqualStrings("/items/0/kind", later.schema_error.?.path);
+}
+
+test "source selection reports retain the producing call separately from the last call" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const report: c.Report = .{
+        .started_at_utc = "2026-09-12T00:00:00Z",
+        .status = .workflow_failed,
+        .candidate_error = .{ .source_selections = .{
+            .scope = .{ .state_id = .{ .bytes = "current-state" }, .chunk_id = .{ .bytes = "chunk-2" } },
+            .revision = 3,
+            .claim_index = 2,
+            .issue = .{ .reason = .unknown_selection, .index = 1, .rejected = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 99 } }, .available = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 4 } } },
+            .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 2 } },
+        } },
+        .candidate_model_call = 2,
+        .candidate_model_step = "extract",
+        .candidate_model_output = "evidence/generation-call-0002.output.txt",
+        .last_model_call = 5,
+        .last_model_step = "repair",
+        .last_model_output = "evidence/generation-call-0005.output.txt",
+    };
+    const retained = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
+    try std.testing.expectEqualDeep(report, retained);
+    const diagnostic = try std.json.Stringify.valueAlloc(a, report.candidate_error.?, .{});
+    for ([_][]const u8{ try @import("report.zig").renderMarkdown(a, retained), try @import("report.zig").terminal(a, retained, "runs", "sample") }) |rendered| {
+        try std.testing.expect(std.mem.indexOf(u8, rendered, diagnostic) != null);
+        try std.testing.expect(std.mem.indexOf(u8, rendered, report.candidate_model_output.?) != null);
+        try std.testing.expect(std.mem.indexOf(u8, rendered, report.last_model_output.?) != null);
+    }
 }
 
 test "evidence store retains distinct attempts excludes credentials and refuses overwrites" {

@@ -15,11 +15,11 @@ pub fn initialize(allocator: std.mem.Allocator, inputs: source.Inputs) e.Error!P
 pub fn current(progress: Progress) ?source.Scope {
     return if (progress.count < progress.scopes.len) progress.scopes[progress.count] else null;
 }
-pub fn append(allocator: std.mem.Allocator, progress: Progress, scope: source.Scope, bytes: []const u8) e.Error!Progress {
+pub fn append(allocator: std.mem.Allocator, progress: Progress, scope: source.Scope, bytes: []const u8, origin: ?@import("model_candidate_origin.zig").Origin) e.Error!Progress {
     const expected = current(progress) orelse return error.InvalidReferenceExtraction;
     if (!expected.state_id.eql(scope.state_id) or !expected.chunk_id.eql(scope.chunk_id)) return error.InvalidReferenceExtraction;
     const entry = try allocator.create(Entry);
-    entry.* = .{ .value = .{ .scope = expected, .result = .{ .response = try allocator.dupe(u8, bytes) } }, .previous = progress.latest };
+    entry.* = .{ .value = .{ .scope = expected, .origin = origin, .result = .{ .response = try allocator.dupe(u8, bytes) } }, .previous = progress.latest };
     return .{ .scopes = progress.scopes, .latest = entry, .count = progress.count + 1 };
 }
 pub fn finish(allocator: std.mem.Allocator, progress: Progress) e.Error!e.Raw {

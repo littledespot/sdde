@@ -38,6 +38,16 @@ pub const Request = opaque {
         };
     }
 
+    /// Project original immutable inputs for initial calls and corrections.
+    pub fn content(self: *const Request, buffer: *[2]provider.ModelVisibleContent) []const provider.ModelVisibleContent {
+        buffer[0] = .{ .guidance = self.prompt() };
+        if (self.input()) |bytes| {
+            buffer[1] = .{ .user = bytes };
+            return buffer;
+        }
+        return buffer[0..1];
+    }
+
     pub fn packet(self: *const Request) ?*const packets.Packet {
         return switch (storage(self).input orelse return null) {
             .resource => null,

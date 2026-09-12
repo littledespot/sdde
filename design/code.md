@@ -3714,6 +3714,7 @@ PreservedTokenClaimCandidate {
   sourceChunkIds[]
 }
 
+// Native captured/persisted citation validation; never the model extraction shape.
 SourceCitationProposal {
   sourceId,                 // must be in this workflow operation unit's allowlist
   blockId,                  // must equal the supplied chunk's block
@@ -3721,9 +3722,11 @@ SourceCitationProposal {
   verbatim?: RawSourceScalarProposal
 }
 
+SourceSelection { first: SourceLineId, last: SourceLineId } // inclusive; request-scoped
+
 ReferenceClaimProposal {
   content: ReferenceClaimProposalContent,
-  citations: SourceCitationProposal[]
+  citations: SourceSelection[]
   // No reference-state, chunk, citation, claim, disposition, or related-claim IDs.
 }
 

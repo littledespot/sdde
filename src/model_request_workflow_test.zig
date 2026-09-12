@@ -90,9 +90,9 @@ test "native domain packets traverse generic fake provider execution without res
         try std.testing.expectEqualStrings(packet.body(), request.prepared().?.content[1].user);
         const view: @import("domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
         if (expected == .ok) {
-            try std.testing.expectEqualStrings(body, try candidate_handoff.body(&view));
+            try std.testing.expectEqualStrings(body, (try candidate_handoff.read(&view)).body);
         } else {
-            try std.testing.expectError(error.OperationExecutionFailed, candidate_handoff.body(&view));
+            try std.testing.expectError(error.OperationExecutionFailed, candidate_handoff.read(&view));
         }
         // Equal bytes do not authorize substituting another packet identity.
         const foreign = try packets.create(std.testing.allocator, packet.body(), unit, .initial_generation, null);
@@ -100,7 +100,7 @@ test "native domain packets traverse generic fake provider execution without res
         defer values.destroy(foreign_value);
         var changed = view;
         changed.slots[@intFromEnum(requests.packet_schema.key)] = foreign_value;
-        try std.testing.expectError(error.OperationExecutionFailed, candidate_handoff.body(&changed));
+        try std.testing.expectError(error.OperationExecutionFailed, candidate_handoff.read(&changed));
     }
 }
 
@@ -429,7 +429,9 @@ test "new logical requests get initial attempts without resetting the YAML opera
         for ([_][]const u8{ "origin", "validate", "build" }) |step| try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
         const applied = runner.bindings().invokeStep(.{ .bytes = "account" });
         if (index == 2) {
-            try std.testing.expectEqual(.failed, applied.outcome);
+            try std.testing.expectEqualStrings("account", applied.rejected.retry_limit.operation().bytes);
+            try std.testing.expectEqual(@as(u32, 1), applied.rejected.retry_limit.limit.value);
+            try std.testing.expectEqual(@as(u64, 2), applied.rejected.retry_limit.completed_executions);
             break;
         }
         try std.testing.expectEqual(.ok, applied.outcome);

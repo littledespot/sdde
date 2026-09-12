@@ -3,12 +3,23 @@ const std = @import("std");
 pub const Error = error{InvalidJsonDocument} || std.mem.Allocator.Error;
 pub const Limits = struct { maximum_bytes: ?usize = null, maximum_depth: usize };
 
-/// Safe parser metadata only: no input bytes, keys, values or credentials.
+/// Parser diagnostics own context strings; callers release or copy them explicitly.
 pub const Diagnostic = struct {
     reason: Reason,
     location: ?Location = null,
+    context: ?@import("json_context.zig").Context = null,
 
-    pub const Location = struct { byte_offset: u64, line: u64, column: u64 };
+    pub fn deinit(self: Diagnostic, allocator: std.mem.Allocator) void {
+        if (self.context) |context| context.deinit(allocator);
+    }
+
+    pub fn copy(self: Diagnostic, allocator: std.mem.Allocator) std.mem.Allocator.Error!Diagnostic {
+        var result = self;
+        if (self.context) |context| result.context = try context.copy(allocator);
+        return result;
+    }
+
+    pub const Location = @import("json_context.zig").Location;
     pub const Reason = enum {
         EmptyDocument,
         ByteLimitExceeded,
@@ -88,8 +99,24 @@ fn wireTypes(comptime T: type, value: std.json.Value) Error!void {
 
 /// Syntax only. Callers retain their own schema/root-shape and number policy.
 /// The result owns all strings, keys and collections; it never borrows bytes.
+/// On rejection, a requested diagnostic also owns its context. Release it before
+/// reusing the output slot; allocation failure leaves that slot empty.
 pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, limits: Limits, parse_numbers: bool, diagnostic: ?*?Diagnostic) Error!std.json.Parsed(std.json.Value) {
     if (diagnostic) |out| out.* = null;
+    return parseDocument(allocator, bytes, limits, parse_numbers, diagnostic) catch |err| {
+        if (diagnostic) |out| if (out.*) |*failure| {
+            if (failure.location) |position| {
+                failure.context = @import("json_context.zig").describe(allocator, bytes, position.byte_offset, failure.reason == .DuplicateField) catch |context_error| {
+                    out.* = null;
+                    return context_error;
+                };
+            }
+        };
+        return err;
+    };
+}
+
+fn parseDocument(allocator: std.mem.Allocator, bytes: []const u8, limits: Limits, parse_numbers: bool, diagnostic: ?*?Diagnostic) Error!std.json.Parsed(std.json.Value) {
     try validateTransport(allocator, bytes, limits, diagnostic);
     var scanner = std.json.Scanner.initCompleteInput(allocator, bytes);
     defer scanner.deinit();
@@ -182,7 +209,7 @@ test "closed fixed arrays and empty tagged variants reject length wire-kind and 
     }) |bytes| try std.testing.expectError(error.InvalidJsonDocument, decode(Value, a, bytes, .{ .maximum_depth = 8 }));
 }
 
-test "strict JSON retains native reasons and byte locations without retaining input" {
+test "strict JSON retains native reasons and byte locations with owned context" {
     const Case = struct { bytes: []const u8, reason: Diagnostic.Reason, location: ?Diagnostic.Location = null };
     for ([_]Case{
         .{ .bytes = "```json\n{}\n```", .reason = .SyntaxError, .location = .{ .byte_offset = 0, .line = 1, .column = 1 } },
@@ -198,8 +225,55 @@ test "strict JSON retains native reasons and byte locations without retaining in
         try std.testing.expectError(error.InvalidJsonDocument, parse(std.testing.allocator, case.bytes, .{ .maximum_depth = 2 }, false, &diagnostic));
         try std.testing.expectEqual(case.reason, diagnostic.?.reason);
         if (case.location) |expected| try std.testing.expectEqualDeep(expected, diagnostic.?.location.?);
+        diagnostic.?.deinit(std.testing.allocator);
+        diagnostic = null;
         var accepted = try parse(std.testing.allocator, "{\"valid\":true}", .{ .maximum_depth = 2 }, false, &diagnostic);
         defer accepted.deinit();
         try std.testing.expect(diagnostic == null);
     }
+}
+
+test "duplicate diagnostics identify object scope decoded key and both occurrences" {
+    for ([_]struct { bytes: []const u8, path: []const u8, key: []const u8 }{
+        .{ .bytes = "{\"statements\":[{\"local_key\":\"a\",\"content\":{},\"local_key\":\"b\"}]}", .path = "/statements/0", .key = "local_key" },
+        .{ .bytes = "{\"a~/b\":[{}, {\"x\":1,\"\\u0078\":2}]}", .path = "/a~0~1b/1", .key = "x" },
+        .{ .bytes = "{\n \"outer\":{\"flag\":true,\"child\":{\"flag\":false},\"flag\":false}}", .path = "/outer", .key = "flag" },
+    }) |case| {
+        var diagnostic: ?Diagnostic = null;
+        defer if (diagnostic) |value| value.deinit(std.testing.allocator);
+        try std.testing.expectError(error.InvalidJsonDocument, parse(std.testing.allocator, case.bytes, .{ .maximum_depth = 8 }, false, &diagnostic));
+        const context = diagnostic.?.context.?;
+        try std.testing.expectEqual(.DuplicateField, diagnostic.?.reason);
+        try std.testing.expectEqualStrings(case.path, context.path);
+        try std.testing.expectEqualStrings(case.key, context.key.?);
+        try std.testing.expect(context.first_occurrence.?.byte_offset < context.repeated_occurrence.?.byte_offset);
+        try std.testing.expectEqual(@as(u8, '"'), case.bytes[@intCast(context.first_occurrence.?.byte_offset)]);
+        try std.testing.expectEqual(@as(u8, '"'), case.bytes[@intCast(context.repeated_occurrence.?.byte_offset)]);
+    }
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, diagnosticAllocation, .{});
+}
+
+fn diagnosticAllocation(allocator: std.mem.Allocator) !void {
+    var diagnostic: ?Diagnostic = null;
+    defer if (diagnostic) |value| value.deinit(allocator);
+    const parsed = parse(allocator, "{\"items\":[{\"name\":1,\"name\":2}]}", .{ .maximum_depth = 8 }, false, &diagnostic) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.InvalidJsonDocument => {
+            const copied = try diagnostic.?.copy(allocator);
+            defer copied.deinit(allocator);
+            try std.testing.expectEqualStrings("/items/0", copied.context.?.path);
+            return;
+        },
+    };
+    parsed.deinit();
+    return error.TestUnexpectedResult;
+}
+
+test "syntax diagnostics retain active field and container without inventing a correction" {
+    var diagnostic: ?Diagnostic = null;
+    defer if (diagnostic) |value| value.deinit(std.testing.allocator);
+    try std.testing.expectError(error.InvalidJsonDocument, parse(std.testing.allocator, "{\"items\":[{\"enabled\": }]}", .{ .maximum_depth = 8 }, false, &diagnostic));
+    try std.testing.expectEqualStrings("/items/0", diagnostic.?.context.?.path);
+    try std.testing.expectEqualStrings("enabled", diagnostic.?.context.?.key.?);
+    try std.testing.expect(diagnostic.?.context.?.first_occurrence == null);
 }

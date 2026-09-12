@@ -96,10 +96,22 @@ payload, model-selected schema, arbitrary executable validator or inferred
 undeclared variant is admitted. Unsupported schema features reject before invocation;
 this decision does not authorize a general-purpose JSON Schema engine.
 
-Schema/version selection stays in compiled authority. Native output mode
-receives the same complete semantic schema as prompt-only mode; a provider
-must prove representability before using native mode. There is no silent
-downgrade, coercion, field dropping or hidden retry.
+Schema/version selection stays in compiled authority. The 2026-09-12 amendment
+separates generation constraints from acceptance: native output mode receives
+a registered provider projection derived from the same compiled schema. It
+retains closed objects, required fields, types, enums and tagged alternatives.
+The Bedrock projection uses `anyOf` for the compiler-proven disjoint `oneOf`
+variants and retains supported array minima. Unsupported numeric, string and
+array bounds remain in the complete schema supplied as guidance and enforced
+by the unchanged engine validator. The projection is never acceptance authority.
+No workflow or model supplies a second schema, relaxes validation, silently
+switches response mode, coerces output or introduces a hidden retry.
+
+This amendment is authorized by the user's instruction to implement shared
+provider-enforced output and actionable JSON diagnostics. It supersedes this
+ADR's former exact-provider-representability requirement and the corresponding
+wording in Design §12.3 and F0006. Native JSON/schema compliance establishes
+structure only; semantic support and completion retain their existing gates.
 
 Use concise meaningful field names, not opaque one-letter aliases or
 positional tuples. Do not request restated instructions, rules, evidence
@@ -200,7 +212,7 @@ schemas. Any invalid schema rejects graph construction with
 `WORKFLOW_GRAPH_COMPILE_INVALID`; no partial registry is published.
 
 This increment implements schema compilation, not request construction,
-candidate decoding/validation, native-provider schema representability or
+candidate decoding/validation, registered native-provider schema projection or
 provider calls. Those consumers must reuse the compiled contract rather than
 introducing another schema reader or registry. Byte-identical source/tree
 binding and immutable ownership are preserved through graph/registry copies.

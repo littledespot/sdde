@@ -1,4 +1,5 @@
 const std = @import("std");
+pub const max_local_id_bytes = 64;
 
 pub const WorkflowId = struct {
     bytes: []const u8,
@@ -66,7 +67,7 @@ fn validRegisteredName(bytes: []const u8) bool {
 }
 
 fn validLocalId(bytes: []const u8) bool {
-    if (bytes.len == 0 or bytes.len > 64 or bytes[0] < 'a' or bytes[0] > 'z') return false;
+    if (bytes.len == 0 or bytes.len > max_local_id_bytes or bytes[0] < 'a' or bytes[0] > 'z') return false;
     var hyphen = false;
     for (bytes, 0..) |byte, index| {
         if (!(std.ascii.isLower(byte) or std.ascii.isDigit(byte) or byte == '-') or

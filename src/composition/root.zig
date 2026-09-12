@@ -1007,7 +1007,7 @@ test "reference ingestion compiler enforces inputs and content-read capability" 
         .{ "use: validate-reference-chunks", "use: validate-reference-extraction-text" },
         .{ "use: validate-reference-chunks", "use: extract-structured-reference-facts" },
         .{ "use: validate-reference-chunks", "use: assign-structured-token-candidate-identities" },
-        .{ "use: validate-reference-chunks", "use: validate-preserved-token-classifications" },
+        .{ "use: validate-reference-chunks", "use: validate-reference-selections" },
         .{ "use: validate-reference-chunks", "use: assign-preserved-token-identities" },
         .{ "use: validate-reference-chunks", "use: build-preserved-token-claims" },
         .{ "use: validate-reference-chunks", "use: validate-reference-claims" },
@@ -1086,7 +1086,7 @@ const ReferenceExtractionTestProducer = struct {
         for (entries, 0..) |*entry, index| {
             const chunk = source.chunks.entries[if (context.?.mode == .duplicate) 0 else index];
             var citation_chunk = chunk;
-            if (context.?.mode == .invalid_citation) citation_chunk.block_id.ordinal += 1;
+            if (context.?.mode == .invalid_citation) citation_chunk.span.end.line += 1;
             entry.* = .{
                 .scope = .{ .state_id = source.corpus.state_id, .chunk_id = chunk.id },
                 .result = switch (context.?.mode) {
@@ -1202,10 +1202,10 @@ test "native YAML validates citations extraction and reconciliation before conti
             "  propose-extraction: { use: test.propose-extraction, on: { ok: parse-extraction } }\n" ++
             "  parse-extraction: { use: parse-reference-extraction-results, on: { ok: validate-text, failed: end.failed } }\n" ++
             "  validate-text: { use: validate-reference-extraction-text, on: { ok: validate-classifications, failed: end.failed } }\n" ++
-            "  validate-classifications: { use: validate-preserved-token-classifications, on: { ok: assign-tokens, invalid: end.invalid, failed: end.failed } }\n" ++
+            "  validate-classifications: { use: validate-reference-selections, on: { ok: assign-tokens, invalid: end.invalid, failed: end.failed } }\n" ++
             "  assign-tokens: { use: assign-preserved-token-identities, on: { ok: build-token-claims, failed: end.failed } }\n" ++
             "  build-token-claims: { use: build-preserved-token-claims, on: { ok: validate-claims, failed: end.failed } }\n" ++
-            "  validate-claims: { use: validate-reference-claims, on: { ok: assign-claims, failed: end.failed } }\n" ++
+            "  validate-claims: { use: validate-reference-claims, on: { ok: assign-claims, invalid: end.invalid, failed: end.failed } }\n" ++
             "  assign-claims: { use: assign-reference-claim-identities, on: { ok: build-ledger, failed: end.failed } }\n" ++
             "  build-ledger: { use: build-reference-extraction-ledger, on: { ok: account-extraction, failed: end.failed } }\n" ++
             "  account-extraction: { use: validate-reference-extraction-accounting, on: { ok: observe-extraction, blocked: end.blocked, failed: end.failed } }\n" ++
@@ -1263,8 +1263,8 @@ test "native YAML validates citations extraction and reconciliation before conti
         const expected: workflow.OutcomeTag = if (mode) |selected| switch (selected) {
             .claims, .no_claim, .passive, .preserved, .irrelevant, .reconciled => .ok,
             .blocked, .conflict => .blocked,
-            .missing_classification, .positive_empty_preserved => .invalid,
-            .malformed, .missing, .duplicate, .invalid_citation, .unbound, .unknown_literal, .legacy, .bad_reconciliation => .failed,
+            .missing_classification, .positive_empty_preserved, .invalid_citation => .invalid,
+            .malformed, .missing, .duplicate, .unbound, .unknown_literal, .legacy, .bad_reconciliation => .failed,
         } else if (invalid) .failed else .ok;
         try std.testing.expectEqual(expected, result.executionStatus().?);
         try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), if (reconcile) reconciliation_producer.observed else if (mode != null) extraction_producer.observed else producer.observed);
@@ -1303,13 +1303,18 @@ test "configured specification generation YAML executes native references models
         .{ .stage = .generation, .shape = .nested_empty },
         .{ .stage = .repair, .shape = .nested_empty },
         .{ .stage = .generation, .shape = .mixed_variant },
-        .{ .stage = .generation, .shape = .empty, .persistent = true },
-        .{ .stage = .repair, .shape = .empty, .persistent = true },
+        .{ .stage = .generation, .shape = .empty, .repetition = .persistent },
+        .{ .stage = .repair, .shape = .empty, .repetition = .persistent },
+        .{ .stage = .extraction, .shape = .alternating_protocol, .repetition = .{ .every_request = 2 } },
+        .{ .stage = .reconciliation, .shape = .alternating_protocol, .repetition = .{ .every_request = 2 } },
+        .{ .stage = .generation, .shape = .alternating_protocol, .repetition = .{ .every_request = 2 } },
     };
     const classification_repair_start = 14 + faults.len;
-    for (0..classification_repair_start + 3) |scenario| {
-        const classification_scenario = scenario >= classification_repair_start;
-        const fault: ?@TypeOf(faults[0]) = if (scenario >= 14 and !classification_scenario) faults[scenario - 14] else null;
+    const citation_repair_start = classification_repair_start + 3;
+    for (0..citation_repair_start + 3) |scenario| {
+        const citation_scenario = scenario >= citation_repair_start;
+        const classification_scenario = scenario >= classification_repair_start and !citation_scenario;
+        const fault: ?@TypeOf(faults[0]) = if (scenario >= 14 and !classification_scenario and !citation_scenario) faults[scenario - 14] else null;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
@@ -1367,9 +1372,32 @@ test "configured specification generation YAML executes native references models
         driver.missing_classifications = classification_scenario;
         driver.malformed_classification_repair_once = scenario == classification_repair_start + 1;
         driver.failed_classification_repair = scenario == classification_repair_start + 2;
+        driver.citation_fault = if (citation_scenario) (if (scenario == citation_repair_start + 1) .missing else .unknown) else null;
+        driver.failed_citation_repair = scenario == citation_repair_start + 2;
         const result = driver.run();
-        const expected: workflow.OutcomeTag = if (scenario == 2 or scenario == 6 or driver.failed_classification_repair or (fault != null and fault.?.persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap) .needs_user else if (scenario == 7) .invalid else .ok;
+        const expected: workflow.OutcomeTag = if (scenario == 2 or scenario == 6 or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap) .needs_user else if (scenario == 7) .invalid else .ok;
         try std.testing.expectEqual(expected, result.executionStatus().?);
+        if (citation_scenario) {
+            try std.testing.expectEqual(@as(usize, 2), driver.citation_repair_calls);
+            const diagnostic = try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots });
+            if (driver.failed_citation_repair) {
+                try std.testing.expect(diagnostic != null and diagnostic.? == .source_selections);
+                const rejected = diagnostic.?.source_selections;
+                try std.testing.expectEqual(.unknown_selection, rejected.issue.reason);
+                try std.testing.expect(rejected.origin != null);
+                var diagnostic_arena: std.heap.ArenaAllocator = .init(allocator);
+                defer diagnostic_arena.deinit();
+                const retained = try diagnostic.?.copy(diagnostic_arena.allocator());
+                try std.testing.expectEqualDeep(rejected.origin, retained.origin());
+                var matching: usize = 0;
+                const identities = try @import("../application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
+                for (runner.tokenLedger().accounted_operations.items) |operation| if (rejected.origin.?.matches(identities, operation)) {
+                    try std.testing.expect(operation.model_request_id.purpose == .atomic_repair);
+                    matching += 1;
+                };
+                try std.testing.expectEqual(@as(usize, 1), matching);
+            } else try std.testing.expect(diagnostic == null);
+        }
         if (classification_scenario) {
             try std.testing.expectEqual(@as(usize, if (scenario == classification_repair_start) 1 else 2), driver.classification_repair_calls);
             const diagnostic = try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots });
@@ -1378,7 +1406,26 @@ test "configured specification generation YAML executes native references models
                 try std.testing.expect(diagnostic.?.token_classifications.issues.missing.len != 0);
             } else try std.testing.expect(diagnostic == null);
         }
-        if (fault) |selected_fault| try std.testing.expectEqual(@as(usize, if (selected_fault.persistent) 2 else 1), driver.fault_calls);
+        if (fault) |selected_fault| switch (selected_fault.repetition) {
+            .once => try std.testing.expectEqual(@as(usize, 1), driver.fault_calls),
+            .every_request => |count| {
+                // Distinct logical requests traverse the same correction step.
+                try std.testing.expect(driver.fault_requests >= 2);
+                try std.testing.expectEqual(driver.fault_requests * count, driver.fault_calls);
+            },
+            .persistent => {
+                const exhausted = result.execution_rejected.retry_limit;
+                var matched = false;
+                for (graph.authority.steps) |step| if (std.mem.eql(u8, step.id.bytes, exhausted.operation().bytes)) {
+                    try std.testing.expectEqualStrings("advance-model-attempt-accounting", step.operation_id.bytes);
+                    try std.testing.expectEqual(step.retry_authority.?.limit.value, exhausted.limit.value);
+                    try std.testing.expectEqual(@as(u64, exhausted.limit.value) + 1, exhausted.completed_executions);
+                    try std.testing.expectEqual(exhausted.completed_executions, driver.fault_calls);
+                    matched = true;
+                };
+                try std.testing.expect(matched);
+            },
+        };
         if (expected == .ok) {
             const content = try @import("../application/required_authority_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/required_authority_workflow.zig").content_schema, .content);
             try std.testing.expect(content.records.len != 0);
@@ -1411,7 +1458,7 @@ test "configured specification generation YAML executes native references models
             defer allocator.free(bytes);
             const rendered = try @import("../application/specification_values.zig").storage.read(&.{ .slots = runner.envelope.slots }, @import("../application/specification_rendering_workflow.zig").rendered_schema, .rendered);
             try std.testing.expectEqualStrings(rendered, bytes);
-            if (classification_scenario) {
+            if (classification_scenario or citation_scenario) {
                 // Capturing repaired candidates must not exempt their source
                 // authority from the ordinary stale-generation gate.
                 const source_schema = @import("../application/reference_evidence_workflow.zig").inputs_schema;

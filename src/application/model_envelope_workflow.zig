@@ -109,7 +109,8 @@ const Owner = struct {
     fn releaseTree(self: *Owner) void {
         switch (self.outcome) {
             .decoded => |*owned| owned.deinit(),
-            .protocol_rejected, .not_decoded => {},
+            .protocol_rejected => |rejected| rejected.diagnostic.deinit(self.allocator),
+            .not_decoded => {},
         }
     }
 

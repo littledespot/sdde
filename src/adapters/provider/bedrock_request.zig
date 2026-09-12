@@ -11,20 +11,38 @@ pub fn reasoningEffort(value: ?[]const u8) error{InvalidRequest}!?ReasoningEffor
 }
 
 pub fn encode(allocator: std.mem.Allocator, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind) Error![]const u8 {
+    const schema: TextSchema = switch (request.response_guidance_mode) {
+        .prompt_only => .{ .prompt_only = request.response_schema.modelBytes() },
+        .native_schema => .{ .native = .{
+            .guidance = request.response_schema.modelBytes(),
+            .structure = try @import("../../domain/model_schema_projection.zig").render(allocator, request.response_schema, .bedrock),
+        } },
+    };
+    defer if (schema == .native) allocator.free(schema.native.structure);
     return encodeText(allocator, .{
         .content = request.content,
-        .schema = request.response_schema.modelBytes(),
-        .response_mode = request.response_guidance_mode,
+        .schema = schema,
         .schema_name = "sdde_model_envelope_v1",
         .temperature = if (request.controls.temperature) |temperature| @as(f64, @floatFromInt(temperature.value)) / 1000.0 else null,
         .reasoning_effort = try reasoningEffort(request.binding_id.reasoning_effort),
     }, kind);
 }
 
+pub const TextSchema = union(enum) {
+    prompt_only: []const u8,
+    native: struct { guidance: []const u8, structure: []const u8 },
+
+    pub fn guidance(self: TextSchema) []const u8 {
+        return switch (self) {
+            .prompt_only => |bytes| bytes,
+            .native => |native| native.guidance,
+        };
+    }
+};
+
 pub const TextRequest = struct {
     content: []const operation.ModelVisibleContent,
-    schema: []const u8,
-    response_mode: @import("../../domain/model_controls.zig").ResponseGuidanceMode,
+    schema: TextSchema,
     schema_name: []const u8,
     temperature: ?f64,
     reasoning_effort: ?ReasoningEffort,
@@ -63,10 +81,10 @@ fn write(writer: *std.Io.Writer, request: TextRequest, kind: operation.ProviderO
             try json.write(temperature);
             try json.endObject();
         }
-        if (request.response_mode == .native_schema) {
+        if (request.schema == .native) {
             try json.objectField("outputConfig");
             try json.write(.{ .textFormat = .{ .type = "json_schema", .structure = .{ .jsonSchema = .{
-                .schema = request.schema,
+                .schema = request.schema.native.structure,
                 .name = request.schema_name,
             } } } });
         }
@@ -74,8 +92,8 @@ fn write(writer: *std.Io.Writer, request: TextRequest, kind: operation.ProviderO
     try json.endObject();
 }
 
-// One projection for both APIs. The result schema is sent once: as guidance
-// for prompt-only, or as native outputConfig for registered native support.
+// Both APIs receive complete acceptance guidance. Native inference also carries
+// the derived provider grammar; it adds no acceptance authority or prose.
 fn textInput(json: *std.json.Stringify, request: TextRequest) !void {
     try json.objectField("system");
     try json.beginArray();
@@ -84,7 +102,7 @@ fn textInput(json: *std.json.Stringify, request: TextRequest) !void {
         .user, .evidence => {},
     };
     try json.write(.{ .text = @import("../../domain/model_controls.zig").response_format_guidance });
-    if (request.response_mode == .prompt_only) try json.write(.{ .text = request.schema });
+    try json.write(.{ .text = request.schema.guidance() });
     try json.endArray();
     try json.objectField("messages");
     try json.beginArray();

@@ -499,7 +499,9 @@ coordination without a built-in workflow. Protocol guidance is selected once
 by the originating assignment's optional `protocol-prompt` resource; consumers
 cannot replace resources, model controls or slots. Retry preparation replaces
 only the prepared transport and retires the rejected attempt, retaining the
-logical request. Its required `retry-limit: 0` permits one visit.
+logical request. It rebuilds from the original inputs and latest rejection;
+only the existing attempt-accounting step and total token budget limit further
+calls (Design §22.6).
 
 `advance-model-request-lifecycle` declares a ledger replacement and explicit
 `transition: invoked`. Its compiled contract requires the retained request,

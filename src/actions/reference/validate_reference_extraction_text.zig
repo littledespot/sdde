@@ -14,6 +14,7 @@ pub const Action = struct {
             const context: text.Context = .{ .registry = registry, .current = current, .inputs = inputs, .scope = candidate.scope };
             _ = try evidence.resolve(inputs, candidate.scope);
             entry.scope = candidate.scope;
+            entry.classification_origin = candidate.origin;
             entry.token_classifications = candidate.token_classifications;
             entry.outcome = switch (candidate.outcome) {
                 .blocked => |reason| .{ .blocked = reason },
@@ -22,6 +23,10 @@ pub const Action = struct {
                     const checked = try allocator.alloc(extraction.TextValidatedProposal, proposals.len);
                     for (proposals, checked) |proposal, *value| {
                         value.citations = proposal.citations;
+                        value.origin = candidate.origin;
+                        const origins = try allocator.alloc(?@import("../../domain/model_candidate_origin.zig").Origin, proposal.citations.len);
+                        @memset(origins, candidate.origin);
+                        value.citation_origins = origins;
                         value.content = switch (proposal.content) {
                             inline .business, .scope_guard => |candidate_text, tag| @unionInit(extraction.Content, @tagName(tag), try self.validator.business(allocator, context, candidate_text)),
                             inline else => |candidate_text, tag| @unionInit(extraction.Content, @tagName(tag), try self.validator.reference(allocator, context, candidate_text)),

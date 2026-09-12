@@ -267,10 +267,9 @@ pub const Runner = struct {
             }
         }
         if (step.retry_authority) |authority| {
-            if (self.retry_execution_counts[index] > @as(u64, authority.limit.value)) return .{ .outcome = .failed };
-            self.retry_execution_counts[index] = std.math.add(u64, self.retry_execution_counts[index], 1) catch {
-                return .{ .outcome = .failed };
-            };
+            if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = @import("../domain/workflow_retry.zig").Exhaustion.init(step.id, authority.limit, self.retry_execution_counts[index]) orelse return .{ .rejected = .authority } } };
+            // Compiled limits are u32; exhaustion is checked before increment.
+            self.retry_execution_counts[index] += 1;
         }
         var authorization: ?authorization_binding.Binding = null;
         var authorization_published = false;

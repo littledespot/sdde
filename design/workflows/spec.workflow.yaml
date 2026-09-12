@@ -259,33 +259,33 @@ steps:
   validate-extraction-text:
     use: validate-reference-extraction-text
     on:
-      ok: classify-tokens
+      ok: validate-selections
       failed: end.failed
-  classify-tokens:
-    use: validate-preserved-token-classifications
+  validate-selections:
+    use: validate-reference-selections
     on:
       ok: assign-tokens
-      invalid: authorize-token-repair
+      invalid: authorize-extraction-repair
       failed: end.failed
-  authorize-token-repair:
-    use: authorize-token-classification-repair
-    on: { ok: token-repair-input, invalid: end.invalid, failed: end.failed }
-  token-repair-input:
-    use: build-token-classification-repair-input
-    on: { ok: token-repair, failed: end.failed }
-  token-repair:
+  authorize-extraction-repair:
+    use: authorize-reference-extraction-repair
+    on: { ok: extraction-repair-input, invalid: end.invalid, failed: end.failed }
+  extraction-repair-input:
+    use: build-reference-extraction-repair-input
+    on: { ok: extraction-repair, failed: end.failed }
+  extraction-repair:
     call: model-request
     with: { prompt: repair-prompt, schema: extraction-schema, selection: input, retry-limit: 1 }
-    on: { ok: parse-token-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled }
-  parse-token-repair:
-    use: parse-token-classification-repair
-    on: { ok: merge-token-repair, invalid: end.invalid, failed: end.failed }
-  merge-token-repair:
-    use: merge-token-classification-repair
-    on: { ok: token-repair-release, invalid: end.invalid, failed: end.failed }
-  token-repair-release:
+    on: { ok: parse-extraction-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled }
+  parse-extraction-repair:
+    use: parse-reference-extraction-repair
+    on: { ok: merge-extraction-repair, invalid: end.invalid, failed: end.failed }
+  merge-extraction-repair:
+    use: merge-reference-extraction-repair
+    on: { ok: extraction-repair-release, invalid: end.invalid, failed: end.failed }
+  extraction-repair-release:
     call: release-request
-    on: { ok: classify-tokens, failed: end.failed }
+    on: { ok: validate-selections, failed: end.failed }
   assign-tokens:
     use: assign-preserved-token-identities
     on:
@@ -300,6 +300,7 @@ steps:
     use: validate-reference-claims
     on:
       ok: assign-claims
+      invalid: end.invalid
       failed: end.failed
   assign-claims:
     use: assign-reference-claim-identities
@@ -869,8 +870,6 @@ subgraphs:
           cancelled: close
       retry:
         use: build-model-protocol-retry
-        with:
-          retry-limit: 0
         on:
           ok: account
           failed: end.failed

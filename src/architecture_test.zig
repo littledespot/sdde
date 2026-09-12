@@ -1696,12 +1696,13 @@ test "extraction candidates reuse citation and identity owners without gaining c
     const binding = @import("application/workflow_operation_binding.zig");
     try std.testing.expect(extraction.ClaimId == identity.ClaimId);
     try std.testing.expect(extraction.CitationId == identity.CitationId);
-    inline for (.{ operations.Parse, operations.Validate, operations.Assign, operations.Build, operations.Account }) |T| {
+    inline for (.{ operations.Parse, operations.ValidateSelections, operations.Validate, operations.Assign, operations.Build, operations.Account }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(@as(usize, 0), @typeInfo(T.Action).@"struct".fields.len);
         try std.testing.expect(T.Action.contract.side_effect == .none);
     }
     for (operations.schemas) |schema| try std.testing.expect(schema.maximum_bytes == null);
+    try std.testing.expect(@FieldType(extraction.Proposal, "citations") == []const @import("domain/source_selections.zig").Selection);
     for ([_][]const u8{ "state_id", "chunk_id", "claim_id", "citation_id", "disposition" }) |field| {
         inline for (@typeInfo(extraction.Proposal).@"struct".fields) |proposal_field| try std.testing.expect(!std.mem.eql(u8, field, proposal_field.name));
     }
@@ -1755,16 +1756,17 @@ test "typed extraction has one shared prose gate and no passive operational capa
 
 test "preservation is a generic YAML boundary with source-only scalars and mandatory accounting" {
     const native = @import("application/structured_token_workflow.zig");
+    const selection = @import("application/reference_extraction_workflow.zig").ValidateSelections;
     const binding = @import("application/workflow_operation_binding.zig");
     const key = @import("domain/pipeline.zig").DataKey;
-    inline for (.{ native.Extract, native.AssignCandidates, native.Validate, native.AssignTokens, native.BuildClaims }) |T| {
+    inline for (.{ native.Extract, native.AssignCandidates, selection, native.AssignTokens, native.BuildClaims }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }
-    try std.testing.expectEqualSlices(key, &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction }, native.Validate.Action.contract.requires);
+    try std.testing.expectEqualSlices(key, &.{ .citable_reference_inputs, .structured_token_candidates, .text_validated_reference_extraction }, selection.Action.contract.requires);
     try std.testing.expectEqualSlices(key, &.{.preserved_token_identities}, native.BuildClaims.Action.contract.requires);
     try std.testing.expectEqualSlices(key, &.{ .citable_reference_inputs, .preserved_token_identities, .reference_extraction_ledger }, @import("actions/reference/validate_reference_extraction_accounting.zig").Action.contract.requires);
-    try std.testing.expect(native.classified_schema.maximum_bytes == null);
+    try std.testing.expect(@import("application/reference_extraction_workflow.zig").selections_schema.maximum_bytes == null);
     const classification = @import("domain/structured_tokens.zig").Classification;
     try std.testing.expect(!@hasField(@FieldType(classification, "preserve"), "raw_value"));
     try std.testing.expect(!@hasField(@FieldType(classification, "preserve"), "citation_id"));
@@ -1891,18 +1893,18 @@ fn countOccurrences(source: []const u8, needle: []const u8) usize {
 
 test "classification and specification repair share authority and expose only native replacement operations" {
     const binding = @import("application/workflow_operation_binding.zig");
-    const tokens = @import("application/token_classification_repair_workflow.zig");
+    const tokens = @import("application/reference_extraction_repair_workflow.zig");
     const spec = @import("application/specification_repair_workflow.zig");
     inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }
-    inline for (.{ @embedFile("domain/token_classification_repair.zig"), @embedFile("domain/specification_repair.zig") }) |source| {
+    inline for (.{ @embedFile("domain/reference_extraction_repair.zig"), @embedFile("domain/specification_repair.zig") }) |source| {
         try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic_repair.zig"));
         try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic.checkMerge("));
         try expectAbsent(source, "candidate.revision + 1");
         try expectAbsent(source, "retry_limit");
     }
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.text_validated_reference_extraction}, tokens.Merge.Action.contract.replaces);
-    try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .ok, .invalid, .failed }, &@import("application/structured_token_workflow.zig").Validate.outcomes);
+    try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .ok, .invalid, .failed }, &@import("application/reference_extraction_workflow.zig").ValidateSelections.outcomes);
 }

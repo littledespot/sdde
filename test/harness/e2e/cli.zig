@@ -44,7 +44,7 @@ fn command(init: std.process.Init) !bool {
     const message = try @import("report.zig").terminal(allocator, report, output_root, &run.name);
     try std.Io.File.stdout().writeStreamingAll(io, message);
     if (report.specification) |path| try std.Io.File.stdout().writeStreamingAll(io, try std.fmt.allocPrint(allocator, "Specification: {s}/{s}/project/{s}\n", .{ output_root, run.name, path }));
-    return report.status == .passed;
+    return report.status == .evaluated;
 }
 
 fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.process.Environ.Map, case_path: []const u8, run: std.Io.Dir, project: std.Io.Dir, execution_id: []const u8, report: *c.Report) !void {

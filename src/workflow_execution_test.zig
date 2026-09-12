@@ -94,7 +94,7 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
             .produces = &.{},
             .replaces = &.{},
             .invalidates = &.{},
-            .outcomes = &.{ .ok, retry_outcome },
+            .outcomes = &.{ .ok, retry_outcome, .failed },
             .side_effect = .none,
             .gates = &.{},
             .capabilities = &.{},
@@ -108,6 +108,8 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
         const loop_transitions = [_]workflow.Transition{
             .{ .from = .{ .bytes = "run" }, .outcome = .ok, .target = .{ .terminal = .ok } },
             .{ .from = .{ .bytes = "run" }, .outcome = retry_outcome, .target = .{ .step = .{ .bytes = "run" } } },
+            // A runner rejection must never follow the operation's failure edge.
+            .{ .from = .{ .bytes = "run" }, .outcome = .failed, .target = .{ .terminal = .ok } },
         };
 
         var completes: OperationControl = .{ .state = .{ .outcome = retry_outcome, .scripted = &.{ retry_outcome, .ok } } };
@@ -115,9 +117,9 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
         var complete_graph = try testGraph();
         complete_graph.authority.steps = &loop_steps;
         complete_graph.authority.transitions = &loop_transitions;
-        complete_graph.authority.maximum_step_executions = 3;
+        complete_graph.authority.maximum_step_executions = 4;
         var complete_registry = testRegistry(&completes);
-        completes.entries[1].contract.outcomes = &.{ .ok, retry_outcome };
+        completes.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
         completes.entries[1].contract.retry_limit = .{ .maximum = 2 };
         completes.entries[1].contract.parameters = &retry_parameters;
         var complete_runner = runner_module.Runner.init(std.testing.allocator, selected(&complete_graph), &complete_registry, complete_barrier.port(), .{}, null);
@@ -131,13 +133,19 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
         var exhausted_barrier: FakeBarrier = .{};
         var exhausted_graph = complete_graph;
         var exhausted_registry = testRegistry(&exhausts);
-        exhausts.entries[1].contract.outcomes = &.{ .ok, retry_outcome };
+        exhausts.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
         exhausts.entries[1].contract.retry_limit = .{ .maximum = 2 };
         exhausts.entries[1].contract.parameters = &retry_parameters;
         var exhausted_runner = runner_module.Runner.init(std.testing.allocator, selected(&exhausted_graph), &exhausted_registry, exhausted_barrier.port(), .{}, null);
         defer exhausted_runner.deinit();
         var exhausted_children: TestEngineBindings = .{ .graph = &exhausted_graph, .runner = &exhausted_runner };
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, engine.run(exhausted_children.bindings()).executionStatus().?);
+        const exhausted = engine.run(exhausted_children.bindings());
+        try std.testing.expectEqual(workflow.OutcomeTag.failed, exhausted.executionStatus().?);
+        try std.testing.expectEqualStrings("RetryLimitExhausted", exhausted.execution_rejected.diagnostic());
+        const diagnostic = exhausted.execution_rejected.retry_limit;
+        try std.testing.expectEqualStrings("run", diagnostic.operation().bytes);
+        try std.testing.expectEqual(@as(u32, 2), diagnostic.limit.value);
+        try std.testing.expectEqual(@as(u64, 3), diagnostic.completed_executions);
         try std.testing.expectEqual(@as(usize, 3), exhausts.state.calls);
         try std.testing.expectEqual(@as(usize, 3), exhausted_barrier.calls);
 
@@ -150,7 +158,7 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
         var zero_control: OperationControl = .{ .state = .{ .outcome = .ok } };
         var zero_barrier: FakeBarrier = .{};
         var zero_registry = testRegistry(&zero_control);
-        zero_control.entries[1].contract.outcomes = &.{ .ok, retry_outcome };
+        zero_control.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
         zero_control.entries[1].contract.retry_limit = .{ .maximum = 2 };
         zero_control.entries[1].contract.parameters = &retry_parameters;
         var zero_runner = runner_module.Runner.init(std.testing.allocator, selected(&zero_graph), &zero_registry, zero_barrier.port(), .{}, null);
@@ -271,7 +279,7 @@ const TestEngineBindings = struct {
 };
 
 test "workflow outcomes preserve exact runner rejections at invocation and step boundaries" {
-    for ([_]execution.Rejection{ .authority, .operation_failed, .cancelled, .deadline_exhausted, .{ .gate = .missing_evidence }, .{ .logging = .LOG_SINK_FAILURE }, .{ .token_budget = error.WorkflowTokenBudgetExceeded }, .{ .token_budget = error.ProviderTokenUsageUnavailable } }) |reason| {
+    for ([_]execution.Rejection{ .authority, .operation_failed, .cancelled, .deadline_exhausted, .{ .gate = .missing_evidence }, .{ .logging = .LOG_SINK_FAILURE }, .{ .token_budget = error.WorkflowTokenBudgetExceeded }, .{ .token_budget = error.ProviderTokenUsageUnavailable }, .{ .retry_limit = @import("domain/workflow_retry.zig").Exhaustion.init(.{ .bytes = "account" }, .{ .value = 1 }, 2).? } }) |reason| {
         for ([_]bool{ false, true }) |invocation| {
             var graph = try testGraph();
             var control: OperationControl = .{ .state = .{ .outcome = .ok } };
@@ -286,6 +294,16 @@ test "workflow outcomes preserve exact runner rejections at invocation and step 
             try std.testing.expectEqual(@as(usize, 0), control.state.calls);
         }
     }
+}
+
+test "retry exhaustion owns the operation name after source teardown" {
+    const Exhaustion = @import("domain/workflow_retry.zig").Exhaustion;
+    var name = "request-account".*;
+    const rejection: execution.Rejection = .{ .retry_limit = Exhaustion.init(.{ .bytes = &name }, .{ .value = 4 }, 5).? };
+    @memset(&name, 'x');
+    try std.testing.expectEqualStrings("request-account", rejection.retry_limit.operation().bytes);
+    try std.testing.expect(Exhaustion.init(.{ .bytes = "account" }, .{ .value = 4 }, 4) == null);
+    try std.testing.expect(Exhaustion.init(.{ .bytes = "invalid/name" }, .{ .value = 4 }, 5) == null);
 }
 
 fn selected(graph: *const compilation.CompiledWorkflow) execution.SelectedWorkflow {

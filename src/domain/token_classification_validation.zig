@@ -11,6 +11,7 @@ pub const Issues = struct {
     forbidden: []const tokens.CandidateId,
 };
 pub const Rejection = struct {
+    origin: ?@import("model_candidate_origin.zig").Origin = null,
     scope: evidence.Scope,
     revision: u64,
     field: enum { token_classifications } = .token_classifications,
@@ -67,7 +68,7 @@ pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: token
             // A blocked entry is engine-owned, so contradictory data is an
             // authority failure, not an invitation to have the model repair it.
             if (entry.outcome == .blocked) return error.InvalidReferenceExtraction;
-            return .{ .invalid = .{ .scope = entry.scope, .revision = parsed.revision, .issues = .{
+            return .{ .invalid = .{ .scope = entry.scope, .revision = parsed.revision, .origin = entry.classification_origin, .issues = .{
                 .missing = try missing.toOwnedSlice(a),
                 .duplicate = try duplicate.toOwnedSlice(a),
                 .unknown = try unknown.toOwnedSlice(a),

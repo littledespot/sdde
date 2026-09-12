@@ -147,61 +147,9 @@ fn createSchema(allocator: std.mem.Allocator, root: *const Node, bytes: []const 
     const result = try allocator.create(Storage);
     var scratch: std.heap.ArenaAllocator = .init(allocator);
     defer scratch.deinit();
-    const model_bytes = try std.json.Stringify.valueAlloc(allocator, try schemaValue(scratch.allocator(), root), .{});
+    const model_bytes = try std.json.Stringify.valueAlloc(allocator, try @import("model_schema_projection.zig").value(scratch.allocator(), root, .complete), .{});
     result.* = .{ .bytes = bytes, .model_bytes = model_bytes, .root = root.*, .definitions = definitions };
     return @ptrCast(result);
-}
-
-fn schemaValue(allocator: std.mem.Allocator, node: *const Node) std.mem.Allocator.Error!std.json.Value {
-    var object: std.json.ObjectMap = .{};
-    switch (node.*) {
-        .object => |properties| {
-            try object.put(allocator, "type", .{ .string = "object" });
-            var fields_value: std.json.ObjectMap = .{};
-            var required: std.array_list.Managed(std.json.Value) = .init(allocator);
-            for (properties) |property| {
-                try fields_value.put(allocator, property.name, try schemaValue(allocator, property.schema));
-                if (property.required) try required.append(.{ .string = property.name });
-            }
-            try object.put(allocator, "properties", .{ .object = fields_value });
-            try object.put(allocator, "required", .{ .array = required });
-            try object.put(allocator, "additionalProperties", .{ .bool = false });
-        },
-        .string => |bounds| {
-            try object.put(allocator, "type", .{ .string = "string" });
-            if (bounds.minimum != 0) try object.put(allocator, "minLength", .{ .integer = bounds.minimum });
-            try object.put(allocator, "maxLength", .{ .integer = bounds.maximum });
-        },
-        .integer => |bounds| {
-            try object.put(allocator, "type", .{ .string = "integer" });
-            try object.put(allocator, "minimum", .{ .integer = bounds.minimum });
-            try object.put(allocator, "maximum", .{ .integer = bounds.maximum });
-        },
-        .boolean, .null_value => try object.put(allocator, "type", .{ .string = if (node.* == .boolean) "boolean" else "null" }),
-        .constant => |value| try object.put(allocator, "const", switch (value) {
-            .string => |v| .{ .string = v },
-            .integer => |v| .{ .integer = v },
-            .boolean => |v| .{ .bool = v },
-            .null_value => .null,
-        }),
-        .enumeration => |choices| {
-            var list: std.array_list.Managed(std.json.Value) = .init(allocator);
-            for (choices) |choice| try list.append(.{ .string = choice });
-            try object.put(allocator, "enum", .{ .array = list });
-        },
-        .array => |items| {
-            try object.put(allocator, "type", .{ .string = "array" });
-            try object.put(allocator, "items", try schemaValue(allocator, items.items));
-            if (items.minimum != 0) try object.put(allocator, "minItems", .{ .integer = items.minimum });
-            try object.put(allocator, "maxItems", .{ .integer = items.maximum });
-        },
-        .one_of => |choices| {
-            var list: std.array_list.Managed(std.json.Value) = .init(allocator);
-            for (choices) |choice| try list.append(try schemaValue(allocator, choice));
-            try object.put(allocator, "oneOf", .{ .array = list });
-        },
-    }
-    return .{ .object = object };
 }
 
 const Compiler = struct {

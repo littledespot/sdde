@@ -60,7 +60,7 @@ pub const Collect = struct {
         const packet = values.read(&input.step.data, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .raw = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), packet, try @import("model_candidate_handoff.zig").body(&input.step.data)) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .raw = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), packet, (try @import("model_candidate_handoff.zig").read(&input.step.data)).body) catch return error.OperationExecutionFailed };
         return publish(self.allocator, raw_schema, owner, .ok);
     }
 };

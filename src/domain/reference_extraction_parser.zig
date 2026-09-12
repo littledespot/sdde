@@ -15,6 +15,7 @@ pub fn parse(allocator: std.mem.Allocator, raw: extraction.Raw) extraction.Error
             .chunk_id = .{ .bytes = try allocator.dupe(u8, entry.scope.chunk_id.bytes) },
         };
         result.token_classifications = &.{};
+        result.origin = entry.origin;
         result.outcome = switch (entry.result) {
             .blocked => |reason| .{ .blocked = reason },
             .response => |bytes| outcome: {

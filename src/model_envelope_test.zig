@@ -196,6 +196,7 @@ test "every decoding allocation failure and syntax rejection frees partial trees
 
 fn allocationCase(allocator: std.mem.Allocator, complete: *const invocation.CompleteCandidate, accepted: bool) !void {
     var diagnostic: ?@import("domain/strict_json.zig").Diagnostic = null;
+    defer if (diagnostic) |value| value.deinit(allocator);
     var decoded = (action.Action{}).execute(allocator, complete, &diagnostic) catch |err| switch (err) {
         error.OutOfMemory => {
             try std.testing.expect(diagnostic == null);

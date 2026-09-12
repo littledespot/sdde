@@ -348,6 +348,7 @@ task.
 - Fault injection: malformed model output, parser/command/filesystem failure,
   every transaction phase, interruption, stale approval, and retry exhaustion.
 - Unit and integration tests may use fakes; their results are not E2E evidence.
+- Ask for explicit user approval before each E2E test run.
 - End to end: execute the complete production path, including the real LLM
   selected by the test's `.sddtoolkit.json`, configured external services, and
   required rubric evaluation of the engine's actual published output. Scripted

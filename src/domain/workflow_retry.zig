@@ -11,6 +11,35 @@ pub const Limit = struct {
     }
 };
 
+/// Terminal evidence owns its operation name and survives graph/runner teardown.
+pub const Exhaustion = struct {
+    operation_name: [workflow.max_local_id_bytes]u8,
+    operation_name_len: u8,
+    limit: Limit,
+    completed_executions: u64,
+
+    pub const Description = struct {
+        operation_instance_id: workflow.WorkflowStepId,
+        retry_limit: u32,
+        completed_executions: u64,
+    };
+
+    pub fn init(step: workflow.WorkflowStepId, limit: Limit, completed: u64) ?Exhaustion {
+        if (workflow.WorkflowStepId.parse(step.bytes) == null or completed <= limit.value) return null;
+        var result: Exhaustion = .{ .operation_name = @splat(0), .operation_name_len = @intCast(step.bytes.len), .limit = limit, .completed_executions = completed };
+        @memcpy(result.operation_name[0..step.bytes.len], step.bytes);
+        return result;
+    }
+
+    pub fn operation(self: *const Exhaustion) workflow.WorkflowStepId {
+        return .{ .bytes = self.operation_name[0..self.operation_name_len] };
+    }
+
+    pub fn describe(self: *const Exhaustion, allocator: std.mem.Allocator) std.mem.Allocator.Error!Description {
+        return .{ .operation_instance_id = .{ .bytes = try allocator.dupe(u8, self.operation().bytes) }, .retry_limit = self.limit.value, .completed_executions = self.completed_executions };
+    }
+};
+
 pub const CompiledAuthority = struct {
     workflow_id: workflow.WorkflowId,
     workflow_version: u32,

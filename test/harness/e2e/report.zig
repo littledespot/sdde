@@ -32,8 +32,17 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
     defer out.deinit();
     const writer = &out.writer;
     try writer.print("E2E result: {s}\n", .{@tagName(report.status)});
+    if (report.evaluation) |evaluation| switch (evaluation.outcome) {
+        .evaluated => |judgment| {
+            try writer.print("Quality assessment: {s}; threshold: {s}", .{ @tagName(judgment.assessment), @tagName(judgment.threshold) });
+            if (judgment.score_percent) |score| try writer.print("; score: {d:.2}%", .{score});
+            try writer.writeByte('\n');
+        },
+        .evaluator_error => |reason| try writer.print("Quality evaluation failed: {s}\n", .{@tagName(reason)}),
+    };
     const fields = [_]struct { label: []const u8, value: ?[]const u8 }{
         .{ .label = "Model step", .value = report.last_model_step },
+        .{ .label = "Candidate source step", .value = report.candidate_model_step },
         .{ .label = "Engine/harness error", .value = report.diagnostic },
         .{ .label = "Provider error", .value = report.provider_diagnostic },
         .{ .label = "Model validation error", .value = report.model_diagnostic },
@@ -45,6 +54,10 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
         try std.json.Stringify.value(value, .{}, writer);
         try writer.writeByte('\n');
     };
+    if (report.retry_error) |diagnostic| {
+        try writeRetryError(writer, diagnostic);
+        try writer.writeByte('\n');
+    }
     if (report.candidate_error) |diagnostic| {
         try writeCandidateError(writer, diagnostic);
         try writer.writeAll("\n\n");
@@ -59,6 +72,7 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
         try writer.writeByte('\n');
     }
     if (report.last_model_output) |path| try writer.print("Model output: {s}/{s}/{s}\n", .{ root, run, path });
+    if (report.candidate_model_output) |path| try writer.print("Candidate source output: {s}/{s}/{s}\n", .{ root, run, path });
     if (report.events_file) |path| try writer.print("Events: {s}/{s}/{s}\n", .{ root, run, path });
     try writer.print("Report: {s}/{s}/report.md\nDetails: {s}/{s}/report.json\n", .{ root, run, root, run });
     return out.toOwnedSlice();
@@ -69,10 +83,19 @@ fn writeCandidateError(writer: *std.Io.Writer, diagnostic: @import("../../../src
     try std.json.Stringify.value(diagnostic, .{}, writer);
 }
 
+fn writeRetryError(writer: *std.Io.Writer, diagnostic: @import("../../../src/domain/workflow_retry.zig").Exhaustion.Description) !void {
+    try writer.writeAll("Retry exhaustion: ");
+    try std.json.Stringify.value(diagnostic, .{}, writer);
+}
+
 fn writeJsonError(writer: *std.Io.Writer, diagnostic: @import("../../../src/domain/strict_json.zig").Diagnostic) !void {
     try writer.print("JSON error: {s}", .{@tagName(diagnostic.reason)});
     if (diagnostic.location) |position|
         try writer.print(" at line {d}, column {d} (byte offset {d})", .{ position.line, position.column, position.byte_offset });
+    if (diagnostic.context) |context| {
+        try writer.writeAll("; context: ");
+        try std.json.Stringify.value(context, .{}, writer);
+    }
 }
 
 /// Human view of the same structured report; it introduces no workflow verdict.
@@ -98,6 +121,10 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     try writer.writeAll("; model validation: ");
     try escape(writer, report.model_diagnostic orelse "none");
     try writer.writeAll(".\n\n");
+    if (report.retry_error) |diagnostic| {
+        try writeRetryError(writer, diagnostic);
+        try writer.writeAll("\n\n");
+    }
     if (report.candidate_error) |diagnostic| {
         try writeCandidateError(writer, diagnostic);
         try writer.writeAll("\n\n");
@@ -113,6 +140,9 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     }
     if (report.last_model_output) |path| {
         try writer.print("Rejected or completed model output: [open text]({s}). This is untrusted diagnostic data.\n\n", .{path});
+    }
+    if (report.candidate_model_output) |path| {
+        try writer.print("Candidate diagnostic source: [model output]({s}), call {d}.\n\n", .{ path, report.candidate_model_call.? });
     }
     if (report.events_file) |path| try writer.print("Every step and validation result: [events]({s}).\n\n", .{path});
     if (report.evidence_root) |path| try writer.print("Model-call inputs and responses: [{s}/]({s}/).\n\n", .{ path, path });
@@ -172,6 +202,6 @@ fn explanation(report: c.Report) []const u8 {
         .generated => "The engine published its validated specification; rubric grading has not completed.",
         .evaluator_failed => "Generation completed, but the evaluator failed. The published specification remains available; this result has no quality grade.",
         .quality_unresolved => "Generation completed, but the judge could not resolve every required criterion. Inspect the criterion evidence and uncertainty below.",
-        .passed => "Generation, publication checks and rubric scoring completed. Inspect the score and criterion findings below; a completed evaluation may still report poor quality.",
+        .evaluated => "Generation, publication checks and rubric scoring completed. Inspect the score and criterion findings below; a completed evaluation may still report poor quality.",
     };
 }

@@ -10,6 +10,7 @@ const values = @import("../../../src/application/pipeline_values.zig");
 const requests = @import("../../../src/application/model_request_workflow.zig");
 const evidence = @import("../evidence.zig");
 const c = @import("contracts.zig");
+const Origin = @import("../../../src/domain/model_candidate_origin.zig").Origin;
 
 const TransportOutcome = union(enum) {
     transport_error: enum { cancelled, allocation_failed },
@@ -24,6 +25,8 @@ pub const Trace = struct {
     inner_transport: ?transport.Port = null,
     failure: ?anyerror = null,
     calls: usize = 0,
+    call_origins: std.ArrayList(Origin) = .empty,
+    last_rejection: @import("observation.zig").LastModelRejection = .{},
     sequence: usize = 0,
     current: ?operation.ProviderOperationId = null,
     output_written: bool = false,
@@ -33,6 +36,8 @@ pub const Trace = struct {
         return .{ .store = store, .invocation = invocation, .events = try store.run.createFile(store.io, "events.jsonl", .{ .exclusive = true, .permissions = .fromMode(0o600) }) };
     }
     pub fn close(self: *Trace) void {
+        self.last_rejection.deinit(self.store.allocator);
+        self.call_origins.deinit(self.store.allocator);
         self.events.close(self.store.io);
     }
     pub fn port(self: *Trace) bindings.ChildBindings {
@@ -134,9 +139,12 @@ pub const Trace = struct {
         const request = (try requests.readCurrent(&view, requests.prepared_schema)).prepared() orelse return error.MissingRequestEvidence;
         const accounting = @import("../../../src/application/workflow_model_accounting.zig");
         self.current = (try values.read(&view, accounting.invoked_schema, @import("../../../src/domain/provider_operation_lifecycle.zig").InvokedOperation)).operation().id;
+        const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
+        try self.call_origins.append(self.store.allocator, Origin.from(identities, self.current.?) orelse return error.MissingRequestEvidence);
         const context = try std.json.Stringify.valueAlloc(self.store.allocator, .{
             .schema = "model-call-evidence/v1",
             .call = self.calls,
+            .origin = self.call_origins.items[self.calls - 1],
             .request_step = request.binding_id.operation_id.workflow_step_id.bytes,
             .slot = request.binding_id.slot_id.bytes,
             .attempt = self.current.?.model_attempt_ordinal.value,
@@ -146,6 +154,7 @@ pub const Trace = struct {
             .reasoning_effort = request.binding_id.reasoning_effort,
             .content = request.content,
             .response_schema = request.response_schema.modelBytes(),
+            .response_mode = request.response_guidance_mode,
         }, .{ .whitespace = .indent_2 });
         defer self.store.allocator.free(context);
         try self.store.write(.generation, self.calls, .context, context);
@@ -159,6 +168,9 @@ pub const Trace = struct {
         const a = arena.allocator();
         var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status() };
         try @import("observation.zig").capture(a, runner, &report);
+        try self.last_rejection.observe(self.store.allocator, self.calls, report);
+        try self.last_rejection.project(a, self.calls, &report);
+        try self.correlate(a, &report);
         const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
         const invocation = @import("../../../src/application/model_invocation_workflow.zig");
         var call: ?usize = null;
@@ -181,17 +193,32 @@ pub const Trace = struct {
             .step = id.bytes,
             .outcome = result.status(),
             .rejection = if (result == .rejected) result.rejected.diagnostic() else null,
-            .model_call = call,
-            .request_step = report.last_model_step,
+            .model_call = report.candidate_model_call orelse call orelse (if (report.model_diagnostic != null) self.calls else null),
+            .request_step = report.candidate_model_step orelse report.last_model_step,
             .provider_error = report.provider_diagnostic,
             .model_error = report.model_diagnostic,
             .json_error = report.json_error,
             .schema_error = report.schema_error,
+            .retry_error = if (result == .rejected and result.rejected == .retry_limit) try result.rejected.retry_limit.describe(a) else null,
             .candidate_error = report.candidate_error,
             .usage = report.last_model_usage,
         }, .{});
         try self.events.writeStreamingAll(self.store.io, event);
         try self.events.writeStreamingAll(self.store.io, "\n");
         try self.events.sync(self.store.io);
+    }
+
+    /// Join a retained native origin to the actual captured exchange. No guess
+    /// based on the latest call, step name or model response contents.
+    pub fn correlate(self: *const Trace, a: std.mem.Allocator, report: *c.Report) !void {
+        const diagnostic = report.candidate_error orelse return;
+        const origin = diagnostic.origin() orelse return;
+        var found: ?usize = null;
+        for (self.call_origins.items, 1..) |candidate, call| if (std.meta.eql(candidate, origin)) {
+            if (found != null) return error.MissingRequestEvidence;
+            found = call;
+        };
+        report.candidate_model_call = found orelse return error.MissingRequestEvidence;
+        report.candidate_model_output = try evidence.Store.path(a, .generation, found.?, .model_output);
     }
 };

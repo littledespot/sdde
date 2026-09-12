@@ -51,7 +51,7 @@ pub const Parse = struct {
         const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .repair_result = self.action.execute(owner.arena.allocator(), authorization, packet, try @import("model_candidate_handoff.zig").body(&input.step.data)) catch |err| return reject(self.allocator, result_schema, owner, err) };
+        owner.payload = .{ .repair_result = self.action.execute(owner.arena.allocator(), authorization, packet, (try @import("model_candidate_handoff.zig").read(&input.step.data)).body) catch |err| return reject(self.allocator, result_schema, owner, err) };
         return owned.publish(self.allocator, result_schema, owner, .ok) catch error.OperationExecutionFailed;
     }
 };

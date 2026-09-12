@@ -8,11 +8,12 @@ pub const Payload = union(enum) {
     raw: extraction.Raw,
     parsed: extraction.Parsed,
     text_validated: extraction.TextValidated,
-    token_classified: extraction.Classified,
+    selections_validated: extraction.Classified,
     token_classification_rejected: @import("token_classification_validation.zig").Rejection,
     tokens_assigned: extraction.TokenAssignments,
     prepared: extraction.Prepared,
     validated: extraction.Validated,
+    citation_rejected: @import("reference_selection_validation.zig").Rejection,
     assigned: extraction.Assignments,
     ledger: extraction.Ledger,
     accounted: extraction.Accounted,
@@ -84,6 +85,7 @@ pub fn capture(allocator: std.mem.Allocator, raw: extraction.Raw) std.mem.Alloca
     const entries = try arena.alloc(extraction.RawResult, raw.entries.len);
     for (raw.entries, entries) |input, *entry| {
         entry.* = .{
+            .origin = input.origin,
             .scope = .{ .state_id = .{ .bytes = try arena.dupe(u8, input.scope.state_id.bytes) }, .chunk_id = .{ .bytes = try arena.dupe(u8, input.scope.chunk_id.bytes) } },
             .result = switch (input.result) {
                 .response => |bytes| .{ .response = try arena.dupe(u8, bytes) },

@@ -6,7 +6,7 @@ const execution = @import("../domain/workflow_execution.zig");
 const identity = @import("../domain/model_request_identity.zig");
 pub const Build = struct {
     pub const Action = @import("../actions/model/build_model_protocol_retry.zig").Action;
-    pub const contract: @import("../domain/workflow_operation.zig").Contract = .{ .id = Action.contract.id, .kind = .step, .requires = Action.contract.requires, .replaces = Action.contract.replaces, .invalidates = Action.contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .retry_limit = .{ .maximum = 1 }, .parameters = &.{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 0 }} };
+    pub const contract: @import("../domain/workflow_operation.zig").Contract = .{ .id = Action.contract.id, .kind = .step, .requires = Action.contract.requires, .replaces = Action.contract.replaces, .invalidates = Action.contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -30,7 +30,8 @@ pub const Build = struct {
         if (observation != .validated or observation.validated.result() != .complete) return error.OperationExecutionFailed;
         const rejected = observation.validated.result().complete;
         if (rejected.association().request() != current.prepared()) return error.OperationExecutionFailed;
-        var prepared = self.action.execute(self.allocator, source, rejected, diagnostic, prompt) catch return error.OperationExecutionFailed;
+        var parts: [2]@import("../domain/llm_provider_operation.zig").ModelVisibleContent = undefined;
+        var prepared = self.action.execute(self.allocator, source, validated.content(&parts), rejected, diagnostic, prompt) catch return error.OperationExecutionFailed;
         const next = @import("../domain/model_request_handoff.zig").prepared(validated, prepared) catch {
             prepared.deinit();
             return error.OperationExecutionFailed;

@@ -32,6 +32,9 @@ pub const PositiveOrdinal = struct {
     }
 };
 
+/// Read-only position in this execution's existing request ledger.
+pub const RecordIndex = struct { value: usize };
+
 pub const LedgerRevision = struct {
     value: u64,
 
@@ -213,6 +216,18 @@ pub const ModelRequestIdentityLedger = opaque {
 
     pub fn recordCount(self: *const ModelRequestIdentityLedger) usize {
         return ledgerStorage(self).record_count;
+    }
+
+    pub fn indexOf(self: *const ModelRequestIdentityLedger, request_id: *const ModelRequestId) ?RecordIndex {
+        var index = self.recordCount();
+        var current = ledgerStorage(self).latest_record;
+        while (current) |node| : (current = node.previous) {
+            // Lifecycle nodes reuse a request; only assignment adds a record.
+            if (node.record.status != .assigned) continue;
+            if (node.canonical_model_request_id == request_id) return .{ .value = index };
+            index -= 1;
+        }
+        return null;
     }
 
     pub fn latestRecord(self: *const ModelRequestIdentityLedger) ?*const Record {

@@ -28,7 +28,7 @@ pub const Collect = struct {
         const packet = values.read(&input.step.data, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), source, try spec.readContext(&input.step.data), packet, try @import("model_candidate_handoff.zig").body(&input.step.data)) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), source, try spec.readContext(&input.step.data), packet, (try @import("model_candidate_handoff.zig").read(&input.step.data)).body) catch return error.OperationExecutionFailed };
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(authority.inputs_schema.key)] = values.adopt(self.allocator, authority.inputs_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
         return .{ .outcome = .ok, .delta = delta };

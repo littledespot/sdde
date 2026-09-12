@@ -61,10 +61,10 @@ pub const CollectExtraction = struct {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, progress_schema, .extraction_progress);
         const packet = try readPacket(&input.step.data);
-        const body = try handoff.body(&input.step.data);
+        const candidate = try handoff.read(&input.step.data);
         const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .extraction_progress = self.action.execute(owner.arena.allocator(), prior.payload().extraction_progress, packet, body) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .extraction_progress = self.action.execute(owner.arena.allocator(), prior.payload().extraction_progress, packet, candidate.body, candidate.origin) catch return error.OperationExecutionFailed };
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(progress_schema.key)] = values.adopt(self.allocator, progress_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
         return .{ .outcome = .ok, .delta = delta };
@@ -112,7 +112,7 @@ pub const CollectReconciliation = struct {
         const prior = try extraction.read(&input.step.data, reconciliation.input_schema, .reconciliation_input);
         const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .reconciliation_raw = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_input, try readPacket(&input.step.data), try handoff.body(&input.step.data)) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .reconciliation_raw = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_input, try readPacket(&input.step.data), (try handoff.read(&input.step.data)).body) catch return error.OperationExecutionFailed };
         return extraction.publish(self.allocator, reconciliation.raw_schema, owner, .ok);
     }
 };

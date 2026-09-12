@@ -56,7 +56,7 @@ The initial registered contracts are:
 
 | Exact model | Explicit region | Converse | CountTokens | Response modes |
 | --- | --- | --- | --- | --- |
-| `openai.gpt-oss-20b-1:0` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; representable native schemas |
+| `openai.gpt-oss-20b-1:0` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; native schema projection |
 | `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` | Yes | Yes | Prompt-only |
 
 Both support the registered temperature control. GPT-OSS registers the explicit
@@ -119,18 +119,17 @@ the adapter accepts no arbitrary additional parameters.
 Neither sends `maxTokens`, a workflow-budget-derived ceiling, tools, stop
 sequences, arbitrary wire parameters or model-visible engine identities.
 
-Prompt-only adds the retained result schema once to guidance. Native mode
-sends it once in `outputConfig.textFormat.structure.jsonSchema`, with type
-`json_schema` and the fixed name `sdde_model_envelope_v1`.
-
-Native representability is checked only for a registered native profile. The
-implemented intersection with the engine schema is closed objects, constants,
-enumerations, booleans and nulls. Engine strings, integers and arrays require
-constraints that [Bedrock's native schema subset](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
-cannot enforce; those schemas and `oneOf` reject in native mode. No constraint
-is dropped, and no rejection triggers a prompt-only fallback. Prompt-only may
-use the entire engine schema. Both modes still require explicit YAML response
-validation, JSON decoding and authoritative payload validation.
+Both modes add the complete compiled result schema once to guidance. Native
+mode also sends its registered structural projection in
+`outputConfig.textFormat.structure.jsonSchema`, with type `json_schema` and
+fixed name `sdde_model_envelope_v1`. This is derived data, never a second schema
+source. Under [ADR 0006](../decisions/0006-minimal-model-response.md), closed
+objects, required fields, types, enums and constants are retained; disjoint tagged
+`oneOf` becomes `anyOf`, and a positive array minimum becomes `minItems: 1`.
+Bounds unsupported by [Bedrock's schema subset](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
+remain in complete guidance and authoritative engine validation. No error
+triggers a response-mode fallback. Both modes require the same explicit YAML
+response validation, strict JSON decoding and payload validation.
 
 ## Response, failure and accounting
 
@@ -181,7 +180,7 @@ never charge tokens again.
 - Shared fake/Bedrock conformance covers exact association, count/inference,
   single-use authorization, deadlines, failures, cancellation and owned cleanup.
 - Wire fixtures cover canonical projection, URI encoding, strict response and
-  usage rejection, secret redaction, native representability, unsupported
+  usage rejection, secret redaction, native projection, unsupported
   counting, status/type agreement and growing HTTP headers.
 - [Concrete HTTP tests](../../src/bedrock_http_test.zig) exercise the actual
   serializer, response reader and deadline race over event-controlled in-memory

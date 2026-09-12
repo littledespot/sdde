@@ -13,26 +13,39 @@ pub const Kind = enum { business, design, technical, validation, implementation_
 fn ContentOf(comptime Business: type, comptime Reference: type) type {
     return union(Kind) { business: Business, design: Reference, technical: Reference, validation: Reference, implementation_assumption: Reference, open_question: Reference, scope_guard: Business };
 }
-pub const Proposal = struct { content: ProposalContent, citations: []const evidence.CitationProposal };
-pub const TextValidatedProposal = struct { content: Content, citations: []const evidence.CitationProposal };
+pub const Proposal = struct { content: ProposalContent, citations: []const @import("source_selections.zig").Selection };
+pub const TextValidatedProposal = struct {
+    content: Content,
+    citations: []const @import("source_selections.zig").Selection,
+    origin: ?@import("model_candidate_origin.zig").Origin = null,
+    citation_origins: []const ?@import("model_candidate_origin.zig").Origin,
+
+    pub fn rejectionOrigin(self: TextValidatedProposal, issue: @import("source_selections.zig").Issue) Error!?@import("model_candidate_origin.zig").Origin {
+        if (self.citations.len != self.citation_origins.len) return error.InvalidReferenceExtraction;
+        return if (issue.rejected == null) self.origin else if (issue.index < self.citation_origins.len) self.citation_origins[issue.index] else error.InvalidReferenceExtraction;
+    }
+};
 pub const PreparedContent = union(enum) { model: Content, preserved_token: tokens.Value };
-pub const PreparedClaim = struct { content: PreparedContent, citations: []const evidence.CitationProposal };
+pub const PreparedClaim = union(enum) { model: TextValidatedProposal, preserved_token: struct { value: tokens.Value, citation: evidence.ValidatedCitation } };
 pub const ValidatedClaim = struct { content: PreparedContent, citations: []const evidence.ValidatedCitation };
 pub const BlockReason = enum { extraction_failed };
 pub const RawResult = struct {
     scope: evidence.Scope,
+    origin: ?@import("model_candidate_origin.zig").Origin = null,
     /// Only the engine supplies scope and failure; neither is in model JSON.
     result: union(enum) { response: []const u8, blocked: BlockReason },
 };
 pub const Raw = struct { entries: []const RawResult };
 pub const ParsedResult = struct {
     scope: evidence.Scope,
+    origin: ?@import("model_candidate_origin.zig").Origin = null,
     token_classifications: []const tokens.Classification,
     outcome: union(enum) { claims: []const Proposal, no_feature_claim: text.ReferenceSemanticText, blocked: BlockReason },
 };
 pub const Parsed = struct { entries: []const ParsedResult };
 pub const TextValidatedResult = struct {
     scope: evidence.Scope,
+    classification_origin: ?@import("model_candidate_origin.zig").Origin = null,
     token_classifications: []const tokens.Classification,
     outcome: union(enum) { claims: []const TextValidatedProposal, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
@@ -43,12 +56,13 @@ pub const PreparedResult = struct {
     scope: evidence.Scope,
     outcome: union(enum) { claims: []const PreparedClaim, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
-pub const Prepared = struct { entries: []const PreparedResult };
+pub const Prepared = struct { revision: u64, entries: []const PreparedResult };
 pub const ValidatedResult = struct {
     scope: evidence.Scope,
     outcome: union(enum) { claims: []const ValidatedClaim, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
 pub const Validated = struct { state_id: identity.StateId, entries: []const ValidatedResult };
+pub const Validation = union(enum) { valid: Validated, invalid: @import("reference_selection_validation.zig").Rejection };
 pub const ClaimId = identity.ClaimId;
 pub const CitationId = identity.CitationId;
 pub const Assignment = struct { claim_id: ClaimId, citation_ids: []const CitationId };
