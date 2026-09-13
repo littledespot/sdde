@@ -250,6 +250,40 @@
         "last"
       ],
       "additionalProperties": false
+    },
+    "business_text_replacement": {
+      "type": "object",
+      "properties": {
+        "segments": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4294967295,
+          "items": {
+            "$ref": "#/$defs/business_segment"
+          }
+        }
+      },
+      "required": [
+        "segments"
+      ],
+      "additionalProperties": false
+    },
+    "reference_text_replacement": {
+      "type": "object",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4294967295,
+          "items": {
+            "$ref": "#/$defs/reference_node"
+          }
+        }
+      },
+      "required": [
+        "nodes"
+      ],
+      "additionalProperties": false
     }
   },
   "oneOf": [

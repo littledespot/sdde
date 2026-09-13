@@ -117,8 +117,8 @@ test "independent wire cases cover every selected specification result and neste
         try checkCandidate("generation", record[0], response_wire.clarification);
         try checkCandidate("repair", "record_" ++ record[0], bytes);
     }
-    try checkCandidate("repair", "attributed", response_wire.attributed);
-    try checkCandidate("repair", "attributed", "{\"value\":" ++ response_wire.exact ++ ",\"provenance\":" ++ response_wire.provenance ++ "}");
+    try checkCandidate("repair", "provenance", response_wire.provenance);
+    try checkCandidate("repair", "value", response_wire.exact);
     try checkCandidate("support", null, "{\"entries\":[{\"requirement_ordinal\":7,\"finding\":\"supported\",\"disposition\":\"supported\",\"provenance\":" ++ response_wire.provenance ++ "},{\"requirement_ordinal\":9,\"finding\":\"unsupported\",\"disposition\":\"not_applicable\",\"provenance\":{\"claim_ids\":[],\"clarification_response_ids\":[]}}]}");
 }
 
@@ -149,7 +149,7 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
     } else if (comptime std.mem.eql(u8, name, "reconciliation")) {
         _ = try codec.decodeSelected(@FieldType(@import("domain/reference_reconciliation.zig").Parsed, "proposal"), a, if (std.mem.eql(u8, selection.?, "summary")) .summary else .global, bytes);
     } else if (comptime std.mem.eql(u8, name, "repair")) {
-        _ = try codec.decodeSelected(@import("domain/specification_repair.zig").Replacement, a, if (std.mem.eql(u8, selection.?, "attributed")) .attributed else .record, bytes);
+        _ = try codec.decodeSelected(@import("domain/specification_repair.zig").Replacement, a, if (std.mem.eql(u8, selection.?, "provenance")) .provenance else if (std.mem.eql(u8, selection.?, "value")) .value else .record, bytes);
     } else if (comptime std.mem.eql(u8, name, "generation")) {
         _ = try codec.decode(@import("domain/specification_generation.zig").ModelResponse, a, bytes);
     } else _ = try codec.decode(@import("domain/specification_support.zig").Review, a, bytes);
@@ -161,7 +161,7 @@ test "final proposal schemas and native readers reject deterministic echoes and 
         try candidateCase("reconciliation", "summary", "{\"statements\":[],\"" ++ field ++ "\":[]}", .unknown_property, "/" ++ field);
     }
     try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance/citation_ids");
-    try candidateCase("repair", "attributed", "{\"value\":" ++ response_wire.exact ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance/citation_ids");
+    try candidateCase("repair", "provenance", echoed, .unknown_property, "/citation_ids");
     try candidateCase("support", null, "{\"entries\":[{\"requirement_ordinal\":7,\"finding\":\"supported\",\"disposition\":\"supported\",\"provenance\":" ++ echoed ++ "}]}", .unknown_property, "/entries/0/provenance/citation_ids");
     try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[{\"ordinal\":7}],\"citation_ids\":[],\"content\":{\"kind\":\"preserved_token\",\"token_id\":{\"ordinal\":7}}}],\"conflicts\":[]}", .unknown_property, "/signals/0/citation_ids");
     try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[],\"conflicts\":[{\"claim_ids\":[{\"ordinal\":7},{\"ordinal\":9}],\"citation_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "},\"resolution\":\"unresolved\"}]}", .unknown_property, "/conflicts/0/citation_ids");

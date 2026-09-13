@@ -23,6 +23,6 @@ pub const Action = struct {
                 .blocked => |reason| .{ .blocked = reason },
             } };
         }
-        return .{ .revision = assigned.classified.text_validated.revision, .entries = entries };
+        return .{ .dependencies = assigned.classified.dependencies, .revision = assigned.classified.text_validated.revision, .entries = entries };
     }
 };

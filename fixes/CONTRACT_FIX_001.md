@@ -14,6 +14,14 @@ The later [R12 review](FIX_001.md#9-post-phase-1-live-run-review) reopened chunk
 for missed protocol-prompt cleanup and refined observation/readiness checks.
 The [Phase 1 follow-up](TODO_FIX_001.md#phase-1-follow-up-completion--13-september-2026)
 now closes that item. A1–A3 and accepted engine authority remain unchanged.
+The [R13 review](FIX_001.md#10-post-phase-2-live-run-review) confirms the remaining
+B02/R1 extraction-text gap. Chunk 12's extraction-text portion can follow 08
+without waiting for 09–11; the other routes keep their dependencies. Phase 2
+remains complete offline. Phase 3 (08–12) is also complete offline; its delivery and verification record now
+live in [the rollout](TODO_FIX_001.md#phase-3-delivery-and-verification--13-september-2026),
+including the downstream support-review eligibility issue assigned to 13–14.
+The historical boundary table below remains the Phase 0 snapshot. No new authority
+or repair target is approved here.
 
 ## 1. Outcome, authority and ownership
 
@@ -133,7 +141,7 @@ Use these preconditions in the table:
 
 | Target | Smallest permitted write / operation | Immutable read dependencies and validation after merge |
 | --- | --- | --- |
-| R1 — Extraction prose | Replace one content field or typed content value. Replace a containing claim only if its text/selection cannot be valid independently within that record. | Current chunk, selected source lines, passive registry and text policy; rerun text, classification/selection, claim construction/accounting, then full extraction. |
+| R1 — Extraction prose | Replace one content field or typed content value. Replace a containing claim only if its text/selection cannot be valid independently within that record. | Retain the original parsed candidate, revision and producing origin before text acceptance, plus current chunk, selected source lines, passive registry and text policy; rerun text, classification/selection, claim construction/accounting, then full extraction. |
 | R2 — Classification collection | Retain the existing §22.1 coupled collection replacement for one chunk; it covers missing, extra, duplicate and forbidden decisions in one authorized record. | Exact candidate inventory, chunk outcome and permitted decision variants; rerun classifications and source selections, reconstruct tokens/claims, validate accounting and complete extraction. No semantic first/last survivor. |
 | R3 — Source selections | Replace one invalid selection; replace the known-empty selection collection under the existing missing-citations target. A duplicate selection may be deleted only after proving redundancy and preserving nonempty support. | Original unchanged claim, captured source choices, exact scope and selection issue; reconstruct quotations, rerun selections, derived claims/tokens and full extraction. Re-selection is semantic evidence choice, not permission to fabricate quoted text. |
 | R4 — Summary statement | Replace a faulty field/claim selection, or one inseparable statement. Insert one statement for engine-identified uncovered claim membership. Delete an exactly redundant statement only if total coverage and order remain valid. | Fixed partition membership, child summaries, existing statements/keys, selected claims and text context; rerun uniqueness, content and exact-once membership validation before append, then complete lineage. Overlapping non-equivalent statements use gate G1. |
@@ -332,7 +340,7 @@ Multi-member failures retain enough member identities to explain missing, extra
 and duplicate coverage. Application bindings retain the result; authorization
 verifies its binding without repeating domain validation to rediscover the error.
 
-In chunks 02–04 and 13, carry that evidence through collection, request release,
+In chunks 02–04, 12 and 13, carry that evidence through collection, request release,
 repair and terminal report. A replacement records its actual producing call even
 if its bytes equal the previous value; unchanged siblings retain their origins.
 Every event distinguishes the **current provider exchange** from the **candidate
@@ -352,6 +360,15 @@ terminal rejection; an unvalidated final response receives no invented JSON or
 domain verdict. R12 makes these existing observation obligations concrete in
 chunks 16/18. Use the native observation/accounting and existing rejection
 retention owner, not report-side revalidation or a second history service.
+
+R13's full response is retained, while extraction text failure collapses to
+`operation_failed` with null candidate diagnostic/origin fields. Chunk 12 must
+carry the native text rejection through the same closed diagnostic union and
+existing report/event projections. That requires producer/binding work, not
+another raw-body logger or a guessed exception in the report. A later
+classification or semantic defect found during review must remain distinct from
+the first validator actually reached. Chunk 16 remains the transport-observation
+owner; R13 provides no transport failure to diagnose.
 
 Native diagnostic detail and explicitly permitted harness capture are distinct
 from production metadata. [Design §26.5](../design/design.md#265-secrets-and-logging)
@@ -384,7 +401,7 @@ at least two registered requirement kinds; the Hello World example is insufficie
 | Case / boundary | Accepted case | Rejected case | Owning offline checks |
 | --- | --- | --- | --- |
 | T01 / B01 | Independent valid fixtures cover every selected result and nested variant, exact integers `7`, `7.0`, `70e-1`, whitespace/order, and precise parent/value schema diagnostics without examples. | Duplicate keys, malformed JSON, fences, missing/mixed/unknown variant fields, fractional/out-of-range integers and foreign request/schema association reject; local/global exhaustion cannot reset. | `test-model-candidate-json`, `test-model-payload-schema`, `test-model-result-schema`, `test-model-request-workflow`, `test-model-attempt-accounting` |
-| T02 / B02 | Correct one localized invalid text field with allowed passive/source references; preserve other claims and citations. | Same apparent text error under stale grammar/source binding never calls repair; out-of-scope edits and missing semantic authority cannot pass. | `test-reference-extraction`, `test-typed-text`, `test-structured-tokens` |
+| T02 / B02 | Correct one localized invalid text field with allowed passive/source references; preserve other claims, citations and classifications. Carry its native location/rule/origin through request release and reports; then detect a separate classification defect before full acceptance. | Same apparent text error under stale grammar/source binding never calls repair; out-of-scope edits, unchanged invalid replacements and missing semantic authority cannot pass. | `test-reference-extraction`, `test-typed-text`, `test-structured-tokens`, `test-model-request-workflow`, `test-e2e-harness` |
 | T03 / B03 | Coupled classification replacement supplies every scoped candidate once after missing/duplicate/unknown decisions. | Foreign candidate, forbidden preservation, duplicated non-equivalent choice or corrupted engine-blocked entry remains rejected; no first/last collapse. | `test-reference-extraction`, `test-structured-tokens` |
 | T04 / B04 | Repair one bad occurrence and an empty selection list from captured line choices; quotations exactly match capture. | Foreign line, ambiguous occurrence, absent source, empty support and stale revision reject; model-authored quotation is not authority. | `test-reference-extraction`, `test-reference-evidence` |
 | T05 / B05 | Candidate selection rejection survives claim construction and returns to its precise source target with correct origin. | Corrupt derived token citation or chunk/state/count binding fails without semantic repair or invented identities; final accounting stays exhaustive. | `test-reference-extraction`, `test-reference-evidence`, `test` |

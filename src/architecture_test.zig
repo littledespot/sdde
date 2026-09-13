@@ -1891,15 +1891,18 @@ fn countOccurrences(source: []const u8, needle: []const u8) usize {
     return count;
 }
 
-test "classification and specification repair share authority and expose only native replacement operations" {
+test "candidate repairs share authority and expose only native scoped operations" {
     const binding = @import("application/workflow_operation_binding.zig");
     const tokens = @import("application/reference_extraction_repair_workflow.zig");
     const spec = @import("application/specification_repair_workflow.zig");
-    inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge }) |T| {
+    const lexical = @import("application/reference_text_repair_workflow.zig");
+    const reconciliation = @import("application/reference_reconciliation_repair_workflow.zig");
+    const coverage = @import("application/specification_coverage_repair_workflow.zig");
+    inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, tokens.RetainClaimRejection, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge, lexical.Authorize, lexical.BuildInput, lexical.Parse, lexical.Merge, reconciliation.Authorize(.summary), reconciliation.Authorize(.dispositions), reconciliation.Authorize(.signals), reconciliation.Authorize(.conflicts), reconciliation.BuildInput, reconciliation.Parse, reconciliation.Merge, coverage.Authorize, coverage.Merge }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }
-    inline for (.{ @embedFile("domain/reference_extraction_repair.zig"), @embedFile("domain/specification_repair.zig") }) |source| {
+    inline for (.{ @embedFile("domain/reference_extraction_repair.zig"), @embedFile("domain/specification_repair.zig"), @embedFile("domain/reference_extraction_text_repair.zig"), @embedFile("domain/reference_reconciliation_repair.zig"), @embedFile("domain/specification_coverage_repair.zig") }) |source| {
         try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic_repair.zig"));
         try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic.checkMerge("));
         try expectAbsent(source, "candidate.revision + 1");

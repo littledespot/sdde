@@ -29,6 +29,9 @@ const identity_source = @import("../ports/reference_state_identity.zig");
 const extraction = @import("../application/reference_extraction_workflow.zig");
 const path_tokens = @import("../application/path_token_workflow.zig");
 const passive_literals = @import("../application/passive_literal_workflow.zig");
+const text_repair = @import("../application/reference_text_repair_workflow.zig");
+const coverage_repair = @import("../application/specification_coverage_repair_workflow.zig");
+const reconciliation_repair = @import("../application/reference_reconciliation_repair_workflow.zig");
 const extraction_repair = @import("../application/reference_extraction_repair_workflow.zig");
 const structured_tokens = @import("../application/structured_token_workflow.zig");
 const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
@@ -92,9 +95,21 @@ pub const Assembly = struct {
     extract_structured_facts: structured_tokens.Extract,
     assign_token_candidates: structured_tokens.AssignCandidates,
     validate_token_classifications: extraction.ValidateSelections,
+    retain_claim_rejection: extraction_repair.RetainClaimRejection,
+    authorize_summary_repair: reconciliation_repair.Authorize(.summary),
+    authorize_dispositions_repair: reconciliation_repair.Authorize(.dispositions),
+    authorize_signals_repair: reconciliation_repair.Authorize(.signals),
+    authorize_conflicts_repair: reconciliation_repair.Authorize(.conflicts),
+    build_reconciliation_repair: reconciliation_repair.BuildInput,
+    parse_reconciliation_repair: reconciliation_repair.Parse,
+    merge_reconciliation_repair: reconciliation_repair.Merge,
+    authorize_text_repair: text_repair.Authorize,
     authorize_extraction_repair: extraction_repair.Authorize,
+    build_text_repair: text_repair.BuildInput,
     build_extraction_repair: extraction_repair.BuildInput,
+    parse_text_repair: text_repair.Parse,
     parse_extraction_repair: extraction_repair.Parse,
+    merge_text_repair: text_repair.Merge,
     merge_extraction_repair: extraction_repair.Merge,
     assign_preserved_tokens: structured_tokens.AssignTokens,
     build_preserved_claims: structured_tokens.BuildClaims,
@@ -139,6 +154,8 @@ pub const Assembly = struct {
     collect_specification_support: specification_support.Collect,
     build_authority_observations: authority.BuildObservations,
     retire_authority: authority.Retire,
+    authorize_coverage_repair: coverage_repair.Authorize,
+    merge_coverage_repair: coverage_repair.Merge,
     validate_specification_coverage: specification.ValidateCoverage,
     authorize_specification_repair: specification_repair.Authorize,
     build_specification_repair: specification_repair.BuildInput,
@@ -160,7 +177,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 114 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 128 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -209,9 +226,21 @@ pub const Assembly = struct {
             .extract_structured_facts = .{ .allocator = allocator },
             .assign_token_candidates = .{ .allocator = allocator },
             .validate_token_classifications = .{ .allocator = allocator },
+            .retain_claim_rejection = .{ .allocator = allocator },
+            .authorize_summary_repair = .{ .allocator = allocator },
+            .authorize_dispositions_repair = .{ .allocator = allocator },
+            .authorize_signals_repair = .{ .allocator = allocator },
+            .authorize_conflicts_repair = .{ .allocator = allocator },
+            .build_reconciliation_repair = .{ .allocator = allocator },
+            .parse_reconciliation_repair = .{ .allocator = allocator },
+            .merge_reconciliation_repair = .{ .allocator = allocator },
+            .authorize_text_repair = .{ .allocator = allocator },
             .authorize_extraction_repair = .{ .allocator = allocator },
+            .build_text_repair = .{ .allocator = allocator },
             .build_extraction_repair = .{ .allocator = allocator },
+            .parse_text_repair = .{ .allocator = allocator },
             .parse_extraction_repair = .{ .allocator = allocator },
+            .merge_text_repair = .{ .allocator = allocator },
             .merge_extraction_repair = .{ .allocator = allocator },
             .assign_preserved_tokens = .{ .allocator = allocator },
             .build_preserved_claims = .{ .allocator = allocator },
@@ -268,7 +297,9 @@ pub const Assembly = struct {
             .build_specification_repair = .{ .allocator = allocator },
             .parse_specification_repair = .{ .allocator = allocator },
             .merge_specification_repair = .{ .allocator = allocator },
-            .validate_specification_coverage = .{ .allocator = allocator },
+            .authorize_coverage_repair = .{ .allocator = allocator },
+            .merge_coverage_repair = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
+            .validate_specification_coverage = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
             .build_specification_support = .{ .allocator = allocator },
             .collect_specification_support = .{ .allocator = allocator },
             .build_authority_observations = .{ .allocator = allocator },
@@ -334,6 +365,8 @@ pub const Assembly = struct {
             entry(specification.Validate, &self.validate_specification),
             entry(specification.Advance, &self.advance_specification),
             entry(specification.Assemble, &self.assemble_specification),
+            entry(coverage_repair.Authorize, &self.authorize_coverage_repair),
+            entry(coverage_repair.Merge, &self.merge_coverage_repair),
             entry(specification.ValidateCoverage, &self.validate_specification_coverage),
             entry(specification_repair.Authorize, &self.authorize_specification_repair),
             entry(specification_repair.BuildInput, &self.build_specification_repair),
@@ -346,9 +379,21 @@ pub const Assembly = struct {
             entry(structured_tokens.Extract, &self.extract_structured_facts),
             entry(structured_tokens.AssignCandidates, &self.assign_token_candidates),
             entry(extraction.ValidateSelections, &self.validate_token_classifications),
+            entry(extraction_repair.RetainClaimRejection, &self.retain_claim_rejection),
+            entry(reconciliation_repair.Authorize(.summary), &self.authorize_summary_repair),
+            entry(reconciliation_repair.Authorize(.dispositions), &self.authorize_dispositions_repair),
+            entry(reconciliation_repair.Authorize(.signals), &self.authorize_signals_repair),
+            entry(reconciliation_repair.Authorize(.conflicts), &self.authorize_conflicts_repair),
+            entry(reconciliation_repair.BuildInput, &self.build_reconciliation_repair),
+            entry(reconciliation_repair.Parse, &self.parse_reconciliation_repair),
+            entry(reconciliation_repair.Merge, &self.merge_reconciliation_repair),
+            entry(text_repair.Authorize, &self.authorize_text_repair),
             entry(extraction_repair.Authorize, &self.authorize_extraction_repair),
+            entry(text_repair.BuildInput, &self.build_text_repair),
             entry(extraction_repair.BuildInput, &self.build_extraction_repair),
+            entry(text_repair.Parse, &self.parse_text_repair),
             entry(extraction_repair.Parse, &self.parse_extraction_repair),
+            entry(text_repair.Merge, &self.merge_text_repair),
             entry(extraction_repair.Merge, &self.merge_extraction_repair),
             entry(structured_tokens.AssignTokens, &self.assign_preserved_tokens),
             entry(structured_tokens.BuildClaims, &self.build_preserved_claims),
@@ -419,7 +464,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write },
@@ -474,6 +519,7 @@ pub fn entry(comptime T: type, context: *T) operations.Entry {
             .side_effect = contract.side_effect,
             .outcomes = if (@hasDecl(T, "outcomes")) &T.outcomes else &.{ .ok, .failed },
             .gates = if (@hasDecl(T, "gates")) &T.gates else &.{},
+            .retry_limit = if (@hasDecl(T, "retry_limit")) T.retry_limit else null,
         },
         .binding = binding.bind(T, context, T.invoke),
     };

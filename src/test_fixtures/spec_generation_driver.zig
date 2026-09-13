@@ -12,6 +12,14 @@ pub const Fault = struct {
 pub const Driver = struct {
     runner: *@import("../application/workflow_pipeline_runner.zig").Runner,
     fake: *@import("../adapters/provider/fake_llm_provider.zig").FakeLLMProvider,
+    text_fault: bool = false,
+    failed_text_repair: bool = false,
+    text_repair_calls: usize = 0,
+    text_failure_origin: ?@import("../domain/model_candidate_origin.zig").Origin = null,
+    classification_original_origin: ?@import("../domain/model_candidate_origin.zig").Origin = null,
+    classification_text_origin: ?@import("../domain/model_candidate_origin.zig").Origin = null,
+    classification_failure_origin: ?@import("../domain/model_candidate_origin.zig").Origin = null,
+    reconciliation_repair_fault: @FieldType(@import("spec_generation_responses.zig").Options, "reconciliation_repair_fault") = null,
     reconciliation_fault: ?@import("spec_generation_responses.zig").ReconciliationFault = null,
     malformed: bool = false,
     uncertain: bool = false,
@@ -57,7 +65,7 @@ pub const Driver = struct {
         defer arena.deinit();
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             self.fake.invocation_plan.complete.content = if (self.malformed or (self.malformed_once and self.calls == 0)) "{" else body;
             const current_request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
@@ -69,7 +77,8 @@ pub const Driver = struct {
             std.testing.expectEqualDeep(base, content[0..base.len]) catch unreachable;
             if (current_request.id().immutable_unit_owner_id == .reference_chunk and current_request.id().purpose == .atomic_repair) {
                 if (self.malformed_classification_repair_once and self.classification_repair_calls == 0) self.fake.invocation_plan.complete.content = "{}";
-                if (self.citation_fault != null) self.citation_repair_calls += 1 else self.classification_repair_calls += 1;
+                const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
+                if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "business_text_replacement")) self.text_repair_calls += 1 else if (self.citation_fault != null) self.citation_repair_calls += 1 else self.classification_repair_calls += 1;
             }
             if (self.fault) |fault| {
                 const request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
@@ -101,7 +110,24 @@ pub const Driver = struct {
             }
             self.calls += 1;
         };
-        return self.runner.bindings().invokeStep(id);
+        const result = self.runner.bindings().invokeStep(id);
+        const diagnostic = @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = self.runner.envelope.slots }) catch unreachable;
+        if (diagnostic) |value| switch (value) {
+            .extraction_text => |rejection| if (self.text_failure_origin == null) {
+                self.text_failure_origin = rejection.origin;
+            },
+            .token_classifications => |rejection| if (self.classification_failure_origin == null) {
+                self.classification_failure_origin = rejection.origin;
+                const extraction = @import("../application/reference_extraction_workflow.zig");
+                const parsed = extraction.read(&.{ .slots = self.runner.envelope.slots }, extraction.parsed_schema, .parsed) catch unreachable;
+                for (parsed.payload().parsed.entries) |entry| if (entry.scope.chunk_id.eql(rejection.scope.chunk_id)) {
+                    self.classification_original_origin = entry.origin;
+                    if (entry.text_origins.len != 0) self.classification_text_origin = entry.text_origins[0].origin;
+                };
+            },
+            else => {},
+        };
+        return result;
     }
 };
 
@@ -119,7 +145,7 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
 fn emptyNested(value: *std.json.Value, root: bool) bool {
     switch (value.*) {
         .object => |*object| {
-            if (!root and object.contains("kind")) {
+            if (!root and (object.contains("kind") or object.contains("ordinal"))) {
                 // The caller uses an arena; the complete parsed owner is kept.
                 object.clearRetainingCapacity();
                 return true;

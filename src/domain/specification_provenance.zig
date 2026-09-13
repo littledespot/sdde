@@ -84,12 +84,15 @@ fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Con
     };
 }
 
-pub fn checkAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue) Error!spec.AttributedValue {
+pub fn inspectAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, part: *@import("specification_candidate.zig").Part) Error!spec.AttributedValue {
+    part.* = .provenance;
     const resolved = try resolve(boundary, allocator, context, candidate.provenance);
+    part.* = .{ .value = .value };
     return .{ .value = try valueIn(allocator, validator, context, resolved, candidate.value), .provenance = resolved.provenance };
 }
 
-pub fn checkRecord(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal) Error!spec.RecordProposal {
+pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal, part: *@import("specification_candidate.zig").Part) Error!spec.RecordProposal {
+    part.* = .provenance;
     const resolved = try resolve(boundary, allocator, context, candidate.provenance);
     var result: spec.RecordProposal = .{ .content = candidate.content, .provenance = resolved.provenance };
     switch (candidate.content) {
@@ -98,10 +101,14 @@ pub fn checkRecord(comptime boundary: spec.Boundary, allocator: std.mem.Allocato
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
                 const proposed = @field(fields, field.name);
                 if (comptime field.type == spec.BusinessValue) {
+                    part.* = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
                     @field(normalized, field.name) = try valueIn(allocator, validator, context, resolved, proposed);
                 } else {
                     const relationships = try allocator.alloc(spec.BusinessValue, proposed.len);
-                    for (proposed, relationships) |entry, *checked| checked.* = try valueIn(allocator, validator, context, resolved, entry);
+                    for (proposed, relationships, 0..) |entry, *checked, index| {
+                        part.* = .{ .value = .{ .relationship = index } };
+                        checked.* = try valueIn(allocator, validator, context, resolved, entry);
+                    }
                     @field(normalized, field.name) = relationships;
                 }
             }
@@ -109,4 +116,13 @@ pub fn checkRecord(comptime boundary: spec.Boundary, allocator: std.mem.Allocato
         },
     }
     return result;
+}
+
+pub fn checkAttributed(comptime boundary: spec.Boundary, a: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue) Error!spec.AttributedValue {
+    var part: @import("specification_candidate.zig").Part = .provenance;
+    return inspectAttributed(boundary, a, validator, context, candidate, &part);
+}
+pub fn checkRecord(comptime boundary: spec.Boundary, a: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal) Error!spec.RecordProposal {
+    var part: @import("specification_candidate.zig").Part = .provenance;
+    return inspectRecord(boundary, a, validator, context, candidate, &part);
 }

@@ -15,7 +15,7 @@ pub const raw_schema = values.schema(.raw_specification_unit, owned.Value, 1, nu
 pub const parsed_schema = values.schema(.parsed_specification_unit, owned.Value, 1, null).captured();
 pub const checked_schema = values.schema(.validated_specification_unit, owned.Value, 1, null).captured();
 pub const ids_schema = values.schema(.specification_id_ledger, @import("../domain/specification_identity.zig").Ledger, 1, @sizeOf(@import("../domain/specification_identity.zig").Ledger));
-pub const coverage_schema = values.schema(.specification_coverage, owned.Value, 1, null);
+pub const coverage_schema = values.schema(.specification_coverage, owned.Value, 1, null).captured();
 pub const schemas = [_]data.Schema{ session_schema, raw_schema, parsed_schema, checked_schema, ids_schema, coverage_schema };
 
 pub const Initialize = struct {
@@ -138,19 +138,19 @@ pub const ValidateCoverage = struct {
     pub const Action = @import("../actions/specification/validate_specification_coverage.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     allocator: std.mem.Allocator,
-    action: Action = .{},
+    action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const current = try readSession(&input.step.data);
-        const references = try @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted);
         const content = @import("required_authority_values.zig").read(&input.step.data, @import("required_authority_workflow.zig").content_schema, .content) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .coverage = self.action.execute(owner.arena.allocator(), references.payload().reconciliation_accounted, (current.units[0] orelse return error.OperationExecutionFailed).response.content.brief, content) catch |err| switch (err) {
-            error.OutOfMemory => return error.OperationExecutionFailed,
-            error.InvalidSpecificationCoverage => return publish(self.allocator, coverage_schema, owner, .invalid),
-        } };
-        return publish(self.allocator, coverage_schema, owner, .ok);
+        const result = self.action.execute(owner.arena.allocator(), current, try readContext(&input.step.data), content) catch return error.OperationExecutionFailed;
+        owner.payload = switch (result) {
+            .valid => |value| .{ .coverage = value },
+            .invalid => |value| .{ .coverage_rejected = value },
+        };
+        return publish(self.allocator, coverage_schema, owner, if (result == .valid) .ok else .invalid);
     }
 };
 

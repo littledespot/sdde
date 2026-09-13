@@ -141,7 +141,7 @@ fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: d
         }
     };
 }
-fn textContext(view: *const data.View) operations.Error!validation.TextContext {
+pub fn textContext(view: *const data.View) operations.Error!validation.TextContext {
     const inputs = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs) catch return error.OperationExecutionFailed;
     const registry = values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch return error.OperationExecutionFailed;
     const current = values.read(view, @import("toolchain_workflow_values.zig").valid, @import("../domain/toolchain_safety.zig").ValidToolchain) catch return error.OperationExecutionFailed;

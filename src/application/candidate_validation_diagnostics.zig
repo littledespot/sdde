@@ -5,6 +5,10 @@ const values = @import("pipeline_values.zig");
 const Diagnostic = @import("../domain/candidate_validation_diagnostic.zig").Diagnostic;
 pub fn read(view: *const data.View) values.Error!?Diagnostic {
     const extraction = @import("reference_extraction_workflow.zig");
+    if (view.contains(extraction.text_schema.key)) {
+        const value = try values.read(view, extraction.text_schema, @import("../domain/reference_candidate_value.zig").Value);
+        if (value.payload().* == .text_rejected) return .{ .extraction_text = value.payload().text_rejected };
+    }
     if (view.contains(extraction.validated_schema.key)) {
         const value = try values.read(view, extraction.validated_schema, @import("../domain/reference_candidate_value.zig").Value);
         if (value.payload().* == .citation_rejected) return .{ .source_selections = value.payload().citation_rejected };
@@ -15,6 +19,7 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
         if (value.payload().* == .citation_rejected) return .{ .source_selections = value.payload().citation_rejected };
     }
     const reconciliation = @import("reference_reconciliation_workflow.zig");
+    if (try @import("reference_reconciliation_repair_workflow.zig").diagnostic(view)) |rejection| return .{ .reconciliation = rejection };
     for ([_]data.Schema{ reconciliation.summary_schema, reconciliation.dispositions_schema, reconciliation.signals_schema, reconciliation.conflicts_schema }) |schema| {
         if (!view.contains(schema.key)) continue;
         const value = try values.read(view, schema, @import("../domain/reference_candidate_value.zig").Value);
@@ -25,6 +30,19 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
         const storage = @import("specification_values.zig").storage;
         const value = storage.payload(try values.read(view, spec.checked_schema, storage.Value));
         if (value.* == .unit_rejected) return .{ .specification = value.unit_rejected };
+    }
+    const storage = @import("specification_values.zig").storage;
+    const repair_schema = @import("specification_coverage_repair_workflow.zig").schema;
+    if (view.contains(repair_schema.key)) {
+        const value = storage.payload(try values.read(view, repair_schema, storage.Value));
+        if (value.* == .coverage_repair) return .{ .coverage = switch (value.coverage_repair) {
+            .authorized => |authorized| authorized.rule.rejection,
+            .blocked => |blocked| blocked,
+        } };
+    }
+    if (view.contains(spec.coverage_schema.key)) {
+        const value = storage.payload(try values.read(view, spec.coverage_schema, storage.Value));
+        if (value.* == .coverage_rejected) return .{ .coverage = value.coverage_rejected };
     }
     return null;
 }

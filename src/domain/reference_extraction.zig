@@ -39,10 +39,27 @@ pub const Raw = struct { entries: []const RawResult };
 pub const ParsedResult = struct {
     scope: evidence.Scope,
     origin: ?@import("model_candidate_origin.zig").Origin = null,
+    text_origins: []const TextOrigin = &.{},
     token_classifications: []const tokens.Classification,
     outcome: union(enum) { claims: []const Proposal, no_feature_claim: text.ReferenceSemanticText, blocked: BlockReason },
 };
-pub const Parsed = struct { entries: []const ParsedResult };
+pub const TextTarget = union(enum) { claim: usize, reason };
+pub const TextOrigin = struct { target: TextTarget, origin: ?@import("model_candidate_origin.zig").Origin };
+pub fn textOrigin(entry: ParsedResult, target: TextTarget) ?@import("model_candidate_origin.zig").Origin {
+    for (entry.text_origins) |value| if (std.meta.eql(value.target, target)) return value.origin;
+    return entry.origin;
+}
+pub const Parsed = struct { revision: u64 = 1, entries: []const ParsedResult };
+pub const TextRejection = struct {
+    scope: evidence.Scope,
+    revision: u64,
+    target: TextTarget,
+    origin: ?@import("model_candidate_origin.zig").Origin,
+    issue: text.Issue,
+    observed: union(enum) { content: ProposalContent, reason: text.ReferenceSemanticText },
+    dependencies: @import("atomic_repair.zig").Snapshot,
+};
+pub const TextResult = union(enum) { valid: TextValidated, invalid: TextRejection };
 pub const TextValidatedResult = struct {
     scope: evidence.Scope,
     classification_origin: ?@import("model_candidate_origin.zig").Origin = null,
@@ -50,13 +67,13 @@ pub const TextValidatedResult = struct {
     outcome: union(enum) { claims: []const TextValidatedProposal, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
 pub const TextValidated = struct { revision: u64 = 1, entries: []const TextValidatedResult };
-pub const Classified = struct { text_validated: TextValidated, selections: []const tokens.Selected };
+pub const Classified = struct { dependencies: ?@import("atomic_repair.zig").Snapshot = null, text_validated: TextValidated, selections: []const tokens.Selected };
 pub const TokenAssignments = struct { classified: Classified, entries: []const tokens.Assignment, next_token_ordinal: u32 };
 pub const PreparedResult = struct {
     scope: evidence.Scope,
     outcome: union(enum) { claims: []const PreparedClaim, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
-pub const Prepared = struct { revision: u64, entries: []const PreparedResult };
+pub const Prepared = struct { dependencies: ?@import("atomic_repair.zig").Snapshot = null, revision: u64, entries: []const PreparedResult };
 pub const ValidatedResult = struct {
     scope: evidence.Scope,
     outcome: union(enum) { claims: []const ValidatedClaim, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },

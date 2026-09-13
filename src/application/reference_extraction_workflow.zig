@@ -9,7 +9,7 @@ const data = @import("../domain/pipeline_data.zig");
 const pipeline = @import("../domain/pipeline.zig");
 
 pub const raw_schema = values.schema(.raw_reference_extraction, owned.Value, 1, null);
-pub const parsed_schema = values.schema(.parsed_reference_extraction, owned.Value, 1, null);
+pub const parsed_schema = values.schema(.parsed_reference_extraction, owned.Value, 1, null).captured();
 // Repair retains this immutable candidate; source/policy lineage stays current.
 pub const text_schema = values.schema(.text_validated_reference_extraction, owned.Value, 1, null).captured();
 pub const selections_schema = values.schema(.validated_reference_selections, owned.Value, 1, null).captured();
@@ -33,6 +33,7 @@ pub const Parse = struct {
     }
 };
 pub const ValidateText = struct {
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     pub const Action = @import("../actions/reference/validate_reference_extraction_text.zig").Action;
     allocator: std.mem.Allocator,
     action: Action,
@@ -44,8 +45,12 @@ pub const ValidateText = struct {
         const prior = try read(&input.step.data, parsed_schema, .parsed);
         const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .text_validated = self.action.execute(owner.arena.allocator(), registry.*, current, source.*, prior.payload().parsed) catch return error.OperationExecutionFailed };
-        return publish(self.allocator, text_schema, owner, .ok);
+        const result = self.action.execute(owner.arena.allocator(), registry.*, current, source.*, prior.payload().parsed) catch return error.OperationExecutionFailed;
+        owner.payload = switch (result) {
+            .valid => |value| .{ .text_validated = value },
+            .invalid => |rejection| .{ .text_rejected = rejection },
+        };
+        return publish(self.allocator, text_schema, owner, if (result == .valid) .ok else .invalid);
     }
 };
 pub const ValidateSelections = struct {

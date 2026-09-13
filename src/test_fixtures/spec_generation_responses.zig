@@ -9,6 +9,9 @@ const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
 pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, conflict_coverage };
 pub const Options = struct {
+    text_fault: bool = false,
+    failed_text_repair: bool = false,
+    reconciliation_repair_fault: ?enum { unchanged, alternating } = null,
     reconciliation_fault: ?ReconciliationFault = null,
     script: ?@import("specification_script.zig").Script = null,
     uncertain: bool = false,
@@ -33,6 +36,11 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
             const chunk = selected_chunk.chunk;
             const candidates = (try values.read(&view, @import("../application/structured_token_workflow.zig").candidates_schema, r.extraction.tokens.Candidates)).*;
             if (request.id().purpose == .atomic_repair) {
+                const packet = try values.read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet);
+                if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "business_text_replacement")) {
+                    const replacement: @import("../domain/reference_extraction_text_repair.zig").Replacement = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = if (options.failed_text_repair) "unbound/reference.md" else try extractedClaim(allocator, chunk.id) } }} } };
+                    return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/reference_extraction_text_repair.zig").Replacement, allocator, replacement);
+                }
                 if (options.citation_fault) |fault| {
                     const choice = if (options.failed_citation_repair) @import("../domain/source_selections.zig").Selection{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } else @import("../reference_extraction_test.zig").wholeChunk(chunk);
                     const replacement: @import("../domain/reference_extraction_repair.zig").Replacement = switch (fault) {
@@ -44,16 +52,36 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 const choices = if (options.failed_classification_repair) &.{} else try @import("reference_tokens.zig").classifications(allocator, candidates, chunk);
                 return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/reference_extraction_repair.zig").Replacement, allocator, .{ .classifications = .{ .token_classifications = choices } });
             }
-            const claim = if (options.script) |script| (try @import("specification_script.zig").extraction(script, selected_chunk.bytes)).claim else try std.fmt.allocPrint(allocator, "The outcome from reference unit {s} is observable.", .{chunk.id.bytes});
+            const claim = if (options.script) |script| (try @import("specification_script.zig").extraction(script, selected_chunk.bytes)).claim else try extractedClaim(allocator, chunk.id);
             const citation: @import("../domain/source_selections.zig").Selection = if (options.citation_fault == .unknown) .{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } else @import("../reference_extraction_test.zig").wholeChunk(chunk);
-            const body = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = claim } }} } }, .citations = if (options.citation_fault == .missing) &.{} else &.{citation} }}, .token_classifications = &.{} } });
+            const body = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = if (options.text_fault) "unbound/reference.md" else claim } }} } }, .citations = if (options.citation_fault == .missing) &.{} else &.{citation} }}, .token_classifications = &.{} } });
             return @import("reference_tokens.zig").wire(allocator, body, if (options.missing_classifications) &.{} else try @import("reference_tokens.zig").classifications(allocator, candidates, chunk));
         },
         .reference_global => {
             const input = (try native.read(&view, @import("../application/reference_reconciliation_workflow.zig").input_schema, .reconciliation_input)).payload().reconciliation_input;
+            if (request.id().purpose == .atomic_repair) {
+                const repair = @import("../domain/reference_reconciliation_repair.zig");
+                const authorization = try @import("../application/reference_reconciliation_repair_workflow.zig").readAuthorization(&view);
+                if (options.reconciliation_repair_fault) |fault| {
+                    const target = authorization.target.disposition;
+                    const replacement: repair.Replacement = if (fault == .alternating and authorization.revision % 2 == 0)
+                        .{ .disposition = .{ .duplicate = .{ .target_claim_id = .{ .ordinal = 999999 } } } }
+                    else
+                        .{ .disposition = .{ .superseded = .{ .related_claim_ids = &.{target.claim} } } };
+                    return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, replacement);
+                }
+                const replacement: repair.Replacement = switch (authorization.target) {
+                    .insert_statement => |target| .{ .content = @import("reference_reconciliation.zig").content((try r.item(input.progress.plan.layout.items, target.claim)).claim) },
+                    .insert_signal => |target| .{ .content = @import("reference_reconciliation.zig").content((try r.item(input.progress.plan.layout.items, target.claim)).claim) },
+                    .disposition, .insert_disposition => .{ .disposition = .{ .retained = .{} } },
+                    .insert_conflict => .{ .conflict_detail = .{ .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The supplied claims state conflicting outcomes." } }} } } },
+                    else => return error.UnexpectedScriptedRepair,
+                };
+                return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, replacement);
+            }
             if (input.purpose == .summary) {
                 var proposal = try @import("reference_reconciliation.zig").summary(allocator, input);
-                if (options.reconciliation_fault == .summary_membership) proposal.statements = &.{};
+                if (options.reconciliation_fault == .summary_membership) proposal.statements = proposal.statements[1..];
                 return @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .summary = proposal });
             }
             var proposal = try @import("reference_reconciliation.zig").global(allocator, input);
@@ -89,7 +117,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
             if (request.id().purpose == .atomic_repair) {
                 var replacement = value;
                 if (options.failed_repair) replacement.provenance.claim_ids = &.{.{ .ordinal = 999999 }};
-                return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_repair.zig").Replacement, allocator, .{ .attributed = replacement });
+                return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_repair.zig").Replacement, allocator, .{ .provenance = replacement.provenance });
             }
             const unit = try @import("../domain/specification_session.zig").unit(current.completed);
             if (options.script) |script| return @import("../domain/model_candidate_json.zig").encode(g.ModelResponse, allocator, g.ModelResponse.from(try scriptedContent(allocator, all, unit, script)));
@@ -230,4 +258,8 @@ fn scriptedValue(allocator: std.mem.Allocator, all: r.Items, scalar: g.spec.Scal
 
 fn selection(value: g.spec.Provenance) g.spec.Selection {
     return .{ .claim_ids = value.claim_ids, .clarification_response_ids = value.clarification_response_ids };
+}
+
+fn extractedClaim(allocator: std.mem.Allocator, chunk: r.evidence.identity.ChunkId) ![]const u8 {
+    return std.fmt.allocPrint(allocator, "The outcome from reference unit {s} is observable.", .{chunk.bytes});
 }

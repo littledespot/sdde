@@ -463,8 +463,8 @@ chunk has no candidates. `no_feature_claim` may classify candidates irrelevant,
 but cannot preserve any.
 
 Compiled graphs retain a fixed 512-step capacity, including expanded subgraph
-instances; the Specify definition uses 264 steps with both repair paths. This
-capacity is independent of operation retry limits and the workflow token budget.
+instances. Specify reuses model-request/release subgraphs and compact outcome
+maps for its repair routes. This capacity is independent of operation retry limits and the workflow token budget.
 
 The reference-ingestion policy permits a distinct `invalid` terminal outcome.
 The validator publishes `invalid` with the chunk scope, candidate revision,
@@ -557,8 +557,14 @@ Signals and conflicts never echo aggregate citation IDs. Their canonical
 records retain the complete engine-derived union. Initial packets include
 concise guidance projected from native constraint identities alongside current
 claim/evidence facts; protocol corrections retain that same input. Schema and
-native validation reject old or mixed response fields. Semantic reconciliation
-repair remains FIX_001 Phase 3 work.
+native validation reject old or mixed response fields. Summary and global candidate
+rejections enter the shared atomic contract before history append or reference
+acceptance. Native authorizers select one field, a missing member, or an exactly
+redundant entry. Related claims, partition/history membership and text/evidence
+facts remain read dependencies. Every merge repeats summary validation or all
+three global validators. Proven redundant deletions and determined token
+insertions require no model confirmation. Non-equivalent competing entries remain
+blocked under FIX_001 G1; a repaired conflict representation remains unresolved.
 
 All text uses §3.7's shared validator with the explicit contributing-claim
 scope set; cross-source scope never becomes corpus-wide permission. Models
@@ -684,12 +690,21 @@ or schema-profile extension is introduced.
 Summary, disposition, signal and conflict validators return checked values or
 native rejections with the unit, rule, observed/expected constraint, revision and
 producing origin. Invalid corpus/history/context and operational errors remain
-failures; candidate rejection terminates as `invalid` until reconciliation repair
-is implemented. Specification unit validation retains provenance, text, kind and
-duplicate-record failures. Existing extraction/specification authorizers consume
-retained rejections and verify current association and old values. They do not
-repeat validation traversal; canonical validation still runs after merge. Repair
-updates only the replaced field's origin and retains siblings' producing origins.
+failures. Extraction text retains its native lexical cause and content location
+before text acceptance, including `no_feature_claim` reasons. A successful text
+repair must still pass classification, selection and constructed-claim accounting;
+a constructed model-selection rejection returns to its original selection target
+and retires derived claims/tokens. Engine-derived corruption does not trigger a
+model call.
+
+Repair authorizers consume retained rejections and verify current association,
+exact old values and immutable dependency snapshots. They do not repeat candidate
+validation traversal. Canonical validation still runs after merge. Repair updates
+only the replaced field's producing origin, even when replacement bytes are
+unchanged. Specification candidates record byte-change status separately from
+revision and acceptance. The existing native diagnostic projection carries text,
+reconciliation, specification and coverage failures through console/events/reports;
+no separate logger or report-side validator is added.
 
 `test-reference-model-input` checks packets, exact values, scope membership and
 allocation failures; `test-model-request-workflow` checks native packet transport
@@ -1011,17 +1026,40 @@ has an exact-copy target. Coverage is mechanical accounting, not semantic proof.
 Model review supplies scoped evidence for the shared gate before generation and
 after assembly, including the brief description/goal and every record field.
 
-An invalid mechanically repairable candidate authorizes one field or record in
-stable diagnostic order. The engine retains its owner, revision and old value;
-the model returns only the replacement. Merge preserves siblings, increments
-revision and repeats unit validation. Assembly revalidates all units, checks
+An invalid mechanically repairable candidate authorizes one independent value or
+provenance selection in stable diagnostic order. Record-field and relationship
+locations are closed native targets. Whole-record replacement is limited to a
+record-kind defect; exact evidence-equivalent duplicates can be deleted, while
+competing records remain blocked. The engine retains owner, revision, old value,
+source choices and policy facts; the model returns only the selected value or
+provenance shape. The former broad attributed-field repair schema is removed.
+Merge preserves siblings, increments revision and repeats unit validation. Assembly revalidates all units, checks
 conditional entities and assigns IDs before coverage and final authority review.
-Classification collections and specification fields/records use the same
-`atomic_repair.Contract`: immutable authorization IDs bind owner, revision,
-target, expected value and validator rule; response parsing verifies the exact
+All repair consumers use the same `atomic_repair.Contract`: immutable authorization
+IDs bind owner, revision, operation, target, expected value, native rule and read
+dependencies; response parsing verifies the exact
 repair packet, and merge checks the old value before incrementing the revision.
-Native domain actions only select and apply their typed units. Both paths use
-the existing `model-request` subgraph and one replacement prompt. JSON/schema
+Native domain actions select and apply their typed units. Calls use the existing
+`model-request` subgraph and concise shared repair prompt. Request release occurs
+before shared model/automatic reconciliation and specification merge routes.
+Deterministic repair loops have explicit runner-owned execution bounds.
+
+Coverage rejections retain the missing claim/token obligation. When an existing
+validated value already projects to exactly the preserved token bytes and selects
+that token's claim, the shared contract can restore its exact-copy reference
+without discarding business text or changing provenance. The owning unit validator
+checks the repaired value before it re-enters the checked session. Assembly then
+revalidates every unit, reassigns candidate IDs from the unchanged starting ledger
+and rebuilds coverage. If no independently supported write is identifiable, the
+candidate remains blocked with `no_independent_supported_target`; no destination
+family, invented statement or coverage-ledger edit is substituted. Source-support
+classification and actionable gaps remain FIX_001 Phase 4 work.
+
+A Phase 3 runner regression also exposes a later boundary issue: a cycle repair
+can produce valid superseded dispositions/signals, while support collection uses
+retained-business provenance eligibility for their review. Global reconciliation
+passes; the unsupported positive review still fails before publication. Phase 4
+must resolve review evidence scope without weakening business provenance. JSON/schema
 protocol retry remains separate from semantic repair.
 YAML's repair operations each have an explicit bounded ceiling; exhaustion fails.
 Only the workflow's cumulative actual token budget limits model tokens.

@@ -551,7 +551,7 @@ test "step events keep the newer exchange usage separate from an older rejected 
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
 }
 
-test "reports preserve native reconciliation and specification failures after source release" {
+test "reports preserve native extraction reconciliation and specification failures after source release" {
     const reference_fixture = @import("../../../src/reference_reconciliation_test.zig");
     const references = @import("../../../src/test_fixtures/reference_reconciliation.zig");
     const Diagnostic = @import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic;
@@ -560,7 +560,7 @@ test "reports preserve native reconciliation and specification failures after so
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var retained: [2]Diagnostic = undefined;
+    var retained: [3]Diagnostic = undefined;
     {
         var source: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer source.deinit();
@@ -580,6 +580,9 @@ test "reports preserve native reconciliation and specification failures after so
         const action = @import("../../../src/actions/specification/validate_specification_unit.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
         const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .primary_user_story = .{ .value = .{ .normalized = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} } }, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} } } } } })).invalid;
         retained[1] = try (Diagnostic{ .specification = spec }).copy(a);
+        const extraction_action = @import("../../../src/actions/reference/validate_reference_extraction_text.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
+        const lexical = (try extraction_action.execute(scratch, context.registry, context.current, input.inputs, .{ .entries = &.{.{ .scope = .{ .state_id = input.inputs.corpus.state_id, .chunk_id = input.inputs.chunks.entries[0].id }, .origin = origin, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "unbound/reference.md" } }} } } }} })).invalid;
+        retained[2] = try (Diagnostic{ .extraction_text = lexical }).copy(a);
     }
     for (retained) |diagnostic| {
         const report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };

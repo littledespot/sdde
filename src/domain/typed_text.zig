@@ -18,6 +18,30 @@ pub const ValidatedBusinessText = struct { value: BusinessText };
 pub const ValidatedReferenceSemanticText = struct { value: ReferenceSemanticText };
 pub const Context = struct { registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, scope: evidence.Scope };
 pub const ScopeSetContext = struct { registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, scopes: []const evidence.Scope };
+pub const Issue = struct {
+    reason: enum { empty, invalid_scalar, unbound_path, unknown_passive, unknown_source, blank },
+    first_node: usize,
+    last_node: usize,
+    pub fn description(self: Issue) []const u8 {
+        return switch (self.reason) {
+            .empty, .blank => "Supply nonblank content using the supplied typed text choices.",
+            .invalid_scalar => "Literal text must be nonempty valid Unicode without forbidden control characters.",
+            .unbound_path => "Represent filenames, paths and URIs with supplied passive reference IDs, outside literal text.",
+            .unknown_passive => "Use only passive reference IDs supplied for this source scope.",
+            .unknown_source => "Use only source IDs supplied for this source scope.",
+        };
+    }
+    pub fn failure(self: Issue) Error {
+        return switch (self.reason) {
+            .unbound_path => error.UnboundPathReference,
+            .unknown_passive => error.InvalidPassiveLiteral,
+            else => error.InvalidTypedText,
+        };
+    }
+};
+pub fn Result(comptime T: type) type {
+    return union(enum) { valid: T, invalid: Issue };
+}
 pub const Validator = struct {
     normalizer: unicode.Normalizer,
     folder: unicode.CaseFolder,
@@ -30,39 +54,59 @@ pub const Validator = struct {
         return self.referenceIn(allocator, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = &.{context.scope} }, candidate);
     }
     pub fn businessIn(self: Validator, allocator: std.mem.Allocator, context: ScopeSetContext, candidate: BusinessText) Error!ValidatedBusinessText {
-        return .{ .value = .{ .segments = try self.nodes(BusinessSegment, allocator, context, candidate.segments) } };
+        return switch (try self.checkBusinessIn(allocator, context, candidate)) {
+            .valid => |value| value,
+            .invalid => |issue| issue.failure(),
+        };
     }
     pub fn referenceIn(self: Validator, allocator: std.mem.Allocator, context: ScopeSetContext, candidate: ReferenceSemanticText) Error!ValidatedReferenceSemanticText {
-        return .{ .value = .{ .nodes = try self.nodes(ReferenceNode, allocator, context, candidate.nodes) } };
+        return switch (try self.checkReferenceIn(allocator, context, candidate)) {
+            .valid => |value| value,
+            .invalid => |issue| issue.failure(),
+        };
     }
-    fn nodes(self: Validator, comptime Node: type, allocator: std.mem.Allocator, context: ScopeSetContext, candidates: []const Node) Error![]const Node {
+    pub fn checkBusinessIn(self: Validator, allocator: std.mem.Allocator, context: ScopeSetContext, candidate: BusinessText) Error!Result(ValidatedBusinessText) {
+        var issue: ?Issue = null;
+        const checked = self.nodes(BusinessSegment, allocator, context, candidate.segments, &issue) catch |err| return if (issue) |value| .{ .invalid = value } else err;
+        return .{ .valid = .{ .value = .{ .segments = checked } } };
+    }
+    pub fn checkReferenceIn(self: Validator, allocator: std.mem.Allocator, context: ScopeSetContext, candidate: ReferenceSemanticText) Error!Result(ValidatedReferenceSemanticText) {
+        var issue: ?Issue = null;
+        const checked = self.nodes(ReferenceNode, allocator, context, candidate.nodes, &issue) catch |err| return if (issue) |value| .{ .invalid = value } else err;
+        return .{ .valid = .{ .value = .{ .nodes = checked } } };
+    }
+    fn nodes(self: Validator, comptime Node: type, allocator: std.mem.Allocator, context: ScopeSetContext, candidates: []const Node, issue: *?Issue) Error![]const Node {
         comptime std.debug.assert(Node == BusinessSegment or Node == ReferenceNode);
         try @import("path_token_grammar.zig").validateBinding(allocator, context.registry.grammar, context.current, context.inputs, self.normalizer, self.folder);
         if (context.scopes.len == 0) return error.InvalidTypedText;
         for (context.scopes) |scope| _ = try evidence.resolve(context.inputs, scope);
-        if (candidates.len == 0) return error.InvalidTypedText;
+        if (candidates.len == 0) return reject(issue, .empty, 0, 0);
         var result: std.ArrayList(Node) = .empty;
         var index: usize = 0;
         var visible = false;
         while (index < candidates.len) {
             switch (candidates[index]) {
                 inline else => |node, tag| if (comptime tag == .literal) {
+                    const first = index;
                     var joined: std.ArrayList(u8) = .empty;
                     // Adjacent segments are one lexical surface: splitting a
                     // filename into two strings cannot evade the shared lexer.
                     while (index < candidates.len and candidates[index] == .literal) : (index += 1) {
                         const bytes = candidates[index].literal.value;
-                        if (!validScalar(bytes) or bytes.len == 0) return error.InvalidTypedText;
+                        if (!validScalar(bytes) or bytes.len == 0) return reject(issue, .invalid_scalar, index, index);
                         try joined.appendSlice(allocator, bytes);
                     }
                     const text = try naming.normalize(allocator, joined.items, true, self.normalizer, self.folder);
                     const matches = try scan.scan(allocator, context.registry.grammar, text, self.normalizer, self.folder, self.classifier);
                     defer scan.destroy(matches);
-                    if (matches.matches.len != 0) return error.UnboundPathReference;
+                    if (matches.matches.len != 0) return reject(issue, .unbound_path, first, index - 1);
                     visible = visible or std.mem.trim(u8, text, " \t\r\n").len != 0;
                     try result.append(allocator, .{ .literal = .{ .value = text } });
                 } else if (comptime tag == .passive) {
-                    _ = try literals.resolveIn(context.registry, context.inputs, context.scopes, node.passive_literal_id);
+                    _ = literals.resolveIn(context.registry, context.inputs, context.scopes, node.passive_literal_id) catch |err| return switch (err) {
+                        error.InvalidPassiveLiteral => reject(issue, .unknown_passive, index, index),
+                        else => err,
+                    };
                     try result.append(allocator, .{ .passive = node });
                     visible = true;
                     index += 1;
@@ -70,17 +114,23 @@ pub const Validator = struct {
                     for (context.scopes) |scope| {
                         const unit = try evidence.resolve(context.inputs, scope);
                         if (node.source_id.ordinal == unit.source.id.ordinal) break;
-                    } else return error.InvalidTypedText;
+                    } else return reject(issue, .unknown_source, index, index);
                     try result.append(allocator, .{ .source = node });
                     visible = true;
                     index += 1;
                 },
             }
         }
-        if (!visible) return error.InvalidTypedText;
+        if (!visible) return reject(issue, .blank, 0, candidates.len - 1);
         return result.toOwnedSlice(allocator);
     }
 };
+
+fn reject(target: *?Issue, reason: @FieldType(Issue, "reason"), first: usize, last: usize) Error {
+    const issue: Issue = .{ .reason = reason, .first_node = first, .last_node = last };
+    target.* = issue;
+    return issue.failure();
+}
 
 /// Shared scalar syntax only; this is not normalized/validated text authority.
 pub fn validScalar(bytes: []const u8) bool {

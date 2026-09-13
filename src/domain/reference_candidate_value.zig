@@ -8,6 +8,7 @@ pub const Payload = union(enum) {
     raw: extraction.Raw,
     parsed: extraction.Parsed,
     text_validated: extraction.TextValidated,
+    text_rejected: extraction.TextRejection,
     selections_validated: extraction.Classified,
     token_classification_rejected: @import("token_classification_validation.zig").Rejection,
     tokens_assigned: extraction.TokenAssignments,

@@ -4,6 +4,7 @@ const extraction = @import("reference_extraction.zig");
 const evidence = @import("reference_evidence.zig");
 const selections = @import("source_selections.zig");
 pub const Rejection = struct {
+    dependencies: ?@import("atomic_repair.zig").Snapshot = null,
     scope: evidence.Scope,
     revision: u64,
     claim_index: usize,
@@ -22,7 +23,11 @@ pub const Result = union(enum) {
 pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: extraction.tokens.Candidates, current: extraction.TextValidated) extraction.Error!Result {
     const classified = try @import("token_classification_validation.zig").validate(a, inputs, candidates, current);
     if (classified == .invalid) return .{ .token_classifications = classified.invalid };
-    if (try validateCitations(a, inputs, classified.valid.text_validated)) |rejection| return .{ .source_selections = rejection };
+    if (try validateCitations(a, inputs, classified.valid.text_validated)) |rejection| {
+        var bound = rejection;
+        bound.dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = current });
+        return .{ .source_selections = bound };
+    }
     return .{ .valid = classified.valid };
 }
 

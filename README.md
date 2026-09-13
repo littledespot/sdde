@@ -106,10 +106,15 @@ response decoding or lifecycle terminalization is implicit. Shared fake/Bedrock
 conformance and production-composition YAML tests exercise the same boundary.
 
 Mechanically invalid candidates can enter engine-authorized atomic repair.
-Classification collections and specification fields/records share one owner,
-revision, request-association and old-value checking contract. Repair changes only
-the selected unit, then reruns its validators and the downstream full-candidate
-checks. The workflow owns bounded repetition; no model decision grants authority.
+Extraction text/selections, reconciliation statements/relationships and specification
+values/provenance share one authorization and compare-and-swap contract. It binds
+the candidate, owner, revision, exact old value and immutable evidence/rule facts.
+The engine selects replacements, missing-member insertions and proven redundant
+deletions; the model supplies only permitted content when a choice is needed.
+Specification provenance repair preserves business text. Every merge returns to
+native validation and full-candidate checks. YAML owns bounded repetition; no
+model decision grants authority. Competing entries without a safe independent
+write remain explicitly blocked.
 See [classification and repair contracts](design/features/F0100-SpecWorkflow.md#38-exact-value-preservation).
 
 `count-model-input-tokens` and `validate-model-token-count-observation` are
@@ -160,10 +165,10 @@ include the container path, active key and duplicate-key occurrence locations.
 The same schema reason and JSON Pointer appear in E2E events, reports and the
 terminal. Strict validation and existing retry/token accounting still apply.
 
-Native reconciliation and specification validators retain typed rejections with
+Native extraction-text, reconciliation, specification and coverage validators retain typed rejections with
 the affected unit, rule, observed values, candidate revision and producing
 request/attempt. Invalid source context remains an operational failure. Existing
-extraction/specification repair authorizers consume those retained failures and
+repair authorizers consume those retained failures and
 check association and old values; post-merge validation still owns acceptance.
 The harness reports the latest exchange and usage separately from a rejected
 candidate's source, and names the terminal step even when it made no model call.

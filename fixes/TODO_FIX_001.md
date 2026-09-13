@@ -8,10 +8,14 @@ complete. The user explicitly approved A1–A3 on 13 September 2026; their wordi
 is applied to design §§12.5/17.3/22.6. Phase 1 (01–04), including the follow-up
 that closes R12's reopened chunk 01, is implemented and verified offline;
 Phase 2 (05–07) is implemented and verified offline.
-08–21 remain pending. See the [Phase 2 delivery record](#phase-2-delivery-and-verification--13-september-2026).
+Phase 3 (08–12) is implemented and verified offline; 13–21 remain pending. See the [Phase 2 delivery record](#phase-2-delivery-and-verification--13-september-2026).
 Phase 0 involved no runtime implementation or model calls. No live E2E run was
 performed during Phase 1 implementation or its follow-up; the separately retained
 run is reviewed in [FIX_001 §9](FIX_001.md#9-post-phase-1-live-run-review).
+The subsequent [R13 review](FIX_001.md#10-post-phase-2-live-run-review) found a
+schema-valid extraction candidate stopping at the then-unimplemented text
+rejection/repair boundary. It refines Phase 3 scheduling and evidence below;
+it does not reopen Phase 2 or establish a successful live baseline.
 
 ## Outcome and delivery rules
 
@@ -555,9 +559,15 @@ chunk 08 is next. H-011 answer authentication remains a separate gate.
 
 ## Phase 3 — Complete authorized repair and revalidation
 
+**R13 sequencing:** implement 08, then the extraction-text portion of 12 before
+09–11, because it blocks the earlier extraction stage. This portion depends on
+03–04/08, not on reconciliation or specification repair. Complete 09–11 and the
+remaining coverage/claim routes before closing 12. This is a testable subdivision
+of existing work, not a new repair mechanism or phase.
+
 ### 08 — Bind shared repair preconditions through existing consumers
 
-- [ ] Complete chunk 08. **Depends on:** 00's target matrix, 04, 06, 07.
+- [x] Complete chunk 08. **Depends on:** 00's target matrix, 04, 06, 07.
 
 **Owners:** [atomic_repair.zig](../src/domain/atomic_repair.zig), native candidate
 owners and focused domain repair input/authorization builders.
@@ -583,6 +593,11 @@ wrong replacement kind and model-supplied target/operation reject. Required read
 context is complete, while reading neighbors does not authorize editing them.
 Allocation failure leaves the original candidate unchanged. The first insert/delete
 consumer adds equivalent precondition, scope and failure tests for that operation.
+For extraction prose, bind the original parsed candidate and its producing origin
+before text acceptance; a text-valid candidate cannot be a prerequisite for
+repairing invalid text. Retain chunk, source choices, passive registry and text
+policy as immutable read facts under R1. Existing R2/R3 consumers keep their
+classification/selection targets and post-merge checks.
 
 **Checks:** `test-reference-reconciliation`, `test-specification-generation`,
 `test-reference-extraction`, `test-model-candidate-json`, `test-atomic-execution`;
@@ -594,7 +609,7 @@ remains a gate.
 
 ### 09 — Repair reconciliation summaries before appending derived state
 
-- [ ] Complete chunk 09. **Depends on:** 03, 06, 08.
+- [x] Complete chunk 09. **Depends on:** 03, 06, 08.
 
 **Owners:** current summary candidate/validator/builder, focused authorization,
 input/parse/merge actions, reconciliation bindings and registered YAML operations.
@@ -623,7 +638,7 @@ class, not a retry for one retained fixture response.
 
 ### 10 — Repair the global reconciliation candidate with graph dependencies
 
-- [ ] Complete chunk 10. **Depends on:** 03, 07–09.
+- [x] Complete chunk 10. **Depends on:** 03, 07–09.
 
 **Owners:** disposition, signal and conflict validators; native global candidate;
 focused shared-repair actions, operation contracts and reconciliation YAML.
@@ -652,7 +667,7 @@ rejection/authorization/revalidation contract; no disposition-only continuation 
 
 ### 11 — Narrow existing specification repair to independently valid units
 
-- [ ] Complete chunk 11. **Depends on:** 04, 06, 08.
+- [x] Complete chunk 11. **Depends on:** 04, 06, 08.
 
 **Owners:** specification generation/provenance/repair/session, existing repair
 actions and bindings, selected repair schema and diagnostic origin projection.
@@ -679,7 +694,8 @@ provenance; superseded broad targets and schemas are removed.
 
 ### 12 — Close the remaining candidate-validation routes
 
-- [ ] Complete chunk 12. **Depends on:** 03–04, 08–11.
+- [x] Complete chunk 12. **Depends on:** 03–04/08 for extraction text;
+  09–11 additionally for completion of all remaining routes.
 
 **Owners:** extraction text/claim validation, specification coverage, their
 application bindings, shared diagnostic/repair contracts and explicit YAML edges.
@@ -692,19 +708,107 @@ every error to `.invalid` or routing every invalid outcome into a model call.
 Preserve existing authority routing here; 14 separately refines the supported
 omission versus source-gap distinction across all relevant producers.
 
+**First testable delivery — extraction text (R13):** retain localized candidate
+text failures from the shared typed-text owner, including native rule/cause,
+chunk/claim/content location, rejected typed value, admissible scoped references,
+revision and producing origin. Separate these from grammar/source/policy binding
+and operational errors before the application catch discards their identity.
+Thread the typed result through the existing candidate-diagnostic, authorization,
+YAML and console/event/report consumers. Add an `invalid` repair route to
+`validate-extraction-text`; do not turn its current `failed` route into a retry
+for every exception. Cover business segments, reference nodes and
+`no_feature_claim` reasons through the same owner.
+
+Use R1's exact content target and shared replacement preconditions. A valid
+lexical replacement must preserve unrelated claims, source selections and token
+classifications. Re-enter text validation, then classification/source-selection
+validation and downstream construction/accounting. R13's six unknown token IDs
+must still reject through the existing R2 route after the text defect is fixed;
+neither success nor classification acceptance follows from JSON/schema validity.
+Reuse the already-supplied passive IDs and concise native rule guidance. Do not
+automatically rewrite a literal filename, invent a passive ID, delete unsupported
+claims or broaden the repair to the whole extraction result.
+
 **Evidence:** one recoverable and one non-repairable representative for each
 affected validator. Preserve exact tokens, source selections and business authority.
 No unknown/missing rule or unsafe target becomes a fallback. Workflow tests prove
 full validation, bounded repetition and truthful terminal diagnostics across
 unrelated requirement kinds.
 
+R13 regression evidence must include: a schema-valid literal filename despite an
+available passive reference; an unrelated path/URI or foreign passive ID; the
+same apparent text defect with stale grammar/source binding; and successive text
+then classification defects in one candidate. Prove immutable siblings, original
+versus repaired call attribution, repeated-invalid exhaustion and complete
+post-merge validation. An ambiguous source claim remains an authority issue.
+Console, event JSON and both reports must expose the same retained native text
+rejection and candidate origin after request release. No report-side parsing or
+revalidation may substitute for the missing producer diagnostic.
+
 **Checks:** `test-reference-extraction`, `test-reference-evidence`,
 `test-typed-text`, `test-path-tokens`, `test-structured-tokens`,
 `test-specification-generation`, `test-required-authority`,
-`test-model-request-workflow`; full `verify`.
+`test-model-request-workflow`, `test-e2e-harness`; full `verify`.
 **Exit:** mechanical rows have no unexplained terminal candidate branch. A
 deliberately non-repairable case has a typed reason and negative test. Shared
 authority refinements and actionable gap publication remain assigned to 14–15.
+
+### Phase 3 delivery and verification — 13 September 2026
+
+Implementation covers 08–12 under the existing shared contract:
+
+- Atomic authorization binds full immutable read facts, owner/revision and exact
+  replacement/collection preconditions. Insert/delete landed with reconciliation
+  consumers. Merge owns replacement bytes after request/result release.
+- Extraction text reports localized native failures before text acceptance and
+  repairs only one content/reason field. Classification and source-selection checks
+  still run afterwards. Constructed model-selection rejections retire derived
+  claims/tokens and return to the original selection repair owner.
+- Summary repair runs before append. Global disposition, signal and conflict
+  repair share typed authorization/input/parse/merge bindings and full revalidation.
+  Exact redundant entries can be deleted; required token projections are native
+  insertions. G1 blocks competing records without choosing semantic survivors.
+- Specification targets distinguish provenance from business/exact-copy values,
+  including record fields. The broad attributed replacement schema/result slot is
+  removed. Record-kind defects retain record scope; evidence-equivalent duplicates
+  use delete. Changed-value status and producing origin remain separate.
+- Coverage retains precise obligations. A value already equal to an evidenced
+  token can receive an exact-copy reference through shared CAS, preserving its
+  business bytes/provenance and rebuilding IDs/coverage. Missing content with no
+  safe engine-identified destination is explicitly blocked; 14 must establish
+  support and scope before broader omission repair, never infer a record family.
+- YAML uses compact outcome maps and existing subgraphs. Model and automatic
+  reconciliation/specification paths release requests before the same merge step;
+  the runner bounds native repair loops. No validator, token budget or gate is
+  weakened. No new output-token limit or logging subsystem is introduced.
+
+Verification completed:
+
+- `zig build test-e2e-harness test-reference-extraction test-specification-generation test-reference-reconciliation test-model-candidate-json --summary all` — 646/646 tests before final repetition and allocation cases.
+- `zig build test-e2e-harness test-reference-reconciliation --summary all` — 477/477 tests with final per-chunk attribution, repeated/alternating rejection and insert/delete allocation-failure cases.
+- `zig build verify --summary all` — **120/120 steps; 1388/1388 tests passed**,
+  including lint, architecture checks and clean native packaging smoke tests.
+- `git diff --check` and `git diff --cached --check` — passed.
+
+The complete diff was reviewed for shared ownership, immutable read context,
+replacement lifetime, exact invalidation/revalidation, narrow response schemas,
+competing-entry blocks and removed legacy paths. No dependency, accepted design,
+security/CI policy, provider configuration or retry/token-policy amendment was
+made. The existing generic runner's retry contract is explicitly declared by the
+new deterministic merge loops; model-request limits remain unchanged. Live E2E has **not** been run;
+this implementation does not establish completion or quality of the live baseline.
+Each live run still requires explicit user approval.
+
+**Newly isolated downstream boundary:** the production-runner cycle case repairs
+and fully validates global reconciliation (revision 2, complete accounting), then
+fails at `pre-collect`. `specification_support.collect` applies
+`specification_provenance.select`'s retained-claim rule to every supported finding,
+including signals whose valid nonconflicting members may be superseded. Its packet
+supplies those members and authority projection requires review of those signals.
+The regression preserves that later failure and verifies graph repair separately.
+This is an offline architectural finding, not a new live-run result. It belongs to
+13–14's support contract and must not be bypassed by making all business provenance
+eligible or altering a repaired disposition solely to satisfy review.
 
 ## Phase 4 — Preserve support findings and route genuine gaps
 
@@ -731,6 +835,15 @@ self-contained under its canonical authority; do not persist a prior-run request
 ordinal as resolvable authority. Change closed state producers/readers with the
 evidence projection, without legacy dual readers or a new persistence subsystem.
 
+**Phase 3 follow-up:** establish review evidence eligibility for every requirement
+kind at the shared support/provenance boundary. Include valid superseded and
+nonconflicting token signals, source conflicts and retained business candidates.
+The packet's selectable evidence, collector and required-authority projection must
+agree; inspect governing authority before changing eligibility. Keep business
+provenance restricted to current retained support. Add the cycle-repair → signal
+review regression and retain precise review rejection details instead of reducing
+them to `operation_failed`. This is required for 13–14 completion.
+
 **Evidence:** source absence can be reported without invented citations. Unknown
 requirements, foreign references, stale candidate/authority bindings and incomplete
 finding coverage reject. Valid negative findings survive collection and request
@@ -744,6 +857,13 @@ associations reject, and call correlation never grants cross-run authority.
 `test-e2e-harness`, `test`; full `verify` for state/publication changes.
 **Exit:** downstream policy/reporting can inspect the same validated finding;
 semantic judgments remain explicitly model-assisted.
+
+R13 also supplies a semantic-review regression: an allowed token-kind label is
+not proof of correct classification or use. Its displayed greeting is labelled
+`visual_typography`, and a metadata-only technical claim cites the document
+heading. Retain inspectable source/candidate findings for such mismatches under
+this owner and 14; do not add a deterministic greeting/type rule or treat the
+unreached review as a failure already reported by R13.
 
 ### 14 — Distinguish supported candidate omissions from source-authority gaps
 
@@ -897,6 +1017,12 @@ contain no references to removed examples. Carry 01's repeated/alternating
 protocol regressions through the production runner. When 16 is implemented,
 verify its budget-stop evidence through the reports; otherwise retain its known
 reporting limitations explicitly without changing its independent scheduling.
+Carry 12's extraction text → classification → full-validation regressions through
+the production runner and reports, including retained candidate origins after
+request release. R13 captured all five call-evidence files and correct usage but
+lost the native text diagnostic; extra raw-response logging does not close that
+gap. Record reached validation stages separately: its accepted extraction JSON
+did not exercise Phase 2 reconciliation/generation or establish semantic quality.
 Existing coverage may satisfy these checks; do not duplicate
 validators or count repeated event projections as additional model failures.
 

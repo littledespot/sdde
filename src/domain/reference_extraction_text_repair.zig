@@ -1,0 +1,93 @@
+//! One parsed extraction content field, before text acceptance. Atomic repair
+//! owns CAS; the shared text validator and workflow own acceptance/repetition.
+const std = @import("std");
+const e = @import("reference_extraction.zig");
+const context = @import("reference_extraction_context.zig");
+const packets = @import("model_input_packet.zig");
+const identity = @import("model_request_identity.zig");
+pub const Target = struct { scope: e.identity.ChunkId, field: e.TextTarget };
+pub const Replacement = union(enum) { business: e.text.BusinessText, reference: e.text.ReferenceSemanticText };
+pub const Rule = struct { validator: enum { typed_text_v1 } = .typed_text_v1, issue: e.text.Issue, requirement: []const u8 };
+const shared = @import("atomic_repair.zig");
+const atomic = shared.Contract(Target, Replacement, context.TextFacts, Rule);
+pub const Authorization = atomic.Authorization;
+pub const Error = atomic.Error || e.Error;
+pub const Facts = context.TextFacts;
+
+pub fn authorize(a: std.mem.Allocator, facts: Facts, rejection: e.TextRejection) Error!Authorization {
+    const parsed = facts.candidate;
+    if (parsed.revision != rejection.revision or !facts.inputs.corpus.state_id.eql(rejection.scope.state_id) or
+        !std.meta.eql(rejection.dependencies, try shared.snapshot(Facts, a, facts))) return error.InvalidAtomicRepair;
+    const target: Target = .{ .scope = rejection.scope.chunk_id, .field = rejection.target };
+    const entry = try entryAt(parsed, target);
+    if (!std.meta.eql(e.textOrigin(entry, target.field), rejection.origin)) return error.InvalidAtomicRepair;
+    const expected = try select(parsed, target);
+    const observed: Replacement = switch (rejection.observed) {
+        .reason => |value| .{ .reference = value },
+        .content => |content| switch (content) {
+            .business, .scope_guard => |value| .{ .business = value },
+            inline else => |value| .{ .reference = value },
+        },
+    };
+    if (!try atomic.equal(a, expected, observed)) return error.InvalidAtomicRepair;
+    return atomic.authorize(a, unit(rejection.scope), parsed.revision, target, expected, facts, .{ .issue = rejection.issue, .requirement = rejection.issue.description() });
+}
+pub fn packet(a: std.mem.Allocator, facts: Facts, registry: @import("passive_literals.zig").Registry, candidates: e.tokens.Candidates, authorization: Authorization) Error!*packets.Packet {
+    try atomic.checkDependencies(a, authorization, facts);
+    const scope: @import("reference_evidence.zig").Scope = .{ .state_id = facts.inputs.corpus.state_id, .chunk_id = authorization.target.scope };
+    const base = try @import("reference_model_input.zig").extractionPacket(a, facts.inputs, registry, candidates, scope);
+    defer packets.release(base);
+    return atomic.packet(a, authorization, base, .{ .bytes = switch (authorization.operation.replace) {
+        .business => "business_text_replacement",
+        .reference => "reference_text_replacement",
+    } });
+}
+pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
+    return atomic.parse(a, authorization, input, bytes);
+}
+pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, proposed_replacement: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!e.Parsed {
+    const replacement = try atomic.copyReplacement(a, proposed_replacement);
+    const target = authorization.target;
+    const scope: @import("reference_evidence.zig").Scope = .{ .state_id = facts.inputs.corpus.state_id, .chunk_id = target.scope };
+    const revision = try atomic.checkMerge(a, unit(scope), facts.candidate.revision, try select(facts.candidate, target), facts, authorization, replacement);
+    const entries = try a.dupe(e.ParsedResult, facts.candidate.entries);
+    for (entries) |*entry| if (entry.scope.chunk_id.eql(target.scope)) {
+        switch (target.field) {
+            .reason => entry.outcome.no_feature_claim = replacement.reference,
+            .claim => |index| {
+                const claims = try a.dupe(e.Proposal, entry.outcome.claims);
+                claims[index].content = switch (claims[index].content) {
+                    inline .business, .scope_guard => |_, tag| @unionInit(e.ProposalContent, @tagName(tag), replacement.business),
+                    inline else => |_, tag| @unionInit(e.ProposalContent, @tagName(tag), replacement.reference),
+                };
+                entry.outcome = .{ .claims = claims };
+            },
+        }
+        var origins: std.ArrayList(e.TextOrigin) = .empty;
+        for (entry.text_origins) |value| if (!std.meta.eql(value.target, target.field)) try origins.append(a, value);
+        try origins.append(a, .{ .target = target.field, .origin = origin });
+        entry.text_origins = try origins.toOwnedSlice(a);
+    };
+    return .{ .revision = revision, .entries = entries };
+}
+fn entryAt(parsed: e.Parsed, target: Target) Error!e.ParsedResult {
+    var result: ?e.ParsedResult = null;
+    for (parsed.entries) |entry| if (entry.scope.chunk_id.eql(target.scope)) {
+        if (result != null or entry.outcome == .blocked) return error.InvalidAtomicRepair;
+        result = entry;
+    };
+    return result orelse error.InvalidAtomicRepair;
+}
+fn select(parsed: e.Parsed, target: Target) Error!Replacement {
+    const entry = try entryAt(parsed, target);
+    return switch (target.field) {
+        .reason => if (entry.outcome == .no_feature_claim) .{ .reference = entry.outcome.no_feature_claim } else error.InvalidAtomicRepair,
+        .claim => |index| if (entry.outcome == .claims and index < entry.outcome.claims.len) switch (entry.outcome.claims[index].content) {
+            .business, .scope_guard => |value| .{ .business = value },
+            inline else => |value| .{ .reference = value },
+        } else error.InvalidAtomicRepair,
+    };
+}
+fn unit(scope: @import("reference_evidence.zig").Scope) identity.ImmutableUnitOwnerId {
+    return .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } };
+}

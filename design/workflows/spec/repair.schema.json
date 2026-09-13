@@ -119,22 +119,6 @@
       ],
       "additionalProperties": false
     },
-    "attributed": {
-      "type": "object",
-      "properties": {
-        "value": {
-          "$ref": "#/$defs/business_value"
-        },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
-        }
-      },
-      "required": [
-        "value",
-        "provenance"
-      ],
-      "additionalProperties": false
-    },
     "record_acceptance_criterion": {
       "type": "object",
       "properties": {
@@ -419,7 +403,10 @@
         "provenance"
       ],
       "additionalProperties": false
+    },
+    "value": {
+      "$ref": "#/$defs/business_value"
     }
   },
-  "$ref": "#/$defs/attributed"
+  "$ref": "#/$defs/provenance"
 }

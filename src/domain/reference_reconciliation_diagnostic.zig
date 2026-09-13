@@ -1,7 +1,20 @@
 //! Native candidate failures. Context corruption and operational errors never
 //! enter this result; these facts grant observation, not repair authority.
 const r = @import("reference_reconciliation.zig");
-pub const Source = struct { revision: u64 = 1, origin: ?@import("model_candidate_origin.zig").Origin = null };
+const std = @import("std");
+const Origin = @import("model_candidate_origin.zig").Origin;
+pub const Field = enum { record, key, selections, content, relationship };
+pub const FieldOrigin = struct { unit: Unit, field: Field, origin: ?Origin };
+pub const Source = struct {
+    revision: u64 = 1,
+    origin: ?Origin = null,
+    fields: []const FieldOrigin = &.{},
+    pub fn at(self: Source, unit: Unit, field: Field) ?Origin {
+        for (self.fields) |value| if (std.meta.eql(value.unit, unit) and value.field == field) return value.origin;
+        for (self.fields) |value| if (std.meta.eql(value.unit, unit) and value.field == .record) return value.origin;
+        return self.origin;
+    }
+};
 pub const Unit = union(enum) { summary, statement: usize, dispositions, disposition: usize, signals, signal: usize, conflicts, conflict: usize };
 pub const Rule = enum { membership, local_key, claim_selection, content, cardinality, duplicate_disposition, relationship, cycle, signal_coverage, duplicate_signal, conflict_coverage, duplicate_conflict, typed_text };
 pub const Constraint = enum {
@@ -61,7 +74,10 @@ pub const Fact = union(enum) {
     constraint: Constraint,
 };
 pub const Issue = struct { rule: Rule, observed: Fact, expected: Fact, native_error: ?enum { InvalidTypedText, UnboundPathReference, InvalidPassiveLiteral } = null };
+pub const RepairBlock = enum { competing_entries, no_independent_target, no_required_member };
 pub const Rejection = struct {
+    blocked: ?RepairBlock = null,
+    dependencies: ?@import("atomic_repair.zig").Snapshot = null,
     state_id: r.evidence.identity.StateId,
     partition_id: r.PartitionId,
     revision: u64,
@@ -76,7 +92,17 @@ pub fn Check(comptime T: type) type {
     return union(enum) { valid: T, invalid: Issue };
 }
 pub fn reject(comptime T: type, input: r.Input, source: Source, unit: Unit, issue: Issue) Result(T) {
-    return .{ .invalid = .{ .state_id = input.progress.plan.layout.items.state_id, .partition_id = input.partition.id, .revision = source.revision, .origin = source.origin, .unit = unit, .issue = issue } };
+    return .{ .invalid = .{ .state_id = input.progress.plan.layout.items.state_id, .partition_id = input.partition.id, .revision = source.revision, .origin = source.at(unit, fieldFor(unit, issue.rule)), .unit = unit, .issue = issue } };
+}
+pub fn fieldFor(unit: Unit, rule: Rule) Field {
+    if (rule == .relationship and (unit == .signal or unit == .conflict)) return .selections;
+    return switch (rule) {
+        .local_key => .key,
+        .claim_selection => .selections,
+        .content, .typed_text => .content,
+        .relationship, .cycle => .relationship,
+        else => .record,
+    };
 }
 pub fn textFailure(err: r.Error, observed: Fact) r.Error!Issue {
     return .{ .rule = .typed_text, .observed = observed, .native_error = switch (err) {

@@ -32,5 +32,8 @@ pub fn prepare(allocator: std.mem.Allocator, inputs: @import("../domain/referenc
 pub fn check(allocator: std.mem.Allocator, inputs: @import("../domain/reference_evidence.zig").Inputs, parsed: @import("../domain/reference_extraction.zig").Parsed) !@import("../domain/reference_extraction.zig").TextValidated {
     const prepared = try prepare(allocator, inputs);
     defer prepared.deinit();
-    return validate_text.execute(allocator, prepared.registry, safety.value(prepared.owner), inputs, parsed);
+    return switch (try validate_text.execute(allocator, prepared.registry, safety.value(prepared.owner), inputs, parsed)) {
+        .valid => |value| value,
+        .invalid => |rejection| rejection.issue.failure(),
+    };
 }

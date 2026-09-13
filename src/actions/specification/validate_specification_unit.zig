@@ -10,7 +10,7 @@ pub const Action = struct {
         const result = try g.validate(allocator, self.validator, context, try session.unit(current.completed), proposed.response);
         return switch (result) {
             .valid => |checked| .{ .valid = .{ .unit = checked.unit, .response = checked.response, .origins = proposed.origins } },
-            .invalid => |issue| .{ .invalid = .{ .owner = try session.owner(allocator, current), .revision = proposed.revision, .origin = proposed.origins.at(issue.field), .issue = issue } },
+            .invalid => |issue| .{ .invalid = .{ .owner = try session.owner(allocator, current), .revision = proposed.revision, .last_repair_changed = proposed.last_repair_changed, .origin = proposed.origins.at(issue.field), .issue = issue, .dependencies = try @import("../../domain/specification_candidate_context.zig").snapshot(allocator, current, context, proposed) } },
         };
     }
 };

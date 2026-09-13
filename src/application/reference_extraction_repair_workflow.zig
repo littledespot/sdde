@@ -34,7 +34,7 @@ pub const Authorize = struct {
         };
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .authorization = self.action.execute(owner.arena.allocator(), prior.payload().text_validated, rejection) catch |err| return reject(self.allocator, authorization_schema, owner, err) };
+        owner.payload = .{ .authorization = self.action.execute(owner.arena.allocator(), try facts(&input.step.data, prior.payload().text_validated), rejection) catch |err| return reject(self.allocator, authorization_schema, owner, err) };
         return owned.publish(self.allocator, authorization_schema, owner, .ok) catch error.OperationExecutionFailed;
     }
 };
@@ -81,7 +81,7 @@ pub const Merge = struct {
         const prior = try extraction.read(&input.step.data, extraction.text_schema, .text_validated);
         const owner = reference.create(self.allocator, prior) catch return error.OperationExecutionFailed;
         errdefer reference.destroy(owner);
-        owner.payload = .{ .text_validated = self.action.execute(owner.arena.allocator(), prior.payload().text_validated, authorization, replacement.value, replacement.origin) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .text_validated = self.action.execute(owner.arena.allocator(), try facts(&input.step.data, prior.payload().text_validated), authorization, replacement.value, replacement.origin) catch return error.OperationExecutionFailed };
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(extraction.text_schema.key)] = values.adopt(self.allocator, extraction.text_schema, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch return error.OperationExecutionFailed;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
@@ -93,3 +93,27 @@ fn reject(allocator: std.mem.Allocator, schema: data.Schema, owner: *owned.Owner
     owner.payload = .rejected;
     return owned.publish(allocator, schema, owner, .invalid) catch error.OperationExecutionFailed;
 }
+
+fn facts(view: *const data.View, candidate: @import("../domain/reference_extraction.zig").TextValidated) operations.Error!repair.Facts {
+    const source = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch return error.OperationExecutionFailed;
+    const candidates = values.read(view, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch return error.OperationExecutionFailed;
+    return .{ .inputs = source.*, .candidates = candidates.*, .candidate = candidate };
+}
+
+/// Retire derived claims/tokens while preserving the original selection facts.
+pub const RetainClaimRejection = struct {
+    pub const Action = @import("../actions/reference/retain_reference_claim_rejection.zig").Action;
+    allocator: std.mem.Allocator,
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const prior = try extraction.read(&input.step.data, extraction.validated_schema, .citation_rejected);
+        const owner = reference.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+        errdefer reference.destroy(owner);
+        owner.payload = .{ .citation_rejected = self.action.execute(prior.payload().citation_rejected) };
+        var delta: pipeline.NodeDelta = .{};
+        delta.data_replacements[@intFromEnum(extraction.selections_schema.key)] = values.adopt(self.allocator, extraction.selections_schema, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch return error.OperationExecutionFailed;
+        for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
+        return .{ .outcome = .ok, .delta = delta };
+    }
+};

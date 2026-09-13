@@ -7,6 +7,11 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{ .id = "validate-reference-signal-proposals", .kind = .action, .requires = &.{ .validated_reference_dispositions, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain }, .produces = &.{.validated_reference_signals}, .side_effect = .none };
     validator: r.text.Validator,
     pub fn execute(self: Action, allocator: std.mem.Allocator, prior: r.CheckedDispositions, context: v.TextContext) r.Error!d.Result(r.CheckedSignals) {
+        var result = try self.check(allocator, prior, context);
+        if (result == .invalid) result.invalid.dependencies = try @import("../../domain/reference_reconciliation_context.zig").snapshot(allocator, .{ .source = prior.source, .input = prior.input, .proposal = .{ .global = prior.proposal } }, context);
+        return result;
+    }
+    fn check(self: Action, allocator: std.mem.Allocator, prior: r.CheckedDispositions, context: v.TextContext) r.Error!d.Result(r.CheckedSignals) {
         const items = prior.input.progress.plan.layout.items;
         try v.input(allocator, prior.input);
         try v.bind(allocator, items, context, self.validator);

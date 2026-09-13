@@ -11,6 +11,7 @@ pub const Issues = struct {
     forbidden: []const tokens.CandidateId,
 };
 pub const Rejection = struct {
+    dependencies: ?@import("atomic_repair.zig").Snapshot = null,
     origin: ?@import("model_candidate_origin.zig").Origin = null,
     scope: evidence.Scope,
     revision: u64,
@@ -69,7 +70,7 @@ pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: token
             // A blocked entry is engine-owned, so contradictory data is an
             // authority failure, not an invitation to have the model repair it.
             if (entry.outcome == .blocked) return error.InvalidReferenceExtraction;
-            return .{ .invalid = .{ .scope = entry.scope, .revision = parsed.revision, .origin = entry.classification_origin, .observed = entry.token_classifications, .issues = .{
+            return .{ .invalid = .{ .dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = parsed }), .scope = entry.scope, .revision = parsed.revision, .origin = entry.classification_origin, .observed = entry.token_classifications, .issues = .{
                 .missing = try missing.toOwnedSlice(a),
                 .duplicate = try duplicate.toOwnedSlice(a),
                 .unknown = try unknown.toOwnedSlice(a),
@@ -78,5 +79,5 @@ pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: token
         }
     }
     if (index != selections.len) return error.InvalidStructuredTokens;
-    return .{ .valid = .{ .text_validated = .{ .revision = parsed.revision, .entries = ordered }, .selections = selections } };
+    return .{ .valid = .{ .dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = parsed }), .text_validated = .{ .revision = parsed.revision, .entries = ordered }, .selections = selections } };
 }
