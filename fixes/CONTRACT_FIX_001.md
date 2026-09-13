@@ -26,6 +26,18 @@ cause from model guidance. The [Phase 3 follow-up](TODO_FIX_001.md#phase-3-follo
 closes that implementation gap under existing §§22.3–22.4. Shared diagnostics,
 actual request checks and native merge observations now pass offline verification;
 no new authority decision or live reliability claim is made.
+The later [R15 review](FIX_001.md#13-post-follow-up-live-run-review) reopens
+08–10 for a distinct target-feasibility defect: a mixed selection receives an
+impossible content-only repair. Existing R4/R6 and G1 govern the
+[follow-up](TODO_FIX_001.md#phase-3-follow-up-required-by-r15); no additional
+coupled target or authority exception is approved by this review.
+The [full architecture audit](REVIEW_FIX_001_ARCHITECTURE.md) subsequently reopens
+08–12 for feasibility, missing immutable request dependencies and inconsistent
+canonical equivalence. It also identifies downstream support and persisted-reader
+gaps assigned to 13–15/17. Its final review adds F9's incomplete native dependency
+capture, extends F8's source-accounting evidence and confirms duplicated assembly
+in F10/chunk 20. The findings refine implementation evidence under the
+existing design; they do not approve a new repair algebra or authority exception.
 The historical boundary table below remains the Phase 0 snapshot. No new authority
 or repair target is approved here.
 
@@ -117,11 +129,12 @@ Its shared `Unary`/`TextStage` bindings currently convert action errors to
 
 ## 3. Authorized repair targets and dependency checks
 
-The following are selected target contracts under §§22.1–22.5, not claims that
-the code supports all operations. The shared implementation currently has
-`Target`, `Replacement`, `Rule`, owner, revision and exact expected value; it has
-no insert/delete implementation or general dependency-fact binding. Add only the
-operation required by its first consumer, together with that consumer's tests.
+The following are selected target contracts under §§22.1–22.5. At the original
+Phase 0 snapshot, shared repair supported replacement only. Phase 3 subsequently
+added insert/delete with real consumers and dependency binding; retain those
+implementations and tests. The current review finds incomplete dependency facts,
+not a missing operation algebra. It does not authorize recreating delivered
+operations, adding speculative variants or expanding G1's scope.
 
 For every target, authorization retains the originating native diagnostic,
 exact owner and current candidate revision, selected operation/target, expected
@@ -260,6 +273,16 @@ and audit extraction/specification siblings. Engine bookkeeping may stay private
 repair-relevant diagnostic facts cannot disappear from the actual request. The
 [completed rollout checks](TODO_FIX_001.md#phase-3-follow-up-delivery--13-september-2026) verify
 this boundary without widening repair targets or weakening validation.
+
+**Current implementation review:** R15 and the final architecture review identify
+violations of these existing §22 obligations; they do not extend the target matrix.
+The narrow write must have sufficient immutable read context and complete native
+dependency binding. Relation predicates retain one domain owner; authorization
+consumes their facts and exact CAS remains exact. Findings and concrete counterexamples
+live in [the architecture audit](REVIEW_FIX_001_ARCHITECTURE.md#3-confirmed-repair-defects);
+remaining implementation, cleanup and tests live only in
+[the rollout follow-up](TODO_FIX_001.md#phase-3-architecture-audit-follow-up).
+This avoids a second evolving implementation prescription in the contract record.
 
 ## 5. Design amendment decisions
 
@@ -459,10 +482,12 @@ G2 remain explicit gates for the affected later work; no exception or authentica
 mechanism was approved. Chunks 01–04, including the R12 follow-up, are implemented
 and verified offline. Phase 2 (05–07) is implemented and verified
 offline; the rollout records 120/120 verification steps and 1,374/1,374 tests.
-Phase 3 (08–12), including R14's guidance follow-up, is implemented and verified
-offline: 120/120 steps and 1,393/1,393 tests. Chunks 13–21 remain pending.
-R14's unchanged invalid signal remains historical evidence; no new live run
-establishes model convergence or publication. If an intended fix exceeds
+Phase 3's R14 follow-up passed 120/120 steps and 1,393/1,393 tests offline.
+R15 reopened 08–10. The subsequent architecture audit reopens 08–12 for complete
+feasibility/context/equivalence contracts; 13–21 remain pending. The audit's
+unchanged-code verification also passed 120/120 steps and 1,393/1,393 tests;
+it does not supply the missing regressions. Neither failed live run establishes
+model convergence or publication. If an intended fix exceeds
 the approved governing wording, obtain the specific missing decision rather than
 broadening this document into new authority.
 
@@ -473,5 +498,7 @@ or clarification routes (12–15). Retain independent regression coverage and
 historical run evidence. Phase 0 has no legacy runtime path to remove because it
 introduces no replacement runtime path.
 
-Documentation checks for this delivery are recorded in chunk 00 of the rollout.
-No engine tests, live E2E calls or rubric evaluation were run for this review.
+Documentation checks for the original delivery are recorded in chunk 00 of the
+rollout. No engine tests, live E2E calls or rubric evaluation were run for that
+Phase 0 review. The later architecture audit's separate offline verification is
+recorded in its report; no live execution is implied.
