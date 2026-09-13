@@ -54,6 +54,11 @@ accepts generic execution-owned requests and one immutable identity/binding/reso
 handoff between explicit YAML operations. SDD-specific ownership validation remains
 required for SDD work, but is not a prerequisite for a generic model request.
 
+**Response-guidance and provenance amendment (2026-09-13):** The user explicitly
+approved FIX_001 A1–A3. Sections 12.5, 17.3 and 22.6 own the amended rules;
+the [approval record](../fixes/CONTRACT_FIX_001.md#5-design-amendment-decisions)
+records their scope.
+
 **Primary inputs:** The historical prompts, templates, and flow documentation cited throughout this design, plus `design/paths.md`, `design/schemas/sddtoolkit-config.schema.json`, and the current source examples under `design/toolchainPresets/`, `design/examples/.sddtoolkit.json`, and `design/templates/`.
 
 **Out of scope:** Editing the current prompts/scripts; defining the domain
@@ -1418,7 +1423,8 @@ A context request asks only for already-held evidence. It cannot stand in for ab
 - strict JSON schema with enums and `additionalProperties: false`;
 - low temperature or provider equivalent, without relying on it for correctness;
 - stable IDs for sources, requirements, tokens, projects, files, tasks, commands, and diagnostics;
-- a short valid example matching the current exact schema;
+- complete response-shape guidance from the bound compiled schema, including
+  nested alternatives and constraints, without synthetic candidate examples;
 - no request to reproduce engine-known filenames, IDs, headings, checkboxes, or status;
 - no open-ended “inspect the repo” instruction;
 - no unrestricted tool use;
@@ -3279,7 +3285,7 @@ Calls are split into typed units:
 - entities, only if business data is involved;
 - semantic ambiguity/open-question review.
 
-The LLM does not assign the feature ID, IDs, headings, paths, dates, status, checklist state, passive-literal values, clarification lifecycle, or execution status. Every initial brief/spec record selects either real claim/citation IDs, one or more exact resolved clarification-response IDs, or an allowed combination. The engine assigns canonical IDs and mechanically verifies all authority joins and citation unions. Semantic entailment of arbitrary prose is model-assisted and ultimately user-reviewed; it is never misrepresented as deterministic proof. For path/filename/URI display text the model may select only a unit-allowlisted passive ID from the exact registry. There is no unreferenced command description to use as provenance. The model returns typed business content rather than Markdown. Each acceptance-criterion proposal contains exactly one nonempty typed `given`, `when`, and `then` value; the model does not supply Markdown labels or combine the three values into free-form prose.
+The LLM does not assign the feature ID, IDs, headings, paths, dates, status, checklist state, passive-literal values, clarification lifecycle, or execution status. Every initial brief/spec record selects real claim IDs, one or more exact resolved clarification-response IDs, or an allowed combination. Meaningful exact-copy and source selections remain explicit. The engine assigns canonical IDs, validates current authority and selection joins, and constructs reference citation lists as the stable unique union of the selected claims' canonical citations. The model does not reproduce that determined union; user answers never receive fabricated reference citations. Semantic entailment of arbitrary prose is model-assisted and ultimately user-reviewed; it is never misrepresented as deterministic proof. For path/filename/URI display text the model may select only a unit-allowlisted passive ID from the exact registry. There is no unreferenced command description to use as provenance. The model returns typed business content rather than Markdown. Each acceptance-criterion proposal contains exactly one nonempty typed `given`, `when`, and `then` value; the model does not supply Markdown labels or combine the three values into free-form prose.
 
 For each feature-brief or specification unit, the declared model operation returns either content or a clarification need. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
@@ -4087,9 +4093,11 @@ defined response-level correction containing:
   reason and JSON Pointer; duplicate-field diagnostics identify the first and
   repeated key locations without inferring a repair or accepting changed data;
 - no request to reconsider semantics;
-- schema-derived shape examples. Syntax examples include an array item when
-  permitted, so nested fields remain visible. Schema rejections show the
-  rejected shape's alternatives. Example values supply no business facts.
+- for schema rejection, the exact expected compiled schema node, its JSON Pointer
+  and value/parent scope, including all applicable alternatives and constraints.
+  Syntax correction uses the original complete schema already supplied. Guidance
+  does not synthesize candidate values or duplicate the complete schema in a
+  separate example.
 
 The builder owns no retry counter or limit. Each correction returns through the
 existing `advance-model-attempt-accounting` step, whose compiler-validated local

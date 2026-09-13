@@ -3,8 +3,10 @@
 Status: Proposed implementation plan. Created: 13 September 2026.
 Source: [FIX_001.md](FIX_001.md). Governing authority remains
 [AGENTS.md](../AGENTS.md), [design.md](../design/design.md) and accepted ADRs.
-This checklist does not approve design amendments or live runs. No implementation,
-tests or model calls were performed while preparing it. All chunks are pending.
+This checklist does not approve design amendments or live runs. Phase 0 is
+complete. The user explicitly approved A1–A3 on 13 September 2026; their wording
+is applied to design §§12.5/17.3/22.6. Chunks 01–21 remain pending. No runtime
+implementation, engine tests or model calls were performed for Phase 0.
 
 ## Outcome and delivery rules
 
@@ -99,7 +101,20 @@ Keep completion unchecked when a required check or acceptance case is missing.
 
 ### 00 — Review the classification and repair-unit matrix
 
-- [ ] Complete chunk 00.
+- [x] Complete chunk 00.
+
+**Delivered:** [CONTRACT_FIX_001.md](CONTRACT_FIX_001.md), reviewed on
+13 September 2026 against source revision
+`5d751c8ae06e4bac1641dc21655af2e596528ba8` and the current working tree.
+It records 16 boundary classifications, 10 repair targets, accepted/rejected
+cases T01–T16, final proposal-shape choices, source-support classification,
+diagnostic/persistence requirements and amendment decisions A1–A3.
+
+**Approval gates:** the user explicitly approved A1–A3 on 13 September 2026;
+their wording is applied to design §§12.5/17.3/22.6. Amendment approval gates for
+chunks 01 and 06 are cleared. The concrete G1 target-scope and G2 answer-authentication
+limitations remain recorded for the affected later work. These approvals do not
+expand repair scope or authorize an E2E invocation.
 
 **Scope and owners:** review [design §§12, 17, 21–22, 25, 27–28 and 31](../design/design.md)
 against FIX_001 §§4 and 6. Use the existing validator, schema, authorization,
@@ -147,11 +162,27 @@ Check document links and `git diff --check`. Preserve the design's Proposed stat
 is not approval. Unaffected offline work may proceed while a specific decision
 is pending; dependent code may not silently choose its own policy.
 
+**Initial Phase 0 validation:** a local Python check passed for 95 Markdown links/anchors,
+B01–B16 to T01–T16 coverage, R1–R10 targets, 17 cited build-step names and all 22
+chunk completion states. `git diff --check` passed. Also checked both complete
+documents, including untracked content, with
+`git diff --no-index --check /dev/null <document>`: no whitespace diagnostics
+(exit 1 denotes the added file). Reviewed both changed documents for scope,
+authority duplication and unsupported completion claims. No runtime path was
+replaced, so legacy code removal remains with its owning implementation chunk.
+Engine tests and live E2E were not run for this documentation-only phase.
+
+**A1–A3 documentation updates:** approved wording applied, superseded requirements
+removed, and approval status reconciled across the design and both Phase 0
+documents. Markdown references, exact amendment scope and whitespace checks
+passed. Section 17.5's canonical citation-union rule and all runtime files remain
+unchanged. Phase 0's review and amendment approvals are complete.
+
 ## Phase 1 — Make guidance and rejection trustworthy
 
 ### 01 — Replace synthetic correction examples and their test dependency
 
-- [ ] Complete chunk 01. **Depends on:** 00's example amendment.
+- [ ] Complete chunk 01. **Depends on:** 00's A1–A2 amendments (approved and applied).
 
 **Owners:** [model_protocol_retry.zig](../src/domain/model_protocol_retry.zig),
 [model_schema_diagnostic.zig](../src/domain/model_schema_diagnostic.zig),
@@ -281,7 +312,8 @@ or change to accepted domain policy.
 
 ### 06 — Remove deterministic echoes from model response contracts
 
-- [ ] Complete chunk 06. **Depends on:** 00's selection decision, 01, 04, 05.
+- [ ] Complete chunk 06. **Depends on:** 00's selection decision and A3 amendment
+  (approved and applied), 01, 04, 05.
 
 **Owners:** reconciliation/specification proposal and canonical types, input
 projections, parsers/builders, existing repair and support consumers, and
@@ -305,8 +337,8 @@ same canonical content, without requiring identical wording from different model
 `test-specification-generation`, `test-specification-contract`,
 `test-structured-tokens`, `test-typed-text`; full `verify`.
 **Exit:** candidate choices and engine-constructed facts have distinct types; no
-parallel citation-echo repair schema remains. Update §17.3 and related docs with
-the approved change, preserving §17.5 canonical evidence requirements.
+parallel citation-echo repair schema remains. Implement the approved §17.3 contract
+and update related implementation docs, preserving §17.5 canonical evidence requirements.
 
 ### 07 — Express disposition choices and guidance through their owning contract
 
