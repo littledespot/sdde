@@ -148,6 +148,12 @@ in workflow schemas and one shared native candidate codec. Malformed root or
 nested variants reject before request closure and use the existing YAML retry;
 no permissive one-key union schema or legacy model reader remains.
 
+FIX_001 Phase 2 separates model selections from canonical records. The engine
+constructs summary lineage and citation unions; generation, repair and support
+schemas reject the removed echoes. Dispositions use nested `kind` choices and
+native relationship guidance. Canonical provenance and exact-copy validation
+remain mandatory. Phase 3 owns the remaining semantic repair work.
+
 Native captured values retain their immutable evidence and current domain
 dependencies. Retiring a request does not invalidate accepted evidence; changing
 an underlying reference or candidate still invalidates dependent gates.
@@ -203,8 +209,8 @@ revision and old-value checks. YAML bounds attempts; each merge repeats the
 owning validator and assembly repeats full-candidate validation. Unsupported
 knowledge remains a typed need/gap, not a repaired guess.
 
-Protocol examples now pass both the workflow schema and native decoding. Tests
-cover empty/mixed/nested-invalid responses, unchanged request identity on retry,
+Independently authored response cases pass both the workflow schema and native
+decoding. Tests cover empty/mixed/nested-invalid responses, unchanged request identity on retry,
 successful correction and exhaustion across extraction, reconciliation,
 generation, repair and support. JSON integer decoding reuses the schema
 validator's exact arithmetic; equivalent numeric spellings do not create a

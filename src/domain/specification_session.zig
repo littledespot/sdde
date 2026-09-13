@@ -98,7 +98,7 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
     for (current.units, 0..) |entry, index| {
         const checked = entry orelse return error.InvalidSpecificationUnit;
         // Full-candidate revalidation uses the same owning unit validator.
-        const result = switch (try g.validate(allocator, validator, context, try unit(index), checked.response)) {
+        const result = switch (try g.revalidate(allocator, validator, context, try unit(index), checked.response)) {
             .valid => |valid| valid,
             .invalid => return error.InvalidSpecificationUnit,
         };

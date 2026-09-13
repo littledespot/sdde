@@ -107,20 +107,6 @@
     "summary": {
       "type": "object",
       "properties": {
-        "member_claim_ids": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ordinal"
-          },
-          "maxItems": 4294967295
-        },
-        "member_summary_ids": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ordinal"
-          },
-          "maxItems": 4294967295
-        },
         "statements": {
           "type": "array",
           "items": {
@@ -327,8 +313,6 @@
         }
       },
       "required": [
-        "member_claim_ids",
-        "member_summary_ids",
         "statements"
       ],
       "additionalProperties": false
@@ -345,25 +329,83 @@
                 "$ref": "#/$defs/ordinal"
               },
               "disposition": {
-                "enum": [
-                  "retained",
-                  "superseded",
-                  "duplicate",
-                  "conflicting"
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "retained"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "superseded"
+                      },
+                      "related_claim_ids": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/ordinal"
+                        },
+                        "minItems": 1,
+                        "maxItems": 4294967295
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "related_claim_ids"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "duplicate"
+                      },
+                      "target_claim_id": {
+                        "$ref": "#/$defs/ordinal"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "target_claim_id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "conflicting"
+                      },
+                      "related_claim_ids": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/ordinal"
+                        },
+                        "minItems": 1,
+                        "maxItems": 4294967295
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "related_claim_ids"
+                    ],
+                    "additionalProperties": false
+                  }
                 ]
-              },
-              "related_claim_ids": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/ordinal"
-                },
-                "maxItems": 4294967295
               }
             },
             "required": [
               "claim_id",
-              "disposition",
-              "related_claim_ids"
+              "disposition"
             ],
             "additionalProperties": false
           },
@@ -375,13 +417,6 @@
             "type": "object",
             "properties": {
               "claim_ids": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/ordinal"
-                },
-                "maxItems": 4294967295
-              },
-              "citation_ids": {
                 "type": "array",
                 "items": {
                   "$ref": "#/$defs/ordinal"
@@ -568,7 +603,6 @@
             },
             "required": [
               "claim_ids",
-              "citation_ids",
               "content"
             ],
             "additionalProperties": false
@@ -581,13 +615,6 @@
             "type": "object",
             "properties": {
               "claim_ids": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/ordinal"
-                },
-                "maxItems": 4294967295
-              },
-              "citation_ids": {
                 "type": "array",
                 "items": {
                   "$ref": "#/$defs/ordinal"
@@ -626,7 +653,6 @@
             },
             "required": [
               "claim_ids",
-              "citation_ids",
               "kind",
               "summary",
               "resolution"

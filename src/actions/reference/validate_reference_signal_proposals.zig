@@ -17,14 +17,13 @@ pub const Action = struct {
         @memset(token_covered, false);
         for (prior.proposal.signals, signals, 0..) |proposal, *signal, index| {
             if (v.claims(items, proposal.claim_ids, prior.input.partition.group.claim_ids)) |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, issue);
-            if (try v.citations(allocator, items, proposal.claim_ids, proposal.citation_ids)) |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, issue);
             for (proposal.claim_ids) |id| {
                 const disposition = try v.disposition(prior.dispositions, id);
                 if (disposition.disposition == .conflicting) return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, .{ .rule = .relationship, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .nonconflicting_claims } });
                 covered[id.ordinal - 1] = true;
                 if (proposal.content == .preserved_token) token_covered[id.ordinal - 1] = true;
             }
-            signal.* = .{ .claim_ids = proposal.claim_ids, .citation_ids = proposal.citation_ids, .content = switch (try v.content(allocator, self.validator, context, items, proposal.claim_ids, proposal.content)) {
+            signal.* = .{ .claim_ids = proposal.claim_ids, .citation_ids = try r.citationUnion(allocator, items, proposal.claim_ids), .content = switch (try v.content(allocator, self.validator, context, items, proposal.claim_ids, proposal.content)) {
                 .valid => |value| value,
                 .invalid => |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, issue),
             } };

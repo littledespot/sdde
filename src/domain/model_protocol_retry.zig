@@ -11,7 +11,10 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
     defer arena.deinit();
     const scratch = arena.allocator();
     const guidance = switch (diagnostic) {
-        .decoder => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .decoder = reason } }, .{}),
+        .decoder => |reason| if (reason.explanation()) |explanation|
+            try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .decoder = reason }, .explanation = explanation }, .{})
+        else
+            try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .decoder = reason } }, .{}),
         .schema => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .schema = try reason.describe(scratch) }, .expected = .{ .path = (try reason.describeExpected(scratch)).path, .scope = reason.expected_location, .schema = try projection.value(scratch, reason.expected, .complete) } }, .{}),
     };
     const response = try std.json.Stringify.valueAlloc(scratch, .{ .rejected_response = rejected.content() }, .{});

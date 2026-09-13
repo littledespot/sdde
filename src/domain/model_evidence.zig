@@ -12,8 +12,8 @@ pub const Token = struct { id: tokens.Id, kind: tokens.Kind, value: []const u8, 
 pub const Projection = struct { claims: []const Claim, citations: []const r.extraction.Citation, preserved_tokens: []const Token };
 pub const Statement = struct { id: r.StatementId, claim_ids: []const r.ClaimId, content: r.ContentProposal };
 pub const Summary = struct { id: r.SummaryId, partition_id: r.PartitionId, member_claim_ids: []const r.ClaimId, member_summary_ids: []const r.SummaryId, statements: []const Statement };
-pub const Signal = struct { id: r.SignalId, value: r.SignalProposal };
-pub const Conflict = struct { id: r.ConflictId, value: r.ConflictProposal };
+pub const Signal = struct { id: r.SignalId, value: struct { claim_ids: []const r.ClaimId, citation_ids: []const r.CitationId, content: r.ContentProposal } };
+pub const Conflict = struct { id: r.ConflictId, value: struct { claim_ids: []const r.ClaimId, citation_ids: []const r.CitationId, kind: r.ConflictKind, summary: r.text.ReferenceSemanticText, resolution: @FieldType(r.ValidatedConflict, "resolution") } };
 
 pub fn modelContent(value: r.extraction.Content) r.extraction.ProposalContent {
     return switch (value) {

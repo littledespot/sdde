@@ -5,10 +5,13 @@ Source: [FIX_001.md](FIX_001.md). Governing authority remains
 [AGENTS.md](../AGENTS.md), [design.md](../design/design.md) and accepted ADRs.
 This checklist does not approve design amendments or live runs. Phase 0 is
 complete. The user explicitly approved A1–A3 on 13 September 2026; their wording
-is applied to design §§12.5/17.3/22.6. Phase 1 (chunks 01–04) is implemented
-and verified offline; chunks 05–21 remain pending. Phase 0 itself involved no
-runtime implementation, engine tests or model calls. No live E2E run was performed
-for Phase 1.
+is applied to design §§12.5/17.3/22.6. Phase 1 (01–04), including the follow-up
+that closes R12's reopened chunk 01, is implemented and verified offline;
+Phase 2 (05–07) is implemented and verified offline.
+08–21 remain pending. See the [Phase 2 delivery record](#phase-2-delivery-and-verification--13-september-2026).
+Phase 0 involved no runtime implementation or model calls. No live E2E run was
+performed during Phase 1 implementation or its follow-up; the separately retained
+run is reviewed in [FIX_001 §9](FIX_001.md#9-post-phase-1-live-run-review).
 
 ## Outcome and delivery rules
 
@@ -186,10 +189,19 @@ unchanged. Phase 0's review and amendment approvals are complete.
 
 - [x] Complete chunk 01. **Depends on:** 00's A1–A2 amendments (approved and applied).
 
+**R12 follow-up completed:** the earlier generator removal left obsolete example
+wording in the canonical [protocol prompt](../design/workflows/spec/protocol.prompt.md).
+That missed cleanup reached the live model and caused this item to be reopened.
+The follow-up removes it, verifies the selected resource, adds native explanatory
+guidance and completes the correction/exhaustion coverage below. The
+[new verification record](#phase-1-follow-up-completion--13-september-2026)
+closes this item; the original cleanup claim remains corrected in R12's history.
+
 **Owners:** [model_protocol_retry.zig](../src/domain/model_protocol_retry.zig),
 [model_schema_diagnostic.zig](../src/domain/model_schema_diagnostic.zig),
-[model_schema_projection.zig](../src/domain/model_schema_projection.zig), and
-their payload-schema/native-codec tests and protocol documentation.
+[model_schema_projection.zig](../src/domain/model_schema_projection.zig),
+[strict_json.zig](../src/domain/strict_json.zig), the selected protocol prompt,
+and their payload-schema/native-codec tests and protocol documentation.
 
 **Change:** replace generator-dependent conformance inputs with independent
 contract cases; use the retained expected schema node and parent/value scope for
@@ -197,6 +209,12 @@ correction guidance. Preserve original assignment, schema, evidence, latest exac
 rejected bytes and immutable request association. Delete synthetic example
 generation, superseded assertions and example-specific descriptions together.
 Do not replace it with empty-array defaults or another semantic example generator.
+For duplicate-member correction, make the existing native diagnostic's meaning
+explicit: a JSON member name occurs twice in one object; this is not a judgment
+about duplicate business ID values. Render any concise explanation from the
+shared decoder diagnostic, retaining its object/key positions and original
+complete schema. Do not prescribe an inferred record split, choose a surviving
+value, add a workflow-specific hint, or duplicate rules in YAML.
 
 **Evidence:** each selected response definition and nested variant has accepted
 wire/native cases. Missing `kind`, mixed/unknown fields, duplicate keys, invalid
@@ -206,9 +224,17 @@ integer values still reject. Applicable omission/null and empty-struct cases are
 explicit. Domain cases still reject structurally valid self-relations.
 Correction tests prove exact rejected bytes, diagnostic locations, alternatives,
 schema bounds and request identity survive without fabricated business values.
+Exercise malformed multi-item arrays with repeated object member names and an
+unrelated nested-record case. Corrected independent responses must decode and
+continue to schema/domain checks; unchanged and alternating malformed responses
+must remain rejected. Each retry carries only the latest response/diagnostic
+with the original assignment/schema; neither local accounting nor the global
+token budget resets. Test local exhaustion and a budget stop before the next
+decode separately. These tests establish mechanics, not live model convergence.
 
 **Checks:** `test-model-result-schema`, `test-model-payload-schema`,
-`test-model-candidate-json`, `test-model-envelope`, `test-model-request-workflow`.
+`test-model-candidate-json`, `test-model-envelope`, `test-model-request-workflow`,
+`test-model-attempt-accounting`; full `verify` after the follow-up implementation.
 **Exit:** correction guidance is truthful, and deleting the generator does not
 delete conformance coverage. No live acceptance or prompt-size improvement is claimed.
 
@@ -290,6 +316,12 @@ consume serialized diagnostic JSON. Narrower targets are implemented in 11.
 
 ### Phase 1 delivery and verification — 13 September 2026
 
+This is the original delivery record. The later [R12 review](FIX_001.md#9-post-phase-1-live-run-review)
+found obsolete example wording in the selected protocol prompt and reopened
+chunk 01. That item is now closed by the separate follow-up record below. These
+original checks were not rerun during the R12 documentation review and did not
+establish complete prompt cleanup or live convergence.
+
 Implemented in the working tree based on revision
 `24533e8cda25865df4a1c58fe240a0b7deaf2bcb`. This entry records implementation
 evidence; it does not amend design authority or claim live reliability.
@@ -347,11 +379,65 @@ offline checks establishes Phase 1's contracts, not LLM quality, a published liv
 baseline or E2E reliability. Each live invocation still requires explicit user
 approval.
 
+### Phase 1 follow-up completion — 13 September 2026
+
+Implemented in the working tree based on
+`a5db1bda687f59dc9cb3280e791c667e9d83c4d1`, preserving the R12 review changes.
+The shared [decoder diagnostic](../src/domain/strict_json.zig) now supplies a
+brief explanation for `DuplicateField`; the
+[protocol builder](../src/domain/model_protocol_retry.zig) adds it only to that
+correction's guidance. Native stored diagnostics remain `reason`, `location`
+and `context`. The explanation distinguishes property names from identifier
+values and grants no authority to split objects or select surviving values.
+Removed obsolete example instructions from the selected prompt and the current
+H-010 status documentation; historical run records remain intact.
+
+Owning-boundary evidence:
+
+- `selected protocol guidance explains duplicate property names and preserves
+  native diagnostics` reads the actual selected prompt, verifies its inclusion,
+  native positions/context, exact rejected bytes, unchanged schema/identity,
+  unrelated nested/escaped property names and allocation-failure cleanup.
+  Other parser failures gain no duplicate-member explanation. Envelope tests
+  still accept repeated identifier values in separate objects for domain validation.
+- `protocol retries retain only latest repeated or alternating decoder rejection
+  until local exhaustion` exercises the registered correction/accounting operations
+  through the runner with independent array/nested responses and exact local limits.
+- `protocol retry budget overshoot charges the response before decoding and blocks
+  another call` verifies cumulative usage, absent invocation/decoded/payload deltas
+  on rejection and no additional provider effect. Later raw-response/report
+  improvements remain chunk 16.
+- `corrected protocol responses pass schema validation before request closure`
+  tests malformed multi-item JSON, a decoded but schema-invalid correction, then
+  independently authored valid records and exact request association. Existing
+  native specification integration tests cover downstream domain validation,
+  rejection propagation and the selected production YAML/prompt resources.
+
+Actual final commands/results:
+
+```sh
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg test-model-result-schema test-model-payload-schema test-model-candidate-json test-model-envelope test-model-request-workflow test-model-attempt-accounting --summary all > .zig-cache/phase1-followup-targeted.log 2>&1
+# 18/18 steps; 302/302 tests passed.
+
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg verify --summary all > .zig-cache/phase1-followup-verify.log 2>&1
+# 120/120 steps; 1,362/1,362 tests passed, including lint, architecture and native packaging smoke.
+
+git diff --check
+# Passed.
+```
+
+Reviewed the complete follow-up diff for duplicated rules, changed authority,
+weakened checks and residual current example instructions. No schema, parser
+acceptance, retry limit, token budget, persistence, dependency or model-selection
+policy changed. No live E2E run was started. These checks complete Phase 1's
+mechanical acceptance; model convergence and a published, scored specification
+remain unproven. Phase 2 delivery is recorded below.
+
 ## Phase 2 — Simplify the final proposal contracts
 
 ### 05 — Use one deterministic citation-union constructor
 
-- [ ] Complete chunk 05. **Depends on:** 03, 04.
+- [x] Complete chunk 05. **Depends on:** 03, 04.
 
 **Owners:** [reference_reconciliation_validation.zig](../src/domain/reference_reconciliation_validation.zig),
 [specification_provenance.zig](../src/domain/specification_provenance.zig), and the
@@ -373,7 +459,7 @@ or change to accepted domain policy.
 
 ### 06 — Remove deterministic echoes from model response contracts
 
-- [ ] Complete chunk 06. **Depends on:** 00's selection decision and A3 amendment
+- [x] Complete chunk 06. **Depends on:** 00's selection decision and A3 amendment
   (approved and applied), 01, 04, 05.
 
 **Owners:** reconciliation/specification proposal and canonical types, input
@@ -392,6 +478,10 @@ selection omissions reject. Old fields and mixed old/new responses reject. Every
 new selected response and repair shape decodes, and full candidate validation still
 checks current authority and exact tokens. Rendering remains byte-stable for the
 same canonical content, without requiring identical wording from different models.
+Include independently authored multi-item responses under the final schemas,
+with separate object records and malformed duplicate-member/delimiter variants.
+Removing deterministic echoes does not itself prove syntax correction converges;
+the shared protocol follow-up in 01 covers failures before valid IR exists.
 
 **Checks:** `test-model-candidate-json`, `test-model-payload-schema`,
 `test-reference-model-input`, `test-reference-reconciliation`,
@@ -403,7 +493,7 @@ and update related implementation docs, preserving §17.5 canonical evidence req
 
 ### 07 — Express disposition choices and guidance through their owning contract
 
-- [ ] Complete chunk 07. **Depends on:** 00's shape decision, 01, 03, 06.
+- [x] Complete chunk 07. **Depends on:** 00's shape decision, 01, 03, 06.
 
 **Owners:** reconciliation proposal types/schema, input/guidance construction,
 disposition validator and consumers, including schema/native conformance cases.
@@ -425,6 +515,43 @@ proposal; no invalid candidate is silently rewritten to retained-empty.
 `test-reference-reconciliation`; full `verify`.
 **Exit:** final disposition choices and precise initial/repair guidance agree.
 No unsupported schema feature or alternative discriminator is introduced.
+
+### Phase 2 delivery and verification — 13 September 2026
+
+Implemented the approved proposal contracts at their existing owners:
+
+| Chunk | Implementation and regression evidence |
+| --- | --- |
+| 05 | `reference_reconciliation.citationUnion` owns stable first-occurrence citation construction. Reconciliation signals/conflicts and specification provenance use it. Tests cover overlap, reordered/repeated inputs, empty input and unknown claims; stage validators retain selection eligibility. The isolated constructor increment passed 208/208 tests, 12/12 steps (`.zig-cache/phase2-chunk05.log`). |
+| 06 | Model summary membership and aggregate citation echoes are removed from native proposals, all four response schemas, generation/support prompts, repair values and fixtures. Canonical summaries, evidence projections and persisted specification provenance retain complete membership/citations. Closed model/canonical types share business fields and one validation traversal. Canonical revalidation detects altered unions; exact-copy joins, absence handling, unsupported answer rejection, current authority and repair preconditions remain enforced. |
+| 07 | Nested `kind` choices express retained-empty, duplicate-target and nonempty superseded/conflicting selections. The same native relationship validator constructs canonical enum/list records and still checks targets, self-relations, kinds, token values, reciprocity, cycles and coverage. Input construction projects concise native constraint descriptions beside current facts; protocol correction retains that packet. Independent wire cases reject legacy/mixed fields and malformed multi-record objects. |
+
+Final targeted command:
+
+```sh
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg test-model-result-schema test-model-candidate-json test-model-payload-schema test-reference-model-input test-reference-reconciliation test-specification-generation test-specification-contract test-structured-tokens test-typed-text --summary all
+```
+
+Passed **27/27 steps, 408/408 tests**; output retained in
+`.zig-cache/phase2-targeted.log`. Full verification passed **120/120 steps,
+1,374/1,374 tests**, including lint, architecture checks, production-composition
+integration and clean native packaging; output is in `.zig-cache/phase2-verify.log`.
+`git diff --check` passed. The full commands were:
+
+```sh
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg verify --summary all
+git diff --check
+```
+
+Removed superseded echo validators/diagnostic variants, native convenience
+wrappers with no remaining consumer, old proposal readers and fixture-side
+citation construction. No compatibility reader, new retry mechanism, dependency,
+provider policy, authority gate or model-specific behavior was added.
+
+**Limit:** no live E2E run was performed. These are offline contract, integration
+and packaging checks, not evidence of live completion or output quality.
+Semantic reconciliation repair and narrower evidence-only repair remain Phase 3;
+chunk 08 is next. H-011 answer authentication remains a separate gate.
 
 ## Phase 3 — Complete authorized repair and revalidation
 
@@ -476,6 +603,9 @@ input/parse/merge actions, reconciliation bindings and registered YAML operation
 and authorized unit repair path. Bind partition membership, claims, evidence and
 revision. Repair before accepting/appending the summary; invalidate any already
 derived dependent state. YAML owns calls, retries, retirement and typed branches.
+This route starts after JSON/schema acceptance. Duplicate JSON member names or
+broken array delimiters remain response-level protocol failures under 01; they
+must not be treated as semantic duplicate statements or passed to atomic merge.
 Land any newly required insert/delete operation with this first consumer and its
 scope/old-value/collection-precondition tests under 08's shared contract.
 
@@ -683,21 +813,34 @@ decision/scope before implementing acceptance; protected form handling remains r
 
 **Owners:** [bedrock_http.zig](../src/adapters/provider/bedrock_http.zig),
 [bedrock_transport.zig](../src/adapters/provider/bedrock_transport.zig), current
-provider outcome, evidence store and report projections.
+provider outcome and runner accounting, evidence store and report projections.
 
 **Change:** retain a closed known failure phase and safe cause category without
 changing delivery/retry policy. Distinguish absent response, retained raw response,
 budget stop before text projection, evidence-write failure and complete capture.
 Reuse HTTP status, exception and request ID already captured. Do not infer DNS,
 TLS or sandbox causes from `transport_failed`/`not_sent`.
+Carry available per-exchange usage through a budget rejection using the existing
+accounted provider observation, even when candidate-text projection never runs.
+Reports must link the retained raw response and state why extracted text is absent.
+Retain the last observed protocol rejection with its own request/attempt/call
+beside the later terminal cause. Reuse the existing rejection retention owner;
+do not relabel an older rejection as the last exchange's validation result.
 
 **Evidence:** failures before send, during send, in response headers/body and timeout
 retain only known facts. Unknown causes remain unknown. Final raw response survives
 budget rejection even without text projection. Capture errors cannot produce a
 passing run; redaction, actual usage and no-hidden-resend behavior remain unchanged.
+Reproduce R12's separate facts: call 34's decoder rejection, call 35's retained
+response and 2,818 accounted tokens, and the 100,114-token terminal budget stop.
+The report must not say the final response was decoded, borrow call 34's usage,
+or infer missing provider text from a missing `model_output.txt`. Include a
+non-budget operational stop after an earlier rejection and an actual no-response
+case. Terminal output, JSON and Markdown must preserve the same distinctions.
 
 **Checks:** `test-provider-conformance`, `test-model-request-workflow`,
-`test-e2e-harness`, `test-atomic-execution`; full `verify`.
+`test-model-attempt-accounting`, `test-e2e-harness`, `test-atomic-execution`;
+full `verify`.
 **Exit:** future environmental failures can be isolated without a new logger or
 model retry path. Historical lost detail is not retrospectively invented.
 
@@ -739,12 +882,23 @@ with already captured configuration, workflow/prompt/schema, source, generation
 model and rubric/evaluator settings. Reuse existing run metadata; do not add a
 production Git dependency, artifact-freshness authority or benchmark platform.
 Record the unresolved first-live acceptance criterion explicitly.
+Include the executed model-operation retry settings and global budget alongside
+per-request attempt/usage summaries derived from existing captured origins and
+accounting. R12's retry limit of 128 did not bind before the global budget; expose
+that distinction without introducing another counter, stall detector or budget.
 
 **Evidence:** clean and modified source identities are distinguishable; captured
 identity names the build actually run. Credentials/environment dumps are excluded.
 Provenance cannot change workflow gates. Publication and diagnostic evidence joins
 remain exact. Review every changed contract for dead code, duplicate policy,
 unregistered operations, old response formats and weakened assertions.
+Verify the actual captured prompt/schema resources match the proposed build and
+contain no references to removed examples. Carry 01's repeated/alternating
+protocol regressions through the production runner. When 16 is implemented,
+verify its budget-stop evidence through the reports; otherwise retain its known
+reporting limitations explicitly without changing its independent scheduling.
+Existing coverage may satisfy these checks; do not duplicate
+validators or count repeated event projections as additional model failures.
 
 **Checks:** `test-e2e-harness`, `test-e2e-launcher`, `test-rubric-evaluator`,
 `smoke-e2e-harness`, `smoke-rubric-evaluator`; full `verify` and `git diff --check`.

@@ -54,7 +54,7 @@ pub fn merge(allocator: std.mem.Allocator, current: session.Session, candidate: 
         .story => result.response.content.primary_user_story = replacement.attributed,
         .entity_basis => result.response.content.entities.basis = replacement.attributed,
         .record => |index| {
-            const records = try allocator.dupe(g.spec.RecordProposal, candidate.response.content.records);
+            const records = try allocator.dupe(g.spec.Model.RecordProposal, candidate.response.content.records);
             records[index] = replacement.record;
             result.response.content.records = records;
         },

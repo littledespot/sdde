@@ -121,13 +121,6 @@
           },
           "maxItems": 4294967295
         },
-        "citation_ids": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ordinal"
-          },
-          "maxItems": 4294967295
-        },
         "clarification_response_ids": {
           "type": "array",
           "items": {
@@ -138,7 +131,6 @@
       },
       "required": [
         "claim_ids",
-        "citation_ids",
         "clarification_response_ids"
       ],
       "additionalProperties": false

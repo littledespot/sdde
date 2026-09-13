@@ -3,13 +3,58 @@
 const r = @import("reference_reconciliation.zig");
 pub const Source = struct { revision: u64 = 1, origin: ?@import("model_candidate_origin.zig").Origin = null };
 pub const Unit = union(enum) { summary, statement: usize, dispositions, disposition: usize, signals, signal: usize, conflicts, conflict: usize };
-pub const Rule = enum { membership, local_key, claim_selection, content, citations, cardinality, duplicate_disposition, relationship, cycle, signal_coverage, duplicate_signal, conflict_coverage, duplicate_conflict, typed_text };
-pub const Constraint = enum { unique_nonzero, nonempty_unique_allowed_claims, matching_claim_content, exact_selected_token, no_self_relation, same_content_kind, same_token_value, nonconflicting_target, reciprocal_conflict, acyclic, nonempty, at_least_two, nonconflicting_claims, conflicting_related_claims, unique_members, retained_claim_covered, token_projected, conflict_claim_covered, conflict_pair_covered, valid_typed_text };
+pub const Rule = enum { membership, local_key, claim_selection, content, cardinality, duplicate_disposition, relationship, cycle, signal_coverage, duplicate_signal, conflict_coverage, duplicate_conflict, typed_text };
+pub const Constraint = enum {
+    unique_nonzero,
+    nonempty_unique_allowed_claims,
+    matching_claim_content,
+    exact_selected_token,
+    no_self_relation,
+    same_content_kind,
+    same_token_value,
+    nonconflicting_target,
+    reciprocal_conflict,
+    acyclic,
+    nonempty,
+    at_least_two,
+    nonconflicting_claims,
+    conflicting_related_claims,
+    unique_members,
+    retained_claim_covered,
+    token_projected,
+    conflict_claim_covered,
+    conflict_pair_covered,
+    valid_typed_text,
+
+    pub fn description(self: Constraint) []const u8 {
+        return switch (self) {
+            .unique_nonzero => "IDs and local keys must be nonzero and unique within their collection.",
+            .nonempty_unique_allowed_claims => "Select a nonempty, unique subset of the supplied claim IDs.",
+            .matching_claim_content => "Content must match the selected claims' content kind.",
+            .exact_selected_token => "Select the exact preserved token of the cited claim.",
+            .no_self_relation => "A claim cannot relate to itself.",
+            .same_content_kind => "Duplicate and superseded targets must have the same content kind.",
+            .same_token_value => "Duplicate tokens must have the same token kind and exact value.",
+            .nonconflicting_target => "Duplicate and superseded targets cannot be conflicting.",
+            .reciprocal_conflict => "Every conflicting relationship must be declared in both directions.",
+            .acyclic => "Duplicate and superseded chains must terminate without cycles.",
+            .nonempty => "At least one related claim is required.",
+            .at_least_two => "A conflict must select at least two claims.",
+            .nonconflicting_claims => "Signals may select only nonconflicting claims.",
+            .conflicting_related_claims => "Conflict members must declare each other as conflicting.",
+            .unique_members => "Do not repeat an identical member set for the same projection kind.",
+            .retained_claim_covered => "Every retained claim must appear in a signal.",
+            .token_projected => "Every nonconflicting preserved token needs an exact-token signal, including after supersession.",
+            .conflict_claim_covered => "Every conflicting claim must appear in a conflict.",
+            .conflict_pair_covered => "Every declared conflicting pair must appear together in a conflict.",
+            .valid_typed_text => "Use the supplied typed text and scoped evidence choices.",
+        };
+    }
+};
+
 pub const Fact = union(enum) {
     count: usize,
     claims: []const r.ClaimId,
-    summaries: []const r.SummaryId,
-    citations: []const r.CitationId,
     disposition: r.ClaimDisposition,
     content: r.ContentProposal,
     text: r.text.ReferenceSemanticText,

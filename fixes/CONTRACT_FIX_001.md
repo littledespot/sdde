@@ -10,6 +10,10 @@ approvals. Governing wording lives in `design/design.md`; this review introduces
 no runtime contracts and establishes no test or live-run pass. Subsequent
 implementation evidence is recorded in the [Phase 1 delivery log](TODO_FIX_001.md#phase-1-delivery-and-verification--13-september-2026); the boundary table below
 retains the source state reviewed for Phase 0.
+The later [R12 review](FIX_001.md#9-post-phase-1-live-run-review) reopened chunk 01
+for missed protocol-prompt cleanup and refined observation/readiness checks.
+The [Phase 1 follow-up](TODO_FIX_001.md#phase-1-follow-up-completion--13-september-2026)
+now closes that item. A1–A3 and accepted engine authority remain unchanged.
 
 ## 1. Outcome, authority and ownership
 
@@ -180,19 +184,20 @@ implementer. Independently repairable cases in R1–R10 can proceed. A concrete
 G1 case that must recover to meet a later chunk's acceptance requires the smallest
 additional approved contract decision before that chunk can be called complete.
 
-## 4. Final model-facing choices for later implementation
+## 4. Final model-facing choices
 
 These choices remove duplicated facts while retaining semantic selections and
 canonical provenance. They are settled for this rollout, with A1–A3 approved and
-applied to the design. Runtime behavior changes only when each complete
-producer/schema/consumer change lands.
+applied to the design. Phase 2 implements the selection and disposition boundaries below; delivery
+evidence is recorded in [the rollout](TODO_FIX_001.md#phase-2-delivery-and-verification--13-september-2026).
+Richer support findings and routing remain with 13–14.
 
 | Choice | Model proposes | Engine constructs / retains | Implementation gate |
 | --- | --- | --- | --- |
-| Summary membership | Statement grouping, content and selected claim IDs; retain the current statement-key contract for this scope. | `member_claim_ids` from the exact partition; `member_summary_ids` from validated child summaries. Store both in canonical summaries and validate complete lineage. | 06; no new design amendment required. |
-| Citation unions | Meaningful selected claim IDs and, where the existing lifecycle authorizes them, resolved clarification-response IDs. | One shared stable unique union: traverse validated selected claims in their supplied order, traverse each canonical claim's citations in order, retain first occurrence of each citation ID. Retain exact canonical quotations and all persisted provenance. | 05 preserves existing stage comparison behavior; 06 removes model union echoes under approved A3. |
-| Dispositions | One claim selection plus a supported nested tagged relationship decision. | The canonical disposition enum and its related-claim list are derived from that checked decision. Cardinality/self/kind/reciprocity/cycle validation still owns acceptance. | 07 after final schema/codec conformance. |
-| Support provenance | Selected evidence and a concise inspectable finding, including the missing datum or preservation defect for a negative judgment. | Validated requirement/finding association and derived citation union. Absence may have no evidence selection; it never receives fabricated citations. | 06, 13–14; shared authority routing remains mandatory. |
+| Summary membership | Statement grouping, content and selected claim IDs; retain the current statement-key contract for this scope. | `member_claim_ids` from the exact partition; `member_summary_ids` from validated child summaries. Store both in canonical summaries and validate complete lineage. | 06 complete; no new design amendment required. |
+| Citation unions | Meaningful selected claim IDs and, where the existing lifecycle authorizes them, resolved clarification-response IDs. | One shared stable unique union: traverse validated selected claims in their supplied order, traverse each canonical claim's citations in order, retain first occurrence of each citation ID. Retain exact canonical quotations and all persisted provenance. | 05–06 complete under approved A3. |
+| Dispositions | One claim selection plus a supported nested tagged relationship decision. | The canonical disposition enum and its related-claim list are derived from that checked decision. Cardinality/self/kind/reciprocity/cycle validation still owns acceptance. | 07 complete with schema/native conformance. |
+| Support provenance | Selected evidence and a concise inspectable finding, including the missing datum or preservation defect for a negative judgment. | Validated requirement/finding association and derived citation union. Absence may have no evidence selection; it never receives fabricated citations. | Selection boundary complete in 06; richer findings and routing remain 13–14. |
 
 Use separate raw proposal and canonical types at the existing trust boundary;
 do not strip citation fields from a canonical state type to simplify a prompt.
@@ -237,7 +242,7 @@ repeat schemas, membership inventories or a second implementation of those rules
 
 On 13 September 2026 the user explicitly instructed: “approve A1 and A2, update
 docs”, then “A3 is approved, update docs”. A1–A3 are applied to `design/design.md`;
-runtime implementation remains pending in the later chunks. No invariant,
+the corresponding runtime changes are implemented in Phases 1–2. No invariant,
 accepted ADR, retry limit, native projection, JSON strictness or §17.5 canonical
 union changes. The links below identify the sole governing wording for approved
 amendments.
@@ -340,6 +345,13 @@ not requested, no response received, response retained but no extracted candidat
 available, and evidence-write failure. Transport details must report only observed
 phase/cause/status facts; existing generic failures do not justify guessing DNS,
 TLS, credentials or sandbox causes. Chunk 16 owns this independent improvement.
+For a budget stop after a received response, preserve available accounted usage
+and the raw-response link even when extracted text is unavailable. Keep the last
+observed protocol rejection and its origin separate from a later exchange and
+terminal rejection; an unvalidated final response receives no invented JSON or
+domain verdict. R12 makes these existing observation obligations concrete in
+chunks 16/18. Use the native observation/accounting and existing rejection
+retention owner, not report-side revalidation or a second history service.
 
 Native diagnostic detail and explicitly permitted harness capture are distinct
 from production metadata. [Design §26.5](../design/design.md#265-secrets-and-logging)
@@ -405,15 +417,19 @@ execution context and observations remain separate.
 
 | Gate | Status | Dependent work |
 | --- | --- | --- |
-| A1–A2 | Explicitly approved on 13 September 2026 and applied to design §§12.5/22.6. | Chunk 01 implemented and verified offline; see the Phase 1 delivery log. |
-| A3 | Explicitly approved on 13 September 2026 and applied to design §17.3. | Approval gate cleared for chunk 06's model-facing spec/support provenance change; implementation and its tests remain pending. |
+| A1–A2 | Explicitly approved on 13 September 2026 and applied to design §§12.5/22.6. | Chunk 01, including R12's prompt-cleanup and correction-coverage follow-up, implemented and verified offline; see the follow-up completion record. |
+| A3 | Explicitly approved on 13 September 2026 and applied to design §17.3. | Chunk 06 implements the model-facing spec/support selection boundary and canonical evidence reconstruction under this approval. |
 | G1 | Fail-closed target policy selected; no cross-record exception approved. | Only a concrete repair requiring an unestablished semantic survivor or inseparable multi-record write. |
 | G2 | Authentication mechanism still unselected under H-011. | Acceptance of new edited answers, not read-only form protection or an authority-complete baseline. |
 
 Phase 0's contract review and required amendment approvals are complete. G1 and
 G2 remain explicit gates for the affected later work; no exception or authentication
-mechanism was approved. Chunks 01–04 are implemented and verified offline;
-chunks 05–21 remain pending. If an intended fix exceeds
+mechanism was approved. Chunks 01–04, including the R12 follow-up, are implemented
+and verified offline. Phase 2 (05–07) is implemented and verified
+offline; the rollout records 120/120 verification steps and 1,374/1,374 tests.
+Chunks 08–21 remain pending. The retained live run failed before
+schema-valid IR existed for the failing cross-source summary, so the existing
+§22.6 protocol boundary owns that rejection. If an intended fix exceeds
 the approved governing wording, obtain the specific missing decision rather than
 broadening this document into new authority.
 

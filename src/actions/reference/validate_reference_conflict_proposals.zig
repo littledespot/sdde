@@ -16,7 +16,6 @@ pub const Action = struct {
         for (prior.prior.proposal.conflicts, conflicts, 0..) |proposal, *conflict, index| {
             if (proposal.claim_ids.len < 2) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .cardinality, .observed = .{ .count = proposal.claim_ids.len }, .expected = .{ .constraint = .at_least_two } });
             if (v.claims(items, proposal.claim_ids, prior.prior.input.partition.group.claim_ids)) |issue| return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, issue);
-            if (try v.citations(allocator, items, proposal.claim_ids, proposal.citation_ids)) |issue| return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, issue);
             for (proposal.claim_ids) |id| {
                 const disposition = try v.disposition(prior.prior.dispositions, id);
                 if (disposition.disposition != .conflicting) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .relationship, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .conflicting_related_claims } });
@@ -29,7 +28,7 @@ pub const Action = struct {
                     if (!r.contains(r.ClaimId, proposal.claim_ids, id)) break;
                 } else return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .duplicate_conflict, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
             }
-            conflict.* = .{ .claim_ids = proposal.claim_ids, .citation_ids = proposal.citation_ids, .kind = proposal.kind, .summary = self.validator.referenceIn(allocator, try v.scopes(allocator, items, proposal.claim_ids, context), proposal.summary) catch |err| return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, try d.textFailure(err, .{ .text = proposal.summary })), .resolution = .unresolved };
+            conflict.* = .{ .claim_ids = proposal.claim_ids, .citation_ids = try r.citationUnion(allocator, items, proposal.claim_ids), .kind = proposal.kind, .summary = self.validator.referenceIn(allocator, try v.scopes(allocator, items, proposal.claim_ids, context), proposal.summary) catch |err| return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, try d.textFailure(err, .{ .text = proposal.summary })), .resolution = .unresolved };
         }
         for (prior.prior.dispositions, covered) |disposition, present| {
             if ((disposition.disposition == .conflicting) != present) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .conflicts, .{ .rule = .conflict_coverage, .observed = .{ .disposition = disposition }, .expected = .{ .constraint = .conflict_claim_covered } });

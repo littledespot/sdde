@@ -51,14 +51,6 @@ pub fn content(allocator: std.mem.Allocator, validator: r.text.Validator, contex
         },
     }
 }
-pub fn citations(allocator: std.mem.Allocator, items: r.Items, ids: []const r.ClaimId, proposed: []const r.CitationId) r.Error!?d.Issue {
-    var expected: std.ArrayList(r.CitationId) = .empty;
-    for (ids) |id| for ((try r.item(items, id)).claim.citation_ids) |citation| {
-        if (!r.contains(r.CitationId, expected.items, citation)) try expected.append(allocator, citation);
-    };
-    r.sameSet(r.CitationId, expected.items, proposed) catch return .{ .rule = .citations, .observed = .{ .citations = proposed }, .expected = .{ .citations = expected.items } };
-    return null;
-}
 pub fn disposition(values: []const r.ClaimDisposition, id: r.ClaimId) r.Error!r.ClaimDisposition {
     for (values) |value| if (value.claim_id.ordinal == id.ordinal) return value;
     return error.InvalidReferenceReconciliation;

@@ -15,7 +15,9 @@ pub const Action = struct {
             var matches: usize = 0;
             for (global.proposal.claim_dispositions) |proposal| {
                 if (proposal.claim_id.ordinal != disposition.claim_id.ordinal) continue;
-                if (!std.meta.eql(proposal, disposition)) return error.InvalidReferenceReconciliation;
+                const expected = try proposal.canonical(allocator);
+                if (expected.disposition != disposition.disposition or expected.related_claim_ids.len != disposition.related_claim_ids.len) return error.InvalidReferenceReconciliation;
+                for (expected.related_claim_ids, disposition.related_claim_ids) |left, right| if (left.ordinal != right.ordinal) return error.InvalidReferenceReconciliation;
                 matches += 1;
             }
             if (matches != 1) return error.InvalidReferenceReconciliation;

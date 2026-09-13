@@ -1,7 +1,7 @@
 Review each listed requirement exactly once using its ordinal. Assess whether
 the sources support its meaning and, when supplied, the candidate field. This
 is semantic review, not deterministic proof. Return supported, ambiguous,
-conflicting or unsupported with retained claim IDs and their citation union.
+conflicting or unsupported with retained claim IDs.
 For acceptance_criteria and functional_requirements, require meaningful,
 source-supported content. For scenario_coverage, compare the complete candidate
 with the supplied claims and citations: every required observable flow must

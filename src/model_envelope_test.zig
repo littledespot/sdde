@@ -111,6 +111,8 @@ test "duplicate decoded keys reject at every depth including escaped equivalents
     }) |bytes| try checkDocument(bytes, false);
     // Keys in different objects are unrelated; Unicode is not normalized.
     try checkDocument("{\"a\":{\"x\":1},\"b\":{\"x\":2},\"é\":0,\"e\\u0301\":1}", true);
+    // Repeated identifier values are a domain concern, not duplicate members.
+    try checkDocument("{\"statements\":[{\"local_key\":1},{\"local_key\":1}]}", true);
 }
 
 test "decoding never interprets model metadata or validates the bound payload schema" {

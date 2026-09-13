@@ -50,6 +50,10 @@ once, including retries. Task prompts and result schemas remain workflow-owned;
 strict decoding and schema validation still reject invalid model output.
 Reference extraction selects supplied source-line IDs; the shared evidence
 resolver reconstructs exact quotations and coordinates from captured bytes.
+Reconciliation responses select statements and tagged claim dispositions. The
+engine derives summary lineage and stable citation unions from current claim
+selections. Specification generation, repair and support responses use the same
+selection boundary; canonical evidence retains all citations and is revalidated.
 Invalid selections use the existing atomic repair contract, preserving other
 citations and their producing-call evidence. See the
 [prompt and response flow](design/diagrams/17-model-prompt-response-flow.md).
@@ -147,7 +151,9 @@ Protocol retries retain the full rejected response as untrusted evidence and
 reuse the original schema. Diagnostics identify JSON syntax positions or exact
 schema field paths. Schema corrections include the exact expected schema node,
 its JSON Pointer and parent/value scope; syntax corrections retain the original
-complete schema. Retries never synthesize candidate examples.
+complete schema. Duplicate-member corrections explain that a property name
+repeats within one JSON object; they do not infer a repair or reject repeated
+identifier values across objects. Retries never synthesize candidate examples.
 Native Bedrock requests derive structural constraints from the same compiled
 schema. Complete bounds remain in guidance and engine validation. JSON errors
 include the container path, active key and duplicate-key occurrence locations.

@@ -29,12 +29,13 @@ pub fn bind(allocator: std.mem.Allocator, validator: text.Validator, context: Co
 
 /// Initial reference-grounded generation. Applicable user-response support is
 /// supplied by the clarification lifecycle, not inferred from loaded form IDs.
-pub fn scopes(allocator: std.mem.Allocator, context: Context, provenance: spec.Provenance) Error![]const evidence.Scope {
+const Resolved = struct { provenance: spec.Provenance, scopes: []const evidence.Scope };
+
+fn resolve(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, context: Context, provenance: spec.Values(boundary).Evidence) Error!Resolved {
     const claims = try items(context);
     if (provenance.claim_ids.len == 0 or provenance.clarification_response_ids.len != 0) return error.InvalidSpecification;
     try r.unique(r.ClaimId, provenance.claim_ids);
-    try r.unique(r.CitationId, provenance.citation_ids);
-    var citations: std.ArrayList(r.CitationId) = .empty;
+    if (boundary == .canonical) try r.unique(r.CitationId, provenance.citation_ids);
     const result = try allocator.alloc(evidence.Scope, provenance.claim_ids.len);
     const dispositions = context.references.records.assignments.checked.prior.prior.dispositions;
     for (provenance.claim_ids, result) |id, *scope| {
@@ -45,23 +46,33 @@ pub fn scopes(allocator: std.mem.Allocator, context: Context, provenance: spec.P
             break;
         };
         if (!retained) return error.InvalidSpecification;
-        for (claim.citation_ids) |citation| if (!r.contains(r.CitationId, citations.items, citation)) try citations.append(allocator, citation);
         scope.* = .{ .state_id = claims.state_id, .chunk_id = claim.chunk_id };
         _ = try evidence.resolve(context.inputs, scope.*);
     }
     // Stable unique union in selected-claim order, not an arbitrary superset.
-    if (citations.items.len != provenance.citation_ids.len) return error.InvalidSpecification;
-    for (citations.items, provenance.citation_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecification;
-    return result;
+    const citations = try r.citationUnion(allocator, claims, provenance.claim_ids);
+    if (boundary == .canonical) {
+        if (citations.len != provenance.citation_ids.len) return error.InvalidSpecification;
+        for (citations, provenance.citation_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecification;
+    }
+    return .{ .provenance = .{ .claim_ids = provenance.claim_ids, .citation_ids = citations, .clarification_response_ids = provenance.clarification_response_ids }, .scopes = result };
 }
 
-pub fn value(allocator: std.mem.Allocator, validator: text.Validator, context: Context, provenance: spec.Provenance, candidate: spec.BusinessValue) Error!spec.BusinessValue {
-    const allowed = try scopes(allocator, context, provenance);
+pub fn scopes(allocator: std.mem.Allocator, context: Context, provenance: spec.Provenance) Error![]const evidence.Scope {
+    return (try resolve(.canonical, allocator, context, provenance)).scopes;
+}
+
+/// Construct complete provenance from meaningful, currently eligible selections.
+pub fn select(allocator: std.mem.Allocator, context: Context, selection: spec.Selection) Error!spec.Provenance {
+    return (try resolve(.model, allocator, context, selection)).provenance;
+}
+
+fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Context, resolved: Resolved, candidate: spec.BusinessValue) Error!spec.BusinessValue {
     return switch (candidate) {
-        .normalized => |proposed| .{ .normalized = (try validator.businessIn(allocator, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = allowed }, proposed)).value },
+        .normalized => |proposed| .{ .normalized = (try validator.businessIn(allocator, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = resolved.scopes }, proposed)).value },
         .exact_copy => |selected| result: {
             const all = try items(context);
-            for (provenance.claim_ids) |id| {
+            for (resolved.provenance.claim_ids) |id| {
                 const claim = (try r.item(all, id)).claim;
                 if (claim.content == .preserved_token) {
                     const token = claim.content.preserved_token;
@@ -73,22 +84,24 @@ pub fn value(allocator: std.mem.Allocator, validator: text.Validator, context: C
     };
 }
 
-pub fn attributed(allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.AttributedValue) Error!spec.AttributedValue {
-    return .{ .value = try value(allocator, validator, context, candidate.provenance, candidate.value), .provenance = candidate.provenance };
+pub fn checkAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue) Error!spec.AttributedValue {
+    const resolved = try resolve(boundary, allocator, context, candidate.provenance);
+    return .{ .value = try valueIn(allocator, validator, context, resolved, candidate.value), .provenance = resolved.provenance };
 }
 
-pub fn record(allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.RecordProposal) Error!spec.RecordProposal {
-    var result = candidate;
+pub fn checkRecord(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal) Error!spec.RecordProposal {
+    const resolved = try resolve(boundary, allocator, context, candidate.provenance);
+    var result: spec.RecordProposal = .{ .content = candidate.content, .provenance = resolved.provenance };
     switch (candidate.content) {
         inline else => |fields, kind| {
             var normalized = fields;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
                 const proposed = @field(fields, field.name);
                 if (comptime field.type == spec.BusinessValue) {
-                    @field(normalized, field.name) = try value(allocator, validator, context, candidate.provenance, proposed);
+                    @field(normalized, field.name) = try valueIn(allocator, validator, context, resolved, proposed);
                 } else {
                     const relationships = try allocator.alloc(spec.BusinessValue, proposed.len);
-                    for (proposed, relationships) |entry, *checked| checked.* = try value(allocator, validator, context, candidate.provenance, entry);
+                    for (proposed, relationships) |entry, *checked| checked.* = try valueIn(allocator, validator, context, resolved, entry);
                     @field(normalized, field.name) = relationships;
                 }
             }

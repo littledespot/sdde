@@ -115,10 +115,10 @@ pub fn checkProjectedPacket(a: std.mem.Allocator, bytes: []const u8) !void {
         }
     };
     if (body.get("signals")) |signals| for (signals.array.items) |signal| {
-        _ = try codec.decode(r.SignalProposal, a, try std.json.Stringify.valueAlloc(a, signal.object.get("value").?, .{}));
+        _ = try codec.decode(@FieldType(@import("domain/model_evidence.zig").Signal, "value"), a, try std.json.Stringify.valueAlloc(a, signal.object.get("value").?, .{}));
     };
     if (body.get("conflicts")) |conflicts| for (conflicts.array.items) |conflict| {
-        _ = try codec.decode(r.ConflictProposal, a, try std.json.Stringify.valueAlloc(a, conflict.object.get("value").?, .{}));
+        _ = try codec.decode(@FieldType(@import("domain/model_evidence.zig").Conflict, "value"), a, try std.json.Stringify.valueAlloc(a, conflict.object.get("value").?, .{}));
     };
     if (body.get("brief")) |brief| if (brief != .null) {
         _ = try codec.decode(@import("domain/specification.zig").Brief, a, try std.json.Stringify.valueAlloc(a, brief, .{}));

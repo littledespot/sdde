@@ -518,11 +518,12 @@ All operations are pure and individually registered in the generic YAML registry
 | Global proposal | `validate-reference-claim-dispositions`, `validate-reference-signal-proposals`, `validate-reference-conflict-proposals` |
 | Identified result | `assign-reference-reconciliation-identities`, `build-reference-reconciliation-records`, `validate-reference-reconciliation-completeness` |
 
-The closed native response is either `{"summary": {...}}` or
-`{"global": {...}}`; the engine binds the response to its current partition.
-A summary contains `member_claim_ids`, `member_summary_ids` and `statements`
-with positive unique `local_key`, `claim_ids` and typed `content`. Membership
-must match exactly, and statements represent every member claim exactly once.
+The engine selects the summary or global response schema for its current
+partition. A summary proposal contains only `statements`, with positive unique
+`local_key`, selected `claim_ids` and typed `content`. Statements represent every
+partition member claim exactly once. The engine constructs canonical
+`member_claim_ids` from that partition and `member_summary_ids` from its validated
+child summaries; neither membership field is accepted in a model response.
 Summary IDs are allocated only after validation; partition planning contains
 local group links, not future canonical summary IDs. Statement IDs follow sorted
 local keys. Accepted summaries retain their lineage
@@ -531,24 +532,33 @@ keys rather than retaining stale parallel candidates.
 
 A global proposal contains `claim_dispositions`, `signals` and `conflicts`:
 
-- Exactly one disposition per original claim: `retained` has no related IDs;
-  `duplicate` has one; `superseded` and `conflicting` have one or more.
+- Exactly one disposition per original claim. The nested `disposition.kind`
+  selects `retained` with an empty struct payload, `duplicate` with one
+  `target_claim_id`, or `superseded`/`conflicting` with nonempty
+  `related_claim_ids`. The native validator derives the canonical enum/list.
   Related IDs must be current, unique and non-self. Duplicate/supersession
   edges are acyclic and terminate at retained claims; conflict relationships
   are symmetric and must be represented by conflicts.
-- Signal content is either `{"model": {"business": {"segments": [...]}}}`
-  (or another existing extraction kind), or
-  `{"preserved_token": {"token_id": {"ordinal": 1}}}`. Kind, claim and token
-  joins must agree; citations are the exact union for the selected claims.
+- Signal content uses nested `kind` alternatives for typed model content or
+  a selected preserved-token ID. Kind, claim and token joins must agree.
+  One shared constructor derives canonical citations from selected claims in
+  supplied order, retaining the first occurrence of each citation ID.
   Every retained claim is covered. Every non-conflicting preserved token retains
   its own reference and obligation, including when its claim is superseded or
   duplicate. Different exact scalars cannot be declared duplicates.
-- Conflicts name at least two current conflicting claims, exact citations,
+- Conflicts select at least two current conflicting claims,
   a closed conflict kind, typed `summary`, and `resolution: "unresolved"`.
   Overlapping conflicts retain all relationship coverage; duplicate conflict
   groups of the same kind fail. Conflicting claims cannot be projected as
   resolved signals. No source-precedence authority is currently registered,
   so model-proposed precedence or user resolution is rejected.
+
+Signals and conflicts never echo aggregate citation IDs. Their canonical
+records retain the complete engine-derived union. Initial packets include
+concise guidance projected from native constraint identities alongside current
+claim/evidence facts; protocol corrections retain that same input. Schema and
+native validation reject old or mixed response fields. Semantic reconciliation
+repair remains FIX_001 Phase 3 work.
 
 All text uses §3.7's shared validator with the explicit contributing-claim
 scope set; cross-source scope never becomes corpus-wide permission. Models
@@ -982,8 +992,13 @@ wrapper. Repair uses the same compact codec, and its expected-value guidance
 uses the response wire shape. Existing provenance, repair and gate validators
 remain the owners of meaning and authority.
 
-The initial reference-only provenance join requires retained current claims and
-their stable unique citation union. Exact copies contain only a valid token and
+Model generation, field/record repair and support provenance select claim IDs
+and authorized clarification-response IDs; they do not return citation unions.
+Distinct model and canonical types share business fields. The provenance owner
+requires retained current claims and constructs their stable unique citation
+union through the same reference constructor. Canonical revalidation compares
+the stored union against current evidence, rejecting tampering rather than
+replacing it. Exact copies still contain a valid token and
 citation reference, never replacement display bytes. Arbitrary loaded
 clarification-response IDs are rejected; applicable-answer integration remains
 with H-011. Engine code allocates monotonic per-family record IDs; no model

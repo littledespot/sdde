@@ -19,6 +19,34 @@ pub const Diagnostic = struct {
         return result;
     }
 
+    /// Explain an ambiguous parser term without inferring a correction or
+    /// changing the stored diagnostic and its context.
+    pub fn explanation(self: Diagnostic) ?[]const u8 {
+        return switch (self.reason) {
+            .DuplicateField => "Property names must be unique within each JSON object. " ++
+                "This diagnostic concerns repeated names, not repeated identifier values.",
+            .EmptyDocument,
+            .ByteLimitExceeded,
+            .InvalidUtf8,
+            .ByteOrderMark,
+            .NestingLimitExceeded,
+            .ExpectedObject,
+            .SyntaxError,
+            .UnexpectedEndOfInput,
+            .UnexpectedToken,
+            .InvalidNumber,
+            .Overflow,
+            .InvalidCharacter,
+            .InvalidEnumTag,
+            .UnknownField,
+            .MissingField,
+            .LengthMismatch,
+            .BufferUnderrun,
+            .ValueTooLong,
+            => null,
+        };
+    }
+
     pub const Location = @import("json_context.zig").Location;
     pub const Reason = enum {
         EmptyDocument,

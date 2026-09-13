@@ -53,32 +53,27 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
             const input = (try native.read(&view, @import("../application/reference_reconciliation_workflow.zig").input_schema, .reconciliation_input)).payload().reconciliation_input;
             if (input.purpose == .summary) {
                 var proposal = try @import("reference_reconciliation.zig").summary(allocator, input);
-                if (options.reconciliation_fault == .summary_membership) proposal.member_claim_ids = &.{};
+                if (options.reconciliation_fault == .summary_membership) proposal.statements = &.{};
                 return @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .summary = proposal });
             }
             var proposal = try @import("reference_reconciliation.zig").global(allocator, input);
             if (options.reconciliation_fault) |fault| {
-                const dispositions = try allocator.dupe(r.ClaimDisposition, proposal.claim_dispositions);
+                const dispositions = try allocator.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
                 proposal.claim_dispositions = dispositions;
                 switch (fault) {
                     .summary_membership => {},
                     .duplicate_disposition => dispositions[1] = dispositions[0],
                     .self_relation => {
-                        dispositions[0].disposition = .superseded;
-                        dispositions[0].related_claim_ids = &.{dispositions[0].claim_id};
+                        dispositions[0].disposition = .{ .superseded = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
                     },
                     .cycle => {
-                        dispositions[0].disposition = .superseded;
-                        dispositions[0].related_claim_ids = &.{dispositions[1].claim_id};
-                        dispositions[1].disposition = .superseded;
-                        dispositions[1].related_claim_ids = &.{dispositions[0].claim_id};
+                        dispositions[0].disposition = .{ .superseded = .{ .related_claim_ids = &.{dispositions[1].claim_id} } };
+                        dispositions[1].disposition = .{ .superseded = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
                     },
                     .signal_coverage => proposal.signals = proposal.signals[1..],
                     .conflict_coverage => {
-                        dispositions[0].disposition = .conflicting;
-                        dispositions[0].related_claim_ids = &.{dispositions[1].claim_id};
-                        dispositions[1].disposition = .conflicting;
-                        dispositions[1].related_claim_ids = &.{dispositions[0].claim_id};
+                        dispositions[0].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[1].claim_id} } };
+                        dispositions[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
                         proposal.signals = proposal.signals[2..];
                         proposal.conflicts = &.{};
                     },
@@ -105,11 +100,11 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 .entities => .{ .entities = .{ .disposition = if (options.entities_required) .required else .not_applicable, .basis = value } },
                 .records => |kind| result: {
                     if (kind == .entity and options.entities_required) {
-                        const record: g.spec.RecordProposal = .{ .content = .{ .entity = .{ .name = value.value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = value.provenance };
-                        break :result .{ .records = try allocator.dupe(g.spec.RecordProposal, &.{record}) };
+                        const record: g.spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = value.value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = value.provenance };
+                        break :result .{ .records = try allocator.dupe(g.spec.Model.RecordProposal, &.{record}) };
                     }
                     if ((kind != .functional_requirement and kind != .user_visible_outcome and kind != .acceptance_criterion) or (options.omit_exact and kind == .user_visible_outcome)) break :result .{ .records = &.{} };
-                    var records: std.ArrayList(g.spec.RecordProposal) = .empty;
+                    var records: std.ArrayList(g.spec.Model.RecordProposal) = .empty;
                     for (all.entries) |item| {
                         const selected = try attributed(allocator, all, &.{item.claim.id});
                         if (kind == .acceptance_criterion and item.claim.content == .model) try records.append(allocator, .{ .content = .{ .acceptance_criterion = .{ .given = selected.value, .when = selected.value, .then = selected.value } }, .provenance = selected.provenance });
@@ -132,8 +127,8 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 var selected = (try attributed(allocator, all, &.{all.entries[0].claim.id})).provenance;
                 if (inputs.brief) |brief| if (requirement.seed.id.unit == .feature) {
                     selected = switch (requirement.seed.id.slot) {
-                        .description => brief.description.provenance,
-                        .primary_goal => brief.primary_goal.provenance,
+                        .description => selection(brief.description.provenance),
+                        .primary_goal => selection(brief.primary_goal.provenance),
                         else => selected,
                     };
                 };
@@ -146,14 +141,14 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                     },
                     .record => |id| if (inputs.specification) |content| {
                         for (content.records) |record| if (std.meta.eql(record.id, id)) {
-                            selected = record.proposal.provenance;
+                            selected = selection(record.proposal.provenance);
                         };
                     },
                     .feature => if (inputs.specification) |content| {
                         selected = switch (requirement.seed.id.slot) {
-                            .display_name => content.display_name.provenance,
-                            .primary_user_story => content.primary_user_story.provenance,
-                            .entities => content.entities.basis.provenance,
+                            .display_name => selection(content.display_name.provenance),
+                            .primary_user_story => selection(content.primary_user_story.provenance),
+                            .entities => selection(content.entities.basis.provenance),
                             else => selected,
                         };
                     },
@@ -167,11 +162,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
         else => return error.InvalidFixture,
     }
 }
-fn attributed(allocator: std.mem.Allocator, all: r.Items, ids: []const r.ClaimId) !g.spec.AttributedValue {
-    var citations: std.ArrayList(r.CitationId) = .empty;
-    for (ids) |id| for ((try r.item(all, id)).claim.citation_ids) |citation| {
-        if (!r.contains(r.CitationId, citations.items, citation)) try citations.append(allocator, citation);
-    };
+fn attributed(allocator: std.mem.Allocator, all: r.Items, ids: []const r.ClaimId) !g.spec.Model.AttributedValue {
     const claim = (try r.item(all, ids[0])).claim;
     const value: g.spec.BusinessValue = switch (claim.content) {
         .model => |model| switch (model) {
@@ -180,7 +171,7 @@ fn attributed(allocator: std.mem.Allocator, all: r.Items, ids: []const r.ClaimId
         },
         .preserved_token => |token| .{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } },
     };
-    return .{ .value = value, .provenance = .{ .claim_ids = try allocator.dupe(r.ClaimId, ids), .citation_ids = citations.items, .clarification_response_ids = &.{} } };
+    return .{ .value = value, .provenance = .{ .claim_ids = try allocator.dupe(r.ClaimId, ids), .clarification_response_ids = &.{} } };
 }
 
 fn scriptedContent(allocator: std.mem.Allocator, all: r.Items, unit: g.Unit, script: @import("specification_script.zig").Script) !g.Response {
@@ -197,7 +188,7 @@ fn scriptedContent(allocator: std.mem.Allocator, all: r.Items, unit: g.Unit, scr
         .primary_user_story => .{ .primary_user_story = .{ .value = try scriptedValue(allocator, all, document.primary_user_story), .provenance = provenance } },
         .entities => .{ .entities = .{ .disposition = if (document.entity_section == .present) .required else .not_applicable, .basis = .{ .value = try scriptedValue(allocator, all, .{ .bytes = script.entity_basis }), .provenance = provenance } } },
         .records => |kind| records: {
-            var result: std.ArrayList(g.spec.RecordProposal) = .empty;
+            var result: std.ArrayList(g.spec.Model.RecordProposal) = .empty;
             for (document.records) |record| {
                 if (record.content != kind) continue;
                 switch (record.content) {
@@ -235,4 +226,8 @@ fn scriptedValue(allocator: std.mem.Allocator, all: r.Items, scalar: g.spec.Scal
     }
     // Script strings are retained by the invocation's arena.
     return .{ .normalized = .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = scalar.bytes } }}) } };
+}
+
+fn selection(value: g.spec.Provenance) g.spec.Selection {
+    return .{ .claim_ids = value.claim_ids, .clarification_response_ids = value.clarification_response_ids };
 }

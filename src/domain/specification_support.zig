@@ -12,7 +12,7 @@ pub const Finding = struct {
     requirement_ordinal: u32,
     finding: @FieldType(a.Evidence, "finding"),
     disposition: enum { supported, not_applicable },
-    provenance: spec.Provenance,
+    provenance: spec.Selection,
 };
 
 pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context) Error!*packets.Packet {
@@ -48,7 +48,7 @@ pub fn collect(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Contex
         };
         const finding = found orelse return error.InvalidRequiredAuthority;
         if (finding.finding == .supported) {
-            _ = try p.scopes(allocator, context, finding.provenance);
+            const selected = try p.select(allocator, context, finding.provenance);
             if (inputs.brief) |brief| if (requirement.seed.id.unit == .feature) {
                 const expected = switch (requirement.seed.id.slot) {
                     .description => brief.description.provenance,
@@ -57,12 +57,12 @@ pub fn collect(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Contex
                 };
                 if (expected) |scope| {
                     try r.sameSet(r.ClaimId, scope.claim_ids, finding.provenance.claim_ids);
-                    try r.sameSet(r.CitationId, scope.citation_ids, finding.provenance.citation_ids);
+                    try r.sameSet(r.CitationId, scope.citation_ids, selected.citation_ids);
                 }
             };
             if (inputs.specification) |content| if (candidateProvenance(content, requirement.seed.id)) |expected| {
                 try r.sameSet(r.ClaimId, expected.claim_ids, finding.provenance.claim_ids);
-                try r.sameSet(r.CitationId, expected.citation_ids, finding.provenance.citation_ids);
+                try r.sameSet(r.CitationId, expected.citation_ids, selected.citation_ids);
             };
             switch (requirement.seed.id.unit) {
                 .token => |id| {
@@ -83,8 +83,8 @@ pub fn collect(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Contex
                 else => {},
             }
         } else if (finding.provenance.claim_ids.len != 0) {
-            _ = try p.scopes(allocator, context, finding.provenance);
-        } else if (finding.provenance.citation_ids.len != 0 or finding.provenance.clarification_response_ids.len != 0) return error.InvalidRequiredAuthority;
+            _ = try p.select(allocator, context, finding.provenance);
+        } else if (finding.provenance.clarification_response_ids.len != 0) return error.InvalidRequiredAuthority;
         const policy = requirement.registered_policy;
         if (finding.disposition == .not_applicable and (policy == null or policy.?.not_applicable != .no_business_data)) return error.InvalidRequiredAuthority;
         if (inputs.specification) |content| {

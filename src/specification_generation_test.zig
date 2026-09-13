@@ -81,7 +81,7 @@ test "complete specification sessions preserve unit order provenance and conditi
         defer fixture.deinit();
         var current = try sessions.initialize(.{ .bytes = "requested-feature" }, fixture.context);
         const first = current;
-        const value = try fixture.value(source);
+        const value = try fixture.proposal(source);
         try std.testing.expectError(error.InvalidSpecificationUnit, sessions.assemble(a, text.validator, fixture.context, current));
         while (current.completed < sessions.unit_count) {
             const unit = try sessions.unit(current.completed);
@@ -95,7 +95,7 @@ test "complete specification sessions preserve unit order provenance and conditi
                 .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = value } },
                 .records => |kind| result: {
                     if (kind != .functional_requirement) break :result .{ .records = &.{} };
-                    const records = try a.dupe(spec.RecordProposal, &.{.{ .content = .{ .functional_requirement = .{ .text = value.value } }, .provenance = value.provenance }});
+                    const records = try a.dupe(spec.Model.RecordProposal, &.{.{ .content = .{ .functional_requirement = .{ .text = value.value } }, .provenance = value.provenance }});
                     break :result .{ .records = records };
                 },
             } };
@@ -125,7 +125,7 @@ test "specification semantic support contributes scoped evidence to the shared g
     const ledger = try authority.build(a, initial);
     const findings = try a.alloc(support.Finding, ledger.requirements.len);
     const value = try fixture.value("A greeting is visible.");
-    for (findings, 0..) |*finding, index| finding.* = .{ .requirement_ordinal = @intCast(index + 1), .finding = .supported, .disposition = .supported, .provenance = value.provenance };
+    for (findings, 0..) |*finding, index| finding.* = .{ .requirement_ordinal = @intCast(index + 1), .finding = .supported, .disposition = .supported, .provenance = selection(value.provenance) };
     const bytes = try std.json.Stringify.valueAlloc(a, support.Review{ .entries = findings }, .{});
     const reviewed = try support.collect(a, initial, fixture.context, bytes);
     for (reviewed.evidence) |proof| try std.testing.expectEqual(.model_assisted, proof.method);
@@ -138,6 +138,12 @@ test "specification semantic support contributes scoped evidence to the shared g
     const gap_ledger = try authority.build(a, gap);
     const gap_observations = try (@import("actions/authority/build_required_authority_observations.zig").Action{}).execute(a, gap_ledger);
     try std.testing.expectEqual(.needs_user, (try authority.reconcile(a, gap_ledger, gap_observations)).continuation);
+    findings[0].provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} };
+    const absent = try support.collect(a, initial, fixture.context, try std.json.Stringify.valueAlloc(a, support.Review{ .entries = findings }, .{}));
+    try std.testing.expectEqual(.ambiguous, absent.evidence[0].finding);
+    findings[0].provenance.clarification_response_ids = &.{.{ .ordinal = 1 }};
+    try std.testing.expectError(error.InvalidRequiredAuthority, support.collect(a, initial, fixture.context, try std.json.Stringify.valueAlloc(a, support.Review{ .entries = findings }, .{})));
+    findings[0].provenance = selection(value.provenance);
     findings[0].requirement_ordinal = 999;
     try std.testing.expectError(error.InvalidRequiredAuthority, support.collect(a, initial, fixture.context, try std.json.Stringify.valueAlloc(a, support.Review{ .entries = findings }, .{})));
 }
@@ -148,21 +154,21 @@ test "specification units validate every section family without creating IDs or 
     const a = arena.allocator();
     var fixture = try Fixture.init(a, "A librarian renews a loan.");
     defer fixture.deinit();
-    const value = try fixture.value("A librarian renews a loan.");
+    const value = try fixture.proposal("A librarian renews a loan.");
     inline for (comptime std.meta.tags(spec.Kind)) |kind| {
         const fields = Fields(kind, value.value);
-        const record: spec.RecordProposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), fields), .provenance = value.provenance };
+        const record: spec.Model.RecordProposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), fields), .provenance = value.provenance };
         const result = (try g.validate(a, text.validator, fixture.context, .{ .records = kind }, .{ .content = .{ .records = &.{record} } })).valid;
         try std.testing.expectEqual(kind, std.meta.activeTag(result.response.content.records[0].content));
-        const wire = try @import("domain/model_candidate_json.zig").encode(g.ModelResponse, a, g.ModelResponse.from(result.response));
-        try std.testing.expectEqualDeep(result.response, try g.parse(a, wire));
+        const wire = try @import("domain/model_candidate_json.zig").encode(g.ModelResponse, a, g.ModelResponse.from(.{ .content = .{ .records = &.{record} } }));
+        try std.testing.expectEqualDeep(result.response, (try g.validate(a, text.validator, fixture.context, .{ .records = kind }, try g.parse(a, wire))).valid.response);
         _ = (try g.validate(a, text.validator, fixture.context, .{ .records = kind }, .{ .content = .{ .records = &.{} } })).valid;
         try std.testing.expectEqual(.duplicate_record, (try g.validate(a, text.validator, fixture.context, .{ .records = kind }, .{ .content = .{ .records = &.{ record, record } } })).invalid.rule);
     }
     const brief: g.Response = .{ .content = .{ .brief = .{ .title = value, .description = value, .primary_goal = value } } };
     _ = (try g.validate(a, text.validator, fixture.context, .brief, brief)).valid;
     try std.testing.expectEqual(.unit_kind, (try g.validate(a, text.validator, fixture.context, .primary_user_story, brief)).invalid.rule);
-    const question = (try g.validate(a, text.validator, fixture.context, .primary_user_story, .{ .clarification = .{ .reason = .ambiguous, .question = try fixture.value("Which renewal limit applies?") } })).valid;
+    const question = (try g.validate(a, text.validator, fixture.context, .primary_user_story, .{ .clarification = .{ .reason = .ambiguous, .question = try fixture.proposal("Which renewal limit applies?") } })).valid;
     try std.testing.expectEqual(.clarification, std.meta.activeTag(question.response));
 }
 
@@ -173,7 +179,7 @@ test "specification provenance rejects foreign missing duplicate stale and unacc
     var fixture = try Fixture.init(a, "A customer books a visit.");
     defer fixture.deinit();
     const good = try fixture.value("A customer books a visit.");
-    _ = try provenance.attributed(a, text.validator, fixture.context, good);
+    _ = try provenance.checkAttributed(.canonical, a, text.validator, fixture.context, good);
     for (0..6) |scenario| {
         var changed = good;
         switch (scenario) {
@@ -185,15 +191,15 @@ test "specification provenance rejects foreign missing duplicate stale and unacc
             5 => changed.provenance.clarification_response_ids = &.{.{ .ordinal = 1 }},
             else => unreachable,
         }
-        if (provenance.attributed(a, text.validator, fixture.context, changed)) |_| return error.ExpectedRejection else |err| switch (err) {
+        if (provenance.checkAttributed(.canonical, a, text.validator, fixture.context, changed)) |_| return error.ExpectedRejection else |err| switch (err) {
             error.InvalidSpecification, error.InvalidReferenceReconciliation => {},
             else => return err,
         }
     }
     var stale = fixture.context;
     stale.inputs.corpus.state_id.bytes = "different-reference-state";
-    try std.testing.expectError(error.InvalidSpecification, provenance.attributed(a, text.validator, stale, good));
-    try std.testing.expectError(error.UnboundPathReference, provenance.attributed(a, text.validator, fixture.context, try fixture.value("Write src/main.zig.")));
+    try std.testing.expectError(error.InvalidSpecification, provenance.checkAttributed(.canonical, a, text.validator, stale, good));
+    try std.testing.expectError(error.UnboundPathReference, provenance.checkAttributed(.canonical, a, text.validator, fixture.context, try fixture.value("Write src/main.zig.")));
 }
 
 test "exact specification values retain token references and never accept replacement display bytes" {
@@ -208,11 +214,16 @@ test "exact specification values retain token references and never accept replac
             const token = item.claim.content.preserved_token;
             const ids = try a.dupe(references.r.ClaimId, &.{item.claim.id});
             const proposed: spec.AttributedValue = .{ .value = .{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } }, .provenance = .{ .claim_ids = ids, .citation_ids = item.claim.citation_ids, .clarification_response_ids = &.{} } };
-            const accepted = try provenance.attributed(a, text.validator, fixture.context, proposed);
+            const accepted = try provenance.checkAttributed(.canonical, a, text.validator, fixture.context, proposed);
             try std.testing.expectEqualDeep(proposed, accepted);
+            const model: spec.Model.AttributedValue = .{ .value = proposed.value, .provenance = selection(proposed.provenance) };
+            try std.testing.expectEqualDeep(accepted, try provenance.checkAttributed(.model, a, text.validator, fixture.context, model));
+            var wrong_model = model;
+            wrong_model.value.exact_copy.citation_id.ordinal = 999;
+            try std.testing.expectError(error.InvalidSpecification, provenance.checkAttributed(.model, a, text.validator, fixture.context, wrong_model));
             var wrong = proposed;
             wrong.value.exact_copy.token_id.ordinal = 999;
-            try std.testing.expectError(error.InvalidSpecification, provenance.attributed(a, text.validator, fixture.context, wrong));
+            try std.testing.expectError(error.InvalidSpecification, provenance.checkAttributed(.canonical, a, text.validator, fixture.context, wrong));
         };
     }
 }
@@ -224,7 +235,7 @@ test "unit parsing rejects model authority and ID ledger allocation remains engi
     var fixture = try Fixture.init(a, "Users view a greeting.");
     defer fixture.deinit();
     const value = try fixture.value("Users view a greeting.");
-    const response: g.Response = .{ .content = .{ .primary_user_story = value } };
+    const response: g.Response = .{ .content = .{ .primary_user_story = try fixture.proposal("Users view a greeting.") } };
     const bytes = try @import("domain/model_candidate_json.zig").encode(g.ModelResponse, a, g.ModelResponse.from(response));
     _ = try g.parse(a, bytes);
     for ([_][]const u8{ "id", "completed", "path", "approved", "open_questions" }) |key| {
@@ -271,6 +282,10 @@ const Fixture = struct {
     fn deinit(self: *Fixture) void {
         self.passive.deinit();
     }
+    fn proposal(self: *const Fixture, bytes: []const u8) !spec.Model.AttributedValue {
+        const canonical = try self.value(bytes);
+        return .{ .value = canonical.value, .provenance = selection(canonical.provenance) };
+    }
     fn value(self: *const Fixture, bytes: []const u8) !spec.AttributedValue {
         const claim = self.context.references.records.assignments.checked.prior.prior.input.items[0].claim;
         const segments = try self.allocator.dupe(@import("domain/typed_text.zig").BusinessSegment, &.{.{ .literal = .{ .value = bytes } }});
@@ -290,7 +305,7 @@ test "atomic specification repair preserves siblings and rejects stale or foreig
         var fixture = try Fixture.init(a, source);
         defer fixture.deinit();
         const current = try sessions.initialize(.{ .bytes = "selected" }, fixture.context);
-        const good = try fixture.value(source);
+        const good = try fixture.proposal(source);
         var bad = good;
         bad.provenance.claim_ids = &.{.{ .ordinal = 999 }};
         const candidate: repair.Candidate = .{ .response = .{ .content = .{ .brief = .{ .title = good, .description = bad, .primary_goal = good } } } };
@@ -339,12 +354,12 @@ test "record repair selects one duplicate without changing IDs or valid sibling 
     var fixture = try Fixture.init(a, "A borrower renews a loan.");
     defer fixture.deinit();
     var current = try sessions.initialize(.{ .bytes = "selected" }, fixture.context);
-    const value = try fixture.value("Borrower requests renewal.");
+    const value = try fixture.proposal("Borrower requests renewal.");
     inline for (.{ spec.Kind.acceptance_criterion, spec.Kind.business_rule }) |kind| {
         current.completed = 3 + @intFromEnum(kind);
-        const record: spec.RecordProposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), Fields(kind, value.value)), .provenance = value.provenance };
-        const replacement_value = try fixture.value("Renewal confirmation is visible.");
-        const replacement: spec.RecordProposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), Fields(kind, replacement_value.value)), .provenance = replacement_value.provenance };
+        const record: spec.Model.RecordProposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), Fields(kind, value.value)), .provenance = value.provenance };
+        const replacement_value = try fixture.proposal("Renewal confirmation is visible.");
+        const replacement: spec.Model.RecordProposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), Fields(kind, replacement_value.value)), .provenance = replacement_value.provenance };
         const proposed: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{ record, record } } } };
         const rejection = (try validate_unit.execute(a, current, fixture.context, proposed)).invalid;
         const authorization = try repair.authorize(a, current, proposed, rejection);
@@ -407,7 +422,7 @@ test "mandatory content gaps survive positive model review and scenario coverage
                 .requirement_ordinal = @intCast(index + 1),
                 .finding = if (mode == 4 and requirement.seed.id.slot == .scenario_coverage) .unsupported else .supported,
                 .disposition = if (requirement.seed.id.kind == .entity_applicability) .not_applicable else .supported,
-                .provenance = value.provenance,
+                .provenance = selection(value.provenance),
             };
             const reviewed = try support.collect(a, inputs, fixture.context, try std.json.Stringify.valueAlloc(a, support.Review{ .entries = findings }, .{}));
             const checked = try authority.build(a, reviewed);
@@ -441,7 +456,7 @@ test "retained specification rejection distinguishes source binding and preserve
     var fixture = try Fixture.init(a, "A borrower renews a loan.");
     defer fixture.deinit();
     const current = try sessions.initialize(.{ .bytes = "selected" }, fixture.context);
-    const good = try fixture.value("A renewal is confirmed.");
+    const good = try fixture.proposal("A renewal is confirmed.");
     var bad = good;
     bad.provenance.claim_ids = &.{.{ .ordinal = 999 }};
     const candidate: candidates.Candidate = .{ .origins = .{ .initial = initial }, .response = .{ .content = .{ .brief = .{ .title = good, .description = bad, .primary_goal = bad } } } };
@@ -492,15 +507,15 @@ test "retained specification rejection and authorization release allocation fail
     var fixture = try Fixture.init(a, "A visitor confirms a reservation.");
     defer fixture.deinit();
     const current = try @import("domain/specification_session.zig").initialize(.{ .bytes = "chosen" }, fixture.context);
-    const good = try fixture.value("Reservation confirmation is visible.");
+    const good = try fixture.proposal("Reservation confirmation is visible.");
     var bad = good;
-    bad.provenance.citation_ids = &.{};
+    bad.provenance.claim_ids = &.{};
     const candidate: @import("domain/specification_candidate.zig").Candidate = .{ .response = .{ .content = .{ .primary_user_story = bad } } };
     var story = current;
     story.completed = 1;
     try std.testing.checkAllAllocationFailures(std.testing.allocator, rejectionAllocationCase, .{ fixture.context, story, candidate, good });
 }
-fn rejectionAllocationCase(allocator: std.mem.Allocator, context: provenance.Context, current: @import("domain/specification_session.zig").Session, candidate: @import("domain/specification_candidate.zig").Candidate, good: spec.AttributedValue) !void {
+fn rejectionAllocationCase(allocator: std.mem.Allocator, context: provenance.Context, current: @import("domain/specification_session.zig").Session, candidate: @import("domain/specification_candidate.zig").Candidate, good: spec.Model.AttributedValue) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -511,4 +526,57 @@ fn rejectionAllocationCase(allocator: std.mem.Allocator, context: provenance.Con
     const authorization = try repair.authorize(a, current, candidate, rejected);
     const merged = try repair.merge(a, current, candidate, authorization, .{ .attributed = good }, null);
     try std.testing.expect((try validate_unit.execute(a, current, context, merged)) == .valid);
+}
+
+fn selection(value: spec.Provenance) spec.Selection {
+    return .{ .claim_ids = value.claim_ids, .clarification_response_ids = value.clarification_response_ids };
+}
+
+test "model evidence selections construct canonical citations and canonical revalidation detects tampering" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "Confirm a reservation.", "Show a renewal receipt." }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        const proposal = try fixture.proposal(source);
+        const response: g.Response = .{ .content = .{ .primary_user_story = proposal } };
+        const checked = (try g.validate(a, text.validator, fixture.context, .primary_user_story, response)).valid;
+        const expected = (try fixture.value(source)).provenance;
+        try std.testing.expectEqualDeep(expected, checked.response.content.primary_user_story.provenance);
+        _ = (try g.revalidate(a, text.validator, fixture.context, .primary_user_story, checked.response)).valid;
+        var corrupt = checked.response;
+        corrupt.content.primary_user_story.provenance.citation_ids = &.{};
+        try std.testing.expectEqual(.provenance, (try g.revalidate(a, text.validator, fixture.context, .primary_user_story, corrupt)).invalid.rule);
+        for (0..4) |scenario| {
+            var bad = response;
+            const selected = &bad.content.primary_user_story.provenance;
+            switch (scenario) {
+                0 => selected.claim_ids = &.{},
+                1 => selected.claim_ids = &.{.{ .ordinal = 999 }},
+                2 => selected.claim_ids = &.{ proposal.provenance.claim_ids[0], proposal.provenance.claim_ids[0] },
+                3 => selected.clarification_response_ids = &.{.{ .ordinal = 1 }},
+                else => unreachable,
+            }
+            try std.testing.expectEqual(.provenance, (try g.validate(a, text.validator, fixture.context, .primary_user_story, bad)).invalid.rule);
+        }
+    }
+}
+
+test "specification provenance preserves selected claim order and rejects reordered canonical citations" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.init(a, "Show `Reservation accepted!`.");
+    defer fixture.deinit();
+    const items = try provenance.items(fixture.context);
+    try std.testing.expectEqual(@as(usize, 2), items.entries.len);
+    const forward = try provenance.select(a, fixture.context, .{ .claim_ids = &.{ items.entries[0].claim.id, items.entries[1].claim.id }, .clarification_response_ids = &.{} });
+    const reverse = try provenance.select(a, fixture.context, .{ .claim_ids = &.{ items.entries[1].claim.id, items.entries[0].claim.id }, .clarification_response_ids = &.{} });
+    try std.testing.expectEqual(@as(usize, 2), forward.citation_ids.len);
+    try std.testing.expectEqualDeep(items.entries[0].claim.citation_ids[0], forward.citation_ids[0]);
+    try std.testing.expectEqualDeep(items.entries[1].claim.citation_ids[0], reverse.citation_ids[0]);
+    var corrupt = forward;
+    corrupt.citation_ids = reverse.citation_ids;
+    try std.testing.expectError(error.InvalidSpecification, provenance.scopes(a, fixture.context, corrupt));
 }

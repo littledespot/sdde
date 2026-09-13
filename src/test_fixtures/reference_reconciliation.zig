@@ -33,16 +33,16 @@ pub fn summary(allocator: std.mem.Allocator, input: r.Input) !r.SummaryProposal 
         ids[0] = item.claim.id;
         statement.* = .{ .local_key = @intCast(index + 1), .claim_ids = ids, .content = content(item.claim) };
     }
-    return .{ .member_claim_ids = input.partition.group.claim_ids, .member_summary_ids = input.member_summary_ids, .statements = statements };
+    return .{ .statements = statements };
 }
 pub fn global(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
-    const dispositions = try allocator.alloc(r.ClaimDisposition, input.items.len);
+    const dispositions = try allocator.alloc(r.ClaimDispositionProposal, input.items.len);
     const signals = try allocator.alloc(r.SignalProposal, input.items.len);
     for (input.items, dispositions, signals) |item, *disposition, *signal| {
         const ids = try allocator.alloc(r.ClaimId, 1);
         ids[0] = item.claim.id;
-        disposition.* = .{ .claim_id = item.claim.id, .disposition = .retained, .related_claim_ids = &.{} };
-        signal.* = .{ .claim_ids = ids, .citation_ids = item.claim.citation_ids, .content = content(item.claim) };
+        disposition.* = .{ .claim_id = item.claim.id, .disposition = .{ .retained = .{} } };
+        signal.* = .{ .claim_ids = ids, .content = content(item.claim) };
     }
     return .{ .claim_dispositions = dispositions, .signals = signals, .conflicts = &.{} };
 }

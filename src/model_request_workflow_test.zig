@@ -3056,6 +3056,177 @@ fn prepareRequestClosure(runner: *runner_module.Runner, outcome: workflow.Outcom
     try std.testing.expectEqual(outcome, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
 }
 
+const malformed_protocol_items = "{\"items\":[{\"name\":\"first\",\"text\":\"one\"},{\"name\":\"second\",\"text\":\"two\",\"name\":\"third\",\"text\":\"three\"}]}";
+const malformed_protocol_record = "{\"result\":{\"settings\":{\"state\":\"open\",\"state\":\"closed\"}}}";
+
+fn protocolRetryYaml(fixture: *Fixture) ![]const u8 {
+    const allocator = fixture.arena.allocator();
+    var source = try requestCompletionYaml(fixture);
+    for ([_][2][]const u8{
+        .{ "prompt: prompt, result-schema:", "prompt: prompt, protocol-prompt: prompt, result-schema:" },
+        .{ "retry-limit: 0", "retry-limit: 2" },
+        .{ "ok: close-request, invalid: close-request", "ok: close-request, invalid: retry" },
+        .{ "ok: advance-request, failed: end.failed", "ok: phase, failed: end.failed" },
+    }) |change| source = try std.mem.replaceOwned(u8, allocator, source, change[0], change[1]);
+    return std.fmt.allocPrint(allocator,
+        \\{s}
+        \\  phase: {{ use: check-model-request-phase, on: {{ok: advance-request, more: advance-operation, failed: end.failed}} }}
+        \\  retry: {{ use: build-model-protocol-retry, on: {{ok: account, failed: end.failed}} }}
+        \\
+    , .{source});
+}
+
+fn prepareProtocolAttempt(runner: *runner_module.Runner, retry: bool) !void {
+    if (!retry) {
+        try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
+        for ([_][]const u8{ "initialize", "origin", "validate", "build" }) |step|
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+    }
+    for ([_][]const u8{ "account", "assign-operation", "authorize" }) |step|
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+    try std.testing.expectEqual(@as(workflow.OutcomeTag, if (retry) .more else .ok), runner.bindings().invokeStep(.{ .bytes = "phase" }).outcome);
+    if (!retry) try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-request" }).outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+}
+
+fn rejectProtocolResponse(runner: *runner_module.Runner) !void {
+    for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step|
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+    for ([_][]const u8{ "decode", "validate-payload" }) |step|
+        try std.testing.expectEqual(.invalid, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+}
+
+test "protocol retries retain only latest repeated or alternating decoder rejection until local exhaustion" {
+    const sequences = [_][3][]const u8{
+        .{ malformed_protocol_items, malformed_protocol_items, malformed_protocol_items },
+        .{ malformed_protocol_items, "{", malformed_protocol_record },
+    };
+    for (sequences) |responses| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try protocolRetryYaml(&fixture));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        var original_id: ?*const identity.ModelRequestId = null;
+        for (responses, 0..) |body, index| {
+            fake.invocation_plan.complete.content = body;
+            try prepareProtocolAttempt(&runner, index != 0);
+            const request = try currentRequest(&runner);
+            if (index == 0) original_id = request.id();
+            try std.testing.expect(request.id() == original_id.?);
+            try std.testing.expectEqualStrings(schema_bytes, request.prepared().?.response_schema.bytes());
+            try std.testing.expectEqual(@as(u32, @intCast(index + 1)), (try invokedOperation(&runner)).operation().id.model_attempt_ordinal.value);
+            try rejectProtocolResponse(&runner);
+            const diagnostic = (try envelopeResult(&runner)).outcome().protocol_rejected.diagnostic;
+            if (body.len > 1) {
+                try std.testing.expectEqual(.DuplicateField, diagnostic.reason);
+                try std.testing.expectEqualStrings(if (std.mem.eql(u8, body, malformed_protocol_items)) "/items/1" else "/result/settings", diagnostic.context.?.path);
+                try std.testing.expect(diagnostic.context.?.first_occurrence.?.byte_offset < diagnostic.context.?.repeated_occurrence.?.byte_offset);
+            }
+            const retained_diagnostic = try std.json.Stringify.valueAlloc(fixture.arena.allocator(), diagnostic, .{});
+            try std.testing.expectEqualStrings(body, (try observationResult(&runner)).outcome().validated.result().complete.content());
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+            const correction = (try currentRequest(&runner)).prepared().?;
+            try std.testing.expect(correction.model_request_id == original_id.?);
+            try std.testing.expectEqualStrings(schema_bytes, correction.response_schema.bytes());
+            // The immutable inputs plus one prompt/diagnostic/response survive;
+            // an earlier correction can never become the next assignment.
+            try std.testing.expectEqual(@as(usize, 5), correction.content.len);
+            try std.testing.expectEqualStrings(prompt_bytes, correction.content[0].guidance);
+            try std.testing.expectEqualStrings(input_bytes, correction.content[1].user);
+            try std.testing.expectEqualStrings(prompt_bytes, correction.content[2].guidance);
+            var guidance = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, correction.content[3].guidance, .{});
+            defer guidance.deinit();
+            const decoder = guidance.value.object.get("diagnostic").?.object.get("decoder").?;
+            try std.testing.expectEqualStrings(retained_diagnostic, try std.json.Stringify.valueAlloc(fixture.arena.allocator(), decoder, .{}));
+            var evidence = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, correction.content[4].evidence, .{});
+            defer evidence.deinit();
+            try std.testing.expectEqual(@as(usize, 1), evidence.value.object.count());
+            try std.testing.expectEqualStrings(body, evidence.value.object.get("rejected_response").?.string);
+            try std.testing.expectEqual(@as(u128, (index + 1) * 7), runner.tokenLedger().committed());
+            try std.testing.expectEqual(@as(u64, @intCast(index + 1)), runner.tokenLedger().revision().value);
+        }
+        const exhausted = runner.bindings().invokeStep(.{ .bytes = "account" });
+        try std.testing.expectEqualStrings("account", exhausted.rejected.retry_limit.operation().bytes);
+        try std.testing.expectEqual(@as(u32, 2), exhausted.rejected.retry_limit.limit.value);
+        try std.testing.expectEqual(@as(u64, 3), exhausted.rejected.retry_limit.completed_executions);
+        try std.testing.expectEqual(@as(u32, 3), attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved(original_id.?));
+        try std.testing.expectEqual(@as(usize, 3), fake.effect_count);
+        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        try std.testing.expectEqual(@as(u128, 21), runner.tokenLedger().committed());
+        try std.testing.expectEqual(.invoked, (try requestLedger(&runner)).record(original_id.?).?.status);
+    }
+}
+
+test "protocol retry budget overshoot charges the response before decoding and blocks another call" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try protocolRetryYaml(&fixture));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fake.invocation_plan.complete.content = malformed_protocol_items;
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    try prepareProtocolAttempt(&runner, false);
+    try rejectProtocolResponse(&runner);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+    try prepareProtocolAttempt(&runner, true);
+    fake.invocation_plan.complete = .{ .content = malformed_protocol_record, .input_tokens = graph.authority.total_model_token_budget.value - 7, .output_tokens = 1 };
+    const rejected = runner.bindings().invokeStep(.{ .bytes = "call" });
+    try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, rejected.rejected.token_budget);
+    try std.testing.expectEqual(@as(u128, graph.authority.total_model_token_budget.value) + 1, runner.tokenLedger().committed());
+    try std.testing.expectEqual(@as(u64, 2), runner.tokenLedger().revision().value);
+    try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
+    try std.testing.expect(runner.envelope.slots[@intFromEnum(envelope_workflow.schema.key)] == null);
+    try std.testing.expect(runner.envelope.slots[@intFromEnum(payload_workflow.schema.key)] == null);
+    try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected.token_budget);
+    try std.testing.expectEqual(@as(usize, 2), fake.effect_count);
+    try std.testing.expectEqual(@as(u32, 2), attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved((try currentRequest(&runner)).id()));
+}
+
+test "corrected protocol responses pass schema validation before request closure" {
+    const result_schema = "{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"maxItems\":3,\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"maxLength\":40},\"text\":{\"type\":\"string\",\"maxLength\":40}},\"required\":[\"name\",\"text\"],\"additionalProperties\":false}}},\"required\":[\"items\"],\"additionalProperties\":false}";
+    const corrected = "{\"items\":[{\"name\":\"first\",\"text\":\"one\"},{\"text\":\"two\",\"name\":\"second\"},{\"name\":\"third\",\"text\":\"three\"}]}";
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compileWithSchema(try protocolRetryYaml(&fixture), result_schema);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fake.invocation_plan.complete.content = malformed_protocol_items;
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    try prepareProtocolAttempt(&runner, false);
+    try rejectProtocolResponse(&runner);
+    for ([_][]const u8{ "{}", corrected }, 0..) |body, index| {
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+        try prepareProtocolAttempt(&runner, true);
+        fake.invocation_plan.complete.content = body;
+        for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode" }) |step|
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        const validated = runner.bindings().invokeStep(.{ .bytes = "validate-payload" });
+        if (index == 0) {
+            try std.testing.expectEqual(.invalid, validated.outcome);
+            try std.testing.expectEqual(.missing_required_property, (try payloadResult(&runner)).outcome().schema_rejected.reason);
+            try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        } else {
+            try std.testing.expectEqual(.ok, validated.outcome);
+            const accepted = (try payloadResult(&runner)).outcome().valid.candidate();
+            try std.testing.expectEqualStrings(corrected, accepted.association().result().complete.content());
+            try std.testing.expect(accepted.association().request() == (try currentRequest(&runner)).prepared().?);
+            for ([_][]const u8{ "close-request", "observe" }) |step|
+                try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 3), fake.effect_count);
+    try std.testing.expectEqual(@as(u128, 21), runner.tokenLedger().committed());
+    try std.testing.expectEqual(.accepted, (try requestLedger(&runner)).record((try currentRequest(&runner)).id()).?.terminal_reason.?);
+}
+
 test "YAML request closure accepts only the schema-valid candidate and preserves content rejection" {
     for ([_][]const u8{ "{\"answer\":\"candidate, not workflow success\"}", "{}", "{", "{\"answer\":1,\"answer\":2}", "{} trailing" }) |body| {
         var fixture: Fixture = undefined;

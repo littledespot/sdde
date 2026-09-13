@@ -152,7 +152,10 @@ the harness does not infer or revalidate it. Protocol retries include the full
 rejected response as untrusted evidence and the original complete schema.
 Schema corrections add the exact expected schema node, its JSON Pointer and
 parent/value scope, including bounds and alternatives. Syntax corrections add
-the decoder diagnostic. Neither synthesizes a candidate example.
+the decoder diagnostic. Duplicate-member corrections also include the native
+decoder's brief explanation of property-name uniqueness within one object,
+without inferring record boundaries or choosing which value survives. Neither
+correction path synthesizes a candidate example.
 
 `evaluated` and exit 0 mean generation, publication checks and a scored evaluation
 completed. A low score is still a completed evaluation; inspect `score_percent`
@@ -455,3 +458,19 @@ A structurally valid response alone does not satisfy E2E quality acceptance.
 
 See the [2026-09-12 JSON quality verification](04-json-quality-2026-09-12.md)
 for all retained run outcomes and the current native-mode activation limitation.
+
+## FIX_001 Phase 2 — proposal boundaries
+
+Model responses now select evidence; the engine constructs summary lineage and
+aggregate citation unions. Canonical records and input evidence retain complete
+provenance. Generation, repair and support use the reduced selection shape;
+legacy echo fields reject. Tagged dispositions expose only the relevant
+relationships, with concise guidance from the native constraint owner.
+
+The [Phase 2 delivery record](../../fixes/TODO_FIX_001.md#phase-2-delivery-and-verification--13-september-2026)
+contains exact commands: 408/408 targeted tests and full offline verification
+with 120/120 steps and 1,374/1,374 tests, including clean native packaging.
+No live E2E run was performed for
+this phase. Existing reports remain historical evidence; live convergence,
+publication and rubric quality remain unproven. Phase 3 owns the outstanding
+semantic repair paths, and every live run still requires explicit approval.

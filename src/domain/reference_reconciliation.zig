@@ -38,7 +38,7 @@ pub const Content = union(enum) {
 pub const StatementProposal = struct { local_key: u32, claim_ids: []const ClaimId, content: ContentProposal };
 pub const ValidatedStatement = struct { local_key: u32, claim_ids: []const ClaimId, content: Content };
 pub const Statement = struct { id: StatementId, claim_ids: []const ClaimId, content: Content };
-pub const SummaryProposal = struct { member_claim_ids: []const ClaimId, member_summary_ids: []const SummaryId, statements: []const StatementProposal };
+pub const SummaryProposal = struct { statements: []const StatementProposal };
 pub const Summary = struct { id: SummaryId, partition_id: PartitionId, member_claim_ids: []const ClaimId, member_summary_ids: []const SummaryId, statements: []const Statement };
 /// Immutable append-only execution history; appending a summary does not copy
 /// every previous summary or mutate an older workflow value.
@@ -47,19 +47,36 @@ pub const Progress = struct { plan: Plan, latest: ?*const SummaryHistory, summar
 pub const Input = struct { progress: Progress, partition: Partition, items: []const Item, summaries: []const Summary, member_summary_ids: []const SummaryId, purpose: enum { summary, global } };
 pub const Disposition = enum { retained, superseded, duplicate, conflicting };
 pub const ClaimDisposition = struct { claim_id: ClaimId, disposition: Disposition, related_claim_ids: []const ClaimId };
-pub const SignalProposal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: ContentProposal };
+pub const ClaimDispositionProposal = struct {
+    claim_id: ClaimId,
+    disposition: union(Disposition) {
+        retained: struct {},
+        superseded: struct { related_claim_ids: []const ClaimId },
+        duplicate: struct { target_claim_id: ClaimId },
+        conflicting: struct { related_claim_ids: []const ClaimId },
+    },
+
+    /// Shape conversion only; native relationship validation owns acceptance.
+    pub fn canonical(self: ClaimDispositionProposal, allocator: std.mem.Allocator) std.mem.Allocator.Error!ClaimDisposition {
+        return .{ .claim_id = self.claim_id, .disposition = self.disposition, .related_claim_ids = switch (self.disposition) {
+            .retained => &.{},
+            .duplicate => |choice| try allocator.dupe(ClaimId, &.{choice.target_claim_id}),
+            inline .superseded, .conflicting => |choice| choice.related_claim_ids,
+        } };
+    }
+};
+pub const SignalProposal = struct { claim_ids: []const ClaimId, content: ContentProposal };
 pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content };
 pub const ConflictKind = enum { mutually_exclusive, precedence_missing, value_mismatch, scope_mismatch };
 pub const ConflictProposal = struct {
     claim_ids: []const ClaimId,
-    citation_ids: []const CitationId,
     kind: ConflictKind,
     summary: text.ReferenceSemanticText,
     // No registered precedence authority is available in this increment.
     resolution: enum { unresolved },
 };
 pub const ValidatedConflict = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, kind: ConflictKind, summary: text.ValidatedReferenceSemanticText, resolution: enum { unresolved } };
-pub const Proposal = struct { claim_dispositions: []const ClaimDisposition, signals: []const SignalProposal, conflicts: []const ConflictProposal };
+pub const Proposal = struct { claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, conflicts: []const ConflictProposal };
 pub const diagnostic = @import("reference_reconciliation_diagnostic.zig");
 pub const Raw = struct { source: diagnostic.Source = .{}, input: Input, bytes: []const u8 };
 pub const Parsed = struct { source: diagnostic.Source = .{}, input: Input, proposal: union(enum) { summary: SummaryProposal, global: Proposal } };
@@ -79,6 +96,17 @@ pub fn item(items: Items, id: ClaimId) Error!Item {
     const result = items.entries[id.ordinal - 1];
     if (result.claim.id.ordinal != id.ordinal) return error.InvalidReferenceReconciliation;
     return result;
+}
+/// Canonical citation union in selected-claim order. Callers validate selection
+/// uniqueness and stage eligibility; this constructor does not decide support.
+/// The caller owns the returned slice.
+pub fn citationUnion(allocator: std.mem.Allocator, items: Items, ids: []const ClaimId) Error![]const CitationId {
+    var result: std.ArrayList(CitationId) = .empty;
+    errdefer result.deinit(allocator);
+    for (ids) |id| for ((try item(items, id)).claim.citation_ids) |citation| {
+        if (!contains(CitationId, result.items, citation)) try result.append(allocator, citation);
+    };
+    return result.toOwnedSlice(allocator);
 }
 pub fn contains(comptime Id: type, ids: []const Id, id: Id) bool {
     for (ids) |value| if (value.ordinal == id.ordinal) return true;

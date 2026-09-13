@@ -48,6 +48,7 @@ pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.
         .citations = projected.citations,
         .preserved_tokens = projected.preserved_tokens,
         .summaries = try projection.summaries(scratch, input.summaries),
+        .constraints = try reconciliationGuidance(scratch, input.purpose),
         .passive_literals = try passiveChoices(scratch, registry, inputs, scopes),
     };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
@@ -67,4 +68,18 @@ pub fn passiveChoices(allocator: std.mem.Allocator, registry: literals.Registry,
         try result.append(allocator, allowed);
     }
     return result.toOwnedSlice(allocator);
+}
+
+const Constraint = reconciliation.diagnostic.Constraint;
+const Guidance = struct { constraint: Constraint, requirement: []const u8 };
+/// Project native rule identities alongside current claim facts. Corrections
+/// retain this packet, with no separate prompt rules table.
+fn reconciliationGuidance(allocator: std.mem.Allocator, purpose: @FieldType(reconciliation.Input, "purpose")) std.mem.Allocator.Error![]const Guidance {
+    const constraints: []const Constraint = switch (purpose) {
+        .summary => &.{ .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token },
+        .global => &.{ .nonempty_unique_allowed_claims, .no_self_relation, .same_content_kind, .same_token_value, .nonconflicting_target, .reciprocal_conflict, .acyclic, .nonconflicting_claims, .conflicting_related_claims, .retained_claim_covered, .token_projected, .conflict_pair_covered },
+    };
+    const result = try allocator.alloc(Guidance, constraints.len);
+    for (constraints, result) |constraint, *entry| entry.* = .{ .constraint = constraint, .requirement = constraint.description() };
+    return result;
 }

@@ -76,6 +76,10 @@ pub const Id = struct {
 };
 
 pub const ResponseId = struct { ordinal: u64 };
+pub const Selection = struct {
+    claim_ids: []const reference.ClaimId,
+    clarification_response_ids: []const ResponseId,
+};
 pub const Provenance = struct {
     claim_ids: []const reference.ClaimId,
     citation_ids: []const reference.CitationId,
@@ -85,8 +89,21 @@ pub const BusinessValue = union(enum) {
     normalized: text.BusinessText,
     exact_copy: struct { token_id: reference.tokens.Id, citation_id: reference.CitationId },
 };
-pub const AttributedValue = struct { value: BusinessValue, provenance: Provenance };
-pub const Brief = struct { title: AttributedValue, description: AttributedValue, primary_goal: AttributedValue };
+pub const Boundary = enum { model, canonical };
+/// The two evidence boundaries share business fields, never evidence authority.
+pub fn Values(comptime boundary: Boundary) type {
+    return struct {
+        const Self = @This();
+        pub const Evidence = if (boundary == .model) Selection else Provenance;
+        pub const AttributedValue = struct { value: BusinessValue, provenance: Evidence };
+        pub const Brief = struct { title: Self.AttributedValue, description: Self.AttributedValue, primary_goal: Self.AttributedValue };
+        pub const RecordProposal = struct { content: Content(BusinessValue), provenance: Evidence };
+        pub const ApplicabilityProposal = struct { disposition: Applicability, basis: Self.AttributedValue };
+    };
+}
+pub const Model = Values(.model);
+pub const AttributedValue = Values(.canonical).AttributedValue;
+pub const Brief = Values(.canonical).Brief;
 
 /// This shared field shape is used by semantic content and its text projection.
 /// Projection bytes never supply provenance, applicability or gate authority.
@@ -105,11 +122,9 @@ pub fn Content(comptime Value: type) type {
     };
 }
 
-pub const RecordProposal = struct { content: Content(BusinessValue), provenance: Provenance };
-pub const ApplicabilityProposal = struct {
-    disposition: enum { required, not_applicable },
-    basis: AttributedValue,
-};
+pub const RecordProposal = Values(.canonical).RecordProposal;
+pub const Applicability = enum { required, not_applicable };
+pub const ApplicabilityProposal = Values(.canonical).ApplicabilityProposal;
 pub const ContentProposal = struct {
     display_name: AttributedValue,
     primary_user_story: AttributedValue,

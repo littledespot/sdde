@@ -578,7 +578,7 @@ test "reports preserve native reconciliation and specification failures after so
         var current = try @import("../../../src/domain/specification_session.zig").initialize(.{ .bytes = "chosen" }, context);
         current.completed = 1;
         const action = @import("../../../src/actions/specification/validate_specification_unit.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
-        const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .primary_user_story = .{ .value = .{ .normalized = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} } }, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .citation_ids = &.{}, .clarification_response_ids = &.{} } } } } })).invalid;
+        const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .primary_user_story = .{ .value = .{ .normalized = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} } }, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} } } } } })).invalid;
         retained[1] = try (Diagnostic{ .specification = spec }).copy(a);
     }
     for (retained) |diagnostic| {

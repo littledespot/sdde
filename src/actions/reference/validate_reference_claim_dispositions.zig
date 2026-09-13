@@ -15,7 +15,8 @@ pub const Action = struct {
         const dispositions = try allocator.alloc(r.ClaimDisposition, supplied.len);
         const seen = try allocator.alloc(bool, supplied.len);
         @memset(seen, false);
-        for (supplied, 0..) |value, position| {
+        for (supplied, 0..) |proposal, position| {
+            const value = try proposal.canonical(allocator);
             const original = r.item(items, value.claim_id) catch return failure(parsed, position, .claim_selection, value, .nonempty_unique_allowed_claims);
             const index = value.claim_id.ordinal - 1;
             if (seen[index]) return failure(parsed, position, .duplicate_disposition, value, .unique_nonzero);
@@ -34,22 +35,24 @@ pub const Action = struct {
                 }
             }
             switch (value.disposition) {
-                .retained => if (value.related_claim_ids.len != 0) return cardinality(parsed, position, value, 0),
-                .duplicate => if (value.related_claim_ids.len != 1) return cardinality(parsed, position, value, 1),
+                .retained, .duplicate => {},
                 .superseded, .conflicting => if (value.related_claim_ids.len == 0) return failure(parsed, position, .cardinality, value, .nonempty),
             }
             dispositions[index] = value;
         }
-        for (supplied, 0..) |value, position| for (value.related_claim_ids) |id| {
-            const target = dispositions[id.ordinal - 1];
-            switch (value.disposition) {
-                .retained => unreachable,
-                .duplicate, .superseded => if (target.disposition == .conflicting) return failure(parsed, position, .relationship, value, .nonconflicting_target),
-                .conflicting => if (target.disposition != .conflicting or !r.contains(r.ClaimId, target.related_claim_ids, value.claim_id)) return failure(parsed, position, .relationship, value, .reciprocal_conflict),
+        for (supplied, 0..) |proposal, position| {
+            const value = dispositions[proposal.claim_id.ordinal - 1];
+            for (value.related_claim_ids) |id| {
+                const target = dispositions[id.ordinal - 1];
+                switch (value.disposition) {
+                    .retained => unreachable,
+                    .duplicate, .superseded => if (target.disposition == .conflicting) return failure(parsed, position, .relationship, value, .nonconflicting_target),
+                    .conflicting => if (target.disposition != .conflicting or !r.contains(r.ClaimId, target.related_claim_ids, value.claim_id)) return failure(parsed, position, .relationship, value, .reciprocal_conflict),
+                }
             }
-        };
+        }
         if (try cycle(allocator, dispositions)) |index| {
-            for (supplied, 0..) |value, position| if (value.claim_id.ordinal == dispositions[index].claim_id.ordinal) return failure(parsed, position, .cycle, value, .acyclic);
+            for (supplied, 0..) |value, position| if (value.claim_id.ordinal == dispositions[index].claim_id.ordinal) return failure(parsed, position, .cycle, dispositions[index], .acyclic);
             return error.InvalidReferenceReconciliation;
         }
         return .{ .valid = .{ .source = parsed.source, .input = parsed.input, .proposal = parsed.proposal.global, .dispositions = dispositions } };
@@ -93,7 +96,4 @@ fn cycle(allocator: std.mem.Allocator, values: []const r.ClaimDisposition) r.Err
 
 fn failure(parsed: r.Parsed, index: usize, rule: d.Rule, actual: r.ClaimDisposition, expected: d.Constraint) d.Result(r.CheckedDispositions) {
     return d.reject(r.CheckedDispositions, parsed.input, parsed.source, .{ .disposition = index }, .{ .rule = rule, .observed = .{ .disposition = actual }, .expected = .{ .constraint = expected } });
-}
-fn cardinality(parsed: r.Parsed, index: usize, actual: r.ClaimDisposition, expected: usize) d.Result(r.CheckedDispositions) {
-    return d.reject(r.CheckedDispositions, parsed.input, parsed.source, .{ .disposition = index }, .{ .rule = .cardinality, .observed = .{ .count = actual.related_claim_ids.len }, .expected = .{ .count = expected } });
 }
