@@ -14,19 +14,19 @@ pub fn suffix(allocator: std.mem.Allocator, summary_count: usize) ![]const u8 {
         defer allocator.free(block);
         try result.appendSlice(allocator, block);
         if (index == summary_count) {
-            const final = try std.fmt.allocPrint(allocator, "  check-{d}: {{ use: validate-reference-claim-dispositions, on: {{ ok: check-signals, failed: end.failed }} }}\n", .{index});
+            const final = try std.fmt.allocPrint(allocator, "  check-{d}: {{ use: validate-reference-claim-dispositions, on: {{ ok: check-signals, invalid: end.invalid, failed: end.failed }} }}\n", .{index});
             defer allocator.free(final);
             try result.appendSlice(allocator, final);
         } else {
-            const summary = try std.fmt.allocPrint(allocator, "  check-{d}: {{ use: validate-reference-reconciliation-summary, on: {{ ok: assign-summary-{d}, failed: end.failed }} }}\n" ++
+            const summary = try std.fmt.allocPrint(allocator, "  check-{d}: {{ use: validate-reference-reconciliation-summary, on: {{ ok: assign-summary-{d}, invalid: end.invalid, failed: end.failed }} }}\n" ++
                 "  assign-summary-{d}: {{ use: assign-reference-summary-identities, on: {{ ok: build-summary-{d}, failed: end.failed }} }}\n" ++
                 "  build-summary-{d}: {{ use: build-reference-reconciliation-summary, on: {{ ok: input-{d}, failed: end.failed }} }}\n", .{ index, index, index, index, index, index + 1 });
             defer allocator.free(summary);
             try result.appendSlice(allocator, summary);
         }
     }
-    try result.appendSlice(allocator, "  check-signals: { use: validate-reference-signal-proposals, on: { ok: check-conflicts, failed: end.failed } }\n" ++
-        "  check-conflicts: { use: validate-reference-conflict-proposals, on: { ok: assign-records, failed: end.failed } }\n" ++
+    try result.appendSlice(allocator, "  check-signals: { use: validate-reference-signal-proposals, on: { ok: check-conflicts, invalid: end.invalid, failed: end.failed } }\n" ++
+        "  check-conflicts: { use: validate-reference-conflict-proposals, on: { ok: assign-records, invalid: end.invalid, failed: end.failed } }\n" ++
         "  assign-records: { use: assign-reference-reconciliation-identities, on: { ok: build-records, failed: end.failed } }\n" ++
         "  build-records: { use: build-reference-reconciliation-records, on: { ok: account-reconciliation, failed: end.failed } }\n" ++
         "  account-reconciliation: { use: validate-reference-reconciliation-completeness, on: { ok: project-authority, blocked: end.blocked, failed: end.failed } }\n" ++

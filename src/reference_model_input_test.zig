@@ -84,7 +84,7 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
     for ([_][]const u8{ "chunk_id", "reference_state_id", "result_definition", "extractor", "raw_value" }) |internal| {
         try std.testing.expect(std.mem.indexOf(u8, packet.body(), internal) == null);
     }
-    const accounted = try reconciliation.finish(a, global, try reconciliation.global(a, global), context);
+    const accounted = (try reconciliation.finish(a, global, try reconciliation.global(a, global), context)).valid;
     try std.testing.expectEqual(.complete, accounted.outcome);
     try std.testing.expectEqual(extracted.ledger.claims.len, global.items.len);
 }

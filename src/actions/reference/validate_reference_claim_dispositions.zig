@@ -2,58 +2,63 @@ const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
 const r = @import("../../domain/reference_reconciliation.zig");
 const v = @import("../../domain/reference_reconciliation_validation.zig");
+const d = r.diagnostic;
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{ .id = "validate-reference-claim-dispositions", .kind = .action, .requires = &.{.parsed_reference_reconciliation}, .produces = &.{.validated_reference_dispositions}, .side_effect = .none };
-    pub fn execute(_: Action, allocator: std.mem.Allocator, parsed: r.Parsed) r.Error!r.CheckedDispositions {
+    pub fn execute(_: Action, allocator: std.mem.Allocator, parsed: r.Parsed) r.Error!d.Result(r.CheckedDispositions) {
         if (parsed.input.purpose != .global or parsed.proposal != .global or parsed.input.partition.group.level != .global) return error.InvalidReferenceReconciliation;
-        try v.history(allocator, parsed.input.progress);
+        try v.input(allocator, parsed.input);
+        if (parsed.source.revision == 0) return error.InvalidReferenceReconciliation;
         const items = parsed.input.progress.plan.layout.items;
         const supplied = parsed.proposal.global.claim_dispositions;
-        if (supplied.len != items.entries.len) return error.InvalidReferenceReconciliation;
+        if (supplied.len != items.entries.len) return d.reject(r.CheckedDispositions, parsed.input, parsed.source, .dispositions, .{ .rule = .cardinality, .observed = .{ .count = supplied.len }, .expected = .{ .count = items.entries.len } });
         const dispositions = try allocator.alloc(r.ClaimDisposition, supplied.len);
         const seen = try allocator.alloc(bool, supplied.len);
         @memset(seen, false);
-        for (supplied) |value| {
-            const original = try r.item(items, value.claim_id);
+        for (supplied, 0..) |value, position| {
+            const original = r.item(items, value.claim_id) catch return failure(parsed, position, .claim_selection, value, .nonempty_unique_allowed_claims);
             const index = value.claim_id.ordinal - 1;
-            if (seen[index]) return error.InvalidReferenceReconciliation;
+            if (seen[index]) return failure(parsed, position, .duplicate_disposition, value, .unique_nonzero);
             seen[index] = true;
-            try r.unique(r.ClaimId, value.related_claim_ids);
+            r.unique(r.ClaimId, value.related_claim_ids) catch return failure(parsed, position, .relationship, value, .unique_nonzero);
             for (value.related_claim_ids) |related| {
-                const target = try r.item(items, related);
-                if (related.ordinal == value.claim_id.ordinal) return error.InvalidReferenceReconciliation;
+                const target = r.item(items, related) catch return failure(parsed, position, .claim_selection, value, .nonempty_unique_allowed_claims);
+                if (related.ordinal == value.claim_id.ordinal) return failure(parsed, position, .relationship, value, .no_self_relation);
                 if (value.disposition == .duplicate or value.disposition == .superseded) {
-                    if (std.meta.activeTag(original.claim.content) != std.meta.activeTag(target.claim.content)) return error.InvalidReferenceReconciliation;
+                    if (std.meta.activeTag(original.claim.content) != std.meta.activeTag(target.claim.content)) return failure(parsed, position, .relationship, value, .same_content_kind);
                     switch (original.claim.content) {
-                        .model => |model| if (std.meta.activeTag(model) != std.meta.activeTag(target.claim.content.model)) return error.InvalidReferenceReconciliation,
+                        .model => |model| if (std.meta.activeTag(model) != std.meta.activeTag(target.claim.content.model)) return failure(parsed, position, .relationship, value, .same_content_kind),
                         .preserved_token => |token| if (value.disposition == .duplicate and
-                            (token.value.kind != target.claim.content.preserved_token.value.kind or !std.mem.eql(u8, token.value.raw_value.bytes, target.claim.content.preserved_token.value.raw_value.bytes))) return error.InvalidReferenceReconciliation,
+                            (token.value.kind != target.claim.content.preserved_token.value.kind or !std.mem.eql(u8, token.value.raw_value.bytes, target.claim.content.preserved_token.value.raw_value.bytes))) return failure(parsed, position, .relationship, value, .same_token_value),
                     }
                 }
             }
             switch (value.disposition) {
-                .retained => if (value.related_claim_ids.len != 0) return error.InvalidReferenceReconciliation,
-                .duplicate => if (value.related_claim_ids.len != 1) return error.InvalidReferenceReconciliation,
-                .superseded, .conflicting => if (value.related_claim_ids.len == 0) return error.InvalidReferenceReconciliation,
+                .retained => if (value.related_claim_ids.len != 0) return cardinality(parsed, position, value, 0),
+                .duplicate => if (value.related_claim_ids.len != 1) return cardinality(parsed, position, value, 1),
+                .superseded, .conflicting => if (value.related_claim_ids.len == 0) return failure(parsed, position, .cardinality, value, .nonempty),
             }
             dispositions[index] = value;
         }
-        for (dispositions) |value| for (value.related_claim_ids) |id| {
+        for (supplied, 0..) |value, position| for (value.related_claim_ids) |id| {
             const target = dispositions[id.ordinal - 1];
             switch (value.disposition) {
                 .retained => unreachable,
-                .duplicate, .superseded => if (target.disposition == .conflicting) return error.InvalidReferenceReconciliation,
-                .conflicting => if (target.disposition != .conflicting or !r.contains(r.ClaimId, target.related_claim_ids, value.claim_id)) return error.InvalidReferenceReconciliation,
+                .duplicate, .superseded => if (target.disposition == .conflicting) return failure(parsed, position, .relationship, value, .nonconflicting_target),
+                .conflicting => if (target.disposition != .conflicting or !r.contains(r.ClaimId, target.related_claim_ids, value.claim_id)) return failure(parsed, position, .relationship, value, .reciprocal_conflict),
             }
         };
-        try validateAcyclic(allocator, dispositions);
-        return .{ .input = parsed.input, .proposal = parsed.proposal.global, .dispositions = dispositions };
+        if (try cycle(allocator, dispositions)) |index| {
+            for (supplied, 0..) |value, position| if (value.claim_id.ordinal == dispositions[index].claim_id.ordinal) return failure(parsed, position, .cycle, value, .acyclic);
+            return error.InvalidReferenceReconciliation;
+        }
+        return .{ .valid = .{ .source = parsed.source, .input = parsed.input, .proposal = parsed.proposal.global, .dispositions = dispositions } };
     }
 };
 
 /// Iterative graph proof: duplicate/supersession chains must terminate at
 /// retained claims. Conflict relationships are symmetric, not directed edges.
-fn validateAcyclic(allocator: std.mem.Allocator, values: []const r.ClaimDisposition) r.Error!void {
+fn cycle(allocator: std.mem.Allocator, values: []const r.ClaimDisposition) r.Error!?usize {
     const Mark = enum { unseen, active, done };
     const marks = try allocator.alloc(Mark, values.len);
     @memset(marks, .unseen);
@@ -74,7 +79,7 @@ fn validateAcyclic(allocator: std.mem.Allocator, values: []const r.ClaimDisposit
             const target = edges[frame.edge].ordinal - 1;
             frame.edge += 1;
             switch (marks[target]) {
-                .active => return error.InvalidReferenceReconciliation,
+                .active => return frame.index,
                 .done => {},
                 .unseen => {
                     marks[target] = .active;
@@ -83,4 +88,12 @@ fn validateAcyclic(allocator: std.mem.Allocator, values: []const r.ClaimDisposit
             }
         }
     }
+    return null;
+}
+
+fn failure(parsed: r.Parsed, index: usize, rule: d.Rule, actual: r.ClaimDisposition, expected: d.Constraint) d.Result(r.CheckedDispositions) {
+    return d.reject(r.CheckedDispositions, parsed.input, parsed.source, .{ .disposition = index }, .{ .rule = rule, .observed = .{ .disposition = actual }, .expected = .{ .constraint = expected } });
+}
+fn cardinality(parsed: r.Parsed, index: usize, actual: r.ClaimDisposition, expected: usize) d.Result(r.CheckedDispositions) {
+    return d.reject(r.CheckedDispositions, parsed.input, parsed.source, .{ .disposition = index }, .{ .rule = .cardinality, .observed = .{ .count = actual.related_claim_ids.len }, .expected = .{ .count = expected } });
 }

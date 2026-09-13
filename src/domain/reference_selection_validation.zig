@@ -9,6 +9,7 @@ pub const Rejection = struct {
     claim_index: usize,
     field: enum { citations } = .citations,
     issue: selections.Issue,
+    observed: []const selections.Selection,
     origin: ?@import("model_candidate_origin.zig").Origin = null,
 };
 
@@ -33,7 +34,7 @@ fn validateCitations(a: std.mem.Allocator, inputs: evidence.Inputs, current: ext
         for (entry.outcome.claims, 0..) |claim, index| {
             switch (try selections.validate(a, inputs, entry.scope, claim.citations)) {
                 .valid => |checked| a.free(checked.entries),
-                .invalid => |issue| return .{ .scope = entry.scope, .revision = current.revision, .claim_index = index, .issue = issue, .origin = try claim.rejectionOrigin(issue) },
+                .invalid => |issue| return .{ .scope = entry.scope, .revision = current.revision, .claim_index = index, .observed = claim.citations, .issue = issue, .origin = try claim.rejectionOrigin(issue) },
             }
         }
     }

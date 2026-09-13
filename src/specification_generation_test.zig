@@ -7,6 +7,7 @@ const references = @import("test_fixtures/reference_reconciliation.zig");
 const evidence = @import("reference_evidence_test.zig");
 const extraction = @import("reference_extraction_test.zig");
 const text = @import("test_fixtures/reference_text.zig");
+const validate_unit = @import("actions/specification/validate_specification_unit.zig").Action{ .validator = text.validator };
 const tokens = @import("test_fixtures/reference_tokens.zig");
 
 test "reference-grounded projections round trip all record families and reject changed rendering" {
@@ -98,7 +99,7 @@ test "complete specification sessions preserve unit order provenance and conditi
                     break :result .{ .records = records };
                 },
             } };
-            const checked = try g.validate(a, text.validator, fixture.context, unit, response);
+            const checked = (try g.validate(a, text.validator, fixture.context, unit, response)).valid;
             current = try sessions.append(current, checked);
         }
         const identified = try sessions.assemble(a, text.validator, fixture.context, current);
@@ -151,17 +152,17 @@ test "specification units validate every section family without creating IDs or 
     inline for (comptime std.meta.tags(spec.Kind)) |kind| {
         const fields = Fields(kind, value.value);
         const record: spec.RecordProposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), fields), .provenance = value.provenance };
-        const result = try g.validate(a, text.validator, fixture.context, .{ .records = kind }, .{ .content = .{ .records = &.{record} } });
+        const result = (try g.validate(a, text.validator, fixture.context, .{ .records = kind }, .{ .content = .{ .records = &.{record} } })).valid;
         try std.testing.expectEqual(kind, std.meta.activeTag(result.response.content.records[0].content));
         const wire = try @import("domain/model_candidate_json.zig").encode(g.ModelResponse, a, g.ModelResponse.from(result.response));
         try std.testing.expectEqualDeep(result.response, try g.parse(a, wire));
-        _ = try g.validate(a, text.validator, fixture.context, .{ .records = kind }, .{ .content = .{ .records = &.{} } });
-        try std.testing.expectError(error.InvalidSpecificationUnit, g.validate(a, text.validator, fixture.context, .{ .records = kind }, .{ .content = .{ .records = &.{ record, record } } }));
+        _ = (try g.validate(a, text.validator, fixture.context, .{ .records = kind }, .{ .content = .{ .records = &.{} } })).valid;
+        try std.testing.expectEqual(.duplicate_record, (try g.validate(a, text.validator, fixture.context, .{ .records = kind }, .{ .content = .{ .records = &.{ record, record } } })).invalid.rule);
     }
     const brief: g.Response = .{ .content = .{ .brief = .{ .title = value, .description = value, .primary_goal = value } } };
-    _ = try g.validate(a, text.validator, fixture.context, .brief, brief);
-    try std.testing.expectError(error.InvalidSpecificationUnit, g.validate(a, text.validator, fixture.context, .primary_user_story, brief));
-    const question = try g.validate(a, text.validator, fixture.context, .primary_user_story, .{ .clarification = .{ .reason = .ambiguous, .question = try fixture.value("Which renewal limit applies?") } });
+    _ = (try g.validate(a, text.validator, fixture.context, .brief, brief)).valid;
+    try std.testing.expectEqual(.unit_kind, (try g.validate(a, text.validator, fixture.context, .primary_user_story, brief)).invalid.rule);
+    const question = (try g.validate(a, text.validator, fixture.context, .primary_user_story, .{ .clarification = .{ .reason = .ambiguous, .question = try fixture.value("Which renewal limit applies?") } })).valid;
     try std.testing.expectEqual(.clarification, std.meta.activeTag(question.response));
 }
 
@@ -264,7 +265,7 @@ const Fixture = struct {
         const extracted = try extraction.finish(a, inputs, &.{.{ .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = reply } }});
         const context: references.Context = .{ .inputs = inputs, .registry = passive.registry, .current = text.safety.value(passive.owner) };
         const global = try references.summaries(a, try references.initialize(a, inputs, extracted, 2), context);
-        const complete = try references.finish(a, global, try references.global(a, global), context);
+        const complete = (try references.finish(a, global, try references.global(a, global), context)).valid;
         return .{ .allocator = a, .context = .{ .inputs = inputs, .references = complete, .registry = passive.registry, .current = context.current }, .passive = passive };
     }
     fn deinit(self: *Fixture) void {
@@ -293,7 +294,8 @@ test "atomic specification repair preserves siblings and rejects stale or foreig
         var bad = good;
         bad.provenance.claim_ids = &.{.{ .ordinal = 999 }};
         const candidate: repair.Candidate = .{ .response = .{ .content = .{ .brief = .{ .title = good, .description = bad, .primary_goal = good } } } };
-        const authorization = try repair.authorize(a, text.validator, fixture.context, current, candidate);
+        const rejection = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
+        const authorization = try repair.authorize(a, current, candidate, rejection);
         try std.testing.expect(authorization.target == .description);
         const packet = try repair.packet(std.testing.allocator, current, fixture.context, authorization);
         defer packets.release(packet);
@@ -301,20 +303,20 @@ test "atomic specification repair preserves siblings and rejects stale or foreig
         const replacement: repair.Replacement = .{ .attributed = good };
         const wire = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement);
         const parsed = try repair.parse(a, authorization, packet, wire);
-        const merged = try repair.merge(a, current, candidate, authorization, parsed);
+        const merged = try repair.merge(a, current, candidate, authorization, parsed, null);
         try std.testing.expectEqual(@as(u64, 2), merged.revision);
         try std.testing.expectEqualDeep(good, merged.response.content.brief.title);
         try std.testing.expectEqualDeep(good, merged.response.content.brief.primary_goal);
         try std.testing.expectEqualDeep(bad, candidate.response.content.brief.description);
-        _ = try g.validate(a, text.validator, fixture.context, .brief, merged.response);
-        try std.testing.expectError(error.InvalidSpecificationRepair, repair.authorize(a, text.validator, fixture.context, current, merged));
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, current, merged, authorization, parsed));
+        _ = (try g.validate(a, text.validator, fixture.context, .brief, merged.response)).valid;
+        try std.testing.expectError(error.InvalidSpecificationRepair, repair.authorize(a, current, merged, rejection));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, current, merged, authorization, parsed, null));
         var changed = candidate;
         changed.response.content.brief.description = good;
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, current, changed, authorization, parsed));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, current, changed, authorization, parsed, null));
         var foreign = current;
         foreign.feature.bytes = "another-feature";
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, foreign, candidate, authorization, parsed));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, foreign, candidate, authorization, parsed, null));
         try std.testing.expectError(error.InvalidAtomicRepair, repair.packet(a, foreign, fixture.context, authorization));
         var wrong_id = authorization;
         wrong_id.id.bytes = "foreign-repair";
@@ -323,8 +325,8 @@ test "atomic specification repair preserves siblings and rejects stale or foreig
         try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, with_target));
         const with_sibling = try std.fmt.allocPrint(a, "{{\"record\":{{}},{s}", .{wire[1..]});
         try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, with_sibling));
-        const still_invalid = try repair.merge(a, current, candidate, authorization, .{ .attributed = bad });
-        try std.testing.expectError(error.InvalidReferenceReconciliation, g.validate(a, text.validator, fixture.context, .brief, still_invalid.response));
+        const still_invalid = try repair.merge(a, current, candidate, authorization, .{ .attributed = bad }, null);
+        try std.testing.expectEqual(.provenance, (try g.validate(a, text.validator, fixture.context, .brief, still_invalid.response)).invalid.rule);
     }
 }
 
@@ -344,12 +346,13 @@ test "record repair selects one duplicate without changing IDs or valid sibling 
         const replacement_value = try fixture.value("Renewal confirmation is visible.");
         const replacement: spec.RecordProposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), Fields(kind, replacement_value.value)), .provenance = replacement_value.provenance };
         const proposed: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{ record, record } } } };
-        const authorization = try repair.authorize(a, text.validator, fixture.context, current, proposed);
+        const rejection = (try validate_unit.execute(a, current, fixture.context, proposed)).invalid;
+        const authorization = try repair.authorize(a, current, proposed, rejection);
         try std.testing.expectEqual(@as(usize, 1), authorization.target.record);
-        const merged = try repair.merge(a, current, proposed, authorization, .{ .record = replacement });
+        const merged = try repair.merge(a, current, proposed, authorization, .{ .record = replacement }, null);
         try std.testing.expectEqualDeep(record, merged.response.content.records[0]);
-        _ = try g.validate(a, text.validator, fixture.context, .{ .records = kind }, merged.response);
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, current, proposed, authorization, .{ .attributed = value }));
+        _ = (try g.validate(a, text.validator, fixture.context, .{ .records = kind }, merged.response)).valid;
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, current, proposed, authorization, .{ .attributed = value }, null));
     }
 }
 
@@ -423,4 +426,89 @@ test "mandatory content gaps survive positive model review and scenario coverage
             }
         }
     }
+}
+
+test "retained specification rejection distinguishes source binding and preserves sibling origins" {
+    const repair = @import("domain/specification_repair.zig");
+    const candidates = @import("domain/specification_candidate.zig");
+    const sessions = @import("domain/specification_session.zig");
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const initial: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    const correction: Origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 2 } };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.init(a, "A borrower renews a loan.");
+    defer fixture.deinit();
+    const current = try sessions.initialize(.{ .bytes = "selected" }, fixture.context);
+    const good = try fixture.value("A renewal is confirmed.");
+    var bad = good;
+    bad.provenance.claim_ids = &.{.{ .ordinal = 999 }};
+    const candidate: candidates.Candidate = .{ .origins = .{ .initial = initial }, .response = .{ .content = .{ .brief = .{ .title = good, .description = bad, .primary_goal = bad } } } };
+    const rejected = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
+    try std.testing.expectEqual(.provenance, rejected.issue.rule);
+    try std.testing.expectEqual(.InvalidReferenceReconciliation, rejected.issue.native_error.?);
+    try std.testing.expectEqualDeep(initial, rejected.origin.?);
+    try std.testing.expectEqualDeep(bad, rejected.issue.observed.?.attributed);
+    const authorization = try repair.authorize(a, current, candidate, rejected);
+    const merged = try repair.merge(a, current, candidate, authorization, .{ .attributed = good }, correction);
+    const sibling = (try validate_unit.execute(a, current, fixture.context, merged)).invalid;
+    try std.testing.expect(sibling.issue.field.target == .primary_goal);
+    try std.testing.expectEqualDeep(initial, sibling.origin.?);
+    try std.testing.expectEqualDeep(correction, merged.origins.at(.{ .target = .description }).?);
+    try std.testing.expectEqualDeep(initial, merged.origins.at(.{ .target = .title }).?);
+    const unchanged = try repair.merge(a, current, candidate, authorization, .{ .attributed = bad }, correction);
+    const again = (try validate_unit.execute(a, current, fixture.context, unchanged)).invalid;
+    try std.testing.expectEqual(.provenance, again.issue.rule);
+    try std.testing.expectEqualDeep(correction, again.origin.?);
+    for (0..5) |scenario| {
+        var foreign = rejected;
+        switch (scenario) {
+            0 => foreign.owner.specification_unit.feature_id.bytes = "another-feature",
+            1 => foreign.issue.unit = .primary_user_story,
+            2 => foreign.revision += 1,
+            3 => foreign.origin = correction,
+            4 => foreign.issue.observed = .{ .attributed = good },
+            else => unreachable,
+        }
+        try std.testing.expectError(error.InvalidSpecificationRepair, repair.authorize(a, current, candidate, foreign));
+    }
+    var wrong = candidate;
+    wrong.response = .{ .content = .{ .primary_user_story = good } };
+    const wrong_unit = (try validate_unit.execute(a, current, fixture.context, wrong)).invalid;
+    try std.testing.expectEqual(.unit_kind, wrong_unit.issue.rule);
+    try std.testing.expectError(error.InvalidSpecificationRepair, repair.authorize(a, current, wrong, wrong_unit));
+    var stale = fixture.context;
+    stale.references.records.assignments.checked.prior.prior.input.progress.plan.layout.items.state_id.bytes = "foreign-state";
+    try std.testing.expectError(error.InvalidSpecification, validate_unit.execute(a, current, stale, candidate));
+    // Even a candidate with no values cannot mask an inconsistent source corpus.
+    try std.testing.expectError(error.InvalidSpecification, g.validate(a, text.validator, stale, .{ .records = .business_rule }, .{ .content = .{ .records = &.{} } }));
+}
+
+test "retained specification rejection and authorization release allocation failures" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.init(a, "A visitor confirms a reservation.");
+    defer fixture.deinit();
+    const current = try @import("domain/specification_session.zig").initialize(.{ .bytes = "chosen" }, fixture.context);
+    const good = try fixture.value("Reservation confirmation is visible.");
+    var bad = good;
+    bad.provenance.citation_ids = &.{};
+    const candidate: @import("domain/specification_candidate.zig").Candidate = .{ .response = .{ .content = .{ .primary_user_story = bad } } };
+    var story = current;
+    story.completed = 1;
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, rejectionAllocationCase, .{ fixture.context, story, candidate, good });
+}
+fn rejectionAllocationCase(allocator: std.mem.Allocator, context: provenance.Context, current: @import("domain/specification_session.zig").Session, candidate: @import("domain/specification_candidate.zig").Candidate, good: spec.AttributedValue) !void {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const repair = @import("domain/specification_repair.zig");
+    const rejected = (try validate_unit.execute(a, current, context, candidate)).invalid;
+    const diagnostic: @import("domain/candidate_validation_diagnostic.zig").Diagnostic = .{ .specification = rejected };
+    _ = try diagnostic.copy(a);
+    const authorization = try repair.authorize(a, current, candidate, rejected);
+    const merged = try repair.merge(a, current, candidate, authorization, .{ .attributed = good }, null);
+    try std.testing.expect((try validate_unit.execute(a, current, context, merged)) == .valid);
 }

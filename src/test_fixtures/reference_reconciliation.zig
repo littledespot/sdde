@@ -56,14 +56,17 @@ pub fn summaries(allocator: std.mem.Allocator, initial: r.Progress, context: Con
         if (input.purpose == .global) return input;
         const bytes = try @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .summary = try summary(allocator, input) });
         const parsed = try parse.execute(allocator, .{ .input = input, .bytes = bytes });
-        progress = try build_summary.execute(allocator, try assign_summary.execute(allocator, try validate_summary.execute(allocator, parsed, context)));
+        progress = try build_summary.execute(allocator, try assign_summary.execute(allocator, (try validate_summary.execute(allocator, parsed, context)).valid));
     }
 }
-pub fn finish(allocator: std.mem.Allocator, input: r.Input, proposal: r.Proposal, context: Context) !r.Accounted {
+pub fn finish(allocator: std.mem.Allocator, input: r.Input, proposal: r.Proposal, context: Context) !r.diagnostic.Result(r.Accounted) {
     const bytes = try @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .global = proposal });
     const parsed = try parse.execute(allocator, .{ .input = input, .bytes = bytes });
     const dispositions = try validate_dispositions.execute(allocator, parsed);
-    const signals = try validate_signals.execute(allocator, dispositions, context);
-    const conflicts = try validate_conflicts.execute(allocator, signals, context);
-    return account.execute(allocator, try build_records.execute(allocator, try assign_records.execute(allocator, conflicts)));
+    if (dispositions == .invalid) return .{ .invalid = dispositions.invalid };
+    const signals = try validate_signals.execute(allocator, dispositions.valid, context);
+    if (signals == .invalid) return .{ .invalid = signals.invalid };
+    const conflicts = try validate_conflicts.execute(allocator, signals.valid, context);
+    if (conflicts == .invalid) return .{ .invalid = conflicts.invalid };
+    return .{ .valid = try account.execute(allocator, try build_records.execute(allocator, try assign_records.execute(allocator, conflicts.valid))) };
 }

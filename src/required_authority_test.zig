@@ -203,7 +203,7 @@ test "Specify projects registered native fields and complete reference obligatio
     const reference = try @import("reference_reconciliation_test.zig").prepare(allocator, &.{"Display `Hello, World!`.\n"});
     defer reference.deinit();
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
-    const accounted = try f.finish(allocator, final, try f.global(allocator, final), reference.context());
+    const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
     const project: @import("actions/authority/build_specification_authority_requirements.zig").Action = .{};
     const before = try project.execute(allocator, .{ .bytes = "hello-world" }, accounted, null, null);
     try std.testing.expectEqual(@as(usize, 11), before.seeds.len); // Eight mandatory slots, two signals, one exact value.
@@ -249,7 +249,7 @@ test "reference support must name current accounted signals with no foreign or d
     const reference = try @import("reference_reconciliation_test.zig").prepare(allocator, &.{"Display the catalogue.\n"});
     defer reference.deinit();
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
-    const accounted = try f.finish(allocator, final, try f.global(allocator, final), reference.context());
+    const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
     var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "catalogue" }, accounted, null, null);
     const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);
     for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };
@@ -276,7 +276,7 @@ test "reference conflicts cannot be dropped or resolved by supplied evidence" {
     const reference = try @import("reference_reconciliation_test.zig").prepare(allocator, &.{ "Confirm immediately.\n", "Request approval first.\n" });
     defer reference.deinit();
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
-    const accounted = try f.finish(allocator, final, try @import("reference_reconciliation_test.zig").conflicting(allocator, final), reference.context());
+    const accounted = (try f.finish(allocator, final, try @import("reference_reconciliation_test.zig").conflicting(allocator, final), reference.context())).valid;
     var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "library" }, accounted, null, null);
     try std.testing.expectEqual(@as(usize, 1), inputs.forced_gaps.len);
     const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);

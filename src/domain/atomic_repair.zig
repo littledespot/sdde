@@ -49,16 +49,21 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Rule
             return json.decodeSelected(Replacement, a, std.meta.activeTag(authorization.expected), bytes);
         }
 
+        /// Exact native old-value equality shared by authorization and merge.
+        pub fn equal(a: std.mem.Allocator, left: Replacement, right: Replacement) std.mem.Allocator.Error!bool {
+            const l = try std.json.Stringify.valueAlloc(a, left, .{});
+            defer a.free(l);
+            const r = try std.json.Stringify.valueAlloc(a, right, .{});
+            defer a.free(r);
+            return std.mem.eql(u8, l, r);
+        }
+
         /// Validate the exact authorized old value before the domain applies the
         /// replacement. Semantic acceptance still requires the original validators.
         pub fn checkMerge(a: std.mem.Allocator, owner: identity.ImmutableUnitOwnerId, revision: u64, current: Replacement, authorization: Authorization, replacement: Replacement) Error!u64 {
             if (!identity.unitOwnerEql(owner, authorization.owner) or revision != authorization.revision or
                 std.meta.activeTag(replacement) != std.meta.activeTag(authorization.expected)) return error.InvalidAtomicRepair;
-            const old = try std.json.Stringify.valueAlloc(a, current, .{});
-            defer a.free(old);
-            const expected = try std.json.Stringify.valueAlloc(a, authorization.expected, .{});
-            defer a.free(expected);
-            if (!std.mem.eql(u8, old, expected)) return error.InvalidAtomicRepair;
+            if (!try equal(a, current, authorization.expected)) return error.InvalidAtomicRepair;
             return std.math.add(u64, revision, 1) catch error.InvalidAtomicRepair;
         }
     };

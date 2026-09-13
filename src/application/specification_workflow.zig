@@ -60,7 +60,8 @@ pub const Collect = struct {
         const packet = values.read(&input.step.data, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .raw = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), packet, (try @import("model_candidate_handoff.zig").read(&input.step.data)).body) catch return error.OperationExecutionFailed };
+        const source = try @import("model_candidate_handoff.zig").read(&input.step.data);
+        owner.payload = .{ .raw = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), packet, source.body, source.origin) catch return error.OperationExecutionFailed };
         return publish(self.allocator, raw_schema, owner, .ok);
     }
 };
@@ -74,7 +75,7 @@ pub const Parse = struct {
         const source = owned.read(&input.step.data, raw_schema, .raw) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .parsed = .{ .response = self.action.execute(owner.arena.allocator(), source) catch |err| return reject(self.allocator, parsed_schema, owner, err) } };
+        owner.payload = .{ .parsed = .{ .response = self.action.execute(owner.arena.allocator(), source.body) catch |err| return reject(self.allocator, parsed_schema, owner, err), .origins = .{ .initial = source.origin } } };
         return publish(self.allocator, parsed_schema, owner, .ok);
     }
 };
@@ -88,9 +89,13 @@ pub const Validate = struct {
         const proposed = owned.read(&input.step.data, parsed_schema, .parsed) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        const checked = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), try readContext(&input.step.data), proposed.response) catch |err| return reject(self.allocator, checked_schema, owner, err);
-        owner.payload = .{ .checked = checked };
-        return publish(self.allocator, checked_schema, owner, if (checked.response == .clarification) .needs_user else .ok);
+        const checked = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), try readContext(&input.step.data), proposed) catch return error.OperationExecutionFailed;
+        if (checked == .invalid) {
+            owner.payload = .{ .unit_rejected = checked.invalid };
+            return publish(self.allocator, checked_schema, owner, .invalid);
+        }
+        owner.payload = .{ .checked = checked.valid };
+        return publish(self.allocator, checked_schema, owner, if (checked.valid.response == .clarification) .needs_user else .ok);
     }
 };
 pub const Advance = struct {
@@ -166,6 +171,6 @@ fn publish(allocator: std.mem.Allocator, schema: data.Schema, owner: *owned.Owne
 }
 fn reject(allocator: std.mem.Allocator, schema: data.Schema, owner: *owned.Owner, err: g.Error) operations.Error!execution.Candidate {
     if (err == error.OutOfMemory) return error.OperationExecutionFailed;
-    owner.payload = .{ .rejected = .invalid_unit };
+    owner.payload = .rejected;
     return publish(allocator, schema, owner, .invalid);
 }

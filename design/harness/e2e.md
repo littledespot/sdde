@@ -149,9 +149,10 @@ Schema failures retain `schema_error.reason` and `schema_error.path`, an escaped
 JSON Pointer (for example `/statements/0/content/kind`), in the same event,
 report and terminal outputs. The engine's validator supplies this diagnostic;
 the harness does not infer or revalidate it. Protocol retries include the full
-rejected response as untrusted evidence, the original schema, and examples
-generated from that schema. Empty permitted arrays no longer hide item shapes
-in syntax examples; schema errors show the expected shape's alternatives.
+rejected response as untrusted evidence and the original complete schema.
+Schema corrections add the exact expected schema node, its JSON Pointer and
+parent/value scope, including bounds and alternatives. Syntax corrections add
+the decoder diagnostic. Neither synthesizes a candidate example.
 
 `evaluated` and exit 0 mean generation, publication checks and a scored evaluation
 completed. A low score is still a completed evaluation; inspect `score_percent`
@@ -170,6 +171,22 @@ They can differ from `last_model_*`. Repair preserves untouched siblings' origin
 The event stream and terminal consume the engine diagnostic; they do not infer
 the cause or reparse the response. Unknown, missing and reversed selections use
 the existing atomic replacement path; stale source authority cannot enter it.
+
+Reconciliation failures retain their partition, affected record/collection, rule,
+observed/expected constraint, revision and origin. Specification failures retain
+the native field/record failure before repair authorization. Both reach the same
+`candidate_error` projection. Authorizers consume retained native rejections,
+check owner/revision/origin/old-value association and never rediscover domain rules.
+Reconciliation rejection currently terminates as `invalid`; later rollout phases
+add its authorized correction path.
+
+Step events place actual-call identity, output and token usage in `exchange`,
+and rejected-candidate identity/output in `candidate_source`. A candidate can
+come from an older call. Missing, ambiguous or foreign joins fail evidence
+capture. Reports retain `terminal_step` and the typed `terminal_rejection`
+independently of `last_model_*`; unavailable output text is stated explicitly.
+These are opt-in harness diagnostics. Production metadata logging does not gain
+raw prompts, source text or candidate values.
 
 For reliability assessment, repeat the same selected case using
 `scripts/e2e-spec.sh --case <workflow.case.json>` with a fixed engine build,

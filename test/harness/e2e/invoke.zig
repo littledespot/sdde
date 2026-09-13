@@ -67,6 +67,10 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     // One production invocation. The observer forwards every selection, step
     // and HTTPS exchange unchanged, retaining diagnostic evidence as it occurs.
     const result = @import("../../../src/application/workflow_engine_orchestrator.zig").run(trace.port());
+    if (trace.failure != null or result.executionStatus() != .ok) {
+        if (trace.last_step) |step| report.terminal_step = try allocator.dupe(u8, step.bytes);
+        if (result == .execution_rejected) report.terminal_rejection = c.TerminalRejection.fromNative(result.execution_rejected);
+    }
     if (trace.calls != 0) {
         report.last_model_call = trace.calls;
         if (trace.output_written) report.last_model_output = try @import("../evidence.zig").Store.path(allocator, .generation, trace.calls, .model_output);

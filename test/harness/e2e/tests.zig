@@ -323,6 +323,7 @@ test "failure reports preserve separate engine provider and model evidence" {
         .json_error = .{ .reason = .SyntaxError, .location = .{ .byte_offset = 9, .line = 2, .column = 8 } },
         .schema_error = .{ .reason = .missing_required_property, .path = "/statements/0/content/kind" },
         .candidate_error = .{ .token_classifications = .{
+            .observed = &.{},
             .scope = .{ .state_id = .{ .bytes = "current-state" }, .chunk_id = .{ .bytes = "chunk-2" } },
             .revision = 3,
             .issues = .{ .missing = &.{.{ .source_id = .{ .ordinal = 2 }, .extractor_id = .markdown_inline_code_v1, .ordinal = 7 }}, .duplicate = &.{}, .unknown = &.{}, .forbidden = &.{} },
@@ -418,6 +419,7 @@ test "source selection reports retain the producing call separately from the las
         .started_at_utc = "2026-09-12T00:00:00Z",
         .status = .workflow_failed,
         .candidate_error = .{ .source_selections = .{
+            .observed = &.{},
             .scope = .{ .state_id = .{ .bytes = "current-state" }, .chunk_id = .{ .bytes = "chunk-2" } },
             .revision = 3,
             .claim_index = 2,
@@ -481,4 +483,113 @@ test "input failure report explains environment setup and escapes untrusted labe
     try std.testing.expect(std.mem.indexOf(u8, view, "Workflow outcome: not_run") != null);
     try std.testing.expect(std.mem.indexOf(u8, view, "<script>") == null);
     try std.testing.expect(std.mem.indexOf(u8, view, "\\[click\\]") != null);
+}
+
+test "step events keep the newer exchange usage separate from an older rejected candidate" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const obs = @import("observation.zig");
+    const Origin = @import("../../../src/domain/model_candidate_origin.zig").Origin;
+    const original: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const repair: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    const Usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage;
+    var calls = [_]obs.Call{
+        .{ .origin = original, .step = "extract", .usage = Usage.init(100, 20, 120).?, .output_available = true },
+        .{ .origin = repair, .step = "repair", .output_available = true },
+    };
+    var report: c.Report = .{
+        .started_at_utc = "",
+        .status = .workflow_failed,
+        .last_model_origin = repair,
+        .last_model_usage = Usage.init(300, 40, 340).?,
+        .candidate_error = .{ .source_selections = .{
+            .observed = &.{},
+            .scope = .{ .state_id = .{ .bytes = "state" }, .chunk_id = .{ .bytes = "chunk" } },
+            .revision = 1,
+            .claim_index = 0,
+            .origin = original,
+            .issue = .{ .reason = .unknown_selection, .index = 0, .rejected = .{ .first = .{ .ordinal = 99 }, .last = .{ .ordinal = 99 } }, .available = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 7 } } },
+        } },
+    };
+    try obs.correlate(a, &calls, &report);
+    try std.testing.expectEqual(@as(usize, 2), report.last_model_call.?);
+    try std.testing.expectEqual(@as(usize, 1), report.candidate_model_call.?);
+    try std.testing.expectEqualStrings("repair", report.last_model_step.?);
+    try std.testing.expectEqualStrings("extract", report.candidate_model_step.?);
+    try std.testing.expectEqual(@as(u64, 340), report.last_model_usage.?.total_tokens);
+    const event = try @import("trace.zig").Trace.stepEvent(a, 91, .{ .bytes = "validate-selections" }, .{ .outcome = .invalid }, report);
+    const tree = try std.json.parseFromSlice(std.json.Value, a, event, .{});
+    const exchange = tree.value.object.get("exchange").?.object;
+    const candidate = tree.value.object.get("candidate_source").?.object;
+    try std.testing.expectEqual(@as(i64, 2), exchange.get("call").?.integer);
+    try std.testing.expectEqual(@as(i64, 1), candidate.get("call").?.integer);
+    try std.testing.expectEqual(@as(i64, 340), exchange.get("usage").?.object.get("total_tokens").?.integer);
+    try std.testing.expect(!tree.value.object.contains("model_call"));
+    try std.testing.expect(!tree.value.object.contains("usage"));
+    // A later deterministic failure keeps its own step after request retirement.
+    report.last_model_usage = null;
+    report.last_model_origin = null;
+    report.terminal_step = "validate-accounting";
+    report.terminal_rejection = .{ .kind = .operation_failed };
+    try obs.correlate(a, &calls, &report);
+    try std.testing.expectEqual(@as(u64, 340), report.last_model_usage.?.total_tokens);
+    for ([_][]const u8{ try @import("report.zig").renderMarkdown(a, report), try @import("report.zig").terminal(a, report, "runs", "sample") }) |rendered| {
+        try std.testing.expect(std.mem.indexOf(u8, rendered, "validate-accounting") != null);
+        try std.testing.expect(std.mem.indexOf(u8, rendered, "operation_failed") != null);
+    }
+    // Correlation cannot fill missing evidence by assuming the latest call.
+    calls[0].output_available = false;
+    try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
+    calls[0].output_available = true;
+    report.candidate_error.?.source_selections.origin.?.attempt.value = 9;
+    try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
+    report.candidate_error.?.source_selections.origin = null;
+    try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
+    report.candidate_error = null;
+    calls[0].origin = repair;
+    try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
+}
+
+test "reports preserve native reconciliation and specification failures after source release" {
+    const reference_fixture = @import("../../../src/reference_reconciliation_test.zig");
+    const references = @import("../../../src/test_fixtures/reference_reconciliation.zig");
+    const Diagnostic = @import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic;
+    const Origin = @import("../../../src/domain/model_candidate_origin.zig").Origin;
+    const origin: Origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 2 } };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var retained: [2]Diagnostic = undefined;
+    {
+        var source: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer source.deinit();
+        const scratch = source.allocator();
+        const input = try reference_fixture.prepare(scratch, &.{ "Confirm a reservation.\n", "Renew a loan.\n" });
+        defer input.deinit();
+        const global = try references.summaries(scratch, try references.initialize(scratch, input.inputs, input.extracted, 2), input.context());
+        const proposal = try references.global(scratch, global);
+        var bad = proposal;
+        bad.claim_dispositions = proposal.claim_dispositions[1..];
+        const rejected = (try references.validate_dispositions.execute(scratch, .{ .input = global, .proposal = .{ .global = bad }, .source = .{ .origin = origin } })).invalid;
+        retained[0] = try (Diagnostic{ .reconciliation = rejected }).copy(a);
+        const accounted = (try references.finish(scratch, global, proposal, input.context())).valid;
+        const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = input.inputs, .references = accounted, .registry = input.context().registry, .current = input.context().current };
+        var current = try @import("../../../src/domain/specification_session.zig").initialize(.{ .bytes = "chosen" }, context);
+        current.completed = 1;
+        const action = @import("../../../src/actions/specification/validate_specification_unit.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
+        const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .primary_user_story = .{ .value = .{ .normalized = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} } }, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .citation_ids = &.{}, .clarification_response_ids = &.{} } } } } })).invalid;
+        retained[1] = try (Diagnostic{ .specification = spec }).copy(a);
+    }
+    for (retained) |diagnostic| {
+        const report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };
+        const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
+        try std.testing.expectEqualDeep(report, decoded);
+        try std.testing.expectEqualDeep(origin, decoded.candidate_error.?.origin().?);
+        const bytes = try std.json.Stringify.valueAlloc(a, diagnostic, .{});
+        for ([_][]const u8{ try @import("report.zig").renderMarkdown(a, decoded), try @import("report.zig").terminal(a, decoded, "runs", "case") }) |output| {
+            try std.testing.expect(std.mem.indexOf(u8, output, bytes) != null);
+            try std.testing.expect(std.mem.indexOf(u8, output, "native-validation") != null);
+        }
+    }
 }

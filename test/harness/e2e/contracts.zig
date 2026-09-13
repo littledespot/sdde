@@ -63,6 +63,21 @@ pub const Status = enum {
     evaluator_failed,
     quality_unresolved,
 };
+
+/// Serializable projection of a native rejection; no inferred domain verdict.
+pub const TerminalRejection = struct {
+    kind: std.meta.Tag(@import("../../../src/domain/workflow_execution.zig").Rejection),
+    detail: ?[]const u8 = null,
+
+    pub fn fromNative(value: @import("../../../src/domain/workflow_execution.zig").Rejection) TerminalRejection {
+        return .{ .kind = std.meta.activeTag(value), .detail = switch (value) {
+            .gate => |reason| @tagName(reason),
+            .logging => |reason| @tagName(reason),
+            .token_budget => |reason| @errorName(reason),
+            .authority, .operation_failed, .cancelled, .deadline_exhausted, .retry_limit => null,
+        } };
+    }
+};
 pub const Report = struct {
     schema: []const u8 = "spec-e2e-report/v1",
     origin: enum { live } = .live,
@@ -73,8 +88,11 @@ pub const Report = struct {
     workflow_id: ?[]const u8 = null,
     status: Status,
     workflow_outcome: ?@import("../../../src/domain/workflow.zig").OutcomeTag = null,
+    terminal_step: ?[]const u8 = null,
+    terminal_rejection: ?TerminalRejection = null,
     model_calls: usize = 0,
     last_model_step: ?[]const u8 = null,
+    last_model_origin: ?@import("../../../src/domain/model_candidate_origin.zig").Origin = null,
     models: []const evaluator.GenerationModel = &.{},
     total_tokens: u128 = 0,
     last_model_usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage = null,

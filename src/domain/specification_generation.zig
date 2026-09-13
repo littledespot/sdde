@@ -19,7 +19,9 @@ pub const Content = union(enum) {
     records: []const spec.RecordProposal,
 };
 pub const Response = union(enum) { content: Content, clarification: Need };
-pub const Checked = struct { unit: Unit, response: Response };
+pub const Checked = struct { unit: Unit, response: Response, origins: candidate.Origins = .{} };
+const candidate = @import("specification_candidate.zig");
+pub const Validation = union(enum) { valid: Checked, invalid: candidate.Issue };
 
 /// Compact model result, without the native IR's content wrapper.
 pub const ModelResponse = union(enum) {
@@ -52,35 +54,36 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!Response {
     };
 }
 
-pub fn validate(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: Response) Error!Checked {
+pub fn validate(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: Response) Error!Validation {
+    try provenance.bind(allocator, validator, context);
     var result = proposed;
     switch (proposed) {
         .clarification => |need| {
-            result.clarification.question = try provenance.attributed(allocator, validator, context, need.question);
+            result.clarification.question = provenance.attributed(allocator, validator, context, need.question) catch |err| return rejected(unit, .clarification_question, .{ .attributed = need.question }, err);
         },
         .content => |content| {
-            if (@intFromEnum(std.meta.activeTag(unit)) != @intFromEnum(std.meta.activeTag(content))) return error.InvalidSpecificationUnit;
+            if (@intFromEnum(std.meta.activeTag(unit)) != @intFromEnum(std.meta.activeTag(content))) return .{ .invalid = .{ .unit = unit, .field = .unit, .rule = .unit_kind, .observed = null } };
             switch (content) {
                 .brief => |brief| result.content.brief = .{
-                    .title = try provenance.attributed(allocator, validator, context, brief.title),
-                    .description = try provenance.attributed(allocator, validator, context, brief.description),
-                    .primary_goal = try provenance.attributed(allocator, validator, context, brief.primary_goal),
+                    .title = provenance.attributed(allocator, validator, context, brief.title) catch |err| return rejected(unit, .{ .target = .title }, .{ .attributed = brief.title }, err),
+                    .description = provenance.attributed(allocator, validator, context, brief.description) catch |err| return rejected(unit, .{ .target = .description }, .{ .attributed = brief.description }, err),
+                    .primary_goal = provenance.attributed(allocator, validator, context, brief.primary_goal) catch |err| return rejected(unit, .{ .target = .primary_goal }, .{ .attributed = brief.primary_goal }, err),
                 },
-                .primary_user_story => |story| result.content.primary_user_story = try provenance.attributed(allocator, validator, context, story),
-                .entities => |entities| result.content.entities.basis = try provenance.attributed(allocator, validator, context, entities.basis),
+                .primary_user_story => |story| result.content.primary_user_story = provenance.attributed(allocator, validator, context, story) catch |err| return rejected(unit, .{ .target = .story }, .{ .attributed = story }, err),
+                .entities => |entities| result.content.entities.basis = provenance.attributed(allocator, validator, context, entities.basis) catch |err| return rejected(unit, .{ .target = .entity_basis }, .{ .attributed = entities.basis }, err),
                 .records => |records| {
                     const checked = try allocator.alloc(spec.RecordProposal, records.len);
                     for (records, checked, 0..) |record, *accepted, index| {
-                        if (std.meta.activeTag(record.content) != unit.records) return error.InvalidSpecificationUnit;
-                        accepted.* = try provenance.record(allocator, validator, context, record);
-                        for (checked[0..index]) |prior| if (try equalContent(allocator, prior.content, accepted.content)) return error.InvalidSpecificationUnit;
+                        if (std.meta.activeTag(record.content) != unit.records) return .{ .invalid = .{ .unit = unit, .field = .{ .target = .{ .record = index } }, .rule = .record_kind, .observed = .{ .record = record } } };
+                        accepted.* = provenance.record(allocator, validator, context, record) catch |err| return rejected(unit, .{ .target = .{ .record = index } }, .{ .record = record }, err);
+                        for (checked[0..index]) |prior| if (try equalContent(allocator, prior.content, accepted.content)) return .{ .invalid = .{ .unit = unit, .field = .{ .target = .{ .record = index } }, .rule = .duplicate_record, .observed = .{ .record = record } } };
                     }
                     result.content.records = checked;
                 },
             }
         },
     }
-    return .{ .unit = unit, .response = result };
+    return .{ .valid = .{ .unit = unit, .response = result } };
 }
 
 /// Equality over normalized typed content, never a second rendered text source.
@@ -90,4 +93,20 @@ pub fn equalContent(allocator: std.mem.Allocator, a: spec.Content(spec.BusinessV
     const right = try std.json.Stringify.valueAlloc(allocator, b, .{});
     defer allocator.free(right);
     return std.mem.eql(u8, left, right);
+}
+
+fn rejected(unit: Unit, field: candidate.Field, observed: candidate.Replacement, err: provenance.Error) Error!Validation {
+    const native: @FieldType(candidate.Issue, "native_error") = switch (err) {
+        error.InvalidSpecification => .InvalidSpecification,
+        error.InvalidReferenceReconciliation => .InvalidReferenceReconciliation,
+        error.InvalidSourceCitation => .InvalidSourceCitation,
+        error.InvalidTypedText => .InvalidTypedText,
+        error.UnboundPathReference => .UnboundPathReference,
+        error.InvalidPassiveLiteral => .InvalidPassiveLiteral,
+        else => return err,
+    };
+    return .{ .invalid = .{ .unit = unit, .field = field, .observed = observed, .native_error = native, .rule = switch (native.?) {
+        .InvalidSpecification, .InvalidReferenceReconciliation, .InvalidSourceCitation => .provenance,
+        .InvalidTypedText, .UnboundPathReference, .InvalidPassiveLiteral => .typed_text,
+    } } };
 }

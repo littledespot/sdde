@@ -7,7 +7,9 @@ Scope: chunk 00 of [TODO_FIX_001.md](TODO_FIX_001.md#phase-0--establish-the-shar
 using [FIX_001 §§4 and 6](FIX_001.md#4-detailed-causes-and-ownership).
 This document records implementation decisions, acceptance cases and amendment
 approvals. Governing wording lives in `design/design.md`; this review introduces
-no runtime contracts and establishes no test or live-run pass.
+no runtime contracts and establishes no test or live-run pass. Subsequent
+implementation evidence is recorded in the [Phase 1 delivery log](TODO_FIX_001.md#phase-1-delivery-and-verification--13-september-2026); the boundary table below
+retains the source state reviewed for Phase 0.
 
 ## 1. Outcome, authority and ownership
 
@@ -403,14 +405,15 @@ execution context and observations remain separate.
 
 | Gate | Status | Dependent work |
 | --- | --- | --- |
-| A1–A2 | Explicitly approved on 13 September 2026 and applied to design §§12.5/22.6. | Approval gate cleared for chunk 01; implementation and its tests remain pending. |
+| A1–A2 | Explicitly approved on 13 September 2026 and applied to design §§12.5/22.6. | Chunk 01 implemented and verified offline; see the Phase 1 delivery log. |
 | A3 | Explicitly approved on 13 September 2026 and applied to design §17.3. | Approval gate cleared for chunk 06's model-facing spec/support provenance change; implementation and its tests remain pending. |
 | G1 | Fail-closed target policy selected; no cross-record exception approved. | Only a concrete repair requiring an unestablished semantic survivor or inseparable multi-record write. |
 | G2 | Authentication mechanism still unselected under H-011. | Acceptance of new edited answers, not read-only form protection or an authority-complete baseline. |
 
 Phase 0's contract review and required amendment approvals are complete. G1 and
 G2 remain explicit gates for the affected later work; no exception or authentication
-mechanism was approved. Chunks 01–21 remain pending. If an intended fix exceeds
+mechanism was approved. Chunks 01–04 are implemented and verified offline;
+chunks 05–21 remain pending. If an intended fix exceeds
 the approved governing wording, obtain the specific missing decision rather than
 broadening this document into new authority.
 

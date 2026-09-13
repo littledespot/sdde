@@ -26,11 +26,15 @@ pub const Authorize = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, extraction.text_schema, .text_validated);
-        const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch return error.OperationExecutionFailed;
-        const candidates = values.read(&input.step.data, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch return error.OperationExecutionFailed;
+        const rejected = values.read(&input.step.data, extraction.selections_schema, reference.Value) catch return error.OperationExecutionFailed;
+        const rejection: repair.Rejection = switch (rejected.payload().*) {
+            .token_classification_rejected => |diagnostic| .{ .token_classifications = diagnostic },
+            .citation_rejected => |diagnostic| .{ .source_selections = diagnostic },
+            else => return error.OperationExecutionFailed,
+        };
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .authorization = self.action.execute(owner.arena.allocator(), source.*, candidates.*, prior.payload().text_validated) catch |err| return reject(self.allocator, authorization_schema, owner, err) };
+        owner.payload = .{ .authorization = self.action.execute(owner.arena.allocator(), prior.payload().text_validated, rejection) catch |err| return reject(self.allocator, authorization_schema, owner, err) };
         return owned.publish(self.allocator, authorization_schema, owner, .ok) catch error.OperationExecutionFailed;
     }
 };

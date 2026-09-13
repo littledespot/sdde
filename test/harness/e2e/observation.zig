@@ -13,7 +13,6 @@ pub const LastModelRejection = struct {
     reason: ?[]const u8 = null,
     json_error: @FieldType(c.Report, "json_error") = null,
     schema_error: @FieldType(c.Report, "schema_error") = null,
-    usage: @FieldType(c.Report, "last_model_usage") = null,
 
     pub fn deinit(self: *LastModelRejection, allocator: std.mem.Allocator) void {
         if (self.reason) |reason| allocator.free(reason);
@@ -33,7 +32,7 @@ pub const LastModelRejection = struct {
         errdefer if (shape) |value| allocator.free(value.path);
         const json_error = if (report.json_error) |value| try value.copy(allocator) else null;
         self.deinit(allocator);
-        self.* = .{ .call = call, .reason = reason, .json_error = json_error, .schema_error = shape, .usage = report.last_model_usage };
+        self.* = .{ .call = call, .reason = reason, .json_error = json_error, .schema_error = shape };
     }
 
     pub fn project(self: *const LastModelRejection, allocator: std.mem.Allocator, call: usize, report: *c.Report) !void {
@@ -48,7 +47,6 @@ pub const LastModelRejection = struct {
         report.model_diagnostic = retained;
         report.json_error = json_error;
         report.schema_error = shape;
-        report.last_model_usage = self.usage;
     }
 };
 
@@ -63,7 +61,6 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
         const services = runner.model_provider_services orelse return error.MissingProviderEvidence;
         for (ledger.accounted_operations.items) |id| {
             const record = accounting.current_operations.record(id) orelse return error.MissingProviderEvidence;
-            report.last_model_step = try allocator.dupe(u8, record.binding_id.operation_id.workflow_step_id.bytes);
             const entry = services.registry().resolveId(record.binding_id.registry_entry_id) orelse return error.MissingProviderEvidence;
             const slot = record.binding_id.slot_id.bytes;
             const found = for (used.items) |model| {
@@ -84,15 +81,13 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
         var found = false;
         for (ledger.accounted_operations.items) |id| if (origin.matches(identities, id)) {
             if (found) return error.MissingProviderEvidence;
-            const record = accounting.current_operations.record(id) orelse return error.MissingProviderEvidence;
-            report.candidate_model_step = try allocator.dupe(u8, record.binding_id.operation_id.workflow_step_id.bytes);
+            _ = accounting.current_operations.record(id) orelse return error.MissingProviderEvidence;
             found = true;
         };
         if (!found) return error.MissingProviderEvidence;
     };
     if (view.slots[@intFromEnum(requests.prepared_schema.key)] != null) {
         const request = try requests.readCurrent(&view, requests.prepared_schema);
-        report.last_model_step = try allocator.dupe(u8, request.binding().operation_id.workflow_step_id.bytes);
         const binding = request.binding();
         const found = for (used.items) |model| {
             if (std.mem.eql(u8, model.slot, binding.slot_id.bytes)) break true;
@@ -107,6 +102,8 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
             const result = try values.read(&view, observation.schema, observation.Result);
             if (result.operationId().model_request_id == request.id()) switch (result.outcome()) {
                 .validated => |evidence| {
+                    const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
+                    report.last_model_origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, result.operationId()) orelse return error.MissingProviderEvidence;
                     report.last_model_usage = evidence.usage();
                     switch (evidence.result()) {
                         .failed => |failure| report.provider_diagnostic = @tagName(failure.cause),
@@ -153,4 +150,56 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
         }
     }
     report.models = try used.toOwnedSlice(allocator);
+}
+
+/// Captured exchange metadata. Trace owns step bytes; projections copy them.
+pub const Call = struct {
+    origin: @import("../../../src/domain/model_candidate_origin.zig").Origin,
+    step: []const u8,
+    usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage = null,
+    output_available: bool = false,
+};
+
+/// Join only exact native associations. A prepared request or a retained older
+/// candidate never supplies the latest exchange's identity or token usage.
+pub fn correlate(a: std.mem.Allocator, calls: []Call, report: *c.Report) !void {
+    if (report.last_model_usage) |usage| {
+        const origin = report.last_model_origin orelse return error.MissingRequestEvidence;
+        calls[try findCall(calls, origin)].usage = usage;
+    }
+    if (calls.len != 0) {
+        const last = calls[calls.len - 1];
+        _ = try findCall(calls, last.origin);
+        report.last_model_call = calls.len;
+        report.last_model_step = try a.dupe(u8, last.step);
+        report.last_model_origin = last.origin;
+        report.last_model_usage = last.usage;
+        report.last_model_output = if (last.output_available) try @import("../evidence.zig").Store.path(a, .generation, calls.len, .model_output) else null;
+    } else {
+        report.last_model_step = null;
+        report.last_model_call = null;
+        report.last_model_origin = null;
+        report.last_model_usage = null;
+        report.last_model_output = null;
+    }
+    report.candidate_model_call = null;
+    report.candidate_model_step = null;
+    report.candidate_model_output = null;
+    const diagnostic = report.candidate_error orelse return;
+    const origin = diagnostic.origin() orelse return error.MissingRequestEvidence;
+    const index = try findCall(calls, origin);
+    const source = calls[index];
+    if (!source.output_available) return error.MissingRequestEvidence;
+    report.candidate_model_call = index + 1;
+    report.candidate_model_step = try a.dupe(u8, source.step);
+    report.candidate_model_output = try @import("../evidence.zig").Store.path(a, .generation, index + 1, .model_output);
+}
+
+fn findCall(calls: []const Call, origin: @import("../../../src/domain/model_candidate_origin.zig").Origin) !usize {
+    var found: ?usize = null;
+    for (calls, 0..) |candidate, index| if (std.meta.eql(candidate.origin, origin)) {
+        if (found != null) return error.MissingRequestEvidence;
+        found = index;
+    };
+    return found orelse error.MissingRequestEvidence;
 }

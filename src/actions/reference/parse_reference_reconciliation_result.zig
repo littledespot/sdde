@@ -8,6 +8,6 @@ pub const Action = struct {
             .summary => .summary,
             .global => .global,
         }, raw.bytes) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
-        return .{ .input = raw.input, .proposal = proposal };
+        return .{ .source = raw.source, .input = raw.input, .proposal = proposal };
     }
 };

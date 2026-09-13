@@ -306,8 +306,20 @@ test "citation repair changes only the selected reference and retains exact diag
         entries[0].outcome = .{ .claims = &.{claim} };
         const candidate = try text_fixture.check(a, inputs, .{ .entries = entries });
         const available = try token_fixture.candidates(a, inputs);
-        const authorization = try repair.authorize(a, inputs, available, candidate);
+        const rejection = (try @import("domain/reference_selection_validation.zig").validate(a, inputs, available, candidate)).source_selections;
+        const authorization = try repair.authorize(a, candidate, .{ .source_selections = rejection });
         try std.testing.expectEqual(@as(usize, 1), authorization.target.citation.citation_index);
+        for (0..4) |scenario| {
+            var foreign_rejection = rejection;
+            switch (scenario) {
+                0 => foreign_rejection.scope.state_id.bytes = "foreign-state",
+                1 => foreign_rejection.revision += 1,
+                2 => foreign_rejection.origin = repair_origin,
+                3 => foreign_rejection.observed = &.{good},
+                else => unreachable,
+            }
+            try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, candidate, .{ .source_selections = foreign_rejection }));
+        }
         const before = (try validate.execute(a, inputs, try token_fixture.prepare(a, inputs, candidate))).invalid;
         try std.testing.expectEqualDeep(original_origin, before.origin.?);
         const context = try text_fixture.prepare(a, inputs);
@@ -328,7 +340,7 @@ test "citation repair changes only the selected reference and retains exact diag
         try std.testing.expectEqual(@as(usize, 2), remaining.issue.index);
         try std.testing.expectEqualDeep(original_origin, remaining.origin.?);
         try std.testing.expectEqualDeep(repair_origin, merged.entries[0].outcome.claims[0].citation_origins[1].?);
-        const retry = try repair.authorize(a, inputs, available, merged);
+        const retry = try repair.authorize(a, merged, .{ .source_selections = remaining });
         const completed = try repair.merge(a, merged, retry, .{ .citation = good }, repair_origin);
         try std.testing.expect((try validate.execute(a, inputs, try token_fixture.prepare(a, inputs, completed))) == .valid);
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, merged, authorization, replacement, repair_origin));
@@ -359,7 +371,8 @@ test "missing citation repair is restricted to the empty collection and material
     claim.citations = &.{};
     entry.outcome = .{ .claims = &.{claim} };
     const candidate = try text_fixture.check(a, inputs, .{ .entries = &.{entry} });
-    const authorization = try repair.authorize(a, inputs, try token_fixture.candidates(a, inputs), candidate);
+    const rejection = (try @import("domain/reference_selection_validation.zig").validate(a, inputs, try token_fixture.candidates(a, inputs), candidate)).source_selections;
+    const authorization = try repair.authorize(a, candidate, .{ .source_selections = rejection });
     try std.testing.expect(authorization.target == .missing_citations);
     const updated = try repair.merge(a, candidate, authorization, .{ .citations = .{ .citations = &.{wholeChunk(inputs.chunks.entries[0])} } }, null);
     const accepted = (try validate.execute(a, inputs, try token_fixture.prepare(a, inputs, updated))).valid;

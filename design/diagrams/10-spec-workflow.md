@@ -63,7 +63,7 @@ flowchart LR
     X --> A["Shared source-authority gate"]
     A --> G["Generate one typed unit"]
     G --> W{"Closed response schema?"}
-    W -->|Malformed| Q["Bounded protocol correction;<br/>same request and valid schema example"]
+    W -->|Malformed| Q["Bounded protocol correction;<br/>same request and precise schema guidance"]
     Q --> G
     Q -->|Exhausted| F["End failed"]
     W -->|Valid| V{"Unit valid?"}

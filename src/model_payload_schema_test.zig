@@ -61,38 +61,24 @@ test "schema diagnostics identify nested fields and array indices without relaxi
     try checkDocument(empty, .{ .bytes = "{\"unexpected\":true}", .rejection = .unknown_property, .path = "/unexpected" });
 }
 
-test "syntax examples expose nested array item shapes even when arrays may be empty" {
+test "correction schema retains nested alternatives and exact bounds without candidate examples" {
     const contract =
         \\{"type":"object","properties":{"statements":{"type":"array","maxItems":2,"items":{"type":"object","properties":{"content":{"oneOf":[{"type":"object","properties":{"kind":{"const":"model"},"text":{"type":"string","maxLength":8}},"required":["kind","text"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"preserved_token"},"token_id":{"type":"integer","minimum":1,"maximum":9}},"required":["kind","token_id"],"additionalProperties":false}]}},"required":["content"],"additionalProperties":false}},"empty":{"type":"array","maxItems":0,"items":{"type":"boolean"}}},"required":["statements","empty"],"additionalProperties":false}
     ;
-    var fixture: Fixture = undefined;
-    try fixture.initWithSchema(contract);
-    defer fixture.deinit();
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const value = try @import("domain/model_protocol_retry.zig").example(arena.allocator(), fixture.resource.content.result_schema.root());
-    const statements = value.object.get("statements").?.array.items;
-    try std.testing.expectEqual(@as(usize, 1), statements.len);
-    try std.testing.expectEqual(@as(usize, 0), value.object.get("empty").?.array.items.len);
-    try std.testing.expectEqualStrings("model", statements[0].object.get("content").?.object.get("kind").?.string);
-    try checkDocument(contract, .{ .bytes = try std.json.Stringify.valueAlloc(arena.allocator(), value, .{}) });
+    try checkDocument(contract, .{ .bytes = "{}", .rejection = .missing_required_property, .path = "/statements" });
+    try checkDocument(contract, .{ .bytes = "{\"statements\":[{\"content\":{}}],\"empty\":[]}", .rejection = .missing_required_property, .path = "/statements/0/content/kind" });
+    try checkDocument(contract, .{ .bytes = "{\"statements\":[{\"content\":{\"kind\":\"preserved_token\",\"token_id\":10}}],\"empty\":[]}", .rejection = .integer_range, .path = "/statements/0/content/token_id" });
+    try checkDocument(contract, .{ .bytes = "{\"statements\":[{\"content\":{\"kind\":\"model\",\"text\":\"hello\"}},{\"content\":{\"kind\":\"preserved_token\",\"token_id\":7}}],\"empty\":[]}" });
 }
 
-test "protocol retry examples satisfy unrelated closed schemas without supplying semantic defaults" {
-    const contracts = [_][]const u8{
-        empty,                                                                                                                                                                                                                                                                                                                                                                                         variants,
-        "{\"type\":\"object\",\"properties\":{\"count\":{\"type\":\"integer\",\"minimum\":3,\"maximum\":9},\"items\":{\"type\":\"array\",\"minItems\":2,\"maxItems\":3,\"items\":{\"type\":\"string\",\"minLength\":2,\"maxLength\":8}},\"enabled\":{\"type\":\"boolean\"},\"absent\":{\"type\":\"null\"}},\"required\":[\"count\",\"items\",\"enabled\",\"absent\"],\"additionalProperties\":false}",
-    };
-    for (contracts) |contract| {
-        var fixture: Fixture = undefined;
-        try fixture.initWithSchema(contract);
-        defer fixture.deinit();
-        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-        defer arena.deinit();
-        const minimum = try @import("domain/model_protocol_retry.zig").example(arena.allocator(), fixture.resource.content.result_schema.root());
-        const bytes = try std.json.Stringify.valueAlloc(arena.allocator(), minimum, .{});
-        try checkDocument(contract, .{ .bytes = bytes });
-    }
+test "independent values cover unrelated closed schemas and explicit null fields" {
+    try checkDocument(empty, .{ .bytes = "{}" });
+    try checkDocument(variants, .{ .bytes = "{\"kind\":\"question\",\"subject\":\"beta\"}" });
+    const contract =
+        \\{"type":"object","properties":{"count":{"type":"integer","minimum":3,"maximum":9},"items":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"string","minLength":2,"maxLength":8}},"enabled":{"type":"boolean"},"absent":{"type":"null"}},"required":["count","items","enabled","absent"],"additionalProperties":false}
+    ;
+    try checkDocument(contract, .{ .bytes = "{\"count\":7,\"items\":[\"first\",\"second\"],\"enabled\":true,\"absent\":null}" });
+    try checkDocument(contract, .{ .bytes = "{\"count\":7,\"items\":[\"first\",\"second\"],\"enabled\":true}", .rejection = .missing_required_property, .path = "/absent" });
 }
 
 test "protocol retry retains exact request schema and identity and releases every failed allocation" {
@@ -146,6 +132,7 @@ test "protocol retries expose the original parser reason and position for unrela
         var evidence = try strict.parse(std.testing.allocator, content[content.len - 1].evidence, .{ .maximum_depth = 64 }, true, null);
         defer evidence.deinit();
         try std.testing.expectEqualStrings(bytes, evidence.value.object.get("rejected_response").?.string);
+        try std.testing.expectEqual(@as(usize, 1), guidance.value.object.count());
         const supplied = guidance.value.object.get("diagnostic").?.object.get("decoder").?.object;
         try std.testing.expectEqualStrings(@tagName(diagnostic.?.reason), supplied.get("reason").?.string);
         const context = try std.json.Stringify.valueAlloc(std.testing.allocator, diagnostic.?.context, .{});
@@ -451,14 +438,15 @@ pub fn checkDocument(contract: []const u8, case: Case) !void {
             try std.testing.expectEqualStrings(path, reported.get("path").?.string);
             try std.testing.expectEqualStrings(@tagName(reason), reported.get("reason").?.string);
             const expected_path = if (result.invalid.expected_location == .parent) path[0..std.mem.lastIndexOfScalar(u8, path, '/').?] else path;
-            try std.testing.expectEqualStrings(expected_path, guidance.value.object.get("example_path").?.string);
-            const examples = guidance.value.object.get("expected_shape_examples").?.array.items;
-            const node = result.invalid.expected;
-            try std.testing.expectEqual(if (node.* == .one_of) node.one_of.len else @as(usize, 1), examples.len);
-            if (node.* == .one_of) for (examples, node.one_of) |example, variant| {
-                const expected_kind = @import("domain/model_result_schema.zig").findProperty(variant.object, "kind").?.schema.constant.string;
-                try std.testing.expectEqualStrings(expected_kind, example.object.get("kind").?.string);
-            };
+            const expected = guidance.value.object.get("expected").?.object;
+            try std.testing.expectEqualStrings(expected_path, expected.get("path").?.string);
+            try std.testing.expectEqualStrings(@tagName(result.invalid.expected_location), expected.get("scope").?.string);
+            var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+            defer arena.deinit();
+            const a = arena.allocator();
+            const projected = try @import("domain/model_schema_projection.zig").value(a, result.invalid.expected, .complete);
+            try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, projected, .{}), try std.json.Stringify.valueAlloc(a, expected.get("schema").?, .{}));
+            try std.testing.expectEqual(@as(usize, 2), guidance.value.object.count());
             var retained = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, parts[parts.len - 1].evidence, .{});
             defer retained.deinit();
             try std.testing.expectEqualStrings(case.bytes, retained.value.object.get("rejected_response").?.string);

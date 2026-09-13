@@ -18,6 +18,15 @@ pub fn items(context: Context) Error!r.Items {
     return result;
 }
 
+/// Check trusted evidence and text authority before classifying candidate errors.
+pub fn bind(allocator: std.mem.Allocator, validator: text.Validator, context: Context) Error!void {
+    const all = try items(context);
+    if (context.references.outcome != .complete) return error.InvalidSpecification;
+    const reconciliation = @import("reference_reconciliation_validation.zig");
+    try reconciliation.history(allocator, context.references.records.assignments.checked.prior.prior.input.progress);
+    try reconciliation.bind(allocator, all, .{ .inputs = context.inputs, .registry = context.registry, .current = context.current }, validator);
+}
+
 /// Initial reference-grounded generation. Applicable user-response support is
 /// supplied by the clarification lifecycle, not inferred from loaded form IDs.
 pub fn scopes(allocator: std.mem.Allocator, context: Context, provenance: spec.Provenance) Error![]const evidence.Scope {

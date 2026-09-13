@@ -112,7 +112,8 @@ pub const CollectReconciliation = struct {
         const prior = try extraction.read(&input.step.data, reconciliation.input_schema, .reconciliation_input);
         const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .reconciliation_raw = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_input, try readPacket(&input.step.data), (try handoff.read(&input.step.data)).body) catch return error.OperationExecutionFailed };
+        const response = try handoff.read(&input.step.data);
+        owner.payload = .{ .reconciliation_raw = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_input, try readPacket(&input.step.data), response.body, response.origin) catch return error.OperationExecutionFailed };
         return extraction.publish(self.allocator, reconciliation.raw_schema, owner, .ok);
     }
 };

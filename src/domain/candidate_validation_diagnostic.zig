@@ -1,22 +1,18 @@
 //! Typed validator evidence for observers. This projection grants no repair or
 //! workflow authority; the retained validator/authorization values own that.
 const std = @import("std");
-const spec = @import("specification_repair.zig");
 pub const Diagnostic = union(enum) {
+    reconciliation: @import("reference_reconciliation_diagnostic.zig").Rejection,
     token_classifications: @import("token_classification_validation.zig").Rejection,
     source_selections: @import("reference_selection_validation.zig").Rejection,
-    specification_repair: struct {
-        owner: @import("model_request_identity.zig").ImmutableUnitOwnerId,
-        revision: u64,
-        target: spec.Target,
-        rule: spec.Rule,
-    },
+    specification: @import("specification_candidate.zig").Rejection,
 
     pub fn origin(self: Diagnostic) ?@import("model_candidate_origin.zig").Origin {
         return switch (self) {
+            .reconciliation => |value| value.origin,
             .token_classifications => |value| value.origin,
             .source_selections => |value| value.origin,
-            .specification_repair => null,
+            .specification => |value| value.origin,
         };
     }
 

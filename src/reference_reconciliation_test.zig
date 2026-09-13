@@ -57,10 +57,10 @@ test "hierarchical reconciliation preserves original meaning citations exact tok
     const final = try f.summaries(a, initial, fixture.context());
     try std.testing.expectEqual(fixture.extracted.ledger.claims.len, final.items.len);
     for (final.items, fixture.extracted.ledger.claims) |item, original| try std.testing.expectEqualDeep(original, item.claim);
-    const result = try f.finish(a, final, try f.global(a, final), fixture.context());
+    const result = (try f.finish(a, final, try f.global(a, final), fixture.context())).valid;
     try std.testing.expectEqual(.complete, result.outcome);
     try std.testing.expectEqual(final.items.len, result.records.signals.len);
-    try std.testing.expectEqualDeep(result, try f.finish(a, final, try f.global(a, final), fixture.context()));
+    try std.testing.expectEqualDeep(result, (try f.finish(a, final, try f.global(a, final), fixture.context())).valid);
     try std.testing.expectEqualStrings("Hello, World!", final.items[1].claim.content.preserved_token.value.raw_value.bytes);
     try std.testing.expectEqualStrings("Cafe\u{301}", final.items[4].claim.content.preserved_token.value.raw_value.bytes);
 }
@@ -118,11 +118,12 @@ test "summaries reject missing duplicate foreign memberships forged keys kinds a
             8 => statements[1].content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 999 } } },
             else => unreachable,
         }
-        try std.testing.expectError(error.InvalidReferenceReconciliation, f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = proposal } }, fixture.context()));
+        const rejected = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = proposal } }, fixture.context())).invalid;
+        try std.testing.expectEqual(([_]r.diagnostic.Rule{ .membership, .membership, .membership, .membership, .content, .claim_selection, .local_key, .content, .content })[scenario], rejected.issue.rule);
     }
     var reversed = valid;
     reversed.statements = &.{ valid.statements[1], valid.statements[0] };
-    const checked = try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = reversed } }, fixture.context());
+    const checked = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = reversed } }, fixture.context())).valid;
     try std.testing.expectEqual(@as(u32, 1), checked.statements[0].local_key);
 }
 
@@ -177,7 +178,8 @@ test "each disposition is total unique current and has a valid terminal relation
             },
             else => unreachable,
         }
-        try std.testing.expectError(error.InvalidReferenceReconciliation, f.validate_dispositions.execute(a, .{ .input = input, .proposal = .{ .global = proposal } }));
+        const rejected = (try f.validate_dispositions.execute(a, .{ .input = input, .proposal = .{ .global = proposal } })).invalid;
+        try std.testing.expectEqual(([_]r.diagnostic.Rule{ .cardinality, .duplicate_disposition, .claim_selection, .cardinality, .cardinality, .relationship, .claim_selection, .cycle, .relationship })[scenario], rejected.issue.rule);
     }
     for ([_]r.Disposition{ .duplicate, .superseded }) |kind| {
         var proposal = valid;
@@ -186,7 +188,7 @@ test "each disposition is total unique current and has a valid terminal relation
         values[0].related_claim_ids = &.{values[1].claim_id};
         proposal.claim_dispositions = values;
         proposal.signals = valid.signals[1..];
-        try std.testing.expectEqual(.complete, (try f.finish(a, input, proposal, fixture.context())).outcome);
+        try std.testing.expectEqual(.complete, ((try f.finish(a, input, proposal, fixture.context())).valid).outcome);
     }
     var chain = valid;
     const chained = try a.dupe(r.ClaimDisposition, valid.claim_dispositions);
@@ -196,9 +198,9 @@ test "each disposition is total unique current and has a valid terminal relation
     chained[1].related_claim_ids = &.{chained[2].claim_id};
     chain.claim_dispositions = chained;
     chain.signals = valid.signals[2..];
-    try std.testing.expectEqual(.complete, (try f.finish(a, input, chain, fixture.context())).outcome);
+    try std.testing.expectEqual(.complete, ((try f.finish(a, input, chain, fixture.context())).valid).outcome);
     chained[1].related_claim_ids = &.{ chained[2].claim_id, chained[2].claim_id };
-    try std.testing.expectError(error.InvalidReferenceReconciliation, f.finish(a, input, chain, fixture.context()));
+    try std.testing.expectEqual(.relationship, (try f.finish(a, input, chain, fixture.context())).invalid.issue.rule);
 }
 
 pub fn conflicting(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
@@ -226,7 +228,7 @@ test "unresolved conflicts are engine identified and blocking and cannot disappe
     defer fixture.deinit();
     const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
     const proposal = try conflicting(a, input);
-    const result = try f.finish(a, input, proposal, fixture.context());
+    const result = (try f.finish(a, input, proposal, fixture.context())).valid;
     try std.testing.expectEqual(.blocked, result.outcome);
     try std.testing.expectEqual(@as(u32, 1), result.records.conflicts[0].id.ordinal);
     try std.testing.expectEqual(.unresolved, result.records.conflicts[0].value.resolution);
@@ -242,7 +244,7 @@ test "unresolved conflicts are engine identified and blocking and cannot disappe
             4 => invalid.signals = (try f.global(a, input)).signals,
             else => unreachable,
         }
-        try std.testing.expectError(error.InvalidReferenceReconciliation, f.finish(a, input, invalid, fixture.context()));
+        try std.testing.expectEqual(([_]r.diagnostic.Rule{ .conflict_coverage, .duplicate_conflict, .citations, .cardinality, .relationship })[scenario], (try f.finish(a, input, invalid, fixture.context())).invalid.issue.rule);
     }
     var dropped = result.records;
     dropped.conflicts = &.{};
@@ -271,7 +273,7 @@ test "signal projection requires exact citation token kind and retained-claim co
             6 => proposal.signals = &.{ signals[0], signals[1], signals[0] },
             else => unreachable,
         }
-        try std.testing.expectError(error.InvalidReferenceReconciliation, f.finish(a, input, proposal, fixture.context()));
+        try std.testing.expectEqual(([_]r.diagnostic.Rule{ .signal_coverage, .citations, .citations, .claim_selection, .content, .content, .duplicate_signal })[scenario], (try f.finish(a, input, proposal, fixture.context())).invalid.issue.rule);
     }
 }
 
@@ -298,7 +300,7 @@ test "empty fully accounted references reconcile without fabricated membership" 
     defer fixture.deinit();
     const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
     try std.testing.expectEqual(@as(usize, 0), input.items.len);
-    try std.testing.expectEqual(.complete, (try f.finish(a, input, try f.global(a, input), fixture.context())).outcome);
+    try std.testing.expectEqual(.complete, ((try f.finish(a, input, try f.global(a, input), fixture.context())).valid).outcome);
 }
 
 fn allocationCase(allocator: std.mem.Allocator) !void {
@@ -308,7 +310,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     const fixture = try prepare(a, &.{"Display `exact`.\n"});
     defer fixture.deinit();
     const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
-    _ = try f.finish(a, input, try f.global(a, input), fixture.context());
+    _ = (try f.finish(a, input, try f.global(a, input), fixture.context())).valid;
 }
 test "reconciliation releases allocation failures throughout all stages" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
@@ -329,7 +331,7 @@ test "every existing claim kind uses the same reconciliation text and signal con
             r.text.ValidatedReferenceSemanticText{ .value = .{ .nodes = &.{.{ .literal = .{ .value = "An independently supported claim." } }} } }) };
         extracted.ledger.claims = claims;
         const input = try f.summaries(a, try f.initialize(a, fixture.inputs, extracted, 2), fixture.context());
-        const result = try f.finish(a, input, try f.global(a, input), fixture.context());
+        const result = (try f.finish(a, input, try f.global(a, input), fixture.context())).valid;
         try std.testing.expectEqual(kind, std.meta.activeTag(result.records.signals[0].value.content.model));
     }
 }
@@ -356,8 +358,8 @@ test "final lineage rejects removed summaries altered membership and changed can
         }
         try std.testing.expectError(error.InvalidReferenceReconciliation, f.finish(a, altered, proposal, fixture.context()));
     }
-    const result = try f.finish(a, input, proposal, fixture.context());
-    for (0..5) |scenario| {
+    const result = (try f.finish(a, input, proposal, fixture.context())).valid;
+    for (0..6) |scenario| {
         var records = result.records;
         const signals = try a.dupe(r.Signal, records.signals);
         records.signals = signals;
@@ -370,6 +372,12 @@ test "final lineage rejects removed summaries altered membership and changed can
                 const dispositions = try a.dupe(r.ClaimDisposition, records.assignments.checked.prior.prior.dispositions);
                 dispositions[0].related_claim_ids = &.{.{ .ordinal = 999 }};
                 records.assignments.checked.prior.prior.dispositions = dispositions;
+            },
+            5 => {
+                const progress = &records.assignments.checked.prior.prior.input.progress;
+                progress.summary_count = 0;
+                progress.latest = null;
+                progress.next_statement_ordinal = 1;
             },
             else => unreachable,
         }
@@ -389,12 +397,12 @@ test "different exact scalars cannot be declared duplicates and token obligation
     dispositions[1].disposition = .duplicate;
     dispositions[1].related_claim_ids = &.{dispositions[3].claim_id};
     proposal.claim_dispositions = dispositions;
-    try std.testing.expectError(error.InvalidReferenceReconciliation, f.finish(a, input, proposal, fixture.context()));
+    try std.testing.expectEqual(.relationship, (try f.finish(a, input, proposal, fixture.context())).invalid.issue.rule);
     dispositions[1].disposition = .superseded;
     // Supersession retains the original token and obligation as provenance.
-    try std.testing.expectEqual(.complete, (try f.finish(a, input, proposal, fixture.context())).outcome);
+    try std.testing.expectEqual(.complete, ((try f.finish(a, input, proposal, fixture.context())).valid).outcome);
     proposal.signals = &.{ proposal.signals[0], proposal.signals[2], proposal.signals[3] };
-    try std.testing.expectError(error.InvalidReferenceReconciliation, f.finish(a, input, proposal, fixture.context()));
+    try std.testing.expectEqual(.signal_coverage, (try f.finish(a, input, proposal, fixture.context())).invalid.issue.rule);
 }
 
 test "shared multi-source scope rejects unrelated passive literals and stale empty context" {
@@ -454,9 +462,48 @@ test "overlapping conflicts conserve every declared conflict relationship" {
         conflict.* = .{ .claim_ids = try a.dupe(r.ClaimId, &.{ dispositions[0].claim_id, dispositions[index].claim_id }), .citation_ids = try a.dupe(r.CitationId, &.{ input.items[0].claim.citation_ids[0], input.items[index].claim.citation_ids[0] }), .kind = .scope_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The scopes disagree." } }} }, .resolution = .unresolved };
     }
     proposal.conflicts = conflicts;
-    const result = try f.finish(a, input, proposal, fixture.context());
+    const result = (try f.finish(a, input, proposal, fixture.context())).valid;
     try std.testing.expectEqual(.blocked, result.outcome);
     try std.testing.expectEqual(@as(usize, 2), result.records.conflicts.len);
     proposal.conflicts = conflicts[0..1];
-    try std.testing.expectError(error.InvalidReferenceReconciliation, f.finish(a, input, proposal, fixture.context()));
+    try std.testing.expectEqual(.conflict_coverage, (try f.finish(a, input, proposal, fixture.context())).invalid.issue.rule);
+}
+
+test "reconciliation diagnostics retain native facts and origin while stale context remains an error" {
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const origin: Origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 2 } };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "Confirm the request.\n", "Renew the loan.\n" });
+    defer fixture.deinit();
+    const initial = try f.initialize(a, fixture.inputs, fixture.extracted, 2);
+    const summary_input = try f.build_input.execute(a, initial);
+    var summary = try f.summary(a, summary_input);
+    summary.member_claim_ids = &.{};
+    const summary_bytes = try @import("domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), a, .{ .summary = summary });
+    const parsed_summary = try f.parse.execute(a, .{ .input = summary_input, .bytes = summary_bytes, .source = .{ .revision = 3, .origin = origin } });
+    const rejected = (try f.validate_summary.execute(a, parsed_summary, fixture.context())).invalid;
+    try std.testing.expectEqual(.membership, rejected.issue.rule);
+    try std.testing.expectEqualDeep(summary_input.partition.group.claim_ids, rejected.issue.expected.claims);
+    try std.testing.expectEqual(@as(usize, 0), rejected.issue.observed.claims.len);
+    try std.testing.expectEqual(@as(u64, 3), rejected.revision);
+    try std.testing.expectEqualDeep(origin, rejected.origin.?);
+    var stale = parsed_summary;
+    stale.input.partition.id.ordinal += 1;
+    try std.testing.expectError(error.InvalidReferenceReconciliation, f.validate_summary.execute(a, stale, fixture.context()));
+    const input = try f.summaries(a, initial, fixture.context());
+    var proposal = try f.global(a, input);
+    const dispositions = try a.dupe(r.ClaimDisposition, proposal.claim_dispositions);
+    dispositions[0].disposition = .superseded;
+    dispositions[0].related_claim_ids = &.{dispositions[0].claim_id};
+    proposal.claim_dispositions = dispositions;
+    const invalid = (try f.validate_dispositions.execute(a, .{ .input = input, .proposal = .{ .global = proposal }, .source = .{ .origin = origin } })).invalid;
+    try std.testing.expectEqual(.no_self_relation, invalid.issue.expected.constraint);
+    try std.testing.expectEqualDeep(dispositions[0], invalid.issue.observed.disposition);
+    const diagnostic: @import("domain/candidate_validation_diagnostic.zig").Diagnostic = .{ .reconciliation = invalid };
+    try std.testing.expectEqualDeep(diagnostic, try diagnostic.copy(a));
+    var changed = input;
+    changed.progress.latest = null;
+    try std.testing.expectError(error.InvalidReferenceReconciliation, f.validate_dispositions.execute(a, .{ .input = changed, .proposal = .{ .global = proposal } }));
 }

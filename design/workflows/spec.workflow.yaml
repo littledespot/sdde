@@ -387,6 +387,7 @@ steps:
     use: validate-reference-reconciliation-summary
     on:
       ok: assign-summary
+      invalid: end.invalid
       failed: end.failed
   assign-summary:
     use: assign-reference-summary-identities
@@ -402,16 +403,19 @@ steps:
     use: validate-reference-claim-dispositions
     on:
       ok: validate-signals
+      invalid: end.invalid
       failed: end.failed
   validate-signals:
     use: validate-reference-signal-proposals
     on:
       ok: validate-conflicts
+      invalid: end.invalid
       failed: end.failed
   validate-conflicts:
     use: validate-reference-conflict-proposals
     on:
       ok: assign-records
+      invalid: end.invalid
       failed: end.failed
   assign-records:
     use: assign-reference-reconciliation-identities

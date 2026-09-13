@@ -7,7 +7,9 @@ const g = @import("../domain/specification_generation.zig");
 const native = @import("../application/reference_extraction_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
+pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, conflict_coverage };
 pub const Options = struct {
+    reconciliation_fault: ?ReconciliationFault = null,
     script: ?@import("specification_script.zig").Script = null,
     uncertain: bool = false,
     brief_uncertain: bool = false,
@@ -49,7 +51,40 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
         },
         .reference_global => {
             const input = (try native.read(&view, @import("../application/reference_reconciliation_workflow.zig").input_schema, .reconciliation_input)).payload().reconciliation_input;
-            return @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, if (input.purpose == .summary) .{ .summary = try @import("reference_reconciliation.zig").summary(allocator, input) } else .{ .global = try @import("reference_reconciliation.zig").global(allocator, input) });
+            if (input.purpose == .summary) {
+                var proposal = try @import("reference_reconciliation.zig").summary(allocator, input);
+                if (options.reconciliation_fault == .summary_membership) proposal.member_claim_ids = &.{};
+                return @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .summary = proposal });
+            }
+            var proposal = try @import("reference_reconciliation.zig").global(allocator, input);
+            if (options.reconciliation_fault) |fault| {
+                const dispositions = try allocator.dupe(r.ClaimDisposition, proposal.claim_dispositions);
+                proposal.claim_dispositions = dispositions;
+                switch (fault) {
+                    .summary_membership => {},
+                    .duplicate_disposition => dispositions[1] = dispositions[0],
+                    .self_relation => {
+                        dispositions[0].disposition = .superseded;
+                        dispositions[0].related_claim_ids = &.{dispositions[0].claim_id};
+                    },
+                    .cycle => {
+                        dispositions[0].disposition = .superseded;
+                        dispositions[0].related_claim_ids = &.{dispositions[1].claim_id};
+                        dispositions[1].disposition = .superseded;
+                        dispositions[1].related_claim_ids = &.{dispositions[0].claim_id};
+                    },
+                    .signal_coverage => proposal.signals = proposal.signals[1..],
+                    .conflict_coverage => {
+                        dispositions[0].disposition = .conflicting;
+                        dispositions[0].related_claim_ids = &.{dispositions[1].claim_id};
+                        dispositions[1].disposition = .conflicting;
+                        dispositions[1].related_claim_ids = &.{dispositions[0].claim_id};
+                        proposal.signals = proposal.signals[2..];
+                        proposal.conflicts = &.{};
+                    },
+                }
+            }
+            return @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .global = proposal });
         },
         .specification_unit => {
             const current = try @import("../application/specification_workflow.zig").readSession(&view);

@@ -5,8 +5,10 @@ Source: [FIX_001.md](FIX_001.md). Governing authority remains
 [AGENTS.md](../AGENTS.md), [design.md](../design/design.md) and accepted ADRs.
 This checklist does not approve design amendments or live runs. Phase 0 is
 complete. The user explicitly approved A1–A3 on 13 September 2026; their wording
-is applied to design §§12.5/17.3/22.6. Chunks 01–21 remain pending. No runtime
-implementation, engine tests or model calls were performed for Phase 0.
+is applied to design §§12.5/17.3/22.6. Phase 1 (chunks 01–04) is implemented
+and verified offline; chunks 05–21 remain pending. Phase 0 itself involved no
+runtime implementation, engine tests or model calls. No live E2E run was performed
+for Phase 1.
 
 ## Outcome and delivery rules
 
@@ -182,7 +184,7 @@ unchanged. Phase 0's review and amendment approvals are complete.
 
 ### 01 — Replace synthetic correction examples and their test dependency
 
-- [ ] Complete chunk 01. **Depends on:** 00's A1–A2 amendments (approved and applied).
+- [x] Complete chunk 01. **Depends on:** 00's A1–A2 amendments (approved and applied).
 
 **Owners:** [model_protocol_retry.zig](../src/domain/model_protocol_retry.zig),
 [model_schema_diagnostic.zig](../src/domain/model_schema_diagnostic.zig),
@@ -212,7 +214,7 @@ delete conformance coverage. No live acceptance or prompt-size improvement is cl
 
 ### 02 — Separate exchange attribution from candidate attribution
 
-- [ ] Complete chunk 02. **Depends on:** 00's observation contract.
+- [x] Complete chunk 02. **Depends on:** 00's observation contract.
 
 **Owners:** [trace.zig](../test/harness/e2e/trace.zig),
 [observation.zig](../test/harness/e2e/observation.zig), existing harness contracts,
@@ -235,7 +237,7 @@ arrive with 03/04; the harness does not invent a missing rule.
 
 ### 03 — Preserve reconciliation rejections through the full boundary
 
-- [ ] Complete chunk 03. **Depends on:** 00, 02.
+- [x] Complete chunk 03. **Depends on:** 00, 02.
 
 **Owners:** reference reconciliation validators, native candidate values,
 [reference_reconciliation_workflow.zig](../src/application/reference_reconciliation_workflow.zig),
@@ -261,7 +263,7 @@ response to infer the failed rule. No caller-specific exception is introduced.
 
 ### 04 — Retain specification/extraction rejections and eliminate rediscovery
 
-- [ ] Complete chunk 04. **Depends on:** 00, 02, shared contracts from 03.
+- [x] Complete chunk 04. **Depends on:** 00, 02, shared contracts from 03.
 
 **Owners:** [specification_generation.zig](../src/domain/specification_generation.zig),
 [specification_repair.zig](../src/domain/specification_repair.zig),
@@ -285,6 +287,65 @@ after merge; invalid unchanged replacements remain invalid.
 `test-reference-evidence`, `test-e2e-harness`, `test-model-request-workflow`.
 **Exit:** one owner discovers each rule violation; native authorization does not
 consume serialized diagnostic JSON. Narrower targets are implemented in 11.
+
+### Phase 1 delivery and verification — 13 September 2026
+
+Implemented in the working tree based on revision
+`24533e8cda25865df4a1c58fe240a0b7deaf2bcb`. This entry records implementation
+evidence; it does not amend design authority or claim live reliability.
+
+| Chunk | Delivered and regression evidence |
+| --- | --- |
+| 01 | Removed `model_protocol_retry.example`/`examples` and their generator-dependent test inputs. Corrections use the original complete schema and exact expected node/location/scope. Independent selected-wire cases cover extraction, reconciliation, generation, support and repair, including nested kinds, numeric spellings, null/omission, empty structs and rejected fields. Tests `independent wire cases cover every selected specification result and nested content variant` and the schema correction tests retain exact rejected bytes, bounds, alternatives and association. |
+| 02 | Captured exchange records retain their own origin, step, usage and output availability. Events expose separate `exchange` and `candidate_source` objects; the old ambiguous top-level event attribution was removed. Reports retain terminal step/rejection. `step events keep the newer exchange usage separate from an older rejected candidate` covers old/new attribution and missing/foreign/duplicate joins; unavailable text remains explicit. |
+| 03 | [Reconciliation diagnostics](../src/domain/reference_reconciliation_diagnostic.zig) carry native unit/rule/observed/expected/revision/origin through all four validators, captured values, registered outcomes and reports. YAML terminates their candidate rejection as `invalid`. Native pipeline fault cases cover summary membership, duplicate dispositions, self-relations, cycles, missing signals and missing conflicts after request release. Corpus/history/partition/allocation failures remain errors. The existing full-history gate remains required at final accounting. |
+| 04 | [Specification candidates](../src/domain/specification_candidate.zig) retain field/record failures and producing origins. The owning validator discovers provenance/text/kind/duplicate failures once; authorization checks the retained rejection. Extraction authorization consumes its retained selection rejection and exact observed collection. Both reuse atomic old-value equality and retain post-merge validation. Tests reject foreign owner/unit/origin/old value and stale revision, preserve sibling origins, keep invalid unchanged replacements invalid, distinguish stale corpus from provenance defects and exercise allocation cleanup. |
+
+The native pipeline and report tests also cover specification failure after an
+intervening repair request. `reports preserve native reconciliation and
+specification failures after source release` verifies copied native diagnostics,
+JSON round trips and both human report projections without reparsing a model
+response to infer its meaning. Production metadata logging remains unchanged.
+
+Actual commands/results (project-local caches and temporary files):
+
+```sh
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg test-model-result-schema test-model-payload-schema test-model-candidate-json test-model-envelope test-model-request-workflow test-reference-model-input test-specification-generation test-reference-evidence --summary all
+# 24/24 steps; 429/429 tests passed.
+
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg test-structured-tokens --summary all
+# 3/3 steps; 60/60 tests passed.
+
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg test-e2e-harness --summary all
+# 3/3 steps; 390/390 tests passed. This is the offline harness suite.
+
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg verify --summary all
+# Final gate: 120/120 steps; 1,356/1,356 tests passed.
+
+git diff --check
+# Passed.
+```
+
+Targeted `test-reference-reconciliation` and `test-reference-extraction` also
+passed (66 and 49 tests respectively). The final `verify` covers the complete
+current implementation, architecture/import checks, all regression and negative
+tests, harness/evaluator tests and clean native packaging smoke. Iteration found
+and corrected stale test call signatures, the invalid-to-failed terminal mapping,
+and fixture errors; those earlier failed checks are not completion evidence.
+
+Removed superseded authorization traversal, generic specification-unit failure
+projection, synthetic example generation and stale current protocol descriptions.
+Historical run evidence remains historical. Reviewed the diff for duplicated
+rules, weakened validation, capability leaks and unrelated scope changes; no new
+repair framework, dependency, prompt resource, token limit or approval exception
+was introduced. Updated README, provider/specification documentation, harness
+instructions and the existing Markdown Mermaid diagrams.
+
+**Remaining scope:** reconciliation recovery remains with 09/10, final proposal
+shape changes with 05–07, and narrower repair targets with 11/12. Passing these
+offline checks establishes Phase 1's contracts, not LLM quality, a published live
+baseline or E2E reliability. Each live invocation still requires explicit user
+approval.
 
 ## Phase 2 — Simplify the final proposal contracts
 

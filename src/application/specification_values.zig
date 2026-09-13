@@ -1,10 +1,10 @@
 const g = @import("../domain/specification_generation.zig");
 pub const Payload = union(enum) {
     session: @import("../domain/specification_session.zig").Session,
-    raw: []const u8,
+    raw: @import("../domain/specification_candidate.zig").Raw,
     parsed: @import("../domain/specification_repair.zig").Candidate,
     repair_authorization: @import("../domain/specification_repair.zig").Authorization,
-    repair_result: @import("../domain/specification_repair.zig").Replacement,
+    repair_result: struct { value: @import("../domain/specification_repair.zig").Replacement, origin: @import("../domain/model_candidate_origin.zig").Origin },
     checked: g.Checked,
     coverage: @import("../domain/specification_coverage.zig").Coverage,
     document: @import("../domain/specification.zig").CapturedDocument,
@@ -13,6 +13,7 @@ pub const Payload = union(enum) {
     publication_state: @import("../domain/specification_state.zig").State,
     reference_context: []const u8,
     reference_snapshot: @import("../domain/reference_snapshot.zig").Snapshot,
-    rejected: enum { invalid_unit },
+    unit_rejected: @import("../domain/specification_candidate.zig").Rejection,
+    rejected,
 };
-pub const storage = @import("retained_candidate.zig").Storage(Payload, .{ .rejected = .invalid_unit });
+pub const storage = @import("retained_candidate.zig").Storage(Payload, .rejected);

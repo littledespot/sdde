@@ -66,7 +66,7 @@ local reusable subgraphs. They expand before ordinary graph validation, with
 separate identities and retries for each call. The [input contract](design/decisions/0013-workflow-input-reuse.md)
 also supports local schema references, compact transport and typed per-unit
 result selection. Evidence packets retain complete claims and exact tokens
-while sharing citation records. See the [file guide and measurements](design/TODO001.md)
+while sharing citation records. See the [Specify workflow](design/features/F0100-SpecWorkflow.md)
 for required configuration, resources and remaining workflow work.
 
 `advance-model-attempt-accounting` now accounts that prepared request through
@@ -145,12 +145,22 @@ reconciliation, generation, review and repair.
 
 Protocol retries retain the full rejected response as untrusted evidence and
 reuse the original schema. Diagnostics identify JSON syntax positions or exact
-schema field paths, with schema-derived examples that expose nested shapes.
+schema field paths. Schema corrections include the exact expected schema node,
+its JSON Pointer and parent/value scope; syntax corrections retain the original
+complete schema. Retries never synthesize candidate examples.
 Native Bedrock requests derive structural constraints from the same compiled
 schema. Complete bounds remain in guidance and engine validation. JSON errors
 include the container path, active key and duplicate-key occurrence locations.
 The same schema reason and JSON Pointer appear in E2E events, reports and the
 terminal. Strict validation and existing retry/token accounting still apply.
+
+Native reconciliation and specification validators retain typed rejections with
+the affected unit, rule, observed values, candidate revision and producing
+request/attempt. Invalid source context remains an operational failure. Existing
+extraction/specification repair authorizers consume those retained failures and
+check association and old values; post-merge validation still owns acceptance.
+The harness reports the latest exchange and usage separately from a rejected
+candidate's source, and names the terminal step even when it made no model call.
 
 `complete-provider-operation` explicitly closes an invoked inference operation
 using its validated provider observation. It takes no parameters and retains

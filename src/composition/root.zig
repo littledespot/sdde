@@ -1263,8 +1263,8 @@ test "native YAML validates citations extraction and reconciliation before conti
         const expected: workflow.OutcomeTag = if (mode) |selected| switch (selected) {
             .claims, .no_claim, .passive, .preserved, .irrelevant, .reconciled => .ok,
             .blocked, .conflict => .blocked,
-            .missing_classification, .positive_empty_preserved, .invalid_citation => .invalid,
-            .malformed, .missing, .duplicate, .unbound, .unknown_literal, .legacy, .bad_reconciliation => .failed,
+            .missing_classification, .positive_empty_preserved, .invalid_citation, .bad_reconciliation => .invalid,
+            .malformed, .missing, .duplicate, .unbound, .unknown_literal, .legacy => .failed,
         } else if (invalid) .failed else .ok;
         try std.testing.expectEqual(expected, result.executionStatus().?);
         try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), if (reconcile) reconciliation_producer.observed else if (mode != null) extraction_producer.observed else producer.observed);
@@ -1311,10 +1311,13 @@ test "configured specification generation YAML executes native references models
     };
     const classification_repair_start = 14 + faults.len;
     const citation_repair_start = classification_repair_start + 3;
-    for (0..citation_repair_start + 3) |scenario| {
-        const citation_scenario = scenario >= citation_repair_start;
-        const classification_scenario = scenario >= classification_repair_start and !citation_scenario;
-        const fault: ?@TypeOf(faults[0]) = if (scenario >= 14 and !classification_scenario and !citation_scenario) faults[scenario - 14] else null;
+    const reconciliation_start = citation_repair_start + 3;
+    const reconciliation_faults = std.meta.tags(@import("../test_fixtures/spec_generation_responses.zig").ReconciliationFault);
+    for (0..reconciliation_start + reconciliation_faults.len) |scenario| {
+        const reconciliation_scenario = scenario >= reconciliation_start;
+        const citation_scenario = scenario >= citation_repair_start and !reconciliation_scenario;
+        const classification_scenario = scenario >= classification_repair_start and !citation_scenario and !reconciliation_scenario;
+        const fault: ?@TypeOf(faults[0]) = if (scenario >= 14 and !classification_scenario and !citation_scenario and !reconciliation_scenario) faults[scenario - 14] else null;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
@@ -1374,9 +1377,41 @@ test "configured specification generation YAML executes native references models
         driver.failed_classification_repair = scenario == classification_repair_start + 2;
         driver.citation_fault = if (citation_scenario) (if (scenario == citation_repair_start + 1) .missing else .unknown) else null;
         driver.failed_citation_repair = scenario == citation_repair_start + 2;
+        if (reconciliation_scenario) driver.reconciliation_fault = reconciliation_faults[scenario - reconciliation_start];
         const result = driver.run();
-        const expected: workflow.OutcomeTag = if (scenario == 2 or scenario == 6 or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap) .needs_user else if (scenario == 7) .invalid else .ok;
+        const expected: workflow.OutcomeTag = if (scenario == 2 or scenario == 6 or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap) .needs_user else if (scenario == 7 or reconciliation_scenario) .invalid else .ok;
         try std.testing.expectEqual(expected, result.executionStatus().?);
+        if (reconciliation_scenario or scenario == 6) {
+            const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })).?;
+            const origin = diagnostic.origin().?;
+            if (reconciliation_scenario) {
+                const rules = [_]@import("../domain/reference_reconciliation_diagnostic.zig").Rule{ .membership, .duplicate_disposition, .relationship, .cycle, .signal_coverage, .conflict_coverage };
+                try std.testing.expectEqual(rules[scenario - reconciliation_start], diagnostic.reconciliation.issue.rule);
+            } else {
+                try std.testing.expectEqual(.provenance, diagnostic.specification.issue.rule);
+                try std.testing.expect(diagnostic.specification.issue.field.target == .description);
+            }
+            var retained_arena: std.heap.ArenaAllocator = .init(allocator);
+            defer retained_arena.deinit();
+            const retained = try diagnostic.copy(retained_arena.allocator());
+            try std.testing.expectEqualDeep(diagnostic, retained);
+            const identities = try @import("../application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
+            var matched: usize = 0;
+            for (runner.tokenLedger().accounted_operations.items) |operation| if (origin.matches(identities, operation)) {
+                try std.testing.expect(if (reconciliation_scenario) operation.model_request_id.purpose == .initial_generation else operation.model_request_id.purpose == .atomic_repair);
+                matched += 1;
+            };
+            try std.testing.expectEqual(@as(usize, 1), matched);
+            const prepared_key = @intFromEnum(pipeline.DataKey.prepared_model_request);
+            if (reconciliation_scenario) {
+                try std.testing.expect(runner.envelope.slots[prepared_key] == null);
+            } else {
+                // Retry exhaustion can retain a newer prepared request. It must
+                // never replace the older failing candidate's producing origin.
+                const prepared = try @import("../application/model_request_workflow.zig").readCurrent(&.{ .slots = runner.envelope.slots }, @import("../application/model_request_workflow.zig").prepared_schema);
+                try std.testing.expect(identities.indexOf(prepared.id()).?.value != origin.request.value);
+            }
+        }
         if (citation_scenario) {
             try std.testing.expectEqual(@as(usize, 2), driver.citation_repair_calls);
             const diagnostic = try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots });

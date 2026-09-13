@@ -14,14 +14,17 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
         if (value.payload().* == .token_classification_rejected) return .{ .token_classifications = value.payload().token_classification_rejected };
         if (value.payload().* == .citation_rejected) return .{ .source_selections = value.payload().citation_rejected };
     }
-    const spec = @import("specification_repair_workflow.zig");
-    if (view.contains(spec.authorization_schema.key)) {
+    const reconciliation = @import("reference_reconciliation_workflow.zig");
+    for ([_]data.Schema{ reconciliation.summary_schema, reconciliation.dispositions_schema, reconciliation.signals_schema, reconciliation.conflicts_schema }) |schema| {
+        if (!view.contains(schema.key)) continue;
+        const value = try values.read(view, schema, @import("../domain/reference_candidate_value.zig").Value);
+        if (value.payload().* == .reconciliation_rejected) return .{ .reconciliation = value.payload().reconciliation_rejected };
+    }
+    const spec = @import("specification_workflow.zig");
+    if (view.contains(spec.checked_schema.key)) {
         const storage = @import("specification_values.zig").storage;
-        const value = storage.payload(try values.read(view, spec.authorization_schema, storage.Value));
-        if (value.* == .repair_authorization) {
-            const authorization = value.repair_authorization;
-            return .{ .specification_repair = .{ .owner = authorization.owner, .revision = authorization.revision, .target = authorization.target, .rule = authorization.rule } };
-        }
+        const value = storage.payload(try values.read(view, spec.checked_schema, storage.Value));
+        if (value.* == .unit_rejected) return .{ .specification = value.unit_rejected };
     }
     return null;
 }

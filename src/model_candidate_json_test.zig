@@ -66,32 +66,94 @@ test "compact candidate encoding and decoding release every failed allocation" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, roundTrip, .{});
 }
 
-test "every specification model schema alternative supplies a native-decodable protocol example" {
-    inline for (.{ "extraction", "reconciliation", "generation", "repair", "support" }) |name| {
-        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-        defer arena.deinit();
-        const a = arena.allocator();
-        const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/" ++ name ++ ".schema.json", a, .limited(@import("domain/model_result_schema.zig").max_bytes));
-        var adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-        const schema = try adapter.compiler().compile(a, bytes);
-        try @import("model_payload_schema_test.zig").checkDocument(bytes, .{ .bytes = "{}", .rejection = .missing_required_property });
-        const selections = comptime if (std.mem.eql(u8, name, "reconciliation")) &.{ "summary", "global" } else if (std.mem.eql(u8, name, "generation")) &.{ "brief", "primary_user_story", "entities", "acceptance_criterion", "user_visible_outcome", "edge_case", "functional_requirement", "business_rule", "assumption", "non_goal", "prohibited_behavior", "entity" } else if (std.mem.eql(u8, name, "repair")) &.{ "attributed", "record_acceptance_criterion", "record_user_visible_outcome", "record_edge_case", "record_functional_requirement", "record_business_rule", "record_assumption", "record_non_goal", "record_prohibited_behavior", "record_entity" } else &.{""};
-        inline for (selections) |selection| {
-            const selected = if (selection.len == 0) schema else schema.select(.{ .bytes = selection }) orelse return error.MissingSchemaSelection;
-            const roots = if (selected.root().* == .one_of) selected.root().one_of else &.{selected.root()};
-            for (roots) |root| {
-                const minimum = try @import("domain/model_protocol_retry.zig").example(a, root);
-                const example = try std.json.Stringify.valueAlloc(a, minimum, .{});
-                try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = example });
-                const T = comptime if (std.mem.eql(u8, name, "extraction")) @import("domain/reference_extraction_parser.zig").Response else if (std.mem.eql(u8, name, "reconciliation")) @FieldType(@import("domain/reference_reconciliation.zig").Parsed, "proposal") else if (std.mem.eql(u8, name, "generation")) @import("domain/specification_generation.zig").ModelResponse else if (std.mem.eql(u8, name, "repair")) @import("domain/specification_repair.zig").Replacement else @import("domain/specification_support.zig").Review;
-                if (comptime std.mem.eql(u8, name, "reconciliation")) {
-                    _ = try codec.decodeSelected(T, a, @field(std.meta.Tag(T), selection), example);
-                } else if (comptime std.mem.eql(u8, name, "repair")) {
-                    _ = try codec.decodeSelected(T, a, if (std.mem.eql(u8, selection, "attributed")) .attributed else .record, example);
-                } else _ = try codec.decode(T, a, example);
-            }
-        }
+// Independent wire fixtures: these values are authored from the contracts, never
+// synthesized from schema nodes or encoded by the codec being tested.
+const response_wire = struct {
+    const id = "{\"ordinal\":7}";
+    const provenance = "{\"claim_ids\":[" ++ id ++ "],\"citation_ids\":[" ++ id ++ "],\"clarification_response_ids\":[]}";
+    const segments = "[{\"kind\":\"literal\",\"value\":\"Display the status\"},{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "}]";
+    const nodes = "[{\"kind\":\"literal\",\"value\":\"Source meaning\"},{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "},{\"kind\":\"source\",\"source_id\":" ++ id ++ "}]";
+    const normalized = "{\"kind\":\"normalized\",\"segments\":" ++ segments ++ "}";
+    const exact = "{\"kind\":\"exact_copy\",\"token_id\":" ++ id ++ ",\"citation_id\":" ++ id ++ "}";
+    const attributed = "{\"value\":" ++ normalized ++ ",\"provenance\":" ++ provenance ++ "}";
+    const selection = "{\"first\":{\"ordinal\":7},\"last\":{\"ordinal\":9}}";
+    const classifications = "[{\"kind\":\"preserve\",\"preserve\":{\"token_candidate_id\":{\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":7},\"kind\":\"business_exact_string\"}},{\"kind\":\"irrelevant\",\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}]";
+    const clarification = "{\"kind\":\"clarification\",\"reason\":\"ambiguous\",\"question\":" ++ attributed ++ "}";
+    const records = .{
+        .{ "acceptance_criterion", "{\"kind\":\"acceptance_criterion\",\"given\":" ++ normalized ++ ",\"when\":" ++ normalized ++ ",\"then\":" ++ exact ++ "}" },
+        .{ "user_visible_outcome", "{\"kind\":\"user_visible_outcome\",\"text\":" ++ normalized ++ "}" },
+        .{ "edge_case", "{\"kind\":\"edge_case\",\"condition\":" ++ normalized ++ ",\"expected_outcome\":" ++ exact ++ "}" },
+        .{ "functional_requirement", "{\"kind\":\"functional_requirement\",\"text\":" ++ normalized ++ "}" },
+        .{ "business_rule", "{\"kind\":\"business_rule\",\"text\":" ++ exact ++ "}" },
+        .{ "assumption", "{\"kind\":\"assumption\",\"text\":" ++ normalized ++ "}" },
+        .{ "non_goal", "{\"kind\":\"non_goal\",\"text\":" ++ normalized ++ "}" },
+        .{ "prohibited_behavior", "{\"kind\":\"prohibited_behavior\",\"text\":" ++ normalized ++ "}" },
+        .{ "entity", "{\"kind\":\"entity\",\"name\":" ++ normalized ++ ",\"business_meaning\":" ++ normalized ++ ",\"relationships\":[" ++ exact ++ "]}" },
+    };
+};
+
+test "independent wire cases cover every selected specification result and nested content variant" {
+    inline for (.{ "business", "scope_guard", "design", "technical", "validation", "implementation_assumption", "open_question" }) |kind| {
+        const content = "{\"kind\":\"" ++ kind ++ "\"," ++ (if (comptime std.mem.eql(u8, kind, "business") or std.mem.eql(u8, kind, "scope_guard")) "\"segments\":" ++ response_wire.segments else "\"nodes\":" ++ response_wire.nodes) ++ "}";
+        try checkCandidate("extraction", null, "{\"kind\":\"claims\",\"claims\":[{\"content\":" ++ content ++ ",\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":" ++ response_wire.classifications ++ "}");
+        try checkCandidate("reconciliation", "summary", "{\"member_claim_ids\":[" ++ response_wire.id ++ "],\"member_summary_ids\":[],\"statements\":[{\"local_key\":7,\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"model\",\"model\":" ++ content ++ "}}]}");
+        try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[{\"claim_id\":" ++ response_wire.id ++ ",\"disposition\":\"retained\",\"related_claim_ids\":[]}],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"citation_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"model\",\"model\":" ++ content ++ "}}],\"conflicts\":[]}");
     }
+    try checkCandidate("extraction", null, "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":" ++ response_wire.nodes ++ "},\"token_classifications\":[]}");
+    try checkCandidate("extraction", "classification_replacement", "{\"token_classifications\":" ++ response_wire.classifications ++ "}");
+    try checkCandidate("extraction", "citation_replacement", "{\"citations\":[" ++ response_wire.selection ++ "]}");
+    try checkCandidate("extraction", "source_selection_replacement", response_wire.selection);
+    try checkCandidate("reconciliation", "summary", "{\"member_claim_ids\":[" ++ response_wire.id ++ "],\"member_summary_ids\":[],\"statements\":[{\"local_key\":7,\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"preserved_token\",\"token_id\":" ++ response_wire.id ++ "}}]}");
+    try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"citation_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"preserved_token\",\"token_id\":" ++ response_wire.id ++ "}}],\"conflicts\":[{\"claim_ids\":[" ++ response_wire.id ++ ",{\"ordinal\":9}],\"citation_ids\":[" ++ response_wire.id ++ "],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "},\"resolution\":\"unresolved\"}]}");
+    // Structural conformance is not a claim that these independently shaped
+    // records satisfy the graph, source-join or semantic validators.
+    try checkCandidate("generation", "brief", "{\"kind\":\"brief\",\"title\":" ++ response_wire.attributed ++ ",\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}");
+    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.exact ++ ",\"provenance\":" ++ response_wire.provenance ++ "}");
+    try checkCandidate("generation", "entities", "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"basis\":" ++ response_wire.attributed ++ "}");
+    inline for (.{ "brief", "primary_user_story", "entities" }) |selection| try checkCandidate("generation", selection, response_wire.clarification);
+    inline for (response_wire.records) |record| {
+        const bytes = "{\"content\":" ++ record[1] ++ ",\"provenance\":" ++ response_wire.provenance ++ "}";
+        try checkCandidate("generation", record[0], "{\"kind\":\"records\",\"records\":[" ++ bytes ++ "]}");
+        try checkCandidate("generation", record[0], response_wire.clarification);
+        try checkCandidate("repair", "record_" ++ record[0], bytes);
+    }
+    try checkCandidate("repair", "attributed", response_wire.attributed);
+    try checkCandidate("repair", "attributed", "{\"value\":" ++ response_wire.exact ++ ",\"provenance\":" ++ response_wire.provenance ++ "}");
+    try checkCandidate("support", null, "{\"entries\":[{\"requirement_ordinal\":7,\"finding\":\"supported\",\"disposition\":\"supported\",\"provenance\":" ++ response_wire.provenance ++ "},{\"requirement_ordinal\":9,\"finding\":\"unsupported\",\"disposition\":\"not_applicable\",\"provenance\":{\"claim_ids\":[],\"citation_ids\":[],\"clarification_response_ids\":[]}}]}");
+}
+
+fn checkCandidate(comptime name: []const u8, comptime selection: ?[]const u8, bytes: []const u8) !void {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const source = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/" ++ name ++ ".schema.json", a, .limited(@import("domain/model_result_schema.zig").max_bytes));
+    var adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schema = try adapter.compiler().compile(a, source);
+    const selected = if (selection) |definition| schema.select(.{ .bytes = definition }) orelse return error.MissingSchemaSelection else schema;
+    try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = bytes });
+    if (comptime std.mem.eql(u8, name, "extraction")) {
+        if (comptime selection) |definition| {
+            const T = @import("domain/reference_extraction_repair.zig").Replacement;
+            _ = try codec.decodeSelected(T, a, if (std.mem.eql(u8, definition, "classification_replacement")) .classifications else if (std.mem.eql(u8, definition, "citation_replacement")) .citations else .citation, bytes);
+        } else _ = try codec.decode(@import("domain/reference_extraction_parser.zig").Response, a, bytes);
+    } else if (comptime std.mem.eql(u8, name, "reconciliation")) {
+        _ = try codec.decodeSelected(@FieldType(@import("domain/reference_reconciliation.zig").Parsed, "proposal"), a, if (std.mem.eql(u8, selection.?, "summary")) .summary else .global, bytes);
+    } else if (comptime std.mem.eql(u8, name, "repair")) {
+        _ = try codec.decodeSelected(@import("domain/specification_repair.zig").Replacement, a, if (std.mem.eql(u8, selection.?, "attributed")) .attributed else .record, bytes);
+    } else if (comptime std.mem.eql(u8, name, "generation")) {
+        _ = try codec.decode(@import("domain/specification_generation.zig").ModelResponse, a, bytes);
+    } else _ = try codec.decode(@import("domain/specification_support.zig").Review, a, bytes);
+}
+
+test "explicit null and empty struct alternatives retain their closed native wire contracts" {
+    const Value = struct { optional: ?u32, choice: union(enum) { retained: struct {}, selected: struct { target: u32 } } };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const value = try codec.decode(Value, a, "{\"choice\":{\"kind\":\"retained\"}, \"optional\":null}");
+    try std.testing.expect(value.optional == null);
+    try std.testing.expect(value.choice == .retained);
+    for ([_][]const u8{ "{\"choice\":{\"kind\":\"retained\"}}", "{\"optional\":null,\"choice\":{\"kind\":\"retained\",\"target\":7}}", "{\"optional\":null,\"choice\":{}}" }) |bytes| try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Value, a, bytes));
 }
 
 test "retained variant decoding omits only the root discriminator and rejects legacy or foreign fields" {

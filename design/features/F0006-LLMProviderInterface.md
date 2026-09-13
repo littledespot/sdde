@@ -368,8 +368,10 @@ runtime cancellation still abandons execution without a hidden closure call.
 `build-model-protocol-retry` accepts only the exactly associated rejected
 response while that logical request remains invoked. It preserves the original
 schema, unit, model selection and request ID, appends only the selected
-correction guidance, native diagnostic and minimum schema example, and retires
-the rejected attempt. `check-model-request-phase` lets YAML skip a duplicate
+correction guidance and native diagnostic, and retires the rejected attempt.
+Schema rejection adds the exact expected schema node, its JSON Pointer and
+parent/value scope; syntax rejection retains the original complete schema.
+No candidate example is generated. `check-model-request-phase` lets YAML skip a duplicate
 logical invocation transition while every provider attempt still receives new
 accounting/authorization. Correction has no separate limit: the existing
 `advance-model-attempt-accounting` step and total token budget bound further

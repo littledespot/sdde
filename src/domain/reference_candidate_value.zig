@@ -17,6 +17,7 @@ pub const Payload = union(enum) {
     assigned: extraction.Assignments,
     ledger: extraction.Ledger,
     accounted: extraction.Accounted,
+    reconciliation_rejected: reconciliation.diagnostic.Rejection,
     reconciliation_items: reconciliation.Items,
     reconciliation_layout: reconciliation.Layout,
     reconciliation_plan: reconciliation.Plan,

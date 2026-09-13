@@ -17,9 +17,9 @@ pub const raw_schema = values.schema(.raw_reference_reconciliation, owned.Value,
 pub const parsed_schema = values.schema(.parsed_reference_reconciliation, owned.Value, 1, null).captured();
 pub const summary_schema = values.schema(.validated_reference_summary, owned.Value, 1, null).captured();
 pub const summary_ids_schema = values.schema(.reference_summary_identities, owned.Value, 1, null).captured();
-pub const dispositions_schema = values.schema(.validated_reference_dispositions, owned.Value, 1, null);
-pub const signals_schema = values.schema(.validated_reference_signals, owned.Value, 1, null);
-pub const conflicts_schema = values.schema(.validated_reference_conflicts, owned.Value, 1, null);
+pub const dispositions_schema = values.schema(.validated_reference_dispositions, owned.Value, 1, null).captured();
+pub const signals_schema = values.schema(.validated_reference_signals, owned.Value, 1, null).captured();
+pub const conflicts_schema = values.schema(.validated_reference_conflicts, owned.Value, 1, null).captured();
 pub const identities_schema = values.schema(.reference_reconciliation_identities, owned.Value, 1, null);
 pub const records_schema = values.schema(.reference_reconciliation_records, owned.Value, 1, null);
 pub const accounted_schema = values.schema(.accounted_reference_reconciliation, owned.Value, 1, null);
@@ -64,11 +64,11 @@ pub const AssignPartitions = Unary(@import("../actions/reference/assign_referenc
 pub const ValidatePartitions = Unary(@import("../actions/reference/validate_reference_reconciliation_partitions.zig").Action, plan_schema, .reconciliation_plan, progress_schema, .reconciliation_progress);
 pub const BuildInput = Unary(@import("../actions/reference/build_reference_reconciliation_input.zig").Action, progress_schema, .reconciliation_progress, input_schema, .reconciliation_input);
 pub const Parse = Unary(@import("../actions/reference/parse_reference_reconciliation_result.zig").Action, raw_schema, .reconciliation_raw, parsed_schema, .reconciliation_parsed);
-pub const ValidateSummary = TextStage(@import("../actions/reference/validate_reference_reconciliation_summary.zig").Action, parsed_schema, .reconciliation_parsed, summary_schema, .reconciliation_summary);
+pub const ValidateSummary = ValidationStage(true, @import("../actions/reference/validate_reference_reconciliation_summary.zig").Action, parsed_schema, .reconciliation_parsed, summary_schema, .reconciliation_summary);
 pub const AssignSummary = Unary(@import("../actions/reference/assign_reference_summary_identities.zig").Action, summary_schema, .reconciliation_summary, summary_ids_schema, .reconciliation_summary_ids);
-pub const ValidateDispositions = Unary(@import("../actions/reference/validate_reference_claim_dispositions.zig").Action, parsed_schema, .reconciliation_parsed, dispositions_schema, .reconciliation_dispositions);
-pub const ValidateSignals = TextStage(@import("../actions/reference/validate_reference_signal_proposals.zig").Action, dispositions_schema, .reconciliation_dispositions, signals_schema, .reconciliation_signals);
-pub const ValidateConflicts = TextStage(@import("../actions/reference/validate_reference_conflict_proposals.zig").Action, signals_schema, .reconciliation_signals, conflicts_schema, .reconciliation_conflicts);
+pub const ValidateDispositions = ValidationStage(false, @import("../actions/reference/validate_reference_claim_dispositions.zig").Action, parsed_schema, .reconciliation_parsed, dispositions_schema, .reconciliation_dispositions);
+pub const ValidateSignals = ValidationStage(true, @import("../actions/reference/validate_reference_signal_proposals.zig").Action, dispositions_schema, .reconciliation_dispositions, signals_schema, .reconciliation_signals);
+pub const ValidateConflicts = ValidationStage(true, @import("../actions/reference/validate_reference_conflict_proposals.zig").Action, signals_schema, .reconciliation_signals, conflicts_schema, .reconciliation_conflicts);
 pub const AssignRecords = Unary(@import("../actions/reference/assign_reference_reconciliation_identities.zig").Action, conflicts_schema, .reconciliation_conflicts, identities_schema, .reconciliation_record_ids);
 pub const BuildRecords = Unary(@import("../actions/reference/build_reference_reconciliation_records.zig").Action, identities_schema, .reconciliation_record_ids, records_schema, .reconciliation_records);
 
@@ -120,19 +120,24 @@ fn Unary(comptime A: type, comptime from: data.Schema, comptime from_tag: Tag, c
         }
     };
 }
-fn TextStage(comptime A: type, comptime from: data.Schema, comptime from_tag: Tag, comptime to: data.Schema, comptime to_tag: Tag) type {
+fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: data.Schema, comptime from_tag: Tag, comptime to: data.Schema, comptime to_tag: Tag) type {
     return struct {
         pub const Action = A;
+        pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
         allocator: std.mem.Allocator,
         action: Action,
         pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
             const self = context.?;
             const prior = try extraction.read(&input.step.data, from, from_tag);
-            const scope = try textContext(&input.step.data);
+
             const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
             errdefer owned.destroy(owner);
-            owner.payload = @unionInit(owned.Payload, @tagName(to_tag), self.action.execute(owner.arena.allocator(), @field(prior.payload(), @tagName(from_tag)), scope) catch return error.OperationExecutionFailed);
-            return extraction.publish(self.allocator, to, owner, .ok);
+            const result = (if (needs_text) self.action.execute(owner.arena.allocator(), @field(prior.payload(), @tagName(from_tag)), try textContext(&input.step.data)) else self.action.execute(owner.arena.allocator(), @field(prior.payload(), @tagName(from_tag)))) catch return error.OperationExecutionFailed;
+            owner.payload = switch (result) {
+                .valid => |checked| @unionInit(owned.Payload, @tagName(to_tag), checked),
+                .invalid => |rejection| .{ .reconciliation_rejected = rejection },
+            };
+            return extraction.publish(self.allocator, to, owner, if (result == .valid) .ok else .invalid);
         }
     };
 }

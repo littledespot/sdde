@@ -14,18 +14,23 @@ const atomic = @import("atomic_repair.zig").Contract(Target, Replacement, Rule);
 pub const Authorization = atomic.Authorization;
 pub const Error = atomic.Error || extraction.Error;
 
-pub fn authorize(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: extraction.tokens.Candidates, current: extraction.TextValidated) Error!Authorization {
-    const checked = try @import("reference_selection_validation.zig").validate(a, inputs, candidates, current);
-    if (checked == .token_classifications) {
-        const diagnostic = checked.token_classifications;
-        return atomic.authorize(a, unit(diagnostic.scope), current.revision, .token_classifications, try select(current, diagnostic.scope, .token_classifications), .{ .token_classifications = diagnostic.issues });
-    }
-    if (checked != .source_selections) return error.InvalidAtomicRepair;
-    const diagnostic = checked.source_selections;
-    const target: Target = if (diagnostic.issue.reason == .missing_selection) .{ .missing_citations = .{ .claim_index = diagnostic.claim_index } } else .{ .citation = .{ .claim_index = diagnostic.claim_index, .citation_index = diagnostic.issue.index } };
-    return atomic.authorize(a, unit(diagnostic.scope), current.revision, target, try select(current, diagnostic.scope, target), .{ .source_selection = diagnostic.issue });
-}
+pub const Rejection = union(enum) { token_classifications: validation.Rejection, source_selections: @import("reference_selection_validation.zig").Rejection };
 
+pub fn authorize(a: std.mem.Allocator, current: extraction.TextValidated, rejection: Rejection) Error!Authorization {
+    switch (rejection) {
+        .token_classifications => |diagnostic| {
+            const entry = try entryAt(current, diagnostic.scope);
+            if (current.revision != diagnostic.revision or !std.meta.eql(entry.classification_origin, diagnostic.origin) or !try atomic.equal(a, .{ .classifications = .{ .token_classifications = entry.token_classifications } }, .{ .classifications = .{ .token_classifications = diagnostic.observed } })) return error.InvalidAtomicRepair;
+            return atomic.authorize(a, unit(diagnostic.scope), current.revision, .token_classifications, try select(current, diagnostic.scope, .token_classifications), .{ .token_classifications = diagnostic.issues });
+        },
+        .source_selections => |diagnostic| {
+            const claim = try claimAt(current, diagnostic.scope, diagnostic.claim_index);
+            if (current.revision != diagnostic.revision or !std.meta.eql(try claim.rejectionOrigin(diagnostic.issue), diagnostic.origin) or !try atomic.equal(a, .{ .citations = .{ .citations = claim.citations } }, .{ .citations = .{ .citations = diagnostic.observed } })) return error.InvalidAtomicRepair;
+            const target: Target = if (diagnostic.issue.reason == .missing_selection) .{ .missing_citations = .{ .claim_index = diagnostic.claim_index } } else .{ .citation = .{ .claim_index = diagnostic.claim_index, .citation_index = diagnostic.issue.index } };
+            return atomic.authorize(a, unit(diagnostic.scope), current.revision, target, try select(current, diagnostic.scope, target), .{ .source_selection = diagnostic.issue });
+        },
+    }
+}
 pub fn packet(a: std.mem.Allocator, inputs: evidence.Inputs, literals: @import("passive_literals.zig").Registry, candidates: extraction.tokens.Candidates, current: extraction.TextValidated, authorization: Authorization) Error!*packets.Packet {
     const scope = try scopeOf(authorization);
     if (current.revision != authorization.revision) return error.InvalidAtomicRepair;

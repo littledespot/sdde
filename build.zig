@@ -389,7 +389,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }) });
-    b.step("test-model-candidate-json", "Test compact model wire contracts and workflow schema examples").dependOn(&b.addRunArtifact(candidate_json_tests).step);
+    b.step("test-model-candidate-json", "Test compact model wire contracts against independent schema cases").dependOn(&b.addRunArtifact(candidate_json_tests).step);
 
     const structured_token_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/structured_token_test.zig"),

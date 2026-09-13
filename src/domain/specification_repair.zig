@@ -5,56 +5,25 @@ const g = @import("specification_generation.zig");
 const p = @import("specification_provenance.zig");
 const session = @import("specification_session.zig");
 const packets = @import("model_input_packet.zig");
-pub const Candidate = struct { revision: u64 = 1, response: g.Response };
-pub const Target = union(enum) { title, description, primary_goal, story, entity_basis, record: usize };
-pub const Replacement = union(enum) { attributed: g.spec.AttributedValue, record: g.spec.RecordProposal };
-pub const Rule = enum { provenance, typed_text, record_kind, duplicate_record };
+const candidates = @import("specification_candidate.zig");
+pub const Candidate = candidates.Candidate;
+pub const Target = candidates.Target;
+pub const Replacement = candidates.Replacement;
+pub const Rule = candidates.Rule;
 const atomic = @import("atomic_repair.zig").Contract(Target, Replacement, Rule);
 pub const Authorization = atomic.Authorization;
 pub const Error = session.Error || atomic.Error || error{InvalidSpecificationRepair};
 
-pub fn authorize(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: session.Session, candidate: Candidate) Error!Authorization {
-    if (candidate.revision == 0 or candidate.response != .content) return error.InvalidSpecificationRepair;
-    const unit = try session.unit(current.completed);
-    const content = candidate.response.content;
-    if (@intFromEnum(std.meta.activeTag(unit)) != @intFromEnum(std.meta.activeTag(content))) return error.InvalidSpecificationRepair;
-    switch (content) {
-        .brief => |brief| {
-            inline for (.{ "title", "description", "primary_goal" }) |field| {
-                _ = p.attributed(allocator, validator, context, @field(brief, field)) catch |err| {
-                    return make(allocator, current, candidate, @unionInit(Target, field, {}), try rule(err));
-                };
-            }
-        },
-        .primary_user_story => |story| {
-            _ = p.attributed(allocator, validator, context, story) catch |err| return make(allocator, current, candidate, .story, try rule(err));
-        },
-        .entities => |entities| {
-            _ = p.attributed(allocator, validator, context, entities.basis) catch |err| return make(allocator, current, candidate, .entity_basis, try rule(err));
-        },
-        .records => |records| {
-            const normalized = try allocator.alloc(g.spec.RecordProposal, records.len);
-            for (records, normalized, 0..) |record, *accepted, index| {
-                if (std.meta.activeTag(record.content) != unit.records) return make(allocator, current, candidate, .{ .record = index }, .record_kind);
-                accepted.* = p.record(allocator, validator, context, record) catch |err| return make(allocator, current, candidate, .{ .record = index }, try rule(err));
-                for (normalized[0..index]) |prior| if (try g.equalContent(allocator, prior.content, accepted.content)) return make(allocator, current, candidate, .{ .record = index }, .duplicate_record);
-            }
-        },
-    }
-    return error.InvalidSpecificationRepair;
-}
-
-fn rule(err: p.Error) Error!Rule {
-    return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.InvalidSpecification, error.InvalidReferenceReconciliation, error.InvalidSourceCitation => .provenance,
-        error.InvalidTypedText, error.UnboundPathReference, error.InvalidPassiveLiteral => .typed_text,
-        // Invalid/stale mechanical authority is never sent to model repair.
-        else => error.InvalidSpecificationRepair,
-    };
-}
-fn make(allocator: std.mem.Allocator, current: session.Session, candidate: Candidate, target: Target, selected_rule: Rule) Error!Authorization {
-    return atomic.authorize(allocator, try session.owner(allocator, current), candidate.revision, target, try select(candidate.response, target), selected_rule);
+pub fn authorize(allocator: std.mem.Allocator, current: session.Session, candidate: Candidate, rejection: candidates.Rejection) Error!Authorization {
+    const owner = try session.owner(allocator, current);
+    if (candidate.revision == 0 or candidate.revision != rejection.revision or
+        !@import("model_request_identity.zig").unitOwnerEql(owner, rejection.owner) or
+        !std.meta.eql(try session.unit(current.completed), rejection.issue.unit) or
+        !std.meta.eql(candidate.origins.at(rejection.issue.field), rejection.origin) or rejection.issue.field != .target) return error.InvalidSpecificationRepair;
+    const expected = rejection.issue.observed orelse return error.InvalidSpecificationRepair;
+    const target = rejection.issue.field.target;
+    if (!try atomic.equal(allocator, try candidates.select(candidate.response, target), expected)) return error.InvalidSpecificationRepair;
+    return atomic.authorize(allocator, owner, candidate.revision, target, expected, rejection.issue.rule);
 }
 
 pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p.Context, authorization: Authorization) Error!*packets.Packet {
@@ -74,9 +43,10 @@ pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_
     return atomic.parse(allocator, authorization, packet_value, bytes);
 }
 
-pub fn merge(allocator: std.mem.Allocator, current: session.Session, candidate: Candidate, authorization: Authorization, replacement: Replacement) Error!Candidate {
+pub fn merge(allocator: std.mem.Allocator, current: session.Session, candidate: Candidate, authorization: Authorization, replacement: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!Candidate {
     var result = candidate;
-    result.revision = try atomic.checkMerge(allocator, try session.owner(allocator, current), candidate.revision, try select(candidate.response, authorization.target), authorization, replacement);
+    result.revision = try atomic.checkMerge(allocator, try session.owner(allocator, current), candidate.revision, try candidates.select(candidate.response, authorization.target), authorization, replacement);
+    result.origins = try candidate.origins.replacing(allocator, authorization.target, origin);
     switch (authorization.target) {
         .title => result.response.content.brief.title = replacement.attributed,
         .description => result.response.content.brief.description = replacement.attributed,
@@ -90,17 +60,4 @@ pub fn merge(allocator: std.mem.Allocator, current: session.Session, candidate: 
         },
     }
     return result;
-}
-
-fn select(response: g.Response, target: Target) Error!Replacement {
-    if (response != .content) return error.InvalidSpecificationRepair;
-    const content = response.content;
-    return switch (target) {
-        .title => if (content == .brief) .{ .attributed = content.brief.title } else error.InvalidSpecificationRepair,
-        .description => if (content == .brief) .{ .attributed = content.brief.description } else error.InvalidSpecificationRepair,
-        .primary_goal => if (content == .brief) .{ .attributed = content.brief.primary_goal } else error.InvalidSpecificationRepair,
-        .story => if (content == .primary_user_story) .{ .attributed = content.primary_user_story } else error.InvalidSpecificationRepair,
-        .entity_basis => if (content == .entities) .{ .attributed = content.entities.basis } else error.InvalidSpecificationRepair,
-        .record => |index| if (content == .records and index < content.records.len) .{ .record = content.records[index] } else error.InvalidSpecificationRepair,
-    };
 }

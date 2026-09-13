@@ -35,8 +35,7 @@ implemented. `spec.workflow.yaml` declares local request/retirement subgraphs;
 the compiler expands their operations through the existing validators.
 Schemas share local definitions and select the current generation unit,
 reconciliation purpose or authorized repair shape. Model inputs share citation
-records and preserve their complete supplied evidence. The
-[file guide and measurements](../TODO001.md) describe the twelve-file bundle.
+records and preserve their complete supplied evidence.
 
 **Classification:** Initial SDD workflow definition
 
@@ -655,7 +654,9 @@ not business authority. All storage is execution-local.
 
 `build-model-protocol-retry` retains the original request identity, schema,
 unit and provider binding. It uses the originating assignment's optional
-`protocol-prompt`, decoder/schema diagnostic and minimum schema example.
+`protocol-prompt` and decoder/schema diagnostic. Schema corrections include the
+exact expected schema node, JSON Pointer and parent/value scope; syntax
+corrections retain the original complete schema. No candidate example is generated.
 It rebuilds from the retained original inputs and latest rejection, without
 accumulating correction history. YAML checks the logical request phase before
 reusing the normal provider-operation lifecycle and accounting. The accounting
@@ -665,10 +666,20 @@ builder has no separate counter or limit (Design §22.6).
 Workflow schemas and the shared `model_candidate_json.zig` decoder use ADR
 0006's closed `kind` alternatives, including nested typed values. Empty, mixed
 or incomplete alternatives reject at payload validation, before request closure,
-and take the existing bounded protocol-correction path. Schema examples are
-checked against native decoding; integer spelling uses the payload validator's
+and take the existing bounded protocol-correction path. Independently authored
+wire cases cover selected schemas and native decoding; integer spelling uses the payload validator's
 exact arithmetic. Native/persisted JSON is unchanged; no legacy model reader
 or schema-profile extension is introduced.
+
+Summary, disposition, signal and conflict validators return checked values or
+native rejections with the unit, rule, observed/expected constraint, revision and
+producing origin. Invalid corpus/history/context and operational errors remain
+failures; candidate rejection terminates as `invalid` until reconciliation repair
+is implemented. Specification unit validation retains provenance, text, kind and
+duplicate-record failures. Existing extraction/specification authorizers consume
+retained rejections and verify current association and old values. They do not
+repeat validation traversal; canonical validation still runs after merge. Repair
+updates only the replaced field's origin and retains siblings' producing origins.
 
 `test-reference-model-input` checks packets, exact values, scope membership and
 allocation failures; `test-model-request-workflow` checks native packet transport

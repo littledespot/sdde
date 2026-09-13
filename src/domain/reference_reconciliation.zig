@@ -60,11 +60,12 @@ pub const ConflictProposal = struct {
 };
 pub const ValidatedConflict = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, kind: ConflictKind, summary: text.ValidatedReferenceSemanticText, resolution: enum { unresolved } };
 pub const Proposal = struct { claim_dispositions: []const ClaimDisposition, signals: []const SignalProposal, conflicts: []const ConflictProposal };
-pub const Raw = struct { input: Input, bytes: []const u8 };
-pub const Parsed = struct { input: Input, proposal: union(enum) { summary: SummaryProposal, global: Proposal } };
+pub const diagnostic = @import("reference_reconciliation_diagnostic.zig");
+pub const Raw = struct { source: diagnostic.Source = .{}, input: Input, bytes: []const u8 };
+pub const Parsed = struct { source: diagnostic.Source = .{}, input: Input, proposal: union(enum) { summary: SummaryProposal, global: Proposal } };
 pub const CheckedSummary = struct { input: Input, statements: []const ValidatedStatement };
 pub const SummaryAssignment = struct { checked: CheckedSummary, id: SummaryId, statement_ids: []const StatementId, next_statement_ordinal: u32 };
-pub const CheckedDispositions = struct { input: Input, proposal: Proposal, dispositions: []const ClaimDisposition };
+pub const CheckedDispositions = struct { source: diagnostic.Source = .{}, input: Input, proposal: Proposal, dispositions: []const ClaimDisposition };
 pub const CheckedSignals = struct { prior: CheckedDispositions, signals: []const ValidatedSignal };
 pub const CheckedConflicts = struct { prior: CheckedSignals, conflicts: []const ValidatedConflict };
 pub const RecordAssignments = struct { checked: CheckedConflicts, signal_ids: []const SignalId, conflict_ids: []const ConflictId };

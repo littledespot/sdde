@@ -41,6 +41,7 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
         .evaluator_error => |reason| try writer.print("Quality evaluation failed: {s}\n", .{@tagName(reason)}),
     };
     const fields = [_]struct { label: []const u8, value: ?[]const u8 }{
+        .{ .label = "Terminal step", .value = report.terminal_step },
         .{ .label = "Model step", .value = report.last_model_step },
         .{ .label = "Candidate source step", .value = report.candidate_model_step },
         .{ .label = "Engine/harness error", .value = report.diagnostic },
@@ -54,6 +55,11 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
         try std.json.Stringify.value(value, .{}, writer);
         try writer.writeByte('\n');
     };
+    if (report.terminal_rejection) |rejection| {
+        try writer.writeAll("Runner rejection: ");
+        try std.json.Stringify.value(rejection, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
     if (report.retry_error) |diagnostic| {
         try writeRetryError(writer, diagnostic);
         try writer.writeByte('\n');
@@ -71,7 +77,7 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
         try writeJsonError(writer, diagnostic);
         try writer.writeByte('\n');
     }
-    if (report.last_model_output) |path| try writer.print("Model output: {s}/{s}/{s}\n", .{ root, run, path });
+    if (report.last_model_output) |path| try writer.print("Model output: {s}/{s}/{s}\n", .{ root, run, path }) else if (report.last_model_call != null) try writer.writeAll("Model output text: unavailable; see exchange evidence.\n");
     if (report.candidate_model_output) |path| try writer.print("Candidate source output: {s}/{s}/{s}\n", .{ root, run, path });
     if (report.events_file) |path| try writer.print("Events: {s}/{s}/{s}\n", .{ root, run, path });
     try writer.print("Report: {s}/{s}/report.md\nDetails: {s}/{s}/report.json\n", .{ root, run, root, run });
@@ -112,7 +118,9 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     try writer.print("\n\nWorkflow outcome: {s}; publication: {s}; semantic quality: {s}.\n\n", .{
         if (report.workflow_outcome) |tag| @tagName(tag) else "not_run", @tagName(report.publication_check), @tagName(report.semantic_quality),
     });
-    try writer.writeAll("Last model step: ");
+    try writer.writeAll("Terminal step: ");
+    try escape(writer, report.terminal_step orelse "none");
+    try writer.writeAll("\n\nLast model step: ");
     try escape(writer, report.last_model_step orelse "none");
     try writer.writeAll("\n\nEngine/harness diagnostic: ");
     try escape(writer, report.diagnostic orelse "none");
@@ -121,6 +129,11 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     try writer.writeAll("; model validation: ");
     try escape(writer, report.model_diagnostic orelse "none");
     try writer.writeAll(".\n\n");
+    if (report.terminal_rejection) |rejection| {
+        try writer.writeAll("Runner rejection: ");
+        try std.json.Stringify.value(rejection, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
     if (report.retry_error) |diagnostic| {
         try writeRetryError(writer, diagnostic);
         try writer.writeAll("\n\n");
@@ -140,7 +153,7 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     }
     if (report.last_model_output) |path| {
         try writer.print("Rejected or completed model output: [open text]({s}). This is untrusted diagnostic data.\n\n", .{path});
-    }
+    } else if (report.last_model_call != null) try writer.writeAll("Model output text is unavailable; inspect the retained exchange evidence.\n\n");
     if (report.candidate_model_output) |path| {
         try writer.print("Candidate diagnostic source: [model output]({s}), call {d}.\n\n", .{ path, report.candidate_model_call.? });
     }
