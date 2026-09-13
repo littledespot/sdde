@@ -59,7 +59,11 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
     if (!parsed.input.progress.plan.layout.items.state_id.eql(rejection.state_id) or parsed.input.partition.id.ordinal != rejection.partition_id.ordinal or parsed.source.revision != rejection.revision or
         !std.meta.eql(parsed.source.at(rejection.unit, d.fieldFor(rejection.unit, rejection.issue.rule)), rejection.origin) or
         !std.meta.eql(rejection.dependencies orelse return error.InvalidAtomicRepair, try shared.snapshot(context.Facts, a, facts))) return error.InvalidAtomicRepair;
-    const rule: Rule = .{ .rejection = rejection, .requirement = if (rejection.issue.expected == .constraint) rejection.issue.expected.constraint.description() else "Use only the supplied identities and preserve complete member coverage." };
+    const rule: Rule = .{ .rejection = rejection, .requirement = switch (rejection.issue.expected) {
+        .constraint => |constraint| constraint.description(),
+        .text_issue => |issue| issue.description(),
+        else => "Use only the supplied identities and preserve complete member coverage.",
+    } };
     switch (rejection.unit) {
         .statement => |index| {
             if (parsed.proposal != .summary or index >= parsed.proposal.summary.statements.len) return error.InvalidAtomicRepair;
@@ -210,7 +214,7 @@ pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authori
     const facts = try context.capture(a, parsed, if (needsText(authorization.rule.rejection.unit)) ctx else null);
     defer a.free(facts.history);
     const target = authorization.target;
-    const revision = try atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try select(parsed, target), facts, authorization, replacement);
+    const merged = try atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try select(parsed, target), facts, authorization, replacement, origin);
     var result = parsed;
     if (parsed.proposal == .summary) {
         var statements: std.ArrayList(r.StatementProposal) = .empty;
@@ -275,7 +279,8 @@ pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authori
         result.proposal = .{ .global = global };
     }
     result.source = try origins(a, parsed.source, target, authorization.operation == .delete, origin);
-    result.source.revision = revision;
+    result.source.revision = merged.revision_after;
+    result.source.last_repair = merged;
     return result;
 }
 fn select(parsed: r.Parsed, target: Target) Error!?Replacement {

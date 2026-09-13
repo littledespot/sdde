@@ -21,6 +21,10 @@ pub const Driver = struct {
     classification_failure_origin: ?@import("../domain/model_candidate_origin.zig").Origin = null,
     reconciliation_repair_fault: @FieldType(@import("spec_generation_responses.zig").Options, "reconciliation_repair_fault") = null,
     reconciliation_fault: ?@import("spec_generation_responses.zig").ReconciliationFault = null,
+    malformed_reconciliation_repair_once: bool = false,
+    reconciliation_repair_calls: usize = 0,
+    reconciliation_merges: usize = 0,
+    unchanged_reconciliation_merges: usize = 0,
     malformed: bool = false,
     uncertain: bool = false,
     malformed_once: bool = false,
@@ -75,6 +79,18 @@ pub const Driver = struct {
             const content = current_request.prepared().?.content;
             std.testing.expectEqual(base.len + @as(usize, if (attempt > 1) 3 else 0), content.len) catch unreachable;
             std.testing.expectEqualDeep(base, content[0..base.len]) catch unreachable;
+            if (current_request.id().purpose == .atomic_repair) {
+                const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
+                assertRepairRequest(arena.allocator(), current_request.prepared().?, packet) catch unreachable;
+            }
+            if (current_request.id().immutable_unit_owner_id == .reference_global and current_request.id().purpose == .atomic_repair) {
+                const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
+                if (self.malformed_reconciliation_repair_once and self.reconciliation_repair_calls == 0) {
+                    const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
+                    self.fake.invocation_plan.complete.content = std.json.Stringify.valueAlloc(arena.allocator(), input.value.object.get("repair").?, .{}) catch unreachable;
+                }
+                self.reconciliation_repair_calls += 1;
+            }
             if (current_request.id().immutable_unit_owner_id == .reference_chunk and current_request.id().purpose == .atomic_repair) {
                 if (self.malformed_classification_repair_once and self.classification_repair_calls == 0) self.fake.invocation_plan.complete.content = "{}";
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
@@ -111,6 +127,20 @@ pub const Driver = struct {
             self.calls += 1;
         };
         const result = self.runner.bindings().invokeStep(id);
+        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, @import("../actions/reference/merge_reference_reconciliation_repair.zig").Action.contract.id) and result.status() == .ok) {
+            const view: data.View = .{ .slots = self.runner.envelope.slots };
+            const parsed = @import("../application/reference_extraction_workflow.zig").read(&view, @import("../application/reference_reconciliation_workflow.zig").parsed_schema, .reconciliation_parsed) catch unreachable;
+            const merged = parsed.payload().reconciliation_parsed.source.last_repair.?;
+            const observed = @import("../application/candidate_repair_observations.zig").read(arena.allocator(), &view) catch unreachable;
+            var matches: usize = 0;
+            for (observed) |item| if (std.mem.eql(u8, item.authorization.bytes, merged.authorization.bytes)) {
+                std.testing.expectEqualDeep(merged, item) catch unreachable;
+                matches += 1;
+            };
+            std.testing.expectEqual(@as(usize, 1), matches) catch unreachable;
+            self.reconciliation_merges += 1;
+            if (!merged.changed) self.unchanged_reconciliation_merges += 1;
+        };
         const diagnostic = @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = self.runner.envelope.slots }) catch unreachable;
         if (diagnostic) |value| switch (value) {
             .extraction_text => |rejection| if (self.text_failure_origin == null) {
@@ -130,6 +160,22 @@ pub const Driver = struct {
         return result;
     }
 };
+
+fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest, packet: *const @import("../domain/model_input_packet.zig").Packet) !void {
+    // Exercise the real provider serializer, without making a network call.
+    const wire = try @import("../adapters/provider/bedrock_request.zig").encode(a, request, .inference);
+    const decoded = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
+    const user = decoded.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[0].object.get("text").?.string;
+    try std.testing.expectEqualStrings(packet.body(), user);
+    var schema_found = false;
+    var instruction_found = false;
+    for (decoded.value.object.get("system").?.array.items) |part| {
+        const value = part.object.get("text").?.string;
+        schema_found = schema_found or std.mem.eql(u8, value, request.response_schema.modelBytes());
+        instruction_found = instruction_found or std.mem.indexOf(u8, value, "Return only the permitted content matching the selected schema.") != null;
+    }
+    try std.testing.expect(schema_found and instruction_found);
+}
 
 fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fault, "shape")) ![]const u8 {
     if (shape == .empty) return "{}";

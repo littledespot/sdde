@@ -69,7 +69,7 @@ pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, p
     const replacement = try atomic.copyReplacement(a, proposed_replacement);
     const current = facts.candidate;
     const scope = try scopeOf(authorization);
-    const revision = try atomic.checkMerge(a, unit(scope), current.revision, try select(current, scope, authorization.target), facts, authorization, replacement);
+    const merged = try atomic.checkMerge(a, unit(scope), current.revision, try select(current, scope, authorization.target), facts, authorization, replacement, origin);
     const entries = try a.dupe(extraction.TextValidatedResult, current.entries);
     for (entries) |*entry| if (entry.scope.chunk_id.eql(scope.chunk_id)) {
         switch (authorization.target) {
@@ -102,7 +102,7 @@ pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, p
             },
         }
     };
-    return .{ .revision = revision, .entries = entries };
+    return .{ .revision = merged.revision_after, .last_repair = merged, .entries = entries };
 }
 
 fn unit(scope: evidence.Scope) identity.ImmutableUnitOwnerId {

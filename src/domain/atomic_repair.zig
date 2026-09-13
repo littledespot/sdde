@@ -2,6 +2,25 @@
 //! Domain validators select typed targets/rules; workflow graphs own repetition.
 const std = @import("std");
 const identity = @import("model_request_identity.zig");
+const Origin = @import("model_candidate_origin.zig").Origin;
+
+/// Execution-local merge facts, published only with the resulting candidate.
+/// A changed value and a new revision do not establish validation acceptance.
+pub const Merge = struct {
+    authorization: identity.RepairAuthorizationId,
+    owner: identity.ImmutableUnitOwnerId,
+    operation: enum { replace, insert, delete },
+    revision_before: u64,
+    revision_after: u64,
+    changed: bool,
+    origin: ?Origin,
+
+    pub fn copy(self: Merge, a: std.mem.Allocator) strict.Error!Merge {
+        const bytes = try std.json.Stringify.valueAlloc(a, self, .{});
+        defer a.free(bytes);
+        return strict.decode(Merge, a, bytes, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
+    }
+};
 const packets = @import("model_input_packet.zig");
 const json = @import("model_candidate_json.zig");
 const strict = @import("strict_json.zig");
@@ -89,7 +108,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
         pub fn equal(a: std.mem.Allocator, left: Replacement, right: Replacement) std.mem.Allocator.Error!bool {
             return eql(Replacement, a, left, right);
         }
-        pub fn changed(a: std.mem.Allocator, authorization: Authorization, replacement: ?Replacement) Error!bool {
+        fn changed(a: std.mem.Allocator, authorization: Authorization, replacement: ?Replacement) Error!bool {
             return switch (authorization.operation) {
                 .replace => |expected| !try equal(a, expected, replacement orelse return error.InvalidAtomicRepair),
                 .insert, .delete => true,
@@ -112,7 +131,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
 
         /// Validate the exact authorized old value before the domain applies the
         /// replacement. Semantic acceptance still requires the original validators.
-        pub fn checkMerge(a: std.mem.Allocator, owner: identity.ImmutableUnitOwnerId, revision: u64, current: ?Replacement, dependencies: Dependencies, authorization: Authorization, replacement: ?Replacement) Error!u64 {
+        pub fn checkMerge(a: std.mem.Allocator, owner: identity.ImmutableUnitOwnerId, revision: u64, current: ?Replacement, dependencies: Dependencies, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!Merge {
             try checkDependencies(a, authorization, dependencies);
             if (!identity.unitOwnerEql(owner, authorization.owner) or revision != authorization.revision) return error.InvalidAtomicRepair;
             switch (authorization.operation) {
@@ -123,7 +142,19 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
                 .insert => |kind| if (current != null or replacement == null or std.meta.activeTag(replacement.?) != kind) return error.InvalidAtomicRepair,
                 .delete => |expected| if (replacement != null or !try equal(a, current orelse return error.InvalidAtomicRepair, expected)) return error.InvalidAtomicRepair,
             }
-            return std.math.add(u64, revision, 1) catch error.InvalidAtomicRepair;
+            return (Merge{
+                .authorization = authorization.id,
+                .owner = owner,
+                .operation = switch (authorization.operation) {
+                    .replace => .replace,
+                    .insert => .insert,
+                    .delete => .delete,
+                },
+                .revision_before = revision,
+                .revision_after = std.math.add(u64, revision, 1) catch return error.InvalidAtomicRepair,
+                .changed = try changed(a, authorization, replacement),
+                .origin = origin,
+            }).copy(a);
         }
     };
 }

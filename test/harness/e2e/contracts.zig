@@ -101,6 +101,7 @@ pub const Report = struct {
     provider_diagnostic: ?[]const u8 = null,
     model_diagnostic: ?[]const u8 = null,
     candidate_error: ?@import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic = null,
+    repairs: []const @import("../../../src/domain/atomic_repair.zig").Merge = &.{},
     candidate_model_call: ?usize = null,
     candidate_model_step: ?[]const u8 = null,
     candidate_model_output: ?[]const u8 = null,

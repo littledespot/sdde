@@ -422,12 +422,20 @@ test "text repair preserves siblings and exposes remaining classification defect
             .{ .reference = .{ .nodes = &.{.{ .passive = passive }} } };
         const packet = try repair.packet(std.testing.allocator, facts, context.registry, available, authorization);
         defer @import("domain/model_input_packet.zig").release(packet);
+        const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+        const rule = body.value.object.get("repair").?.object.get("rule").?.object;
+        try std.testing.expectEqualStrings(rejection.issue.description(), rule.get("requirement").?.string);
+        const projected = try @import("domain/model_candidate_json.zig").decode(extraction.text.Issue, a, try std.json.Stringify.valueAlloc(a, rule.get("issue").?, .{}));
+        try std.testing.expectEqualDeep(rejection.issue, projected);
+        try std.testing.expectEqualStrings("requirements.md", projected.path_match.?.lexeme);
         const wire = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement);
         const merged = try repair.merge(a, facts, authorization, try repair.parse(a, authorization, packet, wire), correction);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[0], merged.entries[0].outcome.claims[0]);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[1].citations, merged.entries[0].outcome.claims[1].citations);
         try std.testing.expectEqualDeep(candidate.entries[0].token_classifications, merged.entries[0].token_classifications);
         const checked = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, merged)).valid;
+        try std.testing.expectEqualDeep(merged.last_repair.?, checked.last_repair.?);
+        try std.testing.expect(checked.last_repair.?.changed);
         try std.testing.expectEqualDeep(correction, checked.entries[0].outcome.claims[1].origin.?);
         try std.testing.expectEqualDeep(first, checked.entries[0].outcome.claims[0].origin.?);
         const remaining = (try @import("domain/reference_selection_validation.zig").validate(a, inputs, available, checked)).token_classifications;
@@ -439,6 +447,7 @@ test "text repair preserves siblings and exposes remaining classification defect
         try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, stale, rejection));
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, stale, authorization, replacement, correction));
         const again = try repair.merge(a, facts, authorization, authorization.operation.replace, correction);
+        try std.testing.expect(!again.last_repair.?.changed);
         const repeated = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, again)).invalid;
         try std.testing.expectEqual(.unbound_path, repeated.issue.reason);
         try std.testing.expectEqualDeep(correction, repeated.origin.?);

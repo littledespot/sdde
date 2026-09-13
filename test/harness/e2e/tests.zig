@@ -596,3 +596,52 @@ test "reports preserve native extraction reconciliation and specification failur
         }
     }
 }
+
+test "events and reports preserve native repair changes and text spans after release" {
+    const reconciliation_fixture = @import("../../../src/reference_reconciliation_test.zig");
+    const reference = @import("../../../src/test_fixtures/reference_reconciliation.zig");
+    const repair = @import("../../../src/domain/reference_reconciliation_repair.zig");
+    const Diagnostic = @import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic;
+    const Merge = @import("../../../src/domain/atomic_repair.zig").Merge;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var retained: Diagnostic = undefined;
+    var merged: [2]Merge = undefined;
+    {
+        var source: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer source.deinit();
+        const scratch = source.allocator();
+        const inputs = try reconciliation_fixture.prepare(scratch, &.{ "Display a greeting.\n", "Confirm a reservation.\n" });
+        defer inputs.deinit();
+        const current = try reference.summaries(scratch, try reference.initialize(scratch, inputs.inputs, inputs.extracted, 2), inputs.context());
+        var proposal = try reference.global(scratch, current);
+        const signals = try scratch.dupe(reference.r.SignalProposal, proposal.signals);
+        const good = signals[0].content;
+        signals[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display \\\"a result\\\"." } }} } } };
+        proposal.signals = signals;
+        const candidate: reference.r.Parsed = .{ .input = current, .proposal = .{ .global = proposal } };
+        const rejected = (try reference.validate_signals.execute(scratch, (try reference.validate_dispositions.execute(scratch, candidate)).valid, inputs.context())).invalid;
+        const authorization = (try repair.authorize(scratch, candidate, inputs.context(), rejected)).model;
+        for (0..2) |index| {
+            const value = try repair.merge(scratch, candidate, inputs.context(), authorization, if (index == 0) authorization.operation.replace else .{ .content = good }, .{ .request = .{ .value = 5 }, .attempt = .{ .value = 2 } });
+            merged[index] = try value.source.last_repair.?.copy(a);
+            const validation = try reference.validate_signals.execute(scratch, (try reference.validate_dispositions.execute(scratch, value)).valid, inputs.context());
+            if (index == 0) retained = try (Diagnostic{ .reconciliation = validation.invalid }).copy(a) else try std.testing.expect(validation == .valid);
+        }
+    }
+    try std.testing.expectEqualStrings("\\", retained.reconciliation.issue.expected.text_issue.path_match.?.lexeme);
+    for (merged, 0..) |merge, index| {
+        const report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = if (index == 0) .invalid else .ok, .terminal_step = "validate-signals", .candidate_error = if (index == 0) retained else null, .repairs = &.{merge} };
+        const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
+        try std.testing.expectEqualDeep(report, decoded);
+        try std.testing.expectEqual(index == 1, decoded.repairs[0].changed);
+        try std.testing.expectEqual(@as(u64, 1), merge.revision_before);
+        try std.testing.expectEqual(@as(u64, 2), merge.revision_after);
+        const bytes = try std.json.Stringify.valueAlloc(a, report.repairs, .{});
+        for ([_][]const u8{ try @import("report.zig").renderMarkdown(a, decoded), try @import("report.zig").terminal(a, decoded, "runs", "case") }) |output| try std.testing.expect(std.mem.indexOf(u8, output, bytes) != null);
+        const event = try @import("trace.zig").Trace.stepEvent(a, index + 1, .{ .bytes = "validate-signals" }, .{ .outcome = report.workflow_outcome.? }, decoded);
+        const tree = try std.json.parseFromSlice(std.json.Value, a, event, .{});
+        try std.testing.expectEqual(index == 1, tree.value.object.get("repairs").?.array.items[0].object.get("changed").?.bool);
+    }
+}

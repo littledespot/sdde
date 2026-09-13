@@ -12,6 +12,7 @@ pub const Rule = struct {
     validator: enum { specification_generation_v1 } = .specification_generation_v1,
     rule: candidates.Rule,
     native_error: @FieldType(candidates.Issue, "native_error"),
+    text_issue: ?@import("typed_text.zig").Issue,
     requirement: []const u8,
 };
 const dependencies = @import("specification_candidate_context.zig");
@@ -34,9 +35,9 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
     const expected = rejection.issue.observed orelse return error.InvalidSpecificationRepair;
     const target = rejection.issue.field.target;
     if (!try atomic.equal(allocator, try candidates.select(candidate.response, target), expected)) return error.InvalidSpecificationRepair;
-    const rule: Rule = .{ .rule = rejection.issue.rule, .native_error = rejection.issue.native_error, .requirement = switch (rejection.issue.rule) {
+    const rule: Rule = .{ .rule = rejection.issue.rule, .native_error = rejection.issue.native_error, .text_issue = rejection.issue.text_issue, .requirement = switch (rejection.issue.rule) {
         .provenance => "Select nonempty, unique currently retained claim IDs; clarification responses are unavailable in this generation context.",
-        .typed_text => "Use valid nonblank business text and only supplied scoped passive references for path-like text.",
+        .typed_text => (rejection.issue.text_issue orelse return error.InvalidSpecificationRepair).description(),
         .exact_copy => "Select a preserved token and its citation supported by this field's unchanged provenance.",
         .record_kind => "Supply one record of the requested kind with valid content and evidence selections.",
         .duplicate_record => "Remove only the evidence-equivalent redundant occurrence; preserve coverage and sibling order.",
@@ -74,8 +75,9 @@ pub fn merge(allocator: std.mem.Allocator, current: session.Session, context: p.
     const facts = try dependencies.capture(allocator, current, context, candidate);
     defer allocator.free(facts.input);
     var result = candidate;
-    result.revision = try atomic.checkMerge(allocator, try session.owner(allocator, current), candidate.revision, try candidates.select(candidate.response, authorization.target), facts, authorization, proposed_replacement);
-    result.last_repair_changed = try atomic.changed(allocator, authorization, proposed_replacement);
+    const merged = try atomic.checkMerge(allocator, try session.owner(allocator, current), candidate.revision, try candidates.select(candidate.response, authorization.target), facts, authorization, proposed_replacement, origin);
+    result.revision = merged.revision_after;
+    result.last_repair = merged;
     switch (authorization.operation) {
         .replace => {
             const replacement = try atomic.copyReplacement(allocator, proposed_replacement.?);

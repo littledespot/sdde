@@ -68,6 +68,7 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
         try writeCandidateError(writer, diagnostic);
         try writer.writeAll("\n\n");
     }
+    try writeRepairs(writer, report.repairs);
     if (report.schema_error) |diagnostic| {
         try writer.writeAll("Schema validation: ");
         try std.json.Stringify.value(diagnostic, .{}, writer);
@@ -142,6 +143,7 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
         try writeCandidateError(writer, diagnostic);
         try writer.writeAll("\n\n");
     }
+    try writeRepairs(writer, report.repairs);
     if (report.schema_error) |diagnostic| {
         try writer.writeAll("Schema validation: ");
         try std.json.Stringify.value(diagnostic, .{}, writer);
@@ -217,4 +219,11 @@ fn explanation(report: c.Report) []const u8 {
         .quality_unresolved => "Generation completed, but the judge could not resolve every required criterion. Inspect the criterion evidence and uncertainty below.",
         .evaluated => "Generation, publication checks and rubric scoring completed. Inspect the score and criterion findings below; a completed evaluation may still report poor quality.",
     };
+}
+
+fn writeRepairs(writer: *std.Io.Writer, repairs: []const @import("../../../src/domain/atomic_repair.zig").Merge) !void {
+    if (repairs.len == 0) return;
+    try writer.writeAll("Retained repair results (merge facts, not validation acceptance): ");
+    try std.json.Stringify.value(repairs, .{}, writer);
+    try writer.writeAll("\n\n");
 }

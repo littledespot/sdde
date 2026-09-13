@@ -118,6 +118,117 @@ test "global repair retains graph siblings and all dependent signal and conflict
     const competing = (try f.validate_dispositions.execute(a, duplicate)).invalid;
     try std.testing.expectEqual(.competing_entries, (try repair.authorize(a, duplicate, fixture.context(), competing)).blocked);
 }
+
+test "summary signal and conflict repair packets retain precise shared text issues" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    const json = @import("domain/model_candidate_json.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const original: Origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 2 } };
+    const correction: Origin = .{ .request = .{ .value = 5 }, .attempt = .{ .value = 2 } };
+    for ([_][]const u8{ "Display `Hello, World!`.\n", "Confirm `Loan renewed!`.\n" }) |source| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try prepare(a, &.{ source, "Retain this independent statement.\n" });
+        defer fixture.deinit();
+        const progress = try f.initialize(a, fixture.inputs, fixture.extracted, 2);
+        for (0..3) |stage| {
+            const input = if (stage == 0) try f.build_input.execute(a, progress) else try f.summaries(a, progress, fixture.context());
+            for (0..@as(usize, if (stage == 2) 4 else 3)) |fault| {
+                const bad_text: r.text.BusinessText = .{ .segments = if (fault == 2)
+                    &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = 999 } } }}
+                else
+                    &.{.{ .literal = .{ .value = if (fault == 0) "Display \\\"a result\\\"." else " \t" } }} };
+                const bad: r.ContentProposal = .{ .model = .{ .business = bad_text } };
+                const good: r.ContentProposal = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display \"a result\"." } }} } } };
+                var parsed: r.Parsed = .{ .input = input, .source = .{ .origin = original }, .proposal = undefined };
+                var replacement: repair.Replacement = .{ .content = good };
+                if (stage == 0) {
+                    var proposal = try f.summary(a, input);
+                    const statements = try a.dupe(r.StatementProposal, proposal.statements);
+                    statements[0].content = bad;
+                    proposal.statements = statements;
+                    parsed.proposal = .{ .summary = proposal };
+                } else {
+                    var proposal = try f.global(a, input);
+                    if (stage == 1) {
+                        const signals = try a.dupe(r.SignalProposal, proposal.signals);
+                        signals[0].content = bad;
+                        proposal.signals = signals;
+                    } else {
+                        const dispositions = try a.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
+                        dispositions[0].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[1].claim_id} } };
+                        dispositions[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
+                        proposal.claim_dispositions = dispositions;
+                        proposal.signals = proposal.signals[2..];
+                        const nodes: []const r.text.ReferenceNode = switch (fault) {
+                            2 => &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = 999 } } }},
+                            3 => &.{.{ .source = .{ .source_id = .{ .ordinal = 999 } } }},
+                            else => &.{.{ .literal = bad_text.segments[0].literal }},
+                        };
+                        proposal.conflicts = &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = nodes }, .resolution = .unresolved }};
+                        replacement = .{ .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The supplied assertions disagree." } }} } };
+                    }
+                    parsed.proposal = .{ .global = proposal };
+                }
+                const rejected = (try textRejection(a, parsed, fixture.context())).?;
+                try std.testing.expectEqual(.typed_text, rejected.issue.rule);
+                const issue = rejected.issue.expected.text_issue;
+                try std.testing.expectEqual(([_]@FieldType(r.text.Issue, "reason"){ .unbound_path, .blank, .unknown_passive, .unknown_source })[fault], issue.reason);
+                if (fault == 0) try std.testing.expectEqualStrings("\\", issue.path_match.?.lexeme);
+                const authorization = (try repair.authorize(a, parsed, fixture.context(), rejected)).model;
+                const packet = try repair.packet(std.testing.allocator, parsed, fixture.context(), authorization);
+                defer packets.release(packet);
+                const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+                const rule = body.value.object.get("repair").?.object.get("rule").?.object;
+                try std.testing.expectEqualStrings(issue.description(), rule.get("requirement").?.string);
+                const projected = try json.decode(r.diagnostic.Fact, a, try std.json.Stringify.valueAlloc(a, rule.get("expected").?, .{}));
+                try std.testing.expectEqualDeep(issue, projected.text_issue);
+                try std.testing.expect(!rule.contains("dependencies") and !rule.contains("origin"));
+                try std.testing.expect(body.value.object.get("input").?.object.get("passive_literals").?.array.items.len > 0);
+                try std.testing.expectEqualStrings(if (stage == 2) "repair_summary" else "repair_content", packet.resultDefinition().?.bytes);
+                const unchanged = try repair.merge(a, parsed, fixture.context(), authorization, authorization.operation.replace, correction);
+                try std.testing.expect(!unchanged.source.last_repair.?.changed);
+                try std.testing.expectEqualDeep(correction, (try textRejection(a, unchanged, fixture.context())).?.origin.?);
+                const accepted = try repair.merge(a, parsed, fixture.context(), authorization, try repair.parse(a, authorization, packet, try json.encodeSelected(repair.Replacement, a, replacement)), correction);
+                try std.testing.expect(accepted.source.last_repair.?.changed);
+                try std.testing.expectEqual(@as(u64, 2), accepted.source.last_repair.?.revision_after);
+                try std.testing.expect(try textRejection(a, accepted, fixture.context()) == null);
+                if (stage == 0) {
+                    try std.testing.expectEqualDeep(parsed.proposal.summary.statements[1..], accepted.proposal.summary.statements[1..]);
+                    _ = try f.build_summary.execute(a, try f.assign_summary.execute(a, (try f.validate_summary.execute(a, accepted, fixture.context())).valid));
+                } else {
+                    try std.testing.expectEqualDeep(parsed.proposal.global.claim_dispositions, accepted.proposal.global.claim_dispositions);
+                    const sibling_start: usize = if (stage == 2) 0 else 1;
+                    try std.testing.expectEqualDeep(parsed.proposal.global.signals[sibling_start..], accepted.proposal.global.signals[sibling_start..]);
+                    const outcome = (try f.finish(a, input, accepted.proposal.global, fixture.context())).valid.outcome;
+                    try std.testing.expectEqual(@as(@TypeOf(outcome), if (stage == 2) .blocked else .complete), outcome);
+                }
+                var stale = fixture.context();
+                stale.inputs.corpus.state_id.bytes = "different-source";
+                try std.testing.expectError(error.InvalidReferenceReconciliation, textRejection(a, parsed, stale));
+                try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, accepted, fixture.context(), authorization, replacement, correction));
+            }
+        }
+    }
+}
+
+fn textRejection(a: std.mem.Allocator, parsed: r.Parsed, ctx: f.Context) !?r.diagnostic.Rejection {
+    if (parsed.proposal == .summary) return switch (try f.validate_summary.execute(a, parsed, ctx)) {
+        .valid => null,
+        .invalid => |issue| issue,
+    };
+    const dispositions = (try f.validate_dispositions.execute(a, parsed)).valid;
+    const signals = switch (try f.validate_signals.execute(a, dispositions, ctx)) {
+        .valid => |value| value,
+        .invalid => |issue| return issue,
+    };
+    return switch (try f.validate_conflicts.execute(a, signals, ctx)) {
+        .valid => null,
+        .invalid => |issue| issue,
+    };
+}
 pub fn prepare(allocator: std.mem.Allocator, sources: []const []const u8) !Fixture {
     const ingestion = @import("domain/reference_ingestion.zig");
     var inputs = try @import("reference_ingestion_test.zig").read(allocator, "base.md", "");

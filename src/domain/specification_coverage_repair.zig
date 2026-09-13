@@ -92,7 +92,8 @@ pub fn merge(a: std.mem.Allocator, validator: @import("typed_text.zig").Validato
     const token = authorization.rule.rejection.issue.missing_exact_copy;
     const replacement: g.spec.BusinessValue = .{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } };
     var next = current;
-    next.revision = try atomic.checkMerge(a, try owner(a, current, target), current.revision, .{ .value = (try candidates.canonicalValue(checked.response, target.subject, target.field)).value }, facts, authorization, .{ .value = replacement });
+    const merged = try atomic.checkMerge(a, try owner(a, current, target), current.revision, .{ .value = (try candidates.canonicalValue(checked.response, target.subject, target.field)).value }, facts, authorization, .{ .value = replacement }, null);
+    next.revision = merged.revision_after;
     const proposal = try candidates.replaceCanonicalValue(a, checked.response, target.subject, target.field, replacement);
     // Checked session units cannot contain unvalidated data. The existing owning
     // validator proves this unit before it re-enters full session assembly.
@@ -100,6 +101,7 @@ pub fn merge(a: std.mem.Allocator, validator: @import("typed_text.zig").Validato
         .valid => |value| value,
         .invalid => return error.InvalidSpecificationCoverageRepair,
     };
+    accepted.last_repair = merged;
     accepted.origins = checked.origins; // Engine reconstruction made no model call.
     next.units[target.unit] = accepted;
     return next;

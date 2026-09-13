@@ -75,6 +75,7 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
     }
     const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
     report.candidate_error = if (try @import("../../../src/application/candidate_validation_diagnostics.zig").read(&view)) |diagnostic| try diagnostic.copy(allocator) else null;
+    report.repairs = try @import("../../../src/application/candidate_repair_observations.zig").read(allocator, &view);
     if (report.candidate_error) |diagnostic| if (diagnostic.origin()) |origin| {
         const accounting = runner.model_accounting orelse return error.MissingProviderEvidence;
         const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);

@@ -17,9 +17,10 @@ pub const Issue = struct {
     rule: Rule,
     observed: ?Replacement,
     blocked: ?Blocked = null,
+    text_issue: ?@import("typed_text.zig").Issue = null,
     native_error: ?enum { InvalidSpecification, InvalidReferenceReconciliation, InvalidSourceCitation, InvalidTypedText, UnboundPathReference, InvalidPassiveLiteral } = null,
 };
-pub const Rejection = struct { owner: identity.ImmutableUnitOwnerId, revision: u64, origin: ?Origin, issue: Issue, last_repair_changed: ?bool = null, dependencies: ?@import("atomic_repair.zig").Snapshot = null };
+pub const Rejection = struct { owner: identity.ImmutableUnitOwnerId, revision: u64, origin: ?Origin, issue: Issue, last_repair: ?@import("atomic_repair.zig").Merge = null, dependencies: ?@import("atomic_repair.zig").Snapshot = null };
 pub const FieldOrigin = struct { target: Target, origin: ?Origin };
 pub const Origins = struct {
     initial: ?Origin = null,
@@ -60,7 +61,7 @@ pub const Origins = struct {
         return .{ .initial = self.initial, .fields = try result.toOwnedSlice(a) };
     }
 };
-pub const Candidate = struct { revision: u64 = 1, last_repair_changed: ?bool = null, response: g.Response, origins: Origins = .{} };
+pub const Candidate = struct { revision: u64 = 1, last_repair: ?@import("atomic_repair.zig").Merge = null, response: g.Response, origins: Origins = .{} };
 pub const Raw = struct { body: []const u8, origin: ?Origin };
 pub const Result = union(enum) { valid: g.Checked, invalid: Rejection };
 pub const Error = error{InvalidSpecificationRepair} || std.mem.Allocator.Error;

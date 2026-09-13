@@ -46,7 +46,7 @@ pub const Action = struct {
                 },
             };
         }
-        return .{ .valid = .{ .revision = parsed.revision, .entries = entries } };
+        return .{ .valid = .{ .revision = parsed.revision, .last_repair = parsed.last_repair, .entries = entries } };
     }
 };
 

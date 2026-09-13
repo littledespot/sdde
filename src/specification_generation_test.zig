@@ -10,6 +10,42 @@ const text = @import("test_fixtures/reference_text.zig");
 const validate_unit = @import("actions/specification/validate_specification_unit.zig").Action{ .validator = text.validator };
 const tokens = @import("test_fixtures/reference_tokens.zig");
 
+test "specification text repair uses shared localized guidance and preserves evidence" {
+    const repair = @import("domain/specification_repair.zig");
+    const candidates = @import("domain/specification_candidate.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const json = @import("domain/model_candidate_json.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "The visitor sees a greeting.", "The borrower receives a renewal confirmation." }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        const current = try @import("domain/specification_session.zig").initialize(.{ .bytes = "selected" }, fixture.context);
+        const good = try fixture.proposal(source);
+        var bad = good;
+        bad.value = .{ .normalized = .{ .segments = &.{.{ .literal = .{ .value = "Display \\\"a result\\\"." } }} } };
+        const candidate: candidates.Candidate = .{ .response = .{ .content = .{ .brief = .{ .title = good, .description = bad, .primary_goal = good } } } };
+        const rejected = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
+        const issue = rejected.issue.text_issue.?;
+        try std.testing.expectEqual(.unbound_path, issue.reason);
+        try std.testing.expectEqualStrings("\\", issue.path_match.?.lexeme);
+        const authorization = try repair.authorize(a, current, fixture.context, candidate, rejected);
+        const packet = try repair.packet(std.testing.allocator, current, fixture.context, authorization);
+        defer packets.release(packet);
+        const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+        const rule = body.value.object.get("repair").?.object.get("rule").?.object;
+        try std.testing.expectEqualStrings(issue.description(), rule.get("requirement").?.string);
+        try std.testing.expectEqualDeep(issue, try json.decode(@import("domain/typed_text.zig").Issue, a, try std.json.Stringify.valueAlloc(a, rule.get("text_issue").?, .{})));
+        const replacement: repair.Replacement = .{ .value = good.value };
+        const merged = try repair.merge(a, current, fixture.context, candidate, authorization, try repair.parse(a, authorization, packet, try json.encodeSelected(repair.Replacement, a, replacement)), null);
+        try std.testing.expectEqualDeep(bad.provenance, merged.response.content.brief.description.provenance);
+        try std.testing.expectEqualDeep(good, merged.response.content.brief.title);
+        try std.testing.expectEqualDeep(good, merged.response.content.brief.primary_goal);
+        try std.testing.expect((try validate_unit.execute(a, current, fixture.context, merged)) == .valid);
+    }
+}
+
 test "reference-grounded projections round trip all record families and reject changed rendering" {
     const projection = @import("domain/specification_projection.zig");
     const codec = @import("domain/specification_markdown.zig");
@@ -473,8 +509,8 @@ test "retained specification rejection distinguishes source binding and preserve
     try std.testing.expectEqualDeep(initial, merged.origins.at(.{ .target = .{ .provenance = .title } }).?);
     const unchanged = try repair.merge(a, current, fixture.context, candidate, authorization, .{ .provenance = bad.provenance }, correction);
     const again = (try validate_unit.execute(a, current, fixture.context, unchanged)).invalid;
-    try std.testing.expectEqual(false, unchanged.last_repair_changed.?);
-    try std.testing.expectEqual(true, merged.last_repair_changed.?);
+    try std.testing.expectEqual(false, unchanged.last_repair.?.changed);
+    try std.testing.expectEqual(true, merged.last_repair.?.changed);
     try std.testing.expectEqual(.provenance, again.issue.rule);
     try std.testing.expectEqualDeep(correction, again.origin.?);
     for (0..5) |scenario| {

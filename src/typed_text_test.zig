@@ -10,6 +10,51 @@ fn context(prepared: fixture.Prepared, inputs: evidence.Inputs, index: usize) te
     return .{ .registry = prepared.registry, .current = fixture.safety.value(prepared.owner), .inputs = inputs, .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[index].id } };
 }
 
+test "text diagnostics retain the owning lexer match on the normalized literal run" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var ids: reference.IdSource = .{};
+    const inputs = try reference.prepare(a, &ids, try ingest(a, "source.md", "A supported business statement.\n"));
+    const prepared = try fixture.prepare(a, inputs);
+    defer prepared.deinit();
+    const ctx = context(prepared, inputs, 0);
+    const scoped: text.ScopeSetContext = .{ .registry = ctx.registry, .current = ctx.current, .inputs = ctx.inputs, .scopes = &.{ctx.scope} };
+    const json = @import("domain/model_candidate_json.zig");
+    for ([_][]const u8{ "Display \"Hello, World!\".", "Confirm \"Loan renewed!\"." }) |value| {
+        const proposed: text.BusinessText = .{ .segments = &.{.{ .literal = .{ .value = value } }} };
+        const decoded = try json.decode(text.BusinessText, a, try json.encode(text.BusinessText, a, proposed));
+        try std.testing.expectEqualStrings(value, (try fixture.validator.checkBusinessIn(a, scoped, decoded)).valid.value.segments[0].literal.value);
+    }
+    for ([_]struct { value: []const u8, lexeme: []const u8, start: usize, kind: @import("domain/path_token_scan.zig").Kind }{
+        .{ .value = "Display \\\"Hello, World!\\\".", .lexeme = "\\", .start = 8, .kind = .display_path },
+        .{ .value = "Open C:\\data\\ledger.txt", .lexeme = "C:\\data\\ledger.txt", .start = 5, .kind = .display_path },
+        .{ .value = "See https://example.test", .lexeme = "https://example.test", .start = 4, .kind = .external_uri },
+    }) |case| {
+        const proposed: text.BusinessText = .{ .segments = &.{.{ .literal = .{ .value = case.value } }} };
+        const decoded = try json.decode(text.BusinessText, a, try json.encode(text.BusinessText, a, proposed));
+        try std.testing.expectEqualDeep(proposed, decoded);
+        const issue = (try fixture.validator.checkBusinessIn(a, scoped, decoded)).invalid;
+        try std.testing.expectEqual(.unbound_path, issue.reason);
+        try std.testing.expectEqual(@as(usize, 0), issue.first_node);
+        try std.testing.expectEqual(@as(usize, 0), issue.last_node);
+        const match = issue.path_match.?; // The lexer's own owner has already been released.
+        try std.testing.expectEqualStrings(case.lexeme, match.lexeme);
+        try std.testing.expectEqual(case.start, match.normalized_literal_run.start_byte);
+        try std.testing.expectEqual(case.start + case.lexeme.len, match.normalized_literal_run.end_byte);
+        try std.testing.expectEqual(case.kind, match.normalized_literal_run.kind);
+    }
+    const split: text.ReferenceSemanticText = .{ .nodes = &.{ .{ .literal = .{ .value = "Cafe\u{301} src/" } }, .{ .literal = .{ .value = "ledger.zig" } } } };
+    const issue = (try fixture.validator.checkReferenceIn(a, scoped, split)).invalid;
+    try std.testing.expectEqual(@as(usize, 1), issue.last_node);
+    try std.testing.expectEqual(@as(usize, "Café ".len), issue.path_match.?.normalized_literal_run.start_byte);
+    try std.testing.expectEqualStrings("src/ledger.zig", issue.path_match.?.lexeme);
+    try std.testing.expectEqualStrings("Cafe\u{301} src/", split.nodes[0].literal.value);
+    var invalid = scoped;
+    invalid.scopes = &.{};
+    try std.testing.expectError(error.InvalidTypedText, fixture.validator.checkBusinessIn(a, invalid, .{ .segments = &.{} }));
+}
+
 test "passive literals deduplicate normalized source scalars and retain exact origins" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

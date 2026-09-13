@@ -7,6 +7,7 @@ pub const Field = enum { record, key, selections, content, relationship };
 pub const FieldOrigin = struct { unit: Unit, field: Field, origin: ?Origin };
 pub const Source = struct {
     revision: u64 = 1,
+    last_repair: ?@import("atomic_repair.zig").Merge = null,
     origin: ?Origin = null,
     fields: []const FieldOrigin = &.{},
     pub fn at(self: Source, unit: Unit, field: Field) ?Origin {
@@ -37,7 +38,6 @@ pub const Constraint = enum {
     token_projected,
     conflict_claim_covered,
     conflict_pair_covered,
-    valid_typed_text,
 
     pub fn description(self: Constraint) []const u8 {
         return switch (self) {
@@ -60,7 +60,6 @@ pub const Constraint = enum {
             .token_projected => "Every nonconflicting preserved token needs an exact-token signal, including after supersession.",
             .conflict_claim_covered => "Every conflicting claim must appear in a conflict.",
             .conflict_pair_covered => "Every declared conflicting pair must appear together in a conflict.",
-            .valid_typed_text => "Use the supplied typed text and scoped evidence choices.",
         };
     }
 };
@@ -71,9 +70,10 @@ pub const Fact = union(enum) {
     disposition: r.ClaimDisposition,
     content: r.ContentProposal,
     text: r.text.ReferenceSemanticText,
+    text_issue: r.text.Issue,
     constraint: Constraint,
 };
-pub const Issue = struct { rule: Rule, observed: Fact, expected: Fact, native_error: ?enum { InvalidTypedText, UnboundPathReference, InvalidPassiveLiteral } = null };
+pub const Issue = struct { rule: Rule, observed: Fact, expected: Fact };
 pub const RepairBlock = enum { competing_entries, no_independent_target, no_required_member };
 pub const Rejection = struct {
     blocked: ?RepairBlock = null,
@@ -104,11 +104,6 @@ pub fn fieldFor(unit: Unit, rule: Rule) Field {
         else => .record,
     };
 }
-pub fn textFailure(err: r.Error, observed: Fact) r.Error!Issue {
-    return .{ .rule = .typed_text, .observed = observed, .native_error = switch (err) {
-        error.InvalidTypedText => .InvalidTypedText,
-        error.UnboundPathReference => .UnboundPathReference,
-        error.InvalidPassiveLiteral => .InvalidPassiveLiteral,
-        else => return err,
-    }, .expected = .{ .constraint = .valid_typed_text } };
+pub fn textFailure(issue: r.text.Issue, observed: Fact) Issue {
+    return .{ .rule = .typed_text, .observed = observed, .expected = .{ .text_issue = issue } };
 }

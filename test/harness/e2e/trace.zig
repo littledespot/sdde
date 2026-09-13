@@ -217,6 +217,7 @@ pub const Trace = struct {
             .schema_error = report.schema_error,
             .retry_error = if (result == .rejected and result.rejected == .retry_limit) try result.rejected.retry_limit.describe(a) else null,
             .candidate_error = report.candidate_error,
+            .repairs = report.repairs,
         }, .{});
     }
 

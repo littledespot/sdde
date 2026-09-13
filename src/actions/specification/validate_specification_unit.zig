@@ -9,8 +9,8 @@ pub const Action = struct {
         if (proposed.revision == 0 or !current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
         const result = try g.validate(allocator, self.validator, context, try session.unit(current.completed), proposed.response);
         return switch (result) {
-            .valid => |checked| .{ .valid = .{ .unit = checked.unit, .response = checked.response, .origins = proposed.origins } },
-            .invalid => |issue| .{ .invalid = .{ .owner = try session.owner(allocator, current), .revision = proposed.revision, .last_repair_changed = proposed.last_repair_changed, .origin = proposed.origins.at(issue.field), .issue = issue, .dependencies = try @import("../../domain/specification_candidate_context.zig").snapshot(allocator, current, context, proposed) } },
+            .valid => |checked| .{ .valid = .{ .unit = checked.unit, .response = checked.response, .origins = proposed.origins, .last_repair = proposed.last_repair } },
+            .invalid => |issue| .{ .invalid = .{ .owner = try session.owner(allocator, current), .revision = proposed.revision, .last_repair = proposed.last_repair, .origin = proposed.origins.at(issue.field), .issue = issue, .dependencies = try @import("../../domain/specification_candidate_context.zig").snapshot(allocator, current, context, proposed) } },
         };
     }
 };

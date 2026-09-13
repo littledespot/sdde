@@ -324,6 +324,12 @@ display IDs and shared typed-text validation now gate extraction candidates;
 raw-string extraction text is rejected. These are read-only, execution-local
 values, not file authority or semantic proof. See
 [F0100's text contract](design/features/F0100-SpecWorkflow.md#37-typed-reference-text-and-source-backed-display-literals).
+Repair guidance retains the shared text validator's reason and node range;
+path failures also retain the first lexer match and its normalized byte span.
+Extraction, reconciliation and specification use those native facts. Existing
+E2E events and reports expose retained repair revisions, exact value changes and
+producing origins separately from validation outcomes. See the
+[Phase 3 follow-up](fixes/TODO_FIX_001.md#phase-3-follow-up-required-by-r14).
 Markdown inline-code spans now become source-backed exact-value candidates;
 prose, quoted text and fenced code do not qualify through that extractor.
 Scripted `preserve`/`irrelevant` classifications are complete and chunk-scoped.

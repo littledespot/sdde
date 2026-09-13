@@ -27,7 +27,7 @@ pub const Need = Responses(.model).Need;
 pub const Content = Responses(.model).Content;
 pub const Response = Responses(.model).Response;
 pub const CanonicalResponse = Responses(.canonical).Response;
-pub const Checked = struct { unit: Unit, response: CanonicalResponse, origins: candidate.Origins = .{} };
+pub const Checked = struct { unit: Unit, response: CanonicalResponse, origins: candidate.Origins = .{}, last_repair: ?@import("atomic_repair.zig").Merge = null };
 const candidate = @import("specification_candidate.zig");
 pub const Validation = union(enum) { valid: Checked, invalid: candidate.Issue };
 
@@ -73,31 +73,31 @@ pub fn revalidate(allocator: std.mem.Allocator, validator: @import("typed_text.z
 
 fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: Responses(boundary).Response) Error!Validation {
     try provenance.bind(allocator, validator, context);
-    var part: candidate.Part = .provenance;
+    var inspection: provenance.Inspection = .{};
     const result: CanonicalResponse = switch (proposed) {
         .clarification => |need| .{ .clarification = .{
             .reason = need.reason,
-            .question = provenance.checkAttributed(boundary, allocator, validator, context, need.question) catch |err| return rejected(unit, .clarification_question, null, err),
+            .question = provenance.inspectAttributed(boundary, allocator, validator, context, need.question, &inspection) catch |err| return rejected(unit, .clarification_question, null, inspection.text_issue, err),
         } },
         .content => |content| blk: {
             if (@intFromEnum(std.meta.activeTag(unit)) != @intFromEnum(std.meta.activeTag(content))) return .{ .invalid = .{ .unit = unit, .field = .unit, .rule = .unit_kind, .observed = null, .blocked = .unit_kind } };
             break :blk .{ .content = switch (content) {
                 .brief => |brief| .{ .brief = .{
-                    .title = provenance.inspectAttributed(boundary, allocator, validator, context, brief.title, &part) catch |err| return rejectedPart(boundary, unit, proposed, .title, part, err),
-                    .description = provenance.inspectAttributed(boundary, allocator, validator, context, brief.description, &part) catch |err| return rejectedPart(boundary, unit, proposed, .description, part, err),
-                    .primary_goal = provenance.inspectAttributed(boundary, allocator, validator, context, brief.primary_goal, &part) catch |err| return rejectedPart(boundary, unit, proposed, .primary_goal, part, err),
+                    .title = provenance.inspectAttributed(boundary, allocator, validator, context, brief.title, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .title, inspection, err),
+                    .description = provenance.inspectAttributed(boundary, allocator, validator, context, brief.description, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .description, inspection, err),
+                    .primary_goal = provenance.inspectAttributed(boundary, allocator, validator, context, brief.primary_goal, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .primary_goal, inspection, err),
                 } },
-                .primary_user_story => |story| .{ .primary_user_story = provenance.inspectAttributed(boundary, allocator, validator, context, story, &part) catch |err| return rejectedPart(boundary, unit, proposed, .story, part, err) },
+                .primary_user_story => |story| .{ .primary_user_story = provenance.inspectAttributed(boundary, allocator, validator, context, story, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .story, inspection, err) },
                 .entities => |entities| .{ .entities = .{
                     .disposition = entities.disposition,
-                    .basis = provenance.inspectAttributed(boundary, allocator, validator, context, entities.basis, &part) catch |err| return rejectedPart(boundary, unit, proposed, .entity_basis, part, err),
+                    .basis = provenance.inspectAttributed(boundary, allocator, validator, context, entities.basis, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .entity_basis, inspection, err),
                 } },
                 .records => |records| records: {
                     const checked = try allocator.alloc(spec.RecordProposal, records.len);
                     for (records, checked, 0..) |record, *accepted, index| {
                         const observed: ?candidate.Replacement = if (boundary == .model) .{ .record = record } else null;
                         if (std.meta.activeTag(record.content) != unit.records) return .{ .invalid = .{ .unit = unit, .field = .{ .target = .{ .record = index } }, .rule = .record_kind, .observed = observed } };
-                        accepted.* = provenance.inspectRecord(boundary, allocator, validator, context, record, &part) catch |err| return rejectedPart(boundary, unit, proposed, .{ .record = index }, part, err);
+                        accepted.* = provenance.inspectRecord(boundary, allocator, validator, context, record, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .{ .record = index }, inspection, err);
                         for (checked[0..index]) |prior| if (try equalContent(allocator, prior.content, accepted.content)) return .{ .invalid = .{ .unit = unit, .field = .{ .target = .{ .record = index } }, .rule = .duplicate_record, .observed = observed, .blocked = if (try equalEvidence(allocator, prior.provenance, accepted.provenance)) null else .competing_records } };
                     }
                     break :records .{ .records = checked };
@@ -117,7 +117,11 @@ pub fn equalContent(allocator: std.mem.Allocator, a: spec.Content(spec.BusinessV
     return std.mem.eql(u8, left, right);
 }
 
-fn rejected(unit: Unit, field: candidate.Field, observed: ?candidate.Replacement, err: provenance.Error) Error!Validation {
+fn rejected(unit: Unit, field: candidate.Field, observed: ?candidate.Replacement, text_issue: ?@import("typed_text.zig").Issue, err: provenance.Error) Error!Validation {
+    if (text_issue == null) switch (err) {
+        error.InvalidTypedText, error.UnboundPathReference, error.InvalidPassiveLiteral => return err,
+        else => {},
+    };
     const native: @FieldType(candidate.Issue, "native_error") = switch (err) {
         error.InvalidSpecification => .InvalidSpecification,
         error.InvalidReferenceReconciliation => .InvalidReferenceReconciliation,
@@ -127,7 +131,7 @@ fn rejected(unit: Unit, field: candidate.Field, observed: ?candidate.Replacement
         error.InvalidPassiveLiteral => .InvalidPassiveLiteral,
         else => return err,
     };
-    return .{ .invalid = .{ .unit = unit, .field = field, .observed = observed, .native_error = native, .blocked = if (field == .clarification_question) .clarification_question else null, .rule = switch (native.?) {
+    return .{ .invalid = .{ .unit = unit, .field = field, .observed = observed, .native_error = native, .text_issue = text_issue, .blocked = if (field == .clarification_question) .clarification_question else null, .rule = switch (native.?) {
         .InvalidSpecification, .InvalidReferenceReconciliation, .InvalidSourceCitation => .provenance,
         .InvalidTypedText, .UnboundPathReference, .InvalidPassiveLiteral => .typed_text,
     } } };
@@ -140,10 +144,10 @@ fn equalEvidence(a: std.mem.Allocator, left: spec.Provenance, right: spec.Proven
     defer a.free(rhs);
     return std.mem.eql(u8, lhs, rhs);
 }
-fn rejectedPart(comptime boundary: spec.Boundary, unit: Unit, response: Responses(boundary).Response, subject: candidate.Subject, part: candidate.Part, err: provenance.Error) Error!Validation {
-    const target = candidate.locate(subject, part);
+fn rejectedPart(comptime boundary: spec.Boundary, unit: Unit, response: Responses(boundary).Response, subject: candidate.Subject, inspection: provenance.Inspection, err: provenance.Error) Error!Validation {
+    const target = candidate.locate(subject, inspection.part);
     const observed = if (boundary == .model) candidate.select(response, target) catch return error.InvalidSpecificationUnit else null;
-    var result = try rejected(unit, .{ .target = target }, observed, err);
-    if (part == .value and result.invalid.rule == .provenance) result.invalid.rule = .exact_copy;
+    var result = try rejected(unit, .{ .target = target }, observed, inspection.text_issue, err);
+    if (inspection.part == .value and result.invalid.rule == .provenance) result.invalid.rule = .exact_copy;
     return result;
 }

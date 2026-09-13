@@ -67,9 +67,17 @@ pub fn select(allocator: std.mem.Allocator, context: Context, selection: spec.Se
     return (try resolve(.model, allocator, context, selection)).provenance;
 }
 
-fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Context, resolved: Resolved, candidate: spec.BusinessValue) Error!spec.BusinessValue {
+pub const Inspection = struct { part: @import("specification_candidate.zig").Part = .provenance, text_issue: ?text.Issue = null };
+
+fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Context, resolved: Resolved, candidate: spec.BusinessValue, inspection: *Inspection) Error!spec.BusinessValue {
     return switch (candidate) {
-        .normalized => |proposed| .{ .normalized = (try validator.businessIn(allocator, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = resolved.scopes }, proposed)).value },
+        .normalized => |proposed| .{ .normalized = switch (try validator.checkBusinessIn(allocator, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = resolved.scopes }, proposed)) {
+            .valid => |checked| checked.value,
+            .invalid => |issue| {
+                inspection.text_issue = issue;
+                return issue.failure();
+            },
+        } },
         .exact_copy => |selected| result: {
             const all = try items(context);
             for (resolved.provenance.claim_ids) |id| {
@@ -84,15 +92,15 @@ fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Con
     };
 }
 
-pub fn inspectAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, part: *@import("specification_candidate.zig").Part) Error!spec.AttributedValue {
-    part.* = .provenance;
+pub fn inspectAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, inspection: *Inspection) Error!spec.AttributedValue {
+    inspection.* = .{};
     const resolved = try resolve(boundary, allocator, context, candidate.provenance);
-    part.* = .{ .value = .value };
-    return .{ .value = try valueIn(allocator, validator, context, resolved, candidate.value), .provenance = resolved.provenance };
+    inspection.part = .{ .value = .value };
+    return .{ .value = try valueIn(allocator, validator, context, resolved, candidate.value, inspection), .provenance = resolved.provenance };
 }
 
-pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal, part: *@import("specification_candidate.zig").Part) Error!spec.RecordProposal {
-    part.* = .provenance;
+pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal, inspection: *Inspection) Error!spec.RecordProposal {
+    inspection.* = .{};
     const resolved = try resolve(boundary, allocator, context, candidate.provenance);
     var result: spec.RecordProposal = .{ .content = candidate.content, .provenance = resolved.provenance };
     switch (candidate.content) {
@@ -101,13 +109,13 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
                 const proposed = @field(fields, field.name);
                 if (comptime field.type == spec.BusinessValue) {
-                    part.* = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
-                    @field(normalized, field.name) = try valueIn(allocator, validator, context, resolved, proposed);
+                    inspection.part = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
+                    @field(normalized, field.name) = try valueIn(allocator, validator, context, resolved, proposed, inspection);
                 } else {
                     const relationships = try allocator.alloc(spec.BusinessValue, proposed.len);
                     for (proposed, relationships, 0..) |entry, *checked, index| {
-                        part.* = .{ .value = .{ .relationship = index } };
-                        checked.* = try valueIn(allocator, validator, context, resolved, entry);
+                        inspection.part = .{ .value = .{ .relationship = index } };
+                        checked.* = try valueIn(allocator, validator, context, resolved, entry, inspection);
                     }
                     @field(normalized, field.name) = relationships;
                 }
@@ -119,10 +127,10 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
 }
 
 pub fn checkAttributed(comptime boundary: spec.Boundary, a: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue) Error!spec.AttributedValue {
-    var part: @import("specification_candidate.zig").Part = .provenance;
-    return inspectAttributed(boundary, a, validator, context, candidate, &part);
+    var inspection: Inspection = .{};
+    return inspectAttributed(boundary, a, validator, context, candidate, &inspection);
 }
 pub fn checkRecord(comptime boundary: spec.Boundary, a: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal) Error!spec.RecordProposal {
-    var part: @import("specification_candidate.zig").Part = .provenance;
-    return inspectRecord(boundary, a, validator, context, candidate, &part);
+    var inspection: Inspection = .{};
+    return inspectRecord(boundary, a, validator, context, candidate, &inspection);
 }

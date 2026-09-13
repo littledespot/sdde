@@ -49,7 +49,7 @@ pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, p
     const replacement = try atomic.copyReplacement(a, proposed_replacement);
     const target = authorization.target;
     const scope: @import("reference_evidence.zig").Scope = .{ .state_id = facts.inputs.corpus.state_id, .chunk_id = target.scope };
-    const revision = try atomic.checkMerge(a, unit(scope), facts.candidate.revision, try select(facts.candidate, target), facts, authorization, replacement);
+    const merged = try atomic.checkMerge(a, unit(scope), facts.candidate.revision, try select(facts.candidate, target), facts, authorization, replacement, origin);
     const entries = try a.dupe(e.ParsedResult, facts.candidate.entries);
     for (entries) |*entry| if (entry.scope.chunk_id.eql(target.scope)) {
         switch (target.field) {
@@ -68,7 +68,7 @@ pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, p
         try origins.append(a, .{ .target = target.field, .origin = origin });
         entry.text_origins = try origins.toOwnedSlice(a);
     };
-    return .{ .revision = revision, .entries = entries };
+    return .{ .revision = merged.revision_after, .last_repair = merged, .entries = entries };
 }
 fn entryAt(parsed: e.Parsed, target: Target) Error!e.ParsedResult {
     var result: ?e.ParsedResult = null;

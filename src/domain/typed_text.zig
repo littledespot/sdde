@@ -22,6 +22,9 @@ pub const Issue = struct {
     reason: enum { empty, invalid_scalar, unbound_path, unknown_passive, unknown_source, blank },
     first_node: usize,
     last_node: usize,
+    /// Byte offsets address the normalized concatenation of first_node..last_node.
+    /// The lexeme is owned by the validation allocator, not the lexer result.
+    path_match: ?struct { normalized_literal_run: scan.Match, lexeme: []const u8 } = null,
     pub fn description(self: Issue) []const u8 {
         return switch (self.reason) {
             .empty, .blank => "Supply nonblank content using the supplied typed text choices.",
@@ -99,7 +102,14 @@ pub const Validator = struct {
                     const text = try naming.normalize(allocator, joined.items, true, self.normalizer, self.folder);
                     const matches = try scan.scan(allocator, context.registry.grammar, text, self.normalizer, self.folder, self.classifier);
                     defer scan.destroy(matches);
-                    if (matches.matches.len != 0) return reject(issue, .unbound_path, first, index - 1);
+                    if (matches.matches.len != 0) {
+                        const match = matches.matches[0];
+                        issue.* = .{ .reason = .unbound_path, .first_node = first, .last_node = index - 1, .path_match = .{
+                            .normalized_literal_run = match,
+                            .lexeme = try allocator.dupe(u8, matches.text[match.start_byte..match.end_byte]),
+                        } };
+                        return error.UnboundPathReference;
+                    }
                     visible = visible or std.mem.trim(u8, text, " \t\r\n").len != 0;
                     try result.append(allocator, .{ .literal = .{ .value = text } });
                 } else if (comptime tag == .passive) {

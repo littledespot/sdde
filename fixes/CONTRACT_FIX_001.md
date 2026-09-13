@@ -17,9 +17,15 @@ now closes that item. A1–A3 and accepted engine authority remain unchanged.
 The [R13 review](FIX_001.md#10-post-phase-2-live-run-review) confirms the remaining
 B02/R1 extraction-text gap. Chunk 12's extraction-text portion can follow 08
 without waiting for 09–11; the other routes keep their dependencies. Phase 2
-remains complete offline. Phase 3 (08–12) is also complete offline; its delivery and verification record now
+remains complete offline. Phase 3's original delivery and verification record
 live in [the rollout](TODO_FIX_001.md#phase-3-delivery-and-verification--13-september-2026),
 including the downstream support-review eligibility issue assigned to 13–14.
+The subsequent [R14 review](FIX_001.md#12-post-phase-3-live-run-review) reopened
+08–10: reconciliation repair retained a native text error but omitted its specific
+cause from model guidance. The [Phase 3 follow-up](TODO_FIX_001.md#phase-3-follow-up-delivery--13-september-2026)
+closes that implementation gap under existing §§22.3–22.4. Shared diagnostics,
+actual request checks and native merge observations now pass offline verification;
+no new authority decision or live reliability claim is made.
 The historical boundary table below remains the Phase 0 snapshot. No new authority
 or repair target is approved here.
 
@@ -246,6 +252,15 @@ owning native contract; typed rule facts feed concise initial/repair guidance an
 diagnostics. YAML references resources and routes typed outcomes. Prompts do not
 repeat schemas, membership inventories or a second implementation of those rules.
 
+**R14 implementation clarification:** a compact rule projection must preserve the
+actionable native cause, localized rejected value and admissible scope. A generic
+`valid_typed_text` label cannot replace a retained `unbound_path` issue. Reuse the
+shared typed-text issue and description for summary, signal and conflict content,
+and audit extraction/specification siblings. Engine bookkeeping may stay private;
+repair-relevant diagnostic facts cannot disappear from the actual request. The
+[completed rollout checks](TODO_FIX_001.md#phase-3-follow-up-delivery--13-september-2026) verify
+this boundary without widening repair targets or weakening validation.
+
 ## 5. Design amendment decisions
 
 On 13 September 2026 the user explicitly instructed: “approve A1 and A2, update
@@ -444,9 +459,10 @@ G2 remain explicit gates for the affected later work; no exception or authentica
 mechanism was approved. Chunks 01–04, including the R12 follow-up, are implemented
 and verified offline. Phase 2 (05–07) is implemented and verified
 offline; the rollout records 120/120 verification steps and 1,374/1,374 tests.
-Chunks 08–21 remain pending. The retained live run failed before
-schema-valid IR existed for the failing cross-source summary, so the existing
-§22.6 protocol boundary owns that rejection. If an intended fix exceeds
+Phase 3 (08–12), including R14's guidance follow-up, is implemented and verified
+offline: 120/120 steps and 1,393/1,393 tests. Chunks 13–21 remain pending.
+R14's unchanged invalid signal remains historical evidence; no new live run
+establishes model convergence or publication. If an intended fix exceeds
 the approved governing wording, obtain the specific missing decision rather than
 broadening this document into new authority.
 

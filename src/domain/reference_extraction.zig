@@ -49,7 +49,7 @@ pub fn textOrigin(entry: ParsedResult, target: TextTarget) ?@import("model_candi
     for (entry.text_origins) |value| if (std.meta.eql(value.target, target)) return value.origin;
     return entry.origin;
 }
-pub const Parsed = struct { revision: u64 = 1, entries: []const ParsedResult };
+pub const Parsed = struct { revision: u64 = 1, last_repair: ?@import("atomic_repair.zig").Merge = null, entries: []const ParsedResult };
 pub const TextRejection = struct {
     scope: evidence.Scope,
     revision: u64,
@@ -66,7 +66,7 @@ pub const TextValidatedResult = struct {
     token_classifications: []const tokens.Classification,
     outcome: union(enum) { claims: []const TextValidatedProposal, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
-pub const TextValidated = struct { revision: u64 = 1, entries: []const TextValidatedResult };
+pub const TextValidated = struct { revision: u64 = 1, last_repair: ?@import("atomic_repair.zig").Merge = null, entries: []const TextValidatedResult };
 pub const Classified = struct { dependencies: ?@import("atomic_repair.zig").Snapshot = null, text_validated: TextValidated, selections: []const tokens.Selected };
 pub const TokenAssignments = struct { classified: Classified, entries: []const tokens.Assignment, next_token_ordinal: u32 };
 pub const PreparedResult = struct {

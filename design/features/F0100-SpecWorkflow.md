@@ -1044,6 +1044,26 @@ Native domain actions select and apply their typed units. Calls use the existing
 before shared model/automatic reconciliation and specification merge routes.
 Deterministic repair loops have explicit runner-owned execution bounds.
 
+Text repair retains the shared validator's reason, inclusive node range and, for
+an unbound path, the first lexer match and matching bytes. Match offsets address
+the normalized concatenation of that literal-node range, not JSON source bytes.
+Reconciliation and specification retain this issue as extraction already did;
+the same issue and description reach the authorized packet and provider request.
+The selected rejected value and permitted source/passive choices remain in that
+packet. Invalid source or policy bindings remain operational failures. JSON
+decoding preserves literal bytes: ordinary quotes, extra backslashes and actual
+paths are checked by the same text/lexer rules.
+
+The shared merge contract records authorization, owner, operation, before/after
+revision, exact value change and optional producing origin. All existing repair
+consumers retain these execution-local facts with the merged candidate. A native
+observer copies them into the existing E2E events and reports; it neither parses
+model text nor decides progress. These are retained merge snapshots, not a total
+repair count or proof of validation acceptance. Protocol corrections remain
+separate provider attempts. Superseded specification-only change flags and generic
+reconciliation text guidance are removed; no workflow YAML or prompt expansion
+is required.
+
 Coverage rejections retain the missing claim/token obligation. When an existing
 validated value already projects to exactly the preserved token bytes and selects
 that token's claim, the shared contract can restore its exact-copy reference

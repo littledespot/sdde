@@ -8,7 +8,10 @@ complete. The user explicitly approved A1–A3 on 13 September 2026; their wordi
 is applied to design §§12.5/17.3/22.6. Phase 1 (01–04), including the follow-up
 that closes R12's reopened chunk 01, is implemented and verified offline;
 Phase 2 (05–07) is implemented and verified offline.
-Phase 3 (08–12) is implemented and verified offline; 13–21 remain pending. See the [Phase 2 delivery record](#phase-2-delivery-and-verification--13-september-2026).
+Phase 3 (08–12), including the
+[R14 follow-up](#phase-3-follow-up-delivery--13-september-2026) for lost repair
+guidance and missing request-level regression evidence, is implemented and
+verified offline. Chunks 13–21 remain pending; Phase 4 is next.
 Phase 0 involved no runtime implementation or model calls. No live E2E run was
 performed during Phase 1 implementation or its follow-up; the separately retained
 run is reviewed in [FIX_001 §9](FIX_001.md#9-post-phase-1-live-run-review).
@@ -559,6 +562,10 @@ chunk 08 is next. H-011 answer authentication remains a separate gate.
 
 ## Phase 3 — Complete authorized repair and revalidation
 
+**Status:** complete offline, including the R14 follow-up in 08–10. The original
+authorization, merge and full-validation routes now carry the specific native
+text issue into the repair request. Phase 4 (13–14) is next.
+
 **R13 sequencing:** implement 08, then the extraction-text portion of 12 before
 09–11, because it blocks the earlier extraction stage. This portion depends on
 03–04/08, not on reconciliation or specification repair. Complete 09–11 and the
@@ -567,7 +574,8 @@ of existing work, not a new repair mechanism or phase.
 
 ### 08 — Bind shared repair preconditions through existing consumers
 
-- [x] Complete chunk 08. **Depends on:** 00's target matrix, 04, 06, 07.
+- [x] Complete chunk 08, including R14 diagnostic projection and request tests.
+  **Depends on:** 00's target matrix, 04, 06, 07.
 
 **Owners:** [atomic_repair.zig](../src/domain/atomic_repair.zig), native candidate
 owners and focused domain repair input/authorization builders.
@@ -609,7 +617,8 @@ remains a gate.
 
 ### 09 — Repair reconciliation summaries before appending derived state
 
-- [x] Complete chunk 09. **Depends on:** 03, 06, 08.
+- [x] Complete chunk 09, including R14 shared summary-text guidance.
+  **Depends on:** 03, 06, 08.
 
 **Owners:** current summary candidate/validator/builder, focused authorization,
 input/parse/merge actions, reconciliation bindings and registered YAML operations.
@@ -638,7 +647,8 @@ class, not a retry for one retained fixture response.
 
 ### 10 — Repair the global reconciliation candidate with graph dependencies
 
-- [x] Complete chunk 10. **Depends on:** 03, 07–09.
+- [x] Complete chunk 10, including R14 signal/conflict text guidance and
+  runner/report regressions. **Depends on:** 03, 07–09.
 
 **Owners:** disposition, signal and conflict validators; native global candidate;
 focused shared-repair actions, operation contracts and reconciliation YAML.
@@ -755,6 +765,11 @@ authority refinements and actionable gap publication remain assigned to 14–15.
 
 ### Phase 3 delivery and verification — 13 September 2026
 
+This is the original delivery record. R14 subsequently exposed incomplete
+model-facing guidance and reopened 08–10. The historical checks below remain
+valid; the [follow-up delivery](#phase-3-follow-up-delivery--13-september-2026)
+records the additional implementation and verification that close those gaps.
+
 Implementation covers 08–12 under the existing shared contract:
 
 - Atomic authorization binds full immutable read facts, owner/revision and exact
@@ -795,8 +810,9 @@ replacement lifetime, exact invalidation/revalidation, narrow response schemas,
 competing-entry blocks and removed legacy paths. No dependency, accepted design,
 security/CI policy, provider configuration or retry/token-policy amendment was
 made. The existing generic runner's retry contract is explicitly declared by the
-new deterministic merge loops; model-request limits remain unchanged. Live E2E has **not** been run;
-this implementation does not establish completion or quality of the live baseline.
+new deterministic merge loops; model-request limits remain unchanged. Live E2E
+was **not** run during this implementation; it does not establish completion or
+quality of the live baseline.
 Each live run still requires explicit user approval.
 
 **Newly isolated downstream boundary:** the production-runner cycle case repairs
@@ -809,6 +825,92 @@ The regression preserves that later failure and verifies graph repair separately
 This is an offline architectural finding, not a new live-run result. It belongs to
 13–14's support contract and must not be bypassed by making all business provenance
 eligible or altering a repaired disposition solely to satisfy review.
+
+### Phase 3 follow-up required by R14
+
+The [retained run](FIX_001.md#12-post-phase-3-live-run-review) reaches signal
+repair, but its packet drops `UnboundPathReference` and retains only
+`typed_text` / `valid_typed_text`. A schema correction then returns the unchanged
+invalid value; full validation rejects it and the existing limit stops execution.
+The missing guidance violates the existing §22.3–22.4 contract; no new design
+decision, retry mechanism or validator exception is needed.
+
+The reopened work is defined by these testable slices:
+
+| Chunk | Required change and evidence |
+| --- | --- |
+| 08 | Preserve the shared typed-text issue through native rejection, authorization and the model-facing rule projection. Reuse `checkBusinessIn` / `checkReferenceIn` and `Issue.description()`; distinguish candidate rejection from invalid context. Retain reason and node range, plus the rejected value and allowed scope. For path matches, retain the first owning lexer span and its text coordinate surface instead of asking a renderer to rescan. Prove that packet compaction cannot remove the actionable cause while removing internal bookkeeping. Audit extraction, reconciliation and specification consumers; change only the owners that lose required facts. |
+| 09 | Carry the same contract through summary content before append. Test actual serialized repair input and selected schema, then parse/merge/revalidate; supplying a known-good replacement directly to merge is insufficient evidence of usable guidance. Include an unrelated source example, unknown passive/source IDs, blank text and stale binding failures. |
+| 10 | Apply the same projection to signal content and conflict summaries, with no workflow/name/token special case. Exercise R14's schema-invalid repair envelope → schema-valid unchanged replacement → native rejection → local exhaustion sequence through the production compiler/runner, and a corrected-value recovery case. Preserve siblings, origins, source bytes and all downstream validation. |
+
+Use the existing test steps named under 08–10, plus `test-reference-model-input`,
+`test-typed-text` and `test-path-tokens` for the shared text/lexer boundary; finish
+with full `verify` and native packaging checks. Tests must distinguish ordinary quoted prose, extra
+literal backslashes and actual Windows paths/URIs. JSON escaping must preserve
+decoded text exactly; do not silently unescape candidates, weaken path validation
+or add a greeting-specific instruction. Check the selected response schema and
+concise replacement-only instruction at the real provider request boundary.
+
+Carry native changed-value status through the existing repair observation path,
+using the shared equality owner; cover unchanged/changed replacements separately
+from revision advancement, protocol corrections and revalidation results. Keep
+native diagnostics and producing origins available after request release. Chunk
+18 verifies those joins and summaries; reports must not reconstruct missing facts
+by parsing model text. No second logger, counter, stall policy or enlarged YAML is
+needed. Preserve the current local limits and total-token budget.
+
+**Exit:** the exact candidate cause reaches the actual repair request for each
+affected consumer; positive and negative packet/runner/report checks pass. This
+closes the reopened implementation work only. A new live baseline still requires
+its own approval and actual publication/evaluation evidence.
+
+### Phase 3 follow-up delivery — 13 September 2026
+
+The implementation closes the R14 guidance gap at the existing owners:
+
+| Area | Delivered behavior and regression evidence |
+| --- | --- |
+| Shared text issue | `typed_text.Issue` retains the first lexer match, matching bytes and a byte range on the normalized literal-node run. Ordinary quoted prose survives JSON decoding unchanged; extra backslashes, Windows paths and URIs still reject. Adjacent-node/NFC cases verify the coordinate surface. |
+| Reconciliation (08–10) | Summary, signal and conflict validators retain the native issue through authorization and the compact rule projection. Packet tests check its exact description and structured facts, rejected value, allowed scope and selected schema across unrelated sources, blank text and foreign IDs. Corrected replacements revalidate; unchanged replacements, stale context and reused authorization reject. Valid siblings and genuine conflicts remain protected. |
+| Sibling consumers | Extraction already retained the issue; packet regressions now check the added lexer detail. Specification's provenance traversal retains the same issue with the selected value-field location. Its repair preserves evidence and sibling fields. Invalid context remains operational failure. |
+| Shared merge observation | `atomic_repair.Contract.checkMerge` supplies one native result with authorization, owner, operation, revision before/after, exact value change and producing origin. All five existing consumers retain it. `candidate_repair_observations` copies retained results into existing events and JSON/Markdown/terminal reports without parsing model text or deciding continuation. It replaces the specification-only change flag. Snapshots are not a total count or proof of acceptance. |
+| Production runner, offline | The real compiler/runner exercises malformed repair envelope → protocol correction → one merged replacement. A corrected value proceeds; an unchanged invalid value reaches native rejection and existing local exhaustion. Assertions distinguish two provider attempts from one merge, retain attempt 2 as the producing origin, and inspect the real provider serializer's packet, selected schema and concise instruction across repair consumers. Report tests retain diagnostics and merge facts after source/request-owner release. |
+
+No prompt, model response schema, workflow YAML, provider setting, retry limit,
+token budget, accepted design or dependency changed. The generic reconciliation text constraint
+and coarse error projection are removed. Source-support eligibility/classification
+and actionable gaps remain Phase 4 (13–14); this delivery does not bypass them.
+Live E2E was not run and requires separate explicit approval.
+
+Verification uses repository-local temporary/cache directories and vendored
+packages. These are offline tests, including `test-e2e-harness`; that step does
+not dispatch the live base case.
+
+```sh
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg test-typed-text test-path-tokens test-reference-reconciliation test-reference-model-input test-specification-generation test-reference-extraction test-model-candidate-json test-e2e-harness --summary all
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg test-e2e-harness --summary all
+```
+
+The first command passed **24/24 steps; 786/786 tests**
+([targeted log](../.zig-cache/phase3-r14-targeted.log)). The second passed
+**3/3 steps; 404/404 tests** after expanding request serialization assertions
+across repair consumers ([provider log](../.zig-cache/phase3-r14-provider.log)).
+
+Final verification passed:
+
+```sh
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg verify --summary all
+git diff --check
+git diff --cached --check
+```
+
+`verify` passed **120/120 steps; 1,393/1,393 tests**, including lint,
+architecture checks and clean native packaging smoke tests
+([full log](../.zig-cache/phase3-r14-verify.log)). Both diff checks passed. The
+complete change was reviewed for shared ownership, exact preconditions,
+candidate/diagnostic lifetime, preserved validation and removed legacy paths.
+Phase 3 is complete offline; no live completion, rubric result or reliability
+claim follows from these tests.
 
 ## Phase 4 — Preserve support findings and route genuine gaps
 
@@ -864,6 +966,14 @@ not proof of correct classification or use. Its displayed greeting is labelled
 heading. Retain inspectable source/candidate findings for such mismatches under
 this owner and 14; do not add a deterministic greeting/type rule or treat the
 unreached review as a failure already reported by R13.
+
+R14 adds the opposite classification case: the sole source code token is marked
+`irrelevant`, leaving no preserved tokens. Exercise this alongside R13's wrong
+preserve-kind case under 13–14. The review must have the original source evidence
+and relevant candidate decisions, not infer completeness from the surviving token
+list alone. Distinguish a valid irrelevant decision from lost source-required
+meaning/exactness; use shared findings and authorized routing, not a token-specific
+rule. R14 never reached support review, so it supplies a review risk, not a verdict.
 
 ### 14 — Distinguish supported candidate omissions from source-authority gaps
 
@@ -1025,6 +1135,15 @@ gap. Record reached validation stages separately: its accepted extraction JSON
 did not exercise Phase 2 reconciliation/generation or establish semantic quality.
 Existing coverage may satisfy these checks; do not duplicate
 validators or count repeated event projections as additional model failures.
+
+Reuse the completed R14 follow-up's 08–10 packet checks, runner sequence and
+native merge projections above. Verify that a precise cause in native reports is also present in
+the actual repair request. Project merge changed-value status, candidate revision,
+producing origin and revalidation outcome from the existing owners. Distinguish
+protocol attempts from merged semantic replacements: R14's two repair calls
+produced only one merged replacement, and the next call stopped before dispatch.
+All 55 call-evidence files were present; another raw-body log would not fix the
+lossy guidance. Capture executed build identity, which this run still lacks.
 
 **Checks:** `test-e2e-harness`, `test-e2e-launcher`, `test-rubric-evaluator`,
 `smoke-e2e-harness`, `smoke-rubric-evaluator`; full `verify` and `git diff --check`.

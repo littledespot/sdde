@@ -7,11 +7,11 @@ const g = @import("../domain/specification_generation.zig");
 const native = @import("../application/reference_extraction_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
-pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, conflict_coverage };
+pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, conflict_coverage, summary_text, signal_text, conflict_text };
 pub const Options = struct {
     text_fault: bool = false,
     failed_text_repair: bool = false,
-    reconciliation_repair_fault: ?enum { unchanged, alternating } = null,
+    reconciliation_repair_fault: ?enum { unchanged, alternating, unchanged_text } = null,
     reconciliation_fault: ?ReconciliationFault = null,
     script: ?@import("specification_script.zig").Script = null,
     uncertain: bool = false,
@@ -63,6 +63,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 const repair = @import("../domain/reference_reconciliation_repair.zig");
                 const authorization = try @import("../application/reference_reconciliation_repair_workflow.zig").readAuthorization(&view);
                 if (options.reconciliation_repair_fault) |fault| {
+                    if (fault == .unchanged_text) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, authorization.operation.replace);
                     const target = authorization.target.disposition;
                     const replacement: repair.Replacement = if (fault == .alternating and authorization.revision % 2 == 0)
                         .{ .disposition = .{ .duplicate = .{ .target_claim_id = .{ .ordinal = 999999 } } } }
@@ -71,6 +72,9 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                     return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, replacement);
                 }
                 const replacement: repair.Replacement = switch (authorization.target) {
+                    .statement_content => |index| .{ .content = @import("reference_reconciliation.zig").content((try r.item(input.progress.plan.layout.items, authorization.dependencies.proposal.summary.statements[index].claim_ids[0])).claim) },
+                    .signal_content => |index| .{ .content = @import("reference_reconciliation.zig").content((try r.item(input.progress.plan.layout.items, authorization.dependencies.proposal.global.signals[index].claim_ids[0])).claim) },
+                    .conflict_summary => .{ .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The supplied assertions disagree." } }} } },
                     .insert_statement => |target| .{ .content = @import("reference_reconciliation.zig").content((try r.item(input.progress.plan.layout.items, target.claim)).claim) },
                     .insert_signal => |target| .{ .content = @import("reference_reconciliation.zig").content((try r.item(input.progress.plan.layout.items, target.claim)).claim) },
                     .disposition, .insert_disposition => .{ .disposition = .{ .retained = .{} } },
@@ -82,6 +86,11 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
             if (input.purpose == .summary) {
                 var proposal = try @import("reference_reconciliation.zig").summary(allocator, input);
                 if (options.reconciliation_fault == .summary_membership) proposal.statements = proposal.statements[1..];
+                if (options.reconciliation_fault == .summary_text and input.progress.summary_count == 0) {
+                    const statements = try allocator.dupe(r.StatementProposal, proposal.statements);
+                    statements[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display \\\"a result\\\"." } }} } } };
+                    proposal.statements = statements;
+                }
                 return @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .summary = proposal });
             }
             var proposal = try @import("reference_reconciliation.zig").global(allocator, input);
@@ -89,7 +98,12 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 const dispositions = try allocator.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
                 proposal.claim_dispositions = dispositions;
                 switch (fault) {
-                    .summary_membership => {},
+                    .summary_membership, .summary_text => {},
+                    .signal_text => {
+                        const signals = try allocator.dupe(r.SignalProposal, proposal.signals);
+                        signals[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display \\\"a result\\\"." } }} } } };
+                        proposal.signals = signals;
+                    },
                     .duplicate_disposition => dispositions[1] = dispositions[0],
                     .self_relation => {
                         dispositions[0].disposition = .{ .superseded = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
@@ -99,11 +113,11 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                         dispositions[1].disposition = .{ .superseded = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
                     },
                     .signal_coverage => proposal.signals = proposal.signals[1..],
-                    .conflict_coverage => {
+                    .conflict_coverage, .conflict_text => {
                         dispositions[0].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[1].claim_id} } };
                         dispositions[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
                         proposal.signals = proposal.signals[2..];
-                        proposal.conflicts = &.{};
+                        proposal.conflicts = if (fault == .conflict_coverage) &.{} else &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "Display \\\"a result\\\"." } }} }, .resolution = .unresolved }};
                     },
                 }
             }

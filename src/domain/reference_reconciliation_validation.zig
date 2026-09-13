@@ -37,8 +37,14 @@ pub fn content(allocator: std.mem.Allocator, validator: r.text.Validator, contex
             }
             const context_set = try scopes(allocator, items, ids, context);
             return .{ .valid = .{ .model = switch (model) {
-                inline .business, .scope_guard => |value, tag| @unionInit(r.extraction.Content, @tagName(tag), validator.businessIn(allocator, context_set, value) catch |err| return .{ .invalid = try d.textFailure(err, .{ .content = candidate }) }),
-                inline else => |value, tag| @unionInit(r.extraction.Content, @tagName(tag), validator.referenceIn(allocator, context_set, value) catch |err| return .{ .invalid = try d.textFailure(err, .{ .content = candidate }) }),
+                inline .business, .scope_guard => |value, tag| @unionInit(r.extraction.Content, @tagName(tag), switch (try validator.checkBusinessIn(allocator, context_set, value)) {
+                    .valid => |checked| checked,
+                    .invalid => |issue| return .{ .invalid = d.textFailure(issue, .{ .content = candidate }) },
+                }),
+                inline else => |value, tag| @unionInit(r.extraction.Content, @tagName(tag), switch (try validator.checkReferenceIn(allocator, context_set, value)) {
+                    .valid => |checked| checked,
+                    .invalid => |issue| return .{ .invalid = d.textFailure(issue, .{ .content = candidate }) },
+                }),
             } } };
         },
         .preserved_token => |token| {
