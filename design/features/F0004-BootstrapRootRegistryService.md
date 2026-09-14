@@ -6,8 +6,9 @@
 `paths.providers` provider-document path; this does not change the status of
 unrelated F0004 design.
 
-**Implementation readiness:** Ready for the bounded configured-root
-capability increment. It begins with F0001's immutable configuration and exact
+**Implementation:** The bounded configured-root capability increment is
+implemented by [the bootstrap root runner](../../src/application/bootstrap_root_runner.zig).
+It begins with F0001's immutable configuration and exact
 project-root descriptor and ends with one service exposing the validated
 immutable `BootstrapRootRegistry`. It does not inventory or read workflow
 definitions or the provider document.
@@ -31,19 +32,19 @@ invocation's immutable validated `BootstrapRootRegistry`. The value is built
 from the seven decoded directory-root paths and the provider-document path and
 is bound to the canonical invocation project root.
 
-This shared boundary owns normalization, containment, active-filesystem
-representability, role assignment, and configured-location separation. A
-workflow loader consumes its `workflow_authority` capability; it never resolves
-`config.paths.workflows` itself. Preset, principle, reference, artifact, and
-template consumers use the same registry rather than introducing
-caller-specific path resolution. F0008 likewise consumes only the opaque
-provider-document capability.
+- This shared boundary owns normalization, containment, active-filesystem
+  representability, role assignment, and configured-location separation.
+- A workflow loader consumes its `workflow_authority` capability; it never resolves
+  `config.paths.workflows` itself.
+- Preset, principle, reference, artifact, and template consumers use the same registry
+  rather than introducing caller-specific path resolution.
+- F0008 likewise consumes only the opaque provider-document capability.
 
-The service is a read-only owner, not a path resolver or general filesystem
-authority. Its construction actions own path validation; after validation its
-concrete `registry()` accessor only returns a borrowed immutable registry. It
-neither reads root contents nor grants a model, orchestrator, or arbitrary
-caller a path or operation capability.
+- The service is a read-only owner, not a path resolver or general filesystem authority.
+- Its construction actions own path validation; after validation its concrete
+  `registry()` accessor only returns a borrowed immutable registry.
+- It neither reads root contents nor grants a model, orchestrator, or arbitrary caller a
+  path or operation capability.
 
 ## 2. Minimal design
 
@@ -59,12 +60,14 @@ actions through runner-owned bindings:
 | `BuildBootstrapRootRegistryAction` | Assemble the seven validated directory capabilities and one provider-document capability exactly once under that identity. |
 | `ValidateBootstrapRootRegistryAction` | Prove exact key/role coverage and the complete configured-location collision and nesting policy. |
 
-No action calls another action. The startup orchestrator coordinates only the
-runner-owned bindings, the runner alone validates and applies node deltas, and
-the composition root alone constructs the filesystem/path adapter and fixed
-bindings. The orchestrator receives no filesystem, path-normalizer, config,
-registry-builder, or logger capability. Only after final registry validation
-does the runner construct one `BootstrapRootRegistryService`.
+- No action calls another action.
+- The startup orchestrator coordinates only the runner-owned bindings, the runner alone
+  validates and applies node deltas, and the composition root alone constructs the
+  filesystem/path adapter and fixed bindings.
+- The orchestrator receives no filesystem, path-normalizer, config, registry-builder, or
+  logger capability.
+- Only after final registry validation does the runner construct one
+  `BootstrapRootRegistryService`.
 
 ## 3. Input, output, and ownership
 
@@ -105,14 +108,15 @@ pub fn registry(
 ) *const BootstrapRootRegistry
 ```
 
-Repeated calls return the same borrowed value without allocation, I/O,
-validation, or mutation. Each capability retains its source key and role;
-callers cannot relabel one root as another. A capability contains an opaque
-typed canonical-contained-path value for its declared role; it does not expose
-that value as caller-constructible path bytes. Raw configuration strings,
-untyped path candidates, unwrapped absolute path buffers, adapter handles, and
-validation scratch state remain runner-private and are released on every
-terminal branch.
+- Repeated calls return the same borrowed value without allocation, I/O, validation, or
+  mutation.
+- Each capability retains its source key and role; callers cannot relabel one root as
+  another.
+- A capability contains an opaque typed canonical-contained-path value for its declared
+  role; it does not expose that value as caller-constructible path bytes.
+- Raw configuration strings, untyped path candidates, unwrapped absolute path buffers,
+  adapter handles, and validation scratch state remain runner-private and are released
+  on every terminal branch.
 
 F0004 introduces no service locator, generic string-key getter, mutable path
 map, cache, reload/watch API, environment override, copied projection, or
@@ -120,32 +124,34 @@ second configuration value.
 
 ## 4. Path and existence contract
 
-Each configured value is parsed as one normalized project-relative path. The
-seven directory entries require directory form; `providers` requires file form
-and the exact `.sddproviders.json` basename. Validation rejects an empty or
-absolute path, drive/UNC form, NUL or
-control scalar, traversal, ambiguous separator or segment, path-policy length
-violation or project-root escape. The normalized candidate must be
-representable under the active workspace policy. Existing directory-root
-components are inspected without following links. The provider-document
-capability reserves only its structural location; F0008 performs the no-follow
-ancestor/file and physical-identity checks before publishing bytes. Every typed
-capability remains bound to the exact canonical project root and role.
+- Each configured value is parsed as one normalized project-relative path.
+- The seven directory entries require directory form; `providers` requires file form and
+  the exact `.sddproviders.json` basename.
+- Validation rejects an empty or absolute path, drive/UNC form, NUL or control scalar,
+  traversal, ambiguous separator or segment, path-policy length violation or
+  project-root escape.
+- The normalized candidate must be representable under the active workspace policy.
+- Existing directory-root components are inspected without following links.
+- The provider-document capability reserves only its structural location; F0008 performs
+  the no-follow ancestor/file and physical-identity checks before publishing bytes.
+- Every typed capability remains bound to the exact canonical project root and role.
 
-All eight normalized locations participate in one collision set even when a
-leaf does not yet exist. They must be distinct and non-nested, with exactly one
-exception: `specsArchive` may be a proper descendant of `specs`. The provider
-document must also differ from `.sddtoolkit.json`. Equality is never permitted.
-Duplicate, normalization-equivalent, case-fold-equivalent,
-portable-name-equivalent, aliased, or otherwise overlapping peers fail before
-any configured root is inventoried or the provider document is read.
+- All eight normalized locations participate in one collision set even when a leaf does
+  not yet exist.
+- They must be distinct and non-nested, with exactly one exception: `specsArchive` may
+  be a proper descendant of `specs`.
+- The provider document must also differ from `.sddtoolkit.json`.
+- Equality is never permitted.
+- Duplicate, normalization-equivalent, case-fold-equivalent, portable-name-equivalent,
+  aliased, or otherwise overlapping peers fail before any configured root is inventoried
+  or the provider document is read.
 
 For the preselection startup increment:
 
 - `workflows` must resolve to an existing, readable, no-follow directory;
 - each other configured root is reserved at its validated location and may be
   absent until a selected registered workflow declares a consumer that applies
-  the root's stricter read or transaction policy; and
+  the root's stricter read or publication policy; and
 - if any optional-at-preselection root exists, it must already be a no-follow
   directory. Absence does not grant creation authority, and every later
   operation revalidates the exact capability and its operation policy before
@@ -203,15 +209,16 @@ The diagnostic may carry bounded engine-owned evidence naming the configuration
 key and failed rule. It never exposes an unrestricted canonical absolute path
 or creates an alternative control branch.
 
-Any rejection or operational failure publishes no service or partial registry
-and prevents workflow inventory, model calls, project writes, state
-transitions, workflow logging, and lock acquisition. Candidate paths and
-handles are released exactly once on success, rejection, cancellation, timeout,
-and operational error. Before workflow selection there is no `WorkflowLog`
-binding; bootstrap therefore uses only its typed non-logging diagnostic path.
-An explicit runner/user cancellation instead propagates terminal `cancelled`
-unchanged; it is never relabelled `failed`. It performs the same cleanup and
-publishes no service.
+- Any rejection or operational failure publishes no service or partial registry and
+  prevents workflow inventory, model calls, project writes, state transitions, workflow
+  logging, and lock acquisition.
+- Candidate paths and handles are released exactly once on success, rejection,
+  cancellation, timeout, and operational error.
+- Before workflow selection there is no `WorkflowLog` binding; bootstrap therefore uses
+  only its typed non-logging diagnostic path.
+- An explicit runner/user cancellation instead propagates terminal `cancelled`
+  unchanged; it is never relabelled `failed`.
+- It performs the same cleanup and publishes no service.
 
 ## 7. Acceptance criteria
 

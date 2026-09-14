@@ -54,5 +54,9 @@ catch error:
 
 ### Core Requirements
 
-- **Error Handling**: Use language-appropriate error handling mechanism, log with correlation ID, provide context
-- **Data Models**: Clear naming, type safety (if language supports it), immutability preferred, validation methods
+- Use language-appropriate error handling.
+- Log errors with a correlation ID and context.
+- Give data models clear names.
+- Use type safety where the language supports it.
+- Prefer immutable data models.
+- Provide data-model validation methods.

@@ -10,39 +10,14 @@ approvals. Governing wording lives in `design/design.md`; this review introduces
 no runtime contracts and establishes no test or live-run pass. Subsequent
 implementation evidence is recorded in the [Phase 1 delivery log](TODO_FIX_001.md#phase-1-delivery-and-verification--13-september-2026); the boundary table below
 retains the source state reviewed for Phase 0.
-The later [R12 review](FIX_001.md#9-post-phase-1-live-run-review) reopened chunk 01
-for missed protocol-prompt cleanup and refined observation/readiness checks.
-The [Phase 1 follow-up](TODO_FIX_001.md#phase-1-follow-up-completion--13-september-2026)
-now closes that item. A1–A3 and accepted engine authority remain unchanged.
-The [R13 review](FIX_001.md#10-post-phase-2-live-run-review) confirms the remaining
-B02/R1 extraction-text gap. Chunk 12's extraction-text portion can follow 08
-without waiting for 09–11; the other routes keep their dependencies. Phase 2
-remains complete offline. Phase 3's original delivery and verification record
-live in [the rollout](TODO_FIX_001.md#phase-3-delivery-and-verification--13-september-2026),
-including the downstream support-review eligibility issue assigned to 13–14.
-The subsequent [R14 review](FIX_001.md#12-post-phase-3-live-run-review) reopened
-08–10: reconciliation repair retained a native text error but omitted its specific
-cause from model guidance. The [Phase 3 follow-up](TODO_FIX_001.md#phase-3-follow-up-delivery--13-september-2026)
-closes that implementation gap under existing §§22.3–22.4. Shared diagnostics,
-actual request checks and native merge observations now pass offline verification;
-no new authority decision or live reliability claim is made.
-The later [R15 review](FIX_001.md#13-post-follow-up-live-run-review) reopens
-08–10 for a distinct target-feasibility defect: a mixed selection receives an
-impossible content-only repair. Existing R4/R6 and G1 govern the
-[follow-up](TODO_FIX_001.md#phase-3-follow-up-required-by-r15); no additional
-coupled target or authority exception is approved by this review.
-The [full architecture audit](REVIEW_FIX_001_ARCHITECTURE.md) subsequently reopens
-08–12 for feasibility, missing immutable request dependencies and inconsistent
-canonical equivalence. It also identifies downstream support and persisted-reader
-gaps assigned to 13–15/17. Its final review adds F9's incomplete native dependency
-capture, extends F8's source-accounting evidence and confirms duplicated assembly
-in F10/chunk 20. The findings refine implementation evidence under the
-existing design; they do not approve a new repair algebra or authority exception.
-The 14 September shared Phase 3 implementation addresses F1–F4/F9 under these
-existing target decisions; its [delivery and verification record](TODO_FIX_001.md#phase-3-architecture-audit-follow-up)
-is the current status authority. No new target or exception was introduced.
-The historical boundary table below remains the Phase 0 snapshot. No new authority
-or repair target is approved here.
+Later reviews and implementation follow-ups are tracked once in
+[the rollout](TODO_FIX_001.md) and [architecture audit](REVIEW_FIX_001_ARCHITECTURE.md).
+The 15 September [critical review](REVIEW_FIX_001_ARCHITECTURE.md#15-september-2026-critical-review)
+supersedes the 14 September Phase 3 completion claim: C1/C2 reproduce remaining
+F1/F4 failures, and C3 records F3 ownership cleanup. Current chunk status and
+closure work remain solely in the rollout; chunks 13–21 are still pending.
+The boundary table below preserves the Phase 0 snapshot. A1–A3 remain approved;
+this historical review introduces no new authority or repair target.
 
 ## 1. Outcome, authority and ownership
 
@@ -486,11 +461,13 @@ mechanism was approved. Chunks 01–04, including the R12 follow-up, are impleme
 and verified offline. Phase 2 (05–07) is implemented and verified
 offline; the rollout records 120/120 verification steps and 1,374/1,374 tests.
 Phase 3's R14 follow-up passed 120/120 steps and 1,393/1,393 tests offline.
-R15 reopened 08–10. The subsequent architecture audit reopens 08–12 for complete
-feasibility/context/equivalence contracts; 13–21 remain pending. The audit's
-unchanged-code verification also passed 120/120 steps and 1,393/1,393 tests;
-it does not supply the missing regressions. Neither failed live run establishes
-model convergence or publication. If an intended fix exceeds
+R15 reopened 08–10; the subsequent architecture audit reopened 08–12.
+The 14 September implementation delivered the shared dependency/request changes.
+The 15 September review still finds C1–C3 outstanding despite the full existing
+suite passing 1,405/1,405 tests; both added isolated acceptance probes fail.
+See the [single current rollout record](TODO_FIX_001.md#phase-3-architecture-audit-follow-up)
+for per-chunk status, evidence and remaining work. Neither failed live run nor
+the offline checks establish model convergence or publication. If an intended fix exceeds
 the approved governing wording, obtain the specific missing decision rather than
 broadening this document into new authority.
 

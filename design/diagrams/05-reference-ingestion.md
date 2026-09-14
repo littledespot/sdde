@@ -43,19 +43,10 @@ flowchart TD
     RECORDS -->|Incomplete or invalid| FAILED
 ```
 
-Citation checks establish where content came from. Semantic interpretation is
-model-assisted and remains subject to validation and user review. Reference
-candidates stay inside the current execution until whole-workflow publication;
-clarifications are retained when a new run is needed.
+Citation checks prove source location; semantic interpretation requires
+validation and user review. Scanning yields byte spans, not file authority.
+Candidates remain execution-local; permitted clarification state survives reruns.
 
-The registered naming compiler, grammar builder and detector are implemented.
-Scanning returns byte spans, not file authority or validated business text.
-Typed-text/passive-literal validation is implemented for execution-local
-reference candidates. Inline-code eligibility and exact-value classification,
-identity and accounting are implemented with scripted results. A positive
-`no_feature_claim` cannot retain a preserved-token claim. Hierarchical grouping,
-summary/disposition accounting and identified signals/conflicts are implemented
-with scripted results. Unresolved conflicts return `blocked`; no resolution is
-invented. The clarification/semantic-review continuation is still future work. Full
-environment/repository bindings, live semantic extraction, review and publication
-remain separate work. See [F0100 §§3.6–3.9](../features/F0100-SpecWorkflow.md#39-reference-reconciliation-boundary).
+Contracts and implementation evidence: [Design §16](../design.md#16-reference-ingestion-and-normalization)
+and [F0100 §§3.6–3.9](../features/F0100-SpecWorkflow.md#39-reference-reconciliation-boundary).
+Scripted verification does not establish live completion or semantic quality.

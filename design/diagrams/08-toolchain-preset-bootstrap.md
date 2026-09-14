@@ -21,7 +21,7 @@ flowchart TD
     SAFETY -->|No| STOP
 ```
 
-The selected workflow controls when toolchain preparation occurs and which
-principles or repository facts it needs. Toolchain policy governs target-project
-files and commands; semantic principles provide guidance only where applicable.
-Templates remain inert during ordinary workflow execution.
+The workflow selects toolchain preparation and its required inputs.
+[F0003](../features/F0003-ToolChainService.md) owns mechanical file/command policy;
+[Design §9.4](../design.md#94-project-principle-resolution) governs applicable semantic
+guidance. Templates remain inert in ordinary execution.

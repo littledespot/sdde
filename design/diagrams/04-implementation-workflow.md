@@ -15,10 +15,12 @@ flowchart TD
     CHECK -->|Yes| MORE{"More tasks?"}
     MORE -->|Yes| TASK
     MORE -->|No| FINAL["Validate the complete project candidate<br/>and all required task evidence"]
-    FINAL -->|Valid| OUTPUT["Publish project changes, evidence and workflow state together;<br/>mark tasks complete"]
+    FINAL -->|Valid| OUTPUT["Publish the complete validated output;<br/>write workflow state last and mark completion only on success"]
+    OUTPUT -->|Write failure or interruption| WRITEFAIL["End without new successful completion;<br/>replaced files may remain"]
     FINAL -->|Invalid| FAILED["End failed;<br/>discard candidate output"]
 ```
 
-Candidate work stays private until the whole workflow succeeds. Failure,
-blocking, cancellation or interruption ends the run without publishing partial
-task completion. A later invocation starts the workflow again.
+Candidate work stays private until whole-workflow success; a failed or abandoned
+run publishes no partial task completion. See
+[Design §20](../design.md#20-implement-stage-design) and
+[ADR 0009](../decisions/0009-atomic-workflow-execution.md).

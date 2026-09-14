@@ -2,9 +2,10 @@
 
 **Status:** Proposed feature design
 
-**Implementation readiness:** Ready. The closed project and preset contracts,
-package layout, bounds, inheritance, merge, and safety-valid output are defined
-below. The JSON Schema files in `design/schemas/` are normative documentation
+**Implementation:** Capture, parsing, inheritance, composition and safety
+validation are connected through [registered workflow bindings](../../src/application/toolchain_workflow_runner.zig).
+The closed project/preset contracts and bounds are defined below. Full target
+repository discovery and file/command authorization remain separate work. The JSON Schema files in `design/schemas/` are normative documentation
 of the same runtime-validated YAML shapes; runtime code does not load them.
 
 **Classification:** Core, read-only mechanical toolchain provider
@@ -31,36 +32,40 @@ as source material in Section 5; it is not promoted to runtime authority.
 `ToolChainService` has one responsibility: expose the current invocation's
 immutable post-composition safety-valid toolchain object to declared consumers.
 
-That object is derived from the complete registry beneath
-`paths.toolchainPreset` and the exact project layer at
-`<paths.principles>/toolchain.yaml`, which selects exact packages from that
-registry. Nothing consumer-visible is published until the project layer,
-complete preset registry, inheritance closure, deterministic composition, and
-effective merged policy have all passed their owning validators.
+- That object is derived from the complete registry beneath `paths.toolchainPreset` and
+  the exact project layer at `<paths.principles>/toolchain.yaml`, which selects exact
+  packages from that registry.
+- Nothing consumer-visible is published until the project layer, complete preset
+  registry, inheritance closure, deterministic composition, and effective merged policy
+  have all passed their owning validators.
 
-F0003 names the resulting nominal value `ValidToolchain`. It is the canonical
-immutable post-inheritance, post-composition, safety-valid result, not a wrapper
-around raw YAML or another projection of the same authority. Captured bytes,
-decoded values, schema-valid layers, registry candidates, and merged pre-safety
-candidates remain runner-owned workflow intermediates exposed only to
-operations declaring their typed input keys. None can construct
-`ToolChainService`.
+- F0003 names the resulting nominal value `ValidToolchain`.
+- It is the canonical immutable post-inheritance, post-composition, safety-valid result,
+  not a wrapper around raw YAML or another projection of the same authority.
+- Captured bytes, decoded values, schema-valid layers, registry candidates, and merged
+  pre-safety candidates remain runner-owned workflow intermediates exposed only to
+  operations declaring their typed input keys.
+- None can construct `ToolChainService`.
 
-After the safety gate succeeds, the runner's envelope owns the original sealed
-`ValidToolchain` allocation. `ToolChainService` is its non-owning read-only facade.
-Declared consumers may borrow only
-`*const ValidToolchain` through one concrete read-only accessor. No service
-registry, generic or string-key service query, cache, copied projection, reread,
-or second authority is introduced. A borrowed service cannot outlive its
-envelope value; replacement, invalidation, rejection, and execution cleanup
-release native owners through the shared value lifecycle.
+- After the safety gate succeeds, the runner's envelope owns the original sealed
+  `ValidToolchain` allocation.
+- `ToolChainService` is its non-owning read-only facade.
+- Declared consumers may borrow only `*const ValidToolchain` through one concrete
+  read-only accessor.
+- No service registry, generic or string-key service query, cache, copied projection,
+  reread, or second authority is introduced.
+- A borrowed service cannot outlive its envelope value; replacement, invalidation,
+  rejection, and execution cleanup release native owners through the shared value
+  lifecycle.
 
-Registered policy descriptors now include explicit naming rules. The separate,
-pure `compile-naming-policy` operation normalizes all selected rules from
-`ValidToolchain` for the shared lexical detector; it never infers rules from
-package names or source examples. Full environment/file-kind authorization and
-repository discovery remain separate work. See
-[F0100 §3.6](F0100-SpecWorkflow.md#36-shared-naming-policy-and-path-token-grammar).
+- Registered policy descriptors now include explicit naming rules.
+- The separate, pure `compile-naming-policy` operation normalizes all selected rules
+  from `ValidToolchain` for the shared lexical detector; it never infers rules from
+  package names or source examples.
+- Full environment/file-kind authorization and repository discovery remain separate
+  work.
+- See [F0100
+  §3.6](F0100-SpecWorkflow.md#36-shared-naming-policy-and-path-token-grammar).
 
 ### Workflow bindings
 
@@ -81,22 +86,24 @@ The YAML graph owns ordering; no combined setup operation hides this sequence.
 | `validate-toolchain-safety` | `valid_toolchain` |
 | `compile-naming-policy` | `compiled_naming_policy` |
 
-Composition binds each source port to its exact F0004 root capability after
-startup, before invocation. Roots are not copied into workflow data or supplied
-by YAML. The source ports derive `toolchain-read`; the parser port derives
-`toolchain-parser`. The registered `core.toolchain@1` profile allows those two
-capabilities only. Unreferenced setup operations perform no reads. Cancellation
-and cleanup remain runner-owned.
+- Composition binds each source port to its exact F0004 root capability after startup,
+  before invocation.
+- Roots are not copied into workflow data or supplied by YAML.
+- The source ports derive `toolchain-read`; the parser port derives `toolchain-parser`.
+- The registered `core.toolchain@1` profile allows those two capabilities only.
+- Unreferenced setup operations perform no reads.
+- Cancellation and cleanup remain runner-owned.
 
 ## 2. Path authority and the requested upstream service
 
-F0004's `BootstrapRootRegistryService` is the sole upstream path-authority
-provider. F0003 consumes only the registry's typed `projectPrinciples()` and
-`toolchainPresetRegistry()` capabilities. It does not receive F0001 config,
-derive a capability from a decoded path string, reread configuration, accept a
-caller path, or create another path authority. The filesystem adapter resolves
-the exact `toolchain.yaml` child only through the typed principles capability;
-the preset loader receives only the typed preset-registry capability.
+- F0004's `BootstrapRootRegistryService` is the sole upstream path-authority provider.
+- F0003 consumes only the registry's typed `projectPrinciples()` and
+  `toolchainPresetRegistry()` capabilities.
+- It does not receive F0001 config, derive a capability from a decoded path string,
+  reread configuration, accept a caller path, or create another path authority.
+- The filesystem adapter resolves the exact `toolchain.yaml` child only through the
+  typed principles capability; the preset loader receives only the typed preset-registry
+  capability.
 
 The two legal source locations are:
 
@@ -114,12 +121,13 @@ example, or packaged fallback.
 
 ### 3.1 Package layout and limits
 
-The project document is exactly `<paths.principles>/toolchain.yaml`. The preset
-registry contains only direct regular-file children ending in
-`.toolchain-preset.yaml`; directories, links, special nodes, alternate suffixes,
-and more than 256 entries reject the complete registry. Each document is at
-most 1 MiB, the captured total is at most 16 MiB, nesting is at most 16, and a
-document contains at most 32 package references and 64 policy references.
+- The project document is exactly `<paths.principles>/toolchain.yaml`.
+- The preset registry contains only direct regular-file children ending in
+  `.toolchain-preset.yaml`; directories, links, special nodes, alternate suffixes, and
+  more than 256 entries reject the complete registry.
+- Each document is at most 1 MiB, the captured total is at most 16 MiB, nesting is at
+  most 16, and a document contains at most 32 package references and 64 policy
+  references.
 
 All files are YAML 1.2, one document, without aliases or custom tags. Duplicate
 keys, unknown fields, placeholders, nulls, implicit objects, and wrong node
@@ -147,36 +155,41 @@ extends: []
 policies: [project.zig@1]
 ```
 
-`package` and every `presets`/`extends` item is an exact
-`<package-id>@<MAJOR.MINOR.PATCH>` reference. Package IDs are lowercase ASCII
-segments separated by `.` or `-`; versions are canonical decimal triples with
-no range, prefix, prerelease, build suffix, alias, or `latest`. `layer` is one
-of `language`, `runtime`, `framework`, `build`, `test`, or `environment`.
-Policy references are exact registered `<policy-id>@<positive-integer>` IDs.
-Lists contain no duplicates.
+- `package` and every `presets`/`extends` item is an exact
+  `<package-id>@<MAJOR.MINOR.PATCH>` reference.
+- Package IDs are lowercase ASCII segments separated by `.` or `-`; versions are
+  canonical decimal triples with no range, prefix, prerelease, build suffix, alias, or
+  `latest`.
+- `layer` is one of `language`, `runtime`, `framework`, `build`, `test`, or
+  `environment`.
+- Policy references are exact registered `<policy-id>@<positive-integer>` IDs.
+- Lists contain no duplicates.
 
 ### 3.3 Inheritance and merge
 
-The complete preset registry validates before project selection. Package
-identity comes only from `package`, never the filename. Each identity occurs
-once. Every dependency resolves exactly, dependency cycles fail, and one
-closure cannot contain two versions of the same package ID. Dependencies are
-ordered before dependants; otherwise packages use fixed layer order followed
-by bytewise package-reference order.
+- The complete preset registry validates before project selection.
+- Package identity comes only from `package`, never the filename.
+- Each identity occurs once.
+- Every dependency resolves exactly, dependency cycles fail, and one closure cannot
+  contain two versions of the same package ID.
+- Dependencies are ordered before dependants; otherwise packages use fixed layer order
+  followed by bytewise package-reference order.
 
-There is one merge operator: stable set union of policy references. Preset
-policies are unioned in resolved package order, then project `policies` are
-unioned. Duplicate values collapse without changing the first occurrence.
-There is no recursive map merge, replacement, removal, override, subtraction,
-or implicit precedence rule.
+- There is one merge operator: stable set union of policy references.
+- Preset policies are unioned in resolved package order, then project `policies` are
+  unioned.
+- Duplicate values collapse without changing the first occurrence.
+- There is no recursive map merge, replacement, removal, override, subtraction, or
+  implicit precedence rule.
 
 ### 3.4 Safety and publication
 
-The composition root supplies the immutable policy registry. Every selected
-policy must resolve to one registered policy marked project-selectable. The
-safety gate also injects every compiler-locked required policy and rejects a
-missing/duplicate registry definition. Package documents cannot define a
-command, path, capability, executable implementation, or safety exception.
+- The composition root supplies the immutable policy registry.
+- Every selected policy must resolve to one registered policy marked project-selectable.
+- The safety gate also injects every compiler-locked required policy and rejects a
+  missing/duplicate registry definition.
+- Package documents cannot define a command, path, capability, executable
+  implementation, or safety exception.
 
 Only the safety gate constructs `ValidToolchain`. It owns the deterministic
 ordered exact package references and immutable compiled policy descriptors;
@@ -189,90 +202,97 @@ The service exposes exactly one accessor:
 pub fn toolchain(self: *const ToolChainService) *const ValidToolchain
 ```
 
-`toolchain()` performs no filesystem read, parse, merge, validation, or
-allocation. Repeated calls return the same borrowed immutable value. The
-service releases its owned value once on every terminal branch. There is no
-generic `query()`, field lookup, raw-document accessor, or pre-safety service
-instance.
+- `toolchain()` performs no filesystem read, parse, merge, validation, or allocation.
+- Repeated calls return the same borrowed immutable value.
+- The runner releases the envelope-owned value once on every terminal branch; the
+  service remains a non-owning facade.
+- There is no generic `query()`, field lookup, raw-document accessor, or pre-safety
+  service instance.
 
-Every declared inheritance binding names an exact preset package identity and
-version, not a directory, filename guess, version range, implicit `latest`, or
-untyped map. Preset packages may have a validated transitive composition graph;
-the project `toolchain.yaml` supplies only its exact direct bindings and policy
-union entries. Project-layer validation alone makes no safety claim; the
-post-composition safety validator rejects any effective merged result that
-weakens compiler-locked safety.
+- Every declared inheritance binding names an exact preset package identity and version,
+  not a directory, filename guess, version range, implicit `latest`, or untyped map.
+- Preset packages may have a validated transitive composition graph; the project
+  `toolchain.yaml` supplies only its exact direct bindings and policy union entries.
+- Project-layer validation alone makes no safety claim; the post-composition safety
+  validator rejects any effective merged result that weakens compiler-locked safety.
 
-The bootstrap diagram also covers inventory ledgers, recovery, persistence,
-authority-change routing, environment compilation, and downstream
-invalidation. Those remain runner, transaction, bootstrap, and policy-compiler
-responsibilities. F0003 neither duplicates nor hides them behind a service
-method.
+The bootstrap diagram shows capture, composition and safety validation.
+Authority-change routing, environment compilation and downstream invalidation
+belong to their declared workflow operations and policy owners. F0003 does not
+hide these responsibilities behind a service method.
 
-`ToolChainService` publishes no raw YAML, decoded/raw value, schema-valid layer, registry
-candidate, mutable map, source path, preset bytes, partially merged candidate,
-or pre-safety policy. Its sole consumer-visible value is the borrowed immutable
-`ValidToolchain` constructed after post-composition safety validation. There is
-no service-consumer exception; intermediate workflow keys are not service authority.
-Persistence of validated bootstrap authority
-remains runner/transaction work outside this read-only boundary.
+- `ToolChainService` publishes no raw YAML, decoded/raw value, schema-valid layer,
+  registry candidate, mutable map, source path, preset bytes, partially merged
+  candidate, or pre-safety policy.
+- Its sole consumer-visible value is the borrowed immutable `ValidToolchain` constructed
+  after post-composition safety validation.
+- There is no service-consumer exception; intermediate workflow keys are not service
+  authority.
+- Publication of validated authority remains with the complete owning workflow under ADR
+  0009, outside this read-only boundary.
 
 ### 3.5 Registered lexical naming rules
 
-Every native `PolicyContract` has a required `naming` collection; an empty
-collection is explicit. Each rule has a stable registry-wide unique ID, kind,
-value and case-sensitivity flag. Supported kinds are compound `extension`,
-`exact`, basename `glob`, `manifest` and `reserved`. The native glob subset
-supports `*`, `?` and ASCII character classes/ranges, with whole-token matching;
-separators, globstar, braces, negation and regex fallback are rejected. Matching
-uses Unicode scalars after NFC and the declared case folding.
+- Every native `PolicyContract` has a required `naming` collection; an empty collection
+  is explicit.
+- Each rule has a stable registry-wide unique ID, kind, value and case-sensitivity flag.
+- Supported kinds are compound `extension`, `exact`, basename `glob`, `manifest` and
+  `reserved`.
+- The native glob subset supports `*`, `?` and ASCII character classes/ranges, with
+  whole-token matching; separators, globstar, braces, negation and regex fallback are
+  rejected.
+- Matching uses Unicode scalars after NFC and the declared case folding.
 
-Safety validates every registered descriptor, including unselected entries,
-and owns immutable copies of selected rules. Bounds are 256 rules per policy,
-128 bytes per rule ID and 255 bytes per value. The compiler preserves complete
-selected-policy/rule order and provenance, including explicitly empty policies,
-and binds the result to the exact execution-local `ValidToolchain` identity.
-Consumers reject stale, omitted, additional or altered rules.
+- Safety validates every registered descriptor, including unselected entries, and owns
+  immutable copies of selected rules.
+- Bounds are 256 rules per policy, 128 bytes per rule ID and 255 bytes per value.
+- The compiler preserves complete selected-policy/rule order and provenance, including
+  explicitly empty policies, and binds the result to the exact execution-local
+  `ValidToolchain` identity.
+- Consumers reject stale, omitted, additional or altered rules.
 
-The existing project/preset YAML schemas are unchanged: they select registered
-policy IDs, never supply raw rules. Engine filenames reuse their owning artifact
-and configuration constants. No second policy registry, runtime fallback,
-filesystem grant or persisted naming state is introduced. RE2 rules and full
-environment/repository-bound policy compilation are not implemented by this
-lexical increment.
+- The existing project/preset YAML schemas are unchanged: they select registered policy
+  IDs, never supply raw rules.
+- Engine filenames reuse their owning artifact and configuration constants.
+- No second policy registry, runtime fallback, filesystem grant or persisted naming
+  state is introduced.
+- RE2 rules and full environment/repository-bound policy compilation are not implemented
+  by this lexical increment.
 
 ## 4. Read-only and logging boundary
 
-F0003 uses F0002 LogService as its only logging mechanism. Because F0002 is
-not a general logger, the service receives no logger or sink capability; the
-runner reports F0003 nodes through the selected compiled workflow's validated,
-runner-created `WorkflowLog` binding and the existing registered `action.*`
-lifecycle facts.
+- F0003 uses F0002 LogService as its only logging mechanism.
+- Because F0002 is not a general logger, the service receives no logger or sink
+  capability; the runner reports F0003 nodes through the selected compiled workflow's
+  validated, runner-created `WorkflowLog` binding and the existing registered `action.*`
+  lifecycle facts.
 
-Read-only means F0003 has no create, update, rename, delete, install, migrate,
-process, command, model, network, transaction, state-transition, or project
-write capability. It does not mutate `toolchain.yaml`, a preset package, the
-effective result, shared workflow state, or configuration. It has no reload,
-watch, caller-selected cache, compatibility projection, command-template
-resolver, or default-test-command helper.
+- Read-only means F0003 has no create, update, rename, delete, install, migrate,
+  process, command, model, network, transaction, state-transition, or project write
+  capability.
+- It does not mutate `toolchain.yaml`, a preset package, the effective result, shared
+  workflow state, or configuration.
+- It has no reload, watch, caller-selected cache, compatibility projection,
+  command-template resolver, or default-test-command helper.
 
 Before a current feature-log binding exists, bootstrap uses its typed
 non-logging diagnostic path; no competing global or direct logger is
 permitted. A requirement for a persisted pre-binding record would need a
 separate approved F0002 contract.
 
-Toolchain or preset bodies, raw commands, and operational paths are never log
-payloads. F0002 owns filtering, redaction, persistence, and failure behavior;
-its logging write is not a source mutation by F0003. A logging failure follows
-F0002's existing fail-closed outcome and cannot be converted into successful
-safety-valid toolchain publication.
+- Toolchain or preset bodies, raw commands, and operational paths are never log
+  payloads.
+- F0002 owns filtering, redaction, persistence, and failure behavior; its logging write
+  is not a source mutation by F0003.
+- A logging failure follows F0002's existing fail-closed outcome and cannot be converted
+  into successful safety-valid toolchain publication.
 
 ## 5. Detailed `_structure.yaml` review
 
-`_structure.yaml` is a useful checklist of legacy concern families:
-framework, package management, build, test, physical path policy, quality, and
-AST support. It is not a closed schema and is not the structure of an accepted
-runtime object. It remains unchanged by this feature.
+- `_structure.yaml` is a useful checklist of legacy concern families: framework, package
+  management, build, test, physical path policy, quality, and AST support.
+- It is not a closed schema and is not the structure of an accepted runtime object.
+- It remains unchanged by this feature.
 
 | Inconsistency | Evidence and consequence | F0003 treatment |
 | --- | --- | --- |
@@ -286,11 +306,11 @@ runtime object. It remains unchanged by this feature.
 | Parser/query identity is incomplete | Extension maps point to raw grammar names or project-relative query paths without package/version identity, required captures, containment, compilation, resolver, fallback, or missing-resource behavior. | Preset registry validation must close every declared asset reference before project selection. |
 | Capability absence is ambiguous | Some examples declare E2E locations without commands and cannot distinguish unsupported capability from omitted data. Other package-add commands do not prove manifest mutation. | The closed F0003 contract contains no inferred capability; absence is simply outside this service's authority. |
 
-The current `_structure.yaml` and sibling examples therefore remain
-non-normative source material. A separate offline migration may accept an
-explicitly selected legacy source, but F0003 never reads these files as a
-default, silently upgrades them, or falls back to them when runtime authority
-is absent.
+- The current `_structure.yaml` and sibling examples therefore remain non-normative
+  source material.
+- A separate offline migration may accept an explicitly selected legacy source, but
+  F0003 never reads these files as a default, silently upgrades them, or falls back to
+  them when runtime authority is absent.
 
 ## 6. Legacy engine usage review
 
@@ -356,11 +376,15 @@ design inputs.
    children of the `paths.toolchainPreset` registry. Neither uses an alternate,
    template, source, packaged, ancestor, descendant, or current-directory
    fallback.
-4. The project layer parses into an owned raw value and then validates into a
-   closed owned Zig layer. The complete preset registry passes its separate
-   typed validation before inheritance is resolved. The two JSON Schema files
-   document those same closed YAML shapes but are not runtime inputs. Raw and schema-valid results
-   are runner-private intermediates and cannot construct `ToolChainService`.
+4. The project layer parses into an owned raw value and then validates into a closed
+   owned Zig layer.
+
+   - The complete preset registry passes its separate typed validation before
+     inheritance is resolved.
+   - The two JSON Schema files document those same closed YAML shapes but are not
+     runtime inputs.
+   - Raw and schema-valid results are runner-private intermediates and cannot construct
+     `ToolChainService`.
 5. Every inherited preset identity/version resolves exactly once; missing,
    duplicate, conflicting-version, ranged/latest, and cyclic closures
    fail closed.

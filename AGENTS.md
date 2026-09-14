@@ -16,7 +16,7 @@ may execute any validated definition composed from registered pipeline-node
 contracts; project definitions never supply executable code or capabilities.
 
 The engine treats every LLM response as untrusted candidate data. Deterministic
-code, closed schemas, validators, transactions, executable evidence, and
+code, closed schemas, validators, validated publication, executable evidence, and
 explicit human approvals own workflow authority.
 
 ## Repository role
@@ -47,10 +47,10 @@ the target project and workflow explicitly.
 - **design/code.md** contains contract and data-shape samples. Treat those
   samples as illustrative unless the governing design explicitly makes a
   contract normative.
-- Files beneath **design/principles/** are templates/source material, not an
+- Files beneath **design/templates/** are templates/source material, not an
   instantiated constitution for this engine.
 - Files beneath **design/toolchainPresets/** and
-  **design/.sddtoolkit.json.example** are source examples, not automatic runtime
+  **design/examples/.sddtoolkit.json** are source examples, not automatic runtime
   configuration or fallback data.
 - Files beneath **design/diagrams/** are Markdown documents containing fenced
   Mermaid diagrams. Keep the `.md` extension and the `mermaid` fence so each
@@ -73,6 +73,18 @@ the target project and workflow explicitly.
 
 Do not silently convert a proposed decision, example, template, or TODO into
 accepted project authority.
+
+- **design/decisions/0009-atomic-workflow-execution.md** supersedes transaction,
+  checkpoint and saved-execution recovery designs. Validate the whole workflow
+  before publication; write failure may leave replaced files but cannot record
+  new successful completion. Fresh invocations start at `start`. Clarifications
+  retain the explicit persistence and user-closed-file protection exception.
+- **design/decisions/0010-explicit-feature-directory.md** makes the validated
+  supplied directory the feature identity; no generated name or ownership
+  registry applies.
+- **design/decisions/0011-provider-owned-request-limits.md** leaves per-call
+  limits to providers; the runner accounts actual tokens against the execution
+  budget without local size ceilings or reservations.
 
 ## Project authority
 
@@ -118,7 +130,7 @@ sections below.
 | Validation and repair | Sections 21-22; code samples 13 and 28-30 |
 | Rendering/editability | Section 23 |
 | State, invalidation, recovery | Section 24; code samples 31-33 |
-| Transactions/filesystem | Section 25 |
+| Publication/filesystem | Sections 23.2 and 25 |
 | Security and command safety | Section 26 |
 | Observability | Section 27; code sample 34 |
 | Testing | Section 28 |
@@ -266,8 +278,9 @@ do not manufacture an architecture exercise.
   repair.
 - Retry exhaustion blocks/fails; it never weakens policy.
 - Candidate project changes stay in memory/overlay until authorized.
-- A task completes only after durable project delta, evidence, state, rendered
-  view, and required lock data commit.
+- A task completes only in successful whole-workflow output after the complete
+  project delta, evidence, state and rendered views validate and all required
+  writes succeed. No task is independently committed or resumed.
 - Failed, blocked, cancelled, and completed remain distinct.
 - Generated plan/task/reference views are never imported as authority.
 - The same normalized input and accepted structured payload render byte-stable
@@ -312,8 +325,8 @@ Once the Zig scaffold exists:
 - Use tagged unions and exhaustive `switch` handling for outcomes, diagnostics,
   workflow states, and every other closed variant set.
 - Use distinct wrapper types for validated IDs, paths, approvals, commands,
-  evidence, capabilities, and transactions; do not pass raw byte slices where
-  one of those states is required.
+  evidence, capabilities, and output authorizations; do not pass raw byte slices
+  where one of those states is required.
 - Parse configuration bytes into the single unversioned closed configuration
   contract and reject unknown fields. Parse other external, persisted, and
   model bytes into their governing closed contracts, including version checks
@@ -343,10 +356,10 @@ task.
   and failure propagation.
 - Contracts: accepted/rejected schema fixtures, including unknown fields and,
   for versioned contracts, version mismatch.
-- Properties: paths, DAGs, conflicts, transitions, repairs, rendering, IDs, and
-  transaction convergence.
+- Properties: paths, DAGs, conflicts, transitions, repairs, rendering, IDs,
+  publication failures and fresh-rerun convergence.
 - Fault injection: malformed model output, parser/command/filesystem failure,
-  every transaction phase, interruption, stale approval, and retry exhaustion.
+  every publication write, interruption, stale approval, and retry exhaustion.
 - Unit and integration tests may use fakes; their results are not E2E evidence.
 - Ask for explicit user approval before each E2E test run.
 - End to end: execute the complete production path, including the real LLM
@@ -426,7 +439,7 @@ A change is complete only when:
 - Flag raw model paths/commands, generated-view authority, stale approval use,
   or completion without committed evidence.
 - Safe path: return through the engine-owned typed validation, approval, and
-  transaction flow.
+  publication flow.
 
 ### Packaged-executable regressions
 

@@ -18,8 +18,7 @@ flowchart TD
     RERUN --> LOAD
 ```
 
-The same subject retains the same clarification identity across runs. Every
-workflow completely overwrites unresolved forms from current validated state,
-including open answer drafts, while user-resolved forms remain byte-for-byte
-unchanged. Applicable validated answers become inputs to a new
-execution, which regenerates and validates the owning workflow's complete output.
+[Design §23.2](../design.md#232-workflow-reruns-and-protected-clarification-files)
+owns stable subject IDs, complete replacement of unresolved forms/drafts and
+byte-preserved user-closed forms. Applicable validated answers feed a fresh
+execution of the owning workflow.

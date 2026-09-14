@@ -1,55 +1,85 @@
 # `.sddtoolkit.json` path contract
 
-Every SDDE project has exactly one `.sddtoolkit.json` at its project root. The
-file's location defines that root. The repository example defines the current
-reader-facing JSON shape but is never itself runtime configuration or a
-fallback.
+- The invocation working directory is the project root. Read only its exact
+  `.sddtoolkit.json`; never search for another.
+- The closed [configuration schema](schemas/sddtoolkit-config.schema.json)
+  contains exactly eight path strings: seven directory roots and one provider file.
+- [F0001](features/F0001-SDDToolKitConfigService.md) supplies immutable strings.
+  [F0004](features/F0004-BootstrapRootRegistryService.md) normalizes and validates
+  them against the canonical root before use; decoding grants no path authority.
 
-The decoded `paths` object contains exactly eight strings: seven intended
-project-relative directory roots and one provider-document file path. F0001
-provides those strings as immutable configuration information. The path-policy
-owner separately normalizes and validates each value against the canonical
-project root before any path is used; decoding a string never grants path
-authority.
+## Configured locations
 
 | Key | Purpose |
 | --- | --- |
-| `specs` | Canonical feature-facing views, clarification forms, and logs. |
-| `references` | Project reference corpora supplied to specification workflows. |
-| `specsArchive` | Archived feature views. This is the sole configured-root nesting exception: it may be beneath `specs`, and its subtree is excluded from active feature discovery. |
-| `workflows` | An arbitrary bounded number of closed declarative workflow definitions and their explicitly declared resources. V1 recursively admits only strict UTF-8 YAML 1.2 regular files with the exact case-sensitive `*.workflow.yaml` suffix and the formal closed [workflow-definition v1 structural schema](schemas/workflow-definition-v1.schema.json); `WorkflowId` comes from validated content, never the filename. Each definition has a unique validated `WorkflowId`, logging shortcode, and graph composed only from the single registry's generic operation contracts. Definitions cannot contain executable code, select infrastructure, grant capabilities, weaken registered gates, or bypass runner validation. The initial definitions are `specify`, `plan`, `tasks`, and `implement`, whose own predecessor gates enforce their order. This root also owns the engine-reserved `features/` child; its root entry is accounted when present and its descendants are excluded from definition traversal. |
-| `toolchainPreset` | The installed toolchain preset packages from which the project's `toolchain.yaml` inherits. Presets remain candidate policy until parsed, composed, and deterministically validated. |
-| `principles` | Project principles. Markdown files are free-text principle sources. The exact root child `toolchain.yaml` is also a project principle, but it is parsed separately as a closed typed project-toolchain layer and never ingested as free text. |
-| `templates` | Inert `*.template.md` principle templates reserved for a future `sdd init` template-to-principles boundary. Current v1 defines no init action or transaction and normal bootstrap and feature workflows neither ingest nor copy these files. A future accepted init design may materialize copies in `principles`, where they would become ordinary project principle input. |
-| `providers` | Engine-read-only LLM-provider catalogue document path. It is a normalized project-relative file path whose basename is exactly `.sddproviders.json`. F0004 reserves it without reading it; F0008 is its sole reader and F0006 owns later decoding. Catalogue membership does not add a model to the repository's allowed `models.slots` set. |
+| `specs` | Feature views, clarification forms and logs. |
+| `references` | Reference corpora supplied to specification workflows. |
+| `specsArchive` | Archived feature views; excluded from active feature selection. |
+| `workflows` | Closed declarative definitions, declared resources and reserved `features/` state. |
+| `toolchainPreset` | Installed preset packages inherited by project `toolchain.yaml`. |
+| `principles` | Free-text Markdown principles plus separately typed `toolchain.yaml`. |
+| `templates` | Inert `*.template.md` inputs for a future accepted `sdde init`. |
+| `providers` | Engine-read-only provider catalogue with exact basename `.sddproviders.json`. |
 
-Except for `specsArchive` beneath `specs`, the seven configured directory
-roots are disjoint. `paths.providers` may not equal, contain, or be contained
-by a configured root. No configured path may alias or collide under an active
-portability policy.
+Containment and ownership:
 
-The engine derives, rather than separately configures, these storage children:
+- Directory roots are disjoint, except `specsArchive` may be beneath `specs`.
+- The normalized project-relative provider file cannot equal, contain or be
+  contained by a configured root.
+- Configured paths must not alias or collide under the active portability policy.
+- Presets remain candidates until parsed, composed and deterministically validated
+  ([F0003](features/F0003-ToolChainService.md)).
+- The exact principles-root child `toolchain.yaml` is a closed typed layer;
+  never ingest it as free text.
+- Normal bootstrap and feature workflows neither ingest nor copy templates. V1
+  defines no init action/transaction; only a future accepted init may copy them
+  into `principles` as ordinary project input.
+- F0004 reserves the provider file without reading it; F0008 alone reads it and
+  F0006 owns decoding. Catalogue membership never expands allowed `models.slots`.
 
-| Derived path | Purpose |
+## Workflow inventory
+
+[F0005](features/F0005-WorkflowDefinitionRegistryService.md) owns inventory and
+compilation against the [closed v1 schema](schemas/workflow-definition-v1.schema.json):
+
+- Recursively admit an arbitrary bounded number of strict UTF-8 YAML 1.2 regular
+  files with exact case-sensitive suffix `*.workflow.yaml` and declared resources.
+- Validate unique content-owned `WorkflowId`s and logging shortcodes; filenames
+  never determine identity.
+- Compile graphs only from the single registry's generic operation contracts.
+  Definitions cannot supply executable code/infrastructure/capabilities, weaken
+  gates or bypass runner validation.
+- The planned SDD suite's own predecessor gates enforce `specify -> plan -> tasks
+  -> implement`. The supplied Specify example currently declares `spec-generation`.
+- Reserve only the root child `features/`: account for its entry when present and
+  exclude descendants from definition traversal. Other directories follow normal
+  inventory rules; no transaction/recovery storage child exists.
+
+## Derived storage
+
+The engine derives these paths; they are not separate configuration fields.
+
+| Path | Purpose |
 | --- | --- |
-| `<paths.workflows>/features/` | Engine-owned canonical per-feature workflow and execution state. |
-| `<paths.workflows>/features/<feature-directory>/state/workflow.json` | Fixed workflow-state singleton; Specify captures/validates `specification-state/v1` separately from read-only clarification preparation (see [F0100 §3.12](features/F0100-SpecWorkflow.md#312-clarification-refresh-and-registered-publication)). |
-| `<paths.workflows>/features/<feature-directory>/state/clarifications.json` | Native clarification registry/response input; closed schema and limits are documented in [F0100 §3.2](features/F0100-SpecWorkflow.md#32-read-only-artifact-and-clarification-inputs). |
+| `<paths.workflows>/features/` | Canonical published feature/clarification state; no execution checkpoints. |
+| `<paths.workflows>/features/<feature-directory>/state/workflow.json` | Fixed workflow-state singleton. |
+| `<paths.workflows>/features/<feature-directory>/state/clarifications.json` | Native clarification registry and response input. |
 
-`--feature` supplies a directory relative to `.sddtoolkit.json`'s `paths.specs`.
-The engine resolves `<paths.specs>/<feature-directory>/` and excludes
-`paths.specsArchive`. For `--feature hello-world`, Specify writes
-`<paths.specs>/hello-world/spec.md`. The caller does not include the configured
-root, and the engine never hard-codes `specs/` or guesses/removes a prefix.
-The normalized relative key also identifies associated canonical state; there
-is no reference-derived name or separate identity/ownership registry
-([ADR 0010](decisions/0010-explicit-feature-directory.md)).
+- [F0100 §3.12](features/F0100-SpecWorkflow.md#312-clarification-refresh-and-registered-publication)
+  owns Specify's separate capture/validation of `specification-state/v1`.
+- [F0100 §3.2](features/F0100-SpecWorkflow.md#32-read-only-artifact-and-clarification-inputs)
+  owns read-only clarification preparation, closed schema and limits.
 
-Only `features/` is reserved at the workflow root. There is no project-level
-transaction storage child or replacement recovery location. Other directories
-follow the ordinary workflow-definition/resource inventory rules.
+## Feature directory
 
-The current reader-facing schema example is
-[`examples/.sddtoolkit.json`](examples/.sddtoolkit.json). The engine never
-searches `design/`, reads this repository copy as project configuration, or
-copies it into a project implicitly.
+[ADR 0010](decisions/0010-explicit-feature-directory.md) defines feature identity:
+
+- `--feature` is relative to `paths.specs`; resolve
+  `<paths.specs>/<feature-directory>/`, excluding `paths.specsArchive`.
+- The caller omits the configured root. Never hard-code `specs/` or guess/remove
+  a prefix: `--feature hello-world` writes `<paths.specs>/hello-world/spec.md`.
+- The normalized relative key also identifies canonical state. There is no
+  reference-derived name or identity/ownership registry.
+
+The [complete example](examples/.sddtoolkit.json) is source material. The engine
+never searches `design/`, uses this copy as runtime fallback or copies it implicitly.

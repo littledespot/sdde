@@ -2,7 +2,10 @@
 
 **Status:** Proposed feature design
 
-**Implementation readiness:** Ready for the bounded JSON-reader increment.
+**Implementation:** The bounded read-only configuration increment is implemented
+in [the bootstrap runner](../../src/application/bootstrap_config_runner.zig)
+and [configuration service](../../src/application/sddtoolkit_config_service.zig).
+This implementation status does not accept the remainder of the proposed design.
 
 **Classification:** Core, read-only configuration provider
 
@@ -18,11 +21,11 @@ SDDE against a target project.
 
 ## 1. Responsibility
 
-F0001 treats the native executable's current working directory, captured once
-at invocation start, as the project root. It reads that directory's exact
-`.sddtoolkit.json` once, decodes it directly into one owned immutable
-`SDDToolKitConfig`, and makes that value available to declared consumers for
-the current invocation.
+- F0001 treats the native executable's current working directory, captured once at
+  invocation start, as the project root.
+- It reads that directory's exact `.sddtoolkit.json` once, decodes it directly into one
+  owned immutable `SDDToolKitConfig`, and makes that value available to declared
+  consumers for the current invocation.
 
 It owns configuration transport and structural decoding only. It does not
 interpret logging, model, or path settings as operational policy.
@@ -82,27 +85,27 @@ PathsConfig {
 }
 ```
 
-The root and every fixed nested object are closed by
-`sddtoolkit-config.schema.json`. Missing, duplicate, unknown, or wrong-kind
-members are rejected. Model slot names are data, but every slot value has the
-same closed shape. `promptCapture` is a unique list of at most the four closed
-selectors shown above; an empty list disables body capture. All sink, format,
-size, retention, flush, redaction, failure,
-prompt-size, and lock values are F0002 compiler constants, not configuration.
-There is no file-output switch: every admitted F0002 record is written to its
-feature/run `.log` file. `console` can only add or suppress the same safe
-pipe-delimited row on `stderr`; it can never replace or disable the file write.
+- The root and every fixed nested object are closed by `sddtoolkit-config.schema.json`.
+- Missing, duplicate, unknown, or wrong-kind members are rejected.
+- Model slot names are data, but every slot value has the same closed shape.
+- `promptCapture` is a unique list of at most the four closed selectors shown above; an
+  empty list disables body capture.
+- All sink, format, size, retention, flush, redaction, failure, prompt-size, and lock
+  values are F0002 compiler constants, not configuration.
+- There is no file-output switch: every admitted F0002 record is written to its
+  feature/run `.log` file.
+- `console` can only add or suppress the same safe pipe-delimited row on `stderr`; it
+  can never replace or disable the file write.
 
-`models.slots` is the repository's allowed model set, expressed as named exact
-`(provider, model)` references plus closed slot options. The configured
-`.sddproviders.json` document is the catalogue of available configured model
-instances. After both inputs validate, every slot tuple must resolve to exactly
-one catalogue entry. Slots may reference some or all catalogue models, never a
-model outside the catalogue. An unreferenced catalogue entry is not allowed for
-this repository merely because it is configured. F0001 only decodes the slot
-values; F0006 owns this cross-document semantic join. Multiple named slots may
-reference the same catalogue entry; the subset rule compares distinct exact
-provider/model tuples, not the number of slot names.
+`models.slots` decodes named exact `(provider, model)` references and closed
+slot options. [F0006 §6](F0006-LLMProviderInterface.md#6-providermodel-binding-and-workflow-token-accounting)
+owns the semantic join to the provider catalogue:
+
+- Every slot tuple resolves exactly once.
+- Slots may select some or all catalogue models; unreferenced entries gain no
+  repository authority.
+- Distinct slot names may share a tuple; the subset rule compares distinct
+  tuples, not slot count.
 
 Structural decoding does not grant operational authority. In particular:
 
@@ -139,15 +142,17 @@ complete owned value once on every terminal invocation branch.
 
 ## 5. File and failure contract
 
-The runtime uses only `<invocation-working-directory>/.sddtoolkit.json`. The
-working directory is captured and canonicalized once as the project root; the
-runtime does not search ancestors or descendants and does not accept aliases,
-alternate names, environment overrides, repository examples, packaged assets,
-or default documents. The file is opened read-only, no-follow, beneath that
-root and read under the compiler-owned `maxEngineConfigBytes = 1,048,576`
-(1 MiB) limit. This limit is not configurable. A file whose byte length exceeds
-the limit is rejected before decoding; the reader also enforces the same limit
-while reading so a stale or inaccurate size observation cannot bypass it.
+- The runtime uses only `<invocation-working-directory>/.sddtoolkit.json`.
+- The working directory is captured and canonicalized once as the project root; the
+  runtime does not search ancestors or descendants and does not accept aliases,
+  alternate names, environment overrides, repository examples, packaged assets, or
+  default documents.
+- The file is opened read-only, no-follow, beneath that root and read under the
+  compiler-owned `maxEngineConfigBytes = 1,048,576` (1 MiB) limit.
+- This limit is not configurable.
+- A file whose byte length exceeds the limit is rejected before decoding; the reader
+  also enforces the same limit while reading so a stale or inaccurate size observation
+  cannot bypass it.
 
 F0001 exposes exactly two terminal configuration errors:
 
@@ -156,11 +161,11 @@ F0001 exposes exactly two terminal configuration errors:
 | `ENGINE_CONFIG_READ_ERROR` | The exact current-directory file cannot be safely and completely read. This includes missing, permissions/I/O failure, unsafe type/symlink/alias, working-directory failure, and exceeding the internal 1 MiB guard. |
 | `ENGINE_CONFIG_PARSE_ERROR` | The bytes cannot be decoded as the exact closed config. This includes malformed JSON, trailing content, and missing, unknown, duplicate, or wrong-kind members. |
 
-Either error makes bootstrap return terminal `failed`, makes the executable
-exit nonzero, and prevents every workflow node, model call, F0002 feature log,
-and project write. The low-level cause may appear in bounded human-readable
-diagnostic detail, but it does not create another public error code or control
-branch.
+- Either error makes bootstrap return terminal `failed`, makes the executable exit
+  nonzero, and prevents every workflow node, model call, F0002 feature log, and project
+  write.
+- The low-level cause may appear in bounded human-readable diagnostic detail, but it
+  does not create another public error code or control branch.
 
 This pre-release proof of concept has no compatibility target or configuration
 version discriminator. The single closed contract is updated in place. A

@@ -24,17 +24,17 @@ SDDE pins Zig 0.16.0 exactly.
 - `.zigversion` records the developer-toolchain pin.
 - `build.zig.zon` records Zig 0.16.0 as the package's minimum version.
 - `build.zig` rejects every compiler version other than 0.16.0.
-- A later stable 0.16.x patch may replace the exact pin after the repository's
-  complete verification passes. Minor-version upgrades require a new explicit
-  decision.
+- A later stable 0.16.x patch may replace the exact pin after the repository's complete
+  verification passes.
+- Minor-version upgrades require a new explicit decision.
 
 ## Consequences
 
-- Developer and CI builds use the same Zig language, build-system, and standard-
-  library contracts.
+- Developer and CI builds use the same Zig language, build-system, and standard-library
+  contracts.
 - The initial implementation may use Zig 0.16 `std.Io` APIs directly without a
   compatibility layer.
-- Any accepted patch upgrade updates all three pinning locations together and
-  records the verification evidence.
-- This decision does not select dependencies, release modes, linking strategy,
-  or a supported platform matrix.
+- Any accepted patch upgrade updates all three pinning locations together and records
+  the verification evidence.
+- This decision does not select dependencies, release modes, linking strategy, or a
+  supported platform matrix.

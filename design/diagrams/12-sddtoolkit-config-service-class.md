@@ -24,5 +24,6 @@ classDiagram
     note for SDDToolKitConfig "Unknown fields and malformed values are rejected before consumers use the configuration"
 ```
 
-Startup reads the invocation's `.sddtoolkit.json`. Dedicated validators resolve
-the logging, model and path policies from the same immutable configuration.
+[F0001](../features/F0001-SDDToolKitConfigService.md) owns the invocation's
+immutable `.sddtoolkit.json` input. Dedicated consumers validate logging,
+model and path policy.

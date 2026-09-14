@@ -33,7 +33,7 @@ classDiagram
     note for ProviderInvocationObservation "A provider response is candidate data; the engine owns validation and workflow outcomes"
 ```
 
-Each call is bound to its exact request, model, input and deadline. Request
-identity and resources remain associated with the originating workflow step.
-The provider reports actual token usage and preserves failure or cancellation;
-workflow policy controls further calls and retries.
+[F0007](../features/F0007-AWSBedrockProvider.md) owns exact request/model/input/
+deadline binding and actual token reporting. Originating-step identity and
+resources follow [ADR 0012](../decisions/0012-workflow-owned-model-request.md);
+workflow policy controls retries and preserves failure/cancellation.

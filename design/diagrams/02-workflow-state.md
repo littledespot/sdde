@@ -20,15 +20,10 @@ flowchart TD
     INVALIDATE --> RERUN
 ```
 
-Each workflow starts from its beginning and publishes its complete output only
-on success. Failure, blocking or cancellation ends that execution. Relevant
-clarification answers are retained for the next run. Every workflow completely
-overwrites its registered replaceable outputs and unresolved forms at the same
-paths on rerun, preserving user-resolved forms byte-for-byte. Other workflow
-definitions follow their own declared gates and transitions under that shared
-replacement rule.
+These predecessor gates apply to the initial SDD suite; unrelated workflows
+follow their own compiled transitions. See [Design §24](../design.md#24-state-sequence-and-recovery-without-fingerprints).
 
-All outputs validate before publication. A publication write failure or
-interruption may leave already-replaced files, but cannot record new successful
-completion. Rerunning replaces the complete output set; there is no rollback or
-recovery store. User-closed clarification files remain protected throughout.
+Every invocation starts at `start`. [ADR 0009](../decisions/0009-atomic-workflow-execution.md)
+owns whole-workflow publication and failure behavior;
+[§23.2](../design.md#232-workflow-reruns-and-protected-clarification-files)
+owns unresolved-form replacement and byte-preserved user-closed forms.

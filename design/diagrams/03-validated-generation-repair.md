@@ -34,9 +34,9 @@ flowchart TD
     GAP --> END["End the current execution;<br/>preserve clarification questions and answers"]
 ```
 
-A request retains its originating workflow-step identity, model binding and
-resources as it passes between steps. Protocol retries retain that request;
-repairs receive distinct requests. Every model call follows the declared
-authorization, token accounting and retry rules. Provider failure or cancellation
-keeps its own outcome. Semantic review is model-assisted; accepted content is
-published only after the complete workflow succeeds.
+Protocol correction retains the originating request; repair binds a distinct
+request. Provider failure and cancellation preserve their typed outcomes.
+See [model request ownership](../decisions/0012-workflow-owned-model-request.md),
+[Design §22 repair](../design.md#22-atomic-repair-protocol) and
+[§25 publication](../design.md#25-atomic-workflow-execution-and-output).
+Semantic review remains model-assisted.

@@ -10,8 +10,11 @@ that closes R12's reopened chunk 01, is implemented and verified offline;
 Phase 2 (05–07) is implemented and verified offline.
 Phase 3's R14 delivery was reopened after the [R15 review](FIX_001.md#13-post-follow-up-live-run-review)
 and [full architecture audit](REVIEW_FIX_001_ARCHITECTURE.md). The 14 September
-implementation closes F1–F4/F9 across chunks 08–12, with full offline verification
-recorded in the [architecture follow-up](#phase-3-architecture-audit-follow-up).
+implementation delivers substantial shared repair work. The 15 September
+[critical review](REVIEW_FIX_001_ARCHITECTURE.md#15-september-2026-critical-review)
+reproduces remaining F1/F4 failures and identifies F3 ownership cleanup.
+Phase 3 is incomplete: 08–11 remain open for the bounded work in the
+[architecture follow-up](#phase-3-architecture-audit-follow-up); 12 remains delivered.
 Chunks 13–21 remain pending. No successful live baseline or rubric result is claimed.
 Phase 0 involved no runtime implementation or model calls. No live E2E run was
 performed during Phase 1 implementation or its follow-up; the separately retained
@@ -563,18 +566,22 @@ chunk 08 is next. H-011 answer authentication remains a separate gate.
 
 ## Phase 3 — Complete authorized repair and revalidation
 
-**Status:** complete and verified offline on 14 September 2026.
-The shared changes cover 08–12, preserving R14 diagnostics and merge observations.
-See the [delivery matrix and validation record](#phase-3-architecture-audit-follow-up).
-Phase 4 (13–15) is next. No live E2E run or rubric evaluation was performed.
+**Status:** incomplete after the critical review on 15 September 2026.
+The 14 September changes and passing offline suite do not close the remaining
+authorization/equivalence cases. Chunks 08–10 require the C1/C2 corrections;
+08/11 also retain C3 eligibility ownership cleanup. Chunk 12 remains delivered.
+See the [current delivery matrix and validation record](#phase-3-architecture-audit-follow-up).
+Finish these bounded Phase 3 items before declaring it complete and advancing
+the sequential rollout to Phase 4. No live E2E run or rubric evaluation was performed.
 
 The earlier R13 extraction-text sequencing is complete; all five current repair
 consumers now participate in the shared contract.
 
 ### 08 — Bind shared repair preconditions through existing consumers
 
-- [x] Complete chunk 08. Verified offline on 14 September 2026;
-  see the [shared delivery record](#phase-3-architecture-audit-follow-up).
+- [ ] Chunk 08 partially delivered; the 15 September review leaves shared
+  feasibility/equivalence and eligibility ownership work under C1–C3.
+  See the [current delivery record](#phase-3-architecture-audit-follow-up).
   **Depends on:** 00's target matrix, 04, 06, 07.
 
 **Owners:** [atomic_repair.zig](../src/domain/atomic_repair.zig), native candidate
@@ -618,8 +625,8 @@ remains a gate.
 
 ### 09 — Repair reconciliation summaries before appending derived state
 
-- [x] Complete chunk 09. Verified offline on 14 September 2026;
-  see the [shared delivery record](#phase-3-architecture-audit-follow-up).
+- [ ] Chunk 09 partially delivered; C1's unchanged-sibling membership case remains.
+  See the [current delivery record](#phase-3-architecture-audit-follow-up).
   **Depends on:** 03, 06, 08.
 
 **Owners:** current summary candidate/validator/builder, focused authorization,
@@ -649,8 +656,8 @@ class, not a retry for one retained fixture response.
 
 ### 10 — Repair the global reconciliation candidate with graph dependencies
 
-- [x] Complete chunk 10. Verified offline on 14 September 2026;
-  see the [shared delivery record](#phase-3-architecture-audit-follow-up).
+- [ ] Chunk 10 partially delivered; C1's signal case and C2's disposition
+  equivalence case remain. See the [current delivery record](#phase-3-architecture-audit-follow-up).
   **Depends on:** 03, 07–09.
 
 **Owners:** disposition, signal and conflict validators; native global candidate;
@@ -679,8 +686,9 @@ rejection/authorization/revalidation contract; no disposition-only continuation 
 
 ### 11 — Narrow existing specification repair to independently valid units
 
-- [x] Complete chunk 11. Verified offline on 14 September 2026;
-  see the [shared delivery record](#phase-3-architecture-audit-follow-up).
+- [ ] Chunk 11's field/context behavior is delivered; C3's duplicated retained-claim
+  eligibility decision remains to satisfy the single-owner requirement.
+  See the [current delivery record](#phase-3-architecture-audit-follow-up).
   **Depends on:** 04, 06, 08.
 
 **Owners:** specification generation/provenance/repair/session, existing repair
@@ -941,18 +949,21 @@ repair policy or implementation path.
 ### Phase 3 architecture audit follow-up
 
 The [source-to-publication audit](REVIEW_FIX_001_ARCHITECTURE.md) reopened F1–F4/F9
-above the shared CAS boundary. The 14 September implementation completes the
-existing contracts without a new repair algebra, retry owner or authority router.
+above the shared CAS boundary. The 14 September implementation addressed the
+reported dependency/request defects and several relation/equivalence cases without
+a new repair algebra, retry owner or authority router. The
+[15 September critical review](REVIEW_FIX_001_ARCHITECTURE.md#15-september-2026-critical-review)
+supersedes the blanket completion claim with C1–C3 below.
 This is the single current delivery matrix; [contract §3](CONTRACT_FIX_001.md#3-authorized-repair-targets-and-dependency-checks)
 continues to own approved target scope.
 
-| Chunk | Delivered behavior and executable evidence |
-| --- | --- |
-| 08 — Native facts and authorization | Shared `typed_text.Dependencies` includes grammar bindings, naming rules, source inputs and passive occurrences. Reconciliation captures flattened typed lineage once; specification generation and coverage reuse provenance dependencies. Runtime toolchain identity is checked before capture. Snapshots no longer depend on model packets. Tests reject changed grammar names, stale policy identity and broken history before dispatch/merge, while presentation-only formatting leaves native facts unchanged. Existing exact CAS, owner/revision/origin, wrong-kind, extra-field and allocation-failure tests remain. |
-| 09 — Summary | Native compatibility facts select content or selection repair, or the existing G1 block. Tests cover business/token mixtures, mixed model kinds, multiple tokens, wrong content kinds and wrong token IDs. Selection then required-token insertion restores complete membership without changing keys or valid siblings. Canonical text and equal claim evidence permit redundant deletion; membership and all validation remain mandatory. |
-| 10 — Global graph | Signals share the summary content predicate; signal eligibility and conflict pairs come from native relationship predicates. No eligible signal choice or conflict pair blocks before a call. R15 and an unrelated renewal example preserve content, dispositions and separate token signals and pass complete reconciliation. Canonical redundancy preserves unresolved conflicts and rejects competing meanings. The production YAML test consumes serialized eligible choices; envelope echo followed by malformed JSON exhausts with zero merges, original revision/origin and latest attempt distinguished. |
-| 11 — Specification | The selected field lens supplies unchanged attributed content or its entire shared-provenance record. Actual request tests cover initial brief (`brief: null`), multi-field records, provenance-only edits and value edits. The validator supplies normalized/exact-copy alternatives, including zero and nonzero eligible token sets. Unsupported replacements remain invalid; siblings and provenance remain unchanged. Shared request projection is tested under allocation failure. |
-| 12 — Extraction and coverage | Classification validation and repair guidance use one outcome/decision owner; actual packet tests cover `claims` and `no_feature_claim`, including forbidden preservation. Text repair retains source/passive policy bindings and rejects changed context. Deterministic coverage uses the same complete specification dependencies and retains byte-preserving exact-copy proof, native blocks and full revalidation with no model call. |
+| Chunk | Current status | Delivered behavior and executable evidence |
+| --- | --- | --- |
+| 08 — Native facts and authorization | Partial: C1–C3 | Shared `typed_text.Dependencies` includes grammar bindings, naming rules, source inputs and passive occurrences. Reconciliation captures flattened typed lineage once; specification generation and coverage reuse provenance dependencies. Runtime toolchain identity is checked before capture. Snapshots no longer depend on model packets. Tests reject changed grammar names, stale policy identity and broken history before dispatch/merge, while presentation-only formatting leaves native facts unchanged. Existing exact CAS, owner/revision/origin, wrong-kind, extra-field and allocation-failure tests remain. |
+| 09 — Summary | Partial: C1 | Native compatibility facts select content or selection repair, or the existing G1 block. Tests cover business/token mixtures, mixed model kinds, multiple tokens, wrong content kinds and wrong token IDs. Selection then required-token insertion restores complete membership without changing keys or valid siblings. Canonical text and equal claim evidence permit redundant deletion; membership and all validation remain mandatory. |
+| 10 — Global graph | Partial: C1/C2 | Signals share the summary content predicate; signal eligibility and conflict pairs come from native relationship predicates. No eligible signal choice or conflict pair blocks before a call. R15 and an unrelated renewal example preserve content, dispositions and separate token signals and pass complete reconciliation. Canonical redundancy preserves unresolved conflicts and rejects competing meanings. The production YAML test consumes serialized eligible choices; envelope echo followed by malformed JSON exhausts with zero merges, original revision/origin and latest attempt distinguished. |
+| 11 — Specification | Behavior delivered; C3 cleanup open | The selected field lens supplies unchanged attributed content or its entire shared-provenance record. Actual request tests cover initial brief (`brief: null`), multi-field records, provenance-only edits and value edits. The validator supplies normalized/exact-copy alternatives, including zero and nonzero eligible token sets. Unsupported replacements remain invalid; siblings and provenance remain unchanged. Shared request projection is tested under allocation failure. |
+| 12 — Extraction and coverage | Delivered; no additional defect established | Classification validation and repair guidance use one outcome/decision owner; actual packet tests cover `claims` and `no_feature_claim`, including forbidden preservation. Text repair retains source/passive policy bindings and rejects changed context. Deterministic coverage uses the same specification dependencies and retains byte-preserving exact-copy proof, native blocks and full revalidation with no model call. |
 
 **Validation — 14 September 2026:**
 
@@ -975,10 +986,60 @@ Diff review retained exact schemas/CAS, existing limits and downstream failure
 gates. No accepted-design/ADR, production dependency or workflow YAML change;
 no new approval deviation. The shared prompt changes one instruction line.
 
-This closes Phase 3's implementation criteria. Offline fakes do not establish
-live completion, model reliability or rubric quality. A live E2E invocation
-requires fresh explicit approval; Phase 4 support/clarification and later-phase
-readback/assembly work remain pending.
+This records the 14 September checks; it does **not** close the gaps reproduced
+by the later critical review. Offline fakes do not establish live completion,
+model reliability or rubric quality. A live E2E invocation requires fresh explicit
+approval; Phase 4 support/clarification and later-phase readback/assembly work
+remain pending.
+
+**Remaining closure work — 15 September 2026:** the delivered behavior above stays
+in place. Findings and causal traces live in the architecture review; this table
+is the sole remaining implementation/checklist prescription.
+
+| Chunks / finding | Required correction and testable exit |
+| --- | --- |
+| 08–10 / C1 (remaining F1) | Native relation facts must account for unchanged sibling membership/coverage before authorizing a selection. Summary exact-once membership and global signal set uniqueness remain distinct; preserve legal overlapping signals. With all eligible membership occupied by valid siblings and no proven redundant entry, return existing G1 before a provider call. Inspect conflict pair/uniqueness dependencies under their existing owner, without presuming a new conflict defect. Add both reproduced domains, summary/global cases, a genuinely available replacement choice, legal overlap, and the existing selection-then-insertion recovery. Inspect serialized choices and prove native authorization plus the production graph's zero-call block/full-validation paths. Do not add a general search solver or broaden write scope. |
+| 08/10 / C2 (remaining F4) | The native disposition relationship owner retains validated redundancy facts; authorization stops using exact JSON equality to decide graph equivalence. `[B,C]` versus `[C,B]` under the same A/disposition must permit proven redundant deletion while preserving graph and signal/conflict obligations. Test superseded and reciprocal-conflict relationships, changed members/variant/claim identity, invalid duplicates, stale preconditions, unchanged siblings and full reconciliation. Keep exact atomic old-value/dependency comparison and genuine conflict blocks. |
+| 08/11 / C3 (remaining F3 cleanup) | Share retained-claim eligibility from the existing provenance owner between native acceptance and model-input projection. Remove the independently maintained filter; preserve current semantics. Test each disposition variant and unknown IDs against actual serialized initial/repair choices and native selection validation. This is a small ownership cleanup; no current eligibility mismatch or new service is claimed. |
+
+The two reproduced failures require regression tests at the owning boundaries and
+their affected production graph paths. Preserve all existing negative, allocation,
+origin, repeated-invalid and malformed-protocol cases. Re-run targeted steps and
+full `verify` after correction. No new target authority or E2E approval is required
+to implement and verify these offline corrections under existing R4–R8/G1 scope.
+
+### Critical review validation — 15 September 2026
+
+Reviewed engine sources: `a742020`. No production source, existing test, prompt,
+schema or YAML edits were made for this review. Additional probes ran in an
+isolated project-local copy; concurrent unrelated documentation edits were preserved.
+
+```sh
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg test-reference-reconciliation test-reference-model-input test-specification-generation test-reference-extraction --summary all > .zig-cache/phase3-critical-review-targeted.log 2>&1
+# PASS: 12/12 steps; 271/271 tests.
+TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg verify --summary all > .zig-cache/phase3-critical-review-verify.log 2>&1
+# PASS: 120/120 steps; 1,405/1,405 tests, including architecture and native smoke.
+TMPDIR="$PWD/.zig-cache/tmp" zig build --build-file .zig-cache/phase3-critical-review-copy/build.zig --global-cache-dir .zig-cache/global --system "$PWD/zig-pkg" test-reference-reconciliation --summary all > .zig-cache/phase3-critical-review-probes.log 2>&1
+# FAIL as expected: 81/83 tests passed; both added acceptance probes failed.
+```
+
+Evidence: [targeted log](../.zig-cache/phase3-critical-review-targeted.log),
+[full verification](../.zig-cache/phase3-critical-review-verify.log),
+[probe source](../.zig-cache/phase3-critical-review-probes.zig), and
+[native failure trace](../.zig-cache/phase3-critical-review-probes.log).
+Probe source was appended to the copied reconciliation test file, with all 81
+existing tests retained. C1 reproduced four summary/global/domain combinations;
+C2 reproduced two domains and first proved each survivor's full reconciliation.
+The probes assert the required behavior, so their failures expose gaps in the
+passing suite. They did not invoke a provider. The sandbox initially denied Zig
+cache creation; the offline probe command was rerun with explicit tool approval.
+These ignored cache files are local evidence, not committed tests; the causal
+cases above remain documented if caches are cleared. No live E2E, publication or
+rubric result is claimed.
+
+Documentation validation: `git diff --check` passed. The three updated
+review/rollout documents have 227 checked local inline targets, 59 checked
+Markdown anchors and balanced fences, with no errors.
 
 The following common acceptance properties remain regression requirements:
 
@@ -1006,7 +1067,9 @@ The following common acceptance properties remain regression requirements:
   source-count checks. Retain existing provider limits, global generation budget,
   local retry settings, mandatory coverage and exact token rules.
 
-Cleanup completed for 08–12; later-phase removals remain pending:
+Cleanup delivered on 14 September is recorded below. C2's disposition-equivalence
+policy and C3's duplicate eligibility filter still require removal through the
+closure work above; later-phase removals remain pending:
 
 | Chunk | Removal / retained boundary |
 | --- | --- |

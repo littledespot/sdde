@@ -1,16 +1,21 @@
 # JSON quality verification — 2026-09-12
 
+**Historical evidence:** This report describes the 12 September source and
+retained runs. Later fixes and current status are tracked in
+[FIX_001](../../fixes/TODO_FIX_001.md). Historical response fields and failures
+below are not current authoring instructions.
+
 The shared projection and diagnostic changes are mechanically verified. Native
 activation did **not** improve the configured Bedrock GPT OSS 20B workflow: both
 native E2E attempts exhausted the 100,000-token execution budget during
 extraction. Specify and the evaluator therefore retain their existing
-`prompt-only` defaults. Native mode remains explicitly selectable through the
+`prompt-only` selections. Native mode remains explicitly selectable through the
 registered capability; it is not enabled as a reliability fix for this case.
 
 ## Retained run evidence
 
-These are all retained E2E reports in this checkout, including the explicitly
-approved follow-up run.
+These are the retained E2E reports assessed for this 12 September review,
+including its explicitly approved follow-up run.
 The acceptance counts come from distinct model calls with recorded payload
 validation events, not reparsing responses with a different validator.
 “Initial” means the call context records attempt 1. A valid payload proves
@@ -41,41 +46,47 @@ semantic support. Changing JSON parsing cannot establish semantic correctness.
 
 ## Native provider investigation
 
-[Bedrock documents native JSON Schema output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html),
-including `anyOf` and `const`. The actual captured requests used its documented
-`outputConfig.textFormat.structure.jsonSchema` field. Nevertheless, responses
-contained malformed prefixes such as `{"{ "kind":...`.
+- [Bedrock documents native JSON Schema
+  output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html),
+  including `anyOf` and `const`.
+- The actual captured requests used its documented
+  `outputConfig.textFormat.structure.jsonSchema` field.
+- Nevertheless, responses contained malformed prefixes such as `{"{ "kind":...`.
 
-Small provider probes outside the workflow reproduced the problem with tagged
-alternatives; a simple object succeeded. Explicit object types and equivalent
-enum tags did not make root alternatives reliable. These probes isolate a
-provider/schema interaction; they are **not E2E evidence**, and they do not prove
-that every native schema or every provider is affected. No prefix stripping,
-variant flattening, weaker acceptance rule or automatic response-mode fallback
-was added. The ineffective explicit-object projection experiment was removed.
+- Small provider probes outside the workflow reproduced the problem with tagged
+  alternatives; a simple object succeeded.
+- Explicit object types and equivalent enum tags did not make root alternatives
+  reliable.
+- These probes isolate a provider/schema interaction; they are **not E2E evidence**, and
+  they do not prove that every native schema or every provider is affected.
+- No prefix stripping, variant flattening, weaker acceptance rule or automatic
+  response-mode fallback was added.
+- The ineffective explicit-object projection experiment was removed.
 
-The native activation limitation must be resolved or a different configured
-model must demonstrate this contract before enabling native mode for Specify.
-The implementation remains usable by any workflow through shared schema
-serialization and diagnostics; provider reliability must be established live.
+- The native activation limitation must be resolved or a different configured model must
+  demonstrate this contract before enabling native mode for Specify.
+- The implementation remains usable by any workflow through shared schema serialization
+  and diagnostics; provider reliability must be established live.
 
 ## Implemented boundaries and remaining acceptance
 
 - `model_schema_projection.zig` serializes the same compiled schema into complete
-  guidance and Bedrock-supported structural constraints. Full bounds and tagged
-  acceptance remain with the canonical validator. The obsolete exact-profile
-  checker was removed; there is no second workflow schema.
+  guidance and Bedrock-supported structural constraints.
+- Full bounds and tagged acceptance remain with the canonical validator.
+- The obsolete exact-profile checker was removed; there is no second workflow schema.
 - `strict_json.zig` retains native rejection reasons and cursor locations.
-  Diagnostic-only token inspection adds container JSON Pointers, active keys and
-  both duplicate-key locations. It does not repair or accept input. JSON Pointer
-  escaping is shared with schema diagnostics.
-- Correction requests, retained rejection snapshots, event evidence, terminal
-  output and Markdown reports carry the same owned diagnostic context. Allocation
-  failures and snapshot lifetimes have regression coverage.
-- Existing candidate repair, semantic gates, accounting and publication authority
-  remain unchanged. The approved follow-up exercised the final prompt-only
-  configuration with these diagnostics, but failed before publication; quality
-  improvement is **not established**.
+- Diagnostic-only token inspection adds container JSON Pointers, active keys and both
+  duplicate-key locations.
+- It does not repair or accept input.
+- JSON Pointer escaping is shared with schema diagnostics.
+- Correction requests, retained rejection snapshots, event evidence, terminal output and
+  Markdown reports carry the same owned diagnostic context.
+- Allocation failures and snapshot lifetimes have regression coverage.
+- Existing candidate repair, semantic gates, accounting and publication authority remain
+  unchanged.
+- The approved follow-up exercised the final prompt-only configuration with these
+  diagnostics, but failed before publication; quality improvement is **not
+  established**.
 
 Final mechanical verification passed: **120/120 steps, 1,349/1,349 tests**, including
 architecture checks and packaged executable smoke checks. `git diff --check`
@@ -86,23 +97,27 @@ TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --sy
 git diff --check
 ```
 
-These checks do not substitute for missing live publication/rubric evidence.
-Per the user's instruction recorded in `AGENTS.md`, each subsequent E2E run
-requires explicit approval.
+- These checks do not substitute for missing live publication/rubric evidence.
+- Per the user's instruction recorded in `AGENTS.md`, each subsequent E2E run requires
+  explicit approval.
 
-Local evidence: [first native report](../../zig-out/e2e-spec/2026-09-12T08-04-14Z-1fe73275aa91d2c8cfaeac6c1cbb08ac/report.md),
-[second native report](../../zig-out/e2e-spec/2026-09-12T08-08-20Z-5f2f0187fdf97370329aa51eb39fa16e/report.md),
-[final verification log](../../zig-out/native-schema-final-verified.log).
-Raw probe requests and responses remain under `zig-out/native-schema-probe/`,
-`zig-out/native-schema-variant-probe/` and `zig-out/native-schema-enum-probe/`.
+- Local evidence: [first native
+  report](../../zig-out/e2e-spec/2026-09-12T08-04-14Z-1fe73275aa91d2c8cfaeac6c1cbb08ac/report.md),
+  [second native
+  report](../../zig-out/e2e-spec/2026-09-12T08-08-20Z-5f2f0187fdf97370329aa51eb39fa16e/report.md),
+  [final verification log](../../zig-out/native-schema-final-verified.log).
+- Raw probe requests and responses remain under `zig-out/native-schema-probe/`,
+  `zig-out/native-schema-variant-probe/` and `zig-out/native-schema-enum-probe/`.
 
 ## Approved prompt-only follow-up
 
-The user explicitly approved one further E2E run. It ran the same configured
-case at **08:21:11 UTC**, exited with failure, and stopped at
-`validate-dispositions`. Of 19 calls, 13 had JSON syntax/duplicate-key errors and
-2 had schema errors; 4 passed the canonical payload validator. Initial attempts
-passed 1 of 4 times. Total accounted usage was **62,941 tokens**.
+- The user explicitly approved one further E2E run.
+- It ran the same configured case at **08:21:11 UTC**, exited with failure, and stopped
+  at `validate-dispositions`.
+- Of 19 calls, 13 had JSON syntax/duplicate-key errors and 2 had schema errors; 4 passed
+  the canonical payload validator.
+- Initial attempts passed 1 of 4 times.
+- Total accounted usage was **62,941 tokens**.
 
 Call 19 finally passed JSON/schema validation, but supplied:
 
@@ -110,17 +125,21 @@ Call 19 finally passed JSON/schema validation, but supplied:
 {"claim_id":{"ordinal":1},"disposition":"retained","related_claim_ids":[{"ordinal":1}]}
 ```
 
-Claim 2 likewise referenced itself. The existing claim-disposition validator
-rejects self-relations and requires `related_claim_ids: []` for retained claims.
-The workflow routes that domain rejection to failure, so it never publishes
-`spec.md` or invokes the rubric evaluator. This is a candidate relationship error
-after JSON validation, not another JSON parsing failure. The validator currently
-emits a generic failure; the precise cause above was established by inspecting
-the retained response and its owning validator, not a typed runtime diagnostic.
+- Claim 2 likewise referenced itself.
+- The existing claim-disposition validator rejects self-relations and requires
+  `related_claim_ids: []` for retained claims.
+- The workflow routes that domain rejection to failure, so it never publishes `spec.md`
+  or invokes the rubric evaluator.
+- This is a candidate relationship error after JSON validation, not another JSON parsing
+  failure.
+- The validator at that revision emitted a generic failure; the precise cause above was
+  established by inspecting the retained response and its owning validator, not a typed
+  runtime diagnostic.
 
-All five expected evidence files were checked for every call. Each retained
-`model_output.txt` exactly matched the complete text in its captured provider
-`response.json`. No subsequent E2E run was started.
+- All five expected evidence files were checked for every call.
+- Each retained `model_output.txt` exactly matched the complete text in its captured
+  provider `response.json`.
+- No subsequent E2E run was started.
 
 Command (after loading the project's `.env.e2e`):
 

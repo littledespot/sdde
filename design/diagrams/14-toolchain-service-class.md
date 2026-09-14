@@ -30,6 +30,6 @@ classDiagram
     note for ToolchainSafety "Rejects invalid composition, ownership and policy selections before use"
 ```
 
-Separate workflow-selected actions perform capture, parsing, inheritance,
-composition and validation. The diagram shows their data relationships.
-The service reads validated results; it does not load or combine toolchain files.
+[F0003](../features/F0003-ToolChainService.md) assigns capture, parsing,
+inheritance, composition and validation to separate workflow-selected actions.
+The service reads their validated results.

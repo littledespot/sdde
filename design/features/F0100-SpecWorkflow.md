@@ -2,40 +2,14 @@
 
 **Status:** Proposed feature design
 
-**Implementation readiness:** The generic concise YAML, declared-resource,
-compiler, registry, and transition-runner boundaries are implemented by F0005
-and ADR 0005. The logical Specify flow, `spec.md` section hierarchy, and
-clarification separation are defined below. The explicit feature/reference
-invocation, shared directory preflight, read-only clarification inputs, Markdown
-ingestion, citable reference preparation, typed text, Markdown exact-value
-preservation, scripted extraction accounting and reconciliation in Sections
-3.1–3.9 are implemented. Model-connected extraction/reconciliation (§3.11) and
-in-memory specification generation/validation/repair (§5.7) are implemented
-through ordinary YAML. Generation needs now refresh and publish controlled
-clarification forms (§3.12); validated specification content renders, reparses
-and publishes alongside its reference sidecar and canonical state. Answer
-application, feature-log integration and remaining clarification routes are
-unfinished. Generated-name code is removed.
-The native content schema and mechanical specification Markdown codec in §5.6
-are implemented. The shared required-authority boundary and Specify projection
-in §3.10 are connected to model-assisted generation and publication evidence.
-
-**E2E evaluation:** The [development harness](../harness/e2e.md) invokes the
-configured production LLM and grades the exact published specification through
-a separate live rubric evaluator. Generation/publication evidence and semantic
-scores remain separate; neither offline integration tests nor supplied-spec
-grading establish a successful live workflow.
+**Implementation:** The native Specify path publishes validated content and controlled
+generation clarifications. Answer application, feature logging and remaining
+clarification routes are unfinished; Phase 3 review gaps remain open. See
+[implementation status](#implementation-status).
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
 rule.
-
-**Input optimization:** [ADR 0013](../decisions/0013-workflow-input-reuse.md) is
-implemented. `spec.workflow.yaml` declares local request/retirement subgraphs;
-the compiler expands their operations through the existing validators.
-Schemas share local definitions and select the current generation unit,
-reconciliation purpose or authorized repair shape. Model inputs share citation
-records and preserve their complete supplied evidence.
 
 **Classification:** Initial SDD workflow definition
 
@@ -55,18 +29,21 @@ F0005 owns YAML discovery, decoding, schema validation, and compilation.
 
 ## 1. Responsibility
 
-`spec.workflow.yaml` is one ordinary definition beneath `paths.workflows`. It
-declares the `specify` workflow's identity and graph topology using registered
-`PipelineNode` contracts. The generic workflow engine selects it by validated
-content-derived `WorkflowId` and follows its compiled typed transitions through
-runner-owned bindings; it contains no `specify` name branch.
+- `spec.workflow.yaml` is one ordinary definition beneath `paths.workflows`.
+- It declares the `specify` workflow's identity and graph topology using registered
+  `PipelineNode` contracts.
+- The generic workflow engine selects it by validated content-derived `WorkflowId` and
+  follows its compiled typed transitions through runner-owned bindings; it contains no
+  `specify` name branch.
 
-YAML-selected registered operations in the selected graph build and validate `SpecificationIR`,
-render and reparse `spec.md`, render `reference-context.md`, and publish the
-complete validated workflow output under Design §25. The generic workflow engine performs none
-of that Specify-specific work. The YAML explicitly selects every operation,
-model slot, prompt/schema resource, and outcome transition. It contains no raw
-operational output path, command, adapter, capability, or executable payload.
+- YAML-selected registered operations in the selected graph build and validate
+  `SpecificationIR`, render and reparse `spec.md`, render `reference-context.md`, and
+  publish the complete validated workflow output under Design §25.
+- The generic workflow engine performs none of that Specify-specific work.
+- The YAML explicitly selects every operation, model slot, prompt/schema resource, and
+  outcome transition.
+- It contains no raw operational output path, command, adapter, capability, or
+  executable payload.
 
 ## 2. Closed YAML shape
 
@@ -84,17 +61,19 @@ The root contains exactly:
 | `resources` | Concise aliases for bounded workflow-owned prompts, schemas, and examples. |
 | `steps` | Local step map selecting registered generic operations, native scalar parameters, and outcomes. |
 
-Each step contains `use`, optional `with`, and `on`. `with` uses native YAML
-scalars whose types and allowed values come from the selected operation
-contract; it does not repeat tagged parameter wrappers. `on` explicitly maps
-every declared outcome to another local step or a matching `end.*` terminal.
+- Each step contains `use`, optional `with`, and `on`.
+- `with` uses native YAML scalars whose types and allowed values come from the selected
+  operation contract; it does not repeat tagged parameter wrappers.
+- `on` explicitly maps every declared outcome to another local step or a matching
+  `end.*` terminal.
 
-Each YAML transition uses one of `ok`, `needs-user`, `invalid`, `blocked`,
-`failed`, or `cancelled`, and targets either another local step or the matching
-`end.*` terminal. The compiler rejects missing or duplicate outcome
-transitions, unbounded cycles, unreachable steps, invalid typed data flow, gate
-weakening, and capability escalation. A retry or repair cycle is accepted only
-when it crosses a registered monotonic budget operation with a finite ceiling.
+- Each YAML transition uses one of `ok`, `needs-user`, `invalid`, `blocked`, `failed`,
+  or `cancelled`, and targets either another local step or the matching `end.*`
+  terminal.
+- The compiler rejects missing or duplicate outcome transitions, unbounded cycles,
+  unreachable steps, invalid typed data flow, gate weakening, and capability escalation.
+- A retry or repair cycle is accepted only when it crosses a registered monotonic budget
+  operation with a finite ceiling.
 
 ## 3. Structural outline
 
@@ -125,11 +104,12 @@ steps:
     on: { ok: validate, invalid: repair, failed: end.failed, cancelled: end.cancelled }
 ```
 
-This is a shape outline, not an executable fixture. A concrete definition is
-valid only after every placeholder is replaced by a registered or captured
-workflow-owned value and every selected operation outcome has exactly one
-mapping. `validate` and `repair` are illustrative local steps and must also be
-declared in a complete definition.
+- This is a shape outline, not an executable fixture.
+- A concrete definition is valid only after every placeholder is replaced by a
+  registered or captured workflow-owned value and every selected operation outcome has
+  exactly one mapping.
+- `validate` and `repair` are illustrative local steps and must also be declared in a
+  complete definition.
 
 ### 3.1 Explicit feature directory and reference preflight
 
@@ -137,26 +117,31 @@ declared in a complete definition.
 feature names and ownership registration with the exact supplied directory:
 
 ```text
-sdd specify --feature <feature-directory> --reference <relative-selector>
+sdde <workflow-id> --feature <feature-directory> --reference <relative-selector>
 ```
 
-The registered invocation requires `featureDirectory` and `referenceSelector`.
-`--feature` and the API's `featureDirectory` are relative to `.sddtoolkit.json`'s
-`paths.specs`, not the project root. For example, `--feature hello-world` writes
-`<paths.specs>/hello-world/spec.md`. Do not repeat or hard-code the specs root;
-resolve from configuration and exclude `paths.specsArchive`.
+- The definition's `id` selects the workflow; the supplied [Spec
+  definition](../workflows/spec.workflow.yaml) uses `spec-generation`.
+- The registered invocation requires `featureDirectory` and `referenceSelector`.
+- `--feature` and the API's `featureDirectory` are relative to `.sddtoolkit.json`'s
+  `paths.specs`, not the project root.
+- For example, `--feature hello-world` writes `<paths.specs>/hello-world/spec.md`.
+- Do not repeat or hard-code the specs root; resolve from configuration and exclude
+  `paths.specsArchive`.
 
 `--reference` independently selects the source directory beneath `paths.references`.
 Missing, duplicate, empty, unknown and positional inputs fail. Unrelated workflows
 keep their own registered invocation contracts; the generic engine has no Specify
 argument branch.
 
-Use shared path normalization, containment, portability and no-follow validation
-for the target. Resolve its registered artifact paths directly and validate only
-the existing state needed by the selected workflow. The same directory is the
-same feature, including when reference input changes. No slug, `max-length`,
-identity seed, owner registry, active/archive ownership scan, or registration
-write is required. An existing directory is not a collision requiring approval.
+- Use shared path normalization, containment, portability and no-follow validation for
+  the target.
+- Resolve its registered artifact paths directly and validate only the existing state
+  needed by the selected workflow.
+- The same directory is the same feature, including when reference input changes.
+- No slug, `max-length`, identity seed, owner registry, active/archive ownership scan,
+  or registration write is required.
+- An existing directory is not a collision requiring approval.
 
 The existing reusable reference operations remain:
 
@@ -166,12 +151,13 @@ The existing reusable reference operations remain:
 | `validate-reference-selector` | Normalized candidate → relative selector |
 | `inspect-reference-directory` | Relative selector → read-only directory observation |
 
-The shared ADR 0007 adapter owns NFC. Reference policy retains its 4,096-byte
-raw/normalized limit, 255-byte segment limit, separator/dot normalization, and
-rejection of traversal, absolute paths, encoded separators, controls and invalid
-portable names. Inspection alone carries `reference-read`; it rechecks root
-identity, follows no symlinks, requires a readable directory, and grants no write
-capability. Reference inspection does not read or reconcile the corpus.
+- The shared ADR 0007 adapter owns NFC.
+- Reference policy retains its 4,096-byte raw/normalized limit, 255-byte segment limit,
+  separator/dot normalization, and rejection of traversal, absolute paths, encoded
+  separators, controls and invalid portable names.
+- Inspection alone carries `reference-read`; it rechecks root identity, follows no
+  symlinks, requires a readable directory, and grants no write capability.
+- Reference inspection does not read or reconcile the corpus.
 
 **Implemented preflight:** `specify-invocation` requires both inputs.
 `normalize-feature-directory`, `validate-feature-directory` and
@@ -183,14 +169,15 @@ targets, aliases and symlinks. Generated-name code and parameters are removed.
 Input, generation and clarification replacement steps are implemented below;
 complete specification output remains H-012.
 
-Specify follows [ADR 0009](../decisions/0009-atomic-workflow-execution.md): each
-execution starts at `start`; no transaction/checkpoint/recovery prerequisite.
-Successful reruns completely overwrite the selected workflow's registered
-replaceable outputs at the same paths without separate approval. Unresolved
-clarification forms are completely overwritten on their publication branch at
-the same IDs/paths under the shared rule for every workflow. User-closed files
-remain byte-for-byte unchanged, including stale/invalid submissions; reuse applicable
-validated answers and recheck protection immediately before writing (§23.2).
+- Specify follows [ADR 0009](../decisions/0009-atomic-workflow-execution.md): each
+  execution starts at `start`; no transaction/checkpoint/recovery prerequisite.
+- Successful reruns completely overwrite the selected workflow's registered replaceable
+  outputs at the same paths without separate approval.
+- Unresolved clarification forms are completely overwritten on their publication branch
+  at the same IDs/paths under the shared rule for every workflow.
+- User-closed files remain byte-for-byte unchanged, including stale/invalid submissions;
+  reuse applicable validated answers and recheck protection immediately before writing
+  (§23.2).
 
 ### 3.2 Read-only artifact and clarification inputs
 
@@ -210,25 +197,27 @@ The executable test definition is
 [`feature-input-preflight.workflow.yaml`](../../src/test_fixtures/feature-input-preflight.workflow.yaml),
 not the complete Specify workflow.
 
-The single native persisted schema is
-[`clarification_inputs.State`](../../src/domain/clarification_inputs.zig):
-strict JSON tagged `clarification-state/v2`, bound to the selected feature,
-with registry/record revisions, stage ID counters, stable subjects, authority
-bindings, bounded answer schemas and recorded responses. Reference authority
-uses the real reference state identity; other authorities use the shared
-canonical kind/ordinal/revision contract. A response owns its
-original form bytes and revision binding. No second persisted byte copy or
-compatibility reader exists. The
-[canonical form renderer](../../src/domain/clarification_form.zig) owns all
-Markdown except `requestedStatus` and the answer region.
+- The single native persisted schema is
+  [`clarification_inputs.State`](../../src/domain/clarification_inputs.zig): strict JSON
+  tagged `clarification-state/v2`, bound to the selected feature, with registry/record
+  revisions, stage ID counters, stable subjects, authority bindings, bounded answer
+  schemas and recorded responses.
+- Reference authority uses the real reference state identity; other authorities use the
+  shared canonical kind/ordinal/revision contract.
+- A response owns its original form bytes and revision binding.
+- No second persisted byte copy or compatibility reader exists.
+- The [canonical form renderer](../../src/domain/clarification_form.zig) owns all
+  Markdown except `requestedStatus` and the answer region.
 
-Capture reads only this state file and the registered `SNN.md`, `PNN.md` and
-`TNN.md` forms: at most 297 forms of 16 KiB each and 8 MiB of state.
-It does not create directories or read generated views, unrelated features or
-`workflow.json`. Missing state with no forms represents fresh inputs.
-Orphan, malformed, unknown, stale, changed or missing protected forms fail
-without modifying anything. Recorded closures use their original revision
-binding and must match the response's exact saved bytes.
+- Capture reads only this state file and the registered `SNN.md`, `PNN.md` and `TNN.md`
+  forms: at most 297 forms of 16 KiB each and 8 MiB of state.
+- It does not create directories or read generated views, unrelated features or
+  `workflow.json`.
+- Missing state with no forms represents fresh inputs.
+- Orphan, malformed, unknown, stale, changed or missing protected forms fail without
+  modifying anything.
+- Recorded closures use their original revision binding and must match the response's
+  exact saved bytes.
 
 The result distinguishes new submissions from recorded responses and retains
 closed bytes unchanged. Structural validation is not actor authentication or
@@ -243,21 +232,27 @@ protection, which applies even when acceptance is blocked.
 
 ### 3.3 Read-only Markdown ingestion
 
-Five registered operations cover the physical source boundary:
-`inventory-reference-sources`, `validate-reference-inventory`,
-`capture-reference-sources`, `decode-reference-markdown` and
-`validate-reference-accounting`. They use the configured `paths.references`
-root and independent selector. Every encountered entry, including hidden files,
-directories and non-followed symlinks, is accounted; unsupported, unreadable,
-changed, malformed or over-limit inputs fail without output writes.
+- Five registered operations cover the physical source boundary:
+  `inventory-reference-sources`, `validate-reference-inventory`,
+  `capture-reference-sources`, `decode-reference-markdown` and
+  `validate-reference-accounting`.
+- They use the configured `paths.references` root and independent selector.
+- Every encountered entry, including hidden files, directories and non-followed
+  symlinks, is accounted; unsupported, unreadable, changed, malformed or over-limit
+  inputs fail without output writes.
 
-The native `markdown_source_v1` reader retains lossless UTF-8 source ranges,
-not a semantic Markdown AST. Inventory/capture/decoding enforce 1,024 entries,
-depth 16, 1 MiB per source, 8 MiB source/decoded corpus budgets, 1,024 blocks per
-file, 16 KiB blocks and 5-second phase checks. Blocks normally break at 64 lines;
-they never split a Unicode scalar, CRLF or eligible exact-value span (§3.8).
-A span may defer the line break but cannot exceed the byte ceiling. These are source-reader limits, not model
-request-size estimates. Decoding never reopens captured source bodies.
+- The native `markdown_source_v1` reader retains lossless UTF-8 source ranges, not a
+  semantic Markdown AST.
+- Inventory/capture/decoding enforce 1,024 entries, depth 16, 1 MiB per source, 8 MiB
+  source/decoded corpus budgets, 1,024 blocks per file, 16 KiB blocks and 5-second phase
+  checks.
+- Blocks normally break at 64 lines; they never split a Unicode scalar, CRLF or eligible
+  exact-value span (§3.8).
+- A span may defer the line break but cannot exceed the byte ceiling.
+- These are source-reader limits, not model request-size estimates.
+- Decoding never reopens captured source bodies.
+
+**Implementation scope**
 
 Additional formats and the full multi-reader probe/rank registry remain future
 work; this initial reader does not claim support for arbitrary reference bytes.
@@ -273,32 +268,39 @@ Four registered operations extend that boundary:
 | `validate-reference-chunks` | Original inputs, feature, corpus and chunks → validated citable inputs; reject omissions, duplicates, changed bytes, wrong mappings or foreign state/feature bindings. |
 | `validate-source-citations` | Citable inputs and engine-scoped typed proposals → validated source citations. |
 
-The [reference identity owner](../../src/domain/reference_identity.zig) supplies
-the same state/chunk types used by model-request owners. Each corpus receives a
-fresh 128-bit system-random namespace, formatted as `reference-<hex>`; entropy
-failure fails the operation. Only identity assignment has `reference-identity`,
-explicitly allowed by `core.reference-ingestion@1`. There is no persisted ID
-counter, reservation, hash or journal. Files keep normalized source order;
-source, state-global block and chunk ordinals are deterministic within the state.
-These values remain execution candidates until later complete publication.
+- The [reference identity owner](../../src/domain/reference_identity.zig) supplies the
+  same state/chunk types used by model-request owners.
+- Each corpus receives a fresh 128-bit system-random namespace, formatted as
+  `reference-<hex>`; entropy failure fails the operation.
+- Only identity assignment has `reference-identity`, explicitly allowed by
+  `core.reference-ingestion@1`.
+- There is no persisted ID counter, reservation, hash or journal.
+- Files keep normalized source order; source, state-global block and chunk ordinals are
+  deterministic within the state.
+- These values remain execution candidates until later complete publication.
 
-Chunks reference captured source ranges instead of owning a second body.
-Locations use zero-based byte offsets, one-based Unicode-scalar line/column
-coordinates, exclusive ends and CRLF as one newline. The citation validator
-checks the engine-supplied state/chunk scope, exact source/block joins and
-nonempty in-chunk locations. Optional verbatim text must equal the entire cited
-range byte-for-byte; validated text comes from the captured source, without NFC
-normalization. This proves location/quotation integrity, not semantic support.
-Models cannot choose the call scope or assign citation IDs.
+- Chunks reference captured source ranges instead of owning a second body.
+- Locations use zero-based byte offsets, one-based Unicode-scalar line/column
+  coordinates, exclusive ends and CRLF as one newline.
+- The citation validator checks the engine-supplied state/chunk scope, exact
+  source/block joins and nonempty in-chunk locations.
+- Optional verbatim text must equal the entire cited range byte-for-byte; validated text
+  comes from the captured source, without NFC normalization.
+- This proves location/quotation integrity, not semantic support.
+- Models cannot choose the call scope or assign citation IDs.
 
-[`reference-ingestion.workflow.yaml`](../../src/test_fixtures/reference-ingestion.workflow.yaml)
-is an executable **test fixture**, ending at validated chunk preparation. Tests
-also inject typed citation proposals to exercise the registered validator through
-the native runner. Section 3.5 extends those tests with scripted extraction
-results. No production proposal producer, model call, persistent snapshot,
-clarification acceptance or `spec.md` publication is added.
-The complete Specify YAML will compose these same operations, not invoke a
-second required user workflow. Closed clarification files remain untouched.
+**Increment evidence**
+
+- [`reference-ingestion.workflow.yaml`](../../src/test_fixtures/reference-ingestion.workflow.yaml)
+  is an executable **test fixture**, ending at validated chunk preparation.
+- Tests also inject typed citation proposals to exercise the registered validator
+  through the native runner.
+- Section 3.5 extends those tests with scripted extraction results.
+- No production proposal producer, model call, persistent snapshot, clarification
+  acceptance or `spec.md` publication is added.
+- The complete Specify YAML will compose these same operations, not invoke a second
+  required user workflow.
+- Closed clarification files remain untouched.
 
 ### 3.5 Extraction-candidate accounting
 
@@ -314,39 +316,48 @@ explicit in the selected YAML:
 | `build-reference-extraction-ledger` | Assigned identities → in-memory claims, citations and chunk outcomes; binds preserved tokens to their assigned citation IDs. |
 | `validate-reference-extraction-accounting` | Citable inputs, preserved-token assignments and ledger → exact total chunk/claim/citation/token coverage, with explicit `ok` or `blocked`; malformed coverage fails. |
 
-The current lossless-Markdown candidate body is exactly one JSON object:
-`{kind: claims, claims: [...], token_classifications: [...]}` or
-`{kind: no_feature_claim, reason: ReferenceSemanticText, token_classifications: [...]}`.
-These are shape descriptions, not literal JSON examples. Each claim has only
-typed `content` and a `citations` collection of inclusive `{first, last}`
-source-line IDs supplied in the request. Missing citations are a typed repairable
-rejection. The engine reconstructs exact bytes and coordinates; no quotation or
-coordinate echo is accepted. Content kinds are `business`, `design`, `technical`,
-`validation`, `implementation_assumption`, `open_question` and `scope_guard`.
-`business` and `scope_guard` use `BusinessText`; other kinds use
-`ReferenceSemanticText`. Text validation establishes syntax and permitted
-references, **not accepted meaning or requirements**. Unknown/duplicate fields,
-unsupported kinds, forged IDs, missing fields and legacy raw strings are
-rejected. Each supplied exact-value candidate needs one classification (§3.8).
+- The current lossless-Markdown candidate body is exactly one JSON object: `{kind:
+  claims, claims: [...], token_classifications: [...]}` or `{kind: no_feature_claim,
+  reason: ReferenceSemanticText, token_classifications: [...]}`.
+- These are shape descriptions, not literal JSON examples.
+- Each claim has only typed `content` and a `citations` collection of inclusive `{first,
+  last}` source-line IDs supplied in the request.
+- Missing citations are a typed repairable rejection.
+- The engine reconstructs exact bytes and coordinates; no quotation or coordinate echo
+  is accepted.
+- Content kinds are `business`, `design`, `technical`, `validation`,
+  `implementation_assumption`, `open_question` and `scope_guard`.
+- `business` and `scope_guard` use `BusinessText`; other kinds use
+  `ReferenceSemanticText`.
+- Text validation establishes syntax and permitted references, **not accepted meaning or
+  requirements**.
+- Unknown/duplicate fields, unsupported kinds, forged IDs, missing fields and legacy raw
+  strings are rejected.
+- Each supplied exact-value candidate needs one classification (§3.8).
 
-State/chunk scope and `blocked: extraction_failed` are engine observations,
-never model body fields. Every supplied chunk needs exactly one claims,
-positive `no_feature_claim`, or engine-blocked result. Positive empty requires
-no model or preserved-token claims; `claims: []` is valid only when preservation
-produces at least one deterministic claim. Missing/duplicate/foreign
-chunks fail; any blocked chunk makes total accounting blocked, even when other
-chunks contain claims. `source_blocks_v1` has one chunk per block, so exact chunk
-coverage also proves block coverage. Claim/citation IDs start at one in each
-fresh reference state and follow chunk/claim/citation order; response arrival
-order cannot change them. No ID counters or ledgers are persisted.
+- State/chunk scope and `blocked: extraction_failed` are engine observations, never
+  model body fields.
+- Every supplied chunk needs exactly one claims, positive `no_feature_claim`, or
+  engine-blocked result.
+- Positive empty requires no model or preserved-token claims; `claims: []` is valid only
+  when preservation produces at least one deterministic claim.
+- Missing/duplicate/foreign chunks fail; any blocked chunk makes total accounting
+  blocked, even when other chunks contain claims.
+- `source_blocks_v1` has one chunk per block, so exact chunk coverage also proves block
+  coverage.
+- Claim/citation IDs start at one in each fresh reference state and follow
+  chunk/claim/citation order; response arrival order cannot change them.
+- No ID counters or ledgers are persisted.
 
-These candidates require the later reconciliation and required-authority gates;
-the extraction validator alone does not establish semantic support.
-Markdown inline-code candidates are implemented; other format extractors remain
-future work. Model/resource/gate integration is described in §3.11. Native values own their data
-and retain only execution-local predecessors; they impose no model-call byte
-ceiling. The test-only YAML path runs these operations with scripted results
-and does not write artifacts, accept clarifications or mark a stage complete.
+- These candidates require the later reconciliation and required-authority gates; the
+  extraction validator alone does not establish semantic support.
+- Markdown inline-code candidates are implemented; other format extractors remain future
+  work.
+- Model/resource/gate integration is described in §3.11.
+- Native values own their data and retain only execution-local predecessors; they impose
+  no model-call byte ceiling.
+- The test-only YAML path runs these operations with scripted results and does not write
+  artifacts, accept clarifications or mark a stage complete.
 
 ### 3.6 Shared naming-policy and path-token grammar
 
@@ -365,29 +376,34 @@ operations:
 | `build-superset-path-token-grammar` | Compiled naming policy, current toolchain and citable reference inputs → `path_token_grammar` |
 | `scan-path-tokens` | Grammar, current toolchain, citable inputs and required `text` data-resource parameter → `path_token_scan` |
 
-[F0003 §3.5](F0003-ToolChainService.md#35-registered-lexical-naming-rules) owns
-the registered rule contract. Grammar construction includes every selected rule
-and captured reference basename, with exact toolchain, feature and reference
-bindings; omitted, altered or stale inputs fail. The shared lexer detects
-path/drive/UNC/URI forms, encoded separators/dots and policy/reference filename
-tokens. Unicode punctuation separates lexemes while path/URI punctuation stays
-internal. Matches retain end-exclusive byte spans into the owned original text;
-NFC/case folding never changes those offsets. No unit allowlist narrows scanning.
-Exact registered/reference names containing spaces or punctuation are also
-detected in full; directory tokens ending in a separator remain path-shaped.
+- [F0003 §3.5](F0003-ToolChainService.md#35-registered-lexical-naming-rules) owns the
+  registered rule contract.
+- Grammar construction includes every selected rule and captured reference basename,
+  with exact toolchain, feature and reference bindings; omitted, altered or stale inputs
+  fail.
+- The shared lexer detects path/drive/UNC/URI forms, encoded separators/dots and
+  policy/reference filename tokens.
+- Unicode punctuation separates lexemes while path/URI punctuation stays internal.
+- Matches retain end-exclusive byte spans into the owned original text; NFC/case folding
+  never changes those offsets.
+- No unit allowlist narrows scanning.
+- Exact registered/reference names containing spaces or punctuation are also detected in
+  full; directory tokens ending in a separator remain path-shaped.
 
-`ok` means scanning succeeded, **not** that matched text is valid or any path is
-authorized. The YAML registry remains generic. `core.reference-ingestion@1`
-permits the existing toolchain read/parser operations so selected YAML can
-compose these prerequisites; unused operations perform no reads. Tests compose
-the existing toolchain and ingestion fixtures, without a required extra user
-workflow, model calls or artifact writes.
+- `ok` means scanning succeeded, **not** that matched text is valid or any path is
+  authorized.
+- The YAML registry remains generic.
+- `core.reference-ingestion@1` permits the existing toolchain read/parser operations so
+  selected YAML can compose these prerequisites; unused operations perform no reads.
+- Tests compose the existing toolchain and ingestion fixtures, without a required extra
+  user workflow, model calls or artifact writes.
 
-This is the native registered-rule lexical slice, not the full proposed
-environment/repository-bound grammar: RE2 rules and repository discovery remain
-unimplemented. Source examples cannot supply missing runtime authority.
-Scanning alone does not validate text or permit specification publication;
-§3.7 owns the implemented text gate.
+- This is the native registered-rule lexical slice, not the full proposed
+  environment/repository-bound grammar: RE2 rules and repository discovery remain
+  unimplemented.
+- Source examples cannot supply missing runtime authority.
+- Scanning alone does not validate text or permit specification publication; §3.7 owns
+  the implemented text gate.
 
 ### 3.7 Typed reference text and source-backed display literals
 
@@ -399,11 +415,12 @@ Three pure YAML operations prepare the execution-local literal registry:
 | `assign-passive-literal-identities` | Candidates → source-ordered IDs, deduplicated by `(kind, NFC bytes)` |
 | `validate-reference-passive-literals` | Assigned candidates and current inputs → `reference_passive_literals` |
 
-Validation reuses the shared detector to prove complete exact origins, values
-and allocations. Models and workflow data resources cannot register literals.
-The initial registry is an immutable in-memory reference candidate, not a
-persisted `PassiveLiteralRegistryState`; authenticated edits/answers and
-append-only persisted revisions remain outside this read-only increment.
+- Validation reuses the shared detector to prove complete exact origins, values and
+  allocations.
+- Models and workflow data resources cannot register literals.
+- The initial registry is an immutable in-memory reference candidate, not a persisted
+  `PassiveLiteralRegistryState`; authenticated edits/answers and append-only persisted
+  revisions remain outside this read-only increment.
 
 The native JSON text shapes are closed:
 
@@ -416,13 +433,15 @@ The native JSON text shapes are closed:
 `{"source":{"source_id":{"ordinal":1}}}`. Neither permits a project-file
 node. A passive node contains only its ID, never model-provided display bytes.
 
-`validate-reference-extraction-text` normalizes literal runs to NFC and rejects
-empty/control-invalid text and inline path/filename/URI matches. Adjacent literal
-segments are joined before scanning so splitting a token cannot bypass it.
-Passive IDs require an occurrence inside the exact chunk, or that chunk's source
-manifest name; source IDs must identify that same source. Unknown, stale and
-cross-unit references fail. Claim text and no-feature-claim reasons share this
-gate. Citation validation and total accounting remain separate responsibilities.
+- `validate-reference-extraction-text` normalizes literal runs to NFC and rejects
+  empty/control-invalid text and inline path/filename/URI matches.
+- Adjacent literal segments are joined before scanning so splitting a token cannot
+  bypass it.
+- Passive IDs require an occurrence inside the exact chunk, or that chunk's source
+  manifest name; source IDs must identify that same source.
+- Unknown, stale and cross-unit references fail.
+- Claim text and no-feature-claim reasons share this gate.
+- Citation validation and total accounting remain separate responsibilities.
 
 The raw-string format is removed, with no dual reader. No file/network grant,
 model call, output write, clarification modification or completion transition is
@@ -430,15 +449,17 @@ introduced. Semantic review, live reconciliation and publication remain required
 
 ### 3.8 Exact-value preservation
 
-Design §16.3's approved `markdown_inline_code_v1` descriptor makes parsed
-Markdown inline-code spans eligible. Prose, quotation-marked text and fenced
-code blocks do not qualify through this extractor. Equal-length backtick runs
-identify the exact interior source bytes; escaped/unmatched delimiters do not
-create invented spans. Code-block/HTML regions are not inline code. Candidate
-values keep source whitespace, line endings and Unicode scalar sequences,
-without Markdown-rendering transformations or NFC normalization. The source
-reader and fact extractor share this parser; reader boundaries do not split a
-value, and an over-limit value fails explicitly.
+- Design §16.3's approved `markdown_inline_code_v1` descriptor makes parsed Markdown
+  inline-code spans eligible.
+- Prose, quotation-marked text and fenced code blocks do not qualify through this
+  extractor.
+- Equal-length backtick runs identify the exact interior source bytes; escaped/unmatched
+  delimiters do not create invented spans.
+- Code-block/HTML regions are not inline code.
+- Candidate values keep source whitespace, line endings and Unicode scalar sequences,
+  without Markdown-rendering transformations or NFC normalization.
+- The source reader and fact extractor share this parser; reader boundaries do not split
+  a value, and an over-limit value fails explicitly.
 
 | Operation | Contract |
 | --- | --- |
@@ -454,43 +475,52 @@ The closed model classifications are:
 {"kind":"preserve","preserve":{"token_candidate_id":{"source_id":{"ordinal":1},"extractor_id":"markdown_inline_code_v1","ordinal":1},"kind":"business_exact_string"}}
 ```
 
-or `{"kind":"irrelevant","source_id":{"ordinal":1},"extractor_id":"markdown_inline_code_v1","ordinal":1}`.
-The discriminator follows ADR 0006; the preserved token's classification remains
-a separate domain field. The model never supplies scalar bytes, citations, canonical token IDs
-or obligation IDs. Unknown, duplicate, omitted, stale and cross-chunk candidates
-fail. An empty classification collection is valid only for a response whose
-chunk has no candidates. `no_feature_claim` may classify candidates irrelevant,
-but cannot preserve any.
+- or
+  `{"kind":"irrelevant","source_id":{"ordinal":1},"extractor_id":"markdown_inline_code_v1","ordinal":1}`.
+- The discriminator follows ADR 0006; the preserved token's classification remains a
+  separate domain field.
+- The model never supplies scalar bytes, citations, canonical token IDs or obligation
+  IDs.
+- Unknown, duplicate, omitted, stale and cross-chunk candidates fail.
+- An empty classification collection is valid only for a response whose chunk has no
+  candidates.
+- `no_feature_claim` may classify candidates irrelevant, but cannot preserve any.
 
 Compiled graphs retain a fixed 512-step capacity, including expanded subgraph
 instances. Specify reuses model-request/release subgraphs and compact outcome
 maps for its repair routes. This capacity is independent of operation retry limits and the workflow token budget.
 
-The reference-ingestion policy permits a distinct `invalid` terminal outcome.
-The validator publishes `invalid` with the chunk scope, candidate revision,
-`token_classifications` field and all missing, duplicate, unknown or forbidden
-candidate IDs. Invalid source authority remains a failure. A repair authorization
-selects that chunk's classification collection, one invalid citation selection,
-or an empty claim-citation collection. The model cannot change claim meaning,
-source bytes, other selections/chunks or the target. The selected replacement schema reuses the corresponding generation definition:
-`classification_replacement`, `source_selection_replacement`, or
-`citation_replacement`. Citation requests also include the unchanged claim. After compare-and-swap
-merge, the shared reference-selection validation runs again before token and
-claim construction and full ledger checks. The text-validated candidate and
-selection result use captured retention,
-like specification repair: descendants retain candidate evidence while current
-source/policy generations remain in their authority lineage. Retiring an old
-repair slot cannot invalidate its retained evidence, and changing source authority
-still blocks later gates. This is an in-memory candidate repair, not a source correction.
+- The reference-ingestion policy permits a distinct `invalid` terminal outcome.
+- The validator publishes `invalid` with the chunk scope, candidate revision,
+  `token_classifications` field and all missing, duplicate, unknown or forbidden
+  candidate IDs.
+- Invalid source authority remains a failure.
+- A repair authorization selects that chunk's classification collection, one invalid
+  citation selection, or an empty claim-citation collection.
+- The model cannot change claim meaning, source bytes, other selections/chunks or the
+  target.
+- The selected replacement schema reuses the corresponding generation definition:
+  `classification_replacement`, `source_selection_replacement`, or
+  `citation_replacement`.
+- Citation requests also include the unchanged claim.
+- After compare-and-swap merge, the shared reference-selection validation runs again
+  before token and claim construction and full ledger checks.
+- The text-validated candidate and selection result use captured retention, like
+  specification repair: descendants retain candidate evidence while current
+  source/policy generations remain in their authority lineage.
+- Retiring an old repair slot cannot invalidate its retained evidence, and changing
+  source authority still blocks later gates.
+- This is an in-memory candidate repair, not a source correction.
 
-Each preserved value produces one claim through the ordinary claim/citation
-pipeline. The final ledger binds its exact scalar to its citation ID and derives
-the downstream obligation identity from the token identity. Final accounting
-checks one-to-one preservation and unchanged bytes, kind, source, citation and
-obligation joins. Eligibility and relevance are not semantic proof, and token
-values grant no file, path, command or network authority. Everything remains
-execution-local: no registry persistence, artifact publication or clarification
-write is added.
+- Each preserved value produces one claim through the ordinary claim/citation pipeline.
+- The final ledger binds its exact scalar to its citation ID and derives the downstream
+  obligation identity from the token identity.
+- Final accounting checks one-to-one preservation and unchanged bytes, kind, source,
+  citation and obligation joins.
+- Eligibility and relevance are not semantic proof, and token values grant no file,
+  path, command or network authority.
+- Everything remains execution-local: no registry persistence, artifact publication or
+  clarification write is added.
 
 ### 3.9 Reference-reconciliation boundary
 
@@ -499,14 +529,15 @@ citations, source/block/chunk identities and preserved-token references. It adds
 no inferred modality or subject/object IDs. The selected reference directory is
 the complete related-document set; filenames confer no precedence.
 
-The explicit YAML parameter `group-size` is an integer of at least two. The
-engine partitions claims within each source in source/claim order, groups those
-summaries across sources, then recursively groups global summaries until one
-global partition remains. The bound counts immediate members, not request bytes
-or tokens. Every partition keeps its complete original-claim map and provenance;
-its input includes unchanged original payloads and accepted child summaries.
-An empty accounted claim set has one empty global partition. Blocked extraction
-cannot enter reconciliation.
+- The explicit YAML parameter `group-size` is an integer of at least two.
+- The engine partitions claims within each source in source/claim order, groups those
+  summaries across sources, then recursively groups global summaries until one global
+  partition remains.
+- The bound counts immediate members, not request bytes or tokens.
+- Every partition keeps its complete original-claim map and provenance; its input
+  includes unchanged original payloads and accepted child summaries.
+- An empty accounted claim set has one empty global partition.
+- Blocked extraction cannot enter reconciliation.
 
 All operations are pure and individually registered in the generic YAML registry:
 
@@ -518,70 +549,85 @@ All operations are pure and individually registered in the generic YAML registry
 | Global proposal | `validate-reference-claim-dispositions`, `validate-reference-signal-proposals`, `validate-reference-conflict-proposals` |
 | Identified result | `assign-reference-reconciliation-identities`, `build-reference-reconciliation-records`, `validate-reference-reconciliation-completeness` |
 
-The engine selects the summary or global response schema for its current
-partition. A summary proposal contains only `statements`, with positive unique
-`local_key`, selected `claim_ids` and typed `content`. Statements represent every
-partition member claim exactly once. The engine constructs canonical
-`member_claim_ids` from that partition and `member_summary_ids` from its validated
-child summaries; neither membership field is accepted in a model response.
-Summary IDs are allocated only after validation; partition planning contains
-local group links, not future canonical summary IDs. Statement IDs follow sorted
-local keys. Accepted summaries retain their lineage
-in immutable execution-local history; advancing clears the consumed candidate
-keys rather than retaining stale parallel candidates.
+- The engine selects the summary or global response schema for its current partition.
+- A summary proposal contains only `statements`, with positive unique `local_key`,
+  selected `claim_ids` and typed `content`.
+- Statements represent every partition member claim exactly once.
+- The engine constructs canonical `member_claim_ids` from that partition and
+  `member_summary_ids` from its validated child summaries; neither membership field is
+  accepted in a model response.
+- Summary IDs are allocated only after validation; partition planning contains local
+  group links, not future canonical summary IDs.
+- Statement IDs follow sorted local keys.
+- Accepted summaries retain their lineage in immutable execution-local history;
+  advancing clears the consumed candidate keys rather than retaining stale parallel
+  candidates.
 
 A global proposal contains `claim_dispositions`, `signals` and `conflicts`:
 
-- Exactly one disposition per original claim. The nested `disposition.kind`
-  selects `retained` with an empty struct payload, `duplicate` with one
-  `target_claim_id`, or `superseded`/`conflicting` with nonempty
-  `related_claim_ids`. The native validator derives the canonical enum/list.
-  Related IDs must be current, unique and non-self. Duplicate/supersession
-  edges are acyclic and terminate at retained claims; conflict relationships
-  are symmetric and must be represented by conflicts.
-- Signal content uses nested `kind` alternatives for typed model content or
-  a selected preserved-token ID. Kind, claim and token joins must agree.
-  One shared constructor derives canonical citations from selected claims in
-  supplied order, retaining the first occurrence of each citation ID.
-  Every retained claim is covered. Every non-conflicting preserved token retains
-  its own reference and obligation, including when its claim is superseded or
-  duplicate. Different exact scalars cannot be declared duplicates.
-- Conflicts select at least two current conflicting claims,
-  a closed conflict kind, typed `summary`, and `resolution: "unresolved"`.
-  Overlapping conflicts retain all relationship coverage; duplicate conflict
-  groups of the same kind fail. Conflicting claims cannot be projected as
-  resolved signals. No source-precedence authority is currently registered,
-  so model-proposed precedence or user resolution is rejected.
+- Exactly one disposition per original claim.
 
-Signals and conflicts never echo aggregate citation IDs. Their canonical
-records retain the complete engine-derived union. Initial packets include
-concise guidance projected from native constraint identities alongside current
-claim/evidence facts; protocol corrections retain that same input. Schema and
-native validation reject old or mixed response fields. Summary and global candidate
-rejections enter the shared atomic contract before history append or reference
-acceptance. Native authorizers select one field, a missing member, or an exactly
-redundant entry. Related claims, partition/history membership and text/evidence
-facts remain read dependencies. Every merge repeats summary validation or all
-three global validators. Proven redundant deletions and determined token
-insertions require no model confirmation. Non-equivalent competing entries remain
-blocked under FIX_001 G1; a repaired conflict representation remains unresolved.
+  - The nested `disposition.kind` selects `retained` with an empty struct payload,
+    `duplicate` with one `target_claim_id`, or `superseded`/`conflicting` with nonempty
+    `related_claim_ids`.
+  - The native validator derives the canonical enum/list.
+  - Related IDs must be current, unique and non-self.
+  - Duplicate/supersession edges are acyclic and terminate at retained claims; conflict
+    relationships are symmetric and must be represented by conflicts.
+- Signal content uses nested `kind` alternatives for typed model content or a selected
+  preserved-token ID.
 
-The same content-kind predicate validates proposals and supplies retained repair
-choices. Mixed claim kinds cannot receive a content-only assignment; an eligible
-selection can be repaired first, followed by an existing missing-member insertion
-when needed. Empty signal selections or absent conflicting pairs block before a
-model call. Every member must still be accounted for before acceptance. Redundancy
-uses validated, normalized text together with identical claim evidence and
-obligations; adjacent literal segmentation alone does not create a competing
-claim. Exact authorization/CAS comparisons remain byte-exact native comparisons.
+  - Kind, claim and token joins must agree.
+  - One shared constructor derives canonical citations from selected claims in supplied
+    order, retaining the first occurrence of each citation ID.
+  - Every retained claim is covered.
+  - Every non-conflicting preserved token retains its own reference and obligation,
+    including when its claim is superseded or duplicate.
+  - Different exact scalars cannot be declared duplicates.
+- Conflicts select at least two current conflicting claims, a closed conflict kind,
+  typed `summary`, and `resolution: "unresolved"`.
 
+  - Overlapping conflicts retain all relationship coverage; duplicate conflict groups of
+    the same kind fail.
+  - Conflicting claims cannot be projected as resolved signals.
+  - No source-precedence authority is currently registered, so model-proposed precedence
+    or user resolution is rejected.
 
-All text uses §3.7's shared validator with the explicit contributing-claim
-scope set; cross-source scope never becomes corpus-wide permission. Models
-cannot supply canonical signal, conflict or statement IDs, scalar replacements,
-paths or completion status. The final validator checks hierarchy and record
-joins and returns `blocked` whenever unresolved conflicts exist, otherwise
-`ok`. This is candidate accounting, not semantic proof or permission to publish.
+- Signals and conflicts never echo aggregate citation IDs.
+- Their canonical records retain the complete engine-derived union.
+- Initial packets include concise guidance projected from native constraint identities
+  alongside current claim/evidence facts; protocol corrections retain that same input.
+- Schema and native validation reject old or mixed response fields.
+- Summary and global candidate rejections enter the shared atomic contract before
+  history append or reference acceptance.
+- Native authorizers select one field, a missing member, or an exactly redundant entry.
+- Related claims, partition/history membership and text/evidence facts remain read
+  dependencies.
+- Every merge repeats summary validation or all three global validators.
+- Proven redundant deletions and determined token insertions require no model
+  confirmation.
+- Non-equivalent competing entries remain blocked under FIX_001 G1; a repaired conflict
+  representation remains unresolved.
+
+- The same content-kind predicate validates proposals and supplies retained repair
+  choices.
+- Mixed claim kinds cannot receive a content-only assignment; an eligible selection can
+  be repaired first, followed by an existing missing-member insertion when needed.
+- Empty signal selections or absent conflicting pairs block before a model call.
+- Every member must still be accounted for before acceptance.
+- Redundancy uses validated, normalized text together with identical claim evidence and
+  obligations; adjacent literal segmentation alone does not create a competing claim.
+- Exact authorization/CAS comparisons remain byte-exact native comparisons.
+
+- All text uses §3.7's shared validator with the explicit contributing-claim scope set;
+  cross-source scope never becomes corpus-wide permission.
+- Models cannot supply canonical signal, conflict or statement IDs, scalar replacements,
+  paths or completion status.
+- The final validator checks hierarchy and record joins and returns `blocked` whenever
+  unresolved conflicts exist, otherwise `ok`.
+- This is candidate accounting, not semantic proof or permission to publish.
+
+**Increment scope and evidence**
 
 The scripted YAML fixture explicitly sequences these operations. Live model
 iteration/repair, shared authority-reconciliation integration, persisted
@@ -596,13 +642,14 @@ specification-quality oracle. `src/domain/required_authority.zig` owns the
 closed requiredness/ownership policies, current support checks and outcomes.
 `specification_authority.zig` contributes the schema-derived Specify projection.
 
-The projection includes the display name, primary story and evidence-backed
-entity decision; each field of an existing identified content record; every
-accounted reference signal/conflict; and each exact-preservation obligation.
-Optional collections add no minimum record count. The gate rebuilds this
-projection to reject omitted/invented entries. Signals retain the existing
-claim/citation/token lineage and unresolved conflicts force a gap; neither a
-citation nor reconciliation membership supplies semantic support by itself.
+- The projection includes the display name, primary story and evidence-backed entity
+  decision; each field of an existing identified content record; every accounted
+  reference signal/conflict; and each exact-preservation obligation.
+- Optional collections add no minimum record count.
+- The gate rebuilds this projection to reject omitted/invented entries.
+- Signals retain the existing claim/citation/token lineage and unresolved conflicts
+  force a gap; neither a citation nor reconciliation membership supplies semantic
+  support by itself.
 
 | Registered YAML operation | Responsibility |
 | --- | --- |
@@ -612,36 +659,44 @@ citation nor reconciliation membership supplies semantic support by itself.
 | `reconcile-required-authorities` | Account for every supplied evidence member and derive one resolution or gap per requirement. |
 | `validate-required-authority-reconciliation` | Rebuild against current inputs and issue accepted/rejected gate evidence. |
 
-Observations contain only requirement references, the complete inspected
-authority set and supplied evidence IDs. Native evidence keeps current
-authority identities, scoped candidate revisions, provenance and whether its
-finding is deterministic or model-assisted. The model cannot mint evidence,
-choose ownership, remove requirements or set workflow success. Only direct
-identity/revision equality collapses equivalent candidates, retaining all member
-evidence. Entity non-applicability requires supported `no_business_data` evidence;
-exceptions are permitted only by the shared registered exact-scope policy and
-current authenticated authority, not by an arbitrary flag.
+- Observations contain only requirement references, the complete inspected authority set
+  and supplied evidence IDs.
+- Native evidence keeps current authority identities, scoped candidate revisions,
+  provenance and whether its finding is deterministic or model-assisted.
+- The model cannot mint evidence, choose ownership, remove requirements or set workflow
+  success.
+- Only direct identity/revision equality collapses equivalent candidates, retaining all
+  member evidence.
+- Entity non-applicability requires supported `no_business_data` evidence; exceptions
+  are permitted only by the shared registered exact-scope policy and current
+  authenticated authority, not by an arbitrary flag.
 
-The shared owner mapping routes business/reference gaps to spec, design/policy
-gaps to plan and decomposition gaps to tasks. Downstream detection produces
-explicit upstream rework; unknown ownership/policy blocks. Structural
-accounting errors block instead of entering model repair. Gap records are
-execution-local inputs to H-011, not inline questions or persisted forms.
+- The shared owner mapping routes business/reference gaps to spec, design/policy gaps to
+  plan and decomposition gaps to tasks.
+- Downstream detection produces explicit upstream rework; unknown ownership/policy
+  blocks.
+- Structural accounting errors block instead of entering model repair.
+- Gap records are execution-local inputs to H-011, not inline questions or persisted
+  forms.
 
-The registered `required-authority@1` gate binds its sole issuer to the current
-input, observation and result generations. The existing runner also checks
-source lineage, so refreshing a reference, candidate or support source requires
-explicit projection/reconciliation/validation again. Protected operations
-declare that gate in their native contract; YAML cannot bypass it or supply
-an alternative issuer. There is no persisted authority ledger, new prompt,
-fingerprint or recovery mechanism.
+- The registered `required-authority@1` gate binds its sole issuer to the current input,
+  observation and result generations.
+- The existing runner also checks source lineage, so refreshing a reference, candidate
+  or support source requires explicit projection/reconciliation/validation again.
+- Protected operations declare that gate in their native contract; YAML cannot bypass it
+  or supply an alternative issuer.
+- There is no persisted authority ledger, new prompt, fingerprint or recovery mechanism.
 
-`zig build test-required-authority` covers scripted outcomes, unrelated kinds,
-all Specify record families, missing/foreign/duplicate/stale support, permitted
-and prohibited dispositions, scoped exceptions, source preservation and YAML
-gate bypasses. The production reference fixture reaches the Specify projection;
-H-009/H-010 now supply model-assisted evidence and generation. H-011–H-013
-still own applicable answers, protected forms, publication and the complete definition.
+**Implementation evidence**
+
+- `zig build test-required-authority` covers scripted outcomes, unrelated kinds, all
+  Specify record families, missing/foreign/duplicate/stale support, permitted and
+  prohibited dispositions, scoped exceptions, source preservation and YAML gate
+  bypasses.
+- The production reference fixture reaches the Specify projection; H-009/H-010 now
+  supply model-assisted evidence and generation.
+- H-011–H-013 still own applicable answers, protected forms, publication and the
+  complete definition.
 
 ### 3.11 Native reference/model execution (H-009)
 
@@ -656,116 +711,139 @@ validators:
   `check-reference-reconciliation-purpose`,
   `collect-reference-reconciliation-result`.
 
-Each extraction packet contains the complete captured chunk as lossless
-`source_lines` with request-local IDs, scoped passive choices and token candidates. Reconciliation packets retain all
-partition claim/summary membership and exact-token references. Collection checks
-the immutable request/packet association; models cannot select another chunk or
-partition. Existing domain validators still own interpretation/accounting.
+- Each extraction packet contains the complete captured chunk as lossless `source_lines`
+  with request-local IDs, scoped passive choices and token candidates.
+- Reconciliation packets retain all partition claim/summary membership and exact-token
+  references.
+- Collection checks the immutable request/packet association; models cannot select
+  another chunk or partition.
+- Existing domain validators still own interpretation/accounting.
 
-`assign-model-request-id` accepts either a native `model_input_packet` or
-the declared static input resource, never both. The packet supplies an
-engine-owned unit/purpose, not a prompt, result schema or provider selection.
-Initial generation, semantic review and authorized atomic repair have native producers.
-A new logical request gets an initial attempt; it does not reset the YAML
-operation's execution/retry ceiling. `more` exposes bounded collection progress
-without reusing failure outcomes.
+- `assign-model-request-id` accepts either a native `model_input_packet` or the declared
+  static input resource, never both.
+- The packet supplies an engine-owned unit/purpose, not a prompt, result schema or
+  provider selection.
+- Initial generation, semantic review and authorized atomic repair have native
+  producers.
+- A new logical request gets an initial attempt; it does not reset the YAML operation's
+  execution/retry ceiling.
+- `more` exposes bounded collection progress without reusing failure outcomes.
 
-The ordinary [generation-only definition](../workflows/spec.workflow.yaml)
-connects these operations, workflow-owned resources and H-008 review.
-`retire-model-input` and `retire-model-request` explicitly release completed
-transport slots. Native captured evidence keeps its current domain-source
-lineage, not the replaceable transport slot; source changes and mixed-generation
-joins still reject. The request ledger is runner-validated execution control,
-not business authority. All storage is execution-local.
+- The ordinary [generation-only definition](../workflows/spec.workflow.yaml) connects
+  these operations, workflow-owned resources and H-008 review.
+- `retire-model-input` and `retire-model-request` explicitly release completed transport
+  slots.
+- Native captured evidence keeps its current domain-source lineage, not the replaceable
+  transport slot; source changes and mixed-generation joins still reject.
+- The request ledger is runner-validated execution control, not business authority.
+- All storage is execution-local.
 
-`build-model-protocol-retry` retains the original request identity, schema,
-unit and provider binding. It uses the originating assignment's optional
-`protocol-prompt` and decoder/schema diagnostic. Schema corrections include the
-exact expected schema node, JSON Pointer and parent/value scope; syntax
-corrections retain the original complete schema. No candidate example is generated.
-It rebuilds from the retained original inputs and latest rejection, without
-accumulating correction history. YAML checks the logical request phase before
-reusing the normal provider-operation lifecycle and accounting. The accounting
-step's configured limit and total token budget own exhaustion; the correction
-builder has no separate counter or limit (Design §22.6).
+- `build-model-protocol-retry` retains the original request identity, schema, unit and
+  provider binding.
+- It uses the originating assignment's optional `protocol-prompt` and decoder/schema
+  diagnostic.
+- Schema corrections include the exact expected schema node, JSON Pointer and
+  parent/value scope; syntax corrections retain the original complete schema.
+- No candidate example is generated.
+- It rebuilds from the retained original inputs and latest rejection, without
+  accumulating correction history.
+- YAML checks the logical request phase before reusing the normal provider-operation
+  lifecycle and accounting.
+- The accounting step's configured limit and total token budget own exhaustion; the
+  correction builder has no separate counter or limit (Design §22.6).
 
-Workflow schemas and the shared `model_candidate_json.zig` decoder use ADR
-0006's closed `kind` alternatives, including nested typed values. Empty, mixed
-or incomplete alternatives reject at payload validation, before request closure,
-and take the existing bounded protocol-correction path. Independently authored
-wire cases cover selected schemas and native decoding; integer spelling uses the payload validator's
-exact arithmetic. Native/persisted JSON is unchanged; no legacy model reader
-or schema-profile extension is introduced.
+- Workflow schemas and the shared `model_candidate_json.zig` decoder use ADR 0006's
+  closed `kind` alternatives, including nested typed values.
+- Empty, mixed or incomplete alternatives reject at payload validation, before request
+  closure, and take the existing bounded protocol-correction path.
+- Independently authored wire cases cover selected schemas and native decoding; integer
+  spelling uses the payload validator's exact arithmetic.
+- Native/persisted JSON is unchanged; no legacy model reader or schema-profile extension
+  is introduced.
 
-Summary, disposition, signal and conflict validators return checked values or
-native rejections with the unit, rule, observed/expected constraint, revision and
-producing origin. Invalid corpus/history/context and operational errors remain
-failures. Extraction text retains its native lexical cause and content location
-before text acceptance, including `no_feature_claim` reasons. A successful text
-repair must still pass classification, selection and constructed-claim accounting;
-a constructed model-selection rejection returns to its original selection target
-and retires derived claims/tokens. Engine-derived corruption does not trigger a
-model call.
+- Summary, disposition, signal and conflict validators return checked values or native
+  rejections with the unit, rule, observed/expected constraint, revision and producing
+  origin.
+- Invalid corpus/history/context and operational errors remain failures.
+- Extraction text retains its native lexical cause and content location before text
+  acceptance, including `no_feature_claim` reasons.
+- A successful text repair must still pass classification, selection and
+  constructed-claim accounting; a constructed model-selection rejection returns to its
+  original selection target and retires derived claims/tokens.
+- Engine-derived corruption does not trigger a model call.
 
-Repair authorizers consume retained rejections and verify current association,
-exact old values and immutable dependency snapshots. They do not repeat candidate
-validation traversal. Canonical validation still runs after merge. Repair updates
-only the replaced field's producing origin, even when replacement bytes are
-unchanged. Specification candidates record byte-change status separately from
-revision and acceptance. The existing native diagnostic projection carries text,
-reconciliation, specification and coverage failures through console/events/reports;
-no separate logger or report-side validator is added.
+- Repair authorizers consume retained rejections and verify current association, exact
+  old values and immutable dependency snapshots.
+- They do not repeat candidate validation traversal.
+- Canonical validation still runs after merge.
+- Repair updates only the replaced field's producing origin, even when replacement bytes
+  are unchanged.
+- Specification candidates record byte-change status separately from revision and
+  acceptance.
+- The existing native diagnostic projection carries text, reconciliation, specification
+  and coverage failures through console/events/reports; no separate logger or
+  report-side validator is added.
 
-`test-reference-model-input` checks packets, exact values, scope membership and
-allocation failures; `test-model-request-workflow` checks native packet transport
-through the fake provider and rejects packet substitution/schema rejection.
-The fake-provider generation test covers complete read/generate/review paths,
-two business examples, protocol correction/exhaustion and semantic uncertainty.
-This is not artifact publication or an end-to-end Specify completion claim.
+- `test-reference-model-input` checks packets, exact values, scope membership and
+  allocation failures; `test-model-request-workflow` checks native packet transport
+  through the fake provider and rejects packet substitution/schema rejection.
+- The fake-provider generation test covers complete read/generate/review paths, two
+  business examples, protocol correction/exhaustion and semantic uncertainty.
+- This is not artifact publication or an end-to-end Specify completion claim.
 
 ### 3.12 Clarification refresh and registered publication
 
-The generation definition now routes validated unit needs through
-`build-specification-clarification-need`, `refresh-clarifications`,
-`render-clarification-forms`, `prepare-clarification-output`,
-`publish-workflow-output` and `check-clarification-progress`. The shared refresh
-retains subject IDs across invocations and replaces open drafts, including when
-the question is unchanged. New submitted answers remain blocked pending trusted
-authentication and applicability validation; loading a response is not acceptance.
+- The generation definition now routes validated unit needs through
+  `build-specification-clarification-need`, `refresh-clarifications`,
+  `render-clarification-forms`, `prepare-clarification-output`,
+  `publish-workflow-output` and `check-clarification-progress`.
+- The shared refresh retains subject IDs across invocations and replaces open drafts,
+  including when the question is unchanged.
+- New submitted answers remain blocked pending trusted authentication and applicability
+  validation; loading a response is not acceptance.
 
-Preparation joins the complete rendered form set to validated registry state,
-retains protected bytes and serializes canonical JSON. The writer has only a
-`feature-output-write` capability and registered destinations, never model paths.
-It rechecks the complete captured clarification input set before replacement,
-uses no-follow file access, rejects hard links, truncates shorter output and
-verifies written bytes. User-closed files are not replacement candidates. No
-transaction directory, append/merge path or recovery subsystem is introduced.
+- Preparation joins the complete rendered form set to validated registry state, retains
+  protected bytes and serializes canonical JSON.
+- The writer has only a `feature-output-write` capability and registered destinations,
+  never model paths.
+- It rechecks the complete captured clarification input set before replacement, uses
+  no-follow file access, rejects hard links, truncates shorter output and verifies
+  written bytes.
+- User-closed files are not replacement candidates.
+- No transaction directory, append/merge path or recovery subsystem is introduced.
 
-The YAML's successful content branch projects current-authority-checked typed
-content through the existing Markdown codec and reparses it. It renders
-`reference-context.md` from an accepted reference snapshot, refreshes the
-clarification registry through the shared refresh operation, and prepares all
-four registered outputs before the writer runs. `workflow.json` is written last.
+- The YAML's successful content branch projects current-authority-checked typed content
+  through the existing Markdown codec and reparses it.
+- It renders `reference-context.md` from an accepted reference snapshot, refreshes the
+  clarification registry through the shared refresh operation, and prepares all four
+  registered outputs before the writer runs.
+- `workflow.json` is written last.
 
-The native closed `specification-state/v1` singleton contains the feature key,
-revision, `specified` stage, captured reference sources/chunks/claims/citations,
-reconciliation and passive-literal records, accepted brief/content/provenance,
-coverage, record-ID counters, clarification state/revision and required-authority
-review evidence. Model-assisted support retains that label. The snapshot contains
-no raw model response, filesystem handle, runner state or saved continuation.
-`capture-workflow-state` and `parse-specification-state` validate this singleton
-before generation; reruns reuse only the canonical record-ID counters, increment
-the publication revision and regenerate the candidate from current inputs.
-Malformed or foreign state blocks before model calls. Generated Markdown is not
-imported as authority. Specification request owners use the same lossless
-`FeatureId` directory contract for generation, review and repair.
+- The native closed `specification-state/v1` singleton contains the feature key,
+  revision, `specified` stage, captured reference sources/chunks/claims/citations,
+  reconciliation and passive-literal records, accepted brief/content/provenance,
+  coverage, record-ID counters, clarification state/revision and required-authority
+  review evidence.
+- Model-assisted support retains that label.
+- The snapshot contains no raw model response, filesystem handle, runner state or saved
+  continuation.
+- `capture-workflow-state` and `parse-specification-state` validate this singleton
+  before generation; reruns reuse only the canonical record-ID counters, increment the
+  publication revision and regenerate the candidate from current inputs.
+- Malformed or foreign state blocks before model calls.
+- Generated Markdown is not imported as authority.
+- Specification request owners use the same lossless `FeatureId` directory contract for
+  generation, review and repair.
 
-Publication checks exact captured workflow-state bytes as well as clarification
-inputs; stale captures reject. Every write failure prevents new completion, and
-a fresh invocation starts from the beginning. Feature-log integration and
-[remaining clarification work](../harness/02-spec-workflow.md#h-011--complete-specification-clarification-handling)
-remain open. A clarification publication ending in `needs_user` still does not
-claim a completed Specify workflow.
+- Publication checks exact captured workflow-state bytes as well as clarification
+  inputs; stale captures reject.
+- Every write failure prevents new completion, and a fresh invocation starts from the
+  beginning.
+- Feature-log integration and [remaining clarification
+  work](../harness/02-spec-workflow.md#h-011--complete-specification-clarification-handling)
+  remain open.
+- A clarification publication ending in `needs_user` still does not claim a completed
+  Specify workflow.
 
 ## 4. Required logical coverage
 
@@ -834,21 +912,23 @@ then applicable sections in this exact relative order:
 ### Key Entities _(include if feature involves data)_
 ```
 
-The angle-bracketed display-name token above documents the renderer slot; it is
-not emitted literally. `User Scenarios & Testing` and `Requirements` are always
-present. Primary User Story, Acceptance Criteria and Functional Requirements
-are mandatory. Other record families appear only when they contain supported
-content. The scope parent appears only when at least one of its children is
-present. `Key Entities` additionally requires the validated business-data
-applicability decision.
+- The angle-bracketed display-name token above documents the renderer slot; it is not
+  emitted literally.
+- `User Scenarios & Testing` and `Requirements` are always present.
+- Primary User Story, Acceptance Criteria and Functional Requirements are mandatory.
+- Other record families appear only when they contain supported content.
+- The scope parent appears only when at least one of its children is present.
+- `Key Entities` additionally requires the validated business-data applicability
+  decision.
 
-The original template's execution flow and generation guidelines are workflow
-instructions, not specification content. Review checklist and execution status
-are represented by actual validation evidence and workflow state; this view
-never invents checked boxes. Branch, creation date, draft status and original
-command metadata are not fields in the current content contract and are not
-fabricated or inferred from the feature title. The feature directory remains
-the identity; the human title is reference-grounded.
+- The original template's execution flow and generation guidelines are workflow
+  instructions, not specification content.
+- Review checklist and execution status are represented by actual validation evidence
+  and workflow state; this view never invents checked boxes.
+- Branch, creation date, draft status and original command metadata are not fields in
+  the current content contract and are not fabricated or inferred from the feature
+  title.
+- The feature directory remains the identity; the human title is reference-grounded.
 
 ### 5.2 Typed content mapping
 
@@ -927,34 +1007,38 @@ conflicting, the engine:
 6. after a current authenticated answer or authority resolution commits,
    regenerates every specification unit before validation and rendering.
 
-On a Specify rerun, the engine MUST overwrite existing `spec.md` and
-`reference-context.md` with the newly validated output at the same paths,
-including prior edits to `spec.md`. It must not skip existing output, require
-separate overwrite approval, or add a filename suffix. This uses the shared
-rerun rule in Design Section 23.2; it never deletes the feature directory or
-its clarification history.
+- On a Specify rerun, the engine MUST overwrite existing `spec.md` and
+  `reference-context.md` with the newly validated output at the same paths, including
+  prior edits to `spec.md`.
+- It must not skip existing output, require separate overwrite approval, or add a
+  filename suffix.
+- This uses the shared rerun rule in Design Section 23.2; it never deletes the feature
+  directory or its clarification history.
 
-Unresolved `clarify/SNN.md` forms MUST also be completely overwritten from
-current validated state at the same paths on rerun, including their editable
-regions and any unsubmitted draft answer. Reuse the same subject ID, not the
-old form bytes, even when the question is unchanged. This replacement also
-applies to a clarification publication ending in `needs_user`; it does not
-publish a partial specification. Design Section 23.2 applies this rule to all
-workflow executions and every registered clarification family.
+- Unresolved `clarify/SNN.md` forms MUST also be completely overwritten from current
+  validated state at the same paths on rerun, including their editable regions and any
+  unsubmitted draft answer.
+- Reuse the same subject ID, not the old form bytes, even when the question is
+  unchanged.
+- This replacement also applies to a clarification publication ending in `needs_user`;
+  it does not publish a partial specification.
+- Design Section 23.2 applies this rule to all workflow executions and every registered
+  clarification family.
 
-The engine MUST NOT overwrite user-closed `clarify/SNN.md` files. Retain them
-byte-for-byte and consume applicable validated answers before generation.
-Accept a valid close into canonical state without rewriting its submitted form. A pending,
-stale, or invalid close is not overwritten; an inapplicable protected answer
-blocks for user direction rather than automatic reopening or a duplicate ID.
-The complete clarification view set includes these retained files, not writes
-to them. Transaction validation rechecks their preservation preconditions.
+- The engine MUST NOT overwrite user-closed `clarify/SNN.md` files.
+- Retain them byte-for-byte and consume applicable validated answers before generation.
+- Accept a valid close into canonical state without rewriting its submitted form.
+- A pending, stale, or invalid close is not overwritten; an inapplicable protected
+  answer blocks for user direction rather than automatic reopening or a duplicate ID.
+- The complete clarification view set includes these retained files, not writes to them.
+- Output-set validation and the writer recheck their preservation preconditions.
 
-There is no committed `Open Questions` section in `spec.md`. Specification-owned
-unknowns use the clarification lifecycle above; reference-context questions
-remain in their separate sidecar authority. Specification content/IR samples
-have no question collection or `OQ-*` identity prefix; `clarification_needed`
-is an operation result, not a specification content unit.
+- There is no committed `Open Questions` section in `spec.md`.
+- Specification-owned unknowns use the clarification lifecycle above; reference-context
+  questions remain in their separate sidecar authority.
+- Specification content/IR samples have no question collection or `OQ-*` identity
+  prefix; `clarification_needed` is an operation result, not a specification content
+  unit.
 
 ### 5.6 Native content and view contract
 
@@ -978,138 +1062,161 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   requirements are required. Other record families have no minimum population.
   Schema presence never proves support, completeness or testability.
 - The Specify authority projection always includes acceptance-criteria,
-  functional-requirement and scenario-coverage obligations. On an assembled
-  candidate, missing mandatory records produce engine-owned `missing` gaps
-  through the shared authority gate even if model evidence says `supported`.
-  The scenario-coverage obligation requires model-assisted comparison of the
-  complete candidate with source claims/citations, including distinct observable
-  flows and their triggers/results. Missing behavior cannot be satisfied by
-  citation presence or a title. Canonical-state parsing rejects missing mandatory
-  families through the same specification required-family contract.
+  functional-requirement and scenario-coverage obligations.
 
-Native proposals contain attributed title/story, `records` with one closed
-content-kind variant and provenance per record, and the entity decision/basis.
-They contain no generated IDs, paths, questions or completion fields. Ordinary
-business values use the existing typed-text shape; exact copies carry token and
-citation references, never a second copy of source bytes.
+  - On an assembled candidate, missing mandatory records produce engine-owned `missing`
+    gaps through the shared authority gate even if model evidence says `supported`.
+  - The scenario-coverage obligation requires model-assisted comparison of the complete
+    candidate with source claims/citations, including distinct observable flows and
+    their triggers/results.
+  - Missing behavior cannot be satisfied by citation presence or a title.
+  - Canonical-state parsing rejects missing mandatory families through the same
+    specification required-family contract.
 
-The view codec receives already projected text and separated, non-overlapping
-exact inline-code spans (adjacent delimiter runs cannot preserve two identities);
-it escapes punctuation and literal control whitespace, uses deterministic
-backtick delimiters/padding, LF structural lines and one final newline. Code
-continuation lines have two structural indentation spaces, removed on parse.
-Record order is section order, preserving order within each family. The shared
-Markdown scanner owns code-span recognition. Parsing captures text/spans, not
-NFC normalization, provenance, applicability, semantic adequacy or stage success.
-H-008/H-010 connect the shared gate and generation validation; H-012 still owns publication.
+- Native proposals contain attributed title/story, `records` with one closed
+  content-kind variant and provenance per record, and the entity decision/basis.
+- They contain no generated IDs, paths, questions or completion fields.
+- Ordinary business values use the existing typed-text shape; exact copies carry token
+  and citation references, never a second copy of source bytes.
+
+- The view codec receives already projected text and separated, non-overlapping exact
+  inline-code spans (adjacent delimiter runs cannot preserve two identities); it escapes
+  punctuation and literal control whitespace, uses deterministic backtick
+  delimiters/padding, LF structural lines and one final newline.
+- Code continuation lines have two structural indentation spaces, removed on parse.
+- Record order is section order, preserving order within each family.
+- The shared Markdown scanner owns code-span recognition.
+- Parsing captures text/spans, not NFC normalization, provenance, applicability,
+  semantic adequacy or stage success.
+- H-008/H-010 connect the shared gate and generation validation; H-012 still owns
+  publication.
 
 ### 5.7 Generation, coverage and repair (H-010)
 
-The native generation candidate is a closed content-or-clarification union.
-Content units are a feature brief (title, description, primary goal), primary
-story, entity applicability, or one registered record family. Native validation
-normalizes typed text, rejects the wrong family and identical normalized records,
-and keeps questions outside specification content.
+- The native generation candidate is a closed content-or-clarification union.
+- Content units are a feature brief (title, description, primary goal), primary story,
+  entity applicability, or one registered record family.
+- Native validation normalizes typed text, rejects the wrong family and identical
+  normalized records, and keeps questions outside specification content.
 
-The model's `kind` selects `brief`, `primary_user_story`, `entities`, `records`
-or `clarification`, with that variant's fields directly, without the IR's `content`
-wrapper. Repair uses the same compact codec, and its expected-value guidance
-uses the response wire shape. Existing provenance, repair and gate validators
-remain the owners of meaning and authority.
+- The model's `kind` selects `brief`, `primary_user_story`, `entities`, `records` or
+  `clarification`, with that variant's fields directly, without the IR's `content`
+  wrapper.
+- Repair uses the same compact codec, and its expected-value guidance uses the response
+  wire shape.
+- Existing provenance, repair and gate validators remain the owners of meaning and
+  authority.
 
-Model generation, field/record repair and support provenance select claim IDs
-and authorized clarification-response IDs; they do not return citation unions.
-Distinct model and canonical types share business fields. The provenance owner
-requires retained current claims and constructs their stable unique citation
-union through the same reference constructor. Canonical revalidation compares
-the stored union against current evidence, rejecting tampering rather than
-replacing it. Exact copies still contain a valid token and
-citation reference, never replacement display bytes. Arbitrary loaded
-clarification-response IDs are rejected; applicable-answer integration remains
-with H-011. Engine code allocates monotonic per-family record IDs; no model
-identity, completion, approval or artifact-path field is accepted.
+- Model generation, field/record repair and support provenance select claim IDs and
+  authorized clarification-response IDs; they do not return citation unions.
+- Distinct model and canonical types share business fields.
+- The provenance owner requires retained current claims and constructs their stable
+  unique citation union through the same reference constructor.
+- Canonical revalidation compares the stored union against current evidence, rejecting
+  tampering rather than replacing it.
+- Exact copies still contain a valid token and citation reference, never replacement
+  display bytes.
+- Arbitrary loaded clarification-response IDs are rejected; applicable-answer
+  integration remains with H-011.
+- Engine code allocates monotonic per-family record IDs; no model identity, completion,
+  approval or artifact-path field is accepted.
 
-Registered actions generate units sequentially through the generic model path.
-Every retained business claim maps to native content keys; non-spec context
-remains in identified reference signals. Every retained exact business token
-has an exact-copy target. Coverage is mechanical accounting, not semantic proof.
-Model review supplies scoped evidence for the shared gate before generation and
-after assembly, including the brief description/goal and every record field.
+- Registered actions generate units sequentially through the generic model path.
+- Every retained business claim maps to native content keys; non-spec context remains in
+  identified reference signals.
+- Every retained exact business token has an exact-copy target.
+- Coverage is mechanical accounting, not semantic proof.
+- Model review supplies scoped evidence for the shared gate before generation and after
+  assembly, including the brief description/goal and every record field.
 
-An invalid mechanically repairable candidate authorizes one independent value or
-provenance selection in stable diagnostic order. Record-field and relationship
-locations are closed native targets. Whole-record replacement is limited to a
-record-kind defect; exact evidence-equivalent duplicates can be deleted, while
-competing records remain blocked. The engine retains owner, revision, old value,
-source choices and policy facts; the model returns only the selected value or
-provenance shape. Provenance repairs receive the unchanged attributed value or
-entire shared-provenance record; value repairs receive that unchanged provenance.
-The value validator retains allowed normalized/exact-copy alternatives, including
-only token/citation pairs supported by the fixed provenance. It never reconstructs
-business meaning or automatically converts an exact copy to prose. The former
-broad attributed-field repair schema is removed.
-Merge preserves siblings, increments revision and repeats unit validation. Assembly revalidates all units, checks
-conditional entities and assigns IDs before coverage and final authority review.
-All repair consumers use the same `atomic_repair.Contract`: immutable authorization
-IDs bind owner, revision, operation, target, expected value, native rule and read
-dependencies; response parsing verifies the exact
-repair packet, and merge checks the old value before incrementing the revision.
-Native domain actions select and apply their typed units. Calls use the existing
-`model-request` subgraph and concise shared repair prompt. Request release occurs
-before shared model/automatic reconciliation and specification merge routes.
-Deterministic repair loops have explicit runner-owned execution bounds.
+- An invalid mechanically repairable candidate authorizes one independent value or
+  provenance selection in stable diagnostic order.
+- Record-field and relationship locations are closed native targets.
+- Whole-record replacement is limited to a record-kind defect; exact evidence-equivalent
+  duplicates can be deleted, while competing records remain blocked.
+- The engine retains owner, revision, old value, source choices and policy facts; the
+  model returns only the selected value or provenance shape.
+- Provenance repairs receive the unchanged attributed value or entire shared-provenance
+  record; value repairs receive that unchanged provenance.
+- The value validator retains allowed normalized/exact-copy alternatives, including only
+  token/citation pairs supported by the fixed provenance.
+- It never reconstructs business meaning or automatically converts an exact copy to
+  prose.
+- The former broad attributed-field repair schema is removed.
+- Merge preserves siblings, increments revision and repeats unit validation.
+- Assembly revalidates all units, checks conditional entities and assigns IDs before
+  coverage and final authority review.
+- All repair consumers use the same `atomic_repair.Contract`: immutable authorization
+  IDs bind owner, revision, operation, target, expected value, native rule and read
+  dependencies; response parsing verifies the exact repair packet, and merge checks the
+  old value before incrementing the revision.
+- Native domain actions select and apply their typed units.
+- Calls use the existing `model-request` subgraph and concise shared repair prompt.
+- Request release occurs before shared model/automatic reconciliation and specification
+  merge routes.
+- Deterministic repair loops have explicit runner-owned execution bounds.
 
-Native dependency capture is independent of request serialization. `typed_text`
-owns the complete text-policy/source projection, the reconciliation context owns
-flattened summary lineage, and specification provenance supplies the shared read
-facts consumed by generation and coverage repair. Current toolchain identity is
-checked before capture; capabilities are not serialized. Grammar-name or history
-changes reject an old authorization before dispatch/merge, even when the model
-packet would look unchanged. Extraction classification guidance retains the frozen
-chunk outcome and permitted decisions from its validator. Coverage reconstruction
-continues to use no model call and must pass unit and full-candidate validation.
+- Native dependency capture is independent of request serialization.
+- `typed_text` owns the complete text-policy/source projection, the reconciliation
+  context owns flattened summary lineage, and specification provenance supplies the
+  shared read facts consumed by generation and coverage repair.
+- Current toolchain identity is checked before capture; capabilities are not serialized.
+- Grammar-name or history changes reject an old authorization before dispatch/merge,
+  even when the model packet would look unchanged.
+- Extraction classification guidance retains the frozen chunk outcome and permitted
+  decisions from its validator.
+- Coverage reconstruction continues to use no model call and must pass unit and
+  full-candidate validation.
 
+- Text repair retains the shared validator's reason, inclusive node range and, for an
+  unbound path, the first lexer match and matching bytes.
+- Match offsets address the normalized concatenation of that literal-node range, not
+  JSON source bytes.
+- Reconciliation and specification retain this issue as extraction already did; the same
+  issue and description reach the authorized packet and provider request.
+- The selected rejected value and permitted source/passive choices remain in that
+  packet.
+- Invalid source or policy bindings remain operational failures.
+- JSON decoding preserves literal bytes: ordinary quotes, extra backslashes and actual
+  paths are checked by the same text/lexer rules.
 
-Text repair retains the shared validator's reason, inclusive node range and, for
-an unbound path, the first lexer match and matching bytes. Match offsets address
-the normalized concatenation of that literal-node range, not JSON source bytes.
-Reconciliation and specification retain this issue as extraction already did;
-the same issue and description reach the authorized packet and provider request.
-The selected rejected value and permitted source/passive choices remain in that
-packet. Invalid source or policy bindings remain operational failures. JSON
-decoding preserves literal bytes: ordinary quotes, extra backslashes and actual
-paths are checked by the same text/lexer rules.
+- The shared merge contract records authorization, owner, operation, before/after
+  revision, exact value change and optional producing origin.
+- All existing repair consumers retain these execution-local facts with the merged
+  candidate.
+- A native observer copies them into the existing E2E events and reports; it neither
+  parses model text nor decides progress.
+- These are retained merge snapshots, not a total repair count or proof of validation
+  acceptance.
+- Protocol corrections remain separate provider attempts.
+- Superseded specification-only change flags and generic reconciliation text guidance
+  are removed; no workflow YAML or prompt expansion is required.
 
-The shared merge contract records authorization, owner, operation, before/after
-revision, exact value change and optional producing origin. All existing repair
-consumers retain these execution-local facts with the merged candidate. A native
-observer copies them into the existing E2E events and reports; it neither parses
-model text nor decides progress. These are retained merge snapshots, not a total
-repair count or proof of validation acceptance. Protocol corrections remain
-separate provider attempts. Superseded specification-only change flags and generic
-reconciliation text guidance are removed; no workflow YAML or prompt expansion
-is required.
+- Coverage rejections retain the missing claim/token obligation.
+- When an existing validated value already projects to exactly the preserved token bytes
+  and selects that token's claim, the shared contract can restore its exact-copy
+  reference without discarding business text or changing provenance.
+- The owning unit validator checks the repaired value before it re-enters the checked
+  session.
+- Assembly then revalidates every unit, reassigns candidate IDs from the unchanged
+  starting ledger and rebuilds coverage.
+- If no independently supported write is identifiable, the candidate remains blocked
+  with `no_independent_supported_target`; no destination family, invented statement or
+  coverage-ledger edit is substituted.
+- Source-support classification and actionable gaps remain FIX_001 Phase 4 work.
 
-Coverage rejections retain the missing claim/token obligation. When an existing
-validated value already projects to exactly the preserved token bytes and selects
-that token's claim, the shared contract can restore its exact-copy reference
-without discarding business text or changing provenance. The owning unit validator
-checks the repaired value before it re-enters the checked session. Assembly then
-revalidates every unit, reassigns candidate IDs from the unchanged starting ledger
-and rebuilds coverage. If no independently supported write is identifiable, the
-candidate remains blocked with `no_independent_supported_target`; no destination
-family, invented statement or coverage-ledger edit is substituted. Source-support
-classification and actionable gaps remain FIX_001 Phase 4 work.
+- A Phase 3 runner regression also exposes a later boundary issue: a cycle repair can
+  produce valid superseded dispositions/signals, while support collection uses
+  retained-business provenance eligibility for their review.
+- Global reconciliation passes; the unsupported positive review still fails before
+  publication.
+- Phase 4 must resolve review evidence scope without weakening business provenance.
+- JSON/schema protocol retry remains separate from semantic repair.
+- YAML's repair operations each have an explicit bounded ceiling; exhaustion fails.
+- Only the workflow's cumulative actual token budget limits model tokens.
+- No missing knowledge is replaced with a default or treated as deterministic proof.
 
-A Phase 3 runner regression also exposes a later boundary issue: a cycle repair
-can produce valid superseded dispositions/signals, while support collection uses
-retained-business provenance eligibility for their review. Global reconciliation
-passes; the unsupported positive review still fails before publication. Phase 4
-must resolve review evidence scope without weakening business provenance. JSON/schema
-protocol retry remains separate from semantic repair.
-YAML's repair operations each have an explicit bounded ceiling; exhaustion fails.
-Only the workflow's cumulative actual token budget limits model tokens.
-No missing knowledge is replaced with a default or treated as deterministic proof.
+**Implementation evidence**
 
 `test-specification-generation` and configured-root fake-provider tests cover
 these paths and negative cases. Section 3.12 connects canonical persistence and
@@ -1123,7 +1230,7 @@ H-011/H-012; reruns regenerate views using the persisted record-ID counters.
 - [`spec.md` projection structure](../diagrams/11-spec-document-structure.md)
   shows the mandatory hierarchy, optional sections and conditional entities.
 - [Reference ingestion and Specify completion](../diagrams/05-reference-ingestion.md)
-  owns the detailed reference/generation transaction flow.
+  owns the detailed reference/generation publication flow.
 - [Clarification lifecycle](../diagrams/07-clarification-lifecycle.md) owns the
   durable `SNN` pause and later full regeneration path.
 
@@ -1146,7 +1253,7 @@ YAML definition.
    or executable payload, and no packaged resource is substituted implicitly.
 5. YAML-selected registered operations—not the generic workflow engine or a
    workflow-name branch—own Specify content, validation, rendering,
-   transaction, and state work; no workflow operation is inaccessible from the
+   publication, and state work; no workflow operation is inaccessible from the
    definition.
 6. A model returns typed candidate content only; the engine owns IDs, paths,
    headings, validation, rendering, repair scope, persistence, and completion.
@@ -1165,24 +1272,28 @@ YAML definition.
     registered generic operations requires no workflow-name branch, hidden
     operation, or engine rebuild.
 12. The supplied directory identifies the feature; reference changes do not select
-    another directory or require an ownership lookup. A Specify rerun MUST overwrite its existing registered output files at the
-    same paths under Design Section 23.2, without skipping, renaming, or separate
-    overwrite approval. Unresolved clarification forms MUST be completely
-    overwritten at the same IDs/paths, including open answer drafts. It MUST NOT
-    overwrite user-resolved clarification files;
-    they remain byte-identical through generation, reference refresh,
-    failed/cancelled runs, and commit; applicable validated
-    answers are reused and no duplicate question bypasses that protection.
+    another directory or require an ownership lookup.
+
+    - A Specify rerun MUST overwrite its existing registered output files at the same
+      paths under Design Section 23.2, without skipping, renaming, or separate overwrite
+      approval.
+    - Unresolved clarification forms MUST be completely overwritten at the same
+      IDs/paths, including open answer drafts.
+    - It MUST NOT overwrite user-resolved clarification files; they remain
+      byte-identical through generation, reference refresh, failed/cancelled runs, and
+      commit; applicable validated answers are reused and no duplicate question bypasses
+      that protection.
 
 ## 8. Verification
 
-- `zig build test-reference-reconciliation` covers hierarchical/recursive
-  grouping, exact original membership, all claim kinds, preserved tokens,
-  closed proposals, invalid/acyclic relationships, overlapping blocking
-  conflicts, scoped text, canonical record joins and allocation/lifetime
-  failures. `zig build verify` also exercises the native YAML path, rejects
-  missing prerequisites and invalid group sizes, preserves user-closed forms,
-  and runs the clean-environment native packaging smoke suite;
+- `zig build test-reference-reconciliation` covers hierarchical/recursive grouping,
+  exact original membership, all claim kinds, preserved tokens, closed proposals,
+  invalid/acyclic relationships, overlapping blocking conflicts, scoped text, canonical
+  record joins and allocation/lifetime failures.
+
+  - `zig build verify` also exercises the native YAML path, rejects missing
+    prerequisites and invalid group sizes, preserves user-closed forms, and runs the
+    clean-environment native packaging smoke suite;
 - `zig build test-structured-tokens` covers inline-code eligibility, exact
   Unicode/whitespace, multiline and size-boundary citations, closed and total
   classifications, source/identity forgery, preserved-claim conservation and
@@ -1218,16 +1329,68 @@ YAML definition.
   unresolved question, malformed/reordered record ID, and invalid acceptance
   triplet; and
 - golden tests prove byte-stable `spec.md`, mandatory sidecar generation, and
-  atomic commit before `specified`.
+  complete validated publication before `specified`, including failure at each
+  write without new successful completion.
 - rerun tests prove all registered replaceable outputs and unresolved forms are
-  completely overwritten at the same paths without append, merge, skipping,
-  renaming, or separate overwrite approval. Cover unchanged questions, open
-  answer drafts, shorter replacements with no retained trailing bytes, and
-  stable subject IDs, while preserving pending and accepted user-closed forms,
-  including when another question is opened;
-  stale/invalid submissions and changed answer applicability block without rewriting, and
-  a user close concurrent with commit cannot be lost.
+  completely overwritten at the same paths without append, merge, skipping, renaming, or
+  separate overwrite approval.
 
+  - Cover unchanged questions, open answer drafts, shorter replacements with no retained
+    trailing bytes, and stable subject IDs, while preserving pending and accepted
+    user-closed forms, including when another question is opened; stale/invalid
+    submissions and changed answer applicability block without rewriting, and a user
+    close concurrent with commit cannot be lost.
+
+## Implementation status
+
+**Implementation readiness**
+
+- The generic concise YAML, declared-resource, compiler, registry, and transition-runner
+  boundaries are implemented by F0005 and ADR 0005.
+- The logical Specify flow, `spec.md` section hierarchy, and clarification separation
+  are defined below.
+- The explicit feature/reference invocation, shared directory preflight, read-only
+  clarification inputs, Markdown ingestion, citable reference preparation, typed text,
+  Markdown exact-value preservation, scripted extraction accounting and reconciliation
+  in Sections 3.1–3.9 are implemented.
+- Model-connected extraction/reconciliation (§3.11) and in-memory specification
+  generation/validation/repair (§5.7) are implemented through ordinary YAML.
+- Generation needs now refresh and publish controlled clarification forms (§3.12);
+  validated specification content renders, reparses and publishes alongside its
+  reference sidecar and canonical state.
+- Answer application, feature-log integration and remaining clarification routes are
+  unfinished.
+- Generated-name code is removed.
+- The native content schema and mechanical specification Markdown codec in §5.6 are
+  implemented.
+- The shared required-authority boundary and Specify projection in §3.10 are connected
+  to model-assisted generation and publication evidence.
+
+**Known implementation gaps**
+
+- The [15 September
+  review](../../fixes/REVIEW_FIX_001_ARCHITECTURE.md#15-september-2026-critical-review)
+  reopens selection feasibility, disposition equivalence and shared retained-claim
+  eligibility work in Phase 3.
+- Connected repair paths and passing existing tests do not establish completion of those
+  contracts.
+- The rollout owns current status.
+
+**E2E evaluation**
+
+- The [development harness](../harness/e2e.md) invokes the configured production LLM and
+  grades the exact published specification through a separate live rubric evaluator.
+- Generation/publication evidence and semantic scores remain separate; neither offline
+  integration tests nor supplied-spec grading establish a successful live workflow.
+
+**Input optimization**
+
+- [ADR 0013](../decisions/0013-workflow-input-reuse.md) is implemented.
+- `spec.workflow.yaml` declares local request/retirement subgraphs; the compiler expands
+  their operations through the existing validators.
+- Schemas share local definitions and select the current generation unit, reconciliation
+  purpose or authorized repair shape.
+- Model inputs share citation records and preserve their complete supplied evidence.
 ## 9. Traceability
 
 | Concern | Authority |

@@ -2,16 +2,9 @@
 
 **Status:** Proposed feature design
 
-**Implementation readiness:** Ready for the bounded initial implementation.
-The workflow-definition schema supplies `WorkflowShortcode`, the registry
-validates uniqueness, and the runner-created `WorkflowLog` producer binding
-carries it. The F0001 logging shape supplies every configurable user choice,
-and all operational policy plus the two `feature-log/v2` pipe-delimited schemas
-are compiler-locked
-constants. ADR 0005 replaces route/profile attribution with compiled
-workflow-operation/model-slot attribution. The event registry and both fixed
-v2 headings must be updated in place as part of the concise workflow contract;
-the current implementation still uses the superseded field names.
+**Implementation:** The service and stream lifecycle are implemented; production Specify
+integration remains open under F0100. See [implementation
+status](#implementation-status).
 
 **Compatibility:** None. This is a pre-release proof of concept with no
 deployed predecessor. `feature-log/v2` and its two column schemas are updated
@@ -37,15 +30,15 @@ SDDToolKitConfigService](F0001-SDDToolKitConfigService.md);
 
 ## 1. Responsibility
 
-F0002 gives each workflow one simple producer binding, `WorkflowLog`, whose
-`workflowLog.log(delta, TelemetryFact)` operation adds one attributed closed
-typed fact to an action's candidate delta; it does not write, filter, format,
-or flush a record.
-After the runner validates and applies that delta, F0002 converts the fact, or
-a separately sanitized prompt exchange, under one validated feature/run
-logging policy and binding into a safe non-authoritative record. An input is
-either filtered, persisted successfully, or produces a typed fail-closed
-outcome.
+- F0002 gives each workflow one simple producer binding, `WorkflowLog`, whose
+  `workflowLog.log(delta, TelemetryFact)` operation adds one attributed closed typed
+  fact to an action's candidate delta; it does not write, filter, format, or flush a
+  record.
+- After the runner validates and applies that delta, F0002 converts the fact, or a
+  separately sanitized prompt exchange, under one validated feature/run logging policy
+  and binding into a safe non-authoritative record.
+- An input is either filtered, persisted successfully, or produces a typed fail-closed
+  outcome.
 
 Every F0002 input originates from the runner-created producer binding for the
 selected compiled workflow. Every emitted record carries that workflow
@@ -108,13 +101,14 @@ The accepted `LogsConfig` has exactly three values:
 - `promptCapture`: a unique list drawn from `request`, `response`,
   `reference_body`, and `code_body`; `[]` disables body capture.
 
-F0001's direct typed decoder enforces the closed contract published as
-`design/schemas/sddtoolkit-config.schema.json`; no generic JSON tree or
-runtime schema dependency is required. The logging-policy compiler owns all
-value semantics and injects every operational constant in Section 6.4. Paths,
-levels on individual events, timestamp/format/limits, retention, flush,
-redaction, failure behavior, prompt byte limits, lock policy, and delimited
-columns/headings are deliberately absent from configuration.
+- F0001's direct typed decoder enforces the closed contract published as
+  `design/schemas/sddtoolkit-config.schema.json`; no generic JSON tree or runtime schema
+  dependency is required.
+- The logging-policy compiler owns all value semantics and injects every operational
+  constant in Section 6.4.
+- Paths, levels on individual events, timestamp/format/limits, retention, flush,
+  redaction, failure behavior, prompt byte limits, lock policy, and delimited
+  columns/headings are deliberately absent from configuration.
 
 Configuration read, decode, canonicalization, validation, persistence, and
 runtime logging therefore each have one owner and one direction of flow.
@@ -135,15 +129,15 @@ workflow definition supplies workflowShortcode: "IMPL"
   -> F0002 record
 ```
 
-The canonical `WorkflowShortcode.parse` constructor accepts exactly four
-case-sensitive ASCII alphanumeric characters.
-`ValidateWorkflowDefinitionSchemaAction` delegates to that constructor rather
-than duplicating shortcode syntax.
-`ValidateWorkflowDefinitionRegistryAction` rejects duplicates. After the
-selected `WorkflowId` resolves, the runner constructs one `WorkflowLog` from
-that typed value and supplies the binding to the executing graph. A model,
-stored log, node parameter, or runtime caller cannot replace it. It is
-observability metadata, not workflow identity or operational authority.
+- The canonical `WorkflowShortcode.parse` constructor accepts exactly four
+  case-sensitive ASCII alphanumeric characters.
+- `ValidateWorkflowDefinitionSchemaAction` delegates to that constructor rather than
+  duplicating shortcode syntax.
+- `ValidateWorkflowDefinitionRegistryAction` rejects duplicates.
+- After the selected `WorkflowId` resolves, the runner constructs one `WorkflowLog` from
+  that typed value and supplies the binding to the executing graph.
+- A model, stored log, node parameter, or runtime caller cannot replace it.
+- It is observability metadata, not workflow identity or operational authority.
 
 Illustrative definition values are:
 
@@ -160,21 +154,11 @@ initialise: INIT
 These values are examples, not a required workflow registry. Every admitted
 definition owns one unique validated value.
 
-The workflow roles currently being considered are:
-
-1. `specify`;
-2. `plan`;
-3. `tasks`;
-4. `implement`;
-5. `audit`;
-6. `drift`; and
-7. `initialise`.
-
-This is a consideration list, not an engine role registry. The initial SDD
-suite remains `specify -> plan -> tasks -> implement`; adding `audit`, `drift`,
-or `initialise` requires its domain graph, gates, state contract, and acceptance
-tests, but does not expand a fixed engine workflow-name union. Every definition
-must supply its own valid unique shortcode.
+The example roles above are under consideration. This is a consideration list, not an engine role registry.
+- The initial SDD suite remains `specify -> plan -> tasks -> implement`; adding `audit`,
+  `drift`, or `initialise` requires its domain graph, gates, state contract, and
+  acceptance tests, but does not expand a fixed engine workflow-name union.
+- Every definition must supply its own valid unique shortcode.
 
 ### 3.3 Other authorities
 
@@ -208,13 +192,14 @@ pub fn log(
 ) !void;
 ```
 
-The call is delta construction, not direct logging I/O. It appends the fact to
-`NodeDelta.telemetryFactsAdded` together with `self.workflow_shortcode` as one
-`WorkflowTelemetryFact`; it grants no sink, filesystem, clock, or runner
-capability. The runner validates and applies the complete delta before handing
-the attributed fact to the logging graph. The runner supplies the binding only
-after the workflow definition and complete registry validate; executing nodes
-cannot supply or replace the shortcode.
+- The call is delta construction, not direct logging I/O.
+- It appends the fact to `NodeDelta.telemetryFactsAdded` together with
+  `self.workflow_shortcode` as one `WorkflowTelemetryFact`; it grants no sink,
+  filesystem, clock, or runner capability.
+- The runner validates and applies the complete delta before handing the attributed fact
+  to the logging graph.
+- The runner supplies the binding only after the workflow definition and complete
+  registry validate; executing nodes cannot supply or replace the shortcode.
 
 The call shape is intentionally concise:
 
@@ -287,67 +272,72 @@ Logging-internal nodes are not recursively observed.
 
 ### 6.1 Mandatory workflow attribution
 
-Every serialized log record MUST contain exactly one `workflow_shortcode`
-value. In a delimited row it occupies the `workflow_shortcode` column; in the emergency
-record it occupies the `workflow` field. It MUST be the typed shortcode
-supplied by the selected compiled workflow's runner-created binding and MUST
-contain exactly four case-sensitive ASCII
-alphanumeric characters. This applies to mandatory event records, optional
-sanitized prompt-fragment records, console-mirrored records, and the fixed
-emergency record.
+- Every serialized log record MUST contain exactly one `workflow_shortcode` value.
+- In a delimited row it occupies the `workflow_shortcode` column; in the emergency
+  record it occupies the `workflow` field.
+- It MUST be the typed shortcode supplied by the selected compiled workflow's
+  runner-created binding and MUST contain exactly four case-sensitive ASCII alphanumeric
+  characters.
+- This applies to mandatory event records, optional sanitized prompt-fragment records,
+  console-mirrored records, and the fixed emergency record.
 
-The canonical `WorkflowShortcode` parser is the single shortcode syntax
-validator, and `ValidateWorkflowDefinitionRegistryAction` is the single
-uniqueness validator. The workflow-definition schema delegates to the parser.
-F0002 accepts only the resulting typed value through the runner binding; it
-does not truncate, pad, normalize, infer, or replace a
-missing value. Raw shortcode text inside a fact, model output, configuration,
-node parameter, or stored log record is never accepted. Missing, malformed, or
-duplicate definition values fail before workflow selection; a missing or
-invalid typed binding at the runtime boundary fails closed before serialization.
+- The canonical `WorkflowShortcode` parser is the single shortcode syntax validator, and
+  `ValidateWorkflowDefinitionRegistryAction` is the single uniqueness validator.
+- The workflow-definition schema delegates to the parser.
+- F0002 accepts only the resulting typed value through the runner binding; it does not
+  truncate, pad, normalize, infer, or replace a missing value.
+- Raw shortcode text inside a fact, model output, configuration, node parameter, or
+  stored log record is never accepted.
+- Missing, malformed, or duplicate definition values fail before workflow selection; a
+  missing or invalid typed binding at the runtime boundary fails closed before
+  serialization.
 
 ### 6.2 Levels and content safety
 
-The canonical levels, ranks, aliases, meanings, and threshold rule are defined
-once in governing Section 26.5. F0002 uses those types and does not define a
-second enum or alias table. The registry owns an event's level; the configured
-level is the emission threshold. A producer supplies neither value.
+- The canonical levels, ranks, aliases, meanings, and threshold rule are defined once in
+  governing Section 26.5.
+- F0002 uses those types and does not define a second enum or alias table.
+- The registry owns an event's level; the configured level is the emission threshold.
+- A producer supplies neither value.
 
-Every serialized log record MUST contain one canonical `level` value from
-Section 26.5. Delimited records use the `level` column and the emergency record uses
-the `level` field. This applies to mandatory event records,
-optional sanitized prompt-fragment records, console-mirrored records, and the
-fixed emergency record. A missing, aliased, unknown, or caller-supplied level
-is rejected before serialization or emission. A fact filtered below the
-threshold creates no record and therefore is not a log record missing a level.
+- Every serialized log record MUST contain one canonical `level` value from Section
+  26.5.
+- Delimited records use the `level` column and the emergency record uses the `level`
+  field.
+- This applies to mandatory event records, optional sanitized prompt-fragment records,
+  console-mirrored records, and the fixed emergency record.
+- A missing, aliased, unknown, or caller-supplied level is rejected before serialization
+  or emission.
+- A fact filtered below the threshold creates no record and therefore is not a log
+  record missing a level.
 
-The following is the complete proof-of-concept event registry. Event names are
-closed and case-sensitive. For every row, `message_template_id` is exactly
-`<event_type>/v1`; this identifier is the complete template contract and there
-is no rendered or free-text message. “Required” and “optional”
-refer to event-specific columns in addition to the common record identity,
-time, workflow, run, feature, and context. Every event/prompt data row requires
-`record_kind`, schema/stream/policy/binding/segment identity,
-`workflow_shortcode`, `event_id`, `sequence`, `occurred_at_utc`,
-`monotonic_offset`, `level`, `event_type`, `message_template_id`, `run_id`, and
-`feature_id`. Event rows may additionally use the common optional
-`stage`, `node_id`, `parent_event_id`, `correlation_id`, `attempt`, and
-`evidence_status` fields. Prompt rows may use optional `stage` and `node_id`;
-their other fields are listed by `model.prompt_fragment`. A field is permitted
-only when it is common or listed for that event below; every other column is
-`\N`. Every metadata field is
-classified `public_metadata`; arbitrary strings and unregistered fields are
-forbidden.
+- The following is the complete proof-of-concept event registry.
+- Event names are closed and case-sensitive.
+- For every row, `message_template_id` is exactly `<event_type>/v1`; this identifier is
+  the complete template contract and there is no rendered or free-text message.
+  “Required” and “optional” refer to event-specific columns in addition to the common
+  record identity, time, workflow, run, feature, and context.
+- Every event/prompt data row requires `record_kind`,
+  schema/stream/policy/binding/segment identity, `workflow_shortcode`, `event_id`,
+  `sequence`, `occurred_at_utc`, `monotonic_offset`, `level`, `event_type`,
+  `message_template_id`, `run_id`, and `feature_id`.
+- Event rows may additionally use the common optional `stage`, `node_id`,
+  `parent_event_id`, `correlation_id`, `attempt`, and `evidence_status` fields.
+- Prompt rows may use optional `stage` and `node_id`; their other fields are listed by
+  `model.prompt_fragment`.
+- A field is permitted only when it is common or listed for that event below; every
+  other column is `\N`.
+- Every metadata field is classified `public_metadata`; arbitrary strings and
+  unregistered fields are forbidden.
 
-Field types are closed: all `*_id` values are their corresponding validated
-opaque identifier types; `diagnostic_code`, `stage`, `outcome`,
-`evidence_status`, `repair_unit_kind`, `direction`, and `body_class` are closed
-enums; `attempt`, `duration_ms`, token counts, `retained_bytes`, and `count` are
-non-negative bounded integers serialized as canonical decimal ASCII;
-`exit_code` is a bounded signed integer; booleans are lowercase `true` or
-`false`; time/offset use the canonical trusted-clock representations; and
-`content` is bounded sanitized UTF-8. No generic string, map, or list field is
-registered.
+- Field types are closed: all `*_id` values are their corresponding validated opaque
+  identifier types; `diagnostic_code`, `stage`, `outcome`, `evidence_status`,
+  `repair_unit_kind`, `direction`, and `body_class` are closed enums; `attempt`,
+  `duration_ms`, token counts, `retained_bytes`, and `count` are non-negative bounded
+  integers serialized as canonical decimal ASCII; `exit_code` is a bounded signed
+  integer; booleans are lowercase `true` or `false`; time/offset use the canonical
+  trusted-clock representations; and `content` is bounded sanitized UTF-8.
+- No generic string, map, or list field is registered.
 
 | Event type | Level | Required fields | Optional fields |
 | --- | --- | --- | --- |
@@ -388,25 +378,28 @@ registered.
 | `security.denied` | `warning` | `rule_id`, `diagnostic_code`, `outcome` | — |
 | `model.prompt_fragment` | `debug` | `attempt`, `request_id`, `model_operation_id`, `model_slot_id`, `fragment_id`, `direction`, `body_class`, `content`, `retained_bytes`, `truncated`, `redacted` | — |
 
-`model.prompt_fragment` exists only in the optional prompt stream. Its
-`content` field is classified `sanitized_content`, never public metadata, and
-is accepted only from the validated sanitization pipeline. All other events
-exist only in the event stream. A fact/event not present in this table is
-rejected; adding one is a design change to this closed registry.
+- `model.prompt_fragment` exists only in the optional prompt stream.
+- Its `content` field is classified `sanitized_content`, never public metadata, and is
+  accepted only from the validated sanitization pipeline.
+- All other events exist only in the event stream.
+- A fact/event not present in this table is rejected; adding one is a design change to
+  this closed registry.
 
 ### 6.3 Fixed-header pipe-delimited format
 
-`feature-log/v2` uses a deterministic fixed-header pipe-delimited format to avoid
-repeating field names in every record. The initial F0002 implementation embeds
-exactly two schemas as compiler constants: `event-columns/v2` and
-`prompt-columns/v2`. It does not generate columns from the event registry or
-read headings/schema IDs from configuration, workflow files, persisted data,
-or plugins. The first row of each segment is exactly one matching
-stream-specific column heading. The second row is one
-`segment_header` control row under that heading. It binds the schema, stream,
-policy/binding, column-schema, segment, and creation facts. Zero or more event
-or prompt rows follow; a normally closed segment ends with one
-`segment_trailer` control row. Control rows are storage metadata, not logs.
+- `feature-log/v2` uses a deterministic fixed-header pipe-delimited format to avoid
+  repeating field names in every record.
+- The initial F0002 implementation embeds exactly two schemas as compiler constants:
+  `event-columns/v2` and `prompt-columns/v2`.
+- It does not generate columns from the event registry or read headings/schema IDs from
+  configuration, workflow files, persisted data, or plugins.
+- The first row of each segment is exactly one matching stream-specific column heading.
+- The second row is one `segment_header` control row under that heading.
+- It binds the schema, stream, policy/binding, column-schema, segment, and creation
+  facts.
+- Zero or more event or prompt rows follow; a normally closed segment ends with one
+  `segment_trailer` control row.
+- Control rows are storage metadata, not logs.
 
 The hard-coded headings are:
 
@@ -415,42 +408,46 @@ record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_bin
 record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|model_operation_id|model_slot_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
 ```
 
-The first is the 38-column event heading; the second is the 30-column prompt
-heading. Every prompt data row represents exactly one sanitized fragment. The
-prompt pipeline sorts selected fragments by canonical `promptBodyFragmentId`
-and emits one row per fragment in that order. It emits no prompt row when no
-fragment is selected; the ordinary metadata event remains available in the
-event stream.
+- The first is the 38-column event heading; the second is the 30-column prompt heading.
+- Every prompt data row represents exactly one sanitized fragment.
+- The prompt pipeline sorts selected fragments by canonical `promptBodyFragmentId` and
+  emits one row per fragment in that order.
+- It emits no prompt row when no fragment is selected; the ordinary metadata event
+  remains available in the event stream.
 
-Prompt columns are scalar: `direction` is `request` or `response`;
-`body_class` is `ordinary`, `reference_body`, or `code_body`; `retained_bytes`
-is canonical unsigned decimal ASCII; and `truncated` and `redacted` are
-lowercase `true` or `false`. `content` is only the redacted, then
-UTF-8-boundary-truncated fragment and uses the escaping below.
-Request/response metadata is represented by event-stream model events and is
-not duplicated. Redaction/truncation evidence IDs remain internal validation
-evidence and are not serialized. There is no JSON, list delimiter, nested row,
-or other composite-cell grammar.
+- Prompt columns are scalar: `direction` is `request` or `response`; `body_class` is
+  `ordinary`, `reference_body`, or `code_body`; `retained_bytes` is canonical unsigned
+  decimal ASCII; and `truncated` and `redacted` are lowercase `true` or `false`.
+- `content` is only the redacted, then UTF-8-boundary-truncated fragment and uses the
+  escaping below.
+- Request/response metadata is represented by event-stream model events and is not
+  duplicated.
+- Redaction/truncation evidence IDs remain internal validation evidence and are not
+  serialized.
+- There is no JSON, list delimiter, nested row, or other composite-cell grammar.
 
 `record_kind` is one of `segment_header`, `event`, `prompt`, or
 `segment_trailer`. Adding or reordering a column is an implementation contract
 change. During this pre-release proof of concept that contract is edited in
 place and old headings are rejected rather than migrated.
 
-Every control/event/prompt row has exactly the same cell count and order as its
-segment heading.
-Required cells cannot be absent; an absent optional value uses the reserved
-`\N` cell, while an empty string remains empty. The canonical dialect is UTF-8
-without BOM, uses ASCII `|` as its delimiter, is unquoted, and has one LF per
-physical row.
-Within a value, encode backslash first as `\\`, pipe as `\|`, CR as `\r`, and
-LF as `\n`. Because literal backslashes are escaped first, literal content
-cannot alias the reserved absent value. A decoder scans left to right, treats
-only an unescaped `|` as a cell boundary, checks the complete encoded cell for
-the reserved `\N`, and then decodes only `\\`, `\|`, `\r`, and `\n`. An unknown
-or dangling escape fails closed. For example, the value `plan|audit` is written
-as `plan\|audit` in one cell. Repeated, missing, reordered, duplicate, or
-unknown headings and extra or missing row cells fail closed.
+- Every control/event/prompt row has exactly the same cell count and order as its
+  segment heading.
+- Required cells cannot be absent; an absent optional value uses the reserved `\N` cell,
+  while an empty string remains empty.
+- The canonical dialect is UTF-8 without BOM, uses ASCII `|` as its delimiter, is
+  unquoted, and has one LF per physical row.
+- Within a value, encode backslash first as `\\`, pipe as `\|`, CR as `\r`, and LF as
+  `\n`.
+- Because literal backslashes are escaped first, literal content cannot alias the
+  reserved absent value.
+- A decoder scans left to right, treats only an unescaped `|` as a cell boundary, checks
+  the complete encoded cell for the reserved `\N`, and then decodes only `\\`, `\|`,
+  `\r`, and `\n`.
+- An unknown or dangling escape fails closed.
+- For example, the value `plan|audit` is written as `plan\|audit` in one cell.
+- Repeated, missing, reordered, duplicate, or unknown headings and extra or missing row
+  cells fail closed.
 
 For example, the registered `task.started` event at `info` can produce this
 segment:
@@ -485,12 +482,12 @@ The mandatory event stream is metadata-only. At every level, including
 raw paths, arbitrary caller text, prompts/responses, references, source code,
 patches, file content, and command output.
 
-Optional prompt/body capture remains a separate, default-off sanitization
-pipeline governed by Sections 13.4 and 26.5. F0002 accepts only its validated
-transient sanitized fragment records; it never receives or sanitizes raw bodies
-a second time. Direction/class opt-ins, redaction-before-truncation,
-UTF-8/size validation, canonical fragment ordering, and transient-handle
-cleanup remain owned by that pipeline.
+- Optional prompt/body capture remains a separate, default-off sanitization pipeline
+  governed by Sections 13.4 and 26.5.
+- F0002 accepts only its validated transient sanitized fragment records; it never
+  receives or sanitizes raw bodies a second time.
+- Direction/class opt-ins, redaction-before-truncation, UTF-8/size validation, canonical
+  fragment ordering, and transient-handle cleanup remain owned by that pipeline.
 
 ### 6.4 Proof-of-concept policy constants
 
@@ -522,12 +519,13 @@ The emergency line is exactly:
 SDDE_LOG_FAILURE workflow=IMPL level=fatal code=LOG_SINK_FAILURE
 ```
 
-The terminating byte is LF. `IMPL` is replaced only by the exact typed
-four-character shortcode. `code` is one of `LOG_LOCK_TIMEOUT`,
-`LOG_SERIALIZATION_FAILURE`, `LOG_SINK_FAILURE`, `LOG_FLUSH_FAILURE`,
-`LOG_RELEASE_FAILURE`, or `LOG_SEGMENT_LIMIT_EXHAUSTED`. No message, path, content, identifier, or additional
-field is permitted. Failure to perform this single emergency write does not
-retry and does not prevent the required fail-closed result.
+- The terminating byte is LF.
+- `IMPL` is replaced only by the exact typed four-character shortcode.
+- `code` is one of `LOG_LOCK_TIMEOUT`, `LOG_SERIALIZATION_FAILURE`, `LOG_SINK_FAILURE`,
+  `LOG_FLUSH_FAILURE`, `LOG_RELEASE_FAILURE`, or `LOG_SEGMENT_LIMIT_EXHAUSTED`.
+- No message, path, content, identifier, or additional field is permitted.
+- Failure to perform this single emergency write does not retry and does not prevent the
+  required fail-closed result.
 
 ## 7. Storage and lifecycle
 
@@ -542,15 +540,15 @@ These shapes are conformance information, not configurable paths. F0002 uses
 only the validated binding and operation-specific storage ports. It never
 joins raw path strings. There is no shared or global persistent log.
 
-The fixed-header pipe-delimited file sink is mandatory and has no disable
-switch. Every newly created or rotated segment durably writes its canonical
-column heading as the first row and
-its `segment_header` control row as the second before accepting event/prompt
-rows. A validated optional console mirror may display only the already-safe
-data row using the exact delimited bytes defined in Section 6.4. File permissions,
-exclusive locking, sequence, flush, rotation,
-retention, prior-tail recovery, and policy transition behavior are governed
-once by Sections 13.9, 14.10, and 26.5 and are not redefined here.
+- The fixed-header pipe-delimited file sink is mandatory and has no disable switch.
+- Every newly created or rotated segment durably writes its canonical column heading as
+  the first row and its `segment_header` control row as the second before accepting
+  event/prompt rows.
+- A validated optional console mirror may display only the already-safe data row using
+  the exact delimited bytes defined in Section 6.4.
+- File permissions, exclusive locking, sequence, flush, rotation, retention, prior-tail
+  recovery, and policy transition behavior are governed once by Sections 13.9, 14.10,
+  and 26.5 and are not redefined here.
 
 The initial implementation processes each fact through the runner-owned
 logging barrier before the next applicable business node. It has no background
@@ -580,13 +578,14 @@ An initialized logging failure follows the governing
 The failure path is not logged through F0002 and cannot recurse. The atomic
 execution contract in ADR 0009 applies; log state never resumes a workflow.
 
-Before a current feature binding exists, the bounded content-free emergency
-path is available only after the selected compiled workflow's runner-created
-`WorkflowLog` binding exists. Without that attribution F0002 emits no log
-record; bootstrap uses its non-logging diagnostic path and blocks. Restart and
-same-run policy changes use the historical/current authority rules in Sections
-14.10 and 26.5; F0002 never reinterprets stored records with raw or candidate
-configuration.
+- Before a current feature binding exists, the bounded content-free emergency path is
+  available only after the selected compiled workflow's runner-created `WorkflowLog`
+  binding exists.
+- Without that attribution F0002 emits no log record; bootstrap uses its non-logging
+  diagnostic path and blocks.
+- Restart and same-run policy changes use the historical/current authority rules in
+  Sections 14.10 and 26.5; F0002 never reinterprets stored records with raw or candidate
+  configuration.
 
 ## 9. Explicit non-responsibilities
 
@@ -682,40 +681,78 @@ F0002 does not:
 Tests should prove the shared boundaries with representative positive and
 negative cases:
 
-- authority: three-value config-to-compiler-to-runtime handoff, rejection of
-  every removed tuning key, one level canonicalizer,
-  workflow-definition shortcode syntax plus registry uniqueness, runner-owned
-  `WorkflowLog` construction, exact shortcode/fact binding, and rejection of
-  raw config/path/message/shortcode inputs or runtime file rereads;
-- processing: `workflowLog.log` appends exactly one attributed typed fact and
-  performs no I/O; rejection of missing, shorter, longer, malformed, or
-  duplicate workflow shortcodes during definition/registry validation and
-  rejection of a mismatched typed runtime binding; exhaustive
-  six-level threshold matrix; rejection of missing, aliased, unknown,
-  mismatched, or caller-supplied record levels; typed field validation;
-  redaction; drop-before-allocation; exhaustive event-registry mapping and
-  rejected unregistered events/fields; exact-once fixed headings;
-  deterministic delimiter escaping/null encoding, including embedded pipe,
-  backslash, CR, and LF cases; byte-for-byte checks of both built-in headings;
-  rejection of unknown and dangling escapes and of any
-  configured/dynamic heading; heading/control-row/row-width corruption; fixed
-  pipe-delimited serialization; one scalar row per prompt fragment in canonical order;
-  zero-fragment behavior; and runner barrier behavior;
-- privacy: prohibited metadata, default-off prompt capture, sanitization
-  handoff, and transient cleanup;
-- storage: exact per-feature bindings, cross-feature isolation, permissions,
-  the exact 2,000 ms no-retry lock deadline, fixed size/retention/flush
-  constants, rotation/limits, exact pipe-delimited console
-  bytes, and representative clean-tail versus corrupt-tail recovery;
-- failure: each operation class reaches the one non-recursive emergency/block
-  route, the emergency line is byte-exact and at most 128 ASCII bytes, a failed
-  emergency write is not retried, and the execution is abandoned without
-  partial successful output; and
-- packaging: a clean native-executable run with no source-tree fallback.
+**Authority**
+
+- three-value config-to-compiler-to-runtime handoff, rejection of every removed tuning
+  key, one level canonicalizer, workflow-definition shortcode syntax plus registry
+  uniqueness, runner-owned `WorkflowLog` construction, exact shortcode/fact binding, and
+  rejection of raw config/path/message/shortcode inputs or runtime file rereads;
+
+**Processing**
+
+- `workflowLog.log` appends exactly one attributed typed fact and performs no I/O
+- rejection of missing, shorter, longer, malformed, or duplicate workflow shortcodes
+  during definition/registry validation and rejection of a mismatched typed runtime
+  binding
+- exhaustive six-level threshold matrix
+- rejection of missing, aliased, unknown, mismatched, or caller-supplied record levels
+- typed field validation
+- redaction
+- drop-before-allocation
+- exhaustive event-registry mapping and rejected unregistered events/fields
+- exact-once fixed headings
+- deterministic delimiter escaping/null encoding, including embedded pipe, backslash,
+  CR, and LF cases
+- byte-for-byte checks of both built-in headings
+- rejection of unknown and dangling escapes and of any configured/dynamic heading
+- heading/control-row/row-width corruption
+- fixed pipe-delimited serialization
+- one scalar row per prompt fragment in canonical order
+- zero-fragment behavior
+- runner barrier behavior;
+
+**Privacy**
+
+- prohibited metadata, default-off prompt capture, sanitization handoff, and transient
+  cleanup;
+
+**Storage**
+
+- exact per-feature bindings, cross-feature isolation, permissions, the exact 2,000 ms
+  no-retry lock deadline, fixed size/retention/flush constants, rotation/limits, exact
+  pipe-delimited console bytes, and representative clean-tail versus corrupt-tail
+  recovery;
+
+**Failure**
+
+- each operation class reaches the one non-recursive emergency/block route, the
+  emergency line is byte-exact and at most 128 ASCII bytes, a failed emergency write is
+  not retried, and the execution is abandoned without partial successful output
+- and
+
+**Packaging**
+
+- a clean native-executable run with no source-tree fallback.
+
 
 Detailed fault matrices remain owned by governing Section 28 and are referenced
 rather than copied into this feature document.
 
+## Implementation status
+
+**Implementation**
+
+- The logging service and stream lifecycle are implemented; production Specify
+  integration remains open under F0100.
+- The workflow-definition schema supplies `WorkflowShortcode`, the registry validates
+  uniqueness, and the runner-created `WorkflowLog` producer binding carries it.
+- The F0001 logging shape supplies every configurable user choice, and all operational
+  policy plus the two `feature-log/v2` pipe-delimited schemas are compiler-locked
+  constants.
+- ADR 0005 replaces route/profile attribution with compiled
+  workflow-operation/model-slot attribution.
+- The current event registry and fixed v2 headings use workflow-operation and model-slot
+  attribution; see [the format owner](../../src/domain/feature_log_format.zig).
 ## 12. Traceability
 
 | Concern | Authority |

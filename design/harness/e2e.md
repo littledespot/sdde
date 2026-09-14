@@ -1,91 +1,142 @@
 # Live Spec E2E test
 
-After configuring `.env.e2e`, run one selected case from the repository root:
+Run one explicitly selected live case from the repository root:
 
-```sh
-./scripts/e2e-spec.sh
-```
+1. Configure credentials and judge selection under [Environment setup](#environment-setup).
+2. Obtain explicit user approval for this E2E run under
+   [AGENTS.md](../../AGENTS.md#testing-expectations).
+3. Run the launcher for the checked-in Hello World case:
 
-The script selects the checked-in Hello World case by default. An explicit
-case uses the same path:
+   ```sh
+   ./scripts/e2e-spec.sh
+   ```
 
-```sh
-zig build e2e-spec -- --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json
-```
+   Or supply an explicit case through the same production path:
 
-This command makes live API calls for both generation and rubric grading. There
-is no mock mode. The script requires the pinned Zig compiler and locates the
-checkout from its own path; case paths are repository-relative. The
-executable does not automatically load an environment file. The development script
-loads the checkout's `.env.e2e` for live invocations; `--help` does not source it.
-The local file replaces values for names it exports. When the file is absent,
-caller-injected variables are used. Direct `zig build e2e-spec` still requires
-explicit environment setup, such as `. ./.env.e2e` in the invoking shell.
+   ```sh
+   zig build e2e-spec -- --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json
+   ```
+
+4. Inspect the retained generation, publication and rubric results under
+   [Retained results](#retained-results).
+
+### Launcher behavior
+
+- The command makes live API calls for generation and grading; there is no mock mode.
+- The script requires the pinned Zig compiler and locates the checkout from its own path.
+- Case paths are repository-relative.
+- The development script loads the checkout's `.env.e2e` for live invocations;
+  `--help` does not source it. The executable does not load an environment file.
+- The local file replaces values for names it exports. If absent, the script uses
+  caller-injected variables.
+- Direct `zig build e2e-spec` requires explicit shell environment setup, such as
+  `. ./.env.e2e`.
+
+## Environment setup
+
+1. From the repository root, create the optional local credential file:
+
+   ```sh
+   cp -n .env.e2e.example .env.e2e
+   chmod 600 .env.e2e
+   ```
+
+2. Fill [.env.e2e.example](../../.env.e2e.example)'s declared values in the
+   Git-ignored `.env.e2e`. Never put credentials in tracked configuration or
+   command arguments.
+3. Set generation to use `TEST_AWS_BEARER_TOKEN_BEDROCK`.
+4. Select grading with `TEST_EVALUATION_PROVIDER` and `TEST_EVALUATION_MODEL`.
+   Supply `TEST_OPENAI_API_KEY` for OpenAI; supply
+   `TEST_AWS_BEARER_TOKEN_BEDROCK` and `TEST_EVALUATION_REGION` for Bedrock.
+   Leave the region empty/unset for OpenAI. Supported controls and model pairs
+   are in the [evaluator contract](evaluator.md#run).
+5. For direct build/evaluator commands, load the file in the invoking shell:
+
+   ```sh
+   . ./.env.e2e
+   zig build evaluate-spec -- --help
+   ```
+
+- The launcher sources the file itself; direct commands do not.
+- Sourcing replaces values for exported names. Already-running processes retain
+  their original environment; CI may inject the variables directly.
+- Help and offline verification make no API calls.
+- The production executable neither loads the file nor consumes `TEST_` variables.
+- Each agent-initiated E2E run requires explicit approval under
+  [AGENTS.md](../../AGENTS.md#testing-expectations). Configuration or an earlier
+  approval does not authorize another run.
 
 ## Execution and quality assessment
 
-The harness captures the case's declared inputs and copies them into one new,
-isolated project. It runs one ordinary workflow invocation through production
-bootstrap, provider catalogue validation, request preparation, authorization,
-HTTPS transport, YAML transitions, deterministic validators and publication.
-Generation uses the model slots selected by that test's `.sddtoolkit.json`.
-The current production provider is Bedrock; its internal test credential is
-`TEST_AWS_BEARER_TOKEN_BEDROCK`. Test credentials are passed directly to the
-provider adapter and are never copied into production environment variables.
+- The harness captures the case's declared inputs and copies them into one new, isolated
+  project.
+- It runs one ordinary workflow invocation through production bootstrap, provider
+  catalogue validation, request preparation, authorization, HTTPS transport, YAML
+  transitions, deterministic validators and publication.
+- Generation uses the model slots selected by that test's `.sddtoolkit.json`.
+- The current production provider is Bedrock; its internal test credential is
+  `TEST_AWS_BEARER_TOKEN_BEDROCK`.
+- Test credentials are passed directly to the provider adapter and are never copied into
+  production environment variables.
 
-After successful generation, the harness reads the specification actually
-published by that invocation and grades those exact captured bytes against the
-case's rubric. The judge uses `TEST_EVALUATION_PROVIDER=openai|bedrock`,
-`TEST_EVALUATION_MODEL`, the selected `TEST_` credential and, for Bedrock,
-`TEST_EVALUATION_REGION`. The case's `evaluation_config` supplies explicit
-reasoning, timeout, retry and total-budget settings; no provider or model is
-selected by a fallback. Judge settings and
-credentials are validated before generation starts.
+- After successful generation, the harness reads the specification actually published by
+  that invocation and grades those exact captured bytes against the case's rubric.
+- The judge uses `TEST_EVALUATION_PROVIDER=openai|bedrock`, `TEST_EVALUATION_MODEL`, the
+  selected `TEST_` credential and, for Bedrock, `TEST_EVALUATION_REGION`.
+- The case's `evaluation_config` supplies explicit reasoning, timeout, retry and
+  total-budget settings; no provider or model is selected by a fallback.
+- Judge settings and credentials are validated before generation starts.
 
-Neither generation nor evaluation sends a per-call output token cap. The
-engine enforces the workflow's cumulative actual-token budget; the evaluator
-has its separate cumulative budget. Provider-owned response limits still
-apply and are reported as provider stops. GPT-OSS supports explicit `low`,
-`medium` and `high` reasoning effort through the shared Bedrock serializer;
-the Hello World generation slot and judge select `low`.
+- Neither generation nor evaluation sends a per-call output token cap.
+- The engine enforces the workflow's cumulative actual-token budget; the evaluator has
+  its separate cumulative budget.
+- Provider-owned response limits still apply and are reported as provider stops.
+- GPT-OSS supports explicit `low`, `medium` and `high` reasoning effort through the
+  shared Bedrock serializer; the Hello World generation slot and judge select `low`.
 
-Every generation call and both evaluator providers use the engine's short
-[universal JSON framing instruction](../decisions/0014-universal-response-format-guidance.md).
-The serializer emits it once, including retries; workflow templates retain only
-task-specific guidance. The actual emitted instruction is retained in each
-call's `request.json`. Closed schemas and strict response validation remain
-independent of whether the model follows that instruction.
+- Every generation call and both evaluator providers use the engine's short [universal
+  JSON framing instruction](../decisions/0014-universal-response-format-guidance.md).
+- The serializer emits it once, including retries; workflow templates retain only
+  task-specific guidance.
+- The actual emitted instruction is retained in each call's `request.json`.
+- Closed schemas and strict response validation remain independent of whether the model
+  follows that instruction.
 
-The Hello World case runs `spec-generation` with `--feature hello-world
---reference hello-world`. It exercises Specify; Plan, Tasks and Implement need
-their own workflow cases. The copied resources are declared test inputs, not
-production source-tree fallbacks. Changes to the reference, including its UTC
-date/time requirement, are captured directly for both engine and judge.
+- The Hello World case runs `spec-generation` with `--feature hello-world --reference
+  hello-world`.
+- It exercises Specify; Plan, Tasks and Implement need their own workflow cases.
+- The copied resources are declared test inputs, not production source-tree fallbacks.
+- Changes to the reference, including its UTC date/time requirement, are captured
+  directly for both engine and judge.
 
 ## Case and publication contract
 
-The closed `spec-e2e-case/v1` declares workflow/feature/reference selection,
-configuration, explicit file mappings, empty directories, all four expected
-artifact kinds, `evaluation_case` and `evaluation_config`. The evaluation case
-names source documents and a rubric. Every selected reference must map exactly
-once to an evaluation source. Unknown or duplicate fields, unsafe paths,
-symlinks, destination collisions and pre-seeded feature output reject.
-Scripted provider responses and expected specifications are not case inputs.
+- The closed `spec-e2e-case/v1` declares workflow/feature/reference selection,
+  configuration, explicit file mappings, empty directories, all four expected artifact
+  kinds, `evaluation_case` and `evaluation_config`.
+- The evaluation case names source documents and a rubric.
+- Every selected reference must map exactly once to an evaluation source.
+- Unknown or duplicate fields, unsafe paths, symlinks, destination collisions and
+  pre-seeded feature output reject.
+- Scripted provider responses and expected specifications are not case inputs.
 
-The harness requires an `ok` workflow outcome, runner-observed publication and
-all four readable, nonempty artifacts: specification, reference context,
-clarification state and workflow state. Each file must match the bytes prepared
-for that publication. This checks artifact identity, not semantic quality. A
-stale file, partial publication or in-memory candidate cannot satisfy the check.
-Only the engine's registered writer publishes output; the harness never exports
-or renders candidates to manufacture a specification.
+- The harness requires an `ok` workflow outcome, runner-observed publication and all
+  four readable, nonempty artifacts: specification, reference context, clarification
+  state and workflow state.
+- Each file must match the bytes prepared for that publication.
+- This checks artifact identity, not semantic quality.
+- A stale file, partial publication or in-memory candidate cannot satisfy the check.
+- Only the engine's registered writer publishes output; the harness never exports or
+  renders candidates to manufacture a specification.
 
-The rubric assesses semantic quality. A readable poor specification is passed
-unchanged to the judge after the engine's own gates accept it. There is no
-harness semantic prefilter or retry-until-good loop. Scores do not alter workflow
-state, resolve clarifications or authorize publication. Rubric revision 2 includes the user-added UTC date/time requirement and remains
-an uncalibrated draft; mechanical validation of a judgment is not proof that its
-semantic assessment is correct.
+- The rubric assesses semantic quality.
+- A readable poor specification is passed unchanged to the judge after the engine's own
+  gates accept it.
+- There is no harness semantic prefilter or retry-until-good loop.
+- Scores do not alter workflow state, resolve clarifications or authorize publication.
+- Rubric revision 2 includes the user-added UTC date/time requirement and remains an
+  uncalibrated draft; mechanical validation of a judgment is not proof that its semantic
+  assessment is correct.
 
 ## Retained results
 
@@ -109,368 +160,212 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
     ...declared inputs and actual engine output...
 ```
 
-The timestamp uses `YYYY-MM-DDTHH-MM-SSZ`; the unique suffix separates concurrent
-runs. Output paths come from validated project configuration. Reports are
-reserved before API calls. Captured inputs and the isolated project are retained
-on failure; input capture failures can leave only the case and failure report.
-Known test credentials are redacted from captured bodies; authorization headers
-and environment maps are excluded. Captured bodies are untrusted diagnostic
-data, not workflow authority. Evidence files are created exclusively with
-owner-only access and flushed as each exchange is observed. Every attempt gets
-its own directory; a retry cannot overwrite the rejected response.
+- The timestamp uses `YYYY-MM-DDTHH-MM-SSZ`; the unique suffix separates concurrent
+  runs.
+- Output paths come from validated project configuration.
+- Reports are reserved before API calls.
+- Captured inputs and the isolated project are retained on failure; input capture
+  failures can leave only the case and failure report.
+- Known test credentials are redacted from captured bodies; authorization headers and
+  environment maps are excluded.
+- Captured bodies are untrusted diagnostic data, not workflow authority.
+- Evidence files are created exclusively with owner-only access and flushed as each
+  exchange is observed.
+- Every attempt gets its own directory; a retry cannot overwrite the rejected response.
 
-No response file is invented when the transport did not return a body, and no
-final-text file is invented for an unavailable or rejected provider result.
-Interruption, incomplete network reads, allocation failure or a failed evidence
-write can leave incomplete artifacts. Evidence write failures fail the E2E run;
-they cannot produce a successful quality result. Normal engine feature logging
-retains its separate configured capture and redaction policy.
+- No response file is invented when the transport did not return a body, and no
+  final-text file is invented for an unavailable or rejected provider result.
+- Interruption, incomplete network reads, allocation failure or a failed evidence write
+  can leave incomplete artifacts.
+- Evidence write failures fail the E2E run; they cannot produce a successful quality
+  result.
+- Normal engine feature logging retains its separate configured capture and redaction
+  policy.
 
-Reports preserve execution identity, engine outcome, selected generation models
-by slot, accounted usage, publication checks and separate provider/model
-rejections. Completed evaluations also retain exact source/spec/rubric bytes,
-judge configuration, attempts, criterion judgments, evidence and aggregate score.
-Source changes during execution fail the run without modifying retained inputs.
+- Reports preserve execution identity, engine outcome, selected generation models by
+  slot, accounted usage, publication checks and separate provider/model rejections.
+- Completed evaluations also retain exact source/spec/rubric bytes, judge configuration,
+  attempts, criterion judgments, evidence and aggregate score.
+- Source changes during execution fail the run without modifying retained inputs.
 
-For malformed model JSON, the shared engine decoder retains the native parser
-reason and available byte offset, line and column. The same diagnostic reaches
-the workflow's protocol retry, `events.jsonl`, both reports and terminal output.
-When the runner exhausts a configured retry limit, those outputs also retain
-`retry_error`: the owning operation instance, configured retry limit and
-completed execution count. The original JSON/schema diagnostic remains
-separate, so the response defect and the reason continuation stopped are both
-visible.
-Offsets are zero-based; lines and columns are one-based. These are parser cursor
-positions, not inferred field names. The terminal links to the retained model
-text and event stream. See the [prompt and response flow](../diagrams/17-model-prompt-response-flow.md)
-for the instructions actually sent to the model.
+- For malformed model JSON, the shared engine decoder retains the native parser reason
+  and available byte offset, line and column.
+- The same diagnostic reaches the workflow's protocol retry, `events.jsonl`, both
+  reports and terminal output.
+- When the runner exhausts a configured retry limit, those outputs also retain
+  `retry_error`: the owning operation instance, configured retry limit and completed
+  execution count.
+- The original JSON/schema diagnostic remains separate, so the response defect and the
+  reason continuation stopped are both visible.
+- Offsets are zero-based; lines and columns are one-based.
+- These are parser cursor positions, not inferred field names.
+- The terminal links to the retained model text and event stream.
+- See the [prompt and response flow](../diagrams/17-model-prompt-response-flow.md) for
+  the instructions actually sent to the model.
 
-Schema failures retain `schema_error.reason` and `schema_error.path`, an escaped
-JSON Pointer (for example `/statements/0/content/kind`), in the same event,
-report and terminal outputs. The engine's validator supplies this diagnostic;
-the harness does not infer or revalidate it. Protocol retries include the full
-rejected response as untrusted evidence and the original complete schema.
-Schema corrections add the exact expected schema node, its JSON Pointer and
-parent/value scope, including bounds and alternatives. Syntax corrections add
-the decoder diagnostic. Duplicate-member corrections also include the native
-decoder's brief explanation of property-name uniqueness within one object,
-without inferring record boundaries or choosing which value survives. Neither
-correction path synthesizes a candidate example.
+- Schema failures retain `schema_error.reason` and `schema_error.path`, an escaped JSON
+  Pointer (for example `/statements/0/content/kind`), in the same event, report and
+  terminal outputs.
+- The engine's validator supplies this diagnostic; the harness does not infer or
+  revalidate it.
+- Protocol retries include the full rejected response as untrusted evidence and the
+  original complete schema.
+- Schema corrections add the exact expected schema node, its JSON Pointer and
+  parent/value scope, including bounds and alternatives.
+- Syntax corrections add the decoder diagnostic.
+- Duplicate-member corrections also include the native decoder's brief explanation of
+  property-name uniqueness within one object, without inferring record boundaries or
+  choosing which value survives.
+- Neither correction path synthesizes a candidate example.
 
-`evaluated` and exit 0 mean generation, publication checks and a scored evaluation
-completed. A low score is still a completed evaluation; inspect `score_percent`
-and the separately reported threshold result. No quality threshold has been
-adopted by the draft rubric. Workflow failure, clarification, cancellation,
-missing/changed output, evaluator error and unresolved quality produce nonzero
-exit status. Evaluator failure preserves a successfully published specification.
+- `evaluated` and exit 0 mean generation, publication checks and a scored evaluation
+  completed.
+- A low score is still a completed evaluation; inspect `score_percent` and the
+  separately reported threshold result.
+- No quality threshold has been adopted by the draft rubric.
+- Workflow failure, clarification, cancellation, missing/changed output, evaluator error
+  and unresolved quality produce nonzero exit status.
+- Evaluator failure preserves a successfully published specification.
 
 The terminal prints the score and threshold result explicitly.
 
-Source-selection failures retain their scope, candidate revision, claim/citation
-indices, rejected selection, admissible range and producing request/attempt.
-`candidate_model_call`, `candidate_model_step` and `candidate_model_output` join
-that origin to the captured call, even after the request has been released.
-They can differ from `last_model_*`. Repair preserves untouched siblings' origins.
-The event stream and terminal consume the engine diagnostic; they do not infer
-the cause or reparse the response. Unknown, missing and reversed selections use
-the existing atomic replacement path; stale source authority cannot enter it.
+- Source-selection failures retain their scope, candidate revision, claim/citation
+  indices, rejected selection, admissible range and producing request/attempt.
+- `candidate_model_call`, `candidate_model_step` and `candidate_model_output` join that
+  origin to the captured call, even after the request has been released.
+- They can differ from `last_model_*`.
+- Repair preserves untouched siblings' origins.
+- The event stream and terminal consume the engine diagnostic; they do not infer the
+  cause or reparse the response.
+- Unknown, missing and reversed selections use the existing atomic replacement path;
+  stale source authority cannot enter it.
 
-Reconciliation failures retain their partition, affected record/collection, rule,
-observed/expected constraint, revision and origin. Specification failures retain
-the native field/record failure before repair authorization. Both reach the same
-`candidate_error` projection. Authorizers consume retained native rejections,
-check owner/revision/origin/old-value association and never rediscover domain rules.
-Reconciliation rejection currently terminates as `invalid`; later rollout phases
-add its authorized correction path.
+- Reconciliation failures retain their partition, affected record/collection, rule,
+  observed/expected constraint, revision and origin.
+- Specification failures retain the native field/record failure before repair
+  authorization.
+- Both reach the same `candidate_error` projection.
+- Authorizers consume retained native rejections, check owner/revision/origin/old-value
+  association and never rediscover domain rules.
+- Reconciliation rejection currently terminates as `invalid`; later rollout phases add
+  its authorized correction path.
 
-Step events place actual-call identity, output and token usage in `exchange`,
-and rejected-candidate identity/output in `candidate_source`. A candidate can
-come from an older call. Missing, ambiguous or foreign joins fail evidence
-capture. Reports retain `terminal_step` and the typed `terminal_rejection`
-independently of `last_model_*`; unavailable output text is stated explicitly.
-These are opt-in harness diagnostics. Production metadata logging does not gain
-raw prompts, source text or candidate values.
+- Step events place actual-call identity, output and token usage in `exchange`, and
+  rejected-candidate identity/output in `candidate_source`.
+- A candidate can come from an older call.
+- Missing, ambiguous or foreign joins fail evidence capture.
+- Reports retain `terminal_step` and the typed `terminal_rejection` independently of
+  `last_model_*`; unavailable output text is stated explicitly.
+- These are opt-in harness diagnostics.
+- Production metadata logging does not gain raw prompts, source text or candidate
+  values.
 
-For reliability assessment, repeat the same selected case using
-`scripts/e2e-spec.sh --case <workflow.case.json>` with a fixed engine build,
-captured case/workflow inputs, model settings and rubric/evaluator configuration.
-Retain every run and compare completion rate, first-pass and post-repair
-acceptance, typed failure categories, criterion scores, threshold results, and
-total usage including failed attempts. Report evaluator failures separately.
-Different cases/models need separate results before aggregation. Mechanical
-tests establish contracts; repeated live completion and acceptable published
-output are separate evidence. A few successful runs do not establish reliability
-across unimplemented workflows or unseen inputs.
+### Reliability assessment
 
-## Verification
-
-- `zig build test-e2e-launcher --summary all` verifies local environment loading,
-  help without credentials, invocation from another directory, argument forwarding
-  and failure exit status without provider calls.
-- `zig build test-e2e-harness test-rubric-evaluator --summary all` checks harness
-  and judge mechanics offline. Those results are unit/integration evidence.
-- `zig build smoke-e2e-harness --summary all` checks the standalone executable's
-  startup and mandatory case selection in a clean directory without credentials.
-- `zig build verify --summary all` includes mechanical tests, lint, architecture
-  and native packaging checks. It does not launch live E2E cases.
-- `zig build e2e-spec -- --case ...` runs live generation and grading. Only its
-  retained results establish what happened in that E2E execution.
-- `zig build evaluate-spec -- ... --live` separately grades a supplied file;
-  it does not establish engine generation. See [evaluator.md](evaluator.md).
-
-Human rubric calibration and broader workflow/rerun/failure acceptance remain
-tracked in [H-016 and H-017](03-harness-verification.md). Earlier reports based
-on scripted generation or golden comparison are not live E2E evidence.
-
-## Source selection verification — 2026-09-12
-
-The source-selection implementation passed `zig build verify --summary all`
-(1,338 tests, lint, architecture and native packaging). Regression coverage
-includes lossless Unicode/line-ending/chunk handling, invalid and stale IDs,
-one-citation and missing-collection repair, unchanged siblings, revision/owner
-rejection, repair exhaustion and producing-call attribution after release.
-These are mechanical results, not evidence of generated specification quality.
-
-Live repetitions used
-`scripts/e2e-spec.sh --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json`
-with the case's configured Bedrock GPT-OSS 20B and unchanged judge settings.
-All four network-enabled executions failed before publication; none reached
-rubric grading. The preceding sandboxed attempt failed at transport.
-
-| Run ID | Observed terminal failure |
-| --- | --- |
-| `2026-09-12T04-59-59Z-70b418738fdd3b609f4647f5bfd2fd64` | Sandboxed transport failure; excluded from the four network-enabled runs. |
-| `2026-09-12T06-16-42Z-86de88bd36020b09665fe871e65a9e17` | Extraction and canonical citations accepted; cross-source reconciliation exhausted protocol retry with missing `/statements/0/content/kind`. |
-| `2026-09-12T06-20-14Z-b2cdace9b811cc76956af8d5f3e3349b` | Extraction exhausted protocol retry with unknown `/token_classifications/0/preserve/ordinal`. |
-| `2026-09-12T06-22-24Z-949a18b95dda68405c5c4cd964098d22` | Provider `response_invalid`; exact provider-body defect was not established. |
-| `2026-09-12T06-25-53Z-83729e2001f8267b033c68053557ae6c` | Extraction repeated the unknown `preserve/ordinal` field; 2 accounted calls, 6,395 tokens, complete usage, no published output or grade. |
-
-The first four directories disappeared during inspection; the cause was not
-established. Their terminal outcomes above remain observed results, but their
-missing raw artifacts cannot be claimed as retained evidence. The final run
-was also copied to `/private/tmp/sdde-source-selection-live/` during inspection.
-Both of its calls retain context, request, response, final text and outcome;
-each final text was checked byte-for-byte against its provider response.
-`capture-audit.json` in that temporary directory records hashes and checks.
-
-This batch establishes failure visibility and one live passage through source
-selection. It does **not** demonstrate reliable completion, live citation
-repair, or acceptable published output. The existing model/schema failures
-remain unresolved; the shared validators and rubric were not weakened.
-
-## Provider normalization discovered by live execution
-
-The first network-enabled run on 2026-09-11 failed with `response_invalid` on
-`g2-ex-assign`. A separate small Bedrock diagnostic request returned HTTP 200
-with empty `usage.serverToolUsage` and a reasoning block plus final text.
-The shared provider decoder now validates those metadata shapes and keeps only
-the single final text block as candidate data. It continues to reject missing
-or multiple text results, malformed/unknown fields and nonempty server-tool
-usage. Both generation and grading use this decoder. The diagnostic request is
-provider evidence only; it is not substituted for a workflow or rubric result.
-
-The reasoning shape follows [AWS ReasoningContentBlock](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ReasoningContentBlock.html).
-The empty server-tool usage shape was observed in the live service response.
-No reasoning narrative is imported as workflow data. A captured raw provider
-response can contain provider reasoning blocks; these remain diagnostic data.
-
-## Live evidence — 2026-09-11
-
-The live development command is:
-
-```sh
-./scripts/e2e-spec.sh
-```
-
-Both generation configuration and judge settings select Bedrock GPT-OSS 20B in
-`ap-southeast-2`. The locally retained runs inspected for this change are:
-
-| Run directory under `zig-out/e2e-spec/` | Result | Calls | Accounted tokens |
-| --- | --- | --- | --- |
-| `2026-09-11T21-45-21Z-4c93154c4ab8b29e0be305b2a95d9ed3` | `workflow_failed`; `InvalidModelEnvelope` at extraction; raw responses were not saved | 2 | 6,536 |
-| `2026-09-11T22-10-04Z-d6dd90e6d157886ea40552316c800245` | `workflow_failed`; `SyntaxError` at byte 0, line 1, column 1; both responses contained Markdown fences | 2 | 6,808 |
-
-The older run's exact JSON defect cannot be recovered from its saved report.
-Do not attribute the newer run's diagnosed cause to it.
-
-The newer run retains request context, wire request, wire response, final text
-and transport outcome for both attempts, plus 67 step events. Each saved final
-text was compared byte-for-byte with the final text in its saved provider body;
-both start with a Markdown JSON fence. The parser rejected the first backtick.
-The terminal and report show the same native parser reason and location. No
-response was stripped or repaired by the harness.
-
-It published no specification and has `semantic_quality: not_evaluated`.
-**Successful generation followed by a live rubric grade remains unverified.**
-The new run proves live failure capture, not completed generation or quality.
-
-## Universal response guidance — 2026-09-12
-
-After adding [ADR 0014's universal instruction](../decisions/0014-universal-response-format-guidance.md),
-`./scripts/e2e-spec.sh` produced run
-`2026-09-11T22-37-01Z-22b097899e82c70bca7be7cb19b78bf8`.
-Both saved requests contain the shared framing instruction exactly once.
-Both saved final texts match their provider response bodies and begin directly
-with a JSON object; neither contains a Markdown fence.
-
-The run still failed after two calls and 6,760 accounted tokens. The initial
-response passed JSON syntax but required a schema retry. The retry ended with
-`"token_classifications":[]"}`: an extra quote follows the closing array.
-The engine reported `SyntaxError` at byte offset 980, line 1, column 981;
-the complete response and diagnostic remain in the run's evidence and reports.
-No specification was published and no rubric grade was produced. This verifies
-the actual emitted instruction and observed fence-free responses, not reliable
-model compliance or completed E2E generation.
+- For reliability assessment, repeat the same selected case using `scripts/e2e-spec.sh
+  --case <workflow.case.json>` with a fixed engine build, captured case/workflow inputs,
+  model settings and rubric/evaluator configuration.
+- Retain every run and compare completion rate, first-pass and post-repair acceptance,
+  typed failure categories, criterion scores, threshold results, and total usage
+  including failed attempts.
+- Report evaluator failures separately.
+- Different cases/models need separate results before aggregation.
+- Mechanical tests establish contracts; repeated live completion and acceptable
+  published output are separate evidence.
+- A few successful runs do not establish reliability across unimplemented workflows or
+  unseen inputs.
 
 ## Candidate validation and atomic repair
 
-`candidate_error` records the native validator's structured diagnostic independently
-of JSON/schema errors and independently of whether the model request has already
-been released. For classification rejection it contains the chunk scope, revision,
-affected field, and all missing, duplicate, unknown and forbidden candidate IDs.
-Terminal output, `report.json`, `report.md` and `events.jsonl` project the same
-retained evidence. Successful repairs clear current rejection data; earlier step
-events remain available.
+- `candidate_error` records the native validator's structured diagnostic independently
+  of JSON/schema errors and independently of whether the model request has already been
+  released.
+- For classification rejection it contains the chunk scope, revision, affected field,
+  and all missing, duplicate, unknown and forbidden candidate IDs.
+- Terminal output, `report.json`, `report.md` and `events.jsonl` project the same
+  retained evidence.
+- Successful repairs clear current rejection data; earlier step events remain available.
 
-Classification and specification repairs use the normal live provider path.
-Each attempt retains its request, context, provider response, final text and
-transport outcome like generation. The harness neither invents classifications
-nor rewrites responses. A repaired candidate must pass native validation before
-publication, and only the published output can receive a rubric grade. Unit tests
-of repair contracts and fake-provider integration tests are not live E2E evidence.
+- Classification and specification repairs use the normal live provider path.
+- Each attempt retains its request, context, provider response, final text and transport
+  outcome like generation.
+- The harness neither invents classifications nor rewrites responses.
+- A repaired candidate must pass native validation before publication, and only the
+  published output can receive a rubric grade.
+- Unit tests of repair contracts and fake-provider integration tests are not live E2E
+  evidence.
 
-## Mechanical verification — 2026-09-12
+## Verification
 
-- `zig build test-provider-conformance test-model-envelope test-model-payload-schema test-rubric-evaluator --summary all`
-  — 12/12 steps; 142/142 tests passed, including universal framing in both
-  response modes, initial calls, retries, counting and both judge providers;
-  strict malformed-JSON rejection remains covered.
-- `zig build verify --summary all`
-  — 120/120 steps; 1,322/1,322 tests passed, including lint, architecture,
-  standalone harness/evaluator smoke and clean native engine packaging.
-- `git diff HEAD --check` — passed. Local links in the edited harness documentation
-  resolve; obsolete scripted-generation and expected-specification fixtures
-  are absent. The user's source change is preserved.
+- `zig build test-e2e-launcher --summary all` verifies local environment loading, help
+  without credentials, invocation from another directory, argument forwarding and
+  failure exit status without provider calls.
+- `zig build test-e2e-harness test-rubric-evaluator --summary all` checks harness and
+  judge mechanics offline.
+- Those results are unit/integration evidence.
+- `zig build smoke-e2e-harness --summary all` checks the standalone executable's startup
+  and mandatory case selection in a clean directory without credentials.
+- `zig build verify --summary all` includes mechanical tests, lint, architecture and
+  native packaging checks.
+- It does not launch live E2E cases.
+- `zig build e2e-spec -- --case ...` runs live generation and grading.
+- Only its retained results establish what happened in that E2E execution.
+- `zig build evaluate-spec -- ... --live` separately grades a supplied file; it does not
+  establish engine generation.
+- See [evaluator.md](evaluator.md).
 
-These are mechanical checks and do not replace the unmet live result above.
+- Human rubric calibration and broader workflow/rerun/failure acceptance remain tracked
+  in [H-016 and H-017](03-harness-verification.md).
+- Earlier reports based on scripted generation or golden comparison are not live E2E
+  evidence.
 
-## Shared atomic-repair verification — 2026-09-12
+## Historical verification records
 
-`zig build verify --summary all` passed 120/120 steps and 1,325/1,325 tests,
-including native packaging smoke tests. Regression cases cover classification
-repair through publication, malformed replacement retry, exhaustion without
-publication, unchanged claims/other chunks, stale revisions, foreign request
-associations and source-authority changes after repair. These are mechanical
-unit/integration results, including fake-provider cases.
+- Dated commands, results, failure analyses and run tables are retained in [E2E
+  verification history](e2e-verification-history.md).
+- They do not establish current verification or successful generation and grading.
+- Active work remains in [FIX_001](../../fixes/TODO_FIX_001.md).
 
-The live `./scripts/e2e-spec.sh` run
-`2026-09-12T00-16-32Z-4d08e91382e3f11752d8f0713cf7550f` failed before classification
-validation: its first response has an extra closing brace at byte 890, and the
-protocol retry adds an unknown `ordinal` field inside
-`token_classifications[0].preserve`. Two calls used 6,627 tokens. Both calls retain
-all five evidence files; saved model text matches the provider body byte-for-byte,
-and 67 step events are retained. No specification was published or graded.
-That run did not reach the classification-repair branch.
+<a id="source-selection-verification--2026-09-12"></a>
 
-## Shared model-input and protocol-retry verification — 2026-09-12
+- [Source selection verification —
+  2026-09-12](e2e-verification-history.md#source-selection-verification--2026-09-12).
 
-`zig build verify --summary all` passed 120/120 steps and 1,329/1,329 tests,
-including architecture checks and clean native packaging. Regression coverage
-includes the reported reconciliation response shapes, all reference content
-kinds, nested schema paths, unknown-field rejection, schema-derived examples,
-exact retry evidence, request association and allocation-failure cleanup.
-`git diff HEAD --check` passed.
+<a id="provider-normalization-discovered-by-live-execution"></a>
 
-The live `./scripts/e2e-spec.sh` run
-`2026-09-12T01-05-47Z-53b5927d74935d8407dddfb857e12230` failed during extraction.
-Both responses contain an undeclared field at
-`/token_classifications/0/preserve/ordinal`. The second request retains the
-first response exactly, reports that path, and provides the expected containing
-object at `/token_classifications/0/preserve` from the original schema. The
-model repeated the error and the existing protocol retry exhausted.
+- [Provider normalization discovered by live
+  execution](e2e-verification-history.md#provider-normalization-discovered-by-live-execution).
 
-Two calls used 6,970 tokens. Both calls retain request, context, provider response,
-model text and outcome files; 67 step events and both reports are present.
-The exact schema error also appears in terminal output. No specification was
-published or graded. This run verifies live diagnostic/retry evidence, but
-does not demonstrate successful reconciliation, publication or rubric evaluation.
+<a id="live-evidence--2026-09-11"></a>
 
-## Protocol retry ownership verification — 2026-09-12
+- [Live evidence — 2026-09-11](e2e-verification-history.md#live-evidence--2026-09-11).
 
-Protocol correction now uses the existing attempt-accounting limit and global
-token budget; the builder's separate one-visit limit and YAML parameter are
-removed. Each correction contains the retained original inputs plus only the
-latest rejection. Runner exhaustion is terminal and reports its compiled owner,
-limit and execution count. The E2E observer retains the latest call's protocol
-diagnostic across transport retirement, and supersedes it on the next call.
-These are diagnostic projections, not additional workflow authority.
+<a id="universal-response-guidance--2026-09-12"></a>
 
-Validation kept caches and temporary projects inside this checkout:
+- [Universal response guidance —
+  2026-09-12](e2e-verification-history.md#universal-response-guidance--2026-09-12).
 
-```sh
-TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg test-e2e-harness --summary all
-TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg test-atomic-execution --summary all
-TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg verify --summary all
-git diff --check
-```
+<a id="mechanical-verification--2026-09-12"></a>
 
-Final verification passed **120/120 steps and 1,340/1,340 tests**, including
-architecture checks and clean native packaging. Focused results were 30 payload
-schema tests, 173 request-workflow tests, 385 harness/native integration tests,
-and 121 atomic-execution tests. Regressions cover two consecutive syntax/schema
-corrections for multiple logical requests through the same extraction,
-reconciliation and generation steps; stable original input content; exact latest
-rejection content; exhaustion without an extra call or a YAML success escape;
-and retained diagnostic ownership after transport/observer teardown.
+- [Mechanical verification —
+  2026-09-12](e2e-verification-history.md#mechanical-verification--2026-09-12).
 
-Three live executions used the unchanged case configuration and `.env.e2e`:
+<a id="shared-atomic-repair-verification--2026-09-12"></a>
 
-```sh
-. ./.env.e2e
-TMPDIR="$PWD/.zig-cache/tmp" zig build --global-cache-dir .zig-cache/global --system zig-pkg e2e-spec -- --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json
-```
+- [Shared atomic-repair verification —
+  2026-09-12](e2e-verification-history.md#shared-atomic-repair-verification--2026-09-12).
 
-| Run/report | Calls / tokens | Observed result |
-| --- | --- | --- |
-| [07:15:23](../../zig-out/e2e-spec/2026-09-12T07-15-23Z-303ef1477f7d2f99830da358340360a6/report.md) | 5 / 15,589 | Global reconciliation passed JSON/schema checks, then `validate-dispositions` rejected nine dispositions repeating three claim IDs. |
-| [07:17:26](../../zig-out/e2e-spec/2026-09-12T07-17-26Z-bb25aaba8067146972d5263d3a1e7b3f/report.md) | 8 / 23,452 | Extraction and cross-source reconciliation each recovered on attempt three. Correction content remained five blocks. Global reconciliation then returned retained claims with no signals; `validate-signals` rejected it. |
-| [07:19:15](../../zig-out/e2e-spec/2026-09-12T07-19-15Z-109238cbc03e18934bb6e66361097d3c/report.md) | 4 / 8,638 | Repeated duplicate token classifications exhausted `g17-extraction-repair-account`, configured limit 1, completed executions 2. Terminal output, events and reports retain that owner/count and the candidate diagnostic's producing call. |
+<a id="shared-model-input-and-protocol-retry-verification--2026-09-12"></a>
 
-The runs retain 158, 192 and 125 step events respectively, both reports, and all
-five evidence files for each returned call. The earlier sandbox-restricted
-attempt at 07:14:13 is separately retained with `transport_failed`; it is not
-live model-quality evidence.
+- [Shared model-input and protocol-retry verification —
+  2026-09-12](e2e-verification-history.md#shared-model-input-and-protocol-retry-verification--2026-09-12).
 
-No live run published a specification or reached rubric grading. The retry
-defect is remedied, but reliable completion and output quality remain unmet.
-Reconciliation's domain failures still surface as generic `failed` in reports;
-the specific violations above were diagnosed from saved responses and their
-canonical validators. They need shared typed diagnostics and authorized semantic
-repair, rather than additional JSON retries or weaker validation.
+<a id="protocol-retry-ownership-verification--2026-09-12"></a>
 
-Native generation constraints derive from the engine's compiled result schema;
-complete bounds and semantic checks remain mandatory. Each captured call records
-its response mode and actual wire request. JSON diagnostics include container
-paths, active keys and duplicate-key occurrence locations; reports and protocol
-corrections reuse this shared diagnostic. Compare retained runs using initial
-JSON/schema acceptance, retries, token use, publication and rubric outcomes.
-A structurally valid response alone does not satisfy E2E quality acceptance.
+- [Protocol retry ownership verification —
+  2026-09-12](e2e-verification-history.md#protocol-retry-ownership-verification--2026-09-12).
 
-See the [2026-09-12 JSON quality verification](04-json-quality-2026-09-12.md)
-for all retained run outcomes and the current native-mode activation limitation.
+<a id="fix_001-phase-2--proposal-boundaries"></a>
 
-## FIX_001 Phase 2 — proposal boundaries
-
-Model responses now select evidence; the engine constructs summary lineage and
-aggregate citation unions. Canonical records and input evidence retain complete
-provenance. Generation, repair and support use the reduced selection shape;
-legacy echo fields reject. Tagged dispositions expose only the relevant
-relationships, with concise guidance from the native constraint owner.
-
-The [Phase 2 delivery record](../../fixes/TODO_FIX_001.md#phase-2-delivery-and-verification--13-september-2026)
-contains exact commands: 408/408 targeted tests and full offline verification
-with 120/120 steps and 1,374/1,374 tests, including clean native packaging.
-No live E2E run was performed for
-this phase. Existing reports remain historical evidence; live convergence,
-publication and rubric quality remain unproven. Phase 3 owns the outstanding
-semantic repair paths, and every live run still requires explicit approval.
+- [FIX_001 Phase 2 — proposal
+  boundaries](e2e-verification-history.md#fix_001-phase-2--proposal-boundaries).

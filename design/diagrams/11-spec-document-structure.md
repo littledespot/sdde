@@ -18,11 +18,7 @@ flowchart TB
     REQUIREMENTS --> ENTITIES["Key Entities<br/>Included when the feature involves business data"]
 ```
 
-The engine renders [F0100 §5.1's hierarchy](../features/F0100-SpecWorkflow.md#51-ownership-and-hierarchy)
-in order and assigns record identities. Acceptance criteria and functional
-requirements need supported content. Empty optional families and an empty scope
-group are omitted; missing mandatory content remains a shared authority gap.
-Missing required knowledge goes into `clarify/SNN.md`, never an `Open Questions` specification section.
-Technical reference context is recorded separately in `reference-context.md`.
-This diagram describes structure, not deterministic proof of semantic quality;
-the native content/view contract is recorded in F0100 §5.6.
+[F0100 §5](../features/F0100-SpecWorkflow.md#5-specmd-projection-contract)
+owns hierarchy, record IDs, mandatory content and optional-section omission.
+Questions belong in `clarify/SNN.md`; technical detail belongs in
+`reference-context.md`. Structure alone does not prove semantic quality.

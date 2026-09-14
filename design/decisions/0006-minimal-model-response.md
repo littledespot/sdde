@@ -13,27 +13,31 @@
 
 ## Decision
 
-`model-envelope/v1` names the engine's response-binding protocol, not a field
-the model must reproduce. The model returns **one closed JSON result object**
-conforming to the exact workflow-declared result schema. That object is the
-whole model-visible response: no universal `result`, `payload` or `data`
-wrapper, protocol-version field, or echoed execution metadata.
+- `model-envelope/v1` names the engine's response-binding protocol, not a field the
+  model must reproduce.
+- The model returns **one closed JSON result object** conforming to the exact
+  workflow-declared result schema.
+- That object is the whole model-visible response: no universal `result`, `payload` or
+  `data` wrapper, protocol-version field, or echoed execution metadata.
 
 The compiled request selects exactly one shape:
 
-- **One result variant:** return its declared candidate fields directly. Do
-  not add a constant result-kind discriminator that the engine already knows.
+- **One result variant:** return its declared candidate fields directly.
+- Do not add a constant result-kind discriminator that the engine already knows.
 - **Multiple result variants:** use one required root `kind` with distinct
-  schema-declared literal values, plus that variant's fields directly. Each
-  variant is a closed object; unknown kinds, mixed variants and extra fields
-  reject. This is schema specialization, not two readers or an optional mode
-  selected by the response.
+  schema-declared literal values, plus that variant's fields directly.
+- Each variant is a closed object; unknown kinds, mixed variants and extra fields
+  reject.
+- This is schema specialization, not two readers or an optional mode selected by the
+  response.
 
-Nested domain unions may retain their own necessary discriminators. No common
-wrapper is inserted around them. Generation, clarification, context selection
-and repair use this same rule; their allowed variants still come only from the
-selected generic operation and YAML-declared schema. A discriminator classifies
-candidate data, never chooses a node, retry, tool, approval or completion.
+- Nested domain unions may retain their own necessary discriminators.
+- No common wrapper is inserted around them.
+- Generation, clarification, context selection and repair use this same rule; their
+  allowed variants still come only from the selected generic operation and YAML-declared
+  schema.
+- A discriminator classifies candidate data, never chooses a node, retry, tool, approval
+  or completion.
 
 For example, a single-target replacement response is simply:
 
@@ -41,110 +45,139 @@ For example, a single-target replacement response is simply:
 {"replacement":"src/components/LoginForm.tsx"}
 ```
 
-The authorization, expected revision, diagnostic, target and old-value
-precondition are retained by the engine; the string grants no write authority.
+- The authorization, expected revision, diagnostic, target and old-value precondition
+  are retained by the engine; the string grants no write authority.
 
 ## Information ownership
 
-The runner retains the protocol version and exact request, attempt, provider
-operation, workflow operation, unit, model binding, model-visible-input and
-result-schema identities. Repair authorization and candidate revision remain
-in that request's existing trusted context. Reuse those immutable authorities;
-do not introduce a second correlation registry or a model-owned copy.
+### Correlation and validation owners
 
-Before decoding, the engine validates the observation's association with the
-exact invoked operation and current lifecycle. The decoded candidate retains
-that association through validation, repair and commit. Unknown, stale or
-foreign observations reject; they cannot be assigned to the latest request,
-matched by arrival order, or correlated from model text. Losing the trusted
-association loses the result; an echoed identifier cannot restore it.
+- The runner retains the protocol version and exact request, attempt, provider
+  operation, workflow operation, unit, model binding, model-visible-input and
+  result-schema identities.
+- Repair authorization and candidate revision remain in that request's existing trusted
+  context.
+- Reuse those immutable authorities; do not introduce a second correlation registry or a
+  model-owned copy.
 
-`ValidateModelRequestBindingAction` owns pre-call request-ledger proof;
-`ValidateProviderInvocationObservationAction` owns post-call association and
-complete-result eligibility. `DecodeModelEnvelopeAction` parses the complete
-JSON object; `ValidateModelPayloadSchemaAction` validates its bound result
-schema. The proposed echo-checking `ValidateModelRequestIdentityAction` is
-removed, not retained as a second identity authority.
+- Before decoding, the engine validates the observation's association with the exact
+  invoked operation and current lifecycle.
+- The decoded candidate retains that association through validation, repair and commit.
+- Unknown, stale or foreign observations reject; they cannot be assigned to the latest
+  request, matched by arrival order, or correlated from model text.
+- Losing the trusted association loses the result; an echoed identifier cannot restore
+  it.
 
-Only data the model must supply or select belongs in its response: candidate
-values, required evidence/citations, selected allowed IDs and necessary domain
-discriminators. Preserve keyed multi-item association, such as repair
-`replacementsByTargetId`, and validate the exact authorized key set; array
-position is not a substitute. A fixed single target needs no echoed target ID.
-Clarification IDs, ownership and deduplication remain engine-owned, while any
-necessary subject selection and supporting evidence remain candidate data.
+- `ValidateModelRequestBindingAction` owns pre-call request-ledger proof;
+  `ValidateProviderInvocationObservationAction` owns post-call association and
+  complete-result eligibility.
+- `DecodeModelEnvelopeAction` parses the complete JSON object;
+  `ValidateModelPayloadSchemaAction` validates its bound result schema.
+- The proposed echo-checking `ValidateModelRequestIdentityAction` is removed, not
+  retained as a second identity authority.
 
-This is a semantic boundary, not a global ban on property names. A business
-schema may legitimately declare a field named `status` or `requestId`; that
-field never becomes engine status or request identity. Unrequested execution
-metadata and the superseded outer envelope reject as unknown fields.
+### Candidate fields and evidence
 
-Provider failure, cancellation, stopped output, usage and latency remain in
-F0006's separate typed observations. They are not model-generated result kinds.
-Repair operation selection, authorization/revision checks and old-value CAS
-remain mandatory even though their identities are not echoed.
-`ValidateRepairEnvelopeAction` checks the retained repair authorization,
-diagnostic and current candidate revision; it does not repeat generic
-provider-observation validation.
+- Only data the model must supply or select belongs in its response: candidate values,
+  required evidence/citations, selected allowed IDs and necessary domain discriminators.
+- Preserve keyed multi-item association, such as repair `replacementsByTargetId`, and
+  validate the exact authorized key set; array position is not a substitute.
+- A fixed single target needs no echoed target ID.
+- Clarification IDs, ownership and deduplication remain engine-owned, while any
+  necessary subject selection and supporting evidence remain candidate data.
+
+- This is a semantic boundary, not a global ban on property names.
+- A business schema may legitimately declare a field named `status` or `requestId`; that
+  field never becomes engine status or request identity.
+- Unrequested execution metadata and the superseded outer envelope reject as unknown
+  fields.
+
+### Provider and repair outcomes
+
+- Provider failure, cancellation, stopped output, usage and latency remain in F0006's
+  separate typed observations.
+- They are not model-generated result kinds.
+- Repair operation selection, authorization/revision checks and old-value CAS remain
+  mandatory even though their identities are not echoed.
+- `ValidateRepairEnvelopeAction` checks the retained repair authorization, diagnostic
+  and current candidate revision; it does not repeat generic provider-observation
+  validation.
 
 ## Schema, tokens and decoding
 
-The selected result schema describes the entire compact response, not an
-inner payload. Its exact captured resource and compiled contract determine the
-allowed properties, required values, variants and finite bounds. No open
-payload, model-selected schema, arbitrary executable validator or inferred
-undeclared variant is admitted. Unsupported schema features reject before invocation;
-this decision does not authorize a general-purpose JSON Schema engine.
+### One schema authority
 
-Schema/version selection stays in compiled authority. The 2026-09-12 amendment
-separates generation constraints from acceptance: native output mode receives
-a registered provider projection derived from the same compiled schema. It
-retains closed objects, required fields, types, enums and tagged alternatives.
-The Bedrock projection uses `anyOf` for the compiler-proven disjoint `oneOf`
-variants and retains supported array minima. Unsupported numeric, string and
-array bounds remain in the complete schema supplied as guidance and enforced
-by the unchanged engine validator. The projection is never acceptance authority.
-No workflow or model supplies a second schema, relaxes validation, silently
-switches response mode, coerces output or introduces a hidden retry.
+- The selected result schema describes the entire compact response, not an inner
+  payload.
+- Its exact captured resource and compiled contract determine the allowed properties,
+  required values, variants and finite bounds.
+- No open payload, model-selected schema, arbitrary executable validator or inferred
+  undeclared variant is admitted.
+- Unsupported schema features reject before invocation; this decision does not authorize
+  a general-purpose JSON Schema engine.
 
-This amendment is authorized by the user's instruction to implement shared
-provider-enforced output and actionable JSON diagnostics. It supersedes this
-ADR's former exact-provider-representability requirement and the corresponding
-wording in Design §12.3 and F0006. Native JSON/schema compliance establishes
-structure only; semantic support and completion retain their existing gates.
+- Schema/version selection stays in compiled authority.
+- The 2026-09-12 amendment separates generation constraints from acceptance: native
+  output mode receives a registered provider projection derived from the same compiled
+  schema.
+- It retains closed objects, required fields, types, enums and tagged alternatives.
+- The Bedrock projection uses `anyOf` for the compiler-proven disjoint `oneOf` variants
+  and retains supported array minima.
+- Unsupported numeric, string and array bounds remain in the complete schema supplied as
+  guidance and enforced by the unchanged engine validator.
+- The projection is never acceptance authority.
+- No workflow or model supplies a second schema, relaxes validation, silently switches
+  response mode, coerces output or introduces a hidden retry.
 
-Use concise meaningful field names, not opaque one-letter aliases or
-positional tuples. Do not request restated instructions, rules, evidence
-already bound to a fixed target, reasoning narratives or summaries unless the
-declared task actually requires that content. Model input includes only needed
-guidance, evidence, schema and explicitly declared examples; engine-only IDs
-are not automatically serialized. Reuse resource aliases in YAML. Avoid
-repeating schema/example text across prompt sections; any provider-required
-duplication must remain explicit and exactly accounted by F0006/F0007.
+- This amendment is authorized by the user's instruction to implement shared
+  provider-enforced output and actionable JSON diagnostics.
+- It supersedes this ADR's former exact-provider-representability requirement and the
+  corresponding wording in Design §12.3 and F0006.
+- Native JSON/schema compliance establishes structure only; semantic support and
+  completion retain their existing gates.
 
-Account API-reported input and output tokens against the execution budget;
-do not estimate size or enforce model-call byte ceilings
-([ADR 0011](0011-provider-owned-request-limits.md)). Adding trusted metadata to
-the internal decoded value creates no model tokens. JSON whitespace is
-accepted; minification is a token-saving preference, not a
-reason to reject otherwise valid JSON. Keep semantic evidence and safety
-constraints complete—never truncate them to satisfy a token budget.
+### Input and token economy
 
-Accept exactly one complete UTF-8 JSON object, with only optional surrounding
-JSON whitespace. Reject duplicate keys at any depth, unknown properties,
-missing required fields, wrong types/kinds, exceeded bounds, malformed JSON,
-fences, commentary, trailing content or a second value. Do not extract JSON
-from prose or convert a stopped response into a candidate. Schema validity
-still proves neither semantic correctness nor authority; ordinary validators,
-clarification handling and compiled YAML transitions remain mandatory.
+- Use concise meaningful field names, not opaque one-letter aliases or positional
+  tuples.
+- Do not request restated instructions, rules, evidence already bound to a fixed target,
+  reasoning narratives or summaries unless the declared task actually requires that
+  content.
+- Model input includes only needed guidance, evidence, schema and explicitly declared
+  examples; engine-only IDs are not automatically serialized.
+- Reuse resource aliases in YAML.
+- Avoid repeating schema/example text across prompt sections; any provider-required
+  duplication must remain explicit and exactly accounted by F0006/F0007.
+
+- Account API-reported input and output tokens against the execution budget; do not
+  estimate size or enforce model-call byte ceilings ([ADR
+  0011](0011-provider-owned-request-limits.md)).
+- Adding trusted metadata to the internal decoded value creates no model tokens.
+- JSON whitespace is accepted; minification is a token-saving preference, not a reason
+  to reject otherwise valid JSON.
+- Keep semantic evidence and safety constraints complete—never truncate them to satisfy
+  a token budget.
+
+### Strict decoding
+
+- Accept exactly one complete UTF-8 JSON object, with only optional surrounding JSON
+  whitespace.
+- Reject duplicate keys at any depth, unknown properties, missing required fields, wrong
+  types/kinds, exceeded bounds, malformed JSON, fences, commentary, trailing content or
+  a second value.
+- Do not extract JSON from prose or convert a stopped response into a candidate.
+- Schema validity still proves neither semantic correctness nor authority; ordinary
+  validators, clarification handling and compiled YAML transitions remain mandatory.
 
 ## Closed result-schema profile
 
-The accepted implementation increment fixes `model-result-schema/v1` as the
-engine-selected, provider-neutral schema profile. This profile name is not a
-new YAML property or model-output field. Each `result-schema` resource is one
-complete UTF-8 JSON object using only the following forms. This is a closed
-subset with JSON Schema meanings, not a general JSON Schema implementation.
+- The accepted implementation increment fixes `model-result-schema/v1` as the
+  engine-selected, provider-neutral schema profile.
+- This profile name is not a new YAML property or model-output field.
+- Each `result-schema` resource is one complete UTF-8 JSON object using only the
+  following forms.
+- This is a closed subset with JSON Schema meanings, not a general JSON Schema
+  implementation.
 
 | Form | Exact fields and constraints |
 | --- | --- |
@@ -157,82 +190,98 @@ subset with JSON Schema meanings, not a general JSON Schema implementation.
 | Array | `type: "array"`, one `items` schema and required `maxItems`; optional `minItems` means zero when absent. |
 | Alternatives | Only `oneOf`, containing 2–32 closed object schemas. Each requires `kind` with a distinct nonempty string `const`; no inferred or overlapping branch is allowed. |
 
-[ADR 0013](0013-workflow-input-reuse.md) extends this profile with optional root
-`$defs` (1–256 entries) and sole-field `$ref: "#/$defs/<name>"` nodes. Names match
-`[a-z][a-z0-9_-]{0,63}`. All definitions validate, including unused helpers.
-Resolution is local, acyclic and bounded to 16 reference hops; escaped names,
-path traversal, remote resources and reference siblings reject. The existing
-node/depth guards apply after substitution to each result/definition.
+### Local references and root rules
 
-The resolved root must be an object or the alternatives form. A single root object
-cannot require a constant result-kind echo: a `kind` property with `const` or
-a singleton `enum` rejects. Necessary nested domain discriminators remain
-allowed. Domain field names are not globally banned, and compilation does not
-infer business meaning or automatically insert/flatten wrappers. The exact
-workflow schema still determines the permitted candidate fields.
+- [ADR 0013](0013-workflow-input-reuse.md) extends this profile with optional root
+  `$defs` (1–256 entries) and sole-field `$ref: "#/$defs/<name>"` nodes.
+- Names match `[a-z][a-z0-9_-]{0,63}`.
+- All definitions validate, including unused helpers.
+- Resolution is local, acyclic and bounded to 16 reference hops; escaped names, path
+  traversal, remote resources and reference siblings reject.
+- The existing node/depth guards apply after substitution to each result/definition.
 
-All length/item bounds are integers in `0..4294967295`, with minimum no greater
-than maximum. Integer bounds must also be ordered. Empty closed objects and
-explicit zero upper bounds are valid. Every nested value is constrained by one
-of the forms above; open maps and unconstrained leaves are prohibited.
+- The resolved root must be an object or the alternatives form.
+- A single root object cannot require a constant result-kind echo: a `kind` property
+  with `const` or a singleton `enum` rejects.
+- Necessary nested domain discriminators remain allowed.
+- Domain field names are not globally banned, and compilation does not infer business
+  meaning or automatically insert/flatten wrappers.
+- The exact workflow schema still determines the permitted candidate fields.
 
-Unknown, duplicate or mixed-form keywords reject, including `$schema`, `$id`,
-external references, nested definitions, recursive schemas, `anyOf`, `allOf`, `not`, conditionals,
-type arrays, `number`, regex/pattern/format rules, annotations and defaults.
-No schema fetch, coercion, ignored keyword or provider fallback is permitted.
-Task guidance and examples remain explicitly declared workflow resources, not
-implicit schema annotations. [ADR 0014](0014-universal-response-format-guidance.md)
-adds the engine-owned JSON framing instruction shared by every model request.
-Decoded duplicate property names and duplicate
-required/enum/kind values also reject, including equivalent JSON escapes.
+- All length/item bounds are integers in `0..4294967295`, with minimum no greater than
+  maximum.
+- Integer bounds must also be ordered.
+- Empty closed objects and explicit zero upper bounds are valid.
+- Every nested value is constrained by one of the forms above; open maps and
+  unconstrained leaves are prohibited.
 
-The compiler reuses the existing 1,048,576-byte workflow-resource ceiling and
-adds structural guards: at most 64 JSON container levels, 16 schema-node levels
-(root is level 1), 4,096 schema nodes including alternative objects and their
-fields, 256 properties per object, and 256 enum values. These are compiler
-safety bounds for compiling the schema resource, not model-call size limits,
-workflow token budgets or retry limits. They cannot be repurposed as request or
-response byte ceilings. Candidate property/item validation and the execution's
-actual-usage token budget remain required; inference has no size preflight.
+- Unknown, duplicate or mixed-form keywords reject, including `$schema`, `$id`, external
+  references, nested definitions, recursive schemas, `anyOf`, `allOf`, `not`,
+  conditionals, type arrays, `number`, regex/pattern/format rules, annotations and
+  defaults.
+- No schema fetch, coercion, ignored keyword or provider fallback is permitted.
+- Task guidance and examples remain explicitly declared workflow resources, not implicit
+  schema annotations. [ADR 0014](0014-universal-response-format-guidance.md) adds the
+  engine-owned JSON framing instruction shared by every model request.
+- Decoded duplicate property names and duplicate required/enum/kind values also reject,
+  including equivalent JSON escapes.
 
-The existing workflow compiler calls one narrow result-schema compiler port
-only for explicitly referenced resources of that kind. Its adapter checks JSON
-transport; the domain compiler owns this profile's semantic rules. A compiled
-resource is tagged: `result_schema` carries an opaque immutable schema with
-its exact captured bytes, typed tree and deterministic compact expanded JSON
-projection. `bytes()` retains source authority; `modelBytes()` supplies model
-transport for inference and counting. Providers perform no separate rewriting.
-Named definitions that satisfy the root rules are selectable views of this
-same owner; helper leaves cannot become response schemas. All clones own the
-source, trees and transport bytes for their lifetime. The registry deep-owns that same authority through
-execution. The existing provider-neutral request also references this compiled
-schema; its unchecked raw-schema constructor path is removed. Other resource
-kinds remain byte captures and are not parsed as
-schemas. Any invalid schema rejects graph construction with
-`WORKFLOW_GRAPH_COMPILE_INVALID`; no partial registry is published.
+### Compiler guards and ownership
 
-This increment implements schema compilation, not request construction,
-candidate decoding/validation, registered native-provider schema projection or
-provider calls. Those consumers must reuse the compiled contract rather than
-introducing another schema reader or registry. Byte-identical source/tree
-binding and immutable ownership are preserved through graph/registry copies.
+- The compiler reuses the existing 1,048,576-byte workflow-resource ceiling and adds
+  structural guards: at most 64 JSON container levels, 16 schema-node levels (root is
+  level 1), 4,096 schema nodes including alternative objects and their fields, 256
+  properties per object, and 256 enum values.
+- These are compiler safety bounds for compiling the schema resource, not model-call
+  size limits, workflow token budgets or retry limits.
+- They cannot be repurposed as request or response byte ceilings.
+- Candidate property/item validation and the execution's actual-usage token budget
+  remain required; inference has no size preflight.
+
+- The existing workflow compiler calls one narrow result-schema compiler port only for
+  explicitly referenced resources of that kind.
+- Its adapter checks JSON transport; the domain compiler owns this profile's semantic
+  rules.
+- A compiled resource is tagged: `result_schema` carries an opaque immutable schema with
+  its exact captured bytes, typed tree and deterministic compact expanded JSON
+  projection.
+- `bytes()` retains source authority; `modelBytes()` supplies model transport for
+  inference and counting.
+- Providers perform no separate rewriting.
+- Named definitions that satisfy the root rules are selectable views of this same owner;
+  helper leaves cannot become response schemas.
+- All clones own the source, trees and transport bytes for their lifetime.
+- The registry deep-owns that same authority through execution.
+- The existing provider-neutral request also references this compiled schema; its
+  unchecked raw-schema constructor path is removed.
+- Other resource kinds remain byte captures and are not parsed as schemas.
+- Any invalid schema rejects graph construction with `WORKFLOW_GRAPH_COMPILE_INVALID`;
+  no partial registry is published.
+
+- This increment implements schema compilation, not request construction, candidate
+  decoding/validation, registered native-provider schema projection or provider calls.
+- Those consumers must reuse the compiled contract rather than introducing another
+  schema reader or registry.
+- Byte-identical source/tree binding and immutable ownership are preserved through
+  graph/registry copies.
 
 ## Acceptance evidence for implementation
 
-- Single-shape and multi-variant results use only schema-required candidate
-  fields; generation and unrelated arbitrary workflows share this contract.
-- Exact call association survives decode; swapped requests/attempts, stale
-  repair revisions and unbound observations reject without replay or guessing.
-- Single-target repair omits identity echoes; group repair preserves exact
-  target keys. Clarification/context variants grant no hidden continuation.
-- Malformed, duplicate, unknown, incomplete, excessive and legacy-envelope
-  responses reject. Required citations and selections cannot be omitted.
-- Native and prompt-only modes have the same candidate meaning and rejection
-  rules; unsupported native schemas fail before any provider call.
+- Single-shape and multi-variant results use only schema-required candidate fields;
+  generation and unrelated arbitrary workflows share this contract.
+- Exact call association survives decode; swapped requests/attempts, stale repair
+  revisions and unbound observations reject without replay or guessing.
+- Single-target repair omits identity echoes; group repair preserves exact target keys.
+- Clarification/context variants grant no hidden continuation.
+- Malformed, duplicate, unknown, incomplete, excessive and legacy-envelope responses
+  reject.
+- Required citations and selections cannot be omitted.
+- Native and prompt-only modes have the same candidate meaning and rejection rules;
+  unsupported native schemas fail before any provider call.
 - Tests inspect the actual model-visible payload and account for API-reported
-  input/output usage, not size estimates or mandatory pre-call counts. No fixed
-  token-saving percentage is assumed.
+  input/output usage, not size estimates or mandatory pre-call counts.
+- No fixed token-saving percentage is assumed.
 
-No compatibility reader or legacy metadata-emitting prompt is retained.
-Schema compilation adds no workflow operation, hidden transition or provider
-support; it is part of the existing workflow-compilation kernel.
+- No compatibility reader or legacy metadata-emitting prompt is retained.
+- Schema compilation adds no workflow operation, hidden transition or provider support;
+  it is part of the existing workflow-compilation kernel.

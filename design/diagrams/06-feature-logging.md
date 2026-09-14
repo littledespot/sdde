@@ -29,7 +29,6 @@ flowchart TD
     FINISH["Workflow ends"] --> CLOSE["Flush and close active streams;<br/>apply retention to eligible closed segments"]
 ```
 
-Metadata logging follows the validated severity policy. Body capture requires
-explicit opt-in, redaction and limits. Logging failures prevent further workflow
-progress. Log-tail recovery repairs log records only; it never resumes workflow
-execution or establishes task completion.
+[F0002](../features/F0002-LogService.md) owns severity, opt-in body capture,
+redaction, limits and failure behavior. Log-tail recovery repairs log records;
+it never resumes a workflow or establishes completion.

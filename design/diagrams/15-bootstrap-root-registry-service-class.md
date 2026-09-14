@@ -27,6 +27,6 @@ classDiagram
     note for ConfiguredBaseRootCapability "Binds a configured root to its declared role and permitted access"
 ```
 
-Directory roles cover specifications, references, archives, workflows, toolchain
-presets, principles and templates. Consumers use the capability for their
-declared operation. Configured locations alone do not grant unrestricted access.
+[F0004](../features/F0004-BootstrapRootRegistryService.md) and the
+[path contract](../paths.md) define directory/file roles. Consumers receive only
+the capability for their declared operation.

@@ -2,7 +2,7 @@ High-level execution flow for the Specify workflow.
 
 ```mermaid
 flowchart TD
-    START["Run sdd specify<br/>--feature FEATURE --reference SOURCE"]
+    START["Run sdde WORKFLOW_ID<br/>--feature FEATURE --reference SOURCE"]
     START --> SETUP["Load project configuration and select the Specify workflow;<br/>prepare the required model provider"]
     SETUP --> INPUTS["Validate feature and reference locations;<br/>load existing feature state and clarification answers"]
     INPUTS --> READ["Read the selected reference material;<br/>account for every source"]
@@ -36,26 +36,18 @@ flowchart TD
     REPAIR -->|Retry limit exhausted| BLOCKED
 ```
 
-`FEATURE` is relative to the configured `paths.specs`; `SOURCE` is relative
-to `paths.references`. The feature title and requirements come from reference
-material and validated answers.
+- `FEATURE` is relative to `paths.specs`; `SOURCE` is relative to `paths.references`.
+- Reference material and validated answers supply the title and requirements.
+- The supplied definition declares `id: spec-generation`; filenames do not
+  determine workflow identity.
 
-Markdown inline-code interiors are exact-value candidates; prose, quoted text
-and fenced code are not candidates through that extractor. Preserved values
-retain original bytes and citations, without implying semantic approval or
-operational authority. This in-memory boundary and scripted hierarchical
-reconciliation are implemented. H-008 implements the shared required-authority
-contract and Specify projection; support is not inferred from citation presence.
-The same gate is rebuilt against current inputs before generation/publication,
-and stale source lineage cannot authorize a consumer. Group size is explicit
-in YAML; the selected reference directory defines related documents. Unresolved conflicts block;
-model-connected iteration, generation, coverage and bounded repair are
-implemented by H-009/H-010. H-011/H-012 now connect unit-need forms to the shared
-writer and render/reparse specifications in memory. Answer application and
-complete specification publication remain open; the final definition is H-013.
+[F0100](../features/F0100-SpecWorkflow.md) owns exact-value extraction,
+reconciliation, shared authority gates, content and publication contracts. Its
+implementation-status sections distinguish H-008–H-012 evidence and remaining
+work from live completion and semantic quality.
 
-The current generation YAML publishes unit-need forms; successful specification
-content remains in memory until the complete sidecar/state set is available:
+Generation YAML publishes unit-need forms or the complete validated
+specification/sidecar/state set:
 
 ```mermaid
 flowchart LR
@@ -77,23 +69,17 @@ flowchart LR
     B --> U["End needs_user; no spec.md"]
     B -->|Write failure| F
     C --> S["Model-assisted field support<br/>and shared authority gate"]
-    S --> M["Project, render and reparse in memory;<br/>no spec.md publication"]
+    S --> M["Project, render and reparse;<br/>prepare specification, sidecar and canonical states"]
+    M --> PUB["Validate complete output and captured-input preconditions;<br/>replace registered files, workflow state last"]
+    PUB -->|All writes succeed| DONE["End ok; published specification available to evaluator"]
+    PUB -->|Write failure or interruption| FAIL["No new successful completion;<br/>replaced files may remain"]
 ```
 
-Each model path uses the same request/provider operations and explicit cleanup.
-Protocol correction keeps the original request/schema; atomic repair binds a
-new request to an engine authorization. Workflow schemas and native decoding
-share the closed `kind` alternatives; malformed root/nested variants fail
-before request closure. Invalid, exhausted and unresolved paths
-cannot reach accepted content. Model review is not deterministic semantic proof.
-
-Every rerun starts the workflow from the beginning. A successful rerun completely
-overwrites all registered replaceable outputs at the same paths. Clarification
-publication completely overwrites unresolved forms at the same IDs/paths,
-including open answer drafts, while user-resolved forms remain byte-for-byte
-unchanged. This is the shared rule for every workflow execution. Failure,
-blocking or cancellation ends the run without publishing a partial successful
-specification.
-If publication itself fails or is interrupted, already-replaced files may
-remain; no new successful completion is recorded. A fresh rerun replaces the
-output set without rollback or recovery machinery (Design §25).
+- [Model request ownership](../decisions/0012-workflow-owned-model-request.md)
+  keeps protocol correction on the original request/schema and binds repair to
+  a fresh authorized request. Closed variants validate before request closure.
+- [Design §23.2](../design.md#232-workflow-reruns-and-protected-clarification-files)
+  owns rerun replacement and user-closed clarification protection.
+- [Design §25](../design.md#25-atomic-workflow-execution-and-output) owns publication:
+  failed writes may leave replaced files but cannot record new successful completion.
+- Model-assisted review does not prove semantic correctness.

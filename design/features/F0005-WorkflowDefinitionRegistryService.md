@@ -2,34 +2,14 @@
 
 **Status:** Proposed feature design
 
-**Implementation:** Complete for the generic workflow-definition increment.
-F0005 accepts only the concise closed schema, captures declared workflow
-resources, compiles through the single generic operation registry, and
-publishes an immutable graph registry. ADR 0003's generic runner now executes
-only those compiled transitions. The selected policy's positive total-token
-budget and each retry-capable operation instance's explicit `retry-limit` are
-compiled into that immutable authority; initial execution is separate from the
-declared retry count. No legacy reader, generic loop budget, or split
-invocation/step registry remains. Concrete domain operations and initial
-workflow definitions remain separately governed increments.
+**Implementation:** The generic workflow-definition increment is complete; concrete
+domain operations and initial definitions have separate contracts. See [implementation
+status](#implementation-status).
 
 **Accepted operation-ID amendment:** [ADR 0005](../decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06)
 requires one current unversioned contract per operation. The formal schema,
 runtime parser, registry, compiler and runner use that contract. Tests reject
 version suffixes and separate operation-version fields, with no aliases.
-
-The operation registry also owns versioned native data schemas. Compilation
-captures only schemas used by the selected graph; the runner retains owned
-invocation values, exposes only declared required/optional inputs, and validates
-complete deltas before applying writes, replacements, or invalidations. Rejected
-and cancelled candidates are released. This adds no YAML fields or executable
-project-supplied schemas. Fixed kernel bindings retain their concrete typed
-owners; `DataShape` is dependency/effect metadata, not a workflow value store.
-
-Runner rejections retain their closed diagnostic in the workflow result and do
-not follow YAML outcome edges. Inference charges actual usage before any result
-publication rejection; an exceeded or unavailable token budget blocks later
-model calls and its exact diagnostic reaches the CLI.
 
 **Compatibility:** None. This pre-release increment accepts only the exact
 concise v1 YAML contract. It has no verbose tagged-parameter form, JSON or
@@ -62,16 +42,17 @@ invocation's complete immutable validated identity-free workflow registry,
 keyed by unique `WorkflowId` and derived from every in-scope definition beneath
 the configured workflow-authority root.
 
-The loader/compiler/registry actions produce and validate that identity-free
-candidate before workflow selection. F0005 names the resulting nominal value
-`ValidatedWorkflowDefinitionRegistry`; it is the candidate plus its exact
-validation evidence, with no `BootstrapComponentId`. Only then does the runner
-construct one service with one concrete borrowed `registry()` accessor. The
-ordinary later bootstrap materialization owner may consume this same validated
-value to assign an ID and construct `WorkflowDefinitionRegistryState`; F0005
-does not allocate that identity. The later generic workflow execution slice
-owns exact selection through `ResolveSelectedWorkflowAction`; the service
-performs no selection itself.
+- The loader/compiler/registry actions produce and validate that identity-free candidate
+  before workflow selection.
+- F0005 names the resulting nominal value `ValidatedWorkflowDefinitionRegistry`; it is
+  the candidate plus its exact validation evidence, with no `BootstrapComponentId`.
+- Only then does the runner construct one service with one concrete borrowed
+  `registry()` accessor.
+- The ordinary later bootstrap materialization owner may consume this same validated
+  value to assign an ID and construct `WorkflowDefinitionRegistryState`; F0005 does not
+  allocate that identity.
+- The later generic workflow execution slice owns exact selection through
+  `ResolveSelectedWorkflowAction`; the service performs no selection itself.
 
 The one feature outcome is built by separate owners:
 
@@ -149,28 +130,31 @@ registry and acquires no feature transaction lock.
 
 ### 3.1 File and YAML contract
 
-V1 supports exactly one encoding: UTF-8 YAML 1.2 in a regular file whose
-basename has at least one character before the exact case-sensitive suffix
-`.workflow.yaml`. One file contains exactly one definition mapping. Discovery is
-recursive beneath the validated workflow-authority root, subject to the
-reserved-child exclusion in Section 5. A filename never supplies or constrains
-`WorkflowId`; identity comes only from validated content.
+- V1 supports exactly one encoding: UTF-8 YAML 1.2 in a regular file whose basename has
+  at least one character before the exact case-sensitive suffix `.workflow.yaml`.
+- One file contains exactly one definition mapping.
+- Discovery is recursive beneath the validated workflow-authority root, subject to the
+  reserved-child exclusion in Section 5.
+- A filename never supplies or constrains `WorkflowId`; identity comes only from
+  validated content.
 
-The syntax reader uses the YAML 1.2 core schema and accepts exactly one
-document. It rejects a UTF-8 BOM, invalid UTF-8, duplicate mapping keys at any
-depth, aliases, custom tags, a non-mapping root, a second document, and
-malformed YAML. It returns a bounded ordinal-bound workflow-owned raw value and
-applies no workflow policy. The schema validator alone converts that raw value
-into an owned `DeclarativeWorkflowDefinition`.
+- The syntax reader uses the YAML 1.2 core schema and accepts exactly one document.
+- It rejects a UTF-8 BOM, invalid UTF-8, duplicate mapping keys at any depth, aliases,
+  custom tags, a non-mapping root, a second document, and malformed YAML.
+- It returns a bounded ordinal-bound workflow-owned raw value and applies no workflow
+  policy.
+- The schema validator alone converts that raw value into an owned
+  `DeclarativeWorkflowDefinition`.
 
-`ParseWorkflowDefinitionAction` depends only on a narrow
-`WorkflowDefinitionParser` port. The composition root binds a workflow adapter
-backed by the shared private bounded YAML 1.2 syntax adapter. That low-level
-adapter may also serve F0003, but workflow and toolchain parser ports, raw
-values, conversions, and schema validators remain separate. The workflow
-adapter converts parser-library nodes directly into the workflow-owned raw
-value; no parser-library type crosses the port or enters domain/service state,
-and there is no YAML-to-JSON text conversion or second parse.
+- `ParseWorkflowDefinitionAction` depends only on a narrow `WorkflowDefinitionParser`
+  port.
+- The composition root binds a workflow adapter backed by the shared private bounded
+  YAML 1.2 syntax adapter.
+- That low-level adapter may also serve F0003, but workflow and toolchain parser ports,
+  raw values, conversions, and schema validators remain separate.
+- The workflow adapter converts parser-library nodes directly into the workflow-owned
+  raw value; no parser-library type crosses the port or enters domain/service state, and
+  there is no YAML-to-JSON text conversion or second parse.
 
 V1 acceptance is the conjunction of three non-overlapping contracts:
 
@@ -186,11 +170,12 @@ V1 acceptance is the conjunction of three non-overlapping contracts:
    the compiler owns step/outcome/resource cross-reference joins, registered
    parameter constraints, resource-kind compatibility, and graph closure.
 
-The executable does not read the repository schema file at runtime. Its Zig
-types and validators implement all three layers; conformance fixtures prove
-that decoded YAML matches the JSON Schema projection and separately prove
-lexical and relational cases. The schema, design examples, and source tree are
-never runtime fallbacks or packaged authority.
+- The executable does not read the repository schema file at runtime.
+- Its Zig types and validators implement all three layers; conformance fixtures prove
+  that decoded YAML matches the JSON Schema projection and separately prove lexical and
+  relational cases.
+- The schema, design examples, and source tree are never runtime fallbacks or packaged
+  authority.
 
 ### 3.2 Root shape
 
@@ -209,14 +194,14 @@ Every definition contains these exact concise fields:
 | `steps` | One to 256 local step IDs mapped to closed operation declarations or local subgraph calls and outcome maps. The expanded graph also has at most 256 operations. |
 | `subgraphs` | Optional map of 1–32 local reusable operation sequences, each with `start` and `steps`. |
 
-`sourceInventoryOrdinal` is engine-derived provenance and is not accepted in a
-file. A resource name is declarative input resolved only beneath the authorized
-workflow-resource root; it is normalized and captured by the compiler and is
-never passed as an operational path. Definitions have no field for a raw
-project path, command, script, adapter, provider implementation, capability,
-gate override, runner control, state identity, bootstrap identity, or
-executable payload. Because the root is closed, adding any such field is a
-schema error.
+- `sourceInventoryOrdinal` is engine-derived provenance and is not accepted in a file.
+- A resource name is declarative input resolved only beneath the authorized
+  workflow-resource root; it is normalized and captured by the compiler and is never
+  passed as an operational path.
+- Definitions have no field for a raw project path, command, script, adapter, provider
+  implementation, capability, gate override, runner control, state identity, bootstrap
+  identity, or executable payload.
+- Because the root is closed, adding any such field is a schema error.
 
 The identifier contracts are:
 
@@ -234,11 +219,13 @@ RegisteredRef
   = 3..128 ASCII bytes
 ```
 
-`OperationId` is used by `invoke` and `steps.*.use` and resolves to exactly one
-current contract. Version suffixes and separate operation-version fields are
-rejected, not accepted as compatibility aliases. `RegisteredRef` retains the
-existing policy-profile name plus positive version. Both use direct typed
-lookup, never a range, `latest`, filename, implementation symbol or near match.
+- `OperationId` is used by `invoke` and `steps.*.use` and resolves to exactly one
+  current contract.
+- Version suffixes and separate operation-version fields are rejected, not accepted as
+  compatibility aliases.
+- `RegisteredRef` retains the existing policy-profile name plus positive version.
+- Both use direct typed lookup, never a range, `latest`, filename, implementation symbol
+  or near match.
 
 ### 3.3 Steps, parameters, resources, and transitions
 
@@ -252,41 +239,47 @@ preflight:
   on: { ok: generate, failed: end.failed, cancelled: end.cancelled }
 ```
 
-The step's mapping key is its unique `WorkflowStepId`. `use` identifies a
-registered operation contract, not a concrete implementation or adapter.
-`with` is absent when the operation has no parameters; otherwise it contains at
-most 32 unique parameter IDs with native YAML boolean, signed integer, or
-bounded string scalar values. The selected operation contract supplies their
-types, bounds, enum members, registry/resource kind, requiredness, and whether
-each parameter is definition-safe. The compiler rejects null, float, sequence,
-nested parameter mapping, free unbounded text, raw operational path/command,
-unknown, missing, wrong-kind, out-of-range, disallowed, or unresolved values.
-There is no repeated `{ parameterId, value: { kind, value } }` wrapper.
+- The step's mapping key is its unique `WorkflowStepId`.
+- `use` identifies a registered operation contract, not a concrete implementation or
+  adapter.
+- `with` is absent when the operation has no parameters; otherwise it contains at most
+  32 unique parameter IDs with native YAML boolean, signed integer, or bounded string
+  scalar values.
+- The selected operation contract supplies their types, bounds, enum members,
+  registry/resource kind, requiredness, and whether each parameter is definition-safe.
+- The compiler rejects null, float, sequence, nested parameter mapping, free unbounded
+  text, raw operational path/command, unknown, missing, wrong-kind, out-of-range,
+  disallowed, or unresolved values.
+- There is no repeated `{ parameterId, value: { kind, value } }` wrapper.
 
-`retry-limit` has no global or implicit meaning. A registered retry-capable
-operation contract must declare it as a required nonnegative integer parameter
-with a finite operation-local maximum. The compiler binds it to that exact step
-instance and its monotonic retry transition. A retry edge without the required
-parameter, or a `retry-limit` supplied to a contract that does not declare it,
-is invalid.
+- `retry-limit` has no global or implicit meaning.
+- A registered retry-capable operation contract must declare it as a required
+  nonnegative integer parameter with a finite operation-local maximum.
+- The compiler binds it to that exact step instance and its monotonic retry transition.
+- A retry edge without the required parameter, or a `retry-limit` supplied to a contract
+  that does not declare it, is invalid.
 
-`resources` prevents large prompt, example, or schema content from being
-repeated in steps. Each alias resolves to exactly one bounded captured resource
-under the authorized workflow root. An operation parameter that expects a
-prompt, schema, or example accepts only a declared alias of that expected kind.
-Two workflows may bind the same captured resource, but one workflow cannot
-declare two aliases for the same source. There is no engine-packaged resource
-fallback or undeclared file lookup. At execution, the runner exposes only the
-immutable resources referenced by the active step's compiled resource
-parameters, never unrelated workflow resources or source paths.
+- `resources` prevents large prompt, example, or schema content from being repeated in
+  steps.
+- Each alias resolves to exactly one bounded captured resource under the authorized
+  workflow root.
+- An operation parameter that expects a prompt, schema, or example accepts only a
+  declared alias of that expected kind.
+- Two workflows may bind the same captured resource, but one workflow cannot declare two
+  aliases for the same source.
+- There is no engine-packaged resource fallback or undeclared file lookup.
+- At execution, the runner exposes only the immutable resources referenced by the active
+  step's compiled resource parameters, never unrelated workflow resources or source
+  paths.
 
-`on` maps every outcome declared by the selected operation contract exactly
-once to either another local step ID or one of `end.ok`, `end.needs-user`,
-`end.invalid`, `end.blocked`, `end.failed`, and `end.cancelled`. The exact YAML
-keys are `ok`, `more`, `needs-user`, `invalid`, `blocked`, `failed`, and `cancelled`;
-the compiler converts them to the corresponding internal tagged-union variants.
-A terminal target must preserve the source outcome and cannot relabel a
-non-`ok` result as `ok`.
+- `on` maps every outcome declared by the selected operation contract exactly once to
+  either another local step ID or one of `end.ok`, `end.needs-user`, `end.invalid`,
+  `end.blocked`, `end.failed`, and `end.cancelled`.
+- The exact YAML keys are `ok`, `more`, `needs-user`, `invalid`, `blocked`, `failed`,
+  and `cancelled`; the compiler converts them to the corresponding internal tagged-union
+  variants.
+- A terminal target must preserve the source outcome and cannot relabel a non-`ok`
+  result as `ok`.
 
 `more` means successful progress with remaining collection work. Its target
 must be another step, never a terminal. Existing compiler-proven cycle bounds
@@ -299,26 +292,33 @@ typed content cannot change the compiled semantic graph.
 
 ### 3.4 Definition-local reuse
 
-[ADR 0013](../decisions/0013-workflow-input-reuse.md) adds `subgraphs` to the
-same closed contract. A top-level step uses either `use` or `call`, never both.
-A call's `with` supplies exactly the parameters referenced by `{param: name}`
-inside its selected subgraph. Literals remain valid inside subgraphs. Registered
-operation contracts alone validate substituted types, resource kinds and bounds.
+- [ADR 0013](../decisions/0013-workflow-input-reuse.md) adds `subgraphs` to the same
+  closed contract.
+- A top-level step uses either `use` or `call`, never both.
+- A call's `with` supplies exactly the parameters referenced by `{param: name}` inside
+  its selected subgraph.
+- Literals remain valid inside subgraphs.
+- Registered operation contracts alone validate substituted types, resource kinds and
+  bounds.
 
-Subgraphs contain operations only. They cannot nest, import files, use aliases,
-or execute templates. Their local `end.<outcome>` exits preserve the originating
-outcome; each call maps exactly those exits through `on`. Local step targets
-cannot escape a subgraph. Top-level targets address authored top-level steps or
-calls, never generated IDs. Unused definitions and extra bindings reject.
+- Subgraphs contain operations only.
+- They cannot nest, import files, use aliases, or execute templates.
+- Their local `end.<outcome>` exits preserve the originating outcome; each call maps
+  exactly those exits through `on`.
+- Local step targets cannot escape a subgraph.
+- Top-level targets address authored top-level steps or calls, never generated IDs.
+- Unused definitions and extra bindings reject.
 
-The shared expander creates `g<call-ID-length>-<call-ID>-<local-step-ID>` identities,
-subject to the existing 64-byte step-ID bound. Collisions and an expansion above
-256 operations reject. The compiler and registry use this same projection;
-existing gates, dependencies, retry/cycle checks, capability policy and runner
-semantics apply to the complete expanded graph. Nothing is hidden in an action.
-See [the spec workflow](../workflows/spec.workflow.yaml) for parameterized reuse.
+- The shared expander creates `g<call-ID-length>-<call-ID>-<local-step-ID>` identities,
+  subject to the existing 64-byte step-ID bound.
+- Collisions and an expansion above 256 operations reject.
+- The compiler and registry use this same projection; existing gates, dependencies,
+  retry/cycle checks, capability policy and runner semantics apply to the complete
+  expanded graph.
+- Nothing is hidden in an action.
+- See [the spec workflow](../workflows/spec.workflow.yaml) for parameterized reuse.
 
-### 3.5 Minimal accepted shape
+### 3.5 Illustrative structural shape
 
 ```yaml
 schema: workflow/v1
@@ -334,8 +334,11 @@ steps:
     on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }
 ```
 
-The values are illustrative. `specify` is not a required registry member and
-the filename need not match it.
+This illustrates the structural schema, not a runnable installed workflow:
+operation/policy references must resolve to actual registered contracts.
+`specify` is not a required registry member and the filename need not match it.
+For a complete current example, see
+[provider-request.workflow.yaml](../examples/provider-request.workflow.yaml).
 
 ## 4. Compiler-owned bounds
 
@@ -360,28 +363,34 @@ allocation or continued traversal can exceed them:
 | `maxWorkflowYamlNestingDepth` | 16 levels per definition |
 | `maxWorkflowYamlScalarBytes` | 128 bytes per scalar |
 
-These YAML limits are workflow-owned and are passed to the shared bounded
-syntax adapter. The event and token ceilings admit the maximum v1 graph shape
-within the one-mebibyte file ceiling; nesting and individual scalars remain
-tightly bounded by the closed schema. F0003 owns its different YAML limits.
+- These YAML limits are workflow-owned and are passed to the shared bounded syntax
+  adapter.
+- The event and token ceilings admit the maximum v1 graph shape within the one-mebibyte
+  file ceiling; nesting and individual scalars remain tightly bounded by the closed
+  schema.
+- F0003 owns its different YAML limits.
 
-Transitions have no independent policy knob. The six closed outcome tags and
-unique `(workflowStepId, outcomeTag)` mapping key bound a 256-step graph to
-1,536 transitions. Zero definitions is a valid variable-size registry; a later
-selection against it returns the ordinary typed unknown-workflow diagnostic.
+- Transitions have no independent policy knob.
+- The six closed outcome tags and unique `(workflowStepId, outcomeTag)` mapping key
+  bound a 256-step graph to 1,536 transitions.
+- Zero definitions is a valid variable-size registry; a later selection against it
+  returns the ordinary typed unknown-workflow diagnostic.
 
 The enumeration adapter receives the fixed deadline and cancellation token;
 timeout or cancellation never turns an incomplete inventory into success.
 
 ## 5. Workflow root and reserved children
 
-`BuildWorkflowAuthorityLayoutAction` derives its root only from F0004's exact
-`workflow_authority` capability. The root inventory includes an encountered
-direct child named exactly `features` to validate its reserved state-root role, but
-enumeration never enters its descendant subtree. That child must be a
-no-follow directory and receives one `reserved_child_accounted` disposition.
-Absence is legal; authorized canonical state publication may create it under
-Design Section 25.1. This is not a feature-identity or ownership registry.
+- `BuildWorkflowAuthorityLayoutAction` derives its root only from F0004's exact
+  `workflow_authority` capability.
+- The root inventory includes an encountered direct child named exactly `features` to
+  validate its reserved state-root role, but enumeration never enters its descendant
+  subtree.
+- That child must be a no-follow directory and receives one `reserved_child_accounted`
+  disposition.
+- Absence is legal; authorized canonical state publication may create it under Design
+  Section 25.1.
+- This is not a feature-identity or ownership registry.
 
 Only that exact root child is reserved. An identically named nested
 directory elsewhere has no reserved status. Normalization, case-fold,
@@ -392,15 +401,16 @@ Implemented: the filesystem loader reuses the inventory's single reserved-child
 rule. Regression tests cover ordinary directory traversal, nested names,
 reserved-root rejection, and unregistered-file rejection in the packaged engine.
 
-The engine recursively encounters every other directory, regular file,
-symlink, and special node without following links. Exact `*.workflow.yaml`
-regular files are definition candidates. After those definitions pass lexical
-and structural validation, every other regular file must be referenced by at
-least one declared `resources` value and every declared resource must resolve
-to exactly one such file. Directories are accounted but not read. An
-undeclared regular file, a definition used as a resource, symlink, special
-node, wrong-kind reserved child, escaping resource name, or collision is
-blocking; the loader never silently ignores an unsupported entry.
+- The engine recursively encounters every other directory, regular file, symlink, and
+  special node without following links.
+- Exact `*.workflow.yaml` regular files are definition candidates.
+- After those definitions pass lexical and structural validation, every other regular
+  file must be referenced by at least one declared `resources` value and every declared
+  resource must resolve to exactly one such file.
+- Directories are accounted but not read.
+- An undeclared regular file, a definition used as a resource, symlink, special node,
+  wrong-kind reserved child, escaping resource name, or collision is blocking; the
+  loader never silently ignores an unsupported entry.
 
 ## 6. Deterministic loading and total accounting
 
@@ -430,12 +440,13 @@ The loader follows the governing action sequence without combining owners:
 11. build exactly one terminal account for every ordinal; and
 12. validate the complete `WorkflowAuthorityInventory` before compilation.
 
-A capture that grows, shrinks, changes identity/type, exceeds a limit, ends
-short, or cannot be read completely is blocking. Parse or schema failure is
-also blocking. A directory, reserved child, captured definition, and captured
-declared resource each have their distinct disposition; no ordinal can have
-zero or multiple dispositions. Every capture joins exactly one ordinal and
-every captured-definition account joins exactly one definition.
+- A capture that grows, shrinks, changes identity/type, exceeds a limit, ends short, or
+  cannot be read completely is blocking.
+- Parse or schema failure is also blocking.
+- A directory, reserved child, captured definition, and captured declared resource each
+  have their distinct disposition; no ordinal can have zero or multiple dispositions.
+- Every capture joins exactly one ordinal and every captured-definition account joins
+  exactly one definition.
 
 No compilation starts from an unvalidated inventory. One bad sibling blocks
 the complete candidate, and no partial definition set, last-known registry, or
@@ -443,155 +454,193 @@ service is published.
 
 ## 7. Registered-operation graph compilation
 
-Request-origin contracts selecting a model binding declare their typed slot and explicit
-`response-mode`, with optional supported controls. Under
-[ADR 0011](../decisions/0011-provider-owned-request-limits.md), retired
-`input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters
-reject. Registration and compilation require no capacity fields, local size
-ceilings or fit estimates. The compiler retains the typed binding requirements;
-the runner rejects divergence from the registered contract. F0006 owns exact
-slot/model/control/schema compatibility, not provider-size policy. This
-capacity-free projection is implemented through the registry, compiler and
-runner; the typed slot is the only new-binding selection.
+- Request-origin contracts selecting a model binding declare their typed slot and
+  explicit `response-mode`, with optional supported controls.
+- Under [ADR 0011](../decisions/0011-provider-owned-request-limits.md), retired
+  `input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters reject.
+- Registration and compilation require no capacity fields, local size ceilings or fit
+  estimates.
+- The compiler retains the typed binding requirements; the runner rejects divergence
+  from the registered contract.
+- F0006 owns exact slot/model/control/schema compatibility, not provider-size policy.
+- This capacity-free projection is implemented through the registry, compiler and
+  runner; the typed slot is the only new-binding selection.
 
-The existing compiled model projection represents an immutable binding
-requirement independently of operational capabilities (ADR 0004, amended
-2026-09-05, further amended by [ADR 0012](../decisions/0012-workflow-owned-model-request.md)).
-A request origin has exactly one required typed model slot. Pure operations may
-receive immutable bindings without a provider port. Registered consumers of the
-prepared-request/ledger data contracts retain the originating binding; they
-cannot repeat slot, resource or response-control selection. The existing dataflow
-compiler proves the producer/consumer handoff without new YAML syntax or a
-second model projection. Provider calls still require an independently
-port-derived, policy-permitted capability and the existing token-budget guard.
+- The existing compiled model projection represents an immutable binding requirement
+  independently of operational capabilities (ADR 0004, amended 2026-09-05, further
+  amended by [ADR 0012](../decisions/0012-workflow-owned-model-request.md)).
+- A request origin has exactly one required typed model slot.
+- Pure operations may receive immutable bindings without a provider port.
+- Registered consumers of the prepared-request/ledger data contracts retain the
+  originating binding; they cannot repeat slot, resource or response-control selection.
+- The existing dataflow compiler proves the producer/consumer handoff without new YAML
+  syntax or a second model projection.
+- Provider calls still require an independently port-derived, policy-permitted
+  capability and the existing token-budget guard.
 
-Registered accounting permissions are compiled alongside data effects and
-compared against the live immutable operation registry at execution. YAML cannot
-author them. The implemented attempt-accounting binding consumes the retained
-request, requires an explicit operation-local `retry-limit`, and publishes only
-runner-applied typed attempt evidence. Its next visit requires the previous
-evidence to have been consumed/invalidated through declared data effects.
-The native provider-assignment binding additionally requires applied attempt
-evidence and one closed `kind` selection. Only runner application creates its
-sealed assigned-operation value. Missing dependencies, hidden accounting
-permissions, undeclared kind parameters and forged/stale handoffs reject; no
-new YAML fields, resource overrides or provider capability are introduced.
+- Registered accounting permissions are compiled alongside data effects and compared
+  against the live immutable operation registry at execution.
+- YAML cannot author them.
+- The implemented attempt-accounting binding consumes the retained request, requires an
+  explicit operation-local `retry-limit`, and publishes only runner-applied typed
+  attempt evidence.
+- Its next visit requires the previous evidence to have been consumed/invalidated
+  through declared data effects.
+- The native provider-assignment binding additionally requires applied attempt evidence
+  and one closed `kind` selection.
+- Only runner application creates its sealed assigned-operation value.
+- Missing dependencies, hidden accounting permissions, undeclared kind parameters and
+  forged/stale handoffs reject; no new YAML fields, resource overrides or provider
+  capability are introduced.
 
-The native authorization-preparation binding requires those same retained
-inputs and explicit positive `timeout-ms`. It derives the separate
-`provider-authorization` capability from its narrow preloaded preparation port,
-not a `model-provider` capability. The runner supplies only the exact facts and
-one allocated deposit/publication slot for that invocation, never its private
-table. A sealed result carries a lease reference or closed failure/cancellation
-facts; publication and consumption checks retain the same request association.
-No provider call, refresh, retry or I/O is implicit.
+- The native authorization-preparation binding requires those same retained inputs and
+  explicit positive `timeout-ms`.
+- It derives the separate `provider-authorization` capability from its narrow preloaded
+  preparation port, not a `model-provider` capability.
+- The runner supplies only the exact facts and one allocated deposit/publication slot
+  for that invocation, never its private table.
+- A sealed result carries a lease reference or closed failure/cancellation facts;
+  publication and consumption checks retain the same request association.
+- No provider call, refresh, retry or I/O is implicit.
 
-The native generation bindings retain immutable model evidence across explicit
-request retirement. Each native data schema declares current authority,
-captured evidence or runner execution control; YAML cannot assign that role.
-Captured evidence expands to its current domain-source lineage. A changed
-source or mixed-generation join invalidates the gate, while retiring completed
-transport does not. Gate authority itself must use current schemas.
+- The native generation bindings retain immutable model evidence across explicit request
+  retirement.
+- Each native data schema declares current authority, captured evidence or runner
+  execution control; YAML cannot assign that role.
+- Captured evidence expands to its current domain-source lineage.
+- A changed source or mixed-generation join invalidates the gate, while retiring
+  completed transport does not.
+- Gate authority itself must use current schemas.
 
-`check-model-request-phase`, `build-model-protocol-retry`,
-`retire-model-input` and `retire-model-request` expose explicit lifecycle
-coordination without a built-in workflow. Protocol guidance is selected once
-by the originating assignment's optional `protocol-prompt` resource; consumers
-cannot replace resources, model controls or slots. Retry preparation replaces
-only the prepared transport and retires the rejected attempt, retaining the
-logical request. It rebuilds from the original inputs and latest rejection;
-only the existing attempt-accounting step and total token budget limit further
-calls (Design §22.6).
+- `check-model-request-phase`, `build-model-protocol-retry`, `retire-model-input` and
+  `retire-model-request` expose explicit lifecycle coordination without a built-in
+  workflow.
+- Protocol guidance is selected once by the originating assignment's optional
+  `protocol-prompt` resource; consumers cannot replace resources, model controls or
+  slots.
+- Retry preparation replaces only the prepared transport and retires the rejected
+  attempt, retaining the logical request.
+- It rebuilds from the original inputs and latest rejection; only the existing
+  attempt-accounting step and total token budget limit further calls (Design §22.6).
 
-`advance-model-request-lifecycle` declares a ledger replacement and explicit
-`transition: invoked`. Its compiled contract requires the retained request,
-attempt, assignment and authorization result, permits no operational capability
-or retry, and preserves the other values. The runner requires a prepared lease,
-rechecks it before publication, and validates an exact direct lifecycle
-successor. Assignment-shaped replacements instead require an actual new request
-assignment. Neither writer can hide another kind of ledger change. Publication
-updates the runner's retained snapshot with the envelope, so an old snapshot
-cannot reset invocation. This is state advancement, not a provider call.
+- `advance-model-request-lifecycle` declares a ledger replacement and explicit
+  `transition: invoked`.
+- Its compiled contract requires the retained request, attempt, assignment and
+  authorization result, permits no operational capability or retry, and preserves the
+  other values.
+- The runner requires a prepared lease, rechecks it before publication, and validates an
+  exact direct lifecycle successor.
+- Assignment-shaped replacements instead require an actual new request assignment.
+- Neither writer can hide another kind of ledger change.
+- Publication updates the runner's retained snapshot with the envelope, so an old
+  snapshot cannot reset invocation.
+- This is state advancement, not a provider call.
 
-`advance-provider-operation-lifecycle` also requires explicit
-`transition: invoked`. Its closed accounting contract consumes the assigned
-operation and requires the same request, attempt and prepared authorization.
-The runner checks the already-invoked request and original lease deadline,
-applies the proposal and publishes sealed invoked-operation evidence while
-invalidating assignment evidence. No consumer may fabricate, replace or reuse
-stale operation evidence. The step has no provider capability, new timeout,
-retry or token charge; cancellation/rejection publishes neither change.
+- `advance-provider-operation-lifecycle` also requires explicit `transition: invoked`.
+- Its closed accounting contract consumes the assigned operation and requires the same
+  request, attempt and prepared authorization.
+- The runner checks the already-invoked request and original lease deadline, applies the
+  proposal and publishes sealed invoked-operation evidence while invalidating assignment
+  evidence.
+- No consumer may fabricate, replace or reuse stale operation evidence.
+- The step has no provider capability, new timeout, retry or token charge;
+  cancellation/rejection publishes neither change.
 
-The selected result-schema resource or its explicitly selected local result definition describes the entire compact model result
-under [ADR 0006](../decisions/0006-minimal-model-response.md), not an inner
-payload or repeated execution metadata. The protocol version and exact resource
-identity stay in compiled authority; no new envelope field is needed in YAML.
-Compilation implements ADR 0006's [closed result-schema
-profile](../decisions/0006-minimal-model-response.md#closed-result-schema-profile)
-through one narrow compiler port bound at composition. Only result-schema
-resources are decoded; their tagged compiled values carry an opaque immutable
-schema and exact captured bytes. The registry owns deep copies of this same
-authority. Missing, malformed, unsupported or unbounded schema declarations
-reject the graph with `WORKFLOW_GRAPH_COMPILE_INVALID`, without publishing a
-partial registry or reading any provider file. Other resource kinds stay bytes.
+- The selected result-schema resource or its explicitly selected local result definition
+  describes the entire compact model result under [ADR
+  0006](../decisions/0006-minimal-model-response.md), not an inner payload or repeated
+  execution metadata.
+- The protocol version and exact resource identity stay in compiled authority; no new
+  envelope field is needed in YAML.
+- Compilation implements ADR 0006's [closed result-schema
+  profile](../decisions/0006-minimal-model-response.md#closed-result-schema-profile)
+  through one narrow compiler port bound at composition.
+- Only result-schema resources are decoded; their tagged compiled values carry an opaque
+  immutable schema and exact captured bytes.
+- The registry owns deep copies of this same authority.
+- Missing, malformed, unsupported or unbounded schema declarations reject the graph with
+  `WORKFLOW_GRAPH_COMPILE_INVALID`, without publishing a partial registry or reading any
+  provider file.
+- Other resource kinds stay bytes.
+
+### Native data and runner outcomes
+
+- The operation registry also owns versioned native data schemas.
+- Compilation captures only schemas used by the selected graph; the runner retains owned
+  invocation values, exposes only declared required/optional inputs, and validates
+  complete deltas before applying writes, replacements, or invalidations.
+- Rejected and cancelled candidates are released.
+- This adds no YAML fields or executable project-supplied schemas.
+- Fixed kernel bindings retain their concrete typed owners; `DataShape` is
+  dependency/effect metadata, not a workflow value store.
+
+- Runner rejections retain their closed diagnostic in the workflow result and do not
+  follow YAML outcome edges.
+- Inference charges actual usage before any result publication rejection; an exceeded or
+  unavailable token budget blocks later model calls and its exact diagnostic reaches the
+  CLI.
 
 ### Execution guards
 
-A gate is a versioned native contract in the existing operation registry: its
-ID, issuing operation ID, evidence key, and nonempty authority-key set. The
-issuer is an ordinary YAML-visible validation operation. It must require those
-authority keys and produce or replace the gate's closed accepted/rejected
-evidence value. It is side-effect-free and holds no operational ports. No other
-operation may write that evidence key.
+- A gate is a versioned native contract in the existing operation registry: its ID,
+  issuing operation ID, evidence key, and nonempty authority-key set.
+- The issuer is an ordinary YAML-visible validation operation.
+- It must require those authority keys and produce or replace the gate's closed
+  accepted/rejected evidence value.
+- It is side-effect-free and holds no operational ports.
+- No other operation may write that evidence key.
 
-The runner records each applied value's local generation, producer, outcome,
-and input generations in its envelope. Before a protected operation, a gate
-requires accepted evidence from a successful execution of its exact issuer,
-bound to the still-present, unchanged authority generations and their recorded
-source lineage. A replaced or removed ancestor invalidates derived evidence;
-a replacement's self-input identifies its superseded revision, not a dependency
-on itself. Missing, rejected,
-foreign, or stale evidence blocks execution. Refresh and domain validation
-remain explicit YAML operations; guards perform no I/O or hidden validation
-workflow. Evidence cannot be imported from a prior envelope as authority.
+- The runner records each applied value's local generation, producer, outcome, and input
+  generations in its envelope.
+- Before a protected operation, a gate requires accepted evidence from a successful
+  execution of its exact issuer, bound to the still-present, unchanged authority
+  generations and their recorded source lineage.
+- A replaced or removed ancestor invalidates derived evidence; a replacement's
+  self-input identifies its superseded revision, not a dependency on itself.
+- Missing, rejected, foreign, or stale evidence blocks execution.
+- Refresh and domain validation remain explicit YAML operations; guards perform no I/O
+  or hidden validation workflow.
+- Evidence cannot be imported from a prior envelope as authority.
 
-Capabilities are derived from the concrete narrow-port types held by each
-registered operation binding, not a second asserted list. The compiler captures
-that set and the selected policy ceiling; the runner checks the current binding
-against both before invoking it. A binding cannot expose an undeclared erased
-capability or service locator. Kernel rejection is terminal, not a YAML outcome
-that can route around the guard. Cancellation is checked before and after guard
-evaluation. These contracts add no workflow-YAML fields.
+- Capabilities are derived from the concrete narrow-port types held by each registered
+  operation binding, not a second asserted list.
+- The compiler captures that set and the selected policy ceiling; the runner checks the
+  current binding against both before invoking it.
+- A binding cannot expose an undeclared erased capability or service locator.
+- Kernel rejection is terminal, not a YAML outcome that can route around the guard.
+- Cancellation is checked before and after guard evaluation.
+- These contracts add no workflow-YAML fields.
 
-An unexpected binding error terminates as an operation failure without applying
-a delta or following a YAML outcome edge. A declared `failed` edge is available
-to an expected failure returned with its valid typed delta; catching an error
-does not synthesize that result or its promised data.
+- An unexpected binding error terminates as an operation failure without applying a
+  delta or following a YAML outcome edge.
+- A declared `failed` edge is available to an expected failure returned with its valid
+  typed delta; catching an error does not synthesize that result or its promised data.
 
-Registered operational ports include `LLMProviderInterface` (`model-provider`),
-the preloaded authorization preparation port (`provider-authorization`),
-the three root-bound toolchain source ports (`toolchain-read`), the toolchain
-document parser (`toolchain-parser`), and reference directory inspection
-(`reference-read`). The pure bounded Unicode normalizer grants no operational
-capability. Further port types require explicit native registration;
-unknown erased contexts or callback fields are rejected, not inferred as pure.
+- Registered operational ports include `LLMProviderInterface` (`model-provider`), the
+  preloaded authorization preparation port (`provider-authorization`), the three
+  root-bound toolchain source ports (`toolchain-read`), the toolchain document parser
+  (`toolchain-parser`), and reference directory inspection (`reference-read`).
+- The pure bounded Unicode normalizer grants no operational capability.
+- Further port types require explicit native registration; unknown erased contexts or
+  callback fields are rejected, not inferred as pure.
 
-The shared value owner copies ordinary immutable data. A sealed native result
-may instead transfer its original owner through a typed native accessor and
-destructor with a bounded retained-byte count. These hooks stay inside the
-runner's value owner, never YAML or model data. Rejected transfers remain with
-their producer; accepted transfers are destroyed exactly once on replacement,
-invalidation, or cleanup. No second service registry or copied authority exists.
+- The shared value owner copies ordinary immutable data.
+- A sealed native result may instead transfer its original owner through a typed native
+  accessor and destructor with a bounded retained-byte count.
+- These hooks stay inside the runner's value owner, never YAML or model data.
+- Rejected transfers remain with their producer; accepted transfers are destroyed
+  exactly once on replacement, invalidation, or cleanup.
+- No second service registry or copied authority exists.
 
 ### Compilation checks
 
-`CompileWorkflowGraphAction` is a pure deterministic compiler over one
-schema-valid definition and immutable registered contracts. It resolves every
-reference exactly once, binds the current invocation contract,
-validates definition-safe parameters, canonicalizes graph data, and derives
-effective data-key, outcome, side-effect, ordering, gate, and capability facts.
-It constructs no adapter, child binding, state identity, or executable code and
-invokes no node.
+- `CompileWorkflowGraphAction` is a pure deterministic compiler over one schema-valid
+  definition and immutable registered contracts.
+- It resolves every reference exactly once, binds the current invocation contract,
+  validates definition-safe parameters, canonicalizes graph data, and derives effective
+  data-key, outcome, side-effect, ordering, gate, and capability facts.
+- It constructs no adapter, child binding, state identity, or executable code and
+  invokes no node.
 
 `ValidateCompiledWorkflowGraphAction` proves at least:
 
@@ -653,14 +702,15 @@ source identity and no `BootstrapComponentId`.
   and
 - a reserved, directory, blocking, or unaccounted ordinal cannot be indexed.
 
-For preselection, the runner constructs exactly one
-`WorkflowDefinitionRegistryService` from the validated identity-free value; no
-earlier candidate can construct it. Separately, when the larger bootstrap
-authority-state flow is required, its materialization owner may consume that
-validated value, assign the one owner-local component ID, and construct
-immutable `WorkflowDefinitionRegistryState`. That later identity does not
-alter graph semantics and is not a precondition for selection.
-`ResolveSelectedWorkflowAction` and workflow execution are not part of F0005.
+- For preselection, the runner constructs exactly one
+  `WorkflowDefinitionRegistryService` from the validated identity-free value; no earlier
+  candidate can construct it.
+- Separately, when the larger bootstrap authority-state flow is required, its
+  materialization owner may consume that validated value, assign the one owner-local
+  component ID, and construct immutable `WorkflowDefinitionRegistryState`.
+- That later identity does not alter graph semantics and is not a precondition for
+  selection.
+- `ResolveSelectedWorkflowAction` and workflow execution are not part of F0005.
 
 ## 9. Failure and cleanup contract
 
@@ -682,15 +732,15 @@ source path operational authority. No failure falls back to another file,
 encoding, definition set, cached registry, hard-coded workflow, or source
 asset.
 
-Raw bytes, decoded raw values, schema-valid definitions, compiled candidates,
-registry candidates, handles, and evidence remain distinct owned values. Each is
-destroyed exactly once on success, deterministic rejection, cancellation,
-timeout, and unexpected operational error. Before workflow selection there is
-no model call, workflow log binding, state write, cache write, transaction,
-feature lock, or filesystem mutation.
-An explicit runner/user cancellation propagates terminal `cancelled` unchanged,
-performs the same complete cleanup, and publishes no service. Cancellation is
-never collapsed into `failed`.
+- Raw bytes, decoded raw values, schema-valid definitions, compiled candidates, registry
+  candidates, handles, and evidence remain distinct owned values.
+- Each is destroyed exactly once on success, deterministic rejection, cancellation,
+  timeout, and unexpected operational error.
+- Before workflow selection there is no model call, workflow log binding, state write,
+  cache write, transaction, feature lock, or filesystem mutation.
+- An explicit runner/user cancellation propagates terminal `cancelled` unchanged,
+  performs the same complete cleanup, and publishes no service.
+- Cancellation is never collapsed into `failed`.
 
 ## 10. Explicit non-responsibilities
 
@@ -744,12 +794,14 @@ Those concerns remain with their accepted owners or later increments.
 10. Every accepted graph has one entry, only reachable terminal-reachable
     nodes, no unbounded cycle, complete unique outcome transitions, valid typed
     data flow, preserved gates, and policy-bounded effective capabilities.
-11. The compiler cannot construct adapters, invoke operations, select behavior
-    from a workflow name, or introduce behavior absent from YAML-referenced
-    registered contracts. Every non-kernel workflow operation is registered and
-    referenceable through the definition's `invoke` or `steps.*.use` fields;
-    source-only non-kernel operations are rejected by architecture tests. There
-    is no second route or domain-workflow registry.
+11. The compiler cannot construct adapters, invoke operations, select behavior from a
+    workflow name, or introduce behavior absent from YAML-referenced registered
+    contracts.
+
+    - Every non-kernel workflow operation is registered and referenceable through the
+      definition's `invoke` or `steps.*.use` fields; source-only non-kernel operations
+      are rejected by architecture tests.
+    - There is no second route or domain-workflow registry.
 12. Registry cardinality is variable from zero through 256 and accepts
     arbitrary schema-valid workflow IDs; no workflow name or four-workflow
     count is required.
@@ -780,62 +832,122 @@ Those concerns remain with their accepted owners or later increments.
 
 Implementation tests must cover the owning boundaries:
 
-- **Path/layout:** relocated workflow roots; no raw-config or fallback path;
-  reserved children absent/present as directories; descendant exclusion;
-  wrong-kind, symlink, case/normalization/portable alias, and collision
-  rejection.
-- **Inventory:** zero, one, many, 256, and 257 definitions; 4,096 and 4,097
-  entries; depths 16 and 17; deadline/cancellation; randomized adapter order;
-  contiguous Unicode-scalar-sorted ordinals; exact `*.workflow.yaml`
-  acceptance; `.workflow.json`, `.workflow.yml`, case variants, suffix-only
-  basenames, declared/unreferenced/unsupported regular resources, links, and
-  special nodes rejection; and
-  exact one-account-per-entry coverage.
-- **Capture/parse:** exactly 1,048,576 and 1,048,577 bytes; exact and exceeded
-  total bytes; short read, growth, shrink, replacement, and type change;
-  invalid UTF-8, BOM, duplicate mapping keys, aliases, custom tags, malformed
-  YAML, non-mapping root, multiple documents, and every accepted parser-limit
-  boundary; comments and equivalent block/flow spellings have no semantic
-  authority.
-- **Schema:** accepted minimal, parameterized, and resource-using definitions; every
-  required/unknown/wrong-kind field; unsupported schema version; malformed IDs,
-  references, version, shortcode, scalar parameter types, integer limits,
-  nested values, local duplicate IDs, resource aliases, and prohibited raw
-  operational path/command/adapter/capability/script or runner-control shapes.
-- **Compiler:** unknown invocation, operation, policy, parameter, outcome, gate
-  and capability references; version-suffixed operation IDs, separate operation
-  version fields, duplicate operation IDs and policy-version mismatches;
-  non-capability-free invocation;
-  entry/run-context mismatch; missing entry or target; dangling, unreachable,
-  nonterminal, cyclic, missing/duplicate-key/undeclared transition;
-  invalid terminal mapping; data-key/version/producer/effect/barrier failure;
-  gate weakening; capability escalation; missing, negative, excessive, or
-  policy-supplied retry limits; retry limits on non-retry contracts; a missing
-  or nonpositive policy token budget; and runner bypass.
-- **Registry:** arbitrary non-SDD IDs; zero definitions; duplicate workflow ID,
-  shortcode, or ordinal; missing/extra graph; mismatched map key;
-  capture/account/evidence mismatch; reserved ordinal indexed; and proof that
-  one invalid sibling publishes nothing.
-- **Properties:** every accepted definition compiles only registered contracts
-  and handles every declared outcome; adding/removing an unrelated definition
-  or inserting an earlier-sorting source cannot change another workflow's
-  `CompiledWorkflowSemanticAuthority`; initial SDD predecessor/approval gates
-  cannot be weakened by any accepted parameter combination; and two executions
-  of one compiled workflow initialize independent total-token ledgers without
-  changing its immutable semantic authority.
-- **Architecture and startup:** actions cannot call nodes; the compiler imports
-  no filesystem/provider implementation; the workflow parse action depends
-  only on its narrow parser port; the YAML library and syntax-node types remain
-  adapter-private; workflow and toolchain ports/raw values/schema validators do
-  not merge; the startup orchestrator has only child bindings; the runner is
-  the sole node/delta owner; the fixed startup graph is absent from the
-  registry; no write, model call, command, or feature lock occurs; and
-  all owned intermediates are released on every terminal branch.
-- **Packaging:** load a valid relocated variable registry and its declared
-  workflow-owned resources with the native
-  executable in a clean directory containing only target-owned runtime inputs,
-  never `design/`, source files, build cache, or a Zig toolchain.
+**Path/layout**
 
+- relocated workflow roots
+- no raw-config or fallback path
+- reserved children absent/present as directories
+- descendant exclusion
+- wrong-kind, symlink, case/normalization/portable alias, and collision rejection.
+
+**Inventory**
+
+- zero, one, many, 256, and 257 definitions
+- 4,096 and 4,097 entries
+- depths 16 and 17
+- deadline/cancellation
+- randomized adapter order
+- contiguous Unicode-scalar-sorted ordinals
+- exact `*.workflow.yaml` acceptance
+- `.workflow.json`, `.workflow.yml`, case variants, suffix-only basenames,
+  declared/unreferenced/unsupported regular resources, links, and special nodes
+  rejection
+- exact one-account-per-entry coverage.
+
+**Capture/parse**
+
+- exactly 1,048,576 and 1,048,577 bytes
+- exact and exceeded total bytes
+- short read, growth, shrink, replacement, and type change
+- invalid UTF-8, BOM, duplicate mapping keys, aliases, custom tags, malformed YAML,
+  non-mapping root, multiple documents, and every accepted parser-limit boundary
+- comments and equivalent block/flow spellings have no semantic authority.
+
+**Schema**
+
+- accepted minimal, parameterized, and resource-using definitions
+- every required/unknown/wrong-kind field
+- unsupported schema version
+- malformed IDs, references, version, shortcode, scalar parameter types, integer limits,
+  nested values, local duplicate IDs, resource aliases, and prohibited raw operational
+  path/command/adapter/capability/script or runner-control shapes.
+
+**Compiler**
+
+- unknown invocation, operation, policy, parameter, outcome, gate and capability
+  references
+- version-suffixed operation IDs, separate operation version fields, duplicate operation
+  IDs and policy-version mismatches
+- non-capability-free invocation
+- entry/run-context mismatch
+- missing entry or target
+- dangling, unreachable, nonterminal, cyclic, missing/duplicate-key/undeclared
+  transition
+- invalid terminal mapping
+- data-key/version/producer/effect/barrier failure
+- gate weakening
+- capability escalation
+- missing, negative, excessive, or policy-supplied retry limits
+- retry limits on non-retry contracts
+- a missing or nonpositive policy token budget
+- runner bypass.
+
+**Registry**
+
+- arbitrary non-SDD IDs
+- zero definitions
+- duplicate workflow ID, shortcode, or ordinal
+- missing/extra graph
+- mismatched map key
+- capture/account/evidence mismatch
+- reserved ordinal indexed
+- proof that one invalid sibling publishes nothing.
+
+**Properties**
+
+- every accepted definition compiles only registered contracts and handles every
+  declared outcome
+- adding/removing an unrelated definition or inserting an earlier-sorting source cannot
+  change another workflow's `CompiledWorkflowSemanticAuthority`
+- initial SDD predecessor/approval gates cannot be weakened by any accepted parameter
+  combination
+- two executions of one compiled workflow initialize independent total-token ledgers
+  without changing its immutable semantic authority.
+
+**Architecture and startup**
+
+- actions cannot call nodes
+- the compiler imports no filesystem/provider implementation
+- the workflow parse action depends only on its narrow parser port
+- the YAML library and syntax-node types remain adapter-private
+- workflow and toolchain ports/raw values/schema validators do not merge
+- the startup orchestrator has only child bindings
+- the runner is the sole node/delta owner
+- the fixed startup graph is absent from the registry
+- no write, model call, command, or feature lock occurs
+- all owned intermediates are released on every terminal branch.
+
+**Packaging**
+
+- load a valid relocated variable registry and its declared workflow-owned resources
+  with the native executable in a clean directory containing only target-owned runtime
+  inputs, never `design/`, source files, build cache, or a Zig toolchain.
+
+## Implementation status
+
+**Implementation**
+
+- Complete for the generic workflow-definition increment.
+- F0005 accepts only the concise closed schema, captures declared workflow resources,
+  compiles through the single generic operation registry, and publishes an immutable
+  graph registry.
+- ADR 0003's generic runner now executes only those compiled transitions.
+- The selected policy's positive total-token budget and each retry-capable operation
+  instance's explicit `retry-limit` are compiled into that immutable authority; initial
+  execution is separate from the declared retry count.
+- No legacy reader, generic loop budget, or split invocation/step registry remains.
+- Concrete domain operations and initial workflow definitions remain separately governed
+  increments.
 ## 13. Traceability
 
 | Concern | Authority |

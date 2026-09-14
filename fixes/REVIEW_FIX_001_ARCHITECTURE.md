@@ -16,13 +16,138 @@ the proposed implementation's single-responsibility boundaries. It adds F9/F10
 and extends F8. Offline verification and the separate final documentation checks
 are recorded in §9.
 
-**Implementation follow-up — 14 September 2026:** F1–F4/F9 are addressed by the
-shared Phase 3 implementation and new boundary/production-graph regressions.
-Final verification passed: 120/120 steps and 1,405/1,405 tests, including native
-smoke; commands and evidence are in the [single rollout record](TODO_FIX_001.md#phase-3-architecture-audit-follow-up).
-The findings and line references below describe the audited `f880799` snapshot;
-they are retained as evidence, not current work status. F5–F8 and F10 remain
-assigned to their later phases. No live quality or reliability claim follows.
+**Current verdict — 15 September 2026: Phase 3 is not complete.** The 14 September
+implementation repaired the reported F2/F9 dependency and request defects and
+several F1/F3/F4 cases. The independent review below reproduces remaining F1/F4
+failures and identifies unfinished F3 ownership cleanup. The prior blanket
+completion statement is superseded. Current status and remaining work have one
+home in the [rollout record](TODO_FIX_001.md#phase-3-architecture-audit-follow-up).
+F5–F8 and F10 retain their later-phase assignments.
+
+## 15 September 2026 critical review
+
+**Snapshot and method:** engine sources at `a742020` (`_`), compared with every
+Phase 3 chunk 08–12 and the approved R1–R9/G1 boundaries. Traced all five atomic
+consumers, native dependency capture, selected schemas, actual packet builders,
+field/collection authorization, merge origins, YAML revalidation, runner limits
+and report retention. Existing engine sources and tests were not edited. Two
+additional tests were appended only to an isolated copy beneath `.zig-cache`
+and run through that copy's unchanged repository `build.zig` step. Concurrent
+documentation edits elsewhere in the worktree were preserved.
+
+### C1 — P2: selection feasibility ignores unchanged sibling membership
+
+This is a remaining **F1** failure in summaries and global signals.
+[Native relation facts](../src/domain/reference_reconciliation_validation.zig),
+lines 107–117, filter choices by content kind and signal disposition. They do
+not account for existing sibling membership. The authorizer's `projectionTarget`
+at [repair lines 175–190](../src/domain/reference_reconciliation_repair.zig)
+treats any nonempty choice list as grounds for a selection-only model request.
+
+The executable counterexample has one business claim A and one preserved-token
+claim B. Two valid siblings already represent A and B. An extra statement/signal
+has an empty selection and different business text. That array shape is allowed
+by the selected schema; the native validator correctly rejects its selection.
+Authorization nevertheless offers A as the **only** replacement choice and freezes
+the extra entry's content and both valid siblings.
+
+The probe reads A from the actual serialized request, parses and merges that
+selection, and reruns the native validators with the merged revision/origins:
+
+- Summary: the candidate fails exact-once membership; authorization then blocks
+  with `competing_entries`.
+- Global signal: the candidate fails duplicate membership; authorization then
+  blocks with `competing_entries` because the texts are not equivalent.
+
+Both outcomes reproduce for greeting and loan-renewal sources. There is no
+other nonempty valid selection in either case. Full validation prevents invalid
+acceptance, but the engine has authorized a futile call before a mechanically
+knowable block. This differs from the permitted selection-then-missing-member
+insertion sequence: here every member is already occupied and there is no
+established safe survivor decision.
+
+**Owning correction:** extend the existing native relation facts to account for
+the unchanged membership/coverage constraints of the selected unit. Authorization
+consumes those facts and uses existing G1 when no independently valid choice
+exists. Summary exact-once membership and signal set uniqueness have different
+rules: do not globally prohibit valid overlapping signals. Inspect the conflict
+consumer against its own pair/uniqueness rules; the probe does not establish a
+new conflict failure. No subset/clique solver, multi-record replacement, sibling
+deletion, retry increase or fixture-specific branch is needed.
+
+### C2 — P2: disposition redundancy still uses byte equality as domain policy
+
+This is an unclosed sibling of **F4**. At
+[reference_reconciliation_repair.zig](../src/domain/reference_reconciliation_repair.zig),
+lines 103–108, duplicate disposition records still use `atomic.equal` to decide
+whether deletion is safe. This is separate from the now-canonical comparison of
+summary, signal and conflict text.
+
+The probe supplies three business claims. A is superseded by B and C, and B/C
+are retained. Both `A → [B, C]` and `A → [C, B]` separately pass full native
+reconciliation with the same signals and graph obligations. Appending the second
+representation as a duplicate A record produces the expected cardinality
+rejection, but authorization returns `competing_entries` because the arrays have
+different byte order. Both greeting and loan examples reproduce the block.
+Relationship validation checks uniqueness, membership and reachability, not an
+ordering-based precedence decision.
+
+**Owning correction:** the native disposition relationship owner should retain
+redundancy facts under its validated set/graph semantics, including unchanged
+claim identity, disposition and obligations. The authorizer consumes that proof.
+Different targets, variants, invalid repeated members or genuinely competing
+graphs must not become removable. Keep `atomic.equal` exact for old-value and
+dependency preconditions; remove only its use as the disposition equivalence
+policy. No model sorting request or automatic choice between meanings is needed.
+
+### C3 — P3: retained-claim eligibility still has two implementations
+
+The F3 audit explicitly identified this drift risk, and it remains:
+[specification_session.packet](../src/domain/specification_session.zig), lines
+53–58, independently filters `.retained` claims for the model, while
+[specification_provenance.resolve](../src/domain/specification_provenance.zig),
+lines 56–62, independently decides whether selected claims are retained.
+They currently agree. This review found **no runtime mismatch** between those
+two predicates; C3 is unfinished ownership cleanup, not another reproduced run
+failure. The new `ValueChoices` correctly shares exact-copy alternatives, but
+does not remove this separate eligibility decision.
+
+Reuse a small pure eligibility predicate at the existing provenance owner for
+both acceptance and packet projection. Keep projection and validation as separate
+responsibilities; no new registry, service or generic validation framework is
+required. Test all disposition variants and missing IDs against actual request
+choices and native acceptance. This completes the existing 08/11 single-owner
+criterion without changing which claims are eligible.
+
+### What passed, and what that establishes
+
+The existing targeted checks passed **271/271** tests. The full repository gate
+passed **120/120 steps and 1,405/1,405 tests**, including architecture and native
+packaging smoke. The isolated reconciliation suite passed its original **81/81**
+tests but failed both added review tests: **81/83 passed**. C1 exercised four
+combinations; C2 exercised two. Commands, probe source and logs are linked in
+the [single validation record](TODO_FIX_001.md#critical-review-validation--15-september-2026).
+These probes invoke native code and real packet serialization with offline
+fixtures; they are neither live LLM calls nor rubric evidence.
+
+No additional defect was established in the inspected shared CAS, dependency
+snapshots, request association, origin replacement, merge receipts, bounded retry
+ownership or mandatory post-merge validation. F2/F9's corrections and chunk 12's
+extraction/coverage work remain delivered. Existing source-count architecture
+guards pass, but they cannot establish that every selection/equivalence decision
+uses the correct domain rule; C1/C2 demonstrate the missing behavioral coverage.
+
+Keep observation on the existing native rejection → authorization → event/report
+path. Retain the facts explaining admissibility or redundancy together with
+target, revision, origin and merge result, and test their lifetime after request
+release. No additional logging subsystem is indicated by these findings; extra
+logs alone cannot correct a wrong feasibility or equivalence decision. Later
+transport observation remains chunk 16.
+
+The remainder of this document records the **13 September `f880799` audit**.
+Its historical findings and line numbers are retained as evidence. The current
+review does not move support/clarification, persisted readback or CLI/harness
+assembly into Phase 3, and makes no live completion or reliability claim.
 
 ## 1. Verdict and limits
 

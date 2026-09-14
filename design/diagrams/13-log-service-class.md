@@ -30,6 +30,6 @@ classDiagram
     note for FeatureLogActions "Filter, redact, validate and persist records within their declared responsibilities"
 ```
 
-Workflow code contributes telemetry facts. The logging runtime owns safe
-recording and stream management. A logging failure blocks further workflow
-progress; logs do not establish workflow authority or completion.
+[F0002](../features/F0002-LogService.md) separates workflow telemetry facts from
+safe recording and stream management. Logging failure blocks progress; logs do
+not establish workflow authority or completion.

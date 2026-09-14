@@ -54,12 +54,13 @@ project-root `.sddtoolkit.json`:
 }
 ```
 
-The value must be a normalized portable project-relative file path whose
-basename is exactly `.sddproviders.json`. F0004 validates and reserves it as a
-distinct engine-read-only file role. It must not equal or nest within a
-configured directory root, collide with `.sddtoolkit.json`, or escape the
-project root. F0008 rejects linked components and physical identity aliasing
-when the file is opened.
+- The value must be a normalized portable project-relative file path whose basename is
+  exactly `.sddproviders.json`.
+- F0004 validates and reserves it as a distinct engine-read-only file role.
+- It must not equal or nest within a configured directory root, collide with
+  `.sddtoolkit.json`, or escape the project root.
+- F0008 rejects linked components and physical identity aliasing when the file is
+  opened.
 
 F0008 consumes only F0004's opaque provider-document capability. It never
 reads `config.paths.providers` directly and never resolves the path again.
@@ -112,19 +113,19 @@ locate or capture rejection returns `failed`; F0006's conditional
 model-provider bootstrap runner maps it to the already accepted
 `LLM_PROVIDER_CONFIG_READ_ERROR`. No partial service is published.
 
-F0008 does not decide whether a selected workflow needs model binding or
-provider calls.
-F0006's accepted capability-free model-provider bootstrap orchestrator owns
-that branch. A workflow whose derived requirement is `not_required` must not
-probe or read the provider document merely because `paths.providers` is
-reserved during root validation.
+- F0008 does not decide whether a selected workflow needs model binding or provider
+  calls.
+- F0006's accepted capability-free model-provider bootstrap orchestrator owns that
+  branch.
+- A workflow whose derived requirement is `not_required` must not probe or read the
+  provider document merely because `paths.providers` is reserved during root validation.
 
 ## 6. Acceptance criteria
 
 1. `paths.providers` is required by the closed `.sddtoolkit.json` contract.
 2. F0004 validates and reserves its exact project-relative
-`.sddproviders.json` path without reading the file; F0008 performs its
-no-follow physical checks when the file is requested.
+   `.sddproviders.json` path without reading the file; F0008 performs its
+   no-follow physical checks when the file is requested.
 3. F0008 consumes only the opaque F0004 capability; raw config path strings do
    not cross into the reader.
 4. Locate and read are separate single-responsibility actions.
@@ -143,13 +144,20 @@ no-follow physical checks when the file is requested.
 
 ## 7. Verification
 
-Tests cover configured-path normalization and exact basename; collision with
-the engine config and every configured root; nested configured locations;
-missing, wrong-kind, symlinked, replaced, short, growing, shrinking, exact-size,
-and over-size files; orchestrator order and terminal propagation; runner delta
-application and cleanup; immutable repeated queries; absence of parsing in the
-service; conditional single capture; ordinary-bootstrap non-probing; and no
-fixed-location or source-example fallback.
+Tests cover:
+
+- configured-path normalization and exact basename
+- collision with the engine config and every configured root
+- nested configured locations
+- missing, wrong-kind, symlinked, replaced, short, growing, shrinking, exact-size, and
+  over-size files
+- orchestrator order and terminal propagation
+- runner delta application and cleanup
+- immutable repeated queries
+- absence of parsing in the service
+- conditional single capture
+- ordinary-bootstrap non-probing
+- no fixed-location or source-example fallback.
 
 ## 8. Traceability
 

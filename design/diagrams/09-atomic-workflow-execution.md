@@ -6,8 +6,10 @@ flowchart TD
     INPUTS --> RUN["Execute the declared workflow;<br/>keep candidate output private"]
     RUN --> RESULT{"Workflow outcome"}
     RESULT -->|Success| VALIDATE["Validate the complete output and evidence"]
-    VALIDATE -->|Valid| OUTPUT["Publish complete artifacts and state together;<br/>replace the workflow's existing outputs"]
-    OUTPUT --> COMPLETE["Report successful completion"]
+    VALIDATE -->|Valid| OUTPUT["Publish validated registered artifacts;<br/>write canonical workflow state last"]
+    OUTPUT -->|All writes succeed| COMPLETE["Report successful completion"]
+    OUTPUT -->|Write failure or interruption| WRITEFAIL["No new successful completion;<br/>already-replaced files may remain"]
+    WRITEFAIL -. Fresh invocation .-> START
     VALIDATE -->|Invalid| FAILED["End failed;<br/>discard candidate output"]
     RESULT -->|Needs user| CLARIFY["Preserve clarification questions and answers;<br/>publish no partial successful output"]
     RESULT -->|Failed| FAILED
@@ -19,6 +21,8 @@ flowchart TD
     ABANDON -. Later invocation .-> START
 ```
 
-Each invocation begins at the workflow's start. Step or task progress is not a
-saved continuation. User-closed clarification files remain unchanged, and
-clarification answers survive output replacement and abandoned executions.
+[ADR 0009](../decisions/0009-atomic-workflow-execution.md) defines fresh execution
+from `start` and whole-workflow publication. Failed writes may leave replaced
+files but cannot record new success. Clarification identity/answer persistence
+and user-closed byte protection follow
+[§23.2](../design.md#232-workflow-reruns-and-protected-clarification-files).

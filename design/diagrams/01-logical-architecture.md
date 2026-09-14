@@ -23,7 +23,6 @@ flowchart TB
     RUNNER --> LOGGING["Logging through runner-owned bindings<br/>Record trusted lifecycle facts and accepted telemetry"]
 ```
 
-Workflow definitions select registered behavior. The runner owns execution;
-orchestrators coordinate through its child bindings, and actions access side
-effects through their declared ports. Model responses remain candidates until
-engine validation accepts them. Publication requires whole-workflow success.
+Workflow YAML selects registered behavior; the runner enforces execution and
+whole-workflow publication. See [Design §§5–6](../design.md#5-logical-architecture)
+for action, orchestrator and model capability boundaries.

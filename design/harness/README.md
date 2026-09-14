@@ -1,58 +1,66 @@
 # Spec workflow evaluation backlog
 
 **Status:** Live generation and rubric handoff are implemented. Human rubric
-calibration and broader acceptance remain open. **Reviewed:** 2026-09-11.
+calibration and broader acceptance remain open. **Reviewed:** 2026-09-15 (documentation/source review; no new live run).
 [Run instructions and result interpretation](e2e.md).
 
 ## User-directed outcome
 
-Run the ordinary `spec.workflow.yaml` against the Hello World reference, then
-evaluate the **actual generated `spec.md`** using the **selected OpenAI or Bedrock API and a rubric**.
-Report criterion-level judgments, scores, evidence and explanations.
+- Run the ordinary `spec.workflow.yaml` against the Hello World reference, then evaluate
+  the **actual generated `spec.md`** using the **selected OpenAI or Bedrock API and a
+  rubric**.
+- Report criterion-level judgments, scores, evidence and explanations.
 
-The LLM evaluates semantic quality: coverage, correctness, unsupported additions,
-clarity, testability and appropriate scope. Mechanical checks establish that
-inputs, execution and evaluator responses can be processed safely. They do not
-establish that the specification is semantically correct.
+- The LLM evaluates semantic quality: coverage, correctness, unsupported additions,
+  clarity, testability and appropriate scope.
+- Mechanical checks establish that inputs, execution and evaluator responses can be
+  processed safely.
+- They do not establish that the specification is semantically correct.
 
-An exact expected `spec.md`, a universal deterministic definition of good
-requirements, or completion of Plan/Tasks/Implement is **not** a prerequisite
-for rubric evaluation. Offline fakes test the machinery; they do not replace the
-requested live, LLM-based evaluation.
+- An exact expected `spec.md`, a universal deterministic definition of good
+  requirements, or completion of Plan/Tasks/Implement is **not** a prerequisite for
+  rubric evaluation.
+- Offline fakes test the machinery; they do not replace the requested live, LLM-based
+  evaluation.
 
 ## Scope and authority
 
-- Initial case: `test/e2e/wf-001-hello-world/node-vitest`, using its
-  sibling [stories.md](../../test/e2e/wf-001-hello-world/reference/stories.md).
-- Evaluator providers: OpenAI Responses or Bedrock Converse, explicitly selected
-  through the internal test environment. The workflow's generation provider
-  and the evaluator's provider/model are separate selections. The supplied-spec
-  evaluator uses Responses/Converse with native HTTPS without a new dependency. Exact model
-  and limits are mandatory operator selections; draft rubric scoring is visible
-  in the rubric file, not a production policy or calibrated result.
+- Initial case: `test/e2e/wf-001-hello-world/node-vitest`, using its sibling
+  [stories.md](../../test/e2e/wf-001-hello-world/reference/stories.md).
+- Evaluator providers: OpenAI Responses or Bedrock Converse, explicitly selected through
+  the internal test environment.
+- The workflow's generation provider and the evaluator's provider/model are separate
+  selections.
+- The supplied-spec evaluator uses Responses/Converse with native HTTPS without a new
+  dependency.
+- Exact model and limits are mandatory operator selections; draft rubric scoring is
+  visible in the rubric file, not a production policy or calibrated result.
 - This is development-only evaluation of the engine in isolated test projects.
-  Live runs transmit their declared inputs and use configured API credentials.
-  They are explicitly invoked and are not part of offline verification or CI.
-- [Engine design](../design.md) remains Proposed. Its production safety and
-  publication rules still apply. This backlog does not make rubric scores into
-  workflow approvals, clarification answers or permission to publish.
-- [F0100](../features/F0100-SpecWorkflow.md) owns the Spec workflow contract.
-  [ADR 0003](../decisions/0003-generic-workflow-engine.md) owns generic YAML
-  execution. [ADR 0009](../decisions/0009-atomic-workflow-execution.md) rules out
-  transaction stores, checkpoints and resumable executions. Its approved
-  publication-failure rule permits already-replaced files to remain after write
-  failure/interruption, without new successful completion; a fresh run replaces
+- Live runs transmit their declared inputs and use configured API credentials.
+- They are explicitly invoked and are not part of offline verification or CI.
+- [Engine design](../design.md) remains Proposed.
+- Its production safety and publication rules still apply.
+- This backlog does not make rubric scores into workflow approvals, clarification
+  answers or permission to publish.
+- [F0100](../features/F0100-SpecWorkflow.md) owns the Spec workflow contract. [ADR
+  0003](../decisions/0003-generic-workflow-engine.md) owns generic YAML execution. [ADR
+  0009](../decisions/0009-atomic-workflow-execution.md) rules out transaction stores,
+  checkpoints and resumable executions.
+- Its approved publication-failure rule permits already-replaced files to remain after
+  write failure/interruption, without new successful completion; a fresh run replaces
   outputs from the beginning.
-- [F0050](../features/F0050-SpecWorkflowEvaluationService.md) points to this
-  harness contract. Rubric grading is part of the E2E path.
+- [F0050](../features/F0050-SpecWorkflowEvaluationService.md) points to this harness
+  contract.
+- Rubric grading is part of the E2E path.
 
 ## Implementation snapshot
 
-The [single-case E2E command](e2e.md) runs the selected test's configured LLM
-through the production runtime, validates actual publication, and submits that
-exact specification to the selected live rubric evaluator. It retains immutable
-input captures and separate generation/publication/quality results in one dated
-folder. Scripted-generation and golden-document E2E paths have been removed.
+- The [single-case E2E command](e2e.md) runs the selected test's configured LLM through
+  the production runtime, validates actual publication, and submits that exact
+  specification to the selected live rubric evaluator.
+- It retains immutable input captures and separate generation/publication/quality
+  results in one dated folder.
+- Scripted-generation and golden-document E2E paths have been removed.
 
 | Area | Implemented | Remaining evidence/work |
 | --- | --- | --- |
@@ -61,14 +69,15 @@ folder. Scripted-generation and golden-document E2E paths have been removed.
 | Evaluator | Supplied-spec and joined E2E grading through OpenAI/Bedrock with closed result/evidence validation. | Human rubric review and H-016 calibration. |
 | Full-workflow harness | Real configured generation, publication identity checks, live grading and failure reports. | H-017 broader live/rerun/failure evidence; see retained run results. |
 
-The latest live run completed extraction with low reasoning, then rejected an
-invalid JSON reconciliation response (3 calls; 8,472 accounted tokens). It
-produced no specification or
-grade. [Run evidence](e2e.md#live-evidence--2026-09-11) retains this unmet acceptance.
+- Historical runs failed before publication and grading.
+- The [FIX_001 analysis](../../fixes/FIX_001.md) retains their dated findings; the
+  [active rollout](../../fixes/TODO_FIX_001.md) records completed offline fixes and
+  remaining work.
+- No successful scored live baseline is claimed.
 
-Mechanical tests establish the harness contracts. A completed live execution
-and its scores must be reported separately; a source inspection is not a test
-pass or proof of semantic quality.
+- Mechanical tests establish the harness contracts.
+- A completed live execution and its scores must be reported separately; a source
+  inspection is not a test pass or proof of semantic quality.
 
 ## Delivery sequence
 
@@ -83,17 +92,19 @@ pass or proof of semantic quality.
    grade that run's output through the selected provider, and produce an inspectable report.
    A low score is a valid evaluation result, not an excuse to hide the run.
 
-Neither a supplied-spec evaluation nor a fake-generation integration test alone
-completes milestone 3. Rubric work and evaluator calibration are core delivery,
-not an optional phase after a golden-file harness.
+- Neither a supplied-spec evaluation nor a fake-generation integration test alone
+  completes milestone 3.
+- Rubric work and evaluator calibration are core delivery, not an optional phase after a
+  golden-file harness.
 
 ## Backlog index
 
-H-001–H-006 are implemented; human review/calibration remains open. H-007's native contract/codec and H-008's
-shared required-authority boundary and H-009/H-010 generation are implemented;
-H-014/H-015 and H-018 code/documentation are implemented; H-011/H-012 gaps,
-H-016 human calibration and H-017 broader acceptance remain open.
-Dependencies and evidence are defined in the ticket bodies.
+- H-001–H-006 are implemented; human review/calibration remains open.
+- H-007's native contract/codec and H-008's shared required-authority boundary and
+  H-009/H-010 generation are implemented; H-014/H-015 and H-018 code/documentation are
+  implemented; H-013 is partially connected, with H-011/H-012 gaps, H-016 human
+  calibration and H-017 broader acceptance remain open.
+- Dependencies and evidence are defined in the ticket bodies.
 
 | ID | Work item | Track |
 | --- | --- | --- |
@@ -116,8 +127,9 @@ Dependencies and evidence are defined in the ticket bodies.
 | [H-017](03-harness-verification.md#h-017--prove-the-complete-spec-evaluation-case) | End-to-end, rerun and failure evidence | Verification |
 | [H-018](03-harness-verification.md#h-018--add-build-wiring-and-correct-the-documentation) | Commands, documentation cleanup and handoff | Delivery |
 
-Use `e2e-spec` for live generation plus grading and `evaluate-spec` for explicit
-supplied-spec grading. Neither changes production workflow authority.
+- Use `e2e-spec` for live generation plus grading and `evaluate-spec` for explicit
+  supplied-spec grading.
+- Neither changes production workflow authority.
 
 ## Completion checklist
 
@@ -139,7 +151,7 @@ supplied-spec grading. Neither changes production workflow authority.
 - [ ] Relevant repository verification and clean native smoke tests pass;
   live checks are explicit opt-in and their actual evidence is recorded.
 
-No ticket adds a dashboard, distributed runner, judge committee, automatic
-prompt optimizer, transaction directory, feature-ownership registry or a new
-workflow engine. Extend an existing owner where it already provides the needed
-contract; remove superseded code/docs in the implementing change.
+- No ticket adds a dashboard, distributed runner, judge committee, automatic prompt
+  optimizer, transaction directory, feature-ownership registry or a new workflow engine.
+- Extend an existing owner where it already provides the needed contract; remove
+  superseded code/docs in the implementing change.

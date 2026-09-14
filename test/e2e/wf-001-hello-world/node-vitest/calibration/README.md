@@ -78,13 +78,14 @@ examples, not new defaults. See the [configuration contract](../../../../../desi
 The calibration review belongs beside retained reports, not inside `spec.md` or
 the rubric. These reports demonstrate supplied-spec evaluation only.
 
-## Current evidence
+## Historical preparation evidence
 
 - All seven specimens pass the ordinary capture/packet regression.
 - `zig build test-rubric-evaluator --summary all`: 29 tests passed.
 - `zig build verify --summary all`: 781 tests, lint and native smoke checks passed.
 - Human review: pending. Judge model/configuration and paid-run allowance: pending.
-- Live reports: none. `OPENAI_API_KEY` was not set in the execution environment
-  when this work was attempted on 2026-09-06.
+- No live reports were produced during preparation on 2026-09-06. That
+  attempt predates the current test-only credential contract; current evaluator
+  calls require `TEST_OPENAI_API_KEY` or the selected Bedrock test credential.
 - H-002's remaining semantic comparison and H-004/H-006's live acceptance stay
   open until their actual review/report evidence exists.
