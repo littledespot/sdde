@@ -10,6 +10,79 @@ const text = @import("test_fixtures/reference_text.zig");
 const validate_unit = @import("actions/specification/validate_specification_unit.zig").Action{ .validator = text.validator };
 const tokens = @import("test_fixtures/reference_tokens.zig");
 
+test "specification choices acceptance and coverage share retained claim eligibility" {
+    const r = references.r;
+    const sessions = @import("domain/specification_session.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const coverage = @import("domain/specification_coverage.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "A visitor sees a greeting.", "A librarian renews a loan." }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        const value = try fixture.value(source);
+        const proposal = try fixture.proposal(source);
+        const id = value.provenance.claim_ids[0];
+        const original = fixture.context.references.records.assignments.checked.prior.prior.dispositions;
+        const content = (try identifiers.assign(a, .{ .display_name = value, .primary_user_story = value, .records = &.{}, .entities = .{ .disposition = .not_applicable, .basis = value } }, .{})).content;
+        const variants = std.meta.tags(r.Disposition);
+        // The final case removes the selected claim's disposition account.
+        for (0..variants.len + 1) |index| {
+            var dispositions: std.ArrayList(r.ClaimDisposition) = .empty;
+            for (original) |account| {
+                var changed = account;
+                if (account.claim_id.ordinal == id.ordinal) {
+                    if (index == variants.len) continue;
+                    changed.disposition = variants[index];
+                }
+                try dispositions.append(a, changed);
+            }
+            var context = fixture.context;
+            context.references.records.assignments.checked.prior.prior.dispositions = dispositions.items;
+            const eligible = index < variants.len and variants[index] == .retained;
+            const current = try sessions.initialize(.{ .bytes = "selected" }, context);
+            const packet = try sessions.packet(std.testing.allocator, current, context);
+            defer packets.release(packet);
+            const repair = @import("domain/specification_repair.zig");
+            var bad = proposal;
+            bad.provenance.claim_ids = &.{.{ .ordinal = 999 }};
+            const candidate: repair.Candidate = .{ .response = .{ .content = .{ .brief = .{ .title = bad, .description = proposal, .primary_goal = proposal } } } };
+            const rejection = (try validate_unit.execute(a, current, context, candidate)).invalid;
+            const authorization = try repair.authorize(a, current, context, candidate, rejection);
+            const repair_packet = try repair.packet(std.testing.allocator, current, context, authorization);
+            defer packets.release(repair_packet);
+            for ([_]*const packets.Packet{ packet, repair_packet }) |request| {
+                const body = try std.json.parseFromSlice(std.json.Value, a, request.body(), .{});
+                const input = if (request.purpose() == .atomic_repair) body.value.object.get("input").? else body.value;
+                var offered = false;
+                for (input.object.get("claims").?.array.items) |claim| {
+                    const ordinal = claim.object.get("id").?.object.get("ordinal").?.integer;
+                    if (ordinal == id.ordinal) offered = true;
+                    try std.testing.expect(ordinal != 999);
+                }
+                try std.testing.expectEqual(eligible, offered);
+            }
+            if (eligible) {
+                try std.testing.expectEqualDeep(value.provenance, try provenance.select(a, context, proposal.provenance));
+                _ = try provenance.scopes(a, context, value.provenance);
+            } else {
+                try std.testing.expectError(error.InvalidSpecification, provenance.select(a, context, proposal.provenance));
+                try std.testing.expectError(error.InvalidSpecification, provenance.scopes(a, context, value.provenance));
+            }
+            const accounted = try coverage.validate(a, context.references, .{ .title = value, .description = value, .primary_goal = value }, content);
+            var covered = false;
+            for (accounted.accounts) |account| if (account.claim_id.ordinal == id.ordinal) {
+                covered = true;
+            };
+            try std.testing.expectEqual(eligible, covered);
+            const missing: r.ClaimId = .{ .ordinal = 999 };
+            try std.testing.expect(!provenance.eligibleClaim(null));
+            try std.testing.expectError(error.InvalidReferenceReconciliation, provenance.select(a, context, .{ .claim_ids = &.{missing}, .clarification_response_ids = &.{} }));
+        }
+    }
+}
+
 test "specification text repair uses shared localized guidance and preserves evidence" {
     const repair = @import("domain/specification_repair.zig");
     const candidates = @import("domain/specification_candidate.zig");

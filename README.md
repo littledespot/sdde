@@ -22,13 +22,15 @@ and publication evidence control workflow authority.
   specification generation, validation, authorized atomic repair and registered
   output publication. Evidence selections resolve to engine-owned citations;
   repair retains exact old values, revisions, dependencies and producing-call evidence.
-- Phase 3 still has known selection-feasibility, disposition-equivalence and
-  shared-eligibility gaps recorded in the [15 September review](fixes/REVIEW_FIX_001_ARCHITECTURE.md#15-september-2026-critical-review).
+- Phase 3 still has selection-feasibility and disposition-equivalence gaps
+  recorded in the [15 September review](fixes/FIX_001.md#15-september-2026-critical-review).
+  Shared eligibility (C3) and runtime assembly (20/F10) are
+  [implemented and verified offline](fixes/IMP_001.md#c3-and-chunk-20-validation--15-september-2026).
   Authenticated clarification-answer application, feature-log integration and
   remaining support-review/publication assurance work are also open. Connected
   generation does not establish complete Specify acceptance. See
   [F0100](design/features/F0100-SpecWorkflow.md) and the
-  [active FIX_001 rollout](fixes/TODO_FIX_001.md).
+  [active FIX_001 rollout](fixes/IMP_001.md).
 - The development harness runs real generation and grades the actual published
   specification through the selected OpenAI or Bedrock evaluator. A successful
   scored live baseline, human rubric calibration and broader acceptance remain
@@ -119,7 +121,21 @@ ships with the production executable.
 | [Feature contracts](design/features/) | Component responsibilities, implementation scope and verification requirements. |
 | [Diagrams](design/diagrams/) | Markdown-fenced Mermaid views of the architecture and workflows. |
 | [Harness backlog](design/harness/README.md) | Remaining integration, calibration and live acceptance work. |
-| [FIX_001 rollout](fixes/TODO_FIX_001.md) | Current repair/support/evidence work and links to historical findings. |
+| [FIX_001 issues](fixes/FIX_001.md) | Issues, retained evidence and required outcomes. |
+| [IMP_001 implementation](fixes/IMP_001.md) | Implementation plan, contract decisions, delivery status and validation evidence. |
+
+### Fix records
+
+Keep each fix in a matching pair under `fixes/`:
+
+- `FIX_XXX.md` describes the issues to be fixed and their required outcomes.
+- `IMP_XXX.md` describes the implementation of that fix, including progress
+  and validation evidence.
+
+Use the same three-digit ID for both files. When the entire fix is implemented
+and its required validation is complete, rename both files to `~FIX_XXX.md`
+and `~IMP_XXX.md`, and update their links. Partially implemented fixes retain
+the active names. FIX_001 remains active because its implementation is incomplete.
 
 [Templates](design/templates/), [legacy preset source examples](design/toolchainPresets/)
 and [configuration examples](design/examples/) are design inputs. They are not

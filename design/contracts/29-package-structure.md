@@ -11,6 +11,11 @@ The logical dependency boundaries map to this Zig source/build layout:
 - The composition root is the only location that constructs concrete adapters and binds
   registered operation implementations.
 - It also assembles the one fixed, nonselectable engine-startup graph.
+- The CLI and in-process harness share `composition/root.zig.Runtime`, which owns
+  production adapter bindings, bootstrap and provider lifetimes. Each invocation
+  borrows that owner and is released before it.
+- Fixture checks, trace storage, publication inspection and rubric evaluation stay
+  in the harness; execution still follows runner-owned child bindings.
 - The workflow compiler alone constructs immutable executable project-workflow graph descriptors
   from validated definitions and registered contracts.
 

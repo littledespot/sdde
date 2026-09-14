@@ -1112,6 +1112,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Distinct model and canonical types share business fields.
 - The provenance owner requires retained current claims and constructs their stable
   unique citation union through the same reference constructor.
+- Its shared `eligibleClaim` predicate supplies initial/repair choices, native provenance
+  validation and coverage; missing disposition accounts are ineligible.
 - Canonical revalidation compares the stored union against current evidence, rejecting
   tampering rather than replacing it.
 - Exact copies still contain a valid token and citation reference, never replacement
@@ -1369,9 +1371,11 @@ YAML definition.
 **Known implementation gaps**
 
 - The [15 September
-  review](../../fixes/REVIEW_FIX_001_ARCHITECTURE.md#15-september-2026-critical-review)
-  reopens selection feasibility, disposition equivalence and shared retained-claim
-  eligibility work in Phase 3.
+  review](../../fixes/FIX_001.md#15-september-2026-critical-review)
+  leaves selection feasibility and disposition equivalence open in Phase 3.
+- Shared retained-claim eligibility (C3) is consolidated in the provenance owner;
+  [closure evidence](../../fixes/IMP_001.md#c3-and-chunk-20-validation--15-september-2026)
+  covers initial/repair requests, native acceptance and coverage.
 - Connected repair paths and passing existing tests do not establish completion of those
   contracts.
 - The rollout owns current status.

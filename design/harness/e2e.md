@@ -70,14 +70,19 @@ Run one explicitly selected live case from the repository root:
 
 - The harness captures the case's declared inputs and copies them into one new, isolated
   project.
-- It runs one ordinary workflow invocation through production bootstrap, provider
-  catalogue validation, request preparation, authorization, HTTPS transport, YAML
+- It shares `composition/root.zig.Runtime` with the CLI for adapter construction,
+  bindings and cleanup, then runs one ordinary invocation through production bootstrap,
+  provider catalogue validation, request preparation, authorization, HTTPS transport, YAML
   transitions, deterministic validators and publication.
 - Generation uses the model slots selected by that test's `.sddtoolkit.json`.
 - The current production provider is Bedrock; its internal test credential is
   `TEST_AWS_BEARER_TOKEN_BEDROCK`.
-- Test credentials are passed directly to the provider adapter and are never copied into
-  production environment variables.
+- The harness supplies a validated credential snapshot to the shared runtime. The CLI
+  supplies its environment, read only after model-binding validation. The runtime owns
+  snapshot cleanup; neither path copies test credentials into production variables.
+- Fixture checks and evidence tracing wrap the existing invocation bindings. The harness
+  does not construct a second production runtime or choose model responses or graph edges.
+- In-process checks and packaged CLI smoke checks retain their separate entry boundaries.
 
 - After successful generation, the harness reads the specification actually published by
   that invocation and grades those exact captured bytes against the case's rubric.
@@ -324,7 +329,7 @@ The terminal prints the score and threshold result explicitly.
 - Dated commands, results, failure analyses and run tables are retained in [E2E
   verification history](e2e-verification-history.md).
 - They do not establish current verification or successful generation and grading.
-- Active work remains in [FIX_001](../../fixes/TODO_FIX_001.md).
+- Active work remains in [FIX_001](../../fixes/IMP_001.md).
 
 <a id="source-selection-verification--2026-09-12"></a>
 

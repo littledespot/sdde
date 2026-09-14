@@ -86,6 +86,56 @@ fn preparedOutput(allocator: std.mem.Allocator, paths: artifacts.FeaturePaths) !
     };
 }
 
+test "shared production runtime preserves deferred environment capture and isolated snapshots" {
+    const Runtime = @import("../../../src/composition/root.zig").Runtime;
+    const key = @import("../../../src/adapters/provider/bedrock_api_key.zig");
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+    const captured = try fixture.capture(io, a, .cwd(), choice);
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try fixture.materialize(io, project.dir, captured);
+    for ([_]?[]const u8{ null, "", "invalid key", "isolated-credential" }) |raw| {
+        inline for (.{ false, true }) |from_environment| {
+            var environment: std.process.Environ.Map = .init(std.testing.allocator);
+            defer environment.deinit();
+            if (from_environment) {
+                if (raw) |bytes| try environment.put("AWS_BEARER_TOKEN_BEDROCK", bytes);
+            } else {
+                // A direct missing/invalid credential cannot use an ambient key.
+                try environment.put("AWS_BEARER_TOKEN_BEDROCK", "ambient-credential");
+            }
+            var runtime: Runtime = undefined;
+            runtime.init(io, std.testing.allocator, project.dir, .{});
+            defer runtime.deinit();
+            try std.testing.expect(runtime.boot == .ready);
+            var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, if (from_environment)
+                .{ .environment = &environment }
+            else
+                .{ .snapshot = try key.Snapshot.capture(std.testing.allocator, raw) });
+            defer invocation.deinit();
+            if (from_environment) try std.testing.expect(runtime.provider_runtime.authorization.material == .unavailable);
+            const bindings = invocation.bindings();
+            try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
+            try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
+            try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
+            try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
+            try std.testing.expect(runtime.provider_runtime.provider != null);
+            const material = runtime.provider_runtime.authorization.material;
+            const valid = if (raw) |bytes| std.mem.eql(u8, bytes, "isolated-credential") else false;
+            try std.testing.expectEqual(valid, material == .ready);
+            if (valid) {
+                try environment.put("AWS_BEARER_TOKEN_BEDROCK", "changed-credential");
+                try std.testing.expectEqualStrings(raw.?, material.ready.bytes);
+            }
+            // Preparation exercises production binding without invoking HTTP.
+        }
+    }
+}
+
 test "production E2E binding honors configured models and cannot succeed without real credentials" {
     const io = std.testing.io;
     for (0..2) |example| {

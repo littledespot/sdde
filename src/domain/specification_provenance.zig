@@ -32,6 +32,12 @@ pub fn items(context: Context) Error!r.Items {
     return result;
 }
 
+/// One eligibility rule for model choices, native support and coverage.
+/// Missing disposition accounts cannot authorize a claim.
+pub fn eligibleClaim(disposition: ?r.Disposition) bool {
+    return disposition != null and disposition.? == .retained;
+}
+
 /// Check trusted evidence and text authority before classifying candidate errors.
 pub fn bind(allocator: std.mem.Allocator, validator: text.Validator, context: Context) Error!void {
     const all = try items(context);
@@ -54,12 +60,11 @@ fn resolve(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, conte
     const dispositions = context.references.records.assignments.checked.prior.prior.dispositions;
     for (provenance.claim_ids, result) |id, *scope| {
         const claim = (try r.item(claims, id)).claim;
-        var retained = false;
-        for (dispositions) |disposition| if (disposition.claim_id.ordinal == id.ordinal) {
-            retained = disposition.disposition == .retained;
-            break;
+        const disposition: ?r.Disposition = found: {
+            for (dispositions) |entry| if (entry.claim_id.ordinal == id.ordinal) break :found entry.disposition;
+            break :found null;
         };
-        if (!retained) return error.InvalidSpecification;
+        if (!eligibleClaim(disposition)) return error.InvalidSpecification;
         scope.* = .{ .state_id = claims.state_id, .chunk_id = claim.chunk_id };
         _ = try evidence.resolve(context.inputs, scope.*);
     }

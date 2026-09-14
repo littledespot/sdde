@@ -84,59 +84,110 @@ fn runInvocationInProject(
     return runInvocationInProjectWithRuntime(io, allocator, project_root, arguments, .{}, null);
 }
 
-fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, project_root: std.Io.Dir, arguments: []const []const u8, runtime: pipeline.NodeRuntime, environment: ?*const std.process.Environ.Map) run_outcome.Outcome {
-    var toolchain_source_adapter = toolchain_authority_source.Adapter.init(io, project_root);
-    var toolchain_parser_adapter: toolchain_documents.Adapter = .{};
-    var reference_adapter: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
-    var feature_adapter: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project_root };
-    var native_bindings: @import("native_workflow_operations.zig").Assembly = undefined;
-    var feature_inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project_root };
-    var feature_outputs: @import("../adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project_root };
-    var reference_contents: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project_root };
-    var markdown_reader: @import("../adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
-    var reference_ids: @import("../adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
-    native_bindings.init(allocator, toolchain_source_adapter.projectCapturer(), toolchain_source_adapter.presetEnumerator(), toolchain_source_adapter.presetCapturer(), toolchain_parser_adapter.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_adapter.inspector(), feature_adapter.inspector(), feature_inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
-    var boot = runInProjectWithRegistry(io, allocator, project_root, runtime, &native_bindings.registry);
-    native_bindings.publish_output.action.writer = feature_outputs.port();
-    native_bindings.capture_workflow_state.action.source = feature_inputs.workflowStateCapturer();
-    if (boot == .ready) native_bindings.bindRoots(boot.ready.roots.registry());
-    defer boot.deinit();
-    var provider_bootstrap = model_provider_bootstrap.Assembly.init(
-        io,
-        allocator,
-        project_root,
-        .{},
-        &@import("provider_model_contracts.zig").registry,
-    );
-    var provider_clock: @import("../adapters/system/provider_operation_clock.zig").Adapter = .{ .io = io };
-    var provider_runtime: @import("model_provider_runtime.zig").Assembly = .{
-        .environment = environment,
-        .operations = &native_bindings.model_requests,
-        .authorization = .{ .allocator = allocator },
-        .transport = .{ .io = io, .clock = provider_clock.clock(), .runtime = runtime },
+/// Owns production adapters, their bindings and bootstrap lifetimes. Initialize
+/// in place; an invocation borrows this owner and must be deinitialized first.
+pub const Runtime = struct {
+    allocator: std.mem.Allocator,
+    control: pipeline.NodeRuntime,
+    toolchain_source: toolchain_authority_source.Adapter,
+    toolchain_parser: toolchain_documents.Adapter,
+    reference: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter,
+    feature: @import("../adapters/filesystem/feature_directory_inspector.zig").Adapter,
+    inputs: @import("../adapters/filesystem/feature_input_source.zig").Adapter,
+    outputs: @import("../adapters/filesystem/workflow_output.zig").Adapter,
+    corpus: @import("../adapters/filesystem/reference_corpus_source.zig").Adapter,
+    markdown: @import("../adapters/parsers/markdown_reference.zig").Adapter,
+    identities: @import("../adapters/system/reference_state_identity.zig").Adapter,
+    native: @import("native_workflow_operations.zig").Assembly,
+    boot: bootstrap_orchestrator.Outcome,
+    providers: model_provider_bootstrap.Assembly,
+    clock: @import("../adapters/system/provider_operation_clock.zig").Adapter,
+    provider_runtime: @import("model_provider_runtime.zig").Assembly,
+
+    invocation_created: bool = false,
+
+    pub const Credentials = union(enum) {
+        environment: *const std.process.Environ.Map,
+        snapshot: ?@import("../adapters/provider/bedrock_api_key.zig").Snapshot,
     };
-    defer provider_runtime.deinit();
-    return runBootstrappedInvocation(
-        allocator,
-        &boot,
-        arguments,
-        &native_bindings.registry,
-        provider_bootstrap.bind(),
-        runtime,
-        provider_clock.clock(),
-        &provider_runtime,
-    );
+
+    pub fn init(self: *Runtime, io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, control: pipeline.NodeRuntime) void {
+        self.* = .{
+            .allocator = allocator,
+            .control = control,
+            .toolchain_source = toolchain_authority_source.Adapter.init(io, project),
+            .toolchain_parser = .{},
+            .reference = .{ .io = io, .project_root = project },
+            .feature = .{ .io = io, .project_root = project },
+            .inputs = .{ .io = io, .project_root = project },
+            .outputs = .{ .io = io, .project_root = project },
+            .corpus = .{ .io = io, .project_root = project },
+            .markdown = .{ .io = io },
+            .identities = .{ .io = io },
+            .native = undefined,
+            .boot = undefined,
+            .providers = model_provider_bootstrap.Assembly.init(io, allocator, project, .{}, &@import("provider_model_contracts.zig").registry),
+            .clock = .{ .io = io },
+            .provider_runtime = undefined,
+        };
+        self.native.init(allocator, self.toolchain_source.projectCapturer(), self.toolchain_source.presetEnumerator(), self.toolchain_source.presetCapturer(), self.toolchain_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, self.reference.inspector(), self.feature.inspector(), self.inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), self.corpus.enumerator(), self.corpus.capturer(), self.markdown.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, self.identities.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
+        self.native.publish_output.action.writer = self.outputs.port();
+        self.native.capture_workflow_state.action.source = self.inputs.workflowStateCapturer();
+        self.boot = runInProjectWithRegistry(io, allocator, project, control, &self.native.registry);
+        if (self.boot == .ready) self.native.bindRoots(self.boot.ready.roots.registry());
+        self.provider_runtime = .{
+            .environment = null,
+            .operations = &self.native.model_requests,
+            .authorization = .{ .allocator = allocator },
+            .transport = .{ .io = io, .clock = self.clock.clock(), .runtime = control },
+        };
+    }
+
+    pub fn deinit(self: *Runtime) void {
+        self.provider_runtime.deinit();
+        self.boot.deinit();
+        self.* = undefined;
+    }
+
+    /// Construct the single invocation after successful bootstrap. Takes ownership
+    /// of a supplied snapshot; environment capture stays in provider preparation.
+    pub fn invocation(self: *Runtime, arguments: []const []const u8, credentials: Credentials) engine_invocation.Assembly {
+        std.debug.assert(self.boot == .ready and !self.invocation_created);
+        self.invocation_created = true;
+        switch (credentials) {
+            .environment => |environment| self.provider_runtime.environment = environment,
+            .snapshot => |snapshot| self.provider_runtime.authorization.material = if (snapshot) |value| .{ .ready = value } else .unavailable,
+        }
+        var result = engine_invocation.Assembly.init(self.allocator, &self.boot.ready, arguments, &self.native.registry, self.providers.bind(), self.control);
+        result.provider_clock = self.clock.clock();
+        result.provider_runtime = &self.provider_runtime;
+        return result;
+    }
+};
+
+fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, project_root: std.Io.Dir, arguments: []const []const u8, runtime: pipeline.NodeRuntime, environment: ?*const std.process.Environ.Map) run_outcome.Outcome {
+    var assembly: Runtime = undefined;
+    assembly.init(io, allocator, project_root, runtime);
+    defer assembly.deinit();
+    return switch (assembly.boot) {
+        .failed => |failure| .{ .bootstrap_failed = failure },
+        .cancelled => .{ .execution = .cancelled },
+        .ready => execute: {
+            var invocation = assembly.invocation(arguments, if (environment) |map| .{ .environment = map } else .{ .snapshot = null });
+            defer invocation.deinit();
+            break :execute workflow_engine.run(invocation.bindings());
+        },
+    };
 }
 
-fn runBootstrappedInvocation(
+// Unit-test wiring for supplied operation registries and provider probes.
+fn testBootstrappedInvocation(
     allocator: std.mem.Allocator,
     boot: *bootstrap_orchestrator.Outcome,
     arguments: []const []const u8,
     operation_registry: *const workflow_operation_registry.Registry,
     provider_bootstrap: model_provider_bootstrap_binding.Binding,
     runtime: pipeline.NodeRuntime,
-    provider_clock: ?@import("../ports/provider_authorization_lease.zig").Clock,
-    provider_runtime: ?*@import("model_provider_runtime.zig").Assembly,
 ) run_outcome.Outcome {
     return switch (boot.*) {
         .failed => |failure| .{ .bootstrap_failed = failure },
@@ -151,8 +202,6 @@ fn runBootstrappedInvocation(
                 runtime,
             );
             defer invocation.deinit();
-            invocation.provider_clock = provider_clock;
-            invocation.provider_runtime = provider_runtime;
             break :execute workflow_engine.run(invocation.bindings());
         },
     };
@@ -175,7 +224,7 @@ fn runInProjectWithRuntime(
     return runInProjectWithRegistry(io, allocator, project_root, runtime, &core_workflow_operations.registry);
 }
 
-pub fn runInProjectWithRegistry(
+fn runInProjectWithRegistry(
     io: std.Io,
     allocator: std.mem.Allocator,
     project_root: std.Io.Dir,
@@ -421,15 +470,13 @@ test "invocation runner handles every provider preparation outcome before workfl
         PreparationMode.cancelled,
     }) |mode| {
         var probe: InvocationPreparationProbe = .{ .mode = mode };
-        const outcome = runBootstrappedInvocation(
+        const outcome = testBootstrappedInvocation(
             std.testing.allocator,
             &boot,
             &.{"hello"},
             probe.registry(),
             probe.providerBinding(),
             .{},
-            null,
-            null,
         );
 
         try std.testing.expectEqual(@as(usize, 1), probe.prepare_calls);
@@ -457,15 +504,13 @@ test "invocation runner handles every provider preparation outcome before workfl
     }
 
     var invalid_probe: InvocationPreparationProbe = .{ .mode = .not_required };
-    const invalid = runBootstrappedInvocation(
+    const invalid = testBootstrappedInvocation(
         std.testing.allocator,
         &boot,
         &.{"absent-workflow"},
         invalid_probe.registry(),
         invalid_probe.providerBinding(),
         .{},
-        null,
-        null,
     );
     try std.testing.expect(invalid == .invocation_invalid);
     try std.testing.expectEqual(@as(usize, 0), invalid_probe.prepare_calls);
@@ -1259,7 +1304,7 @@ test "native YAML validates citations extraction and reconciliation before conti
         try std.testing.expect(boot == .ready);
         native.bindRoots(boot.ready.roots.registry());
         var providers = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project.dir, .{}, &llm_provider_contracts.Registry.empty);
-        const result = runBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{}, null, null);
+        const result = testBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{});
         const expected: workflow.OutcomeTag = if (mode) |selected| switch (selected) {
             .claims, .no_claim, .passive, .preserved, .irrelevant, .reconciled => .ok,
             .blocked, .conflict => .blocked,

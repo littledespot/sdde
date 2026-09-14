@@ -40,7 +40,7 @@ pub fn check(allocator: std.mem.Allocator, references: r.Accounted, brief: g.Bri
     var accounts: std.ArrayList(Account) = .empty;
     var obligations: std.ArrayList(Obligation) = .empty;
     for (references.records.assignments.checked.prior.prior.dispositions) |disposition| {
-        if (disposition.disposition != .retained) continue;
+        if (!@import("specification_provenance.zig").eligibleClaim(disposition.disposition)) continue;
         const item = r.item(items, disposition.claim_id) catch return error.InvalidSpecificationCoverage;
         var targets: std.ArrayList(Key) = .empty;
         const singletons = [_]struct { key: Key, value: spec.AttributedValue }{

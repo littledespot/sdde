@@ -19,6 +19,18 @@ test "production sources exclude internal evaluation tooling and test environmen
     }
 }
 
+test "CLI and E2E invocation reuse production composition without harness assembly" {
+    const io = std.testing.io;
+    const source = try std.Io.Dir.cwd().readFileAlloc(io, "test/harness/e2e/invoke.zig", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(source);
+    try std.testing.expect(std.mem.indexOf(u8, source, "root.Runtime") != null);
+    try std.testing.expect(std.mem.indexOf(u8, source, "runtime.invocation(") != null);
+    inline for (.{ "/adapters/filesystem/", "/adapters/parsers/", "/adapters/system/", "native_workflow_operations", "model_provider_bootstrap", "model_provider_runtime", "engine_invocation", "runInProjectWithRegistry" }) |forbidden| try expectAbsent(source, forbidden);
+    const composition = @embedFile("composition/root.zig");
+    try std.testing.expect(std.mem.indexOf(u8, composition, "var assembly: Runtime") != null);
+    try std.testing.expect(std.mem.indexOf(u8, composition, "assembly.invocation(") != null);
+}
+
 test "production provider wiring retains fact-only authority and no-I/O lease preparation" {
     const contracts_source = @embedFile("composition/provider_model_contracts.zig");
     try expectAbsent(contracts_source, "/adapters/");

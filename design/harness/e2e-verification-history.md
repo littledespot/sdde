@@ -3,7 +3,7 @@
 [Current E2E instructions](e2e.md). These records preserve the source, commands,
 results and retained evidence inspected for each change. They are historical
 observations, not new verification or current implementation status. The
-[active rollout](../../fixes/TODO_FIX_001.md) records subsequent work. Local
+[active rollout](../../fixes/IMP_001.md) records subsequent work. Local
 `zig-out` and temporary artifacts are untracked and may be absent elsewhere.
 
 ## Historical verification records
@@ -236,11 +236,11 @@ provenance. Generation, repair and support use the reduced selection shape;
 legacy echo fields reject. Tagged dispositions expose only the relevant
 relationships, with concise guidance from the native constraint owner.
 
-The [Phase 2 delivery record](../../fixes/TODO_FIX_001.md#phase-2-delivery-and-verification--13-september-2026)
+The [Phase 2 delivery record](../../fixes/IMP_001.md#phase-2-delivery-and-verification--13-september-2026)
 contains exact commands: 408/408 targeted tests and full offline verification
 with 120/120 steps and 1,374/1,374 tests, including clean native packaging.
 No live E2E run was performed for
 this phase. Existing reports remain historical evidence; live convergence,
 publication and rubric quality remain unproven. At that phase close, semantic repair remained Phase 3 work. The
-[active rollout](../../fixes/TODO_FIX_001.md) records subsequent repair delivery, reopened Phase 3 findings
+[active rollout](../../fixes/IMP_001.md) records subsequent repair delivery, reopened Phase 3 findings
 and the remaining support/evidence work. Every live run still requires explicit approval.

@@ -71,7 +71,7 @@ calibration and broader acceptance remain open. **Reviewed:** 2026-09-15 (docume
 
 - Historical runs failed before publication and grading.
 - The [FIX_001 analysis](../../fixes/FIX_001.md) retains their dated findings; the
-  [active rollout](../../fixes/TODO_FIX_001.md) records completed offline fixes and
+  [active rollout](../../fixes/IMP_001.md) records completed offline fixes and
   remaining work.
 - No successful scored live baseline is claimed.
 

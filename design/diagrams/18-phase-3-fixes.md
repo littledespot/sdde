@@ -2,9 +2,10 @@
 
 Flow for FIX_001 chunks **08–12**, including the R14/R15 and architecture-audit
 follow-ups. The **14 September 2026** offline baseline was reopened by the
-[15 September critical review](../../fixes/REVIEW_FIX_001_ARCHITECTURE.md#15-september-2026-critical-review).
-Selection feasibility, disposition-set equivalence and shared eligibility still
-require the fixes in the [current delivery record](../../fixes/TODO_FIX_001.md).
+[15 September critical review](../../fixes/FIX_001.md#15-september-2026-critical-review).
+Selection feasibility and disposition-set equivalence remain open. Shared
+eligibility (C3) is consolidated; see the
+[closure evidence](../../fixes/IMP_001.md#c3-and-chunk-20-validation--15-september-2026).
 This diagram describes the required flow; Phase 3 completion, live E2E and rubric
 quality remain unproven.
 
@@ -60,7 +61,7 @@ The input has passed JSON/schema validation. Malformed replacements use protocol
 correction; reading context grants no write authority. Revision changes and
 unchanged invalid values do not establish acceptance.
 
-The [authorized target matrix](../../fixes/CONTRACT_FIX_001.md#3-authorized-repair-targets-and-dependency-checks)
+The [authorized target matrix](../../fixes/IMP_001.md#3-authorized-repair-targets-and-dependency-checks)
 owns each consumer's correction scope and required checks:
 
 - **08:** shared native dependencies, exact association and compare-and-swap
@@ -73,7 +74,7 @@ owns each consumer's correction scope and required checks:
 - **12:** revalidate extraction through reconstruction/accounting; exact-copy proof
   may authorize model-free coverage repair. Unsafe/unsupported cases retain their block.
 
-[Phase 3 delivery evidence](../../fixes/TODO_FIX_001.md#phase-3--complete-authorized-repair-and-revalidation)
+[Phase 3 delivery evidence](../../fixes/IMP_001.md#phase-3--complete-authorized-repair-and-revalidation)
 tracks bounded retries, typed context failures and distinct candidate/replacement/
 latest-attempt origins. Zero-merge exhaustion retains the original revision/origin;
 redundancy cannot delete competing meaning or lose evidence/coverage.

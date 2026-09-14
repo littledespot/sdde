@@ -8,7 +8,7 @@
 [decision index in §32](#32-accepted-and-deferred-implementation-choices) records
 accepted amendments without accepting the remainder of the design. Current
 implementation and known gaps are tracked in the [feature contracts](features/)
-and [FIX_001 rollout](../fixes/TODO_FIX_001.md); design requirements are not
+and [FIX_001 rollout](../fixes/IMP_001.md); design requirements are not
 claims that the engine already satisfies them.
 
 **Reading this design:** Sections 1, 3, 4, 30–32 retain the overview, invariants,
@@ -25,7 +25,7 @@ outputs and unresolved forms, retaining clarification identities/applicable
 answers and protecting user-closed form bytes (§23.2).
 
 **Recent approved guidance:** FIX_001 A1–A3 amend §§12.5, 17.3 and 22.6. The
-[approval record](../fixes/CONTRACT_FIX_001.md#5-design-amendment-decisions)
+[approval record](../fixes/IMP_001.md#5-design-amendment-decisions)
 preserves the decision scope; subsequent defect reviews do not grant new authority.
 
 **Scope:** Engine development in this repository. `init`, `drift`, `audit`,
