@@ -42,10 +42,10 @@ pub const BuildInput = struct {
         const self = context.?;
         const authorization = owned.read(&input.step.data, authorization_schema, .authorization) catch return error.OperationExecutionFailed;
         const prior = try extraction.read(&input.step.data, extraction.parsed_schema, .parsed);
-        const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch return error.OperationExecutionFailed;
         const candidates = values.read(&input.step.data, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch return error.OperationExecutionFailed;
         const literals = values.read(&input.step.data, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch return error.OperationExecutionFailed;
-        const packet = self.action.execute(self.allocator, @import("../domain/reference_extraction_context.zig").textFacts(source.*, literals.*, prior.payload().parsed), literals.*, candidates.*, authorization) catch return error.OperationExecutionFailed;
+        const current = values.read(&input.step.data, @import("toolchain_workflow_values.zig").valid, @import("../domain/toolchain_safety.zig").ValidToolchain) catch return error.OperationExecutionFailed;
+        const packet = self.action.execute(self.allocator, try facts(&input.step.data, prior.payload().parsed), literals.*, current, candidates.*, authorization) catch return error.OperationExecutionFailed;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
 };
@@ -93,5 +93,6 @@ fn reject(allocator: std.mem.Allocator, schema: data.Schema, owner: *owned.Owner
 fn facts(view: *const data.View, candidate: @import("../domain/reference_extraction.zig").Parsed) operations.Error!repair.Facts {
     const source = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch return error.OperationExecutionFailed;
     const registry = values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch return error.OperationExecutionFailed;
-    return @import("../domain/reference_extraction_context.zig").textFacts(source.*, registry.*, candidate);
+    const current = values.read(view, @import("toolchain_workflow_values.zig").valid, @import("../domain/toolchain_safety.zig").ValidToolchain) catch return error.OperationExecutionFailed;
+    return @import("../domain/reference_extraction_context.zig").textFacts(source.*, registry.*, current, candidate) catch return error.OperationExecutionFailed;
 }

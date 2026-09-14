@@ -7,7 +7,7 @@ const g = @import("../domain/specification_generation.zig");
 const native = @import("../application/reference_extraction_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
-pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, conflict_coverage, summary_text, signal_text, conflict_text };
+pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text };
 pub const Options = struct {
     text_fault: bool = false,
     failed_text_repair: bool = false,
@@ -71,6 +71,14 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                         .{ .disposition = .{ .superseded = .{ .related_claim_ids = &.{target.claim} } } };
                     return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, replacement);
                 }
+                // Selection answers consume the actual request's native choices.
+                // They do not infer missing guidance from hidden fixture state.
+                if (authorization.target == .signal_selection or authorization.target == .statement_selection) {
+                    const packet = try values.read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet);
+                    const input_json = try std.json.parseFromSlice(std.json.Value, allocator, packet.body(), .{});
+                    const choices = input_json.value.object.get("repair").?.object.get("rule").?.object.get("choices").?.object.get("selection").?;
+                    return std.json.Stringify.valueAlloc(allocator, .{ .claim_ids = choices }, .{});
+                }
                 const replacement: repair.Replacement = switch (authorization.target) {
                     .statement_content => |index| .{ .content = @import("reference_reconciliation.zig").content((try r.item(input.progress.plan.layout.items, authorization.dependencies.proposal.summary.statements[index].claim_ids[0])).claim) },
                     .signal_content => |index| .{ .content = @import("reference_reconciliation.zig").content((try r.item(input.progress.plan.layout.items, authorization.dependencies.proposal.global.signals[index].claim_ids[0])).claim) },
@@ -99,6 +107,14 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 proposal.claim_dispositions = dispositions;
                 switch (fault) {
                     .summary_membership, .summary_text => {},
+                    .mixed_selection => {
+                        const signals = try allocator.dupe(r.SignalProposal, proposal.signals);
+                        const token = for (input.items) |item| {
+                            if (item.claim.content == .preserved_token) break item.claim.id;
+                        } else return error.UnexpectedScriptedRepair;
+                        signals[0].claim_ids = try allocator.dupe(r.ClaimId, &.{ signals[0].claim_ids[0], token });
+                        proposal.signals = signals;
+                    },
                     .signal_text => {
                         const signals = try allocator.dupe(r.SignalProposal, proposal.signals);
                         signals[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display \\\"a result\\\"." } }} } } };

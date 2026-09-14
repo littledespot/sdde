@@ -111,7 +111,12 @@ values/provenance share one authorization and compare-and-swap contract. It bind
 the candidate, owner, revision, exact old value and immutable evidence/rule facts.
 The engine selects replacements, missing-member insertions and proven redundant
 deletions; the model supplies only permitted content when a choice is needed.
-Specification provenance repair preserves business text. Every merge returns to
+Native validators retain compatible content kinds, eligible selections and
+canonical redundancy facts; authorization uses those facts to choose an independent
+target or block before dispatch. Dependency snapshots use shared native text,
+source and history facts, separately from model-visible packet formatting.
+Repair packets include unchanged dependent content/provenance and permitted
+choices. Specification provenance repair preserves business text. Every merge returns to
 native validation and full-candidate checks. YAML owns bounded repetition; no
 model decision grants authority. Competing entries without a safe independent
 write remain explicitly blocked.

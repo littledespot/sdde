@@ -413,14 +413,14 @@ test "text repair preserves siblings and exposes remaining classification defect
         try std.testing.expectEqual(.unbound_path, rejection.issue.reason);
         try std.testing.expectEqual(@as(usize, 1), rejection.target.claim);
         try std.testing.expectEqualDeep(first, rejection.origin.?);
-        const facts = contexts.textFacts(inputs, context.registry, candidate);
+        const facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), candidate);
         const authorization = try repair.authorize(a, facts, rejection);
         const passive: extraction.text.PassiveReference = .{ .passive_literal_id = context.registry.records[0].id };
         const replacement: repair.Replacement = if (kind == .business or kind == .scope_guard)
             .{ .business = .{ .segments = &.{.{ .passive = passive }} } }
         else
             .{ .reference = .{ .nodes = &.{.{ .passive = passive }} } };
-        const packet = try repair.packet(std.testing.allocator, facts, context.registry, available, authorization);
+        const packet = try repair.packet(std.testing.allocator, facts, context.registry, text_fixture.safety.value(context.owner), available, authorization);
         defer @import("domain/model_input_packet.zig").release(packet);
         const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
         const rule = body.value.object.get("repair").?.object.get("rule").?.object;
@@ -441,9 +441,20 @@ test "text repair preserves siblings and exposes remaining classification defect
         const remaining = (try @import("domain/reference_selection_validation.zig").validate(a, inputs, available, checked)).token_classifications;
         try std.testing.expectEqualDeep(first, remaining.origin.?);
         try std.testing.expectEqualDeep(&[_]extraction.tokens.CandidateId{unknown}, remaining.issues.unknown);
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, contexts.textFacts(inputs, context.registry, merged), authorization, replacement, correction));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), merged), authorization, replacement, correction));
+        var changed_registry = context.registry;
+        const names = try a.dupe(@import("domain/path_token_grammar.zig").ReferenceName, changed_registry.grammar.reference_names);
+        names[0].basename = "changed.md";
+        changed_registry.grammar.reference_names = names;
+        const changed_facts = try contexts.textFacts(inputs, changed_registry, text_fixture.safety.value(context.owner), candidate);
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, changed_facts, rejection));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.packet(a, facts, changed_registry, text_fixture.safety.value(context.owner), available, authorization));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, changed_facts, authorization, replacement, correction));
+        const foreign_policy = try text_fixture.prepare(a, inputs);
+        defer foreign_policy.deinit();
+        try std.testing.expectError(error.StaleNamingPolicy, contexts.textFacts(inputs, context.registry, text_fixture.safety.value(foreign_policy.owner), candidate));
         var stale = facts;
-        stale.policy_ids = &.{"different-policy"};
+        stale.text.policy_ids = &.{"different-policy"};
         try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, stale, rejection));
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, stale, authorization, replacement, correction));
         const again = try repair.merge(a, facts, authorization, authorization.operation.replace, correction);
@@ -476,7 +487,7 @@ test "no-feature-claim text repair retains native failures and immutable classif
         const rejection = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
         try std.testing.expectEqual(@as(@TypeOf(rejection.issue.reason), if (scenario == 0) .unbound_path else .unknown_passive), rejection.issue.reason);
         try std.testing.expect(rejection.target == .reason);
-        const facts = contexts.textFacts(inputs, context.registry, candidate);
+        const facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), candidate);
         const authorization = try repair.authorize(a, facts, rejection);
         const replacement: repair.Replacement = .{ .reference = .{ .nodes = &.{.{ .literal = .{ .value = "This source supplies background context." } }} } };
         const fixed = try repair.merge(a, facts, authorization, replacement, null);
@@ -514,4 +525,44 @@ test "constructed claim rejection retains the original source selection repair a
     var corrupt = prepared;
     corrupt.entries = &.{};
     try std.testing.expectError(error.InvalidReferenceExtraction, validate.execute(a, inputs, corrupt));
+}
+
+test "classification repair requests retain the frozen outcome and permitted decisions" {
+    const repair = @import("domain/reference_extraction_repair.zig");
+    const classifications = @import("domain/token_classification_validation.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var ids: fixture.IdSource = .{};
+    const inputs = try fixture.prepare(a, &ids, try ingest(a, "receipt.md", "Display `Receipt issued!`."));
+    const context = try text_fixture.prepare(a, inputs);
+    defer context.deinit();
+    const available = try token_fixture.candidates(a, inputs);
+    try std.testing.expect(available.entries.len > 0);
+    for ([_]bool{ false, true }) |has_claims| {
+        const wire = if (has_claims) try reply(a, inputs.chunks.entries[0], "The receipt is visible.") else no_claim;
+        const candidate = try text_fixture.check(a, inputs, try parse.execute(a, .{ .entries = &.{raw(inputs, 0, wire)} }));
+        const rejected = (try classifications.validate(a, inputs, available, candidate)).invalid;
+        const facts: repair.Facts = .{ .inputs = inputs, .candidates = available, .candidate = candidate };
+        const auth = try repair.authorize(a, facts, .{ .token_classifications = rejected });
+        const packet = try repair.packet(a, inputs, context.registry, available, candidate, auth);
+        defer packets.release(packet);
+        const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+        const choices = body.value.object.get("repair").?.object.get("rule").?.object.get("choices").?.object;
+        try std.testing.expectEqualStrings(if (has_claims) "claims" else "no_feature_claim", choices.get("outcome").?.string);
+        const decisions = choices.get("decisions").?.array.items;
+        try std.testing.expectEqual(@as(usize, if (has_claims) 2 else 1), decisions.len);
+        try std.testing.expectEqualStrings("irrelevant", decisions[decisions.len - 1].string);
+        const replacement = try a.alloc(extraction.tokens.Classification, available.entries.len);
+        for (available.entries, replacement) |item, *value| value.* = .{ .irrelevant = item.id };
+        const merged = try repair.merge(a, facts, auth, .{ .classifications = .{ .token_classifications = replacement } }, null);
+        try std.testing.expectEqualDeep(candidate.entries[0].outcome, merged.entries[0].outcome);
+        _ = (try classifications.validate(a, inputs, available, merged)).valid;
+        if (!has_claims) {
+            const forbidden = try token_fixture.classifications(a, available, inputs.chunks.entries[0]);
+            const invalid = try repair.merge(a, facts, auth, .{ .classifications = .{ .token_classifications = forbidden } }, null);
+            try std.testing.expect((try classifications.validate(a, inputs, available, invalid)).invalid.issues.forbidden.len > 0);
+        }
+    }
 }

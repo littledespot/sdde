@@ -8,7 +8,11 @@ pub const Action = struct {
     validator: r.text.Validator,
     pub fn execute(self: Action, allocator: std.mem.Allocator, prior: r.CheckedSignals, context: v.TextContext) r.Error!d.Result(r.CheckedConflicts) {
         var result = try self.check(allocator, prior, context);
-        if (result == .invalid) result.invalid.dependencies = try @import("../../domain/reference_reconciliation_context.zig").snapshot(allocator, .{ .source = prior.prior.source, .input = prior.prior.input, .proposal = .{ .global = prior.prior.proposal } }, context);
+        if (result == .invalid) {
+            const parsed: r.Parsed = .{ .source = prior.prior.source, .input = prior.prior.input, .proposal = .{ .global = prior.prior.proposal } };
+            result.invalid.relations = try v.relations(allocator, self.validator, context, parsed, prior.prior.dispositions, result.invalid);
+            result.invalid.dependencies = try @import("../../domain/reference_reconciliation_context.zig").snapshot(allocator, parsed, context);
+        }
         return result;
     }
     fn check(self: Action, allocator: std.mem.Allocator, prior: r.CheckedSignals, context: v.TextContext) r.Error!d.Result(r.CheckedConflicts) {
@@ -24,14 +28,11 @@ pub const Action = struct {
             for (proposal.claim_ids) |id| {
                 const disposition = try v.disposition(prior.prior.dispositions, id);
                 if (disposition.disposition != .conflicting) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .relationship, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .conflicting_related_claims } });
-                for (proposal.claim_ids) |other| if (other.ordinal != id.ordinal and !r.contains(r.ClaimId, disposition.related_claim_ids, other)) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .relationship, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .conflicting_related_claims } });
+                for (proposal.claim_ids) |other| if (other.ordinal != id.ordinal and !try v.conflictRelated(prior.prior.dispositions, id, other)) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .relationship, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .conflicting_related_claims } });
                 covered[id.ordinal - 1] = true;
             }
             for (prior.prior.proposal.conflicts[0..index]) |previous| {
-                if (previous.kind != proposal.kind or previous.claim_ids.len != proposal.claim_ids.len) continue;
-                for (previous.claim_ids) |id| {
-                    if (!r.contains(r.ClaimId, proposal.claim_ids, id)) break;
-                } else return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .duplicate_conflict, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
+                if (previous.kind == proposal.kind and v.sameMembers(previous.claim_ids, proposal.claim_ids)) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .duplicate_conflict, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
             }
             conflict.* = .{ .claim_ids = proposal.claim_ids, .citation_ids = try r.citationUnion(allocator, items, proposal.claim_ids), .kind = proposal.kind, .summary = switch (try self.validator.checkReferenceIn(allocator, try v.scopes(allocator, items, proposal.claim_ids, context), proposal.summary)) {
                 .valid => |checked| checked,

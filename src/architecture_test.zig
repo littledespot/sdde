@@ -1908,6 +1908,18 @@ test "candidate repairs share authority and expose only native scoped operations
         try expectAbsent(source, "candidate.revision + 1");
         try expectAbsent(source, "retry_limit");
     }
+    // Dependency capture cannot silently become a lossy request projection.
+    const specification_facts = @embedFile("domain/specification_candidate_context.zig");
+    try expectAbsent(specification_facts, "session.packet");
+    try expectAbsent(specification_facts, "input: []const u8");
+    inline for (.{ specification_facts, @embedFile("domain/specification_coverage_repair.zig"), @embedFile("domain/reference_extraction_context.zig"), @embedFile("domain/reference_reconciliation_context.zig") }) |source| {
+        try expectAbsent(source, "policy_ids:");
+        try expectAbsent(source, "passive_records:");
+    }
+    const reconciliation_owner = @embedFile("domain/reference_reconciliation_repair.zig");
+    try expectAbsent(reconciliation_owner, "equivalentStatement");
+    try expectAbsent(reconciliation_owner, "checkBusinessIn");
+    try expectAbsent(reconciliation_owner, "checkReferenceIn");
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.text_validated_reference_extraction}, tokens.Merge.Action.contract.replaces);
     try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .ok, .invalid, .failed }, &@import("application/reference_extraction_workflow.zig").ValidateSelections.outcomes);
 }

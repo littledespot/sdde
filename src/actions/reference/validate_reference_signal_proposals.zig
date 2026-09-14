@@ -8,7 +8,11 @@ pub const Action = struct {
     validator: r.text.Validator,
     pub fn execute(self: Action, allocator: std.mem.Allocator, prior: r.CheckedDispositions, context: v.TextContext) r.Error!d.Result(r.CheckedSignals) {
         var result = try self.check(allocator, prior, context);
-        if (result == .invalid) result.invalid.dependencies = try @import("../../domain/reference_reconciliation_context.zig").snapshot(allocator, .{ .source = prior.source, .input = prior.input, .proposal = .{ .global = prior.proposal } }, context);
+        if (result == .invalid) {
+            const parsed: r.Parsed = .{ .source = prior.source, .input = prior.input, .proposal = .{ .global = prior.proposal } };
+            result.invalid.relations = try v.relations(allocator, self.validator, context, parsed, prior.dispositions, result.invalid);
+            result.invalid.dependencies = try @import("../../domain/reference_reconciliation_context.zig").snapshot(allocator, parsed, context);
+        }
         return result;
     }
     fn check(self: Action, allocator: std.mem.Allocator, prior: r.CheckedDispositions, context: v.TextContext) r.Error!d.Result(r.CheckedSignals) {
@@ -23,8 +27,7 @@ pub const Action = struct {
         for (prior.proposal.signals, signals, 0..) |proposal, *signal, index| {
             if (v.claims(items, proposal.claim_ids, prior.input.partition.group.claim_ids)) |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, issue);
             for (proposal.claim_ids) |id| {
-                const disposition = try v.disposition(prior.dispositions, id);
-                if (disposition.disposition == .conflicting) return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, .{ .rule = .relationship, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .nonconflicting_claims } });
+                if (!try v.signalEligible(prior.dispositions, id)) return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, .{ .rule = .relationship, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .nonconflicting_claims } });
                 covered[id.ordinal - 1] = true;
                 if (proposal.content == .preserved_token) token_covered[id.ordinal - 1] = true;
             }
@@ -35,7 +38,7 @@ pub const Action = struct {
             for (signals[0..index]) |previous| {
                 // One projection per identical claim set/kind. Distinct signals
                 // may overlap when they carry different supported claim sets.
-                if (sameMembers(previous.claim_ids, signal.claim_ids)) return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, .{ .rule = .duplicate_signal, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
+                if (v.sameMembers(previous.claim_ids, signal.claim_ids)) return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, .{ .rule = .duplicate_signal, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
             }
         }
         for (prior.dispositions, items.entries, covered, token_covered) |disposition, item, present, token_present| {
@@ -45,8 +48,3 @@ pub const Action = struct {
         return .{ .valid = .{ .prior = prior, .signals = signals } };
     }
 };
-fn sameMembers(a: []const r.ClaimId, b: []const r.ClaimId) bool {
-    if (a.len != b.len) return false;
-    for (a) |id| if (!r.contains(r.ClaimId, b, id)) return false;
-    return true;
-}

@@ -40,9 +40,9 @@ pub const Rule = struct {
     validator: enum { reference_reconciliation_v1 } = .reference_reconciliation_v1,
     rejection: d.Rejection,
     requirement: []const u8,
-    const Guidance = struct { validator: @FieldType(Rule, "validator"), rule: d.Rule, requirement: []const u8, expected: d.Fact };
+    const Guidance = struct { validator: @FieldType(Rule, "validator"), rule: d.Rule, requirement: []const u8, expected: d.Fact, choices: d.Relations };
     pub fn guidance(self: Rule) Guidance {
-        return .{ .validator = self.validator, .rule = self.rejection.issue.rule, .requirement = self.requirement, .expected = self.rejection.issue.expected };
+        return .{ .validator = self.validator, .rule = self.rejection.issue.rule, .requirement = self.requirement, .expected = self.rejection.issue.expected, .choices = self.rejection.relations };
     }
 };
 const shared = @import("atomic_repair.zig");
@@ -55,7 +55,7 @@ pub const Decision = union(enum) { model: Authorization, automatic: struct { aut
 pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rejection: d.Rejection) Error!Decision {
     try v.input(a, parsed.input);
     const facts = try context.capture(a, parsed, if (needsText(rejection.unit)) ctx else null);
-    defer a.free(facts.history);
+    defer a.free(facts.lineage.history);
     if (!parsed.input.progress.plan.layout.items.state_id.eql(rejection.state_id) or parsed.input.partition.id.ordinal != rejection.partition_id.ordinal or parsed.source.revision != rejection.revision or
         !std.meta.eql(parsed.source.at(rejection.unit, d.fieldFor(rejection.unit, rejection.issue.rule)), rejection.origin) or
         !std.meta.eql(rejection.dependencies orelse return error.InvalidAtomicRepair, try shared.snapshot(context.Facts, a, facts))) return error.InvalidAtomicRepair;
@@ -67,12 +67,10 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
     switch (rejection.unit) {
         .statement => |index| {
             if (parsed.proposal != .summary or index >= parsed.proposal.summary.statements.len) return error.InvalidAtomicRepair;
-            const statements = parsed.proposal.summary.statements;
-            for (statements[0..index]) |prior| if (try equivalentStatement(a, prior, statements[index])) return deletion(a, parsed, facts, .{ .statement = index }, rule);
+            if (rejection.relations.redundant) |redundant| return deletion(a, parsed, facts, .{ .statement = redundant }, rule);
             const target: Target = switch (rejection.issue.rule) {
                 .local_key => .{ .statement_key = index },
-                .claim_selection => .{ .statement_selection = index },
-                .content, .typed_text => .{ .statement_content = index },
+                .claim_selection, .content, .typed_text => projectionTarget(.statement, index, rejection) orelse return .{ .blocked = .no_independent_target },
                 else => return .{ .blocked = .no_independent_target },
             };
             return replace(a, parsed, facts, target, rule);
@@ -80,10 +78,8 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
         .summary => {
             if (parsed.proposal != .summary or rejection.issue.rule != .membership) return .{ .blocked = .no_independent_target };
             const statements = parsed.proposal.summary.statements;
-            for (statements, 0..) |statement, index| for (statements[0..index]) |prior| {
-                if (try equivalentStatement(a, prior, statement)) return deletion(a, parsed, facts, .{ .statement = index }, rule);
-                for (statement.claim_ids) |id| if (r.contains(r.ClaimId, prior.claim_ids, id)) return .{ .blocked = .competing_entries };
-            };
+            if (rejection.relations.redundant) |index| return deletion(a, parsed, facts, .{ .statement = index }, rule);
+            if (rejection.relations.competing) return .{ .blocked = .competing_entries };
             for (parsed.input.partition.group.claim_ids) |id| {
                 for (statements) |statement| {
                     if (r.contains(r.ClaimId, statement.claim_ids, id)) break;
@@ -131,12 +127,11 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
         .signal => |index| {
             if (parsed.proposal != .global or index >= parsed.proposal.global.signals.len) return error.InvalidAtomicRepair;
             if (rejection.issue.rule == .duplicate_signal) {
-                for (parsed.proposal.global.signals[0..index]) |prior| if (try atomic.equal(a, .{ .signal = prior }, .{ .signal = parsed.proposal.global.signals[index] })) return deletion(a, parsed, facts, .{ .signal = index }, rule);
+                if (rejection.relations.redundant) |redundant| return deletion(a, parsed, facts, .{ .signal = redundant }, rule);
                 return .{ .blocked = .competing_entries };
             }
             return replace(a, parsed, facts, switch (rejection.issue.rule) {
-                .content, .typed_text => .{ .signal_content = index },
-                .claim_selection, .relationship => .{ .signal_selection = index },
+                .content, .typed_text, .claim_selection, .relationship => projectionTarget(.signal, index, rejection) orelse return .{ .blocked = .no_independent_target },
                 else => return .{ .blocked = .no_independent_target },
             }, rule);
         },
@@ -152,9 +147,10 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
         .conflict => |index| {
             if (parsed.proposal != .global or index >= parsed.proposal.global.conflicts.len) return error.InvalidAtomicRepair;
             if (rejection.issue.rule == .duplicate_conflict) {
-                for (parsed.proposal.global.conflicts[0..index]) |prior| if (try atomic.equal(a, .{ .conflict = prior }, .{ .conflict = parsed.proposal.global.conflicts[index] })) return deletion(a, parsed, facts, .{ .conflict = index }, rule);
+                if (rejection.relations.redundant) |redundant| return deletion(a, parsed, facts, .{ .conflict = redundant }, rule);
                 return .{ .blocked = .competing_entries };
             }
+            if (rejection.issue.rule != .typed_text and rejection.relations.conflicting_pairs.len == 0) return .{ .blocked = .no_independent_target };
             return replace(a, parsed, facts, if (rejection.issue.rule == .typed_text) .{ .conflict_summary = index } else .{ .conflict_selection = index }, rule);
         },
         .conflicts => {
@@ -170,6 +166,21 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
         },
     }
 }
+/// Summaries and signals share one independent-field selection policy. Native
+/// compatibility facts stay in validation; only this owner chooses a write.
+fn projectionTarget(kind: enum { statement, signal }, index: usize, rejection: d.Rejection) ?Target {
+    if ((rejection.issue.rule == .content or rejection.issue.rule == .typed_text) and rejection.relations.content != null)
+        return switch (kind) {
+            .statement => .{ .statement_content = index },
+            .signal => .{ .signal_content = index },
+        };
+    if (rejection.relations.selection.len == 0) return null;
+    return switch (kind) {
+        .statement => .{ .statement_selection = index },
+        .signal => .{ .signal_selection = index },
+    };
+}
+
 fn replace(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target: Target, rule: Rule) Error!Decision {
     return .{ .model = try atomic.authorize(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)) orelse return error.InvalidAtomicRepair, facts, rule) };
 }
@@ -180,11 +191,6 @@ fn insertion(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, targe
 fn deletion(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target: Target, rule: Rule) Error!Decision {
     return .{ .automatic = .{ .authorization = try atomic.authorizeDelete(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)) orelse return error.InvalidAtomicRepair, facts, rule), .replacement = null } };
 }
-fn equivalentStatement(a: std.mem.Allocator, left: r.StatementProposal, right: r.StatementProposal) Error!bool {
-    var comparable = right;
-    comparable.local_key = left.local_key;
-    return atomic.equal(a, .{ .statement = left }, .{ .statement = comparable });
-}
 pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization) Error!*packets.Packet {
     const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry);
     defer packets.release(base);
@@ -192,10 +198,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
     defer arena.deinit();
     const scratch = arena.allocator();
     try atomic.checkDependencies(scratch, authorization, try context.capture(scratch, parsed, if (needsText(authorization.rule.rejection.unit)) ctx else null));
-    var input = try @import("strict_json.zig").decode(std.json.Value, scratch, base.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
-    const bytes = try @import("model_candidate_json.zig").encode(@FieldType(r.Parsed, "proposal"), scratch, parsed.proposal);
-    try input.object.put(scratch, "candidate", try @import("strict_json.zig").decode(std.json.Value, scratch, bytes, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }));
-    const contextual = try packets.create(a, try std.json.Stringify.valueAlloc(scratch, input, .{}), base.unit(), base.purpose(), null);
+    const contextual = try packets.withContext(@FieldType(r.Parsed, "proposal"), a, base, "candidate", parsed.proposal);
     defer packets.release(contextual);
     const kind = switch (authorization.operation) {
         .replace => |value| std.meta.activeTag(value),
@@ -212,7 +215,7 @@ pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authori
     const replacement = if (proposed_replacement) |value| try atomic.copyReplacement(a, value) else null;
     try v.input(a, parsed.input);
     const facts = try context.capture(a, parsed, if (needsText(authorization.rule.rejection.unit)) ctx else null);
-    defer a.free(facts.history);
+    defer a.free(facts.lineage.history);
     const target = authorization.target;
     const merged = try atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try select(parsed, target), facts, authorization, replacement, origin);
     var result = parsed;

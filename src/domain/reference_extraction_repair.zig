@@ -9,7 +9,7 @@ const identity = @import("model_request_identity.zig");
 const selections = @import("source_selections.zig");
 pub const Target = union(enum) { token_classifications, citation: struct { claim_index: usize, citation_index: usize }, missing_citations: struct { claim_index: usize } };
 pub const Replacement = union(enum) { classifications: struct { token_classifications: []const extraction.tokens.Classification }, citation: selections.Selection, citations: struct { citations: []const selections.Selection } };
-pub const Rule = union(enum) { token_classifications: validation.Issues, source_selection: selections.Issue };
+pub const Rule = union(enum) { token_classifications: struct { issues: validation.Issues, choices: validation.Choices }, source_selection: selections.Issue };
 pub const Facts = @import("reference_extraction_context.zig").Facts;
 const shared = @import("atomic_repair.zig");
 const atomic = shared.Contract(Target, Replacement, Facts, Rule);
@@ -28,7 +28,7 @@ pub fn authorize(a: std.mem.Allocator, facts: Facts, rejection: Rejection) Error
         .token_classifications => |diagnostic| {
             const entry = try entryAt(current, diagnostic.scope);
             if (current.revision != diagnostic.revision or !std.meta.eql(entry.classification_origin, diagnostic.origin) or !try atomic.equal(a, .{ .classifications = .{ .token_classifications = entry.token_classifications } }, .{ .classifications = .{ .token_classifications = diagnostic.observed } })) return error.InvalidAtomicRepair;
-            return atomic.authorize(a, unit(diagnostic.scope), current.revision, .token_classifications, try select(current, diagnostic.scope, .token_classifications), facts, .{ .token_classifications = diagnostic.issues });
+            return atomic.authorize(a, unit(diagnostic.scope), current.revision, .token_classifications, try select(current, diagnostic.scope, .token_classifications), facts, .{ .token_classifications = .{ .issues = diagnostic.issues, .choices = diagnostic.choices } });
         },
         .source_selections => |diagnostic| {
             const claim = try claimAt(current, diagnostic.scope, diagnostic.claim_index);
@@ -48,15 +48,9 @@ pub fn packet(a: std.mem.Allocator, inputs: evidence.Inputs, literals: @import("
     if (authorization.target == .token_classifications) return atomic.packet(a, authorization, base, .{ .bytes = "classification_replacement" });
     // Citation repair needs the unchanged claim's meaning as well as source
     // choices. This is a projection of the retained candidate, not new authority.
-    var arena: std.heap.ArenaAllocator = .init(a);
-    defer arena.deinit();
-    const scratch = arena.allocator();
-    var input = try @import("strict_json.zig").decode(std.json.Value, scratch, base.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
     const claim = try claimAt(current, scope, claimIndex(authorization.target));
     const content = @import("model_evidence.zig").modelContent(claim.content);
-    const encoded = try @import("model_candidate_json.zig").encode(@TypeOf(content), scratch, content);
-    try input.object.put(scratch, "claim", try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }));
-    const contextual = try packets.create(a, try std.json.Stringify.valueAlloc(scratch, input, .{}), base.unit(), base.purpose(), null);
+    const contextual = try packets.withContext(@TypeOf(content), a, base, "claim", content);
     defer packets.release(contextual);
     return atomic.packet(a, authorization, contextual, .{ .bytes = if (authorization.target == .citation) "source_selection_replacement" else "citation_replacement" });
 }

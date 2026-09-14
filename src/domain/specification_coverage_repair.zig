@@ -11,14 +11,7 @@ const shared = @import("atomic_repair.zig");
 pub const Facts = struct {
     session: sessions.Session,
     candidate: g.spec.IdentifiedContent,
-    inputs: r.evidence.Inputs,
-    items: r.Items,
-    dispositions: []const r.ClaimDisposition,
-    signals: []const r.Signal,
-    policy_ids: []const []const u8,
-    rules: []const @import("naming_policy.zig").BoundRule,
-    passive_records: []const @import("passive_literals.zig").Record,
-    passive_occurrences: []const @import("passive_literals.zig").Occurrence,
+    references: p.Dependencies,
 };
 pub const Target = struct { unit: usize, subject: candidates.Subject, field: candidates.ValueField };
 const Replacement = union(enum) { value: g.spec.BusinessValue };
@@ -28,15 +21,18 @@ pub const Authorization = atomic.Authorization;
 pub const Decision = union(enum) { authorized: Authorization, blocked: coverage.Rejection };
 pub const Error = sessions.Error || atomic.Error || candidates.Error || error{InvalidSpecificationCoverageRepair};
 
-pub fn capture(current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent) Error!Facts {
-    if (current.completed != sessions.unit_count or !current.reference_state.eql(context.inputs.corpus.state_id) or !context.registry.grammar.policy.toolchain_identity.eql(context.current.identity())) return error.InvalidSpecificationCoverageRepair;
-    return .{ .session = current, .candidate = candidate, .inputs = context.inputs, .items = try p.items(context), .dispositions = context.references.records.assignments.checked.prior.prior.dispositions, .signals = context.references.records.signals, .policy_ids = context.registry.grammar.policy.policy_ids, .rules = context.registry.grammar.policy.rules, .passive_records = context.registry.records, .passive_occurrences = context.registry.occurrences };
+pub fn capture(a: std.mem.Allocator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent) Error!Facts {
+    if (current.completed != sessions.unit_count or !current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationCoverageRepair;
+    return .{ .session = current, .candidate = candidate, .references = try p.dependencies(a, context) };
 }
 pub fn stamp(a: std.mem.Allocator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent) Error!shared.Snapshot {
-    return shared.snapshot(Facts, a, try capture(current, context, candidate));
+    const facts = try capture(a, current, context, candidate);
+    defer a.free(facts.references.lineage.history);
+    return shared.snapshot(Facts, a, facts);
 }
 pub fn authorize(a: std.mem.Allocator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, rejection: coverage.Rejection) Error!Decision {
-    const facts = try capture(current, context, candidate);
+    const facts = try capture(a, current, context, candidate);
+    defer a.free(facts.references.lineage.history);
     if (rejection.revision != current.revision or !std.meta.eql(rejection.dependencies orelse return error.InvalidSpecificationCoverageRepair, try shared.snapshot(Facts, a, facts))) return error.InvalidSpecificationCoverageRepair;
     if (rejection.issue == .missing_exact_copy) {
         for (current.units, 0..) |entry, index| {
@@ -85,7 +81,8 @@ fn owner(a: std.mem.Allocator, current: sessions.Session, target: Target) Error!
     return sessions.owner(a, selected);
 }
 pub fn merge(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, authorization: Authorization) Error!sessions.Session {
-    const facts = try capture(current, context, candidate);
+    const facts = try capture(a, current, context, candidate);
+    defer a.free(facts.references.lineage.history);
     const target = authorization.target;
     if (target.unit >= current.units.len) return error.InvalidSpecificationCoverageRepair;
     const checked = current.units[target.unit] orelse return error.InvalidSpecificationCoverageRepair;

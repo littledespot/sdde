@@ -311,7 +311,7 @@ test "atomic classification repair preserves claims and other chunks and revalid
         const candidate = try text.check(a, inputs, try parse.execute(a, .{ .entries = &raw }));
         const rejection = (try validation.validate(a, inputs, available, candidate)).invalid;
         const authorization = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, .{ .token_classifications = rejection });
-        try std.testing.expectEqualDeep(&[_]tokens.CandidateId{available.entries[0].id}, authorization.rule.token_classifications.missing);
+        try std.testing.expectEqualDeep(&[_]tokens.CandidateId{available.entries[0].id}, authorization.rule.token_classifications.issues.missing);
         var stale_rejection = rejection;
         stale_rejection.revision += 1;
         try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, .{ .token_classifications = stale_rejection }));

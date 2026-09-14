@@ -16,8 +16,44 @@ pub const BusinessText = struct { segments: []const BusinessSegment };
 pub const ReferenceSemanticText = struct { nodes: []const ReferenceNode };
 pub const ValidatedBusinessText = struct { value: BusinessText };
 pub const ValidatedReferenceSemanticText = struct { value: ReferenceSemanticText };
+pub fn equivalentBusiness(left: ValidatedBusinessText, right: ValidatedBusinessText) bool {
+    return equivalentNodes(BusinessSegment, left.value.segments, right.value.segments);
+}
+pub fn equivalentReference(left: ValidatedReferenceSemanticText, right: ValidatedReferenceSemanticText) bool {
+    return equivalentNodes(ReferenceNode, left.value.nodes, right.value.nodes);
+}
+fn equivalentNodes(comptime Node: type, left: []const Node, right: []const Node) bool {
+    if (left.len != right.len) return false;
+    for (left, right) |first, second| {
+        if (std.meta.activeTag(first) != std.meta.activeTag(second)) return false;
+        switch (first) {
+            .literal => |value| if (!std.mem.eql(u8, value.value, second.literal.value)) return false,
+            inline else => |value, tag| if (!std.meta.eql(value, @field(second, @tagName(tag)))) return false,
+        }
+    }
+    return true;
+}
 pub const Context = struct { registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, scope: evidence.Scope };
 pub const ScopeSetContext = struct { registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, scopes: []const evidence.Scope };
+/// Native read dependencies, independent of model packet presentation. Runtime
+/// toolchain identity is checked before capture; no capability enters a snapshot.
+pub const Dependencies = struct {
+    inputs: evidence.Inputs,
+    grammar_contract: @FieldType(@import("path_token_grammar.zig").Grammar, "contract"),
+    policy_contract: @FieldType(naming.Compiled, "contract"),
+    policy_ids: []const []const u8,
+    rules: []const naming.BoundRule,
+    reference_state_id: evidence.identity.StateId,
+    feature_id: @import("feature_identity.zig").FeatureId,
+    reference_names: []const @import("path_token_grammar.zig").ReferenceName,
+    records: []const literals.Record,
+    occurrences: []const literals.Occurrence,
+};
+pub fn dependencies(inputs: evidence.Inputs, registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain) naming.Error!Dependencies {
+    if (!registry.grammar.policy.toolchain_identity.eql(current.identity())) return error.StaleNamingPolicy;
+    const grammar = registry.grammar;
+    return .{ .inputs = inputs, .grammar_contract = grammar.contract, .policy_contract = grammar.policy.contract, .policy_ids = grammar.policy.policy_ids, .rules = grammar.policy.rules, .reference_state_id = grammar.reference_state_id, .feature_id = grammar.feature_id, .reference_names = grammar.reference_names, .records = registry.records, .occurrences = registry.occurrences };
+}
 pub const Issue = struct {
     reason: enum { empty, invalid_scalar, unbound_path, unknown_passive, unknown_source, blank },
     first_node: usize,

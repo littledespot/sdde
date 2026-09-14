@@ -323,6 +323,7 @@ test "failure reports preserve separate engine provider and model evidence" {
         .json_error = .{ .reason = .SyntaxError, .location = .{ .byte_offset = 9, .line = 2, .column = 8 } },
         .schema_error = .{ .reason = .missing_required_property, .path = "/statements/0/content/kind" },
         .candidate_error = .{ .token_classifications = .{
+            .choices = .{ .outcome = .claims, .decisions = &.{ .preserve, .irrelevant } },
             .observed = &.{},
             .scope = .{ .state_id = .{ .bytes = "current-state" }, .chunk_id = .{ .bytes = "chunk-2" } },
             .revision = 3,

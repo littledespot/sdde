@@ -18,6 +18,7 @@ pub const Issue = struct {
     observed: ?Replacement,
     blocked: ?Blocked = null,
     text_issue: ?@import("typed_text.zig").Issue = null,
+    value_choices: ?@import("specification_provenance.zig").ValueChoices = null,
     native_error: ?enum { InvalidSpecification, InvalidReferenceReconciliation, InvalidSourceCitation, InvalidTypedText, UnboundPathReference, InvalidPassiveLiteral } = null,
 };
 pub const Rejection = struct { owner: identity.ImmutableUnitOwnerId, revision: u64, origin: ?Origin, issue: Issue, last_repair: ?@import("atomic_repair.zig").Merge = null, dependencies: ?@import("atomic_repair.zig").Snapshot = null };
@@ -127,6 +128,19 @@ pub fn select(response: g.Response, selected: Target) Error!Replacement {
         .value => |field| if (field.field == .value) .{ .value = (try attributed(.model, &content, field.subject)).value } else error.InvalidSpecificationRepair,
         .record => unreachable,
     };
+}
+/// The containing record is read context, even when only one field is writable.
+pub const ReadContext = union(enum) { attributed: g.spec.Model.AttributedValue, record: g.spec.Model.RecordProposal };
+pub fn readContext(response: g.Response, selected: Target) Error!ReadContext {
+    _ = try select(response, selected);
+    if (recordIndex(selected)) |index| return .{ .record = response.content.records[index] };
+    var content = response.content;
+    const subject = switch (selected) {
+        .provenance => |value| value,
+        .value => |value| value.subject,
+        .record => unreachable,
+    };
+    return .{ .attributed = (try attributed(.model, &content, subject)).* };
 }
 pub fn replace(a: std.mem.Allocator, response: g.Response, selected: Target, replacement: Replacement) Error!g.Response {
     _ = try select(response, selected);

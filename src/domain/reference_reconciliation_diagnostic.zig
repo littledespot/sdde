@@ -39,19 +39,25 @@ pub const Constraint = enum {
     conflict_claim_covered,
     conflict_pair_covered,
 
+    pub fn appliesTo(self: Constraint, purpose: @FieldType(r.Input, "purpose")) bool {
+        return switch (self) {
+            .unique_nonzero, .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token => true,
+            else => purpose == .global,
+        };
+    }
     pub fn description(self: Constraint) []const u8 {
         return switch (self) {
             .unique_nonzero => "IDs and local keys must be nonzero and unique within their collection.",
             .nonempty_unique_allowed_claims => "Select a nonempty, unique subset of the supplied claim IDs.",
             .matching_claim_content => "Content must match the selected claims' content kind.",
-            .exact_selected_token => "Select the exact preserved token of the cited claim.",
+            .exact_selected_token => "Preserved-token content must select one claim and its exact token ID.",
             .no_self_relation => "A claim cannot relate to itself.",
             .same_content_kind => "Duplicate and superseded targets must have the same content kind.",
             .same_token_value => "Duplicate tokens must have the same token kind and exact value.",
             .nonconflicting_target => "Duplicate and superseded targets cannot be conflicting.",
             .reciprocal_conflict => "Every conflicting relationship must be declared in both directions.",
             .acyclic => "Duplicate and superseded chains must terminate without cycles.",
-            .nonempty => "At least one related claim is required.",
+            .nonempty => "Superseded and conflicting claims require at least one related claim.",
             .at_least_two => "A conflict must select at least two claims.",
             .nonconflicting_claims => "Signals may select only nonconflicting claims.",
             .conflicting_related_claims => "Conflict members must declare each other as conflicting.",
@@ -75,8 +81,19 @@ pub const Fact = union(enum) {
 };
 pub const Issue = struct { rule: Rule, observed: Fact, expected: Fact };
 pub const RepairBlock = enum { competing_entries, no_independent_target, no_required_member };
+pub const ContentKind = union(enum) { model: std.meta.Tag(r.extraction.Content), preserved_token: r.TokenReference };
+/// Necessary independent-edit facts from the owning validators. They describe
+/// available choices, never select a repair operation or prove semantic support.
+pub const Relations = struct {
+    content: ?ContentKind = null,
+    selection: []const r.ClaimId = &.{},
+    conflicting_pairs: []const struct { left: r.ClaimId, right: r.ClaimId } = &.{},
+    redundant: ?usize = null,
+    competing: bool = false,
+};
 pub const Rejection = struct {
     blocked: ?RepairBlock = null,
+    relations: Relations = .{},
     dependencies: ?@import("atomic_repair.zig").Snapshot = null,
     state_id: r.evidence.identity.StateId,
     partition_id: r.PartitionId,

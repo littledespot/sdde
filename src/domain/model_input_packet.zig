@@ -70,6 +70,19 @@ pub fn release(packet: *const Packet) void {
 pub fn view(packet: *const Packet) *const Packet {
     return packet;
 }
+/// Add one typed read-context projection without changing request ownership.
+pub fn withContext(comptime T: type, allocator: std.mem.Allocator, base: *const Packet, comptime field: []const u8, context: T) (Error || @import("strict_json.zig").Error)!*Packet {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    const strict = @import("strict_json.zig");
+    const limits: strict.Limits = .{ .maximum_depth = schema.max_json_depth };
+    var input = try strict.decode(std.json.Value, scratch, base.body(), limits);
+    if (input != .object or input.object.contains(field)) return error.InvalidModelInputPacket;
+    const bytes = try @import("model_candidate_json.zig").encode(T, scratch, context);
+    try input.object.put(scratch, field, try strict.decode(std.json.Value, scratch, bytes, limits));
+    return create(allocator, try std.json.Stringify.valueAlloc(scratch, input, .{}), base.unit(), base.purpose(), base.resultDefinition());
+}
 fn storage(packet: *const Packet) *Storage {
     const handle: *const Handle = @ptrCast(@alignCast(packet));
     return handle.owner;

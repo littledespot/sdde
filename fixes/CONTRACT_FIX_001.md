@@ -38,6 +38,9 @@ gaps assigned to 13–15/17. Its final review adds F9's incomplete native depend
 capture, extends F8's source-accounting evidence and confirms duplicated assembly
 in F10/chunk 20. The findings refine implementation evidence under the
 existing design; they do not approve a new repair algebra or authority exception.
+The 14 September shared Phase 3 implementation addresses F1–F4/F9 under these
+existing target decisions; its [delivery and verification record](TODO_FIX_001.md#phase-3-architecture-audit-follow-up)
+is the current status authority. No new target or exception was introduced.
 The historical boundary table below remains the Phase 0 snapshot. No new authority
 or repair target is approved here.
 

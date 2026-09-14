@@ -26,15 +26,39 @@ pub fn scopes(allocator: std.mem.Allocator, items: r.Items, ids: []const r.Claim
     for (ids, result) |id, *scope| scope.* = .{ .state_id = items.state_id, .chunk_id = (try r.item(items, id)).claim.chunk_id };
     return .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = result };
 }
+pub fn contentKind(value: r.ContentProposal) d.ContentKind {
+    return switch (value) {
+        .model => |model| .{ .model = model },
+        .preserved_token => |token| .{ .preserved_token = token },
+    };
+}
+fn claimKind(value: r.Item) d.ContentKind {
+    return switch (value.claim.content) {
+        .model => |model| .{ .model = model },
+        .preserved_token => |token| .{ .preserved_token = .{ .token_id = token.value.id } },
+    };
+}
+fn matchingKind(left: d.ContentKind, right: d.ContentKind) bool {
+    return std.meta.eql(left, right);
+}
+/// All selected claims must admit one content value. Exact tokens are indivisible.
+fn selectedKind(items: r.Items, ids: []const r.ClaimId) r.Error!?d.ContentKind {
+    if (ids.len == 0) return null;
+    const first = claimKind(try r.item(items, ids[0]));
+    if (first == .preserved_token and ids.len != 1) return null;
+    for (ids[1..]) |id| if (!matchingKind(first, claimKind(try r.item(items, id)))) return null;
+    return first;
+}
+
 pub fn content(allocator: std.mem.Allocator, validator: r.text.Validator, context: TextContext, items: r.Items, ids: []const r.ClaimId, candidate: r.ContentProposal) r.Error!d.Check(r.Content) {
     const mismatch: d.Check(r.Content) = .{ .invalid = .{ .rule = .content, .observed = .{ .content = candidate }, .expected = .{ .constraint = .matching_claim_content } } };
-    if (ids.len == 0) return mismatch;
+    const required = (try selectedKind(items, ids)) orelse return mismatch;
+    if (!matchingKind(required, contentKind(candidate))) return if (required == .preserved_token and candidate == .preserved_token)
+        .{ .invalid = .{ .rule = .content, .observed = .{ .content = candidate }, .expected = .{ .constraint = .exact_selected_token } } }
+    else
+        mismatch;
     switch (candidate) {
         .model => |model| {
-            for (ids) |id| {
-                const original = (try r.item(items, id)).claim.content;
-                if (original != .model or std.meta.activeTag(original.model) != std.meta.activeTag(model)) return mismatch;
-            }
             const context_set = try scopes(allocator, items, ids, context);
             return .{ .valid = .{ .model = switch (model) {
                 inline .business, .scope_guard => |value, tag| @unionInit(r.extraction.Content, @tagName(tag), switch (try validator.checkBusinessIn(allocator, context_set, value)) {
@@ -48,11 +72,6 @@ pub fn content(allocator: std.mem.Allocator, validator: r.text.Validator, contex
             } } };
         },
         .preserved_token => |token| {
-            // A summary or signal names exactly the supplied token, not a new
-            // scalar or a different token with coincidentally equal bytes.
-            if (ids.len != 1) return mismatch;
-            const original = (try r.item(items, ids[0])).claim.content;
-            if (original != .preserved_token or original.preserved_token.value.id.ordinal != token.token_id.ordinal) return .{ .invalid = .{ .rule = .content, .observed = .{ .content = candidate }, .expected = .{ .constraint = .exact_selected_token } } };
             return .{ .valid = .{ .preserved_token = token } };
         },
     }
@@ -60,6 +79,112 @@ pub fn content(allocator: std.mem.Allocator, validator: r.text.Validator, contex
 pub fn disposition(values: []const r.ClaimDisposition, id: r.ClaimId) r.Error!r.ClaimDisposition {
     for (values) |value| if (value.claim_id.ordinal == id.ordinal) return value;
     return error.InvalidReferenceReconciliation;
+}
+
+pub fn signalEligible(values: []const r.ClaimDisposition, id: r.ClaimId) r.Error!bool {
+    return (try disposition(values, id)).disposition != .conflicting;
+}
+pub fn conflictRelated(values: []const r.ClaimDisposition, left: r.ClaimId, right: r.ClaimId) r.Error!bool {
+    const value = try disposition(values, left);
+    return value.disposition == .conflicting and left.ordinal != right.ordinal and r.contains(r.ClaimId, value.related_claim_ids, right);
+}
+pub fn sameMembers(left: []const r.ClaimId, right: []const r.ClaimId) bool {
+    r.sameSet(r.ClaimId, left, right) catch return false;
+    return true;
+}
+
+/// Retain compatibility and canonical redundancy while native validation owns
+/// the candidate. Authorizers need no second interpretation of these relations.
+pub fn relations(a: std.mem.Allocator, validator: r.text.Validator, ctx: TextContext, parsed: r.Parsed, dispositions: []const r.ClaimDisposition, rejection: d.Rejection) r.Error!d.Relations {
+    const items = parsed.input.progress.plan.layout.items;
+    var result: d.Relations = .{};
+    var selections: std.ArrayList(r.ClaimId) = .empty;
+    const selected: ?r.SignalProposal = switch (rejection.unit) {
+        .statement => |index| .{ .claim_ids = parsed.proposal.summary.statements[index].claim_ids, .content = parsed.proposal.summary.statements[index].content },
+        .signal => |index| parsed.proposal.global.signals[index],
+        else => null,
+    };
+    if (selected) |value| {
+        var eligible_current = claims(items, value.claim_ids, parsed.input.partition.group.claim_ids) == null;
+        if (eligible_current and rejection.unit == .signal) for (value.claim_ids) |id| {
+            if (!try signalEligible(dispositions, id)) eligible_current = false;
+        };
+        if (eligible_current) result.content = try selectedKind(items, value.claim_ids);
+        for (parsed.input.partition.group.claim_ids) |id| {
+            if (rejection.unit == .signal and !try signalEligible(dispositions, id)) continue;
+            if (matchingKind(contentKind(value.content), claimKind(try r.item(items, id)))) try selections.append(a, id);
+        }
+        result.selection = try selections.toOwnedSlice(a);
+    }
+    switch (rejection.unit) {
+        .summary, .statement => {
+            const values = parsed.proposal.summary.statements;
+            for (values, 0..) |value, index| {
+                if (rejection.unit == .statement and rejection.unit.statement != index) continue;
+                for (values[0..index]) |prior| {
+                    if (try equivalentContent(a, validator, ctx, items, prior.claim_ids, prior.content, value.claim_ids, value.content)) {
+                        result.redundant = index;
+                        return result;
+                    }
+                    if (rejection.unit == .summary) for (value.claim_ids) |id| {
+                        if (r.contains(r.ClaimId, prior.claim_ids, id)) result.competing = true;
+                    };
+                }
+            }
+        },
+        .signal => |index| if (rejection.issue.rule == .duplicate_signal) {
+            const value = parsed.proposal.global.signals[index];
+            for (parsed.proposal.global.signals[0..index]) |prior| {
+                if (try equivalentContent(a, validator, ctx, items, prior.claim_ids, prior.content, value.claim_ids, value.content)) {
+                    result.redundant = index;
+                    break;
+                }
+            }
+        },
+        .conflict => |index| {
+            var pairs: std.ArrayList(std.meta.Child(@FieldType(d.Relations, "conflicting_pairs"))) = .empty;
+            // Traverse declared edges, never subsets, cliques or repair sequences.
+            for (dispositions) |left| for (left.related_claim_ids) |right| {
+                if (left.claim_id.ordinal < right.ordinal and try conflictRelated(dispositions, left.claim_id, right) and try conflictRelated(dispositions, right, left.claim_id)) try pairs.append(a, .{ .left = left.claim_id, .right = right });
+            };
+            result.conflicting_pairs = try pairs.toOwnedSlice(a);
+            if (rejection.issue.rule == .duplicate_conflict) {
+                const value = parsed.proposal.global.conflicts[index];
+                for (parsed.proposal.global.conflicts[0..index]) |prior| {
+                    if (prior.kind != value.kind or !sameMembers(prior.claim_ids, value.claim_ids)) continue;
+                    const scope = try scopes(a, items, value.claim_ids, ctx);
+                    const left = switch (try validator.checkReferenceIn(a, scope, prior.summary)) {
+                        .valid => |checked| checked,
+                        .invalid => continue,
+                    };
+                    const right = switch (try validator.checkReferenceIn(a, scope, value.summary)) {
+                        .valid => |checked| checked,
+                        .invalid => continue,
+                    };
+                    if (r.text.equivalentReference(left, right)) {
+                        result.redundant = index;
+                        break;
+                    }
+                }
+            }
+        },
+        else => {},
+    }
+    return result;
+}
+fn equivalentContent(a: std.mem.Allocator, validator: r.text.Validator, ctx: TextContext, items: r.Items, left_ids: []const r.ClaimId, left: r.ContentProposal, right_ids: []const r.ClaimId, right: r.ContentProposal) r.Error!bool {
+    if (!sameMembers(left_ids, right_ids) or claims(items, left_ids, left_ids) != null) return false;
+    const first = switch (try content(a, validator, ctx, items, left_ids, left)) {
+        .valid => |value| value,
+        .invalid => return false,
+    };
+    const second = switch (try content(a, validator, ctx, items, right_ids, right)) {
+        .valid => |value| value,
+        .invalid => return false,
+    };
+    // Exact comparison occurs only after canonical text validation. The same
+    // claim set proves identical evidence and token/coverage obligations.
+    return r.equivalentContent(first, second);
 }
 
 /// Replay-independent final lineage gate. Every statement represents original

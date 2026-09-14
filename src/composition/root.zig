@@ -1316,13 +1316,14 @@ test "configured specification generation YAML executes native references models
     const text_start = reconciliation_start + reconciliation_faults.len;
     const repeated_start = text_start + 3;
     const protocol_text_start = repeated_start + 2;
-    for (0..protocol_text_start + 2) |scenario| {
+    const protocol_selection_scenario = protocol_text_start + 2;
+    for (0..protocol_text_start + 3) |scenario| {
         const reconciliation_scenario = scenario >= reconciliation_start and scenario < text_start;
         const citation_scenario = scenario >= citation_repair_start and scenario < reconciliation_start;
         const classification_scenario = scenario >= classification_repair_start and scenario < citation_repair_start;
         const text_scenario = scenario >= text_start and scenario < repeated_start;
         const repeated_scenario = scenario >= repeated_start and scenario < protocol_text_start;
-        const protocol_text_scenario = scenario >= protocol_text_start;
+        const protocol_text_scenario = scenario >= protocol_text_start and scenario < protocol_selection_scenario;
         const fault: ?@TypeOf(faults[0]) = if (scenario >= 14 and scenario < classification_repair_start) faults[scenario - 14] else null;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
@@ -1392,11 +1393,15 @@ test "configured specification generation YAML executes native references models
         }
         if (protocol_text_scenario) {
             driver.reconciliation_fault = .signal_text;
-            driver.malformed_reconciliation_repair_once = true;
+            driver.reconciliation_protocol_fault = .envelope_once;
             if (scenario == protocol_text_start + 1) driver.reconciliation_repair_fault = .unchanged_text;
         }
+        if (scenario == protocol_selection_scenario) {
+            driver.reconciliation_fault = .mixed_selection;
+            driver.reconciliation_protocol_fault = .envelope_then_json;
+        }
         const result = driver.run();
-        const expected: workflow.OutcomeTag = if (scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.reconciliation_fault == .cycle or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text) .blocked else .ok;
+        const expected: workflow.OutcomeTag = if (scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.reconciliation_fault == .cycle or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}\n", .{ scenario, try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (scenario == 6) {
@@ -1445,6 +1450,22 @@ test "configured specification generation YAML executes native references models
             }
         }
 
+        if (scenario == protocol_selection_scenario) {
+            try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
+            try std.testing.expectEqual(@as(usize, 2), driver.reconciliation_repair_calls);
+            try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
+            const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })).?.reconciliation;
+            try std.testing.expectEqual(@as(u64, 1), diagnostic.revision);
+            try std.testing.expectEqual(.content, diagnostic.issue.rule);
+            try std.testing.expect(diagnostic.relations.content == null and diagnostic.relations.selection.len != 0);
+            const latest = @import("../application/model_request_workflow.zig").readCurrent(&.{ .slots = runner.envelope.slots }, @import("../application/model_request_workflow.zig").prepared_schema) catch unreachable;
+            try std.testing.expect(latest.id().purpose == .atomic_repair);
+            const latest_origin = @import("../domain/model_request_identity.zig").ledger(runner.model_accounting.?.requests).indexOf(latest.id()).?;
+            try std.testing.expect(diagnostic.origin.?.request.value != latest_origin.value);
+            try std.testing.expectEqual(@as(u32, 1), diagnostic.origin.?.attempt.value);
+            try std.testing.expectEqual(@as(u32, 2), @import("../domain/model_attempt_accounting.zig").latestAttempt(runner.model_accounting.?.attempts).ordinal().value);
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(@import("../application/reference_reconciliation_workflow.zig").accounted_schema.key)] == null);
+        }
         if (protocol_text_scenario) {
             try std.testing.expectEqual(@as(usize, 2), driver.reconciliation_repair_calls);
             try std.testing.expectEqual(@as(usize, 1), driver.reconciliation_merges);

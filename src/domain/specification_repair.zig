@@ -14,6 +14,7 @@ pub const Rule = struct {
     native_error: @FieldType(candidates.Issue, "native_error"),
     text_issue: ?@import("typed_text.zig").Issue,
     requirement: []const u8,
+    value_choices: ?p.ValueChoices,
 };
 const dependencies = @import("specification_candidate_context.zig");
 const shared = @import("atomic_repair.zig");
@@ -23,7 +24,7 @@ pub const Error = session.Error || atomic.Error || error{ InvalidSpecificationRe
 
 pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context: p.Context, candidate: Candidate, rejection: candidates.Rejection) Error!Authorization {
     const facts = try dependencies.capture(allocator, current, context, candidate);
-    defer allocator.free(facts.input);
+    defer allocator.free(facts.references.lineage.history);
     const stamp = rejection.dependencies orelse return error.InvalidSpecificationRepair;
     if (!std.meta.eql(stamp, try shared.snapshot(dependencies.Facts, allocator, facts))) return error.InvalidSpecificationRepair;
     const owner = try session.owner(allocator, current);
@@ -35,10 +36,10 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
     const expected = rejection.issue.observed orelse return error.InvalidSpecificationRepair;
     const target = rejection.issue.field.target;
     if (!try atomic.equal(allocator, try candidates.select(candidate.response, target), expected)) return error.InvalidSpecificationRepair;
-    const rule: Rule = .{ .rule = rejection.issue.rule, .native_error = rejection.issue.native_error, .text_issue = rejection.issue.text_issue, .requirement = switch (rejection.issue.rule) {
+    const rule: Rule = .{ .rule = rejection.issue.rule, .native_error = rejection.issue.native_error, .text_issue = rejection.issue.text_issue, .value_choices = rejection.issue.value_choices, .requirement = switch (rejection.issue.rule) {
         .provenance => "Select nonempty, unique currently retained claim IDs; clarification responses are unavailable in this generation context.",
         .typed_text => (rejection.issue.text_issue orelse return error.InvalidSpecificationRepair).description(),
-        .exact_copy => "Select a preserved token and its citation supported by this field's unchanged provenance.",
+        .exact_copy => "Use an allowed value representation supported by the unchanged provenance; exact copies must select a supplied token/citation pair.",
         .record_kind => "Supply one record of the requested kind with valid content and evidence selections.",
         .duplicate_record => "Remove only the evidence-equivalent redundant occurrence; preserve coverage and sibling order.",
         .unit_kind => return error.UnsafeSpecificationRepair,
@@ -51,7 +52,7 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
 
 pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p.Context, authorization: Authorization) Error!*packets.Packet {
     const facts = try dependencies.capture(allocator, current, context, authorization.dependencies.candidate);
-    defer allocator.free(facts.input);
+    defer allocator.free(facts.references.lineage.history);
     try atomic.checkDependencies(allocator, authorization, facts);
     const unit = try session.unit(current.completed);
     if (authorization.operation != .replace) return error.InvalidSpecificationRepair;
@@ -64,7 +65,9 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         .record => try std.fmt.allocPrint(allocator, "record_{s}", .{@tagName(unit.records)}),
     };
     defer if (authorization.operation.replace == .record) allocator.free(definition);
-    return atomic.packet(allocator, authorization, base, .{ .bytes = definition });
+    const contextual = try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try candidates.readContext(authorization.dependencies.candidate.response, authorization.target));
+    defer packets.release(contextual);
+    return atomic.packet(allocator, authorization, contextual, .{ .bytes = definition });
 }
 
 pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_value: *const packets.Packet, bytes: []const u8) Error!Replacement {
@@ -73,7 +76,7 @@ pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_
 
 pub fn merge(allocator: std.mem.Allocator, current: session.Session, context: p.Context, candidate: Candidate, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!Candidate {
     const facts = try dependencies.capture(allocator, current, context, candidate);
-    defer allocator.free(facts.input);
+    defer allocator.free(facts.references.lineage.history);
     var result = candidate;
     const merged = try atomic.checkMerge(allocator, try session.owner(allocator, current), candidate.revision, try candidates.select(candidate.response, authorization.target), facts, authorization, proposed_replacement, origin);
     result.revision = merged.revision_after;

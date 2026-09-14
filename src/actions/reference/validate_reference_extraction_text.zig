@@ -21,7 +21,7 @@ pub const Action = struct {
                 .blocked => |reason| .{ .blocked = reason },
                 .no_feature_claim => |reason| .{ .no_feature_claim = switch (try self.validator.checkReferenceIn(allocator, context, reason)) {
                     .valid => |value| value,
-                    .invalid => |issue| return reject(allocator, inputs, registry, parsed, candidate, .reason, issue, .{ .reason = reason }),
+                    .invalid => |issue| return reject(allocator, inputs, registry, current, parsed, candidate, .reason, issue, .{ .reason = reason }),
                 } },
                 .claims => |proposals| claims: {
                     const checked = try allocator.alloc(extraction.TextValidatedProposal, proposals.len);
@@ -34,11 +34,11 @@ pub const Action = struct {
                         value.content = switch (proposal.content) {
                             inline .business, .scope_guard => |candidate_text, tag| @unionInit(extraction.Content, @tagName(tag), switch (try self.validator.checkBusinessIn(allocator, context, candidate_text)) {
                                 .valid => |accepted| accepted,
-                                .invalid => |issue| return reject(allocator, inputs, registry, parsed, candidate, .{ .claim = index }, issue, .{ .content = proposal.content }),
+                                .invalid => |issue| return reject(allocator, inputs, registry, current, parsed, candidate, .{ .claim = index }, issue, .{ .content = proposal.content }),
                             }),
                             inline else => |candidate_text, tag| @unionInit(extraction.Content, @tagName(tag), switch (try self.validator.checkReferenceIn(allocator, context, candidate_text)) {
                                 .valid => |accepted| accepted,
-                                .invalid => |issue| return reject(allocator, inputs, registry, parsed, candidate, .{ .claim = index }, issue, .{ .content = proposal.content }),
+                                .invalid => |issue| return reject(allocator, inputs, registry, current, parsed, candidate, .{ .claim = index }, issue, .{ .content = proposal.content }),
                             }),
                         };
                     }
@@ -50,7 +50,7 @@ pub const Action = struct {
     }
 };
 
-fn reject(a: std.mem.Allocator, inputs: evidence.Inputs, registry: @import("../../domain/passive_literals.zig").Registry, parsed: extraction.Parsed, entry: extraction.ParsedResult, target: extraction.TextTarget, issue: text.Issue, observed: @FieldType(extraction.TextRejection, "observed")) extraction.Error!extraction.TextResult {
+fn reject(a: std.mem.Allocator, inputs: evidence.Inputs, registry: @import("../../domain/passive_literals.zig").Registry, current: *const @import("../../domain/toolchain_safety.zig").ValidToolchain, parsed: extraction.Parsed, entry: extraction.ParsedResult, target: extraction.TextTarget, issue: text.Issue, observed: @FieldType(extraction.TextRejection, "observed")) extraction.Error!extraction.TextResult {
     const context = @import("../../domain/reference_extraction_context.zig");
-    return .{ .invalid = .{ .scope = entry.scope, .revision = parsed.revision, .target = target, .origin = extraction.textOrigin(entry, target), .issue = issue, .observed = observed, .dependencies = try @import("../../domain/atomic_repair.zig").snapshot(context.TextFacts, a, context.textFacts(inputs, registry, parsed)) } };
+    return .{ .invalid = .{ .scope = entry.scope, .revision = parsed.revision, .target = target, .origin = extraction.textOrigin(entry, target), .issue = issue, .observed = observed, .dependencies = try @import("../../domain/atomic_repair.zig").snapshot(context.TextFacts, a, try context.textFacts(inputs, registry, current, parsed)) } };
 }

@@ -148,6 +148,7 @@ fn rejectedPart(comptime boundary: spec.Boundary, unit: Unit, response: Response
     const target = candidate.locate(subject, inspection.part);
     const observed = if (boundary == .model) candidate.select(response, target) catch return error.InvalidSpecificationUnit else null;
     var result = try rejected(unit, .{ .target = target }, observed, inspection.text_issue, err);
+    result.invalid.value_choices = inspection.value_choices;
     if (inspection.part == .value and result.invalid.rule == .provenance) result.invalid.rule = .exact_copy;
     return result;
 }

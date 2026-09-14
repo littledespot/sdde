@@ -10,6 +10,14 @@ pub const Issues = struct {
     unknown: []const tokens.CandidateId,
     forbidden: []const tokens.CandidateId,
 };
+pub const Choices = struct { outcome: std.meta.Tag(@FieldType(extraction.TextValidatedResult, "outcome")), decisions: []const std.meta.Tag(tokens.Classification) };
+pub fn choices(outcome: std.meta.Tag(@FieldType(extraction.TextValidatedResult, "outcome"))) Choices {
+    return .{ .outcome = outcome, .decisions = switch (outcome) {
+        .claims => &.{ .preserve, .irrelevant },
+        .no_feature_claim => &.{.irrelevant},
+        .blocked => &.{},
+    } };
+}
 pub const Rejection = struct {
     dependencies: ?@import("atomic_repair.zig").Snapshot = null,
     origin: ?@import("model_candidate_origin.zig").Origin = null,
@@ -17,6 +25,7 @@ pub const Rejection = struct {
     revision: u64,
     field: enum { token_classifications } = .token_classifications,
     issues: Issues,
+    choices: Choices,
     observed: []const tokens.Classification,
 };
 pub const Result = union(enum) { valid: extraction.Classified, invalid: Rejection };
@@ -64,13 +73,13 @@ pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: token
                 if (candidate.fact.scope.chunk_id.eql(entry.scope.chunk_id) and std.meta.eql(classification.id(), candidate.id)) break true;
             } else false;
             if (!known) try unknown.append(a, classification.id());
-            if (entry.outcome == .blocked or (entry.outcome == .no_feature_claim and classification == .preserve)) try forbidden.append(a, classification.id());
+            if (std.mem.indexOfScalar(std.meta.Tag(tokens.Classification), choices(entry.outcome).decisions, classification) == null) try forbidden.append(a, classification.id());
         }
         if (missing.items.len + duplicate.items.len + unknown.items.len + forbidden.items.len != 0) {
             // A blocked entry is engine-owned, so contradictory data is an
             // authority failure, not an invitation to have the model repair it.
             if (entry.outcome == .blocked) return error.InvalidReferenceExtraction;
-            return .{ .invalid = .{ .dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = parsed }), .scope = entry.scope, .revision = parsed.revision, .origin = entry.classification_origin, .observed = entry.token_classifications, .issues = .{
+            return .{ .invalid = .{ .dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = parsed }), .scope = entry.scope, .revision = parsed.revision, .origin = entry.classification_origin, .observed = entry.token_classifications, .choices = choices(entry.outcome), .issues = .{
                 .missing = try missing.toOwnedSlice(a),
                 .duplicate = try duplicate.toOwnedSlice(a),
                 .unknown = try unknown.toOwnedSlice(a),

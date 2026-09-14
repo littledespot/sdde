@@ -566,6 +566,16 @@ three global validators. Proven redundant deletions and determined token
 insertions require no model confirmation. Non-equivalent competing entries remain
 blocked under FIX_001 G1; a repaired conflict representation remains unresolved.
 
+The same content-kind predicate validates proposals and supplies retained repair
+choices. Mixed claim kinds cannot receive a content-only assignment; an eligible
+selection can be repaired first, followed by an existing missing-member insertion
+when needed. Empty signal selections or absent conflicting pairs block before a
+model call. Every member must still be accounted for before acceptance. Redundancy
+uses validated, normalized text together with identical claim evidence and
+obligations; adjacent literal segmentation alone does not create a competing
+claim. Exact authorization/CAS comparisons remain byte-exact native comparisons.
+
+
 All text uses §3.7's shared validator with the explicit contributing-claim
 scope set; cross-source scope never becomes corpus-wide permission. Models
 cannot supply canonical signal, conflict or statement IDs, scalar replacements,
@@ -1032,7 +1042,12 @@ locations are closed native targets. Whole-record replacement is limited to a
 record-kind defect; exact evidence-equivalent duplicates can be deleted, while
 competing records remain blocked. The engine retains owner, revision, old value,
 source choices and policy facts; the model returns only the selected value or
-provenance shape. The former broad attributed-field repair schema is removed.
+provenance shape. Provenance repairs receive the unchanged attributed value or
+entire shared-provenance record; value repairs receive that unchanged provenance.
+The value validator retains allowed normalized/exact-copy alternatives, including
+only token/citation pairs supported by the fixed provenance. It never reconstructs
+business meaning or automatically converts an exact copy to prose. The former
+broad attributed-field repair schema is removed.
 Merge preserves siblings, increments revision and repeats unit validation. Assembly revalidates all units, checks
 conditional entities and assigns IDs before coverage and final authority review.
 All repair consumers use the same `atomic_repair.Contract`: immutable authorization
@@ -1043,6 +1058,17 @@ Native domain actions select and apply their typed units. Calls use the existing
 `model-request` subgraph and concise shared repair prompt. Request release occurs
 before shared model/automatic reconciliation and specification merge routes.
 Deterministic repair loops have explicit runner-owned execution bounds.
+
+Native dependency capture is independent of request serialization. `typed_text`
+owns the complete text-policy/source projection, the reconciliation context owns
+flattened summary lineage, and specification provenance supplies the shared read
+facts consumed by generation and coverage repair. Current toolchain identity is
+checked before capture; capabilities are not serialized. Grammar-name or history
+changes reject an old authorization before dispatch/merge, even when the model
+packet would look unchanged. Extraction classification guidance retains the frozen
+chunk outcome and permitted decisions from its validator. Coverage reconstruction
+continues to use no model call and must pass unit and full-candidate validation.
+
 
 Text repair retains the shared validator's reason, inclusive node range and, for
 an unbound path, the first lexer match and matching bytes. Match offsets address

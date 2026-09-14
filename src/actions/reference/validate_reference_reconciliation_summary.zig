@@ -8,7 +8,10 @@ pub const Action = struct {
     validator: r.text.Validator,
     pub fn execute(self: Action, allocator: std.mem.Allocator, parsed: r.Parsed, context: validation.TextContext) r.Error!d.Result(r.CheckedSummary) {
         var result = try self.check(allocator, parsed, context);
-        if (result == .invalid) result.invalid.dependencies = try @import("../../domain/reference_reconciliation_context.zig").snapshot(allocator, parsed, context);
+        if (result == .invalid) {
+            result.invalid.relations = try validation.relations(allocator, self.validator, context, parsed, &.{}, result.invalid);
+            result.invalid.dependencies = try @import("../../domain/reference_reconciliation_context.zig").snapshot(allocator, parsed, context);
+        }
         return result;
     }
     fn check(self: Action, allocator: std.mem.Allocator, parsed: r.Parsed, context: validation.TextContext) r.Error!d.Result(r.CheckedSummary) {

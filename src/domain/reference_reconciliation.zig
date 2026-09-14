@@ -36,6 +36,19 @@ pub const Content = union(enum) {
     preserved_token: TokenReference,
 };
 pub const StatementProposal = struct { local_key: u32, claim_ids: []const ClaimId, content: ContentProposal };
+pub fn equivalentContent(left: Content, right: Content) bool {
+    if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
+    return switch (left) {
+        .preserved_token => |token| std.meta.eql(token, right.preserved_token),
+        .model => |model| result: {
+            if (std.meta.activeTag(model) != std.meta.activeTag(right.model)) break :result false;
+            break :result switch (model) {
+                inline .business, .scope_guard => |value, tag| text.equivalentBusiness(value, @field(right.model, @tagName(tag))),
+                inline else => |value, tag| text.equivalentReference(value, @field(right.model, @tagName(tag))),
+            };
+        },
+    };
+}
 pub const ValidatedStatement = struct { local_key: u32, claim_ids: []const ClaimId, content: Content };
 pub const Statement = struct { id: StatementId, claim_ids: []const ClaimId, content: Content };
 pub const SummaryProposal = struct { statements: []const StatementProposal };

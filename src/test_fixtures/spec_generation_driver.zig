@@ -21,7 +21,7 @@ pub const Driver = struct {
     classification_failure_origin: ?@import("../domain/model_candidate_origin.zig").Origin = null,
     reconciliation_repair_fault: @FieldType(@import("spec_generation_responses.zig").Options, "reconciliation_repair_fault") = null,
     reconciliation_fault: ?@import("spec_generation_responses.zig").ReconciliationFault = null,
-    malformed_reconciliation_repair_once: bool = false,
+    reconciliation_protocol_fault: ?enum { envelope_once, envelope_then_json } = null,
     reconciliation_repair_calls: usize = 0,
     reconciliation_merges: usize = 0,
     unchanged_reconciliation_merges: usize = 0,
@@ -85,9 +85,12 @@ pub const Driver = struct {
             }
             if (current_request.id().immutable_unit_owner_id == .reference_global and current_request.id().purpose == .atomic_repair) {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
-                if (self.malformed_reconciliation_repair_once and self.reconciliation_repair_calls == 0) {
-                    const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
-                    self.fake.invocation_plan.complete.content = std.json.Stringify.valueAlloc(arena.allocator(), input.value.object.get("repair").?, .{}) catch unreachable;
+                if (self.reconciliation_protocol_fault) |fault| {
+                    if (self.reconciliation_repair_calls == 0 or fault == .envelope_then_json) {
+                        const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
+                        const echoed = std.json.Stringify.valueAlloc(arena.allocator(), input.value.object.get("repair").?, .{}) catch unreachable;
+                        self.fake.invocation_plan.complete.content = if (self.reconciliation_repair_calls == 0) echoed else echoed[0 .. echoed.len - 1];
+                    }
                 }
                 self.reconciliation_repair_calls += 1;
             }

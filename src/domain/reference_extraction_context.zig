@@ -10,14 +10,9 @@ pub fn snapshot(a: std.mem.Allocator, facts: Facts) std.mem.Allocator.Error!@imp
     return @import("atomic_repair.zig").snapshot(Facts, a, facts);
 }
 pub const TextFacts = struct {
-    inputs: @import("reference_evidence.zig").Inputs,
     candidate: extraction.Parsed,
-    policy_ids: []const []const u8,
-    rules: []const @import("naming_policy.zig").BoundRule,
-    reference_names: []const @import("path_token_grammar.zig").ReferenceName,
-    passive_records: []const @import("passive_literals.zig").Record,
-    passive_occurrences: []const @import("passive_literals.zig").Occurrence,
+    text: extraction.text.Dependencies,
 };
-pub fn textFacts(inputs: @import("reference_evidence.zig").Inputs, registry: @import("passive_literals.zig").Registry, candidate: extraction.Parsed) TextFacts {
-    return .{ .inputs = inputs, .candidate = candidate, .policy_ids = registry.grammar.policy.policy_ids, .rules = registry.grammar.policy.rules, .reference_names = registry.grammar.reference_names, .passive_records = registry.records, .passive_occurrences = registry.occurrences };
+pub fn textFacts(inputs: @import("reference_evidence.zig").Inputs, registry: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, candidate: extraction.Parsed) extraction.Error!TextFacts {
+    return .{ .candidate = candidate, .text = try extraction.text.dependencies(inputs, registry, current) };
 }

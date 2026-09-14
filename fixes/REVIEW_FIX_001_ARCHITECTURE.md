@@ -16,6 +16,14 @@ the proposed implementation's single-responsibility boundaries. It adds F9/F10
 and extends F8. Offline verification and the separate final documentation checks
 are recorded in §9.
 
+**Implementation follow-up — 14 September 2026:** F1–F4/F9 are addressed by the
+shared Phase 3 implementation and new boundary/production-graph regressions.
+Final verification passed: 120/120 steps and 1,405/1,405 tests, including native
+smoke; commands and evidence are in the [single rollout record](TODO_FIX_001.md#phase-3-architecture-audit-follow-up).
+The findings and line references below describe the audited `f880799` snapshot;
+they are retained as evidence, not current work status. F5–F8 and F10 remain
+assigned to their later phases. No live quality or reliability claim follows.
+
 ## 1. Verdict and limits
 
 **Phase 3 contains confirmed brittleness above its shared merge mechanism.**
@@ -606,7 +614,7 @@ can restore. Preserve valid siblings, keep the candidate unaccepted until all
 required validation passes, and require an established safe single-record order.
 Otherwise G1 applies; this is not automatic scope expansion.
 
-Phase 3 chunks **08–12 are reopened for the specified gaps**. Phase 4/5 retain
+At the audit snapshot, Phase 3 chunks **08–12 were reopened for these gaps**. Phase 4/5 retain
 their existing responsibilities; the audit does not move every unfinished feature
 into Phase 3. The next Phase 3 delivery must cover F1–F4 and F9 as one coherent contract
 completion with testable owning-boundary chunks. A signal-only patch is insufficient.
