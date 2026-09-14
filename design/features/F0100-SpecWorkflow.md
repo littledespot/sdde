@@ -4,7 +4,7 @@
 
 **Implementation:** The native Specify path publishes validated content and controlled
 generation clarifications. Answer application, feature logging and remaining
-clarification routes are unfinished; Phase 3 review gaps remain open. See
+clarification routes are unfinished. Phase 3 repair is verified offline. See
 [implementation status](#implementation-status).
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
@@ -1368,17 +1368,18 @@ YAML definition.
 - The shared required-authority boundary and Specify projection in §3.10 are connected
   to model-assisted generation and publication evidence.
 
+**Phase 3 repair**
+
+C1/C2 selection feasibility and disposition equivalence, including conflict-pair
+membership, are [implemented and verified offline](../../fixes/IMP_001.md#c1-and-c2-delivery--15-september-2026).
+Shared retained-claim eligibility (C3) remains consolidated in the provenance owner.
+
 **Known implementation gaps**
 
-- The [15 September
-  review](../../fixes/FIX_001.md#15-september-2026-critical-review)
-  leaves selection feasibility and disposition equivalence open in Phase 3.
-- Shared retained-claim eligibility (C3) is consolidated in the provenance owner;
-  [closure evidence](../../fixes/IMP_001.md#c3-and-chunk-20-validation--15-september-2026)
-  covers initial/repair requests, native acceptance and coverage.
-- Connected repair paths and passing existing tests do not establish completion of those
-  contracts.
-- The rollout owns current status.
+Support findings, source-gap routing, authenticated answers and remaining
+publication/readback assurance remain open. The [rollout](../../fixes/IMP_001.md)
+owns their status; offline repair verification does not establish complete Specify
+or live E2E acceptance.
 
 **E2E evaluation**
 

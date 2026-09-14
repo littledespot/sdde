@@ -1378,6 +1378,19 @@ test "configured specification generation YAML executes native references models
         try project.dir.createDirPath(io, "engine/workflows/spec");
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
+        if (reconciliation_scenario) switch (reconciliation_faults[scenario - reconciliation_start]) {
+            .occupied_summary, .occupied_signals => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Loan renewed!`.\n" }),
+            .occupied_conflict => {
+                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Renew the loan.\n" });
+                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/conflict.md", .data = "Reject the renewal.\n" });
+            },
+            .permuted_disposition, .permuted_conflict_disposition => {
+                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Renew the loan.\n" });
+                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/receipt.md", .data = "Issue a receipt.\n" });
+                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/confirmation.md", .data = "Confirm the renewal.\n" });
+            },
+            else => {},
+        };
         const definition = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", allocator, .limited(1_048_576));
         defer allocator.free(definition);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = definition });
@@ -1446,7 +1459,7 @@ test "configured specification generation YAML executes native references models
             driver.reconciliation_protocol_fault = .envelope_then_json;
         }
         const result = driver.run();
-        const expected: workflow.OutcomeTag = if (scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.reconciliation_fault == .cycle or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text) .blocked else .ok;
+        const expected: workflow.OutcomeTag = if (scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition) or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}\n", .{ scenario, try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (scenario == 6) {
@@ -1476,8 +1489,22 @@ test "configured specification generation YAML executes native references models
         }
         if (reconciliation_scenario) {
             const diagnostic = try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots });
-            try std.testing.expect(diagnostic == null);
-            if (driver.reconciliation_fault == .cycle) {
+            const occupied = driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict;
+            if (occupied) {
+                const rejected = diagnostic.?.reconciliation;
+                try std.testing.expectEqual(@as(@TypeOf(rejected.issue.rule), if (driver.reconciliation_fault == .occupied_conflict) .cardinality else .claim_selection), rejected.issue.rule);
+                try std.testing.expectEqual(@as(usize, 0), rejected.relations.conflicting_pairs.len);
+                try std.testing.expectEqual(.no_independent_target, rejected.blocked.?);
+                try std.testing.expectEqual(@as(usize, 0), rejected.relations.selection.len);
+                try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
+                try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
+                try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.accounted_reference_reconciliation)] == null);
+            } else try std.testing.expect(diagnostic == null);
+            if (driver.reconciliation_fault == .permuted_disposition or driver.reconciliation_fault == .permuted_conflict_disposition) {
+                try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
+                try std.testing.expectEqual(@as(usize, 1), driver.reconciliation_merges);
+            }
+            if (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition) {
                 const accounted = try @import("../application/reference_extraction_workflow.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted);
                 try std.testing.expectEqual(.complete, accounted.payload().reconciliation_accounted.outcome);
                 try std.testing.expectEqual(@as(u64, 2), accounted.payload().reconciliation_accounted.records.assignments.checked.prior.prior.source.revision);
@@ -1488,7 +1515,7 @@ test "configured specification generation YAML executes native references models
                 try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.required_authority_inputs)] != null);
             }
             // Conflict representation repair retains the real source conflict.
-            if (driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text) {
+            if (driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) {
                 const accounted = try @import("../application/reference_extraction_workflow.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted);
                 try std.testing.expectEqual(.blocked, accounted.payload().reconciliation_accounted.outcome);
                 try std.testing.expect(accounted.payload().reconciliation_accounted.records.conflicts.len > 0);

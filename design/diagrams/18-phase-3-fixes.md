@@ -1,13 +1,11 @@
 # Phase 3 fixes: authorized repair and revalidation
 
 Flow for FIX_001 chunks **08–12**, including the R14/R15 and architecture-audit
-follow-ups. The **14 September 2026** offline baseline was reopened by the
-[15 September critical review](../../fixes/FIX_001.md#15-september-2026-critical-review).
-Selection feasibility and disposition-set equivalence remain open. Shared
-eligibility (C3) is consolidated; see the
-[closure evidence](../../fixes/IMP_001.md#c3-and-chunk-20-validation--15-september-2026).
-This diagram describes the required flow; Phase 3 completion, live E2E and rubric
-quality remain unproven.
+follow-ups. Phase 3 is implemented and verified offline, including sibling
+membership and disposition-set equivalence. See the
+[C1/C2 closure evidence](../../fixes/IMP_001.md#c1-and-c2-delivery--15-september-2026).
+Shared eligibility (C3) remains consolidated. Live E2E and rubric quality remain
+unproven.
 
 Each consumer enters the same repair contract. The diagram shows the shared
 control flow; workflow YAML selects transitions through runner-owned bindings.
@@ -83,4 +81,4 @@ Governing sources: [Design §22](../design.md#22-atomic-repair-protocol),
 [invariants 1, 5–9 and 19–23](../design.md#33-non-negotiable-invariants),
 [acceptance criteria 12–15, 30–31 and 36–40](../design.md#31-acceptance-criteria-for-the-design-implementation).
 The design remains **Proposed design**. Phase 4 support/clarification,
-publication/evaluation and live-run approval remain separate from open Phase 3 work.
+publication/evaluation and live-run approval remain separate from Phase 3 closure.

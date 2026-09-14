@@ -22,10 +22,9 @@ and publication evidence control workflow authority.
   specification generation, validation, authorized atomic repair and registered
   output publication. Evidence selections resolve to engine-owned citations;
   repair retains exact old values, revisions, dependencies and producing-call evidence.
-- Phase 3 still has selection-feasibility and disposition-equivalence gaps
-  recorded in the [15 September review](fixes/FIX_001.md#15-september-2026-critical-review).
-  Shared eligibility (C3) and runtime assembly (20/F10) are
-  [implemented and verified offline](fixes/IMP_001.md#c3-and-chunk-20-validation--15-september-2026).
+- Phase 3 repair is [implemented and verified offline](fixes/IMP_001.md#c1-and-c2-delivery--15-september-2026),
+  including sibling-aware selection and native disposition-set equivalence.
+  Shared eligibility (C3) and runtime assembly (20/F10) are also consolidated.
   Authenticated clarification-answer application, feature-log integration and
   remaining support-review/publication assurance work are also open. Connected
   generation does not establish complete Specify acceptance. See

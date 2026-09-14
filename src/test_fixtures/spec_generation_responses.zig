@@ -7,7 +7,7 @@ const g = @import("../domain/specification_generation.zig");
 const native = @import("../application/reference_extraction_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
-pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text };
+pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text, occupied_summary, occupied_signals, occupied_conflict, permuted_disposition, permuted_conflict_disposition };
 pub const Options = struct {
     text_fault: bool = false,
     failed_text_repair: bool = false,
@@ -93,6 +93,12 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
             }
             if (input.purpose == .summary) {
                 var proposal = try @import("reference_reconciliation.zig").summary(allocator, input);
+                if (options.reconciliation_fault == .occupied_summary) {
+                    const statements = try allocator.alloc(r.StatementProposal, proposal.statements.len + 1);
+                    @memcpy(statements[0..proposal.statements.len], proposal.statements);
+                    statements[proposal.statements.len] = .{ .local_key = @intCast(statements.len), .claim_ids = &.{}, .content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "A different proposed meaning." } }} } } } };
+                    proposal.statements = statements;
+                }
                 if (options.reconciliation_fault == .summary_membership) proposal.statements = proposal.statements[1..];
                 if (options.reconciliation_fault == .summary_text and input.progress.summary_count == 0) {
                     const statements = try allocator.dupe(r.StatementProposal, proposal.statements);
@@ -106,7 +112,32 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 const dispositions = try allocator.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
                 proposal.claim_dispositions = dispositions;
                 switch (fault) {
-                    .summary_membership, .summary_text => {},
+                    .summary_membership, .summary_text, .occupied_summary => {},
+                    .occupied_signals => {
+                        const signals = try allocator.alloc(r.SignalProposal, proposal.signals.len + 1);
+                        @memcpy(signals[0..proposal.signals.len], proposal.signals);
+                        signals[proposal.signals.len] = .{ .claim_ids = &.{}, .content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "A different proposed meaning." } }} } } } };
+                        proposal.signals = signals;
+                    },
+                    .permuted_disposition, .permuted_conflict_disposition => {
+                        const duplicate = try allocator.alloc(r.ClaimDispositionProposal, dispositions.len + 1);
+                        @memcpy(duplicate[0..dispositions.len], dispositions);
+                        const related = try allocator.dupe(r.ClaimId, &.{ dispositions[1].claim_id, dispositions[2].claim_id });
+                        duplicate[0].disposition = .{ .superseded = .{ .related_claim_ids = related } };
+                        if (fault == .permuted_conflict_disposition) {
+                            duplicate[0].disposition = .{ .conflicting = .{ .related_claim_ids = related } };
+                            duplicate[1].disposition = .{ .conflicting = .{ .related_claim_ids = try allocator.dupe(r.ClaimId, &.{dispositions[0].claim_id}) } };
+                            duplicate[2].disposition = duplicate[1].disposition;
+                            proposal.signals = proposal.signals[3..];
+                            const conflicts = try allocator.alloc(r.ConflictProposal, 2);
+                            for (related, conflicts) |id, *conflict| conflict.* = .{ .claim_ids = try allocator.dupe(r.ClaimId, &.{ dispositions[0].claim_id, id }), .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The supplied outcomes differ." } }} }, .resolution = .unresolved };
+                            proposal.conflicts = conflicts;
+                        }
+                        duplicate[dispositions.len] = duplicate[0];
+                        const reversed = try allocator.dupe(r.ClaimId, &.{ related[1], related[0] });
+                        if (fault == .permuted_conflict_disposition) duplicate[dispositions.len].disposition.conflicting.related_claim_ids = reversed else duplicate[dispositions.len].disposition.superseded.related_claim_ids = reversed;
+                        proposal.claim_dispositions = duplicate;
+                    },
                     .mixed_selection => {
                         const signals = try allocator.dupe(r.SignalProposal, proposal.signals);
                         const token = for (input.items) |item| {
@@ -129,11 +160,18 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                         dispositions[1].disposition = .{ .superseded = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
                     },
                     .signal_coverage => proposal.signals = proposal.signals[1..],
-                    .conflict_coverage, .conflict_text => {
+                    .conflict_coverage, .conflict_text, .occupied_conflict => {
                         dispositions[0].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[1].claim_id} } };
                         dispositions[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
                         proposal.signals = proposal.signals[2..];
                         proposal.conflicts = if (fault == .conflict_coverage) &.{} else &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "Display \\\"a result\\\"." } }} }, .resolution = .unresolved }};
+                        if (fault == .occupied_conflict) {
+                            const conflicts = try allocator.dupe(r.ConflictProposal, &.{ proposal.conflicts[0], proposal.conflicts[0] });
+                            conflicts[0].summary = .{ .nodes = &.{.{ .literal = .{ .value = "The outcomes differ." } }} };
+                            conflicts[1].summary = .{ .nodes = &.{.{ .literal = .{ .value = "The conditions differ." } }} };
+                            conflicts[1].claim_ids = &.{};
+                            proposal.conflicts = conflicts;
+                        }
                     },
                 }
             }

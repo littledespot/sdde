@@ -35,11 +35,7 @@ pub const Action = struct {
                 .valid => |value| value,
                 .invalid => |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, issue),
             } };
-            for (signals[0..index]) |previous| {
-                // One projection per identical claim set/kind. Distinct signals
-                // may overlap when they carry different supported claim sets.
-                if (v.sameMembers(previous.claim_ids, signal.claim_ids)) return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, .{ .rule = .duplicate_signal, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
-            }
+            if (!v.signalSelectionAvailable(prior.proposal.signals[0..index], index, proposal.claim_ids)) return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, .{ .rule = .duplicate_signal, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
         }
         for (prior.dispositions, items.entries, covered, token_covered) |disposition, item, present, token_present| {
             if (disposition.disposition == .retained and !present) return d.reject(r.CheckedSignals, prior.input, prior.source, .signals, .{ .rule = .signal_coverage, .observed = .{ .disposition = disposition }, .expected = .{ .constraint = .retained_claim_covered } });

@@ -31,9 +31,7 @@ pub const Action = struct {
                 for (proposal.claim_ids) |other| if (other.ordinal != id.ordinal and !try v.conflictRelated(prior.prior.dispositions, id, other)) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .relationship, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .conflicting_related_claims } });
                 covered[id.ordinal - 1] = true;
             }
-            for (prior.prior.proposal.conflicts[0..index]) |previous| {
-                if (previous.kind == proposal.kind and v.sameMembers(previous.claim_ids, proposal.claim_ids)) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .duplicate_conflict, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
-            }
+            if (!v.conflictSelectionAvailable(prior.prior.proposal.conflicts[0..index], index, proposal.kind, proposal.claim_ids)) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .duplicate_conflict, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
             conflict.* = .{ .claim_ids = proposal.claim_ids, .citation_ids = try r.citationUnion(allocator, items, proposal.claim_ids), .kind = proposal.kind, .summary = switch (try self.validator.checkReferenceIn(allocator, try v.scopes(allocator, items, proposal.claim_ids, context), proposal.summary)) {
                 .valid => |checked| checked,
                 .invalid => |issue| return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, d.textFailure(issue, .{ .text = proposal.summary })),

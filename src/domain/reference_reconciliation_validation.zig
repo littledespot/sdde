@@ -93,6 +93,46 @@ pub fn sameMembers(left: []const r.ClaimId, right: []const r.ClaimId) bool {
     return true;
 }
 
+fn summarySelectionAvailable(values: []const r.StatementProposal, selected: usize, ids: []const r.ClaimId) bool {
+    for (values, 0..) |sibling, index| {
+        if (index == selected) continue;
+        for (ids) |id| if (r.contains(r.ClaimId, sibling.claim_ids, id)) return false;
+    }
+    return true;
+}
+
+pub fn signalSelectionAvailable(values: []const r.SignalProposal, selected: usize, ids: []const r.ClaimId) bool {
+    for (values, 0..) |sibling, index| {
+        if (index != selected and sameMembers(sibling.claim_ids, ids)) return false;
+    }
+    return true;
+}
+
+pub fn conflictSelectionAvailable(values: []const r.ConflictProposal, selected: usize, kind: r.ConflictKind, ids: []const r.ClaimId) bool {
+    for (values, 0..) |sibling, index| {
+        if (index != selected and sibling.kind == kind and sameMembers(sibling.claim_ids, ids)) return false;
+    }
+    return true;
+}
+
+/// Count occupied sets, not occupied IDs: overlapping signals remain legal.
+/// Saturating cardinality avoids enumerating subsets or selecting model content.
+fn signalSelectionExists(items: r.Items, values: []const r.SignalProposal, selected: usize, allowed: []const r.ClaimId) bool {
+    var possible: usize = 0;
+    for (allowed) |_| {
+        possible = possible *| 2 +| 1;
+        if (possible > values.len) return true;
+    }
+    var occupied: usize = 0;
+    for (values, 0..) |sibling, index| {
+        if (index == selected or claims(items, sibling.claim_ids, allowed) != null) continue;
+        // Count each set once even when another candidate entry is invalid.
+        if (!signalSelectionAvailable(values[0..index], selected, sibling.claim_ids)) continue;
+        occupied += 1;
+    }
+    return possible > occupied;
+}
+
 /// Retain compatibility and canonical redundancy while native validation owns
 /// the candidate. Authorizers need no second interpretation of these relations.
 pub fn relations(a: std.mem.Allocator, validator: r.text.Validator, ctx: TextContext, parsed: r.Parsed, dispositions: []const r.ClaimDisposition, rejection: d.Rejection) r.Error!d.Relations {
@@ -109,12 +149,22 @@ pub fn relations(a: std.mem.Allocator, validator: r.text.Validator, ctx: TextCon
         if (eligible_current and rejection.unit == .signal) for (value.claim_ids) |id| {
             if (!try signalEligible(dispositions, id)) eligible_current = false;
         };
+        eligible_current = eligible_current and switch (rejection.unit) {
+            .statement => |index| summarySelectionAvailable(parsed.proposal.summary.statements, index, value.claim_ids),
+            .signal => |index| signalSelectionAvailable(parsed.proposal.global.signals, index, value.claim_ids),
+            else => unreachable,
+        };
         if (eligible_current) result.content = try selectedKind(items, value.claim_ids);
         for (parsed.input.partition.group.claim_ids) |id| {
             if (rejection.unit == .signal and !try signalEligible(dispositions, id)) continue;
+            if (rejection.unit == .statement and !summarySelectionAvailable(parsed.proposal.summary.statements, rejection.unit.statement, &.{id})) continue;
             if (matchingKind(contentKind(value.content), claimKind(try r.item(items, id)))) try selections.append(a, id);
         }
         result.selection = try selections.toOwnedSlice(a);
+        if (rejection.unit == .signal and !signalSelectionExists(items, parsed.proposal.global.signals, rejection.unit.signal, result.selection)) {
+            a.free(result.selection);
+            result.selection = &.{};
+        }
     }
     switch (rejection.unit) {
         .summary, .statement => {
@@ -145,7 +195,8 @@ pub fn relations(a: std.mem.Allocator, validator: r.text.Validator, ctx: TextCon
             var pairs: std.ArrayList(std.meta.Child(@FieldType(d.Relations, "conflicting_pairs"))) = .empty;
             // Traverse declared edges, never subsets, cliques or repair sequences.
             for (dispositions) |left| for (left.related_claim_ids) |right| {
-                if (left.claim_id.ordinal < right.ordinal and try conflictRelated(dispositions, left.claim_id, right) and try conflictRelated(dispositions, right, left.claim_id)) try pairs.append(a, .{ .left = left.claim_id, .right = right });
+                if (left.claim_id.ordinal < right.ordinal and try conflictRelated(dispositions, left.claim_id, right) and try conflictRelated(dispositions, right, left.claim_id) and
+                    conflictSelectionAvailable(parsed.proposal.global.conflicts, index, parsed.proposal.global.conflicts[index].kind, &.{ left.claim_id, right })) try pairs.append(a, .{ .left = left.claim_id, .right = right });
             };
             result.conflicting_pairs = try pairs.toOwnedSlice(a);
             if (rejection.issue.rule == .duplicate_conflict) {

@@ -103,10 +103,8 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
         .dispositions, .disposition => {
             if (parsed.proposal != .global) return error.InvalidAtomicRepair;
             const values = parsed.proposal.global.claim_dispositions;
-            for (values, 0..) |value, index| for (values[0..index]) |prior| if (prior.claim_id.ordinal == value.claim_id.ordinal) {
-                if (try atomic.equal(a, .{ .disposition_record = prior }, .{ .disposition_record = value })) return deletion(a, parsed, facts, .{ .disposition_record = index }, rule);
-                return .{ .blocked = .competing_entries };
-            };
+            if (rejection.relations.redundant) |index| return deletion(a, parsed, facts, .{ .disposition_record = index }, rule);
+            if (rejection.relations.competing) return .{ .blocked = .competing_entries };
             var missing: ?r.ClaimId = null;
             for (parsed.input.partition.group.claim_ids) |id| {
                 for (values) |value| {
