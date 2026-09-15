@@ -68,17 +68,24 @@ fn recordField(kind: @import("specification.zig").Kind, slot: Slot) bool {
 pub const Resolution = union(enum) { existing_authority: Authority, supported_candidate: CandidateId, not_applicable: Rule, exception: ExceptionId };
 /// Native, scope-checked evidence supplied by an owning validator/reviewer.
 /// Observation JSON can reference these IDs but cannot create this registry.
+pub const Finding = enum { supported, ambiguous, conflicting, unsupported, candidate_omission };
+pub const ReviewEvidence = struct {
+    detail: []const u8,
+    provenance: @import("specification.zig").Provenance,
+    source_ids: []const @import("reference_identity.zig").SourceId,
+};
 pub const Evidence = struct {
     id: EvidenceId,
     requirement: Id,
     authorities: []const Authority,
     resolution: Resolution,
-    finding: enum { supported, ambiguous, conflicting, unsupported },
+    finding: Finding,
+    review: ?ReviewEvidence = null,
     method: enum { deterministic, model_assisted },
     reference_support: []const union(enum) { signal: @import("reference_reconciliation.zig").SignalId, conflict: @import("reference_reconciliation.zig").ConflictId } = &.{},
 };
 pub const Exception = struct { id: ExceptionId, requirement: Id, authority: Authority, authenticated_actor_ordinal: u64 };
-pub const ForcedGap = struct { requirement: Id, reason: GapReason };
+pub const ForcedGap = struct { requirement: Id, reason: GapReason, subject: enum { authority, candidate } = .authority };
 pub const Inputs = struct {
     feature: @import("feature_identity.zig").FeatureId,
     projection: enum { specification, registered_obligations } = .registered_obligations,
@@ -91,7 +98,10 @@ pub const Inputs = struct {
     candidates: []const Candidate = &.{},
     exceptions: []const Exception = &.{},
     forced_gaps: []const ForcedGap = &.{},
-    references: ?@import("reference_reconciliation.zig").Accounted = null,
+    references: ?@import("reference_support.zig").Records = null,
+    review_origin: ?@import("model_candidate_origin.zig").Origin = null,
+    revision: u64 = 1,
+    review_origins: []const ?@import("model_candidate_origin.zig").Origin = &.{},
 };
 pub const Requirement = struct { seed: Seed, registered_policy: ?Policy };
 pub const Ledger = struct { inputs: Inputs, requirements: []const Requirement };
@@ -108,13 +118,14 @@ pub const Outcome = union(enum) {
     upstream_rework_required: struct { owner: Stage, detected_at: DetectionStage, reason: GapReason },
     administrative_block: BlockReason,
 };
-pub const Entry = struct { requirement: Id, outcome: Outcome, evidence_ids: []const EvidenceId, input_authorities: []const Authority };
-pub const Result = struct { feature: @import("feature_identity.zig").FeatureId, entries: []const Entry, continuation: enum { all_resolved, needs_user, blocked } };
+pub const CandidateDefect = struct { reason: enum { missing_content, not_preserved }, support: ?EvidenceId };
+pub const Entry = struct { candidate_defect: ?CandidateDefect = null, requirement: Id, outcome: Outcome, evidence_ids: []const EvidenceId, input_authorities: []const Authority };
+pub const Result = struct { feature: @import("feature_identity.zig").FeatureId, entries: []const Entry, continuation: enum { all_resolved, invalid, needs_user, blocked } };
 
 pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
     if (@import("feature_identity.zig").FeatureId.parse(inputs.feature.bytes) == null) return error.InvalidRequiredAuthority;
     if (inputs.projection == .specification) {
-        const expected = try @import("specification_authority.zig").project(allocator, inputs.feature, inputs.references orelse return error.InvalidRequiredAuthority, inputs.specification, inputs.brief);
+        const expected = try @import("specification_authority.zig").projectRecords(allocator, inputs.feature, inputs.references orelse return error.InvalidRequiredAuthority, inputs.specification, inputs.brief);
         if (expected.seeds.len != inputs.seeds.len) return error.InvalidRequiredAuthority;
         for (expected.seeds, inputs.seeds) |required, actual| {
             if (!std.meta.eql(required.id, actual.id) or !std.meta.eql(required.requiredness, actual.requiredness)) return error.InvalidRequiredAuthority;
@@ -196,10 +207,12 @@ pub fn reconcile(allocator: std.mem.Allocator, ledger: Ledger, observations: Obs
             }
         }.less);
         const outcome = try resolve(requirement, ledger.inputs);
-        entry.* = .{ .requirement = requirement.seed.id, .outcome = outcome, .evidence_ids = evidence_ids, .input_authorities = requirement.seed.input_authorities };
+        const defect = candidateDefect(requirement, ledger.inputs, outcome);
+        if (defect != null and result.continuation == .all_resolved) result.continuation = .invalid;
+        entry.* = .{ .candidate_defect = defect, .requirement = requirement.seed.id, .outcome = outcome, .evidence_ids = evidence_ids, .input_authorities = requirement.seed.input_authorities };
         switch (outcome) {
             .resolved_exactly_one, .resolved_explicit_exception, .resolved_explicit_not_applicable => {},
-            .clarification_required => if (result.continuation == .all_resolved) {
+            .clarification_required => if (result.continuation == .all_resolved or result.continuation == .invalid) {
                 result.continuation = .needs_user;
             },
             .upstream_rework_required, .administrative_block => result.continuation = .blocked,
@@ -212,7 +225,7 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
     const registered = requirement.registered_policy orelse return .{ .administrative_block = .unregistered_ownership_or_policy };
     const seed = requirement.seed;
     for (seed.input_authorities) |authority| if (!contains(Authority, inputs.authorities, authority)) return route(inputs.detected_at, registered.owner, .stale);
-    for (inputs.forced_gaps) |gap| if (std.meta.eql(gap.requirement, seed.id)) return route(inputs.detected_at, registered.owner, gap.reason);
+    for (inputs.forced_gaps) |gap| if (gap.subject == .authority and std.meta.eql(gap.requirement, seed.id)) return route(inputs.detected_at, registered.owner, gap.reason);
     var resolution: ?Resolution = null;
     var reason: ?GapReason = null;
     for (inputs.evidence) |evidence| {
@@ -224,18 +237,18 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
         }
         if (evidence.reference_support.len != 0) {
             const references = inputs.references orelse return error.InvalidRequiredAuthority;
-            const state = references.records.assignments.checked.prior.prior.input.progress.plan.layout.items.state_id;
+            const state = references.items.state_id;
             if (!contains(Authority, evidence.authorities, .{ .reference = state })) reason = stronger(reason, .stale);
             for (evidence.reference_support, 0..) |support, index| {
                 for (evidence.reference_support[0..index]) |previous| if (std.meta.eql(previous, support)) return error.InvalidRequiredAuthority;
                 switch (support) {
                     .signal => |id| {
-                        for (references.records.signals) |signal| {
+                        for (references.signals) |signal| {
                             if (std.meta.eql(signal.id, id)) break;
                         } else return error.InvalidRequiredAuthority;
                     },
                     .conflict => |id| {
-                        for (references.records.conflicts) |conflict| {
+                        for (references.conflicts) |conflict| {
                             if (std.meta.eql(conflict.id, id)) break;
                         } else return error.InvalidRequiredAuthority;
                         reason = stronger(reason, .conflicting);
@@ -244,7 +257,7 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
             }
         }
         switch (evidence.finding) {
-            .supported => {},
+            .supported, .candidate_omission => {},
             .ambiguous => reason = stronger(reason, .ambiguous),
             .conflicting => reason = stronger(reason, .conflicting),
             .unsupported => reason = stronger(reason, .unsupported),
@@ -294,7 +307,7 @@ pub fn validate(allocator: std.mem.Allocator, inputs: Inputs, observations: Obse
     const current = try reconcile(allocator, try build(allocator, inputs), observations);
     if (!std.mem.eql(u8, current.feature.bytes, result.feature.bytes) or current.continuation != result.continuation or current.entries.len != result.entries.len) return error.InvalidRequiredAuthority;
     for (current.entries, result.entries) |expected, actual| {
-        if (!std.meta.eql(expected.requirement, actual.requirement) or !sameOutcome(expected.outcome, actual.outcome)) return error.InvalidRequiredAuthority;
+        if (!std.meta.eql(expected.requirement, actual.requirement) or !sameOutcome(expected.outcome, actual.outcome) or !std.meta.eql(expected.candidate_defect, actual.candidate_defect)) return error.InvalidRequiredAuthority;
         try sameSet(EvidenceId, expected.evidence_ids, actual.evidence_ids);
         try sameSet(Authority, expected.input_authorities, actual.input_authorities);
     }
@@ -377,4 +390,35 @@ fn sameSet(comptime T: type, a: []const T, b: []const T) Error!void {
     try unique(T, b);
     if (a.len != b.len) return error.InvalidRequiredAuthority;
     for (a) |item| if (!contains(T, b, item)) return error.InvalidRequiredAuthority;
+}
+
+/// Candidate validity is separate from the six authority outcomes. Established
+/// source evidence cannot make absent content valid, or a source gap repairable.
+fn candidateDefect(requirement: Requirement, inputs: Inputs, outcome: Outcome) ?CandidateDefect {
+    var result: ?CandidateDefect = null;
+    for (inputs.forced_gaps) |gap| if (gap.subject == .candidate and std.meta.eql(gap.requirement, requirement.seed.id)) {
+        result = .{ .reason = .missing_content, .support = null };
+    };
+    for (inputs.evidence) |evidence| {
+        if (!std.meta.eql(evidence.requirement, requirement.seed.id) or evidence.finding != .candidate_omission) continue;
+        if (result == null) result = .{ .reason = .not_preserved, .support = null };
+        if (outcome == .resolved_exactly_one and outcome.resolved_exactly_one == .existing_authority and requirement.registered_policy != null) {
+            // A single, current established source resolution supplies repair
+            // evidence. The candidate owner must still authorize a safe target.
+            if (result.?.support != null) return .{ .reason = result.?.reason, .support = null };
+            result.?.support = evidence.id;
+        }
+    }
+    return result;
+}
+pub fn supportedOmission(allocator: std.mem.Allocator, inputs: Inputs, observations: Observations, result: Result, requirement: Id) Error!?Evidence {
+    _ = try validate(allocator, inputs, observations, result);
+    if (result.continuation != .invalid) return null;
+    for (result.entries) |entry| {
+        if (!std.meta.eql(entry.requirement, requirement)) continue;
+        const defect = entry.candidate_defect orelse return null;
+        const id = defect.support orelse return null;
+        for (inputs.evidence) |evidence| if (std.meta.eql(evidence.id, id)) return evidence;
+    }
+    return null;
 }

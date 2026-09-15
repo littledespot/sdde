@@ -32,17 +32,24 @@ pub fn initialize(feature: @import("feature_identity.zig").FeatureId, context: p
 }
 
 pub fn owner(allocator: std.mem.Allocator, current: Session) Error!identity.ImmutableUnitOwnerId {
+    return ownerFor(allocator, current, current.completed);
+}
+pub fn ownerFor(allocator: std.mem.Allocator, current: Session, index: usize) Error!identity.ImmutableUnitOwnerId {
+    _ = try unit(index);
     return .{
         .specification_unit = .{
             .reference_state_id = .{ .bytes = current.reference_state.bytes },
             // Feature directory is the feature identity; no second ownership registry.
             .feature_id = current.feature,
-            .unit_slot_id = .{ .bytes = try std.fmt.allocPrint(allocator, "specification-{d}", .{current.completed + 1}) },
+            .unit_slot_id = .{ .bytes = try std.fmt.allocPrint(allocator, "specification-{d}", .{index + 1}) },
         },
     };
 }
 
 pub fn packet(allocator: std.mem.Allocator, current: Session, context: p.Context) Error!*packets.Packet {
+    return packetFor(allocator, current, context, current.completed);
+}
+pub fn packetFor(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize) Error!*packets.Packet {
     if (!current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
     const all = try p.items(context);
     var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -58,7 +65,7 @@ pub fn packet(allocator: std.mem.Allocator, current: Session, context: p.Context
     }
     const projected = try @import("model_evidence.zig").project(a, claims.items);
     const payload = .{
-        .unit = try unit(current.completed),
+        .unit = try unit(index),
         .brief = if (current.units[0]) |checked| checked.response.content.brief else null,
         .claims = projected.claims,
         .citations = projected.citations,
@@ -67,8 +74,8 @@ pub fn packet(allocator: std.mem.Allocator, current: Session, context: p.Context
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, scopes.items),
     };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), a, payload);
-    const selected = try unit(current.completed);
-    return packets.create(allocator, body, try owner(a, current), .initial_generation, .{ .bytes = switch (selected) {
+    const selected = try unit(index);
+    return packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
         .brief => "brief",
         .primary_user_story => "primary_user_story",
         .entities => "entities",
@@ -114,4 +121,20 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
         .entities = entities,
         .records = records.items,
     }, current.starting_ledger);
+}
+
+/// A completed unit may change only through an exact authorized merge. This
+/// boundary revalidates the whole affected unit before it becomes checked data.
+pub fn replaceCompleted(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: Session, index: usize, response: g.CanonicalResponse, merged: @import("atomic_repair.zig").Merge, origins: @import("specification_candidate.zig").Origins) Error!Session {
+    if (current.completed != unit_count or index >= unit_count or current.units[index] == null or current.revision != merged.revision_before) return error.InvalidSpecificationUnit;
+    var checked = switch (try g.revalidate(allocator, validator, context, try unit(index), response)) {
+        .valid => |value| value,
+        .invalid => return error.InvalidSpecificationUnit,
+    };
+    checked.origins = origins;
+    checked.last_repair = merged;
+    var next = current;
+    next.revision = merged.revision_after;
+    next.units[index] = checked;
+    return next;
 }

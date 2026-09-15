@@ -96,3 +96,38 @@ pub fn project(allocator: std.mem.Allocator, items: []const r.Item) std.mem.Allo
     errdefer allocator.free(citation_slice);
     return .{ .claims = claims, .citations = citation_slice, .preserved_tokens = try preserved.toOwnedSlice(allocator) };
 }
+
+pub const ExtractionReview = struct {
+    chunk_id: r.extraction.identity.ChunkId,
+    source_id: r.extraction.identity.SourceId,
+    location: @import("reference_ingestion.zig").Span,
+    outcome: union(enum) { claims: []const r.ClaimId, no_feature_claim: r.text.ReferenceSemanticText, blocked: r.extraction.BlockReason },
+    token_classifications: []const struct { candidate: ExactCandidate, decision: union(enum) { preserve: tokens.Kind, irrelevant } },
+};
+
+/// Source coordinates and choices suffice for review; execution state IDs,
+/// native validation wrappers and duplicate claim bodies stay out of the packet.
+pub fn extractionReview(a: std.mem.Allocator, inputs: r.evidence.Inputs, chunks: []const r.extraction.ChunkResult) r.Error![]const ExtractionReview {
+    const facts = try tokens.extract(a, inputs);
+    const candidates = try tokens.assign(a, inputs, facts);
+    const result = try a.alloc(ExtractionReview, chunks.len);
+    for (chunks, result) |chunk, *copy| {
+        const source = try r.evidence.resolve(inputs, chunk.scope);
+        const decisions = try a.alloc(std.meta.Child(@FieldType(ExtractionReview, "token_classifications")), chunk.token_classifications.len);
+        for (chunk.token_classifications, decisions) |classification, *decision| {
+            const candidate = for (candidates.entries) |candidate| {
+                if (std.meta.eql(candidate.id, classification.id()) and candidate.fact.scope.chunk_id.eql(chunk.scope.chunk_id)) break candidate;
+            } else return error.InvalidReferenceReconciliation;
+            decision.* = .{ .candidate = exactCandidate(candidate), .decision = switch (classification) {
+                .preserve => |value| .{ .preserve = value.kind },
+                .irrelevant => .irrelevant,
+            } };
+        }
+        copy.* = .{ .chunk_id = source.chunk.id, .source_id = source.source.id, .location = source.chunk.span, .token_classifications = decisions, .outcome = switch (chunk.outcome) {
+            .claims => |ids| .{ .claims = ids },
+            .no_feature_claim => |reason| .{ .no_feature_claim = reason.value },
+            .blocked => |reason| .{ .blocked = reason },
+        } };
+    }
+    return result;
+}

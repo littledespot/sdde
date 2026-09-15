@@ -119,7 +119,12 @@ test "independent wire cases cover every selected specification result and neste
     }
     try checkCandidate("repair", "provenance", response_wire.provenance);
     try checkCandidate("repair", "value", response_wire.exact);
-    try checkCandidate("support", null, "{\"entries\":[{\"requirement_ordinal\":7,\"finding\":\"supported\",\"disposition\":\"supported\",\"provenance\":" ++ response_wire.provenance ++ "},{\"requirement_ordinal\":9,\"finding\":\"unsupported\",\"disposition\":\"not_applicable\",\"provenance\":{\"claim_ids\":[],\"clarification_response_ids\":[]}}]}");
+    try checkCandidate("support", "detail", "{\"detail\":\"Which deadline applies?\"}");
+    try candidateCase("support", "detail", "{\"detail\":\"Which deadline applies?\",\"finding\":\"supported\"}", .unknown_property, "/finding");
+    try checkCandidate("support", "disposition", "{\"disposition\":\"supported\"}");
+    try checkCandidate("support", "selection", "{\"provenance\":" ++ response_wire.provenance ++ ",\"source_ids\":[]}");
+    try checkCandidate("support", "finding", "{\"finding\":\"candidate_omission\",\"disposition\":\"supported\",\"provenance\":" ++ response_wire.provenance ++ ",\"source_ids\":[],\"detail\":\"Preserve the required confirmation.\"}");
+    try checkCandidate("support", null, "{\"entries\":[{\"requirement_ordinal\":7,\"value\":{\"finding\":\"supported\",\"disposition\":\"supported\",\"provenance\":" ++ response_wire.provenance ++ ",\"source_ids\":[],\"detail\":\"\"}},{\"requirement_ordinal\":9,\"value\":{\"finding\":\"unsupported\",\"disposition\":\"not_applicable\",\"provenance\":{\"claim_ids\":[],\"clarification_response_ids\":[]},\"source_ids\":[],\"detail\":\"Which deadline applies?\"}}]}");
 }
 
 fn checkCandidate(comptime name: []const u8, comptime selection: ?[]const u8, bytes: []const u8) !void {
@@ -152,6 +157,9 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         _ = try codec.decodeSelected(@import("domain/specification_repair.zig").Replacement, a, if (std.mem.eql(u8, selection.?, "provenance")) .provenance else if (std.mem.eql(u8, selection.?, "value")) .value else .record, bytes);
     } else if (comptime std.mem.eql(u8, name, "generation")) {
         _ = try codec.decode(@import("domain/specification_generation.zig").ModelResponse, a, bytes);
+    } else if (selection) |selected| {
+        const T = @import("domain/specification_support_repair.zig").Replacement;
+        _ = try codec.decodeSelected(T, a, @field(std.meta.Tag(T), selected), bytes);
     } else _ = try codec.decode(@import("domain/specification_support.zig").Review, a, bytes);
 }
 
@@ -162,7 +170,7 @@ test "final proposal schemas and native readers reject deterministic echoes and 
     }
     try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance/citation_ids");
     try candidateCase("repair", "provenance", echoed, .unknown_property, "/citation_ids");
-    try candidateCase("support", null, "{\"entries\":[{\"requirement_ordinal\":7,\"finding\":\"supported\",\"disposition\":\"supported\",\"provenance\":" ++ echoed ++ "}]}", .unknown_property, "/entries/0/provenance/citation_ids");
+    try candidateCase("support", null, "{\"entries\":[{\"requirement_ordinal\":7,\"value\":{\"finding\":\"supported\",\"disposition\":\"supported\",\"provenance\":" ++ echoed ++ ",\"source_ids\":[],\"detail\":\"\"}}]}", .unknown_property, "/entries/0/value/provenance/citation_ids");
     try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[{\"ordinal\":7}],\"citation_ids\":[],\"content\":{\"kind\":\"preserved_token\",\"token_id\":{\"ordinal\":7}}}],\"conflicts\":[]}", .unknown_property, "/signals/0/citation_ids");
     try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[],\"conflicts\":[{\"claim_ids\":[{\"ordinal\":7},{\"ordinal\":9}],\"citation_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "},\"resolution\":\"unresolved\"}]}", .unknown_property, "/conflicts/0/citation_ids");
 }

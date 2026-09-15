@@ -127,7 +127,8 @@ fn convertSubgraphs(allocator: std.mem.Allocator, raw: ?*definition.RawNode) Err
         if (entries.len == 0 or entries.len > definition.max_steps) return invalid();
         const steps = allocator.alloc(definition.SubgraphStep, entries.len) catch return invalid();
         for (entries, steps) |entry, *step| {
-            const step_map = closedMapping(entry.value, &step_fields, &step_required) orelse return invalid();
+            const call_map = closedMapping(entry.value, &.{ "call", "with", "on" }, &.{ "call", "on" });
+            const step_map = call_map orelse closedMapping(entry.value, &step_fields, &step_required) orelse return invalid();
             var parameters: std.ArrayList(definition.SubgraphParameter) = .empty;
             if (field(step_map, "with")) |with| {
                 const bindings = mapping(with) orelse return invalid();
@@ -145,7 +146,10 @@ fn convertSubgraphs(allocator: std.mem.Allocator, raw: ?*definition.RawNode) Err
             }
             step.* = .{
                 .id = workflow.WorkflowStepId.parse(string(entry.key) orelse return invalid()) orelse return invalid(),
-                .operation_id = workflow.OperationId.parse(string(field(step_map, "use")) orelse return invalid()) orelse return invalid(),
+                .target = if (call_map != null)
+                    .{ .subgraph = definition.SubgraphId.parse(string(field(step_map, "call")) orelse return invalid()) orelse return invalid() }
+                else
+                    .{ .operation = workflow.OperationId.parse(string(field(step_map, "use")) orelse return invalid()) orelse return invalid() },
                 .parameters = parameters.toOwnedSlice(allocator) catch return invalid(),
                 .outcomes = try convertOutcomes(allocator, field(step_map, "on") orelse return invalid()),
             };

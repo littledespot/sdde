@@ -654,6 +654,7 @@ closed requiredness/ownership policies, current support checks and outcomes.
 | Registered YAML operation | Responsibility |
 | --- | --- |
 | `build-specification-authority-requirements` | Project native content/reference facts into shared requirements. |
+| `apply-specification-support` | Project an admitted review into shared authority inputs after collection/repair. |
 | `build-required-authority-ledger` | Validate and canonically order registered requirements/current inputs. |
 | `parse-required-authority-observations` | Parse the closed observation shape using the shared strict JSON decoder. |
 | `reconcile-required-authorities` | Account for every supplied evidence member and derive one resolution or gap per requirement. |
@@ -676,8 +677,8 @@ closed requiredness/ownership policies, current support checks and outcomes.
 - Downstream detection produces explicit upstream rework; unknown ownership/policy
   blocks.
 - Structural accounting errors block instead of entering model repair.
-- Gap records are execution-local inputs to H-011, not inline questions or persisted
-  forms.
+- `build-required-authority-clarification-needs` converts validated gaps to the
+  existing clarification lifecycle, retaining structural subjects and earliest owners.
 
 - The registered `required-authority@1` gate binds its sole issuer to the current input,
   observation and result generations.
@@ -697,6 +698,28 @@ closed requiredness/ownership policies, current support checks and outcomes.
   supply model-assisted evidence and generation.
 - H-011–H-013 still own applicable answers, protected forms, publication and the
   complete definition.
+
+### Support findings and scoped correction
+
+- Review collection and repair preserve the original authority-input projection;
+  `apply-specification-support` advances it only after admission.
+- Review findings retain concise detail, canonical claim/citation/source associations
+  and candidate revision. Request/attempt origins remain execution-local; published
+  evidence validates without an earlier request ledger.
+- Original source text, extraction outcomes and token decisions with source coordinates
+  let review detect discarded or misclassified evidence. These projections use the
+  common evidence owner and do not grant model output authority.
+- `candidate_omission` describes established meaning lost in extraction or generated
+  content. Native missing-family obligations remain invalid even after a positive
+  review. Genuine source gaps route to clarification or the earliest upstream owner.
+- Malformed review repair changes one authorized detail, selection, disposition or
+  missing/identical duplicate finding. It cannot change an existing substantive verdict.
+  Current inputs, old value and revision are checked before dispatch and merge.
+- Source-backed content repair reuses the existing coverage repair owner; unsafe targets
+  block. Assembly, coverage and semantic review run again after a content edit.
+- Persisted review requires `candidate_revision` and uses the same admission checks
+  as live collection; earlier incomplete review states, erased findings,
+  foreign provenance and stale candidate revisions reject.
 
 ### 3.11 Native reference/model execution (H-009)
 
@@ -793,8 +816,9 @@ validators:
 
 ### 3.12 Clarification refresh and registered publication
 
-- The generation definition now routes validated unit needs through
-  `build-specification-clarification-need`, `refresh-clarifications`,
+- The definition converts validated authority gaps with
+  `build-required-authority-clarification-needs` and generation needs with
+  `build-specification-clarification-need`. Both reuse `refresh-clarifications`,
   `render-clarification-forms`, `prepare-clarification-output`,
   `publish-workflow-output` and `check-clarification-progress`.
 - The shared refresh retains subject IDs across invocations and replaces open drafts,
@@ -1205,14 +1229,12 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - If no independently supported write is identifiable, the candidate remains blocked
   with `no_independent_supported_target`; no destination family, invented statement or
   coverage-ledger edit is substituted.
-- Source-support classification and actionable gaps remain FIX_001 Phase 4 work.
-
-- A Phase 3 runner regression also exposes a later boundary issue: a cycle repair can
-  produce valid superseded dispositions/signals, while support collection uses
-  retained-business provenance eligibility for their review.
-- Global reconciliation passes; the unsupported positive review still fails before
-  publication.
-- Phase 4 must resolve review evidence scope without weakening business provenance.
+- Shared authority classification separates supported candidate omissions from source
+  gaps. Native exact-copy repair and reviewed field/record repair use the same
+  coverage-repair contract and merge boundary; every repaired unit is revalidated.
+- Review eligibility includes each nonconflicting signal/token's canonical members,
+  including superseded claims. Generated business provenance still requires retained
+  claims. Cycle and permutation regressions exercise the complete publication path.
 - JSON/schema protocol retry remains separate from semantic repair.
 - YAML's repair operations each have an explicit bounded ceiling; exhaustion fails.
 - Only the workflow's cumulative actual token budget limits model tokens.
@@ -1376,10 +1398,9 @@ Shared retained-claim eligibility (C3) remains consolidated in the provenance ow
 
 **Known implementation gaps**
 
-Support findings, source-gap routing, authenticated answers and remaining
-publication/readback assurance remain open. The [rollout](../../fixes/IMP_001.md)
-owns their status; offline repair verification does not establish complete Specify
-or live E2E acceptance.
+Authenticated answer acceptance and remaining publication/readback assurance remain
+open. The [rollout](../../fixes/IMP_001.md) owns their status; offline verification
+does not establish complete Specify or live E2E acceptance.
 
 **E2E evaluation**
 
@@ -1391,8 +1412,11 @@ or live E2E acceptance.
 **Input optimization**
 
 - [ADR 0013](../decisions/0013-workflow-input-reuse.md) is implemented.
-- `spec.workflow.yaml` declares local request/retirement subgraphs; the compiler expands
-  their operations through the existing validators.
+- `spec.workflow.yaml` uses readable stage calls, nested request/retirement calls and
+  one source/candidate review sequence. The compiler expands them to registered
+  operations; per-call retries and typed failure exits remain explicit.
+- Repair review packets select one requirement. Repair rules omit request/attempt metadata and
+  repeated instructions; original source evidence remains available for semantic review.
 - Schemas share local definitions and select the current generation unit, reconciliation
   purpose or authorized repair shape.
 - Model inputs share citation records and preserve their complete supplied evidence.

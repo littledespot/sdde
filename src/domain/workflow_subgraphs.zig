@@ -1,5 +1,4 @@
-//! Pure expansion of definition-local reuse into ordinary operation steps.
-//! Operation contracts and graph validators remain the policy owners.
+//! Compile local composition into ordinary operations. The runtime never calls subgraphs.
 const std = @import("std");
 const d = @import("workflow_definition.zig");
 const w = @import("workflow.zig");
@@ -9,84 +8,118 @@ pub const Expansion = struct { start: w.WorkflowStepId, steps: []const w.Declara
 pub fn expand(allocator: std.mem.Allocator, source: d.Definition) Error!Expansion {
     if (source.steps.len + source.calls.len == 0 or source.steps.len + source.calls.len > d.max_steps or source.subgraphs.len > d.max_subgraphs) return invalid();
     for (source.subgraphs, 0..) |subgraph, index| {
-        if (subgraph.steps.len == 0 or subgraph.steps.len > d.max_steps) return invalid();
         for (source.subgraphs[0..index]) |prior| if (same(prior.id.bytes, subgraph.id.bytes)) return invalid();
-        var used = false;
-        for (source.calls) |call| if (same(call.subgraph.bytes, subgraph.id.bytes)) {
-            used = true;
-        };
-        if (!used) return invalid();
     }
-    var steps: std.ArrayList(w.DeclarativeStep) = .empty;
-    for (source.steps) |step| {
-        for (source.calls) |call| if (same(step.id.bytes, call.id.bytes)) return invalid();
-        var copy = step;
-        const outcomes = try allocator.dupe(w.OutcomeTransition, step.outcomes);
-        for (outcomes) |*edge| edge.target = try topTarget(allocator, source, edge.target);
-        copy.outcomes = outcomes;
-        try steps.append(allocator, copy);
-    }
-    for (source.calls, 0..) |call, index| {
-        for (source.calls[0..index]) |prior| if (same(prior.id.bytes, call.id.bytes)) return invalid();
-        const subgraph = try find(source, call.subgraph);
-        try validateBindings(subgraph, call);
-        if (subgraph.steps.len > d.max_steps - steps.items.len) return invalid();
-        for (subgraph.steps) |local| {
-            const parameters = try allocator.alloc(w.ParameterBinding, local.parameters.len);
-            for (local.parameters, parameters) |parameter, *bound| {
-                bound.* = .{ .id = parameter.id, .value = switch (parameter.value) {
+    // Normalize the root once; every composition level uses the same expander.
+    const root = try allocator.alloc(d.SubgraphStep, source.steps.len + source.calls.len);
+    for (source.steps, root[0..source.steps.len]) |step, *copy| copy.* = .{
+        .id = step.id,
+        .target = .{ .operation = step.operation_id },
+        .parameters = try literals(allocator, step.parameters),
+        .outcomes = step.outcomes,
+    };
+    for (source.calls, root[source.steps.len..]) |call, *copy| copy.* = .{
+        .id = call.id,
+        .target = .{ .subgraph = call.subgraph },
+        .parameters = try literals(allocator, call.parameters),
+        .outcomes = call.outcomes,
+    };
+    var compiler: Compiler = .{ .allocator = allocator, .subgraphs = source.subgraphs };
+    const result = try compiler.scope(root, source.start_step_id, &.{}, null);
+    for (compiler.used[0..source.subgraphs.len]) |used| if (!used) return invalid();
+    const sorted = try allocator.dupe(w.DeclarativeStep, result.steps);
+    std.mem.sort(w.DeclarativeStep, sorted, {}, stepLessThan);
+    for (sorted, 0..) |step, index| if (index > 0 and same(step.id.bytes, sorted[index - 1].id.bytes)) return invalid();
+    return .{ .start = result.start, .steps = sorted };
+}
+
+const Compiler = struct {
+    allocator: std.mem.Allocator,
+    subgraphs: []const d.Subgraph,
+    active: [d.max_subgraphs]bool = @splat(false),
+    used: [d.max_subgraphs]bool = @splat(false),
+
+    fn scope(self: *Compiler, local: []const d.SubgraphStep, start: w.WorkflowStepId, bindings: []const w.ParameterBinding, prefix: ?w.WorkflowStepId) Error!Expansion {
+        if (local.len == 0 or local.len > d.max_steps) return invalid();
+        try validateParameters(local, bindings);
+        const parts = try self.allocator.alloc(Expansion, local.len);
+        var count: usize = 0;
+        for (local, parts, 0..) |step, *part, index| {
+            for (local[0..index]) |prior| if (same(prior.id.bytes, step.id.bytes)) return invalid();
+            const id = try qualified(self.allocator, prefix, step.id);
+            const parameters = try self.allocator.alloc(w.ParameterBinding, step.parameters.len);
+            for (step.parameters, parameters) |parameter, *bound| bound.* = .{
+                .id = parameter.id,
+                .value = switch (parameter.value) {
                     .literal => |value| value,
-                    .parameter => |id| try binding(call.parameters, id),
-                } };
-            }
-            std.mem.sort(w.ParameterBinding, parameters, {}, parameterLessThan);
-            const outcomes = try allocator.dupe(w.OutcomeTransition, local.outcomes);
-            for (outcomes) |*edge| edge.target = switch (edge.target) {
-                .step => |id| .{ .step = try localId(allocator, call, subgraph, id) },
-                .terminal => |exit| try topTarget(allocator, source, try exitTarget(call, exit)),
+                    .parameter => |reference| try binding(bindings, reference),
+                },
             };
-            try steps.append(allocator, .{
-                .id = try localId(allocator, call, subgraph, local.id),
-                .operation_id = local.operation_id,
-                .parameters = parameters,
-                .outcomes = outcomes,
-            });
+            std.mem.sort(w.ParameterBinding, parameters, {}, parameterLessThan);
+            part.* = switch (step.target) {
+                .operation => |operation| value: {
+                    const operations = try self.allocator.alloc(w.DeclarativeStep, 1);
+                    operations[0] = .{ .id = id, .operation_id = operation, .parameters = parameters, .outcomes = step.outcomes };
+                    break :value .{ .start = id, .steps = operations };
+                },
+                .subgraph => |called| value: {
+                    const selected = for (self.subgraphs, 0..) |subgraph, selected| {
+                        if (same(subgraph.id.bytes, called.bytes)) break selected;
+                    } else return invalid();
+                    if (self.active[selected]) return invalid();
+                    self.active[selected] = true;
+                    defer self.active[selected] = false;
+                    self.used[selected] = true;
+                    const subgraph = self.subgraphs[selected];
+                    try validateExits(subgraph.steps, step.outcomes);
+                    break :value try self.scope(subgraph.steps, subgraph.start, parameters, id);
+                },
+            };
+            if (part.steps.len > d.max_steps - count) return invalid();
+            count += part.steps.len;
         }
+        const operations = try self.allocator.alloc(w.DeclarativeStep, count);
+        var cursor: usize = 0;
+        for (local, parts) |step, part| {
+            for (part.steps) |operation| {
+                const outcomes = try self.allocator.dupe(w.OutcomeTransition, operation.outcomes);
+                for (outcomes) |*edge| {
+                    // Child internal edges are already resolved. Only its exits belong
+                    // to the caller's scope; ordinary operations have local edges.
+                    if (step.target == .operation) {
+                        edge.target = try resolve(local, parts, edge.target);
+                    } else if (edge.target == .terminal) {
+                        edge.target = try resolve(local, parts, try exitTarget(step.outcomes, edge.target.terminal));
+                    }
+                }
+                operations[cursor] = operation;
+                operations[cursor].outcomes = outcomes;
+                cursor += 1;
+            }
+        }
+        return .{ .start = (try resolve(local, parts, .{ .step = start })).step, .steps = operations };
     }
-    std.mem.sort(w.DeclarativeStep, steps.items, {}, stepLessThan);
-    for (steps.items, 0..) |step, index| if (index > 0 and same(step.id.bytes, steps.items[index - 1].id.bytes)) return invalid();
-    const start = try topTarget(allocator, source, .{ .step = source.start_step_id });
-    return .{ .start = start.step, .steps = try steps.toOwnedSlice(allocator) };
-}
+};
 
-fn find(source: d.Definition, id: d.SubgraphId) Error!d.Subgraph {
-    for (source.subgraphs) |subgraph| if (same(subgraph.id.bytes, id.bytes)) return subgraph;
-    return invalid();
-}
-
-fn topTarget(allocator: std.mem.Allocator, source: d.Definition, target: w.TransitionTarget) Error!w.TransitionTarget {
+fn resolve(local: []const d.SubgraphStep, parts: []const Expansion, target: w.TransitionTarget) Error!w.TransitionTarget {
     return switch (target) {
         .terminal => target,
-        .step => |id| value: {
-            for (source.steps) |step| if (same(step.id.bytes, id.bytes)) break :value target;
-            for (source.calls) |call| if (same(call.id.bytes, id.bytes)) {
-                const subgraph = try find(source, call.subgraph);
-                break :value .{ .step = try localId(allocator, call, subgraph, subgraph.start) };
-            };
-            return invalid();
-        },
+        .step => |id| for (local, parts) |step, part| {
+            if (same(id.bytes, step.id.bytes)) break .{ .step = part.start };
+        } else invalid(),
     };
 }
 
-fn localId(allocator: std.mem.Allocator, call: d.SubgraphCall, subgraph: d.Subgraph, id: w.WorkflowStepId) Error!w.WorkflowStepId {
-    var count: usize = 0;
-    for (subgraph.steps) |step| if (same(step.id.bytes, id.bytes)) {
-        count += 1;
-    };
-    if (count != 1) return invalid();
-    // Length-delimited call identity prevents ambiguity between nested names.
-    const bytes = try std.fmt.allocPrint(allocator, "g{d}-{s}-{s}", .{ call.id.bytes.len, call.id.bytes, id.bytes });
+fn qualified(allocator: std.mem.Allocator, prefix: ?w.WorkflowStepId, id: w.WorkflowStepId) Error!w.WorkflowStepId {
+    const parent = prefix orelse return id;
+    const bytes = try std.fmt.allocPrint(allocator, "g{d}-{s}-{s}", .{ parent.bytes.len, parent.bytes, id.bytes });
     return w.WorkflowStepId.parse(bytes) orelse invalid();
+}
+
+fn literals(allocator: std.mem.Allocator, parameters: []const w.ParameterBinding) Error![]const d.SubgraphParameter {
+    const result = try allocator.alloc(d.SubgraphParameter, parameters.len);
+    for (parameters, result) |parameter, *copy| copy.* = .{ .id = parameter.id, .value = .{ .literal = parameter.value } };
+    return result;
 }
 
 fn binding(bindings: []const w.ParameterBinding, id: w.WorkflowParameterId) Error!w.ParameterValue {
@@ -98,9 +131,9 @@ fn binding(bindings: []const w.ParameterBinding, id: w.WorkflowParameterId) Erro
     return result orelse invalid();
 }
 
-fn exitTarget(call: d.SubgraphCall, outcome: w.OutcomeTag) Error!w.TransitionTarget {
+fn exitTarget(outcomes: []const w.OutcomeTransition, outcome: w.OutcomeTag) Error!w.TransitionTarget {
     var result: ?w.TransitionTarget = null;
-    for (call.outcomes) |edge| if (edge.outcome == outcome) {
+    for (outcomes) |edge| if (edge.outcome == outcome) {
         if (result != null) return invalid();
         result = edge.target;
     };
@@ -109,29 +142,29 @@ fn exitTarget(call: d.SubgraphCall, outcome: w.OutcomeTag) Error!w.TransitionTar
     return target;
 }
 
-fn validateBindings(subgraph: d.Subgraph, call: d.SubgraphCall) Error!void {
-    for (call.parameters) |parameter| {
+fn validateParameters(steps: []const d.SubgraphStep, bindings: []const w.ParameterBinding) Error!void {
+    for (bindings) |parameter| {
         var used = false;
-        for (subgraph.steps) |step| for (step.parameters) |reference| {
+        for (steps) |step| for (step.parameters) |reference| {
             if (reference.value == .parameter and same(reference.value.parameter.bytes, parameter.id.bytes)) used = true;
         };
         if (!used) return invalid();
-        _ = try binding(call.parameters, parameter.id);
+        _ = try binding(bindings, parameter.id);
     }
-    var exits = [_]bool{false} ** @typeInfo(w.OutcomeTag).@"enum".fields.len;
-    for (subgraph.steps) |step| {
-        for (step.parameters) |parameter| if (parameter.value == .parameter) {
-            _ = try binding(call.parameters, parameter.value.parameter);
-        };
-        for (step.outcomes) |edge| if (edge.target == .terminal) {
-            if (edge.target.terminal != edge.outcome) return invalid();
-            exits[@intFromEnum(edge.target.terminal)] = true;
-            _ = try exitTarget(call, edge.target.terminal);
-        };
-    }
-    for (call.outcomes) |edge| if (!exits[@intFromEnum(edge.outcome)]) return invalid();
+    for (steps) |step| for (step.parameters) |parameter| if (parameter.value == .parameter) {
+        _ = try binding(bindings, parameter.value.parameter);
+    };
 }
 
+fn validateExits(steps: []const d.SubgraphStep, outcomes: []const w.OutcomeTransition) Error!void {
+    var exits = [_]bool{false} ** @typeInfo(w.OutcomeTag).@"enum".fields.len;
+    for (steps) |step| for (step.outcomes) |edge| if (edge.target == .terminal) {
+        if (edge.target.terminal != edge.outcome) return invalid();
+        exits[@intFromEnum(edge.target.terminal)] = true;
+        _ = try exitTarget(outcomes, edge.target.terminal);
+    };
+    for (outcomes) |edge| if (!exits[@intFromEnum(edge.outcome)]) return invalid();
+}
 fn same(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }

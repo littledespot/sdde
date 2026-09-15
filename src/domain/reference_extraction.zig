@@ -71,11 +71,13 @@ pub const Classified = struct { dependencies: ?@import("atomic_repair.zig").Snap
 pub const TokenAssignments = struct { classified: Classified, entries: []const tokens.Assignment, next_token_ordinal: u32 };
 pub const PreparedResult = struct {
     scope: evidence.Scope,
+    token_classifications: []const tokens.Classification = &.{},
     outcome: union(enum) { claims: []const PreparedClaim, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
 pub const Prepared = struct { dependencies: ?@import("atomic_repair.zig").Snapshot = null, revision: u64, entries: []const PreparedResult };
 pub const ValidatedResult = struct {
     scope: evidence.Scope,
+    token_classifications: []const tokens.Classification = &.{},
     outcome: union(enum) { claims: []const ValidatedClaim, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
 pub const Validated = struct { state_id: identity.StateId, entries: []const ValidatedResult };
@@ -94,6 +96,7 @@ pub const ClaimContent = union(enum) { model: Content, preserved_token: tokens.T
 pub const Claim = struct { id: ClaimId, chunk_id: identity.ChunkId, content: ClaimContent, citation_ids: []const CitationId };
 pub const ChunkResult = struct {
     scope: evidence.Scope,
+    token_classifications: []const tokens.Classification = &.{},
     outcome: union(enum) { claims: []const ClaimId, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
 pub const Ledger = struct {

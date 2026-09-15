@@ -13,6 +13,122 @@
         "ordinal"
       ],
       "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "properties": {
+        "finding": {
+          "enum": [
+            "supported",
+            "ambiguous",
+            "conflicting",
+            "unsupported",
+            "candidate_omission"
+          ]
+        },
+        "disposition": {
+          "$ref": "#/$defs/disposition_value"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ordinal"
+          },
+          "maxItems": 4294967295
+        },
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        }
+      },
+      "required": [
+        "finding",
+        "disposition",
+        "provenance",
+        "source_ids",
+        "detail"
+      ],
+      "additionalProperties": false
+    },
+    "detail": {
+      "type": "object",
+      "properties": {
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        }
+      },
+      "required": [
+        "detail"
+      ],
+      "additionalProperties": false
+    },
+    "disposition": {
+      "type": "object",
+      "properties": {
+        "disposition": {
+          "$ref": "#/$defs/disposition_value"
+        }
+      },
+      "required": [
+        "disposition"
+      ],
+      "additionalProperties": false
+    },
+    "selection": {
+      "type": "object",
+      "properties": {
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ordinal"
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "provenance",
+        "source_ids"
+      ],
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "claim_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ordinal"
+          },
+          "maxItems": 4294967295
+        },
+        "clarification_response_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ordinal"
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "claim_ids",
+        "clarification_response_ids"
+      ],
+      "additionalProperties": false
+    },
+    "detail_value": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "disposition_value": {
+      "enum": [
+        "supported",
+        "not_applicable"
+      ]
     }
   },
   "type": "object",
@@ -27,50 +143,13 @@
             "minimum": 1,
             "maximum": 4294967295
           },
-          "finding": {
-            "enum": [
-              "supported",
-              "ambiguous",
-              "conflicting",
-              "unsupported"
-            ]
-          },
-          "disposition": {
-            "enum": [
-              "supported",
-              "not_applicable"
-            ]
-          },
-          "provenance": {
-            "type": "object",
-            "properties": {
-              "claim_ids": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/ordinal"
-                },
-                "maxItems": 4294967295
-              },
-              "clarification_response_ids": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/ordinal"
-                },
-                "maxItems": 4294967295
-              }
-            },
-            "required": [
-              "claim_ids",
-              "clarification_response_ids"
-            ],
-            "additionalProperties": false
+          "value": {
+            "$ref": "#/$defs/finding"
           }
         },
         "required": [
           "requirement_ordinal",
-          "finding",
-          "disposition",
-          "provenance"
+          "value"
         ],
         "additionalProperties": false
       },

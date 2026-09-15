@@ -191,7 +191,7 @@ Every definition contains these exact concise fields:
 | `policy` | Exact versioned reference to one registered workflow policy profile containing the positive total model-token budget applied to each execution; it supplies no retry count. |
 | `start` | Definition-local ID of the graph entry step. |
 | `resources` | Optional map of concise local aliases to bounded workflow-root-relative resource names. |
-| `steps` | One to 256 local step IDs mapped to closed operation declarations or local subgraph calls and outcome maps. The expanded graph also has at most 256 operations. |
+| `steps` | Local step IDs mapped to closed operation declarations or local subgraph calls and outcome maps. Authored and expanded graphs obey the compiler-owned bounds in §4. |
 | `subgraphs` | Optional map of 1–32 local reusable operation sequences, each with `start` and `steps`. |
 
 - `sourceInventoryOrdinal` is engine-derived provenance and is not accepted in a file.
@@ -302,7 +302,10 @@ typed content cannot change the compiled semantic graph.
   bounds.
 
 - Subgraphs contain operations only.
-- They cannot nest, import files, use aliases, or execute templates.
+- They can compose other definition-local subgraphs and forward explicit parameters.
+  Direct/indirect recursion rejects before execution. They cannot import files, use
+  aliases, or execute templates. The fully expanded graph retains the existing limits,
+  operation contracts, outcome checks and per-call execution identities.
 - Their local `end.<outcome>` exits preserve the originating outcome; each call maps
   exactly those exits through `on`.
 - Local step targets cannot escape a subgraph.
@@ -311,7 +314,7 @@ typed content cannot change the compiled semantic graph.
 
 - The shared expander creates `g<call-ID-length>-<call-ID>-<local-step-ID>` identities,
   subject to the existing 64-byte step-ID bound.
-- Collisions and an expansion above 256 operations reject.
+- Collisions and expansion beyond the compiler-owned step bound reject.
 - The compiler and registry use this same projection; existing gates, dependencies,
   retry/cycle checks, capability policy and runner semantics apply to the complete
   expanded graph.
@@ -355,7 +358,7 @@ allocation or continued traversal can exceed them:
 | `maxWorkflowDefinitionTotalBytes` | 16,777,216 bytes per inventory |
 | `maxWorkflowResourceBytes` | 1,048,576 bytes per resource |
 | `maxWorkflowResourceTotalBytes` | 16,777,216 bytes per inventory |
-| `maxWorkflowStepsPerDefinition` | 256 steps |
+| `maxWorkflowStepsPerDefinition` | 512 steps, including expanded subgraph instances |
 | `maxWorkflowParametersPerStep` | 32 values |
 | `maxWorkflowResourcesPerDefinition` | 64 declared aliases |
 | `maxWorkflowYamlEvents` | 262,144 events per definition |
@@ -372,7 +375,7 @@ allocation or continued traversal can exceed them:
 
 - Transitions have no independent policy knob.
 - The six closed outcome tags and unique `(workflowStepId, outcomeTag)` mapping key
-  bound a 256-step graph to 1,536 transitions.
+  bound a 512-step graph to 3,072 transitions.
 - Zero definitions is a valid variable-size registry; a later selection against it
   returns the ordinary typed unknown-workflow diagnostic.
 
@@ -752,7 +755,7 @@ F0005 does not implement:
 - project-authored executable code, plugins, dynamic libraries, scripts,
   adapters, commands, capabilities, retries, or concurrency;
 - JSON or another workflow encoding, YAML aliases or custom tags,
-  executable includes/imports, nested or external subgraphs, display descriptions,
+  executable includes/imports, recursive or external subgraphs, display descriptions,
   alternate authoring aliases, or compatibility readers;
 - bootstrap component ID allocation, persistence, registry refresh/migration,
   active-feature change classification, or recovery;

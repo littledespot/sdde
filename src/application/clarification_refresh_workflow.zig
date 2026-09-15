@@ -76,3 +76,25 @@ pub const Check = struct {
         return .{ .outcome = context.?.action.execute(result.*), .delta = .{} };
     }
 };
+
+pub const BuildAuthorityNeeds = struct {
+    pub const Action = @import("../actions/clarification/build_required_authority_clarification_needs.zig").Action;
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
+    allocator: std.mem.Allocator,
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const authority = @import("required_authority_workflow.zig");
+        const owned = @import("required_authority_values.zig");
+        const source = owned.read(&input.step.data, authority.inputs_schema, .inputs) catch return error.OperationExecutionFailed;
+        const observations = owned.read(&input.step.data, authority.observations_schema, .observations) catch return error.OperationExecutionFailed;
+        const result = owned.read(&input.step.data, authority.result_schema, .result) catch return error.OperationExecutionFailed;
+        var arena: std.heap.ArenaAllocator = .init(self.allocator);
+        defer arena.deinit();
+        const needs = self.action.execute(arena.allocator(), source, observations, result) catch |err| return switch (err) {
+            error.OutOfMemory => error.OperationExecutionFailed,
+            error.InvalidRequiredAuthority => .{ .outcome = .blocked, .delta = .{} },
+        };
+        return publish(self.allocator, needs_schema, refresh.Needs, needs);
+    }
+};

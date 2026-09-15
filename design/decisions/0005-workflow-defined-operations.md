@@ -14,7 +14,8 @@ removes model-call size ceilings and estimates; provider APIs report their own
 limits and the workflow accounts actual token usage.
 
 **Authoring amendment:** [ADR 0013](0013-workflow-input-reuse.md) permits local,
-non-nesting subgraphs expanded by the shared compiler before graph validation.
+composable definition-local subgraphs expanded by the shared compiler before graph
+validation. ADR 0013’s 2026-09-16 amendment permits nested calls and rejects recursion.
 The existing operation registry and runner remain the execution owners.
 
 ## Context

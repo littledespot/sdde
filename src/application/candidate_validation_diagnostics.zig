@@ -36,13 +36,24 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
     if (view.contains(repair_schema.key)) {
         const value = storage.payload(try values.read(view, repair_schema, storage.Value));
         if (value.* == .coverage_repair) return .{ .coverage = switch (value.coverage_repair) {
-            .authorized => |authorized| authorized.rule.rejection,
+            .authorized => |authorized| authorized.rule.coverage,
             .blocked => |blocked| blocked,
         } };
     }
     if (view.contains(spec.coverage_schema.key)) {
         const value = storage.payload(try values.read(view, spec.coverage_schema, storage.Value));
         if (value.* == .coverage_rejected) return .{ .coverage = value.coverage_rejected };
+    }
+    const support = @import("specification_support_workflow.zig");
+    if (view.contains(support.schema.key)) {
+        const storage_authority = @import("required_authority_values.zig");
+        const value = storage_authority.payload(try values.read(view, support.schema, storage_authority.Value));
+        if (value.* == .support) switch (value.support) {
+            .rejected => |rejected| return .{ .support = rejected.rejection },
+            .accepted => |accepted| for (accepted.inputs.evidence) |evidence| {
+                if (evidence.finding != .supported) return .{ .support_findings = .{ .revision = accepted.inputs.revision, .evidence = accepted.inputs.evidence, .origins = accepted.inputs.review_origins, .origin = accepted.inputs.review_origin } };
+            },
+        };
     }
     return null;
 }

@@ -38,6 +38,8 @@ const reconciliation = @import("../application/reference_reconciliation_workflow
 const authority = @import("../application/required_authority_workflow.zig");
 const reference_model = @import("../application/reference_model_workflow.zig");
 const specification = @import("../application/specification_workflow.zig");
+const omission_repair = @import("../application/specification_omission_repair_workflow.zig");
+const support_repair = @import("../application/specification_support_repair_workflow.zig");
 const specification_support = @import("../application/specification_support_workflow.zig");
 const specification_repair = @import("../application/specification_repair_workflow.zig");
 const specification_rendering = @import("../application/specification_rendering_workflow.zig");
@@ -150,8 +152,17 @@ pub const Assembly = struct {
     validate_specification: specification.Validate,
     advance_specification: specification.Advance,
     assemble_specification: specification.Assemble,
+    authorize_support_repair: support_repair.Authorize,
+    build_support_repair: support_repair.BuildInput,
+    parse_support_repair: support_repair.Parse,
+    merge_support_repair: support_repair.Merge,
+    authorize_omission_repair: omission_repair.Authorize,
+    build_omission_repair: omission_repair.BuildInput,
+    parse_omission_repair: omission_repair.Parse,
+    merge_omission_repair: omission_repair.Merge,
     build_specification_support: specification_support.BuildInput,
     collect_specification_support: specification_support.Collect,
+    apply_specification_support: specification_support.Apply,
     build_authority_observations: authority.BuildObservations,
     retire_authority: authority.Retire,
     authorize_coverage_repair: coverage_repair.Authorize,
@@ -164,6 +175,7 @@ pub const Assembly = struct {
     project_specification_document: specification_rendering.Project,
     render_specification: specification_rendering.Render,
     validate_specification_rendering: specification_rendering.Validate,
+    build_authority_needs: clarification_refresh.BuildAuthorityNeeds,
     build_specification_need: clarification_refresh.BuildSpecificationNeed,
     refresh_clarifications: clarification_refresh.Refresh,
     render_clarifications: clarification_refresh.Render,
@@ -177,7 +189,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 128 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 138 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -278,6 +290,7 @@ pub const Assembly = struct {
             .model_requests = undefined,
             .initialize_specification = .{ .allocator = allocator },
             .project_specification_document = .{ .allocator = allocator },
+            .build_authority_needs = .{ .allocator = allocator },
             .build_specification_need = .{ .allocator = allocator },
             .refresh_clarifications = .{ .allocator = allocator },
             .render_clarifications = .{ .allocator = allocator },
@@ -300,8 +313,17 @@ pub const Assembly = struct {
             .authorize_coverage_repair = .{ .allocator = allocator },
             .merge_coverage_repair = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
             .validate_specification_coverage = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
+            .authorize_support_repair = .{ .allocator = allocator },
+            .build_support_repair = .{ .allocator = allocator },
+            .parse_support_repair = .{ .allocator = allocator },
+            .merge_support_repair = .{ .allocator = allocator },
+            .authorize_omission_repair = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
+            .build_omission_repair = .{ .allocator = allocator },
+            .parse_omission_repair = .{ .allocator = allocator },
+            .merge_omission_repair = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
             .build_specification_support = .{ .allocator = allocator },
             .collect_specification_support = .{ .allocator = allocator },
+            .apply_specification_support = .{ .allocator = allocator },
             .build_authority_observations = .{ .allocator = allocator },
             .retire_authority = .{},
             .check_specification = .{},
@@ -372,8 +394,17 @@ pub const Assembly = struct {
             entry(specification_repair.BuildInput, &self.build_specification_repair),
             entry(specification_repair.Parse, &self.parse_specification_repair),
             entry(specification_repair.Merge, &self.merge_specification_repair),
+            entry(support_repair.Authorize, &self.authorize_support_repair),
+            entry(support_repair.BuildInput, &self.build_support_repair),
+            entry(support_repair.Parse, &self.parse_support_repair),
+            entry(support_repair.Merge, &self.merge_support_repair),
+            entry(omission_repair.Authorize, &self.authorize_omission_repair),
+            entry(omission_repair.BuildInput, &self.build_omission_repair),
+            entry(omission_repair.Parse, &self.parse_omission_repair),
+            entry(omission_repair.Merge, &self.merge_omission_repair),
             entry(specification_support.BuildInput, &self.build_specification_support),
             entry(specification_support.Collect, &self.collect_specification_support),
+            entry(specification_support.Apply, &self.apply_specification_support),
             entry(authority.BuildObservations, &self.build_authority_observations),
             entry(authority.Retire, &self.retire_authority),
             entry(structured_tokens.Extract, &self.extract_structured_facts),
@@ -431,6 +462,7 @@ pub const Assembly = struct {
             entry(specification_rendering.Project, &self.project_specification_document),
             entry(specification_rendering.Render, &self.render_specification),
             entry(specification_rendering.Validate, &self.validate_specification_rendering),
+            entry(clarification_refresh.BuildAuthorityNeeds, &self.build_authority_needs),
             entry(clarification_refresh.BuildSpecificationNeed, &self.build_specification_need),
             entry(clarification_refresh.Refresh, &self.refresh_clarifications),
             entry(clarification_refresh.Render, &self.render_clarifications),
@@ -464,7 +496,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ omission_repair.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write },

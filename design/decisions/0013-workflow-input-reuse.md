@@ -12,8 +12,12 @@
 - Workflow authors may declare definition-local `subgraphs`.
 - A top-level step selects either one registered operation with `use`, or one subgraph
   with `call`.
-- A subgraph has a `start` and ordinary operation `steps`; it cannot call another
-  subgraph.
+- A subgraph has a `start` and `steps` selecting registered operations or other
+  definition-local subgraphs. Calls may forward explicit parameters.
+- The 2026-09-16 user-approved composition amendment replaces the original
+  non-nesting restriction: high-level calls compose detailed operations and
+  reusable calls through this same compiler. Direct and indirect recursion reject;
+  all expanded operations remain subject to the existing graph limits and validators.
 - Its parameter references are closed `{param: name}` values.
 - The call supplies every referenced parameter exactly once through `with`.
 - The existing operation parameter contracts remain the sole type and bounds authority
@@ -28,10 +32,11 @@
   top-level steps.
 - Compilation expands each use into ordinary operations before applying the existing
   dependency, gate, capability, cycle and outcome validators.
-- Expansion has the same 256-step ceiling as an explicit graph.
+- Expansion uses the same compiler-owned step ceiling as an explicit graph
+  ([F0005 §4](../features/F0005-WorkflowDefinitionRegistryService.md#4-compiler-owned-bounds)).
 - Unused subgraphs, identity collisions, missing bindings, recursion, invalid exits and
   expansion overflow reject.
-- Expanded identities deterministically encode the call identity and local step;
+- Expanded identities deterministically encode the complete call path and local step;
   ordering does not supply identity.
 - The runtime executes only the resulting graph through the existing runner.
 - No action acquires child-node execution and no new execution store is added.
@@ -109,7 +114,8 @@
 
 ## Validation
 
-- Equivalent explicit/expanded graphs, unrelated workflow representatives, per-use
+- Equivalent explicit/expanded graphs, nested parameter forwarding, recursive-call
+  rejection, unrelated workflow representatives, per-use
   request/retry isolation, and rejection of invalid boundaries.
 - Schema source/projection lifetime, local-reference failures, exact bounds,
   compact/native/prompt-only consistency, and selected-variant rejection.

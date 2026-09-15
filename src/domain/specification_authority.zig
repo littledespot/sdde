@@ -5,7 +5,10 @@ const spec = @import("specification.zig");
 const reference = @import("reference_reconciliation.zig");
 
 pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: reference.Accounted, content: ?spec.IdentifiedContent, brief: ?spec.Brief) authority.Error!authority.Inputs {
-    const items = references.records.assignments.checked.prior.prior.input.progress.plan.layout.items;
+    return projectRecords(allocator, feature, @import("reference_support.zig").records(references), content, brief);
+}
+pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: @import("reference_support.zig").Records, content: ?spec.IdentifiedContent, brief: ?spec.Brief) authority.Error!authority.Inputs {
+    const items = references.items;
     const sources = try allocator.alloc(authority.Authority, 1);
     sources[0] = .{ .reference = items.state_id };
     var seeds: std.ArrayList(authority.Seed) = .empty;
@@ -25,7 +28,7 @@ pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.
                 else => null,
             };
             if (kind) |required| {
-                if (!spec.hasRecords(candidate, required)) try gaps.append(allocator, .{ .requirement = seeds.items[seeds.items.len - 1].id, .reason = .missing });
+                if (!spec.hasRecords(candidate, required)) try gaps.append(allocator, .{ .requirement = seeds.items[seeds.items.len - 1].id, .reason = .missing, .subject = .candidate });
             }
         }
     }
@@ -44,12 +47,12 @@ pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.
     };
     // Complete reference accounting remains owned by the preceding reference
     // validators. Keep the exact IDs; do not infer field support from a signal.
-    for (references.records.signals) |signal| try seeds.append(allocator, .{
+    for (references.signals) |signal| try seeds.append(allocator, .{
         .id = .{ .kind = .reference_meaning, .unit = .{ .signal = signal.id }, .slot = .disposition },
         .requiredness = .{ .obligation = .reference_accounting },
         .input_authorities = sources,
     });
-    for (references.records.conflicts) |conflict| {
+    for (references.conflicts) |conflict| {
         const id: authority.Id = .{ .kind = .reference_meaning, .unit = .{ .conflict = conflict.id }, .slot = .disposition };
         try seeds.append(allocator, .{ .id = id, .requiredness = .{ .obligation = .reference_accounting }, .input_authorities = sources });
         try gaps.append(allocator, .{ .requirement = id, .reason = .conflicting });

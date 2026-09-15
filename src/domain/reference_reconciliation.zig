@@ -18,7 +18,7 @@ pub const Item = struct {
     block_id: evidence.identity.BlockId,
     citations: []const extraction.Citation,
 };
-pub const Items = struct { state_id: evidence.identity.StateId, entries: []const Item };
+pub const Items = struct { state_id: evidence.identity.StateId, entries: []const Item, extraction: []const extraction.ChunkResult = &.{} };
 pub const Level = enum { within_source, cross_source, global };
 /// Local grouping coordinates are not canonical identities or model input.
 pub const GroupIndex = struct { value: usize };

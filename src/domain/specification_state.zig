@@ -20,6 +20,7 @@ pub const State = struct {
     coverage: @import("specification_coverage.zig").Coverage,
     clarification: struct { state_ordinal: u64, revision: u64 },
     review: struct {
+        candidate_revision: u64,
         seeds: []const authority.Seed,
         evidence: []const authority.Evidence,
         candidates: []const authority.Candidate,
@@ -47,6 +48,7 @@ pub fn validate(allocator: std.mem.Allocator, state: State, feature: @import("fe
         state.clarification.state_ordinal == 0 or state.clarification.revision == 0 or
         !state.reference.inputs.corpus.state_id.eql(state.reference.extraction.state_id) or
         state.reference.conflicts.len != 0) return error.InvalidSpecificationState;
+    validateReview(allocator, state) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationState;
     var largest: [std.meta.tags(spec.Kind).len]u32 = @splat(0);
     for (spec.required_record_families) |kind| if (!spec.hasRecords(state.content, kind)) return error.InvalidSpecificationState;
     for (state.content.records) |record| {
@@ -68,4 +70,15 @@ pub fn checkClarifications(state: clarification.ValidatedState) Error!clarificat
         if (id.stage == .spec and record.status == .open) return error.InvalidSpecificationState;
     }
     return value;
+}
+
+fn validateReview(allocator: std.mem.Allocator, state: State) !void {
+    if (state.review.candidate_revision == 0) return error.InvalidSpecificationState;
+    var inputs = try @import("specification_authority.zig").projectRecords(allocator, state.feature, try @import("reference_support.zig").snapshot(allocator, state.reference), state.content, state.brief);
+    inputs.revision = state.review.candidate_revision;
+    inputs.seeds = state.review.seeds;
+    inputs.evidence = state.review.evidence;
+    inputs.candidates = state.review.candidates;
+    try @import("specification_support.zig").validateStored(allocator, inputs, state.reference.inputs);
+    if (!try authority.validate(allocator, inputs, state.review.observations, state.review.result)) return error.InvalidSpecificationState;
 }

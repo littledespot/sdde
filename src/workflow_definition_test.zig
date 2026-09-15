@@ -676,9 +676,8 @@ test "reuse cannot bypass operation contracts gates exits or local boundaries" {
     }
 }
 
-test "reuse syntax rejects nested calls unknown fields and mixed operation calls" {
+test "reuse syntax rejects unknown fields and mixed operation calls" {
     for ([_][2][]const u8{
-        .{ "use: model.generate", "call: request" },
         .{ "call: request, with:", "call: request, use: model.generate, with:" },
         .{ "{param: limit}", "{param: limit, default: 1}" },
         .{ "subgraphs:\n  request:", "subgraphs:\n  request:\n    include: external.yaml" },
@@ -724,4 +723,80 @@ test "reuse expansion enforces total step bounds unused definitions and collisio
     collision.id.bytes = "g5-first-generate";
     source_definition.steps = &.{collision};
     try std.testing.expectError(error.InvalidWorkflowSubgraph, expand(a, source_definition));
+}
+
+const nested_workflow =
+    \\schema: workflow/v1
+    \\id: nested-check
+    \\version: 1
+    \\shortcode: NEST
+    \\invoke: test.empty
+    \\policy: test.model-policy@1
+    \\start: validate
+    \\resources: {prompt: prompts/generate.md, result-schema: schemas/result.json}
+    \\steps:
+    \\  validate: {use: test.validate, on: {ok: first}}
+    \\  first: {call: stage, with: {limit: 1}, on: {ok: second, failed: end.failed, cancelled: end.cancelled}}
+    \\  second: {call: stage, with: {limit: 2}, on: {ok: end.ok, failed: end.failed, cancelled: end.cancelled}}
+    \\subgraphs:
+    \\  stage:
+    \\    start: inner
+    \\    steps:
+    \\      inner: {call: request, with: {limit: {param: limit}}, on: {ok: end.ok, failed: end.failed, cancelled: end.cancelled}}
+    \\  request:
+    \\    start: generate
+    \\    steps:
+    \\      generate:
+    \\        use: model.generate
+    \\        with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: {param: limit}, response-mode: prompt-only}
+    \\        on: {ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled}
+;
+
+test "nested composition forwards parameters and compiles to the same explicit operations" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const nested = try reusableCompile(a, nested_workflow);
+    const explicit = try std.mem.concat(a, u8, &.{
+        nested_workflow[0..std.mem.indexOf(u8, nested_workflow, "steps:").?],
+        \\steps:
+        \\  validate: {use: test.validate, on: {ok: g14-g5-first-inner-generate}}
+        \\  g14-g5-first-inner-generate:
+        \\    use: model.generate
+        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 1, response-mode: prompt-only}
+        \\    on: {ok: g15-g6-second-inner-generate, invalid: g14-g5-first-inner-generate, failed: end.failed, cancelled: end.cancelled}
+        \\  g15-g6-second-inner-generate:
+        \\    use: model.generate
+        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, response-mode: prompt-only}
+        \\    on: {ok: end.ok, invalid: g15-g6-second-inner-generate, failed: end.failed, cancelled: end.cancelled}
+    });
+    const plain = try reusableCompile(a, explicit);
+    try std.testing.expectEqualDeep(plain.authority.steps, nested.authority.steps);
+    try std.testing.expectEqualDeep(plain.authority.transitions, nested.authority.transitions);
+    try std.testing.expectEqual(plain.authority.maximum_step_executions, nested.authority.maximum_step_executions);
+    var reordered = (try reusableDefinitions(a, nested_workflow))[0];
+    const subgraphs = try a.dupe(@import("domain/workflow_definition.zig").Subgraph, reordered.subgraphs);
+    std.mem.reverse(@import("domain/workflow_definition.zig").Subgraph, subgraphs);
+    reordered.subgraphs = subgraphs;
+    const expand = @import("domain/workflow_subgraphs.zig").expand;
+    try std.testing.expectEqualDeep(try expand(a, (try reusableDefinitions(a, nested_workflow))[0]), try expand(a, reordered));
+}
+
+test "nested composition rejects recursion scope escape missing bindings and outcome masking" {
+    for ([_][2][]const u8{
+        .{ "call: request", "call: stage" },
+        .{ "use: model.generate", "call: stage" },
+        .{ "call: request", "call: missing" },
+        .{ "limit: {param: limit}", "limit: {param: missing}" },
+        .{ "call: request, with: {limit: {param: limit}}", "call: request, with: {}" },
+        .{ "invalid: generate", "invalid: inner" },
+        .{ "ok: end.ok, failed: end.failed", "ok: end.ok, failed: end.ok" },
+        .{ "ok: first", "ok: g14-g5-first-inner-generate" },
+    }) |change| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const bytes = try std.mem.replaceOwned(u8, arena.allocator(), nested_workflow, change[0], change[1]);
+        try std.testing.expect(!std.mem.eql(u8, bytes, nested_workflow));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, reusableCompile(arena.allocator(), bytes));
+    }
 }

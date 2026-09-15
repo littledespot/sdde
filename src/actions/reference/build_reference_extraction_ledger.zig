@@ -16,6 +16,7 @@ pub const Action = struct {
         var index: usize = 0;
         for (assigned.validated.entries, chunks) |entry, *chunk| {
             chunk.scope = entry.scope;
+            chunk.token_classifications = entry.token_classifications;
             chunk.outcome = switch (entry.outcome) {
                 .blocked => |reason| .{ .blocked = reason },
                 .no_feature_claim => |reason| .{ .no_feature_claim = reason },

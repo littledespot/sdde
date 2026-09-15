@@ -27,8 +27,8 @@ const yaml =
     \\  build: { use: build-required-authority-ledger, on: { ok: observe, blocked: end.blocked } }
     \\  observe: { use: test.authority-observation, on: { ok: parse } }
     \\  parse: { use: parse-required-authority-observations, on: { ok: reconcile, blocked: end.blocked } }
-    \\  reconcile: { use: reconcile-required-authorities, on: { ok: validate, needs_user: validate, blocked: validate } }
-    \\  validate: { use: validate-required-authority-reconciliation, on: { ok: protected, needs_user: end.needs_user, blocked: end.blocked } }
+    \\  reconcile: { use: reconcile-required-authorities, on: { ok: validate, invalid: validate, needs_user: validate, blocked: validate } }
+    \\  validate: { use: validate-required-authority-reconciliation, on: { ok: protected, invalid: end.invalid, needs_user: end.needs_user, blocked: end.blocked } }
     \\  protected: { use: test.authority-protected, on: { ok: end.ok } }
 ;
 const Fault = enum { none, missing_support, conflict, stale, unknown, malformed };
@@ -163,14 +163,14 @@ test "YAML cannot skip validation or route a rejected authority gate into protec
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .feature_intent, .missing_support);
     defer fixture.arena.deinit();
-    const bypass = try std.mem.replaceOwned(u8, fixture.arena.allocator(), yaml, "ok: protected, needs_user: end.needs_user, blocked: end.blocked", "ok: protected, needs_user: protected, blocked: protected");
+    const bypass = try std.mem.replaceOwned(u8, fixture.arena.allocator(), yaml, "ok: protected, invalid: end.invalid, needs_user: end.needs_user, blocked: end.blocked", "ok: protected, invalid: end.invalid, needs_user: protected, blocked: protected");
     const graph = try fixture.compile(bypass);
     var runner = fixture.runner(graph);
     defer runner.deinit();
     var harness: Harness = .{ .runner = &runner, .graph = graph };
     try std.testing.expectEqual(.blocked, harness.run());
     try std.testing.expectEqual(@as(usize, 0), fixture.script.calls);
-    const skipped = try std.mem.replaceOwned(u8, fixture.arena.allocator(), yaml, "ok: validate, needs_user: validate, blocked: validate", "ok: protected, needs_user: protected, blocked: protected");
+    const skipped = try std.mem.replaceOwned(u8, fixture.arena.allocator(), yaml, "ok: validate, invalid: validate, needs_user: validate, blocked: validate", "ok: protected, invalid: end.invalid, needs_user: protected, blocked: protected");
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(skipped));
 }
 

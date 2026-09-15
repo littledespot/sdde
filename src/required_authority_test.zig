@@ -208,7 +208,7 @@ test "Specify projects registered native fields and complete reference obligatio
     const before = try project.execute(allocator, .{ .bytes = "hello-world" }, accounted, null, null);
     try std.testing.expectEqual(@as(usize, 11), before.seeds.len); // Eight mandatory slots, two signals, one exact value.
     try std.testing.expectEqual(.needs_user, (try run(allocator, before)).continuation);
-    try std.testing.expectEqualStrings("Hello, World!", before.references.?.records.assignments.checked.prior.prior.input.progress.plan.layout.items.entries[1].claim.content.preserved_token.value.raw_value.bytes);
+    try std.testing.expectEqualStrings("Hello, World!", before.references.?.items.entries[1].claim.content.preserved_token.value.raw_value.bytes);
     const spec = @import("domain/specification.zig");
     const value: spec.BusinessValue = .{ .normalized = .{ .segments = &.{.{ .literal = .{ .value = "Supported business value" } }} } };
     const provenance: spec.Provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} };
@@ -288,7 +288,7 @@ test "reference conflicts cannot be dropped or resolved by supplied evidence" {
         if (entry.requirement.unit == .conflict) break entry;
     } else return error.ExpectedConflict;
     try std.testing.expectEqual(.conflicting, conflict.outcome.clarification_required.reason);
-    try std.testing.expectEqualDeep(accounted.records.conflicts[0].value.citation_ids, inputs.references.?.records.conflicts[0].value.citation_ids);
+    try std.testing.expectEqualDeep(accounted.records.conflicts[0].value.citation_ids, inputs.references.?.conflicts[0].value.citation_ids);
     evidence[0].reference_support = &.{.{ .conflict = accounted.records.conflicts[0].id }};
     const with_conflicting_support = try run(allocator, inputs);
     try std.testing.expectEqual(evidence[0].requirement, with_conflicting_support.entries[0].requirement);
@@ -335,4 +335,79 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     const parsed = try parse.execute(arena.allocator(), bytes);
     const result = try reconcile.execute(arena.allocator(), try build.execute(arena.allocator(), source_inputs), parsed);
     try std.testing.expect(try validate.execute(arena.allocator(), source_inputs, parsed, result));
+}
+
+test "source-backed omissions stay invalid across registered owners and source gaps never authorize repair" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    for ([_]a.Kind{ .feature_intent, .design_decision, .executable_decomposition }) |kind| {
+        var inputs = try fixture(allocator, kind);
+        const proofs = try allocator.dupe(a.Evidence, inputs.evidence);
+        proofs[0].finding = .candidate_omission;
+        proofs[0].resolution = .{ .existing_authority = source };
+        inputs.evidence = proofs;
+        inputs.forced_gaps = &.{.{ .requirement = id(kind), .reason = .missing, .subject = .candidate }};
+        const observations = try observe(allocator, inputs);
+        const result = try run(allocator, inputs);
+        try std.testing.expectEqual(.invalid, result.continuation);
+        try std.testing.expect(result.entries[0].outcome == .resolved_exactly_one);
+        try std.testing.expect((try a.supportedOmission(allocator, inputs, observations, result, id(kind))) != null);
+        try std.testing.expect(!try a.validate(allocator, inputs, observations, result));
+        // Positive review cannot fill missing mandatory content or authorize a
+        // speculative repair without an independently identified omission.
+        proofs[0].finding = .supported;
+        const empty = try run(allocator, inputs);
+        try std.testing.expectEqual(.invalid, empty.continuation);
+        try std.testing.expect((try a.supportedOmission(allocator, inputs, observations, empty, id(kind))) == null);
+        for ([_]a.Finding{ .unsupported, .ambiguous, .conflicting }) |finding| {
+            proofs[0].finding = finding;
+            const gap = try run(allocator, inputs);
+            try std.testing.expectEqual(.needs_user, gap.continuation);
+            try std.testing.expect((try a.supportedOmission(allocator, inputs, observations, gap, id(kind))) == null);
+        }
+        proofs[0].finding = .candidate_omission;
+        inputs.authorities = &.{};
+        const stale = try run(allocator, inputs);
+        try std.testing.expectEqual(.needs_user, stale.continuation);
+        try std.testing.expect((try a.supportedOmission(allocator, inputs, observations, stale, id(kind))) == null);
+    }
+}
+
+test "authority clarification subjects preserve earliest owner and remain stable across finding order and wording" {
+    const conversion = @import("domain/required_authority_clarifications.zig");
+    const refresh = @import("domain/clarification_refresh.zig");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const one = try fixture(allocator, .feature_intent);
+    const two = try fixture(allocator, .design_decision);
+    var inputs = one;
+    inputs.detected_at = .tasks;
+    inputs.seeds = try allocator.dupe(a.Seed, &.{ one.seeds[0], two.seeds[0] });
+    const proofs = try allocator.dupe(a.Evidence, &.{ one.evidence[0], two.evidence[0] });
+    proofs[1].id.ordinal = 2;
+    for (proofs) |*proof| {
+        proof.finding = .ambiguous;
+        proof.resolution = .{ .existing_authority = source };
+        proof.review = .{ .detail = "Which delivery deadline applies?", .provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{} };
+    }
+    inputs.evidence = proofs;
+    inputs.candidates = &.{};
+    const needs = try conversion.build(allocator, inputs, try observe(allocator, inputs), try run(allocator, inputs));
+    try std.testing.expectEqual(@as(usize, 2), needs.entries.len);
+    try std.testing.expectEqual(.spec, needs.entries[0].stage);
+    try std.testing.expectEqual(.plan, needs.entries[1].stage);
+    const c = @import("domain/clarification_inputs.zig");
+    const first = try refresh.refresh(allocator, .{ .state = .{ .value = null }, .submissions = &.{}, .protected_forms = &.{} }, needs);
+    const changed = try allocator.dupe(a.Evidence, &.{ proofs[1], proofs[0] });
+    changed[0].review.?.detail = "Specify the applicable delivery deadline.";
+    inputs.evidence = changed;
+    const again = try conversion.build(allocator, inputs, try observe(allocator, inputs), try run(allocator, inputs));
+    const second = try refresh.refresh(allocator, .{ .state = .{ .value = first.value }, .submissions = &.{}, .protected_forms = &.{} }, again);
+    for (first.value.?.records, second.value.?.records) |before, after| {
+        try std.testing.expect(c.sameSubject(before.subject, after.subject));
+        try std.testing.expectEqualStrings(before.id, after.id);
+    }
+    try std.testing.expectError(error.ProtectedClarification, refresh.refresh(allocator, .{ .state = .{ .value = first.value }, .submissions = &.{}, .protected_forms = &.{.{ .id = c.Id.parse(first.value.?.records[0].id).?, .bytes = "protected" }} }, again));
 }

@@ -6,6 +6,7 @@ pub const Payload = union(enum) {
     repair_authorization: struct { authorization: @import("../domain/specification_repair.zig").Authorization, response: ?struct { value: @import("../domain/specification_repair.zig").Replacement, origin: @import("../domain/model_candidate_origin.zig").Origin } = null },
     checked: g.Checked,
     coverage_rejected: @import("../domain/specification_coverage.zig").Rejection,
+    omission_repair: @import("../domain/specification_coverage_repair.zig").ModelRepair,
     coverage_repair: @import("../domain/specification_coverage_repair.zig").Decision,
     coverage: @import("../domain/specification_coverage.zig").Coverage,
     document: @import("../domain/specification.zig").CapturedDocument,

@@ -44,7 +44,7 @@ pub const SubgraphParameter = struct {
 };
 pub const SubgraphStep = struct {
     id: workflow.WorkflowStepId,
-    operation_id: workflow.OperationId,
+    target: union(enum) { operation: workflow.OperationId, subgraph: SubgraphId },
     parameters: []const SubgraphParameter,
     outcomes: []const workflow.OutcomeTransition,
 };

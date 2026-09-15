@@ -20,6 +20,7 @@ pub const Action = struct {
             if (!candidate.scope.state_id.eql(inputs.corpus.state_id) or !candidate.scope.chunk_id.eql(chunk.id)) return error.InvalidReferenceExtraction;
             _ = try evidence.resolve(inputs, candidate.scope);
             entry.scope = candidate.scope;
+            entry.token_classifications = candidate.token_classifications;
             entry.outcome = switch (candidate.outcome) {
                 .blocked => |reason| .{ .blocked = reason },
                 .no_feature_claim => |reason| .{ .no_feature_claim = reason },

@@ -16,7 +16,7 @@ pub const content_schema = values.schema(.identified_specification_content, owne
 pub const gate_schema = values.schema(.required_authority_gate, gate.Decision, 1, @sizeOf(gate.Decision));
 pub const schemas = [_]data.Schema{ inputs_schema, ledger_schema, raw_schema, observations_schema, result_schema, content_schema, gate_schema };
 pub const gate_contract: gate.Contract = .{ .id = .{ .bytes = "required-authority@1" }, .issuer = .{ .bytes = "validate-required-authority-reconciliation" }, .evidence = .required_authority_gate, .authority = &.{ .required_authority_inputs, .required_authority_observations, .required_authority_result } };
-const operation_outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .needs_user, .blocked };
+const operation_outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .needs_user, .blocked };
 const structural_outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked };
 
 pub const ProjectSpecification = struct {
@@ -34,6 +34,7 @@ pub const ProjectSpecification = struct {
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
         owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted, content, brief) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
+        if (current) |value| owner.payload.inputs.revision = value.revision;
         return owned.publish(self.allocator, inputs_schema, owner, .ok) catch return error.OperationExecutionFailed;
     }
 };
@@ -119,7 +120,7 @@ pub const Validate = struct {
                 error.OutOfMemory => return error.OperationExecutionFailed,
                 error.InvalidRequiredAuthority => break :checked .blocked,
             };
-            break :checked if (accepted) .ok else if (result.continuation == .needs_user) .needs_user else .blocked;
+            break :checked if (accepted) .ok else if (result.continuation == .invalid) .invalid else if (result.continuation == .needs_user) .needs_user else .blocked;
         };
         var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
         delta.data_writes[@intFromEnum(gate_schema.key)] = values.create(self.allocator, gate_schema, gate.Decision, if (outcome == .ok) .accepted else .rejected) catch return error.OperationExecutionFailed;
@@ -134,6 +135,7 @@ fn reject(allocator: std.mem.Allocator, schema: data.Schema, owner: *owned.Owner
 fn status(result: a.Result) @import("../domain/workflow.zig").OutcomeTag {
     return switch (result.continuation) {
         .all_resolved => .ok,
+        .invalid => .invalid,
         .needs_user => .needs_user,
         .blocked => .blocked,
     };
