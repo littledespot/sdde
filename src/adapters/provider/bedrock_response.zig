@@ -133,7 +133,7 @@ fn decodeInference(allocator: std.mem.Allocator, raw: std.json.Value, selected: 
 
 fn errorResponse(allocator: std.mem.Allocator, response: transport.Response, id: operation.ProviderOperationId) std.mem.Allocator.Error!?operation.ProviderFailure {
     const rejected = try classifyResponse(allocator, response) orelse return null;
-    return .{ .operation_id = id, .cause = rejected.cause, .retry_class = rejected.retry_class, .delivery = rejected.delivery };
+    return .{ .operation_id = id, .cause = rejected.cause, .retry_class = rejected.retry_class, .delivery = rejected.delivery, .transport = rejected.diagnostic };
 }
 
 pub fn classifyResponse(allocator: std.mem.Allocator, response: transport.Response) std.mem.Allocator.Error!?transport.Failure {
@@ -150,8 +150,10 @@ pub fn classifyResponse(allocator: std.mem.Allocator, response: transport.Respon
 }
 
 fn decodeError(raw: std.json.Value, status: u16, header: ?[]const u8) Invalid!operation.ProviderFailureCause {
-    try fields(raw, &.{ "message", "__type", "code", "originalStatusCode", "resourceName" });
+    try fields(raw, &.{ "message", "Message", "__type", "code", "originalStatusCode", "resourceName" });
+    if (raw.object.contains("message") and raw.object.contains("Message")) return error.InvalidResponse;
     if (raw.object.get("message")) |message| _ = try string(message);
+    if (raw.object.get("Message")) |message| _ = try string(message);
     if (raw.object.get("resourceName")) |name| _ = try string(name);
     var resolved: ?[]const u8 = if (header) |value| exceptionName(value) else null;
     for ([_][]const u8{ "__type", "code" }) |key_name| {

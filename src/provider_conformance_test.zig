@@ -567,3 +567,33 @@ test "Bedrock uses AWS restJson1 error discriminators without guessing from pros
     const conflict = try response.count(std.testing.allocator, .{ .received = .{ .status = 429, .exception = "ThrottlingException", .body = "{\"code\":\"AccessDeniedException\"}" } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.input_token_count));
     try std.testing.expectEqual(.response_invalid, conflict.failed.cause);
 }
+
+test "Bedrock capitalized messages preserve closed error classification for inference and counting" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator, .bedrock);
+    defer fixture.deinit();
+    for ([_]struct { status: u16, exception: []const u8, cause: operation.ProviderFailureCause }{
+        .{ .status = 403, .exception = "com.amazonaws.bedrock#AccessDeniedException:detail", .cause = .authorization_denied },
+        .{ .status = 429, .exception = "ThrottlingException", .cause = .throttled },
+    }) |case| {
+        for ([_][]const u8{ "{\"Message\":\"private detail\"}", "{\"message\":\"private detail\"}" }) |body| {
+            const wire: transport.Response = .{ .received = .{ .status = case.status, .exception = case.exception, .body = body } };
+            var inferred = try response.inference(std.testing.allocator, wire, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
+            defer inferred.deinit();
+            const counted = try response.count(std.testing.allocator, wire, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.input_token_count));
+            for ([_]operation.ProviderFailure{ inferred.failed, counted.failed }) |failure| {
+                try std.testing.expectEqual(case.cause, failure.cause);
+                try std.testing.expectEqual(.response_received, failure.delivery);
+                try std.testing.expectEqual(@as(operation.ProviderRetryClass, if (case.status == 403) .never else .policy_eligible), failure.retry_class);
+            }
+        }
+    }
+    for ([_][]const u8{ "{\"Message\":1}", "{\"Message\":null}", "{\"message\":\"same\",\"Message\":\"same\"}", "{\"message\":\"a\",\"Message\":\"b\"}", "{\"Message\":\"a\",\"unknown\":true}", "{\"Message\":\"a\",\"code\":\"ThrottlingException\"}" }) |body| {
+        const wire: transport.Response = .{ .received = .{ .status = 403, .exception = "AccessDeniedException", .body = body } };
+        var inferred = try response.inference(std.testing.allocator, wire, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
+        defer inferred.deinit();
+        const counted = try response.count(std.testing.allocator, wire, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.input_token_count));
+        try std.testing.expectEqual(.response_invalid, inferred.failed.cause);
+        try std.testing.expectEqual(.response_invalid, counted.failed.cause);
+    }
+}

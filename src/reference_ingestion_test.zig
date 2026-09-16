@@ -1,4 +1,26 @@
 const std = @import("std");
+
+test "source coverage requires a complete contiguous span with exact positions" {
+    const coverage = @import("domain/reference_source_coverage.zig");
+    const r = @import("domain/reference_ingestion.zig");
+    const bytes = "first\nsecond\n";
+    const middle: r.Position = .{ .byte = 6, .line = 2, .column = 1 };
+    const end: r.Position = .{ .byte = 13, .line = 3, .column = 1 };
+    var good: coverage.Cursor = .{ .bytes = bytes };
+    try good.accept(.{ .start = good.position, .end = middle });
+    try good.accept(.{ .start = middle, .end = end });
+    try good.finish();
+    var suffix: coverage.Cursor = .{ .bytes = bytes };
+    try suffix.accept(.{ .start = suffix.position, .end = middle });
+    try std.testing.expectError(error.InvalidReferenceAccounting, suffix.finish());
+    var prefix: coverage.Cursor = .{ .bytes = bytes };
+    try std.testing.expectError(error.InvalidReferenceAccounting, prefix.accept(.{ .start = middle, .end = end }));
+    var gap: coverage.Cursor = .{ .bytes = bytes };
+    try gap.accept(.{ .start = gap.position, .end = middle });
+    try std.testing.expectError(error.InvalidReferenceAccounting, gap.accept(.{ .start = .{ .byte = 7, .line = 2, .column = 2 }, .end = end }));
+    var wrong_position: coverage.Cursor = .{ .bytes = bytes };
+    try std.testing.expectError(error.InvalidReferenceAccounting, wrong_position.accept(.{ .start = wrong_position.position, .end = .{ .byte = 6, .line = 1, .column = 7 } }));
+}
 const reference = @import("domain/reference_ingestion.zig");
 const inventory_action = @import("actions/reference/validate_reference_inventory.zig");
 const decode_action = @import("actions/reference/decode_reference_markdown.zig");

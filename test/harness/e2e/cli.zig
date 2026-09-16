@@ -36,6 +36,12 @@ fn command(init: std.process.Init) !bool {
     const output = try @import("report.zig").Output.reserve(io, run.dir);
     defer output.close(io);
     var report: c.Report = .{ .started_at_utc = &run.started_at_utc, .execution_id = &run.name, .case_source = case_path, .status = .input_invalid };
+    report.build = .{
+        .source = try @import("../contracts.zig").decode(@import("../../../build/provenance.zig").Identity, allocator, @embedFile("build_provenance")),
+        .zig_version = @import("builtin").zig_version_string,
+        .target = @tagName(@import("builtin").cpu.arch) ++ "-" ++ @tagName(@import("builtin").os.tag) ++ "-" ++ @tagName(@import("builtin").abi),
+        .optimize = @tagName(@import("builtin").mode),
+    };
     execute(io, allocator, init.environ_map, case_path, run.dir, run.project, &run.name, &report) catch |err| {
         if (report.status != .input_invalid) report.status = .harness_error;
         report.diagnostic = @errorName(err);

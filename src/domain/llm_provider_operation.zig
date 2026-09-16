@@ -171,11 +171,17 @@ pub const ProviderDeliveryDisposition = enum {
     accepted_or_unknown,
 };
 
+pub const TransportDiagnostic = struct {
+    phase: enum { preparing, connecting, sending, response_headers, response_body },
+    cause: enum { unknown, name_resolution, connection_refused, connection_reset, tls, timeout, malformed_response, premature_eof, read, write },
+};
+
 pub const ProviderFailure = struct {
     operation_id: ProviderOperationId,
     cause: ProviderFailureCause,
     retry_class: ProviderRetryClass,
     delivery: ProviderDeliveryDisposition,
+    transport: ?TransportDiagnostic = null,
 };
 
 pub const ProviderTokenCountObservation = union(enum) {

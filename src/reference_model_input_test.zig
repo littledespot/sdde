@@ -49,7 +49,7 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
     const context: reconciliation.Context = .{ .inputs = inputs, .registry = passive.registry, .current = text.safety.value(passive.owner) };
     const initial = try reconciliation.initialize(a, inputs, extracted, 2);
     const global = try reconciliation.summaries(a, initial, context);
-    const packet = try input.reconciliationPacket(allocator, global, inputs, passive.registry);
+    const packet = try input.reconciliationPacket(allocator, global, inputs, passive.registry, .all);
     defer packets.release(packet);
     try checkProjectedPacket(a, packet.body());
     try std.testing.expectEqual(.reference_global, std.meta.activeTag(packet.unit()));

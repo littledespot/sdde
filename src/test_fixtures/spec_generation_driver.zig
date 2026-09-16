@@ -199,7 +199,7 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
     for (decoded.value.object.get("system").?.array.items) |part| {
         const value = part.object.get("text").?.string;
         schema_found = schema_found or std.mem.eql(u8, value, request.response_schema.modelBytes());
-        instruction_found = instruction_found or std.mem.indexOf(u8, value, "Return only the permitted content matching the selected schema.") != null;
+        instruction_found = instruction_found or std.mem.indexOf(u8, value, "Return only the selected replacement, matching the supplied schema and evidence.") != null;
     }
     try std.testing.expect(schema_found and instruction_found);
 }

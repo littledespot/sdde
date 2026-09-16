@@ -27,6 +27,7 @@ pub const ReconciliationTransition = struct {
 };
 
 pub const BudgetStatus = enum { available, exhausted, exceeded, usage_unavailable };
+pub const AccountedOperation = struct { id: provider.ProviderOperationId, reconciliation: Reconciliation };
 
 pub const Ledger = struct {
     allocator: std.mem.Allocator,
@@ -35,7 +36,7 @@ pub const Ledger = struct {
     // One API report is u64; a cumulative total may exceed even a u64 budget.
     committed_tokens: u128 = 0,
     usage_unavailable: bool = false,
-    accounted_operations: std.ArrayListUnmanaged(provider.ProviderOperationId) = .empty,
+    accounted_operations: std.ArrayListUnmanaged(AccountedOperation) = .empty,
 
     pub fn init(allocator: std.mem.Allocator, total_budget: TotalTokenBudget) ?Ledger {
         if (!total_budget.isValid()) return null;
@@ -76,7 +77,7 @@ pub const Ledger = struct {
         };
         // At most u64 revisions, each adding at most u64 tokens, fits u128.
         const next_total = self.committed_tokens + @as(u128, amount);
-        try self.accounted_operations.append(self.allocator, transition.operation_id);
+        try self.accounted_operations.append(self.allocator, .{ .id = transition.operation_id, .reconciliation = transition.reconciliation });
         self.committed_tokens = next_total;
         if (transition.reconciliation == .unavailable) self.usage_unavailable = true;
         self.revision_value = .{ .value = next_revision };
@@ -92,7 +93,7 @@ pub const Ledger = struct {
     }
 
     fn contains(self: *const Ledger, id: provider.ProviderOperationId) bool {
-        for (self.accounted_operations.items) |prior| if (prior.eql(id)) return true;
+        for (self.accounted_operations.items) |prior| if (prior.id.eql(id)) return true;
         return false;
     }
 };

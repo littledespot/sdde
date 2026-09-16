@@ -52,7 +52,6 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     if (trace.failure) |failure| {
         report.status = .harness_error;
         report.evidence_error = @errorName(failure);
-        return error.EvidenceCaptureFailed;
     }
     report.workflow_outcome = result.executionStatus();
     switch (result) {
@@ -88,6 +87,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
             if (published.*) publication = .{ .confirmed = try values.read(&.{ .slots = runner.envelope.slots }, @import("../../../src/application/workflow_output_binding.zig").prepared_schema, @import("../../../src/domain/workflow_output.zig").Prepared) };
         }
     }
+    if (trace.failure != null) return error.EvidenceCaptureFailed;
     const observed = try @import("oracle.zig").inspect(io, allocator, project, outcome, publication, selected.expected_artifacts, resolved);
     report.status = observed.status;
     report.missing_artifact = observed.missing_artifact;

@@ -31,7 +31,7 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
     return packets.create(allocator, body, .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } }, .initial_generation, null);
 }
 
-pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry) Error!*packets.Packet {
+pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, guidance_scope: Constraint.Scope) Error!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const scratch = arena.allocator();
@@ -48,7 +48,7 @@ pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.
         .citations = projected.citations,
         .preserved_tokens = projected.preserved_tokens,
         .summaries = try projection.summaries(scratch, input.summaries),
-        .constraints = try reconciliationGuidance(scratch, input.purpose),
+        .constraints = try reconciliationGuidance(scratch, input.purpose, guidance_scope),
         .passive_literals = try passiveChoices(scratch, registry, inputs, scopes),
     };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
@@ -74,9 +74,9 @@ const Constraint = reconciliation.diagnostic.Constraint;
 const Guidance = struct { constraint: Constraint, requirement: []const u8 };
 /// Project native rule identities alongside current claim facts. Corrections
 /// retain this packet, with no separate prompt rules table.
-fn reconciliationGuidance(allocator: std.mem.Allocator, purpose: @FieldType(reconciliation.Input, "purpose")) std.mem.Allocator.Error![]const Guidance {
+fn reconciliationGuidance(allocator: std.mem.Allocator, purpose: @FieldType(reconciliation.Input, "purpose"), scope: Constraint.Scope) std.mem.Allocator.Error![]const Guidance {
     var result: std.ArrayList(Guidance) = .empty;
-    for (std.enums.values(Constraint)) |constraint| if (constraint.appliesTo(purpose)) {
+    for (std.enums.values(Constraint)) |constraint| if (constraint.appliesTo(purpose, scope)) {
         try result.append(allocator, .{ .constraint = constraint, .requirement = constraint.description() });
     };
     return result.toOwnedSlice(allocator);

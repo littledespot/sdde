@@ -35,11 +35,15 @@ pub fn validate(a: std.mem.Allocator, references: r.Accounted, brief: g.Brief, c
     };
 }
 pub fn check(allocator: std.mem.Allocator, references: r.Accounted, brief: g.Brief, candidate: spec.IdentifiedContent) Error!Result {
-    const items = references.records.assignments.checked.prior.prior.input.progress.plan.layout.items;
     if (references.outcome != .complete) return error.InvalidSpecificationCoverage;
+    return checkRecords(allocator, @import("reference_support.zig").records(references), brief, candidate);
+}
+
+pub fn checkRecords(allocator: std.mem.Allocator, references: @import("reference_support.zig").Records, brief: g.Brief, candidate: spec.IdentifiedContent) Error!Result {
+    const items = references.items;
     var accounts: std.ArrayList(Account) = .empty;
     var obligations: std.ArrayList(Obligation) = .empty;
-    for (references.records.assignments.checked.prior.prior.dispositions) |disposition| {
+    for (references.dispositions) |disposition| {
         if (!@import("specification_provenance.zig").eligibleClaim(disposition.disposition)) continue;
         const item = r.item(items, disposition.claim_id) catch return error.InvalidSpecificationCoverage;
         var targets: std.ArrayList(Key) = .empty;
@@ -51,7 +55,7 @@ pub fn check(allocator: std.mem.Allocator, references: r.Accounted, brief: g.Bri
         for (singletons) |entry| if (r.contains(r.ClaimId, entry.value.provenance.claim_ids, item.claim.id)) try targets.append(allocator, entry.key);
         for (candidate.records) |record| if (r.contains(r.ClaimId, record.proposal.provenance.claim_ids, item.claim.id)) try targets.append(allocator, .{ .record = record.id });
         var signals: std.ArrayList(r.SignalId) = .empty;
-        for (references.records.signals) |signal| if (r.contains(r.ClaimId, signal.value.claim_ids, item.claim.id)) try signals.append(allocator, signal.id);
+        for (references.signals) |signal| if (r.contains(r.ClaimId, signal.value.claim_ids, item.claim.id)) try signals.append(allocator, signal.id);
         const context_only = switch (item.claim.content) {
             .model => |model| switch (model) {
                 .business, .scope_guard => false,

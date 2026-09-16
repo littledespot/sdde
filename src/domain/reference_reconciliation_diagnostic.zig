@@ -39,10 +39,26 @@ pub const Constraint = enum {
     conflict_claim_covered,
     conflict_pair_covered,
 
-    pub fn appliesTo(self: Constraint, purpose: @FieldType(r.Input, "purpose")) bool {
-        return switch (self) {
+    /// Presentation scope only; every merged candidate still runs all validators.
+    pub const Scope = enum { all, key, selection, content, disposition, summary, conflict_detail };
+    pub fn appliesTo(self: Constraint, purpose: @FieldType(r.Input, "purpose"), scope: Scope) bool {
+        const in_purpose = switch (self) {
             .unique_nonzero, .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token => true,
             else => purpose == .global,
+        };
+        return in_purpose and switch (scope) {
+            .all => true,
+            .key => self == .unique_nonzero,
+            .content => self == .matching_claim_content or self == .exact_selected_token,
+            .disposition => switch (self) {
+                .no_self_relation, .same_content_kind, .same_token_value, .nonconflicting_target, .reciprocal_conflict, .acyclic, .nonempty => true,
+                else => false,
+            },
+            .selection => switch (self) {
+                .unique_nonzero, .no_self_relation, .same_content_kind, .same_token_value, .nonconflicting_target, .reciprocal_conflict, .acyclic, .nonempty => false,
+                else => true,
+            },
+            .summary, .conflict_detail => false,
         };
     }
     pub fn description(self: Constraint) []const u8 {
@@ -80,6 +96,7 @@ pub const Fact = union(enum) {
     constraint: Constraint,
 };
 pub const Issue = struct { rule: Rule, observed: Fact, expected: Fact };
+pub const RecordIssue = struct { unit: Unit, issue: Issue };
 pub const RepairBlock = enum { competing_entries, no_independent_target, no_required_member };
 pub const ContentKind = union(enum) { model: std.meta.Tag(r.extraction.Content), preserved_token: r.TokenReference };
 /// Necessary independent-edit facts from the owning validators. They describe

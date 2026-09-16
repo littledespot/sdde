@@ -55,23 +55,18 @@ pub fn validate(allocator: std.mem.Allocator, value: Snapshot) Error!void {
         if (source.id.ordinal != source_index + 1 or corpus.source_mappings[source_index].canonical.ordinal != source.id.ordinal or
             !std.unicode.utf8ValidateSlice(source.bytes)) return error.InvalidReferenceSnapshot;
         for (corpus.sources[0..source_index]) |prior| if (std.mem.eql(u8, prior.path.bytes, source.path.bytes)) return error.InvalidReferenceSnapshot;
-        var previous_end: usize = 0;
-        var position: @import("reference_ingestion.zig").Position = .{ .byte = 0, .line = 1, .column = 1 };
+        var coverage: @import("reference_source_coverage.zig").Cursor = .{ .bytes = source.bytes };
         for (source.blocks, 0..) |block, index| {
-            if (block_index >= inputs.chunks.entries.len or block.id.ordinal != block_index + 1 or block.ordinal != index + 1 or
-                block.span.start.byte < previous_end or block.span.start.byte >= block.span.end.byte or block.span.end.byte > source.bytes.len) return error.InvalidReferenceSnapshot;
+            if (block_index >= inputs.chunks.entries.len or block.id.ordinal != block_index + 1 or block.ordinal != index + 1) return error.InvalidReferenceSnapshot;
+            coverage.accept(block.span) catch return error.InvalidReferenceSnapshot;
             const chunk = inputs.chunks.entries[block_index];
             var buffer: [32]u8 = undefined;
             if (!chunk.id.eql(e.identity.formatChunkId(&buffer, @intCast(block_index + 1))) or chunk.source_id.ordinal != source.id.ordinal or
                 chunk.block_id.ordinal != block.id.ordinal or chunk.ordinal != 1 or !std.meta.eql(chunk.span, block.span) or
                 corpus.block_mappings[block_index].canonical.ordinal != block.id.ordinal) return error.InvalidReferenceSnapshot;
-            while (position.byte < block.span.start.byte) position = @import("reference_ingestion.zig").advance(source.bytes, position) catch return error.InvalidReferenceSnapshot;
-            if (!std.meta.eql(position, block.span.start)) return error.InvalidReferenceSnapshot;
-            while (position.byte < block.span.end.byte) position = @import("reference_ingestion.zig").advance(source.bytes, position) catch return error.InvalidReferenceSnapshot;
-            if (!std.meta.eql(position, block.span.end)) return error.InvalidReferenceSnapshot;
-            previous_end = block.span.end.byte;
             block_index += 1;
         }
+        coverage.finish() catch return error.InvalidReferenceSnapshot;
     }
     if (block_index != inputs.chunks.entries.len) return error.InvalidReferenceSnapshot;
     var claim_index: usize = 0;
@@ -90,8 +85,6 @@ pub fn validate(allocator: std.mem.Allocator, value: Snapshot) Error!void {
                     if (citation_index >= ledger.citations.len or citation_id.ordinal != citation_index + 1) return error.InvalidReferenceSnapshot;
                     const citation = ledger.citations[citation_index];
                     if (citation.id.ordinal != citation_id.ordinal) return error.InvalidReferenceSnapshot;
-                    const checked = try @import("source_citations.zig").validate(allocator, inputs, .{ .scope = result.scope, .entries = &.{.{ .source_id = citation.value.source_id, .block_id = citation.value.block_id, .location = citation.value.location, .verbatim = citation.value.verbatim }} });
-                    allocator.free(checked.entries);
                     citation_index += 1;
                 }
                 if (claim.content == .preserved_token) {
@@ -107,9 +100,42 @@ pub fn validate(allocator: std.mem.Allocator, value: Snapshot) Error!void {
     if (claim_index != ledger.claims.len or citation_index != ledger.citations.len) return error.InvalidReferenceSnapshot;
     for (value.passive_records, 1..) |record, ordinal| if (record.id.ordinal != ordinal or record.value.len == 0) return error.InvalidReferenceSnapshot;
     for (value.passive_occurrences) |occurrence| if (occurrence.id.ordinal == 0 or occurrence.id.ordinal > value.passive_records.len) return error.InvalidReferenceSnapshot;
-    for (value.signals, 1..) |signal, ordinal| {
-        if (signal.id.ordinal != ordinal or signal.value.claim_ids.len == 0) return error.InvalidReferenceSnapshot;
-        for (signal.value.claim_ids) |id| if (id.ordinal == 0 or id.ordinal > ledger.claims.len) return error.InvalidReferenceSnapshot;
-        for (signal.value.citation_ids) |id| if (id.ordinal == 0 or id.ordinal > ledger.citations.len) return error.InvalidReferenceSnapshot;
+    validateRecords(allocator, value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceSnapshot;
+}
+
+fn validateRecords(allocator: std.mem.Allocator, value: Snapshot) !void {
+    var scratch: std.heap.ArenaAllocator = .init(allocator);
+    defer scratch.deinit();
+    const a = scratch.allocator();
+    const records = try @import("reference_support.zig").snapshot(a, value);
+    const items = records.items;
+    if (try @import("reference_disposition_validation.zig").check(a, items, records.dispositions) == .invalid) return error.InvalidReferenceSnapshot;
+    const allowed = try a.alloc(r.ClaimId, items.entries.len);
+    for (items.entries, allowed) |item, *id| id.* = item.claim.id;
+    const v = @import("reference_reconciliation_validation.zig");
+    const signals = try a.alloc(r.SignalProposal, records.signals.len);
+    for (records.signals, signals, 0..) |signal, *proposal, index| {
+        proposal.* = .{ .claim_ids = signal.value.claim_ids, .content = @import("model_evidence.zig").content(signal.value.content) };
+        if (signal.id.ordinal != index + 1 or try v.signalClaims(items, records.dispositions, proposal.claim_ids, allowed) != null or
+            try v.contentIssue(items, proposal.claim_ids, proposal.content) != null or
+            !v.signalSelectionAvailable(signals[0..index], index, proposal.claim_ids)) return error.InvalidReferenceSnapshot;
+        try citationUnion(a, items, proposal.claim_ids, signal.value.citation_ids);
     }
+    if (try v.signalCoverage(a, items, records.dispositions, signals) != null) return error.InvalidReferenceSnapshot;
+    const conflicts = try a.alloc(r.ConflictProposal, records.conflicts.len);
+    for (records.conflicts, conflicts, 0..) |conflict, *proposal, index| {
+        proposal.* = .{ .claim_ids = conflict.value.claim_ids, .kind = conflict.value.kind, .summary = conflict.value.summary.value, .resolution = switch (conflict.value.resolution) {
+            .unresolved => .unresolved,
+        } };
+        if (conflict.id.ordinal != index + 1 or try v.conflictClaims(items, records.dispositions, proposal.claim_ids, allowed) != null or
+            !v.conflictSelectionAvailable(conflicts[0..index], index, proposal.kind, proposal.claim_ids)) return error.InvalidReferenceSnapshot;
+        try citationUnion(a, items, proposal.claim_ids, conflict.value.citation_ids);
+    }
+    if (try v.conflictCoverage(a, items, records.dispositions, conflicts) != null) return error.InvalidReferenceSnapshot;
+}
+
+fn citationUnion(a: std.mem.Allocator, items: r.Items, claims: []const r.ClaimId, citations: []const r.CitationId) !void {
+    const expected = try r.citationUnion(a, items, claims);
+    if (expected.len != citations.len) return error.InvalidReferenceSnapshot;
+    for (expected, citations) |left, right| if (left.ordinal != right.ordinal) return error.InvalidReferenceSnapshot;
 }

@@ -20,27 +20,15 @@ pub const Action = struct {
         try v.input(allocator, prior.input);
         try v.bind(allocator, items, context, self.validator);
         const signals = try allocator.alloc(r.ValidatedSignal, prior.proposal.signals.len);
-        const covered = try allocator.alloc(bool, items.entries.len);
-        @memset(covered, false);
-        const token_covered = try allocator.alloc(bool, items.entries.len);
-        @memset(token_covered, false);
         for (prior.proposal.signals, signals, 0..) |proposal, *signal, index| {
-            if (v.claims(items, proposal.claim_ids, prior.input.partition.group.claim_ids)) |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, issue);
-            for (proposal.claim_ids) |id| {
-                if (!try v.signalEligible(prior.dispositions, id)) return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, .{ .rule = .relationship, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .nonconflicting_claims } });
-                covered[id.ordinal - 1] = true;
-                if (proposal.content == .preserved_token) token_covered[id.ordinal - 1] = true;
-            }
+            if (try v.signalClaims(items, prior.dispositions, proposal.claim_ids, prior.input.partition.group.claim_ids)) |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, issue);
             signal.* = .{ .claim_ids = proposal.claim_ids, .citation_ids = try r.citationUnion(allocator, items, proposal.claim_ids), .content = switch (try v.content(allocator, self.validator, context, items, proposal.claim_ids, proposal.content)) {
                 .valid => |value| value,
                 .invalid => |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, issue),
             } };
             if (!v.signalSelectionAvailable(prior.proposal.signals[0..index], index, proposal.claim_ids)) return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, .{ .rule = .duplicate_signal, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
         }
-        for (prior.dispositions, items.entries, covered, token_covered) |disposition, item, present, token_present| {
-            if (disposition.disposition == .retained and !present) return d.reject(r.CheckedSignals, prior.input, prior.source, .signals, .{ .rule = .signal_coverage, .observed = .{ .disposition = disposition }, .expected = .{ .constraint = .retained_claim_covered } });
-            if (item.claim.content == .preserved_token and disposition.disposition != .conflicting and !token_present) return d.reject(r.CheckedSignals, prior.input, prior.source, .signals, .{ .rule = .signal_coverage, .observed = .{ .disposition = disposition }, .expected = .{ .constraint = .token_projected } });
-        }
+        if (try v.signalCoverage(allocator, items, prior.dispositions, prior.proposal.signals)) |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .signals, issue);
         return .{ .valid = .{ .prior = prior, .signals = signals } };
     }
 };

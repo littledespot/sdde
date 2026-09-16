@@ -59,6 +59,8 @@ test "concrete HTTP deadline cancels and joins blocked connect write head and bo
         defer arena.deinit();
         const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
         try std.testing.expectEqual(.timeout, result.failed.cause);
+        try std.testing.expectEqual(.timeout, result.failed.diagnostic.?.cause);
+        try std.testing.expectEqual(phase(point), result.failed.diagnostic.?.phase);
         const delivery: @import("domain/llm_provider_operation.zig").ProviderDeliveryDisposition = if (point == .connect) .not_sent else .accepted_or_unknown;
         try std.testing.expectEqual(delivery, result.failed.delivery);
         try std.testing.expectEqual(@as(usize, 1), fixture.socket_cancellations.load(.acquire));
@@ -152,6 +154,8 @@ test "concrete HTTP partial sends and interrupted heads fail without a resend" {
         defer arena.deinit();
         const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
         try std.testing.expectEqual(.transport_failed, result.failed.cause);
+        try std.testing.expectEqual(phase(point), result.failed.diagnostic.?.phase);
+        try std.testing.expectEqual(@as(@FieldType(@import("domain/llm_provider_operation.zig").TransportDiagnostic, "cause"), if (point == .connect) .connection_refused else .connection_reset), result.failed.diagnostic.?.cause);
         const delivery: @import("domain/llm_provider_operation.zig").ProviderDeliveryDisposition = if (point == .connect) .not_sent else .accepted_or_unknown;
         try std.testing.expectEqual(delivery, result.failed.delivery);
         try std.testing.expect(fixture.fault_fired);
@@ -159,6 +163,15 @@ test "concrete HTTP partial sends and interrupted heads fail without a resend" {
         if (point == .head) try std.testing.expect(fixture.cursor > 0 and fixture.cursor < fixture.body_start);
         try fixture.expectJoined();
     }
+}
+
+fn phase(point: fixture_module.Point) @FieldType(@import("domain/llm_provider_operation.zig").TransportDiagnostic, "phase") {
+    return switch (point) {
+        .connect => .connecting,
+        .write => .sending,
+        .head => .response_headers,
+        .body => .response_body,
+    };
 }
 
 test "concrete HTTP reads chunked close-delimited and informational responses without resending" {

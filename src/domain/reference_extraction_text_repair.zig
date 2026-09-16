@@ -5,9 +5,18 @@ const e = @import("reference_extraction.zig");
 const context = @import("reference_extraction_context.zig");
 const packets = @import("model_input_packet.zig");
 const identity = @import("model_request_identity.zig");
-pub const Target = struct { scope: e.identity.ChunkId, field: e.TextTarget };
+pub const Target = struct {
+    scope: e.identity.ChunkId,
+    field: e.TextTarget,
+    pub fn guidance(self: Target) e.TextTarget {
+        return self.field;
+    }
+};
 pub const Replacement = union(enum) { business: e.text.BusinessText, reference: e.text.ReferenceSemanticText };
-pub const Rule = struct { validator: enum { typed_text_v1 } = .typed_text_v1, issue: e.text.Issue, requirement: []const u8 };
+pub const Rule = struct {
+    issue: e.text.Issue,
+    requirement: []const u8,
+};
 const shared = @import("atomic_repair.zig");
 const atomic = shared.Contract(Target, Replacement, context.TextFacts, Rule);
 pub const Authorization = atomic.Authorization;

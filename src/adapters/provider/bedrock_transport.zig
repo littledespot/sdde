@@ -17,6 +17,7 @@ pub const Failure = struct {
     cause: operation.ProviderFailureCause,
     retry_class: operation.ProviderRetryClass,
     delivery: operation.ProviderDeliveryDisposition,
+    diagnostic: ?operation.TransportDiagnostic = null,
 };
 pub const Response = union(enum) {
     received: struct { status: u16, exception: ?[]const u8 = null, request_id: ?[]const u8 = null, body: []const u8 },

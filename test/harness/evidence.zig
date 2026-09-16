@@ -24,12 +24,23 @@ pub const Store = struct {
         try self.run.createDirPath(self.io, std.fs.path.dirname(target).?);
         // Bodies are exact except for explicitly known credentials. HTTP headers,
         // authorization leases and environment maps are never captured.
-        var safe = bytes;
+        try output.write(self.io, self.run, target, try self.redact(a, bytes));
+    }
+
+    /// Owned redacted bytes for both evidence files and retained report metadata.
+    pub fn redact(self: Store, a: std.mem.Allocator, bytes: []const u8) ![]const u8 {
+        var safe = try a.dupe(u8, bytes);
+        errdefer a.free(safe);
         for (self.secrets) |secret| if (secret.len != 0) {
-            safe = try std.mem.replaceOwned(u8, a, safe, secret, "[REDACTED_CREDENTIAL]");
+            const plain = try std.mem.replaceOwned(u8, a, safe, secret, "[REDACTED_CREDENTIAL]");
+            a.free(safe);
+            safe = plain;
             const encoded = try std.json.Stringify.valueAlloc(a, secret, .{});
-            safe = try std.mem.replaceOwned(u8, a, safe, encoded[1 .. encoded.len - 1], "[REDACTED_CREDENTIAL]");
+            defer a.free(encoded);
+            const quoted = try std.mem.replaceOwned(u8, a, safe, encoded[1 .. encoded.len - 1], "[REDACTED_CREDENTIAL]");
+            a.free(safe);
+            safe = quoted;
         };
-        try output.write(self.io, self.run, target, safe);
+        return safe;
     }
 };

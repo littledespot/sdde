@@ -54,6 +54,9 @@ test "overshooting call records all usage before error and blocks subsequent cal
     try runner.check(); // No maximum-output reservation or estimate.
     try std.testing.expectError(error.WorkflowTokenBudgetExceeded, runner.reconcile(.{ .value = 1 }, fixture.inferenceId(2), usage(15, 25)));
     try std.testing.expectEqual(@as(u128, 70), runner.current().committed());
+    const last = runner.current().accounted_operations.items[1];
+    try std.testing.expect(last.id.eql(fixture.inferenceId(2)));
+    try std.testing.expectEqualDeep(usage(15, 25), last.reconciliation);
     try std.testing.expectEqual(@as(u64, 2), runner.current().revision().value);
     try std.testing.expectError(error.WorkflowTokenBudgetExceeded, runner.check());
     try std.testing.expectError(error.TokenUsageAlreadyAccounted, runner.reconcile(.{ .value = 2 }, fixture.inferenceId(2), usage(15, 25)));

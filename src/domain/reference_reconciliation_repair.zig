@@ -23,6 +23,17 @@ pub const Target = union(enum) {
     conflict_summary: usize,
     conflict: usize,
     insert_conflict: struct { index: usize, claims: []const r.ClaimId },
+
+    const Guidance = struct { unit: std.meta.Tag(Target), index: ?usize = null, claim: ?r.ClaimId = null, claims: ?[]const r.ClaimId = null };
+    pub fn guidance(self: Target) Guidance {
+        var result: Guidance = .{ .unit = std.meta.activeTag(self) };
+        switch (self) {
+            inline .insert_statement, .disposition, .insert_disposition, .insert_signal => |value| result.claim = value.claim,
+            .insert_conflict => |value| result.claims = value.claims,
+            inline else => |index| result.index = index,
+        }
+        return result;
+    }
 };
 pub const Replacement = union(enum) {
     key: struct { local_key: u32 },
@@ -37,12 +48,27 @@ pub const Replacement = union(enum) {
     conflict_detail: struct { kind: r.ConflictKind, summary: r.text.ReferenceSemanticText },
 };
 pub const Rule = struct {
-    validator: enum { reference_reconciliation_v1 } = .reference_reconciliation_v1,
     rejection: d.Rejection,
     requirement: []const u8,
-    const Guidance = struct { validator: @FieldType(Rule, "validator"), rule: d.Rule, requirement: []const u8, expected: d.Fact, choices: d.Relations };
+    const Guidance = struct {
+        rule: d.Rule,
+        requirement: ?[]const u8,
+        expected: ?d.Fact,
+        content: ?d.ContentKind,
+        selection: ?[]const r.ClaimId,
+        conflicting_pairs: ?@FieldType(d.Relations, "conflicting_pairs"),
+    };
     pub fn guidance(self: Rule) Guidance {
-        return .{ .validator = self.validator, .rule = self.rejection.issue.rule, .requirement = self.requirement, .expected = self.rejection.issue.expected, .choices = self.rejection.relations };
+        const expected = self.rejection.issue.expected;
+        const relations = self.rejection.relations;
+        return .{
+            .rule = self.rejection.issue.rule,
+            .requirement = if (expected == .constraint or expected == .text_issue) self.requirement else null,
+            .expected = if (expected == .count or expected == .constraint) null else expected,
+            .content = relations.content,
+            .selection = if (relations.selection.len == 0) null else relations.selection,
+            .conflicting_pairs = if (relations.conflicting_pairs.len == 0) null else relations.conflicting_pairs,
+        };
     }
 };
 const shared = @import("atomic_repair.zig");
@@ -190,19 +216,28 @@ fn deletion(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target
     return .{ .automatic = .{ .authorization = try atomic.authorizeDelete(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)) orelse return error.InvalidAtomicRepair, facts, rule), .replacement = null } };
 }
 pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization) Error!*packets.Packet {
-    const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry);
-    defer packets.release(base);
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
     const scratch = arena.allocator();
     try atomic.checkDependencies(scratch, authorization, try context.capture(scratch, parsed, if (needsText(authorization.rule.rejection.unit)) ctx else null));
-    const contextual = try packets.withContext(@FieldType(r.Parsed, "proposal"), a, base, "candidate", parsed.proposal);
-    defer packets.release(contextual);
     const kind = switch (authorization.operation) {
         .replace => |value| std.meta.activeTag(value),
         .insert => |kind| kind,
         .delete => return error.InvalidAtomicRepair,
     };
+    const scope: d.Constraint.Scope = switch (kind) {
+        .key => .key,
+        .selection => .selection,
+        .content => .content,
+        .disposition => .disposition,
+        .summary => .summary,
+        .conflict_detail => .conflict_detail,
+        .statement, .disposition_record, .signal, .conflict => return error.InvalidAtomicRepair,
+    };
+    const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, scope);
+    defer packets.release(base);
+    const contextual = try packets.withContext(@FieldType(r.Parsed, "proposal"), a, base, "candidate", parsed.proposal);
+    defer packets.release(contextual);
     const definition = try std.fmt.allocPrint(scratch, "repair_{s}", .{@tagName(kind)});
     return atomic.packet(a, authorization, contextual, .{ .bytes = definition });
 }

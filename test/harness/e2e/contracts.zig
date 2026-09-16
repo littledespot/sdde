@@ -78,10 +78,37 @@ pub const TerminalRejection = struct {
         } };
     }
 };
+pub const Attempt = struct {
+    origin: @import("../../../src/domain/model_candidate_origin.zig").Origin,
+    step: []const u8,
+    accounting: std.meta.Tag(@import("../../../src/domain/workflow_token_accounting.zig").Reconciliation),
+    usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage,
+};
+pub const ProtocolRejection = struct {
+    call: usize,
+    origin: @import("../../../src/domain/model_candidate_origin.zig").Origin,
+    reason: []const u8,
+    json_error: ?@import("../../../src/domain/strict_json.zig").Diagnostic,
+    schema_error: ?@import("../../../src/domain/model_schema_diagnostic.zig").Description,
+};
+pub const ExchangeEvidence = struct {
+    raw_response: ?[]const u8,
+    text: enum { available, response_absent, budget_stop, not_projected, capture_failed },
+    status: ?u16,
+    exception: ?[]const u8,
+    request_id: ?[]const u8,
+    transport: ?@import("../../../src/domain/llm_provider_operation.zig").TransportDiagnostic,
+};
 pub const Report = struct {
     schema: []const u8 = "spec-e2e-report/v1",
     origin: enum { live } = .live,
     started_at_utc: []const u8,
+    build: ?struct {
+        source: @import("../../../build/provenance.zig").Identity,
+        zig_version: []const u8,
+        target: []const u8,
+        optimize: []const u8,
+    } = null,
     execution_id: ?[]const u8 = null,
     case_source: ?[]const u8 = null,
     case_id: ?[]const u8 = null,
@@ -91,6 +118,9 @@ pub const Report = struct {
     terminal_step: ?[]const u8 = null,
     terminal_rejection: ?TerminalRejection = null,
     model_calls: usize = 0,
+    total_token_budget: ?u64 = null,
+    retry_settings: []const struct { step: []const u8, limit: u32, completed_executions: u64 } = &.{},
+    attempts: []const Attempt = &.{},
     last_model_step: ?[]const u8 = null,
     last_model_origin: ?@import("../../../src/domain/model_candidate_origin.zig").Origin = null,
     models: []const evaluator.GenerationModel = &.{},
@@ -100,6 +130,8 @@ pub const Report = struct {
     diagnostic: ?[]const u8 = null,
     provider_diagnostic: ?[]const u8 = null,
     model_diagnostic: ?[]const u8 = null,
+    last_protocol_rejection: ?ProtocolRejection = null,
+    exchange_evidence: ?ExchangeEvidence = null,
     candidate_error: ?@import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic = null,
     repairs: []const @import("../../../src/domain/atomic_repair.zig").Merge = &.{},
     candidate_model_call: ?usize = null,

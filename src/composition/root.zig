@@ -1482,8 +1482,8 @@ test "configured specification generation YAML executes native references models
             try std.testing.expectEqualDeep(diagnostic, retained);
             const identities = try @import("../application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
             var matched: usize = 0;
-            for (runner.tokenLedger().accounted_operations.items) |operation| if (origin.matches(identities, operation)) {
-                try std.testing.expect(operation.model_request_id.purpose == .atomic_repair);
+            for (runner.tokenLedger().accounted_operations.items) |operation| if (origin.matches(identities, operation.id)) {
+                try std.testing.expect(operation.id.model_request_id.purpose == .atomic_repair);
                 matched += 1;
             };
             try std.testing.expectEqual(@as(usize, 1), matched);
@@ -1588,8 +1588,8 @@ test "configured specification generation YAML executes native references models
             const origin = diagnostic.origin().?;
             const identities = try @import("../application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
             var matches: usize = 0;
-            for (runner.tokenLedger().accounted_operations.items) |operation| if (origin.matches(identities, operation)) {
-                try std.testing.expect(operation.model_request_id.purpose == .atomic_repair);
+            for (runner.tokenLedger().accounted_operations.items) |operation| if (origin.matches(identities, operation.id)) {
+                try std.testing.expect(operation.id.model_request_id.purpose == .atomic_repair);
                 matches += 1;
             };
             try std.testing.expectEqual(@as(usize, 1), matches);
@@ -1608,8 +1608,8 @@ test "configured specification generation YAML executes native references models
                 try std.testing.expectEqualDeep(rejected.origin, retained.origin());
                 var matching: usize = 0;
                 const identities = try @import("../application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
-                for (runner.tokenLedger().accounted_operations.items) |operation| if (rejected.origin.?.matches(identities, operation)) {
-                    try std.testing.expect(operation.model_request_id.purpose == .atomic_repair);
+                for (runner.tokenLedger().accounted_operations.items) |operation| if (rejected.origin.?.matches(identities, operation.id)) {
+                    try std.testing.expect(operation.id.model_request_id.purpose == .atomic_repair);
                     matching += 1;
                 };
                 try std.testing.expectEqual(@as(usize, 1), matching);

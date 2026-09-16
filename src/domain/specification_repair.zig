@@ -9,11 +9,8 @@ pub const Candidate = candidates.Candidate;
 pub const Target = candidates.Target;
 pub const Replacement = candidates.Replacement;
 pub const Rule = struct {
-    validator: enum { specification_generation_v1 } = .specification_generation_v1,
-    rule: candidates.Rule,
-    native_error: @FieldType(candidates.Issue, "native_error"),
-    text_issue: ?@import("typed_text.zig").Issue,
     requirement: []const u8,
+    text_issue: ?@import("typed_text.zig").Issue,
     value_choices: ?p.ValueChoices,
 };
 const dependencies = @import("specification_candidate_context.zig");
@@ -36,7 +33,7 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
     const expected = rejection.issue.observed orelse return error.InvalidSpecificationRepair;
     const target = rejection.issue.field.target;
     if (!try atomic.equal(allocator, try candidates.select(candidate.response, target), expected)) return error.InvalidSpecificationRepair;
-    const rule: Rule = .{ .rule = rejection.issue.rule, .native_error = rejection.issue.native_error, .text_issue = rejection.issue.text_issue, .value_choices = rejection.issue.value_choices, .requirement = switch (rejection.issue.rule) {
+    const rule: Rule = .{ .text_issue = rejection.issue.text_issue, .value_choices = rejection.issue.value_choices, .requirement = switch (rejection.issue.rule) {
         .provenance => "Select nonempty, unique currently retained claim IDs; clarification responses are unavailable in this generation context.",
         .typed_text => (rejection.issue.text_issue orelse return error.InvalidSpecificationRepair).description(),
         .exact_copy => "Use an allowed value representation supported by the unchanged provenance; exact copies must select a supplied token/citation pair.",

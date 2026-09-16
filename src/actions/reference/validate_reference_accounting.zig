@@ -45,15 +45,12 @@ pub const Action = struct {
             };
             if (result.blocks.len > reference.limits.blocks_per_file) return error.InvalidReferenceAccounting;
             const blocks = try allocator.alloc(reference.Block, result.blocks.len);
-            var position: reference.Position = .{ .byte = 0, .line = 1, .column = 1 };
+            var coverage: @import("../../domain/reference_source_coverage.zig").Cursor = .{ .bytes = bytes };
             for (result.blocks, 0..) |block, block_index| {
-                if (!std.meta.eql(block.span.start, position) or block.span.end.byte <= position.byte or
-                    block.span.end.byte > bytes.len or block.span.end.byte - position.byte > reference.limits.block_bytes) return error.InvalidReferenceAccounting;
-                while (position.byte < block.span.end.byte) position = try reference.advance(bytes, position);
-                if (!std.meta.eql(block.span.end, position)) return error.InvalidReferenceAccounting;
+                try coverage.accept(block.span);
                 blocks[block_index] = .{ .id = .{ .source = entry.id, .ordinal = @intCast(block_index + 1) }, .span = block.span };
             }
-            if (position.byte != bytes.len) return error.InvalidReferenceAccounting;
+            try coverage.finish();
             decoded_total += bytes.len;
             try documents.append(allocator, .{ .source = entry.id, .path = entry.path, .reader = result.reader, .media = result.media, .bytes = bytes, .blocks = blocks });
         }

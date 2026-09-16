@@ -83,8 +83,12 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             const limits: strict.Limits = .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth };
             const input = try strict.decode(std.json.Value, scratch, base.body(), limits);
             if (authorization.operation == .delete) return error.InvalidAtomicRepair;
-            const facts = .{ .operation = std.meta.activeTag(authorization.operation), .target = authorization.target, .rule = if (@hasDecl(Rule, "guidance")) authorization.rule.guidance() else authorization.rule };
+            const facts = .{ .operation = std.meta.activeTag(authorization.operation), .target = if (@hasDecl(Target, "guidance")) authorization.target.guidance() else authorization.target, .rule = if (@hasDecl(Rule, "guidance")) authorization.rule.guidance() else authorization.rule };
             var repair = try strict.decode(std.json.Value, scratch, try json.encode(@TypeOf(facts), scratch, facts), limits);
+            // Only optional presentation fields are omitted. Evidence, old values
+            // and the native authorization retain their complete contracts.
+            omitAbsent(repair.object.getPtr("target").?);
+            omitAbsent(repair.object.getPtr("rule").?);
             if (authorization.operation == .replace) {
                 const expected = try strict.decode(std.json.Value, scratch, try json.encodeSelected(Replacement, scratch, authorization.operation.replace), limits);
                 try repair.object.put(scratch, "expected", expected);
@@ -157,4 +161,14 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             }).copy(a);
         }
     };
+}
+
+fn omitAbsent(value: *std.json.Value) void {
+    if (value.* != .object) return;
+    var index: usize = 0;
+    while (index < value.object.count()) {
+        if (value.object.values()[index] == .null) {
+            value.object.orderedRemoveAt(index);
+        } else index += 1;
+    }
 }

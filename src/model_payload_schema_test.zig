@@ -461,8 +461,19 @@ pub fn checkDocument(contract: []const u8, case: Case) !void {
             var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
             defer arena.deinit();
             const a = arena.allocator();
-            const projected = try @import("domain/model_schema_projection.zig").value(a, result.invalid.expected, .complete);
-            try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, projected, .{}), try std.json.Stringify.valueAlloc(a, expected.get("schema").?, .{}));
+            if (result.invalid.expected == retried.request.response_schema.root()) {
+                try std.testing.expect(!expected.contains("schema"));
+                try std.testing.expect(retried.request.response_schema == fixture.prepared.request.response_schema);
+                const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference);
+                const request = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
+                var occurrences: usize = 0;
+                for (request.value.object.get("system").?.array.items) |part|
+                    occurrences += std.mem.count(u8, part.object.get("text").?.string, retried.request.response_schema.modelBytes());
+                try std.testing.expectEqual(@as(usize, 1), occurrences);
+            } else {
+                const projected = try @import("domain/model_schema_projection.zig").value(a, result.invalid.expected, .complete);
+                try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, projected, .{}), try std.json.Stringify.valueAlloc(a, expected.get("schema").?, .{}));
+            }
             try std.testing.expectEqual(@as(usize, 2), guidance.value.object.count());
             var retained = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, parts[parts.len - 1].evidence, .{});
             defer retained.deinit();

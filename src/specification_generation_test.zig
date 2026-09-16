@@ -1204,10 +1204,11 @@ test "published support validates without an execution ledger and rejects erased
     const bytes = try std.json.Stringify.valueAlloc(a, value, .{});
     var fresh = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer fresh.deinit();
-    _ = try state.parse(fresh.allocator(), bytes, current.feature);
+    const restored = (try state.parse(fresh.allocator(), bytes, current.feature)).state.?;
+    try std.testing.expectEqualStrings(bytes, try std.json.Stringify.valueAlloc(a, restored, .{}));
     const document = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
     try std.testing.expect(document.value.object.get("review").?.object.get("origin") == null);
-    for (0..4) |mode| {
+    for (0..13) |mode| {
         var broken = value;
         if (mode == 0) {
             broken.review.seeds = &.{};
@@ -1221,10 +1222,32 @@ test "published support validates without an execution ledger and rejects erased
             broken.review.evidence = proofs;
         } else if (mode == 2) {
             broken.review.candidate_revision += 1;
-        } else {
+        } else if (mode == 3) {
             const proofs = try a.dupe(@import("domain/required_authority.zig").Evidence, value.review.evidence);
             proofs[0].review = null;
             broken.review.evidence = proofs;
+        } else if (mode == 4) {
+            broken.coverage.accounts = &.{};
+        } else if (mode == 5) {
+            broken.brief.title.provenance.citation_ids = &.{};
+        } else if (mode == 6) {
+            broken.content.primary_user_story.provenance.claim_ids = &.{};
+        } else if (mode == 7) {
+            broken.content.primary_user_story.value = .{ .exact_copy = .{ .token_id = .{ .ordinal = 999 }, .citation_id = .{ .ordinal = 1 } } };
+        } else if (mode == 8) {
+            const sources = try a.dupe(@TypeOf(value.reference.inputs.corpus.sources[0]), value.reference.inputs.corpus.sources);
+            sources[0].bytes = try std.mem.concat(a, u8, &.{ sources[0].bytes, "Unaccounted requirement." });
+            broken.reference.inputs.corpus.sources = sources;
+        } else if (mode == 9 or mode == 10) {
+            const dispositions = try a.dupe(@import("domain/reference_reconciliation.zig").ClaimDisposition, value.reference.dispositions);
+            if (mode == 9) dispositions[0].related_claim_ids = &.{dispositions[0].claim_id} else dispositions[0].disposition = .duplicate;
+            broken.reference.dispositions = dispositions;
+        } else if (mode == 11) {
+            const signals = try a.dupe(@import("domain/reference_reconciliation.zig").Signal, value.reference.signals);
+            signals[0].value.citation_ids = &.{};
+            broken.reference.signals = signals;
+        } else {
+            broken.reference.signals = &.{};
         }
         try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, broken, .{}), current.feature));
     }

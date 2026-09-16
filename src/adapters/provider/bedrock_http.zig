@@ -23,20 +23,20 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
             const self: *Self = @ptrCast(@alignCast(context));
             switch (self.runtime.status()) {
                 .cancelled => return error.Cancelled,
-                .deadline_exhausted => return failed(.timeout, false),
+                .deadline_exhausted => return failed(.timeout, false, .preparing, .timeout),
                 .active => {},
             }
-            const now = self.clock.now() catch return failed(.transport_failed, false);
-            if (now >= request.deadline_monotonic_ms) return failed(.timeout, false);
+            const now = self.clock.now() catch return failed(.transport_failed, false, .preparing, .unknown);
+            if (now >= request.deadline_monotonic_ms) return failed(.timeout, false, .preparing, .timeout);
             var state: Exchange = .{};
             const Event = union(enum) { network: transport.Error!void, timer: std.Io.Cancelable!void };
             var buffer: [2]Event = undefined;
             var tasks: std.Io.Select(Event) = .init(self.io, &buffer);
             defer tasks.cancelDiscard();
-            tasks.concurrent(.network, fetch, .{ self, allocator, request, &state }) catch return failed(.transport_failed, false);
+            tasks.concurrent(.network, fetch, .{ self, allocator, request, &state }) catch return failed(.transport_failed, false, .preparing, .unknown);
             tasks.concurrent(.timer, sleep, .{ self.io, request.deadline_monotonic_ms - now }) catch {
                 tasks.cancelDiscard();
-                return failed(.transport_failed, state.sent);
+                return failed(.transport_failed, state.sent, state.phase, .unknown);
             };
             const event = tasks.await() catch return error.Cancelled;
             switch (event) {
@@ -44,7 +44,7 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
                 .timer => |finished| {
                     finished catch return error.Cancelled;
                     tasks.cancelDiscard();
-                    return failed(.timeout, state.sent);
+                    return failed(.timeout, state.sent, state.phase, .timeout);
                 },
             }
             return state.response;
@@ -58,7 +58,7 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
             self.send(allocator, request, state) catch |err| {
                 if (err == error.OutOfMemory) return error.OutOfMemory;
                 if (err == error.Canceled) return error.Cancelled;
-                state.response = failed(if (err == error.InvalidResponse) .response_invalid else .transport_failed, state.sent);
+                state.response = failed(if (err == error.InvalidResponse) .response_invalid else .transport_failed, state.sent, state.phase, safeCause(err));
             };
         }
 
@@ -70,6 +70,7 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
             defer client.deinit();
             // No environment initialization, proxy, endpoint override, redirect,
             // connection reuse, credential chain, or retry mechanism is installed.
+            state.phase = .connecting;
             var request = try open_request(&client, .POST, try std.Uri.parse(url), .{
                 .redirect_behavior = .unhandled,
                 .keep_alive = false,
@@ -81,8 +82,10 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
             });
             defer request.deinit();
             request.transfer_encoding = .{ .content_length = input.body.len };
+            state.phase = .sending;
             state.sent = true;
             sendBody(&request, input.body) catch return request.connection.?.stream_writer.err orelse error.WriteFailed;
+            state.phase = .response_headers;
             var response: std.http.Client.Response = while (true) {
                 const bytes = @import("bedrock_http_head.zig").receive(allocator, request.reader.in) catch |err| return switch (err) {
                     error.ReadFailed => request.connection.?.getReadError().?,
@@ -97,7 +100,7 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
                 break .{ .request = &request, .head = head };
             };
             if (response.head.status.class() == .redirect) {
-                state.response = .{ .failed = .{ .cause = .response_invalid, .retry_class = .never, .delivery = .response_received } };
+                state.response = .{ .failed = .{ .cause = .response_invalid, .retry_class = .never, .delivery = .response_received, .diagnostic = .{ .phase = .response_headers, .cause = .malformed_response } } };
                 return;
             }
             if (response.head.content_encoding != .identity) return error.InvalidResponse;
@@ -114,6 +117,7 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
                     request_id = try allocator.dupe(u8, header.value);
                 }
             }
+            state.phase = .response_body;
             var bytes: std.Io.Writer.Allocating = .init(allocator);
             defer bytes.deinit();
             var buffer: [4096]u8 = undefined;
@@ -143,13 +147,15 @@ fn sendBody(request: *std.http.Client.Request, body: []const u8) std.Io.Writer.E
     try request.connection.?.flush();
 }
 
+const Diagnostic = @import("../../domain/llm_provider_operation.zig").TransportDiagnostic;
 const Exchange = struct {
+    phase: @FieldType(Diagnostic, "phase") = .preparing,
     sent: bool = false,
     response: transport.Response = .{ .failed = .{ .cause = .transport_failed, .retry_class = .policy_eligible, .delivery = .not_sent } },
 };
 
-fn failed(cause: @import("../../domain/llm_provider_operation.zig").ProviderFailureCause, sent: bool) transport.Response {
-    return .{ .failed = .{ .cause = cause, .retry_class = if (cause == .response_invalid) .never else .policy_eligible, .delivery = if (sent) .accepted_or_unknown else .not_sent } };
+fn failed(cause: @import("../../domain/llm_provider_operation.zig").ProviderFailureCause, sent: bool, phase: @FieldType(Diagnostic, "phase"), cause_detail: @FieldType(Diagnostic, "cause")) transport.Response {
+    return .{ .failed = .{ .cause = cause, .retry_class = if (cause == .response_invalid) .never else .policy_eligible, .delivery = if (sent) .accepted_or_unknown else .not_sent, .diagnostic = .{ .phase = phase, .cause = cause_detail } } };
 }
 
 pub fn endpoint(allocator: std.mem.Allocator, request: transport.Request) std.mem.Allocator.Error![]const u8 {
@@ -166,4 +172,21 @@ pub fn endpoint(allocator: std.mem.Allocator, request: transport.Request) std.me
     return std.fmt.allocPrint(allocator, "https://bedrock-runtime.{s}.amazonaws.com/model/{s}/{s}", .{
         @tagName(request.region), encoded.written(), if (request.kind == .inference) "converse" else "count-tokens",
     });
+}
+
+// Classify only errors actually reported by the transport; unknown failures
+// never imply a DNS, TLS or sandbox diagnosis.
+fn safeCause(err: anyerror) @FieldType(Diagnostic, "cause") {
+    return switch (err) {
+        error.UnknownHostName, error.NameServerFailure, error.NameServerUnavailable => .name_resolution,
+        error.ConnectionRefused => .connection_refused,
+        error.ConnectionResetByPeer => .connection_reset,
+        error.TlsInitializationFailed, error.TlsFailure, error.CertificateBundleLoadFailure => .tls,
+        error.Timeout, error.ConnectionTimedOut => .timeout,
+        error.InvalidResponse => .malformed_response,
+        error.EndOfStream => .premature_eof,
+        error.ReadFailed => .read,
+        error.WriteFailed => .write,
+        else => .unknown,
+    };
 }

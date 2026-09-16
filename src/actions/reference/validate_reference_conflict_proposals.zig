@@ -20,32 +20,15 @@ pub const Action = struct {
         try v.input(allocator, prior.prior.input);
         try v.bind(allocator, items, context, self.validator);
         const conflicts = try allocator.alloc(r.ValidatedConflict, prior.prior.proposal.conflicts.len);
-        const covered = try allocator.alloc(bool, items.entries.len);
-        @memset(covered, false);
         for (prior.prior.proposal.conflicts, conflicts, 0..) |proposal, *conflict, index| {
-            if (proposal.claim_ids.len < 2) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .cardinality, .observed = .{ .count = proposal.claim_ids.len }, .expected = .{ .constraint = .at_least_two } });
-            if (v.claims(items, proposal.claim_ids, prior.prior.input.partition.group.claim_ids)) |issue| return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, issue);
-            for (proposal.claim_ids) |id| {
-                const disposition = try v.disposition(prior.prior.dispositions, id);
-                if (disposition.disposition != .conflicting) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .relationship, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .conflicting_related_claims } });
-                for (proposal.claim_ids) |other| if (other.ordinal != id.ordinal and !try v.conflictRelated(prior.prior.dispositions, id, other)) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .relationship, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .conflicting_related_claims } });
-                covered[id.ordinal - 1] = true;
-            }
+            if (try v.conflictClaims(items, prior.prior.dispositions, proposal.claim_ids, prior.prior.input.partition.group.claim_ids)) |issue| return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, issue);
             if (!v.conflictSelectionAvailable(prior.prior.proposal.conflicts[0..index], index, proposal.kind, proposal.claim_ids)) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, .{ .rule = .duplicate_conflict, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
             conflict.* = .{ .claim_ids = proposal.claim_ids, .citation_ids = try r.citationUnion(allocator, items, proposal.claim_ids), .kind = proposal.kind, .summary = switch (try self.validator.checkReferenceIn(allocator, try v.scopes(allocator, items, proposal.claim_ids, context), proposal.summary)) {
                 .valid => |checked| checked,
                 .invalid => |issue| return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .{ .conflict = index }, d.textFailure(issue, .{ .text = proposal.summary })),
             }, .resolution = .unresolved };
         }
-        for (prior.prior.dispositions, covered) |disposition, present| {
-            if ((disposition.disposition == .conflicting) != present) return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .conflicts, .{ .rule = .conflict_coverage, .observed = .{ .disposition = disposition }, .expected = .{ .constraint = .conflict_claim_covered } });
-            if (!present) continue;
-            for (disposition.related_claim_ids) |related| {
-                for (conflicts) |conflict| {
-                    if (r.contains(r.ClaimId, conflict.claim_ids, disposition.claim_id) and r.contains(r.ClaimId, conflict.claim_ids, related)) break;
-                } else return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .conflicts, .{ .rule = .conflict_coverage, .observed = .{ .disposition = disposition }, .expected = .{ .constraint = .conflict_pair_covered } });
-            }
-        }
+        if (try v.conflictCoverage(allocator, items, prior.prior.dispositions, prior.prior.proposal.conflicts)) |issue| return d.reject(r.CheckedConflicts, prior.prior.input, prior.prior.source, .conflicts, issue);
         return .{ .valid = .{ .prior = prior, .conflicts = conflicts } };
     }
 };

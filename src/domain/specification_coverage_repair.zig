@@ -17,7 +17,16 @@ pub const Facts = struct {
     references: p.Dependencies,
 };
 const ValueTarget = struct { unit: usize, subject: candidates.Subject, field: candidates.ValueField };
-pub const Target = struct { unit: usize, part: union(enum) { value: struct { subject: candidates.Subject, field: candidates.ValueField }, record: usize } };
+pub const Target = struct {
+    unit: usize,
+    part: union(enum) { value: struct { subject: candidates.Subject, field: candidates.ValueField }, record: usize },
+    pub fn guidance(self: Target) union(enum) { value: @FieldType(@FieldType(Target, "part"), "value"), record } {
+        return switch (self.part) {
+            .value => |value| .{ .value = value },
+            .record => .record,
+        };
+    }
+};
 pub const Replacement = union(enum) { value: g.spec.BusinessValue, record: g.spec.Model.RecordProposal };
 const Rule = union(enum) {
     coverage: coverage.Rejection,

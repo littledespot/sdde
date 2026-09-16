@@ -130,6 +130,14 @@ pub fn build(b: *std.Build) void {
             .{ .name = "unicode_normalization", .module = unicode_module },
         },
     });
+    const provenance_module = b.createModule(.{ .root_source_file = b.path("build/provenance.zig"), .target = b.graph.host, .optimize = optimize });
+    const provenance_tool = b.addExecutable(.{ .name = "capture-build-provenance", .root_module = provenance_module });
+    const provenance = b.addRunArtifact(provenance_tool);
+    provenance.setCwd(b.path("."));
+    provenance.has_side_effects = true;
+    e2e_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance.addOutputFileArg("build-provenance.json") });
+    const provenance_tests = b.addRunArtifact(b.addTest(.{ .root_module = provenance_module }));
+    test_step.dependOn(&provenance_tests.step);
     const e2e_tests = b.addTest(.{ .root_module = e2e_module });
     const run_e2e_tests = b.addRunArtifact(e2e_tests);
     b.step("test-e2e-harness", "Test single-case E2E fixture and publication checks").dependOn(&run_e2e_tests.step);

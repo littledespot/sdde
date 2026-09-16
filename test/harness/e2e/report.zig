@@ -69,6 +69,7 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
         try writer.writeAll("\n\n");
     }
     try writeRepairs(writer, report.repairs);
+    try writeExecutionEvidence(writer, report);
     if (report.schema_error) |diagnostic| {
         try writer.writeAll("Schema validation: ");
         try std.json.Stringify.value(diagnostic, .{}, writer);
@@ -112,6 +113,22 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     const writer = &out.writer;
     const escape = @import("../report.zig").escape;
     try writer.print("# Spec E2E run\n\nResult: **{s}**\n\n{s}\n\n", .{ @tagName(report.status), explanation(report) });
+    if (report.build) |build| {
+        try writer.writeAll("Executed build: ");
+        try std.json.Stringify.value(build, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    try writeExecutionEvidence(writer, report);
+    if (report.retry_settings.len != 0) {
+        try writer.writeAll("Retry settings and executions: ");
+        try std.json.Stringify.value(report.retry_settings, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    if (report.attempts.len != 0) {
+        try writer.writeAll("Accounted attempts: ");
+        try std.json.Stringify.value(report.attempts, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
     try writer.writeAll("Case: ");
     try escape(writer, report.case_id orelse "unavailable");
     try writer.writeAll("\n\nExecution: ");
@@ -166,8 +183,6 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
         try escape(writer, reason);
         try writer.writeAll(". This run has incomplete evidence.\n\n");
     }
-    try writer.print("Model calls: {d}. Accounted tokens: {d}. Usage complete: {}.\n\n", .{ report.model_calls, report.total_tokens, report.usage_complete });
-    if (report.last_model_usage) |usage| try writer.print("Last model call: {d} input + {d} output = {d} tokens.\n\n", .{ usage.input_tokens, usage.output_tokens, usage.total_tokens });
     for (report.models) |model| {
         try writer.writeAll("Generation slot ");
         try escape(writer, model.slot);
@@ -226,4 +241,21 @@ fn writeRepairs(writer: *std.Io.Writer, repairs: []const @import("../../../src/d
     try writer.writeAll("Retained repair results (merge facts, not validation acceptance): ");
     try std.json.Stringify.value(repairs, .{}, writer);
     try writer.writeAll("\n\n");
+}
+
+fn writeExecutionEvidence(writer: *std.Io.Writer, report: c.Report) !void {
+    try writer.print("Model calls: {d}. Accounted tokens: {d}", .{ report.model_calls, report.total_tokens });
+    if (report.total_token_budget) |budget| try writer.print("/{d}", .{budget});
+    try writer.print("; usage complete: {}.\n\n", .{report.usage_complete});
+    if (report.last_model_usage) |usage| try writer.print("Last exchange usage: {d} input + {d} output = {d} tokens.\n\n", .{ usage.input_tokens, usage.output_tokens, usage.total_tokens });
+    if (report.exchange_evidence) |exchange| {
+        try writer.writeAll("Exchange evidence: ");
+        try std.json.Stringify.value(exchange, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    if (report.last_protocol_rejection) |rejection| if (report.last_model_call != rejection.call) {
+        try writer.writeAll("Earlier protocol rejection: ");
+        try std.json.Stringify.value(rejection, .{}, writer);
+        try writer.writeAll("\n\n");
+    };
 }

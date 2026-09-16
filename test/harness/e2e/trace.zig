@@ -40,7 +40,11 @@ pub const Trace = struct {
     }
     pub fn close(self: *Trace) void {
         self.last_rejection.deinit(self.store.allocator);
-        for (self.call_records.items) |call| self.store.allocator.free(call.step);
+        for (self.call_records.items) |call| {
+            self.store.allocator.free(call.step);
+            if (call.exception) |bytes| self.store.allocator.free(bytes);
+            if (call.request_id) |bytes| self.store.allocator.free(bytes);
+        }
         self.call_records.deinit(self.store.allocator);
         self.events.close(self.store.io);
     }
@@ -114,9 +118,11 @@ pub const Trace = struct {
         };
         switch (response) {
             .received => |received| {
-                self.store.write(.generation, self.calls, .response, received.body) catch |err| {
+                if (self.store.write(.generation, self.calls, .response, received.body)) {
+                    self.call_records.items[self.calls - 1].raw_response_available = true;
+                } else |err| {
                     self.fail(err);
-                };
+                }
                 self.saveOutcome(.{ .received = .{ .status = received.status, .exception = received.exception, .request_id = received.request_id } }) catch |err| {
                     self.fail(err);
                 };
@@ -133,6 +139,16 @@ pub const Trace = struct {
     }
 
     fn saveOutcome(self: *Trace, value: TransportOutcome) !void {
+        const call = &self.call_records.items[self.calls - 1];
+        switch (value) {
+            .received => |received| {
+                call.status = received.status;
+                if (received.exception) |bytes| call.exception = try self.store.redact(self.store.allocator, bytes);
+                if (received.request_id) |bytes| call.request_id = try self.store.redact(self.store.allocator, bytes);
+            },
+            .failed => |failure| call.transport = failure.diagnostic,
+            .transport_error => {},
+        }
         const bytes = try std.json.Stringify.valueAlloc(self.store.allocator, value, .{});
         defer self.store.allocator.free(bytes);
         try self.store.write(.generation, self.calls, .outcome, bytes);
@@ -176,7 +192,7 @@ pub const Trace = struct {
         var arena: std.heap.ArenaAllocator = .init(self.store.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status() };
+        var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
         try @import("observation.zig").capture(a, runner, &report);
         try self.last_rejection.observe(self.store.allocator, self.calls, report);
         try self.last_rejection.project(a, self.calls, &report);
@@ -215,6 +231,8 @@ pub const Trace = struct {
             .model_error = report.model_diagnostic,
             .json_error = report.json_error,
             .schema_error = report.schema_error,
+            .last_protocol_rejection = report.last_protocol_rejection,
+            .exchange_evidence = report.exchange_evidence,
             .retry_error = if (result == .rejected and result.rejected == .retry_limit) try result.rejected.retry_limit.describe(a) else null,
             .candidate_error = report.candidate_error,
             .repairs = report.repairs,

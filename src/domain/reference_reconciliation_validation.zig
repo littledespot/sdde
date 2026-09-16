@@ -50,13 +50,18 @@ fn selectedKind(items: r.Items, ids: []const r.ClaimId) r.Error!?d.ContentKind {
     return first;
 }
 
-pub fn content(allocator: std.mem.Allocator, validator: r.text.Validator, context: TextContext, items: r.Items, ids: []const r.ClaimId, candidate: r.ContentProposal) r.Error!d.Check(r.Content) {
-    const mismatch: d.Check(r.Content) = .{ .invalid = .{ .rule = .content, .observed = .{ .content = candidate }, .expected = .{ .constraint = .matching_claim_content } } };
+pub fn contentIssue(items: r.Items, ids: []const r.ClaimId, candidate: r.ContentProposal) r.Error!?d.Issue {
+    const mismatch: d.Issue = .{ .rule = .content, .observed = .{ .content = candidate }, .expected = .{ .constraint = .matching_claim_content } };
     const required = (try selectedKind(items, ids)) orelse return mismatch;
     if (!matchingKind(required, contentKind(candidate))) return if (required == .preserved_token and candidate == .preserved_token)
-        .{ .invalid = .{ .rule = .content, .observed = .{ .content = candidate }, .expected = .{ .constraint = .exact_selected_token } } }
+        .{ .rule = .content, .observed = .{ .content = candidate }, .expected = .{ .constraint = .exact_selected_token } }
     else
         mismatch;
+    return null;
+}
+
+pub fn content(allocator: std.mem.Allocator, validator: r.text.Validator, context: TextContext, items: r.Items, ids: []const r.ClaimId, candidate: r.ContentProposal) r.Error!d.Check(r.Content) {
+    if (try contentIssue(items, ids, candidate)) |issue| return .{ .invalid = issue };
     switch (candidate) {
         .model => |model| {
             const context_set = try scopes(allocator, items, ids, context);
@@ -87,6 +92,61 @@ pub fn signalEligible(values: []const r.ClaimDisposition, id: r.ClaimId) r.Error
 pub fn conflictRelated(values: []const r.ClaimDisposition, left: r.ClaimId, right: r.ClaimId) r.Error!bool {
     const value = try disposition(values, left);
     return value.disposition == .conflicting and left.ordinal != right.ordinal and r.contains(r.ClaimId, value.related_claim_ids, right);
+}
+
+pub fn signalClaims(items: r.Items, dispositions: []const r.ClaimDisposition, ids: []const r.ClaimId, allowed: []const r.ClaimId) r.Error!?d.Issue {
+    if (claims(items, ids, allowed)) |issue| return issue;
+    for (ids) |id| if (!try signalEligible(dispositions, id)) return .{ .rule = .relationship, .observed = .{ .claims = ids }, .expected = .{ .constraint = .nonconflicting_claims } };
+    return null;
+}
+
+pub fn conflictClaims(items: r.Items, dispositions: []const r.ClaimDisposition, ids: []const r.ClaimId, allowed: []const r.ClaimId) r.Error!?d.Issue {
+    if (ids.len < 2) return .{ .rule = .cardinality, .observed = .{ .count = ids.len }, .expected = .{ .constraint = .at_least_two } };
+    if (claims(items, ids, allowed)) |issue| return issue;
+    for (ids) |id| {
+        if ((try disposition(dispositions, id)).disposition != .conflicting) return .{ .rule = .relationship, .observed = .{ .claims = ids }, .expected = .{ .constraint = .conflicting_related_claims } };
+        for (ids) |other| if (other.ordinal != id.ordinal and !try conflictRelated(dispositions, id, other)) return .{ .rule = .relationship, .observed = .{ .claims = ids }, .expected = .{ .constraint = .conflicting_related_claims } };
+    }
+    return null;
+}
+
+pub fn signalCoverage(a: std.mem.Allocator, items: r.Items, dispositions: []const r.ClaimDisposition, signals: []const r.SignalProposal) r.Error!?d.Issue {
+    const covered = try a.alloc(bool, items.entries.len);
+    defer a.free(covered);
+    @memset(covered, false);
+    const token_covered = try a.alloc(bool, items.entries.len);
+    defer a.free(token_covered);
+    @memset(token_covered, false);
+    for (signals) |signal| for (signal.claim_ids) |id| {
+        _ = try r.item(items, id);
+        covered[id.ordinal - 1] = true;
+        if (signal.content == .preserved_token) token_covered[id.ordinal - 1] = true;
+    };
+    for (dispositions, items.entries, covered, token_covered) |value, item, present, token_present| {
+        if (value.disposition == .retained and !present) return .{ .rule = .signal_coverage, .observed = .{ .disposition = value }, .expected = .{ .constraint = .retained_claim_covered } };
+        if (item.claim.content == .preserved_token and value.disposition != .conflicting and !token_present) return .{ .rule = .signal_coverage, .observed = .{ .disposition = value }, .expected = .{ .constraint = .token_projected } };
+    }
+    return null;
+}
+
+pub fn conflictCoverage(a: std.mem.Allocator, items: r.Items, dispositions: []const r.ClaimDisposition, conflicts: []const r.ConflictProposal) r.Error!?d.Issue {
+    const covered = try a.alloc(bool, items.entries.len);
+    defer a.free(covered);
+    @memset(covered, false);
+    for (conflicts) |conflict| for (conflict.claim_ids) |id| {
+        _ = try r.item(items, id);
+        covered[id.ordinal - 1] = true;
+    };
+    for (dispositions, covered) |value, present| {
+        if ((value.disposition == .conflicting) != present) return .{ .rule = .conflict_coverage, .observed = .{ .disposition = value }, .expected = .{ .constraint = .conflict_claim_covered } };
+        if (!present) continue;
+        for (value.related_claim_ids) |related| {
+            for (conflicts) |conflict| {
+                if (r.contains(r.ClaimId, conflict.claim_ids, value.claim_id) and r.contains(r.ClaimId, conflict.claim_ids, related)) break;
+            } else return .{ .rule = .conflict_coverage, .observed = .{ .disposition = value }, .expected = .{ .constraint = .conflict_pair_covered } };
+        }
+    }
+    return null;
 }
 pub fn sameMembers(left: []const r.ClaimId, right: []const r.ClaimId) bool {
     r.sameSet(r.ClaimId, left, right) catch return false;

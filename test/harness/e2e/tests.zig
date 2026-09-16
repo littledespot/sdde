@@ -411,7 +411,7 @@ test "failure reports preserve separate engine provider and model evidence" {
     try std.testing.expectError(error.PathAlreadyExists, @import("report.zig").Output.reserve(io, dir.dir));
 }
 
-test "retired protocol rejection survives exhaustion and is superseded by a new call" {
+test "retired protocol rejection stays associated with its call across later failures" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -420,6 +420,7 @@ test "retired protocol rejection survives exhaustion and is superseded by a new 
     const empty: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
     var rejected = empty;
     rejected.model_diagnostic = "InvalidModelEnvelope";
+    rejected.last_model_origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
     var key = "local_key".*;
     rejected.json_error = .{ .reason = .DuplicateField, .location = .{ .byte_offset = 437, .line = 1, .column = 438 }, .context = .{
         .path = "/statements/0",
@@ -458,6 +459,8 @@ test "retired protocol rejection survives exhaustion and is superseded by a new 
     var fresh = empty;
     try snapshot.project(a, 7, &fresh);
     try std.testing.expect(fresh.model_diagnostic == null);
+    try std.testing.expectEqual(@as(usize, 6), fresh.last_protocol_rejection.?.call);
+    try std.testing.expectEqualDeep(rejected.last_model_origin.?, fresh.last_protocol_rejection.?.origin);
     // The final report owns its data after the observer releases the snapshot.
     try std.testing.expectEqualStrings("/items/0/kind", later.schema_error.?.path);
 }
@@ -494,6 +497,81 @@ test "source selection reports retain the producing call separately from the las
     }
 }
 
+test "later budget transport and capture stops retain separate protocol and exchange evidence" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const obs = @import("observation.zig");
+    const Usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage;
+    var calls: [35]obs.Call = undefined;
+    for (&calls, 1..) |*call, ordinal| call.* = .{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = @intCast(ordinal) } }, .step = "repair", .raw_response_available = true, .output_available = ordinal < 35 };
+    var retained: obs.LastModelRejection = .{};
+    defer retained.deinit(std.testing.allocator);
+    try retained.observe(std.testing.allocator, 34, .{ .started_at_utc = "", .status = .workflow_failed, .last_model_origin = calls[33].origin, .model_diagnostic = "SyntaxError", .json_error = .{ .reason = .SyntaxError } });
+    for (0..4) |stop| {
+        var report: c.Report = .{
+            .started_at_utc = "",
+            .status = .workflow_failed,
+            .workflow_outcome = .failed,
+            .total_tokens = 100114,
+            .total_token_budget = 100000,
+            .terminal_rejection = .{ .kind = if (stop == 0) .token_budget else .operation_failed },
+            .last_model_origin = calls[34].origin,
+            .last_model_usage = if (stop == 2) null else Usage.init(2800, 18, 2818).?,
+            .evidence_error = if (stop == 3) "EvidenceWriteFailed" else null,
+        };
+        calls[34].raw_response_available = stop != 2;
+        calls[34].usage = null;
+        try retained.observe(std.testing.allocator, 35, report);
+        try retained.project(a, 35, &report);
+        try obs.correlate(a, &calls, &report);
+        try std.testing.expect(report.model_diagnostic == null and report.json_error == null);
+        try std.testing.expectEqual(@as(usize, 34), report.last_protocol_rejection.?.call);
+        try std.testing.expectEqual(@as(usize, 35), report.last_model_call.?);
+        try std.testing.expect(report.last_model_output == null);
+        const evidence = report.exchange_evidence.?;
+        try std.testing.expectEqual(([_]@FieldType(c.ExchangeEvidence, "text"){ .budget_stop, .not_projected, .response_absent, .capture_failed })[stop], evidence.text);
+        try std.testing.expectEqual(stop != 2, evidence.raw_response != null);
+        if (stop != 2) try std.testing.expectEqual(@as(u64, 2818), report.last_model_usage.?.total_tokens) else try std.testing.expect(report.last_model_usage == null);
+        const protocol = try std.json.Stringify.valueAlloc(a, report.last_protocol_rejection, .{});
+        const exchange = try std.json.Stringify.valueAlloc(a, evidence, .{});
+        for ([_][]const u8{ try std.json.Stringify.valueAlloc(a, report, .{}), try @import("report.zig").terminal(a, report, "runs", "example"), try @import("report.zig").renderMarkdown(a, report) }) |output| {
+            try std.testing.expect(std.mem.indexOf(u8, output, protocol) != null);
+            try std.testing.expect(std.mem.indexOf(u8, output, exchange) != null);
+        }
+    }
+}
+
+test "provider cause survives request release without inventing a candidate rejection" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const obs = @import("observation.zig");
+    var calls = [_]obs.Call{.{
+        .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } },
+        .step = "extract",
+        .raw_response_available = true,
+        .status = 403,
+        .exception = "AccessDeniedException",
+        .request_id = "request-1",
+    }};
+    var observed: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .provider_diagnostic = "authorization_denied", .last_model_origin = calls[0].origin };
+    try obs.correlate(a, &calls, &observed);
+    // The next projection has no active request or provider observation slots.
+    var released: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .usage_complete = false };
+    try obs.correlate(a, &calls, &released);
+    try std.testing.expectEqual(@as(usize, 1), released.last_model_call.?);
+    try std.testing.expectEqualStrings("authorization_denied", released.provider_diagnostic.?);
+    try std.testing.expect(released.model_diagnostic == null and released.last_model_output == null and released.last_model_usage == null);
+    try std.testing.expect(released.last_protocol_rejection == null);
+    try std.testing.expectEqual(@as(u16, 403), released.exchange_evidence.?.status.?);
+    try std.testing.expect(released.exchange_evidence.?.raw_response != null);
+    for ([_][]const u8{ try std.json.Stringify.valueAlloc(a, released, .{}), try @import("report.zig").terminal(a, released, "runs", "example"), try @import("report.zig").renderMarkdown(a, released) }, 0..) |output, index| {
+        try std.testing.expect(std.mem.indexOf(u8, output, if (index == 2) "authorization\\_denied" else "authorization_denied") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "AccessDeniedException") != null);
+    }
+}
+
 test "evidence store retains distinct attempts excludes credentials and refuses overwrites" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -516,6 +594,9 @@ test "evidence store retains distinct attempts excludes credentials and refuses 
     const saved = try @import("../files.zig").read(io, a, run.dir, "evidence/evaluation/call-000001/response.json");
     try std.testing.expect(std.mem.indexOf(u8, saved, &secret) == null);
     try std.testing.expectEqualStrings("{\"echo\":\"[REDACTED_CREDENTIAL]\",\"result\":42}", saved);
+    const metadata = try store.redact(std.testing.allocator, body);
+    defer std.testing.allocator.free(metadata);
+    try std.testing.expectEqualStrings(saved, metadata);
 }
 
 test "input failure report explains environment setup and escapes untrusted labels" {

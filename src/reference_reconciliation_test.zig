@@ -75,6 +75,73 @@ test "summary repair changes only a rejected field then inserts missing membersh
     }
 }
 
+test "disposition insertion ignores response metadata and preserves dependent validation" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    for ([_][]const u8{ "Display `Hello, World!`.\n", "Confirm `Loan renewed!`.\n" }) |source| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try prepare(a, &.{source});
+        defer fixture.deinit();
+        const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+        const good = try f.global(a, input);
+        var missing: r.Parsed = .{ .input = input, .proposal = .{ .global = good } };
+        missing.proposal.global.claim_dispositions = good.claim_dispositions[0..1];
+        const signals = try a.dupe(r.SignalProposal, good.signals);
+        signals[0].claim_ids = &.{ input.items[0].claim.id, input.items[1].claim.id };
+        missing.proposal.global.signals = signals;
+        const rejection = (try f.validate_dispositions.execute(a, missing)).invalid;
+        const authorization = (try repair.authorize(a, missing, fixture.context(), rejection)).model;
+        const packet = try repair.packet(a, missing, fixture.context(), authorization);
+        defer packets.release(packet);
+        const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+        const task = body.value.object.get("repair").?.object;
+        const target = task.get("target").?.object;
+        try std.testing.expectEqual(@as(usize, 2), target.count());
+        try std.testing.expectEqualStrings("insert_disposition", target.get("unit").?.string);
+        try std.testing.expectEqual(@as(i64, 2), target.get("claim").?.object.get("ordinal").?.integer);
+        try std.testing.expectEqual(@as(usize, 1), task.get("rule").?.object.count());
+        const constraints = body.value.object.get("input").?.object.get("constraints").?.array.items;
+        try std.testing.expectEqual(@as(usize, 7), constraints.len);
+        for (constraints) |constraint| try std.testing.expect(!std.mem.eql(u8, constraint.object.get("constraint").?.string, "exact_selected_token"));
+        for ([_][]const u8{
+            "{\"index\":1,\"unit\":\"signals\"}",
+            "{\"kind\":\"count\",\"count\":2}",
+            "{\"claim_dispositions\":[{\"kind\":\"retained\"}]}",
+        }) |echo| try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, echo));
+        const filled = try repair.merge(a, missing, fixture.context(), authorization, try repair.parse(a, authorization, packet, "{\"kind\":\"retained\"}"), null);
+        try std.testing.expectEqualDeep(missing.proposal.global.signals, filled.proposal.global.signals);
+        try std.testing.expectEqualDeep(missing.proposal.global.claim_dispositions, filled.proposal.global.claim_dispositions[0..1]);
+        const dispositions = (try f.validate_dispositions.execute(a, filled)).valid;
+        try std.testing.expectEqual(.content, (try f.validate_signals.execute(a, dispositions, fixture.context())).invalid.issue.rule);
+    }
+}
+
+test "canonical dispositions establish cardinalities before relationship traversal" {
+    const owner = @import("domain/reference_disposition_validation.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "Issue a receipt.\n", "Confirm a library loan.\n", "Confirm a booking.\n" });
+    defer fixture.deinit();
+    const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    const good = try f.global(a, input);
+    const records = try a.alloc(r.ClaimDisposition, good.claim_dispositions.len);
+    for (good.claim_dispositions, records) |proposal, *record| record.* = try proposal.canonical(a);
+    _ = (try owner.check(a, input.progress.plan.layout.items, records)).valid;
+    for (0..3) |fault| {
+        const broken = try a.dupe(r.ClaimDisposition, records);
+        broken[0].disposition = if (fault == 0) .retained else .duplicate;
+        broken[0].related_claim_ids = switch (fault) {
+            0 => &.{records[1].claim_id},
+            1 => &.{},
+            else => &.{ records[1].claim_id, records[2].claim_id },
+        };
+        try std.testing.expectEqual(.cardinality, (try owner.check(a, input.progress.plan.layout.items, broken)).invalid.issue.rule);
+    }
+}
+
 test "global repair retains graph siblings and all dependent signal and conflict checks" {
     const repair = @import("domain/reference_reconciliation_repair.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -764,7 +831,7 @@ test "reconciliation diagnostics retain native facts and origin while stale cont
     const invalid = (try f.validate_dispositions.execute(a, .{ .input = input, .proposal = .{ .global = proposal }, .source = .{ .origin = origin } })).invalid;
     try std.testing.expectEqual(.no_self_relation, invalid.issue.expected.constraint);
     try std.testing.expectEqualDeep(try dispositions[0].canonical(a), invalid.issue.observed.disposition);
-    const packet = try @import("domain/reference_model_input.zig").reconciliationPacket(a, input, fixture.inputs, fixture.text.registry);
+    const packet = try @import("domain/reference_model_input.zig").reconciliationPacket(a, input, fixture.inputs, fixture.text.registry, .all);
     defer @import("domain/model_input_packet.zig").release(packet);
     const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
     defer body.deinit();
@@ -882,7 +949,7 @@ test "mixed claim kinds choose independent selection repair across summaries and
             const packet = try repair.packet(a, parsed, fixture.context(), authorization);
             defer packets.release(packet);
             const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
-            const choices = body.value.object.get("repair").?.object.get("rule").?.object.get("choices").?.object;
+            const choices = body.value.object.get("repair").?.object.get("rule").?.object;
             try std.testing.expectEqual(@as(i64, business.ordinal), choices.get("selection").?.array.items[0].object.get("ordinal").?.integer);
             const constraints = body.value.object.get("input").?.object.get("constraints").?.array.items;
             var content_rule = false;
@@ -1186,7 +1253,7 @@ test "signal selection admits available and overlapping sets but blocks exhauste
         const packet = try repair.packet(a, parsed, fixture.context(), authorization);
         defer packets.release(packet);
         const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
-        const choices = body.value.object.get("repair").?.object.get("rule").?.object.get("choices").?.object.get("selection").?.array.items;
+        const choices = body.value.object.get("repair").?.object.get("rule").?.object.get("selection").?.array.items;
         try std.testing.expectEqual(@as(usize, 2), choices.len);
         const ids = try a.alloc(r.ClaimId, if (scenario == 0) 1 else 2);
         for (ids, 0..) |*id, index| id.* = .{ .ordinal = @intCast(choices[index].object.get("ordinal").?.integer) };
@@ -1333,7 +1400,7 @@ test "conflict selection respects occupied pairs without conflating conflict kin
             const packet = try repair.packet(a, parsed, fixture.context(), authorization);
             defer @import("domain/model_input_packet.zig").release(packet);
             const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
-            const pairs = body.value.object.get("repair").?.object.get("rule").?.object.get("choices").?.object.get("conflicting_pairs").?.array.items;
+            const pairs = body.value.object.get("repair").?.object.get("rule").?.object.get("conflicting_pairs").?.array.items;
             try std.testing.expectEqual(@as(usize, 1), pairs.len);
             const pair = pairs[0].object;
             const wire = try std.json.Stringify.valueAlloc(a, .{ .claim_ids = .{ pair.get("left").?, pair.get("right").? } }, .{});

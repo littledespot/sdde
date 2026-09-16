@@ -3161,6 +3161,33 @@ test "protocol retries retain only latest repeated or alternating decoder reject
     }
 }
 
+test "metadata and diagnostic echoes exhaust protocol retries without acceptance or extra accounting" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try protocolRetryYaml(&fixture));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    for ([_][]const u8{ "{\"index\":1,\"unit\":\"signals\"}", "{\"kind\":\"count\",\"count\":2}", "{\"index\":1,\"unit\":\"signals\"}" }, 0..) |body, index| {
+        fake.invocation_plan.complete.content = body;
+        try prepareProtocolAttempt(&runner, index != 0);
+        for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode" }) |step|
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        try std.testing.expectEqual(.invalid, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+        const correction = (try currentRequest(&runner)).prepared().?;
+        try std.testing.expectEqual(@as(usize, 5), correction.content.len);
+        const latest = try std.json.parseFromSlice(std.json.Value, fixture.arena.allocator(), correction.content[4].evidence, .{});
+        try std.testing.expectEqualStrings(body, latest.value.object.get("rejected_response").?.string);
+        try std.testing.expectEqual(@as(u128, (index + 1) * 7), runner.tokenLedger().committed());
+    }
+    try std.testing.expectEqual(@as(u64, 3), runner.bindings().invokeStep(.{ .bytes = "account" }).rejected.retry_limit.completed_executions);
+    try std.testing.expectEqual(@as(usize, 3), fake.effect_count);
+    try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+}
+
 test "protocol retry budget overshoot charges the response before decoding and blocks another call" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
@@ -5703,6 +5730,8 @@ test "production Bedrock YAML records budget overshoot and blocks another call" 
     const result = harness.result();
     try std.testing.expect(result == .execution_rejected);
     try std.testing.expectEqual(@as(u128, 100002), runner.tokenLedger().committed());
+    try std.testing.expectEqual(@as(u64, 100002), runner.tokenLedger().accounted_operations.items[0].reconciliation.exact_usage.total_tokens);
+    try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
     const repeated = runner.bindings().invokeStep(.{ .bytes = "call" });
     try std.testing.expect(repeated == .rejected);
     try std.testing.expectEqual(@as(usize, 1), wire.calls);

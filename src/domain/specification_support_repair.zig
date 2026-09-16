@@ -7,7 +7,14 @@ const shared = @import("atomic_repair.zig");
 const p = @import("specification_provenance.zig");
 const packets = @import("model_input_packet.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
-const Target = struct { requirement: authority.Id, ordinal: u32, index: usize };
+const Target = struct {
+    requirement: authority.Id,
+    ordinal: u32,
+    index: usize,
+    pub fn guidance(self: Target) struct { requirement_ordinal: u32 } {
+        return .{ .requirement_ordinal = self.ordinal };
+    }
+};
 const Selection = struct { provenance: @import("specification.zig").Selection, source_ids: []const @import("reference_identity.zig").SourceId };
 pub const Replacement = union(enum) { finding: review.Value, selection: Selection, detail: struct { detail: []const u8 }, disposition: struct { disposition: @FieldType(review.Value, "disposition") } };
 const Facts = struct { inputs: authority.Inputs, sources: evidence.Inputs, candidate: review.Candidate };

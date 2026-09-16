@@ -15,7 +15,7 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
             try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .decoder = reason }, .explanation = explanation }, .{})
         else
             try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .decoder = reason } }, .{}),
-        .schema => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .schema = try reason.describe(scratch) }, .expected = .{ .path = (try reason.describeExpected(scratch)).path, .scope = reason.expected_location, .schema = try projection.value(scratch, reason.expected, .complete) } }, .{}),
+        .schema => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .schema = try reason.describe(scratch) }, .expected = .{ .path = (try reason.describeExpected(scratch)).path, .scope = reason.expected_location, .schema = if (reason.expected == original.response_schema.root()) null else try projection.value(scratch, reason.expected, .complete) } }, .{ .emit_null_optional_fields = false }),
     };
     const response = try std.json.Stringify.valueAlloc(scratch, .{ .rejected_response = rejected.content() }, .{});
     const parts = try scratch.alloc(provider.ModelVisibleContent, base_content.len + 3);

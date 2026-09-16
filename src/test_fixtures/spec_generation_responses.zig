@@ -80,7 +80,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 if (authorization.target == .signal_selection or authorization.target == .statement_selection) {
                     const packet = try values.read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet);
                     const input_json = try std.json.parseFromSlice(std.json.Value, allocator, packet.body(), .{});
-                    const choices = input_json.value.object.get("repair").?.object.get("rule").?.object.get("choices").?.object.get("selection").?;
+                    const choices = input_json.value.object.get("repair").?.object.get("rule").?.object.get("selection").?;
                     return std.json.Stringify.valueAlloc(allocator, .{ .claim_ids = choices }, .{});
                 }
                 const replacement: repair.Replacement = switch (authorization.target) {

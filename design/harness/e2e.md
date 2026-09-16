@@ -215,8 +215,9 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
   revalidate it.
 - Protocol retries include the full rejected response as untrusted evidence and the
   original complete schema.
-- Schema corrections add the exact expected schema node, its JSON Pointer and
-  parent/value scope, including bounds and alternatives.
+- Schema corrections retain the expected JSON Pointer and parent/value scope.
+  Nested expectations include their exact schema fragment; root expectations use
+  the already supplied selected schema once.
 - Syntax corrections add the decoder diagnostic.
 - Duplicate-member corrections also include the native decoder's brief explanation of
   property-name uniqueness within one object, without inferring record boundaries or
@@ -252,8 +253,7 @@ The terminal prints the score and threshold result explicitly.
 - Both reach the same `candidate_error` projection.
 - Authorizers consume retained native rejections, check owner/revision/origin/old-value
   association and never rediscover domain rules.
-- Reconciliation rejection currently terminates as `invalid`; later rollout phases add
-  its authorized correction path.
+- Reconciliation repairs use the shared atomic authorization and full revalidation path.
 
 - Step events place actual-call identity, output and token usage in `exchange`, and
   rejected-candidate identity/output in `candidate_source`.
@@ -264,6 +264,21 @@ The terminal prints the score and threshold result explicitly.
 - These are opt-in harness diagnostics.
 - Production metadata logging does not gain raw prompts, source text or candidate
   values.
+
+Reports embed the development harness's build-time source digest, Git revision,
+modified-source flag, Zig version, target and build mode. The digest covers build,
+engine, harness, test, design and script inputs, including untracked source files;
+credentials are excluded. Git runs only in the development provenance build step.
+This identity is diagnostic evidence and never participates in workflow gates.
+
+`total_token_budget`, `retry_settings` and `attempts` project the executed graph
+and native accounting. Per-call usage survives budget rejection before candidate
+text projection. `exchange_evidence` links retained response bytes and distinguishes
+absent responses, budget stops, other missing text and capture failure. Known
+transport phases/causes remain separate from delivery and retry policy; unknown
+causes stay unknown. Recognized provider failures survive request release.
+`last_protocol_rejection` keeps its own call/request/attempt when a later exchange
+fails for another reason. None of these projections creates another counter.
 
 ### Reliability assessment
 
@@ -281,6 +296,11 @@ The terminal prints the score and threshold result explicitly.
   unseen inputs.
 
 ## Candidate validation and atomic repair
+
+The repair prompt requests only the selected replacement. Domain guidance omits
+engine-only insertion positions, absent optional metadata and unrelated constraints;
+native authorization, evidence, current values and dependencies remain intact.
+Metadata echoes and whole-candidate wrappers still reject against the selected schema.
 
 - `candidate_error` records the native validator's structured diagnostic independently
   of JSON/schema errors and independently of whether the model request has already been
