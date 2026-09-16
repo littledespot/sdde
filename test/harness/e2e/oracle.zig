@@ -8,7 +8,14 @@ pub const Publication = union(enum) { not_observed, confirmed: *const @import(".
 pub const Result = struct { status: c.Status, missing_artifact: ?c.Artifact = null, specification: ?[]const u8 = null, specification_bytes: ?[]const u8 = null };
 
 pub fn inspect(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, outcome: @import("../../../src/domain/workflow.zig").OutcomeTag, publication: Publication, expected: []const c.Artifact, resolved: paths.FeaturePaths) !Result {
-    if (outcome != .ok) return .{ .status = .workflow_failed };
+    switch (outcome) {
+        .ok => {},
+        .needs_user => return .{ .status = .awaiting_clarification },
+        .invalid => return .{ .status = .workflow_invalid },
+        .blocked => return .{ .status = .workflow_blocked },
+        .cancelled => return .{ .status = .workflow_cancelled },
+        .failed, .more => return .{ .status = .workflow_failed },
+    }
     if (publication != .confirmed) return .{ .status = .publication_missing };
     var specification_bytes: ?[]const u8 = null;
     var retained = false;

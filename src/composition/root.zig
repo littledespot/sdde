@@ -71,8 +71,8 @@ const model_provider_bootstrap = @import("model_provider_bootstrap.zig");
 const engine_invocation = @import("engine_invocation.zig");
 const workflow_operation_registry = @import("../ports/workflow_operation_registry.zig");
 
-pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8, environment: *const std.process.Environ.Map) run_outcome.Outcome {
-    return runInvocationInProjectWithRuntime(io, allocator, .cwd(), arguments, .{}, environment);
+pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8, environment: *const std.process.Environ.Map) !run_outcome.Report {
+    return reportInvocation(io, allocator, .cwd(), arguments, .{}, environment);
 }
 
 fn runInvocationInProject(
@@ -165,19 +165,33 @@ pub const Runtime = struct {
     }
 };
 
+// Tests that need only the native outcome use the same production invocation.
 fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, project_root: std.Io.Dir, arguments: []const []const u8, runtime: pipeline.NodeRuntime, environment: ?*const std.process.Environ.Map) run_outcome.Outcome {
+    var report = reportInvocation(io, allocator, project_root, arguments, runtime, environment) catch return .{ .execution = .failed };
+    defer report.deinit();
+    return report.outcome;
+}
+
+fn reportInvocation(io: std.Io, allocator: std.mem.Allocator, project_root: std.Io.Dir, arguments: []const []const u8, runtime: pipeline.NodeRuntime, environment: ?*const std.process.Environ.Map) !run_outcome.Report {
     var assembly: Runtime = undefined;
     assembly.init(io, allocator, project_root, runtime);
     defer assembly.deinit();
-    return switch (assembly.boot) {
+    var report: run_outcome.Report = .{ .outcome = .invocation_invalid, .arena = .init(allocator) };
+    errdefer report.deinit();
+    report.outcome = switch (assembly.boot) {
         .failed => |failure| .{ .bootstrap_failed = failure },
         .cancelled => .{ .execution = .cancelled },
         .ready => execute: {
             var invocation = assembly.invocation(arguments, if (environment) |map| .{ .environment = map } else .{ .snapshot = null });
             defer invocation.deinit();
-            break :execute workflow_engine.run(invocation.bindings());
+            const outcome = workflow_engine.run(invocation.bindings());
+            if (outcome.executionStatus() == .needs_user) if (invocation.pipeline_runner) |*runner| {
+                report.clarifications = try @import("../application/workflow_clarification_report.zig").capture(report.arena.allocator(), &.{ .slots = runner.envelope.slots });
+            };
+            break :execute outcome;
         },
     };
+    return report;
 }
 
 // Unit-test wiring for supplied operation registries and provider probes.
@@ -1365,7 +1379,8 @@ test "configured specification generation YAML executes native references models
     const support_start = protocol_text_start + 3;
     const support_faults = std.meta.tags(@import("../test_fixtures/spec_generation_responses.zig").SupportFault);
     const omission_scenario = support_start + support_faults.len * 2;
-    for (0..omission_scenario + 1) |scenario| {
+    for (0..omission_scenario + 3) |scenario| {
+        const extraction_omission = scenario > omission_scenario;
         const support_scenario = scenario >= support_start and scenario < omission_scenario;
         const reconciliation_scenario = scenario >= reconciliation_start and scenario < text_start;
         const citation_scenario = scenario >= citation_repair_start and scenario < reconciliation_start;
@@ -1382,6 +1397,7 @@ test "configured specification generation YAML executes native references models
         try project.dir.createDirPath(io, "engine/workflows/spec");
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
+        if (extraction_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == omission_scenario + 1) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
         if (reconciliation_scenario) switch (reconciliation_faults[scenario - reconciliation_start]) {
             .occupied_summary, .occupied_signals => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Loan renewed!`.\n" }),
             .occupied_conflict => {
@@ -1446,6 +1462,8 @@ test "configured specification generation YAML executes native references models
             driver.support_post = scenario - support_start >= support_faults.len;
         }
         driver.candidate_omission = scenario == omission_scenario;
+        driver.extraction_omission = extraction_omission;
+        if (extraction_omission) driver.malformed_once = true;
         driver.text_fault = text_scenario;
         driver.failed_text_repair = scenario == text_start + 2;
         driver.missing_classifications = classification_scenario or scenario == text_start + 1;
@@ -1468,9 +1486,41 @@ test "configured specification generation YAML executes native references models
             driver.reconciliation_protocol_fault = .envelope_then_json;
         }
         const result = driver.run();
-        const expected: workflow.OutcomeTag = if (scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
+        const expected: workflow.OutcomeTag = if (extraction_omission) .invalid else if (scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}\n", .{ scenario, try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
+        if (extraction_omission) {
+            const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const owned = @import("../application/required_authority_values.zig");
+            const authority = @import("../application/required_authority_workflow.zig");
+            const decision = try owned.read(&view, authority.result_schema, .result);
+            try std.testing.expectEqual(.invalid, decision.continuation);
+            for (decision.entries) |entry| try std.testing.expect(entry.candidate_defect != null);
+            try std.testing.expectEqual(@as(usize, 4), driver.calls);
+            try std.testing.expectEqual(@as(usize, 4), runner.tokenLedger().accounted_operations.items.len);
+            try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.omission_repair_calls);
+            try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/clarifications.json", .{}));
+        }
+        if (expected == .needs_user) {
+            var notice_arena: std.heap.ArenaAllocator = .init(allocator);
+            defer notice_arena.deinit();
+            const notices = try @import("../application/workflow_clarification_report.zig").capture(notice_arena.allocator(), &.{ .slots = runner.envelope.slots });
+            try std.testing.expect(notices.len > 0);
+            const state_bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/clarifications.json", allocator, .limited(8_388_608));
+            defer allocator.free(state_bytes);
+            var state = try std.json.parseFromSlice(@import("../domain/clarification_inputs.zig").State, allocator, state_bytes, .{});
+            defer state.deinit();
+            var open_count: usize = 0;
+            for (state.value.records) |record| if (record.status == .open) {
+                const name = notices[open_count].id.filename();
+                try std.testing.expectEqualStrings(record.id, name[0..3]);
+                try project.dir.access(io, notices[open_count].path.project_relative, .{});
+                open_count += 1;
+            };
+            try std.testing.expectEqual(open_count, notices.len);
+        }
         if (scenario == 6) {
             const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })).?;
             const origin = diagnostic.origin().?;

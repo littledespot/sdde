@@ -2,9 +2,9 @@ const std = @import("std");
 const composition = @import("composition/root.zig");
 
 pub const config = @import("domain/config.zig");
-pub const RunOutcome = @import("domain/run_outcome.zig").Outcome;
+pub const RunReport = @import("domain/run_outcome.zig").Report;
 
-pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8, environment: *const std.process.Environ.Map) RunOutcome {
+pub fn run(io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8, environment: *const std.process.Environ.Map) !RunReport {
     return composition.run(io, allocator, arguments, environment);
 }
 

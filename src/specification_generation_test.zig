@@ -379,6 +379,9 @@ const Fixture = struct {
         return initClassified(a, bytes, .business_exact_string);
     }
     fn initClassified(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind) !Fixture {
+        return initExtraction(a, bytes, kind, true);
+    }
+    fn initExtraction(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool) !Fixture {
         var ids: evidence.IdSource = .{};
         const inputs = try evidence.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "stories.md", bytes));
         const passive = try text.prepare(a, inputs);
@@ -387,7 +390,7 @@ const Fixture = struct {
         const candidates = try tokens.candidates(a, inputs);
         const choices = try a.alloc(@import("domain/structured_tokens.zig").Classification, candidates.entries.len);
         for (candidates.entries, choices) |candidate, *choice| choice.* = if (kind) |selected| .{ .preserve = .{ .token_candidate_id = candidate.id, .kind = selected } } else .{ .irrelevant = candidate.id };
-        const reply = try tokens.wire(a, try extraction.reply(a, chunk, "An extracted business claim."), choices);
+        const reply = try tokens.wire(a, if (has_claims) try extraction.reply(a, chunk, "An extracted business claim.") else extraction.no_claim, choices);
         const extracted = try extraction.finish(a, inputs, &.{.{ .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = reply } }});
         const context: references.Context = .{ .inputs = inputs, .registry = passive.registry, .current = text.safety.value(passive.owner) };
         const global = try references.summaries(a, try references.initialize(a, inputs, extracted, 2), context);
@@ -894,6 +897,52 @@ test "specification repair packets expose unchanged dependent fields and native 
     try std.testing.expectEqual(.exact_copy, (try validate_unit.execute(a, current, fixture.context, merged)).invalid.issue.rule);
 }
 
+test "source-only extraction omissions remain candidate defects without clarification or invented claim authority" {
+    const support = @import("domain/specification_support.zig");
+    const json = @import("domain/model_candidate_json.zig");
+    const gaps = @import("domain/required_authority_clarifications.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "On startup display `Hello, World!` and the current UTC date and time.", "After renewal display `Loan renewed!` and the new return deadline." }) |source| {
+        var fixture = try Fixture.initExtraction(a, source, null, false);
+        defer fixture.deinit();
+        const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, null, null);
+        const packet = try support.packet(a, inputs, fixture.context);
+        defer @import("domain/model_input_packet.zig").release(packet);
+        const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+        try std.testing.expectEqualStrings(source, body.get("sources").?.array.items[0].object.get("text").?.string);
+        try std.testing.expectEqual(@as(usize, 0), body.get("claims").?.array.items.len);
+        const extracted = body.get("extraction").?.array.items[0].object;
+        try std.testing.expectEqualStrings("no_feature_claim", extracted.get("outcome").?.object.get("kind").?.string);
+        try std.testing.expectEqualStrings("irrelevant", extracted.get("token_classifications").?.array.items[0].object.get("decision").?.object.get("kind").?.string);
+        const base = try reviewFor(a, inputs);
+        const findings = try a.dupe(support.Finding, base.entries);
+        const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 14 }, .attempt = .{ .value = 1 } };
+        for (findings) |*finding| finding.value = .{ .finding = .candidate_omission, .disposition = .supported, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{fixture.context.inputs.corpus.sources[0].id}, .detail = "Extraction discarded the source-required behavior." };
+        const admitted = (try support.collect(a, inputs, fixture.context, try json.encode(support.Review, a, .{ .entries = findings }), origin)).accepted.inputs;
+        const decision = try supportDecision(a, admitted);
+        try std.testing.expectEqual(.invalid, decision.result.continuation);
+        for (decision.result.entries) |entry| try std.testing.expect(entry.candidate_defect != null);
+        try std.testing.expectError(error.InvalidRequiredAuthority, gaps.build(a, admitted, decision.observations, decision.result));
+        try std.testing.expectEqualDeep(origin, admitted.review_origin.?);
+        try std.testing.expectEqual(@as(usize, 0), admitted.candidates.len);
+        // A source ID cannot manufacture the claim provenance required by a
+        // positive verdict. Genuine authority gaps still produce user forms.
+        for (findings) |*finding| finding.value.finding = .supported;
+        try std.testing.expect((try support.collect(a, inputs, fixture.context, try json.encode(support.Review, a, .{ .entries = findings }), origin)) == .rejected);
+        for (findings) |*finding| {
+            finding.value.finding = .unsupported;
+            finding.value.source_ids = &.{};
+            finding.value.detail = "The source does not establish this requirement.";
+        }
+        const missing = (try support.collect(a, inputs, fixture.context, try json.encode(support.Review, a, .{ .entries = findings }), origin)).accepted.inputs;
+        const unresolved = try supportDecision(a, missing);
+        try std.testing.expectEqual(.needs_user, unresolved.result.continuation);
+        try std.testing.expectEqual(findings.len, (try gaps.build(a, missing, unresolved.observations, unresolved.result)).entries.len);
+    }
+}
+
 test "native specification dependencies reject changed grammar and broken history independently of presentation" {
     const repair = @import("domain/specification_repair.zig");
     const sessions = @import("domain/specification_session.zig");
@@ -1066,6 +1115,23 @@ test "established UTC and renewal omissions repair one field or record while act
             const content = (try sessions.assemble(a, text.validator, fixture.context, current)).content;
             var inputs = try @import("domain/specification_authority.zig").project(a, current.feature, fixture.context.references, content, current.units[0].?.response.content.brief);
             inputs.revision = current.revision;
+            const review_packet = try support.packet(a, inputs, fixture.context);
+            defer @import("domain/model_input_packet.zig").release(review_packet);
+            const review_body = (try std.json.parseFromSlice(std.json.Value, a, review_packet.body(), .{})).value.object;
+            const subject = review_body.get("subject").?.object;
+            try std.testing.expectEqualStrings("candidate_support", subject.get("kind").?.string);
+            const projected_content = try json.decode(spec.IdentifiedContent, a, try std.json.Stringify.valueAlloc(a, subject.get("candidate").?, .{}));
+            try std.testing.expectEqualDeep(content, projected_content);
+            const projected_brief = try json.decode(spec.Brief, a, try std.json.Stringify.valueAlloc(a, subject.get("brief").?, .{}));
+            try std.testing.expectEqualDeep(inputs.brief.?, projected_brief);
+            // A low-level review may supply a brief before the complete spec.
+            const brief_inputs = try @import("domain/specification_authority.zig").project(a, current.feature, fixture.context.references, null, inputs.brief);
+            const brief_packet = try support.packet(a, brief_inputs, fixture.context);
+            defer @import("domain/model_input_packet.zig").release(brief_packet);
+            const brief_subject = (try std.json.parseFromSlice(std.json.Value, a, brief_packet.body(), .{})).value.object.get("subject").?.object;
+            try std.testing.expectEqualStrings("candidate_support", brief_subject.get("kind").?.string);
+            try std.testing.expect(brief_subject.get("candidate").? == .null);
+            try std.testing.expectEqualDeep(inputs.brief.?, try json.decode(spec.Brief, a, try std.json.Stringify.valueAlloc(a, brief_subject.get("brief").?, .{})));
             const good = try reviewFor(a, inputs);
             const findings = try a.dupe(support.Finding, good.entries);
             const ledger = try authority.build(a, inputs);
@@ -1123,6 +1189,12 @@ test "support reviews retain original sources and discarded or misclassified tok
             const packet = try support.packet(a, inputs, fixture.context);
             defer @import("domain/model_input_packet.zig").release(packet);
             const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+            try std.testing.expectEqualStrings("source_preservation", body.value.object.get("subject").?.object.get("kind").?.string);
+            try std.testing.expect(body.value.object.get("candidate_revision") == null);
+            try std.testing.expect(body.value.object.get("candidate") == null);
+            const row = body.value.object.get("requirements").?.array.items[0].object;
+            try std.testing.expect(row.get("contract_version") == null and row.get("requirement") == null);
+            try std.testing.expect(row.get("slot") != null and row.get("selectable_claim_ids") != null);
             try std.testing.expectEqualStrings(source, body.value.object.get("sources").?.array.items[0].object.get("text").?.string);
             const classification = body.value.object.get("extraction").?.array.items[0].object.get("token_classifications").?.array.items[0];
             try std.testing.expectEqualStrings(if (kind == null) "irrelevant" else "preserve", classification.object.get("decision").?.object.get("kind").?.string);

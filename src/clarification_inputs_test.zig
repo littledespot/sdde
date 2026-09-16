@@ -8,6 +8,41 @@ const feature = @import("domain/feature_directory.zig");
 const action = @import("actions/clarification/validate_clarification_forms.zig");
 const selected = @import("domain/feature_identity.zig").FeatureId{ .bytes = "Chosen/Café" };
 
+test "clarification notices use published open forms and survive invocation release" {
+    const values = @import("application/pipeline_values.zig");
+    const input = @import("application/clarification_input_workflow.zig");
+    const refreshed = @import("application/clarification_refresh_workflow.zig");
+    const output = @import("application/workflow_output_binding.zig");
+    const refresh = @import("domain/clarification_refresh.zig");
+    const capture = @import("application/workflow_clarification_report.zig").capture;
+    var report: @import("domain/run_outcome.zig").Report = .{ .outcome = .{ .execution = .needs_user }, .arena = .init(std.testing.allocator) };
+    defer report.deinit();
+    {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var view: @import("domain/pipeline_data.zig").View = .{};
+        defer for (view.slots) |slot| if (slot) |value| values.destroy(value);
+        try std.testing.expectEqual(@as(usize, 0), (try capture(report.arena.allocator(), &view)).len);
+        const roots: artifacts.FeatureRoots = .{ .specs = "requirements/current", .archive = "requirements/archive", .workflows = "engine/flows" };
+        const directory = try feature.validate(a, .{ .bytes = selected.bytes }, .{ .specs = roots.specs, .archive = roots.archive });
+        const paths = try artifacts.resolveFeaturePaths(a, roots, directory);
+        view.slots[@intFromEnum(input.paths_schema.key)] = try values.create(std.testing.allocator, input.paths_schema, artifacts.FeaturePaths, paths);
+        const prior = try load(a, try fixture.closed(a, "S01", true));
+        view.slots[@intFromEnum(input.inputs_schema.key)] = try values.create(std.testing.allocator, input.inputs_schema, c.Inputs, prior);
+        const record = fixture.record("T01");
+        const state = try refresh.refresh(a, prior, .{ .feature = selected, .entries = &.{.{ .stage = .tasks, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema }} });
+        view.slots[@intFromEnum(refreshed.state_schema.key)] = try values.create(std.testing.allocator, refreshed.state_schema, refresh.Result, .{ .ready = state });
+        // Preparing a new form is not evidence that its write succeeded.
+        try std.testing.expectEqual(@as(usize, 0), (try capture(report.arena.allocator(), &view)).len);
+        view.slots[@intFromEnum(output.published_schema.key)] = try values.create(std.testing.allocator, output.published_schema, bool, true);
+        report.clarifications = try capture(report.arena.allocator(), &view);
+        try std.testing.expectEqual(@as(usize, 1), report.clarifications.len);
+    }
+    try std.testing.expectEqualDeep(c.Id.parse("T01").?, report.clarifications[0].id);
+    try std.testing.expectEqualStrings("requirements/current/Chosen/Café/clarify/T01.md", report.clarifications[0].path.project_relative);
+}
+
 test "refresh allocates stable subject IDs and replaces open drafts for every stage" {
     const refresh = @import("domain/clarification_refresh.zig");
     const views = @import("domain/clarification_views.zig");

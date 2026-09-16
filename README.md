@@ -45,6 +45,11 @@ forms at the same paths, retain clarification identities and applicable answers,
 and preserve user-closed forms byte-for-byte. See
 [ADR 0009](design/decisions/0009-atomic-workflow-execution.md).
 
+`needs_user` is a normal clarification pause: the CLI exits 0 and lists the open
+form IDs and paths. It does not mean the workflow completed. The E2E harness
+reports `awaiting_clarification` with publication/grading `not_run`; only
+`evaluated` establishes its published/scored baseline.
+
 ## Build and verify
 
 Use **Zig 0.16.0 exactly**, as pinned in [.zigversion](.zigversion),

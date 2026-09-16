@@ -224,13 +224,19 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
   choosing which value survives.
 - Neither correction path synthesizes a candidate example.
 
-- `evaluated` and exit 0 mean generation, publication checks and a scored evaluation
-  completed.
+- `evaluated` means generation, publication checks and a scored evaluation completed.
+- `awaiting_clarification` preserves native `needs_user` as a normal pause. Both
+  CLI entrypoints exit 0 and show registered open clarification IDs and paths.
+  Harness paths point into the retained run's `project/`; JSON paths are relative
+  to that project. Unattempted specification publication and grading are `not_run`.
+  After validated answers, a fresh workflow invocation starts at `start`.
+- Exit 0 alone does not establish the published/scored baseline: require `evaluated`.
 - A low score is still a completed evaluation; inspect `score_percent` and the
   separately reported threshold result.
 - No quality threshold has been adopted by the draft rubric.
-- Workflow failure, clarification, cancellation, missing/changed output, evaluator error
-  and unresolved quality produce nonzero exit status.
+- Invalid candidates, workflow failure, blocked/cancelled execution, missing/changed
+  output, evaluator error and unresolved quality produce nonzero exit status.
+  Native `invalid`, `blocked` and `cancelled` retain distinct report statuses.
 - Evaluator failure preserves a successfully published specification.
 
 The terminal prints the score and threshold result explicitly.

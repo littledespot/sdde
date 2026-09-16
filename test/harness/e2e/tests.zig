@@ -171,7 +171,7 @@ test "production E2E binding honors configured models and cannot succeed without
         try std.testing.expectEqual(@as(usize, 0), report.model_calls);
         try std.testing.expectEqualStrings(model, report.models[0].model);
         try std.testing.expectEqualStrings("aws-bedrock", report.models[0].provider);
-        try std.testing.expectEqual(.not_evaluated, report.semantic_quality);
+        try std.testing.expectEqual(.not_run, report.semantic_quality);
         const events = try @import("../files.zig").read(io, a, evidence_run.dir, report.events_file.?);
         try std.testing.expect(std.mem.indexOf(u8, events, "authentication_failed") != null);
         try std.testing.expect(report.last_model_call == null);
@@ -339,16 +339,50 @@ test "E2E oracle requires actual publication and every expected file" {
     const passed = try oracle.inspect(io, a, project.dir, .ok, .{ .confirmed = &prepared }, &expected, paths);
     try std.testing.expectEqual(.generated, passed.status);
     try std.testing.expectEqualStrings("outputs/chosen/spec.md", passed.specification.?);
-    for ([_]@import("../../../src/domain/workflow.zig").OutcomeTag{ .failed, .invalid, .blocked, .cancelled, .needs_user, .more }) |outcome| {
+    const outcomes = [_]@import("../../../src/domain/workflow.zig").OutcomeTag{ .failed, .invalid, .blocked, .cancelled, .needs_user, .more };
+    const statuses = [_]c.Status{ .workflow_failed, .workflow_invalid, .workflow_blocked, .workflow_cancelled, .awaiting_clarification, .workflow_failed };
+    for (outcomes, statuses) |outcome, status| {
         const result = try oracle.inspect(io, a, project.dir, outcome, .{ .confirmed = &prepared }, &expected, paths);
-        try std.testing.expectEqual(.workflow_failed, result.status);
+        try std.testing.expectEqual(status, result.status);
         try std.testing.expect(result.specification == null);
+        try std.testing.expectEqual(outcome == .needs_user, result.status.commandSucceeded());
     }
     try project.dir.deleteFile(io, paths.get(.workflow_state).project_relative);
     const missing = try oracle.inspect(io, a, project.dir, .ok, .{ .confirmed = &prepared }, &expected, paths);
     try std.testing.expectEqual(.artifact_missing, missing.status);
     try std.testing.expectEqual(.workflow_state, missing.missing_artifact.?);
     try std.testing.expect(missing.specification == null);
+}
+
+test "clarification reports are ungraded normal pauses with registered IDs and paths" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var dir = std.testing.tmpDir(.{});
+    defer dir.cleanup();
+    const output = try @import("report.zig").Output.reserve(io, dir.dir);
+    defer output.close(io);
+    const id = @import("../../../src/domain/clarification_inputs.zig").Id.parse("S02").?;
+    const report: c.Report = .{ .started_at_utc = "2026-09-16T00:00:00Z", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .clarifications = &.{.{ .id = id, .path = try @import("../../../src/domain/workflow_output.zig").path(a, try resolve(a), .{ .form = id }) }} };
+    try output.save(io, a, report);
+    const bytes = try @import("../files.zig").read(io, a, dir.dir, "report.json");
+    const retained = try @import("../contracts.zig").decode(c.Report, a, bytes);
+    try std.testing.expectEqualDeep(report.clarifications, retained.clarifications);
+    try std.testing.expectEqual(.not_run, retained.publication_check);
+    try std.testing.expectEqual(.not_run, retained.semantic_quality);
+    try std.testing.expect(retained.diagnostic == null and retained.evaluation == null and retained.specification == null);
+    try std.testing.expect(retained.status.commandSucceeded());
+    for (std.meta.tags(c.Status)) |status| try std.testing.expectEqual(status == .awaiting_clarification or status == .evaluated, status.commandSucceeded());
+    const markdown = try @import("../files.zig").read(io, a, dir.dir, "report.md");
+    const terminal = try @import("report.zig").terminal(a, report, "runs", "example");
+    for ([_][]const u8{ markdown, terminal }) |rendered| {
+        try std.testing.expect(std.mem.indexOf(u8, rendered, "Awaiting clarification") != null);
+        try std.testing.expect(std.mem.indexOf(u8, rendered, "S02") != null);
+        try std.testing.expect(std.mem.indexOf(u8, rendered, "outputs/chosen/clarify/S02.md") != null);
+        try std.testing.expect(std.mem.indexOf(u8, rendered, "publication: not_run") != null);
+        try std.testing.expect(std.mem.indexOf(u8, rendered, "Engine/harness error") == null);
+    }
 }
 
 test "failure reports preserve separate engine provider and model evidence" {
@@ -392,7 +426,7 @@ test "failure reports preserve separate engine provider and model evidence" {
     try std.testing.expectEqualDeep(report.schema_error, retained.schema_error);
     try std.testing.expectEqualDeep(report.candidate_error, retained.candidate_error);
     try std.testing.expectEqualStrings("run-failed", retained.execution_id.?);
-    try std.testing.expectEqual(.not_evaluated, retained.semantic_quality);
+    try std.testing.expectEqual(.not_run, retained.semantic_quality);
     try std.testing.expect(retained.evaluation == null);
     const view = try @import("../files.zig").read(io, a, dir.dir, "report.md");
     try std.testing.expect(std.mem.indexOf(u8, view, "provider stopped generation at its output limit") != null);

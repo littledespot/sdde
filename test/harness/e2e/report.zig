@@ -32,6 +32,11 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
     defer out.deinit();
     const writer = &out.writer;
     try writer.print("E2E result: {s}\n", .{@tagName(report.status)});
+    try writer.print("Specification publication: {s}; grading: {s}\n", .{ @tagName(report.publication_check), @tagName(report.semantic_quality) });
+    if (report.status == .awaiting_clarification) try writer.print("{s}\n", .{explanation(report)});
+    const project_prefix = try std.fmt.allocPrint(allocator, "{s}/{s}/project/", .{ root, run });
+    defer allocator.free(project_prefix);
+    try writeClarifications(writer, report, project_prefix);
     if (report.evaluation) |evaluation| switch (evaluation.outcome) {
         .evaluated => |judgment| {
             try writer.print("Quality assessment: {s}; threshold: {s}", .{ @tagName(judgment.assessment), @tagName(judgment.threshold) });
@@ -113,6 +118,7 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     const writer = &out.writer;
     const escape = @import("../report.zig").escape;
     try writer.print("# Spec E2E run\n\nResult: **{s}**\n\n{s}\n\n", .{ @tagName(report.status), explanation(report) });
+    try writeClarifications(writer, report, "project/");
     if (report.build) |build| {
         try writer.writeAll("Executed build: ");
         try std.json.Stringify.value(build, .{}, writer);
@@ -213,7 +219,7 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     if (report.evaluation) |evaluation| {
         try writer.writeAll(try @import("../report.zig").markdown(allocator, evaluation));
     } else {
-        try writer.writeAll("No rubric grade is available. This run provides failure evidence only; it does not establish the quality of a generated specification.\n");
+        try writer.writeAll("No rubric grade is available. The published/scored baseline is incomplete.\n");
     }
     return out.toOwnedSlice();
 }
@@ -223,10 +229,14 @@ fn explanation(report: c.Report) []const u8 {
         .input_invalid => "Input setup failed before workflow execution. Check the diagnostic and captured inputs. Use scripts/e2e-spec.sh to load the checkout's .env.e2e; direct Zig invocations require the TEST_EVALUATION_* settings and test credential in their environment.",
         .harness_error => "The harness encountered an operational error. Any retained candidate or score does not make this a completed E2E run.",
         .bootstrap_failed => "The engine rejected project/workflow configuration before generation. Inspect the bootstrap diagnostic and captured project resources.",
+        .awaiting_clarification => "Awaiting clarification. Answer the registered forms, then run the workflow again. Specification publication and grading have not run.",
+        .workflow_invalid => "The workflow rejected candidate data. Inspect its validation findings; no completed specification is available for grading.",
+        .workflow_blocked => "The workflow is blocked. Inspect its native outcome and diagnostics before another invocation.",
+        .workflow_cancelled => "The workflow was cancelled. No completed specification is available for grading.",
         .workflow_failed => if (report.provider_diagnostic != null and std.mem.eql(u8, report.provider_diagnostic.?, "output_limit"))
             "The provider stopped generation at its output limit before returning a complete candidate. The engine sets no per-call output token limit; its token budget is cumulative across the workflow. The engine rejected partial output, so no published specification was available to grade. Inspect the model assignment, prompt and schema at the reported step; no harness retry or partial-output substitution was applied."
         else
-            "The workflow did not complete. Inspect its outcome and separate provider/model diagnostics; a failed, cancelled or clarification-blocked invocation cannot supply a fresh specification for grading.",
+            "The workflow failed. Inspect its outcome and separate provider/model diagnostics; no completed specification is available for grading.",
         .publication_missing, .artifact_missing, .artifact_unreadable, .artifact_changed => "The invocation did not provide all expected, unchanged published artifacts. Inspect publication evidence and the retained project; file existence alone cannot establish success.",
         .fixture_changed => "Source inputs changed during execution. This run is not accepted as a stable E2E comparison; use the retained capture to inspect what was evaluated.",
         .generated => "The engine published its validated specification; rubric grading has not completed.",
@@ -234,6 +244,16 @@ fn explanation(report: c.Report) []const u8 {
         .quality_unresolved => "Generation completed, but the judge could not resolve every required criterion. Inspect the criterion evidence and uncertainty below.",
         .evaluated => "Generation, publication checks and rubric scoring completed. Inspect the score and criterion findings below; a completed evaluation may still report poor quality.",
     };
+}
+
+fn writeClarifications(writer: *std.Io.Writer, report: c.Report, prefix: []const u8) !void {
+    for (report.clarifications) |form| {
+        const name = form.id.filename();
+        try writer.print("Clarification {s}: ", .{name[0..3]});
+        try @import("../report.zig").escape(writer, prefix);
+        try @import("../report.zig").escape(writer, form.path.project_relative);
+        try writer.writeAll("\n\n");
+    }
 }
 
 fn writeRepairs(writer: *std.Io.Writer, repairs: []const @import("../../../src/domain/atomic_repair.zig").Merge) !void {

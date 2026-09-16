@@ -31,6 +31,14 @@ pub const Collection = union(enum) {
     rejected: struct { candidate: ?Candidate, rejection: Rejection },
 };
 
+// Correlate responses by ordinal; native identity/version and revision remain
+// in the retained ledger. Only the applicable review subject reaches the model.
+const Requirement = struct { ordinal: u32, kind: a.Kind, unit: a.Unit, slot: a.Slot, member: u32, permitted_not_applicable: ?a.Rule, selectable_claim_ids: []const r.ClaimId };
+const Subject = union(enum) {
+    source_preservation: struct {},
+    candidate_support: struct { candidate: ?spec.IdentifiedContent, brief: ?spec.Brief },
+};
+
 pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context) Error!*packets.Packet {
     return packetFor(allocator, inputs, context, null);
 }
@@ -43,16 +51,18 @@ pub fn packetFor(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Cont
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     const all = try p.items(context);
     if (inputs.projection != .specification or !a.contains(a.Authority, inputs.authorities, .{ .reference = all.state_id }) or !records.items.state_id.eql(all.state_id)) return error.InvalidRequiredAuthority;
-    var slots: std.ArrayList(struct { ordinal: u32, requirement: a.Id, permitted_not_applicable: ?a.Rule, selectable_claim_ids: []const r.ClaimId }) = .empty;
+    var slots: std.ArrayList(Requirement) = .empty;
     for (ledger.requirements, 0..) |requirement, index| {
         if (target) |selected| if (!std.meta.eql(selected, requirement.seed.id)) continue;
-        try slots.append(scratch, .{ .ordinal = try r.ordinal(index), .requirement = requirement.seed.id, .permitted_not_applicable = if (requirement.registered_policy) |policy| policy.not_applicable else null, .selectable_claim_ids = try admission.choices(scratch, records, requirement.seed.id) });
+        const id = requirement.seed.id;
+        try slots.append(scratch, .{ .ordinal = try r.ordinal(index), .kind = id.kind, .unit = id.unit, .slot = id.slot, .member = id.member, .permitted_not_applicable = if (requirement.registered_policy) |policy| policy.not_applicable else null, .selectable_claim_ids = try admission.choices(scratch, records, id) });
     }
     if (target != null and slots.items.len != 1) return error.InvalidRequiredAuthority;
     const projected = try @import("model_evidence.zig").project(scratch, all.entries);
     const sources = try scratch.alloc(struct { id: @import("reference_identity.zig").SourceId, text: []const u8 }, context.inputs.corpus.sources.len);
     for (context.inputs.corpus.sources, sources) |source, *copy| copy.* = .{ .id = source.id, .text = source.bytes };
-    const payload = .{ .requirements = slots.items, .candidate_revision = inputs.revision, .candidate = inputs.specification, .brief = inputs.brief, .sources = sources, .extraction = try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction), .dispositions = records.dispositions, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = try @import("model_evidence.zig").signals(scratch, records.signals), .conflicts = try @import("model_evidence.zig").conflicts(scratch, records.conflicts) };
+    const subject: Subject = if (inputs.specification != null or inputs.brief != null) .{ .candidate_support = .{ .candidate = inputs.specification, .brief = inputs.brief } } else .{ .source_preservation = .{} };
+    const payload = .{ .subject = subject, .requirements = slots.items, .sources = sources, .extraction = try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction), .dispositions = records.dispositions, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = try @import("model_evidence.zig").signals(scratch, records.signals), .conflicts = try @import("model_evidence.zig").conflicts(scratch, records.conflicts) };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
     return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = "source-support" } } }, .{ .semantic_review = .{ .bytes = "source-support" } }, null);
 }

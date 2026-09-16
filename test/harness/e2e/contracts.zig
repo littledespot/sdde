@@ -54,6 +54,10 @@ pub const Status = enum {
     harness_error,
     bootstrap_failed,
     workflow_failed,
+    awaiting_clarification,
+    workflow_invalid,
+    workflow_blocked,
+    workflow_cancelled,
     publication_missing,
     artifact_missing,
     artifact_unreadable,
@@ -62,6 +66,10 @@ pub const Status = enum {
     generated,
     evaluator_failed,
     quality_unresolved,
+
+    pub fn commandSucceeded(self: Status) bool {
+        return self == .evaluated or self == .awaiting_clarification;
+    }
 };
 
 /// Serializable projection of a native rejection; no inferred domain verdict.
@@ -115,6 +123,7 @@ pub const Report = struct {
     workflow_id: ?[]const u8 = null,
     status: Status,
     workflow_outcome: ?@import("../../../src/domain/workflow.zig").OutcomeTag = null,
+    clarifications: []const @import("../../../src/domain/run_outcome.zig").Clarification = &.{},
     terminal_step: ?[]const u8 = null,
     terminal_rejection: ?TerminalRejection = null,
     model_calls: usize = 0,
@@ -148,7 +157,7 @@ pub const Report = struct {
     missing_artifact: ?Artifact = null,
     specification: ?[]const u8 = null,
     publication_check: enum { not_run, passed, failed } = .not_run,
-    semantic_quality: enum { not_evaluated, scored, unresolved, evaluator_error } = .not_evaluated,
+    semantic_quality: enum { not_run, scored, unresolved, evaluator_error } = .not_run,
     evaluation_configuration: ?@import("../configuration.zig").Config = null,
     evaluation: ?@import("../report.zig").Report = null,
 };

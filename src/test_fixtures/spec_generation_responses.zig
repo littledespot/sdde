@@ -13,6 +13,7 @@ pub const Options = struct {
     support_fault: ?SupportFault = null,
     support_post: bool = false,
     candidate_omission: bool = false,
+    extraction_omission: bool = false,
     text_fault: bool = false,
     failed_text_repair: bool = false,
     reconciliation_repair_fault: ?enum { unchanged, alternating, unchanged_text } = null,
@@ -55,6 +56,14 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 }
                 const choices = if (options.failed_classification_repair) &.{} else try @import("reference_tokens.zig").classifications(allocator, candidates, chunk);
                 return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/reference_extraction_repair.zig").Replacement, allocator, .{ .classifications = .{ .token_classifications = choices } });
+            }
+            if (options.extraction_omission) {
+                const choices = try @import("reference_tokens.zig").classifications(allocator, candidates, chunk);
+                const discarded = try allocator.alloc(@import("../domain/structured_tokens.zig").Classification, choices.len);
+                for (choices, discarded) |choice, *decision| decision.* = .{ .irrelevant = choice.id() };
+                // R21: a protocol-valid correction abandons the source task.
+                const reply = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .no_feature_claim = .{ .reason = .{ .nodes = &.{.{ .literal = .{ .value = "The rejected response JSON has a syntax error in its claims array." } }} }, .token_classifications = &.{} } });
+                return @import("reference_tokens.zig").wire(allocator, reply, discarded);
             }
             const claim = if (options.script) |script| (try @import("specification_script.zig").extraction(script, selected_chunk.bytes)).claim else try extractedClaim(allocator, chunk.id);
             const citation: @import("../domain/source_selections.zig").Selection = if (options.citation_fault == .unknown) .{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } else @import("../reference_extraction_test.zig").wholeChunk(chunk);
@@ -276,6 +285,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 const conflict = requirement.seed.id.unit == .conflict or (eligible.len == 0 and context.references.records.conflicts.len != 0);
                 const omission = options.candidate_omission and inputs.specification != null and requirement.seed.id.slot == .functional_requirements and !g.spec.hasRecords(inputs.specification.?, .functional_requirement);
                 finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .finding = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else .supported, .disposition = if (requirement.seed.id.kind == .entity_applicability and inputs.specification != null and inputs.specification.?.entities.disposition == .not_applicable) .not_applicable else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The sources require loan renewal, but the specification has no functional requirement for it." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else "" } };
+                if (options.extraction_omission) finding.value = .{ .finding = .candidate_omission, .disposition = .supported, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{context.inputs.corpus.sources[0].id}, .detail = "Extraction discarded the source-required behavior and exact message." };
             }
             if (request.id().purpose == .atomic_repair) {
                 const repair = @import("../domain/specification_support_repair.zig");

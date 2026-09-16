@@ -17,7 +17,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
             return null;
         },
         .cancelled => {
-            report.status = .workflow_failed;
+            report.status = .workflow_cancelled;
             report.workflow_outcome = .cancelled;
             return null;
         },
@@ -55,7 +55,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     }
     report.workflow_outcome = result.executionStatus();
     switch (result) {
-        .execution => |outcome| if (outcome != .ok) {
+        .execution => |outcome| if (outcome == .failed) {
             report.diagnostic = @tagName(outcome);
         },
         .execution_rejected => |reason| {
@@ -79,6 +79,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     };
     var publication: @import("oracle.zig").Publication = .not_observed;
     if (invocation.pipeline_runner) |*runner| {
+        if (outcome == .needs_user) report.clarifications = try @import("../../../src/application/workflow_clarification_report.zig").capture(allocator, &.{ .slots = runner.envelope.slots });
         try @import("observation.zig").capture(allocator, runner, report);
         try trace.last_rejection.project(allocator, trace.calls, report);
         try trace.correlate(allocator, report);
@@ -92,7 +93,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     report.status = observed.status;
     report.missing_artifact = observed.missing_artifact;
     report.specification = observed.specification;
-    report.publication_check = if (observed.status == .generated) .passed else .failed;
+    report.publication_check = if (outcome != .ok) .not_run else if (observed.status == .generated) .passed else .failed;
     if (observed.status == .publication_missing) report.diagnostic = "WORKFLOW_OUTPUT_NOT_PUBLISHED";
     if (observed.status == .artifact_changed) report.diagnostic = "PUBLISHED_ARTIFACT_CHANGED";
     return observed.specification_bytes;

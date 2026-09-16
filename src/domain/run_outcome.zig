@@ -1,5 +1,22 @@
 const bootstrap_error = @import("bootstrap_error.zig");
 const execution = @import("workflow_execution.zig");
+const std = @import("std");
+
+pub const Clarification = struct {
+    id: @import("clarification_inputs.zig").Id,
+    path: @import("workflow_artifact_registry.zig").ArtifactPath,
+};
+
+/// Owned presentation data copied before the invocation releases its state.
+pub const Report = struct {
+    outcome: Outcome,
+    clarifications: []const Clarification = &.{},
+    arena: std.heap.ArenaAllocator,
+
+    pub fn deinit(self: *Report) void {
+        self.arena.deinit();
+    }
+};
 
 pub const Outcome = union(enum) {
     execution: execution.Outcome,

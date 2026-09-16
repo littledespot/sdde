@@ -11,14 +11,24 @@ pub fn main(init: std.process.Init) !void {
         try arguments.append(init.gpa, try init.arena.allocator().dupe(u8, argument));
     }
 
-    const outcome = sdde.run(init.io, init.gpa, arguments.items, init.environ_map);
+    var report = try sdde.run(init.io, init.gpa, arguments.items, init.environ_map);
+    defer report.deinit();
+    const outcome = report.outcome;
 
     switch (outcome) {
         .execution => |execution| switch (execution) {
             .ok => return,
             // Compiled graphs cannot terminate with a progress-only outcome.
             .more => unreachable,
-            .needs_user, .invalid, .blocked, .failed, .cancelled => {
+            .needs_user => {
+                try std.Io.File.stdout().writeStreamingAll(init.io, "Awaiting clarification. Answer the registered forms, then run the workflow again.\n");
+                for (report.clarifications) |form| {
+                    const name = form.id.filename();
+                    const line = try std.fmt.allocPrint(init.arena.allocator(), "{s}: {s}\n", .{ name[0..3], form.path.project_relative });
+                    try std.Io.File.stdout().writeStreamingAll(init.io, line);
+                }
+            },
+            .invalid, .blocked, .failed, .cancelled => {
                 try writeFailure(init.io, @tagName(execution));
                 std.process.exit(1);
             },
