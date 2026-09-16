@@ -32,4 +32,4 @@ Bootstrap has a fixed engine-startup portion and workflow-owned setup:
 - A config, workflow-definition, toolchain-layer, preset, reader, parser, project, or command
   ambiguity is an engine/environment problem and does not consume a repair attempt.
 
-The new engine uses typed filesystem and process adapters. It does not reproduce the current `eval $(get_feature_paths)` pattern (`.specify/scripts/bash/common.sh:71-88`), hard-code `specs/`, or delegate state construction to a shell script.
+The new engine uses typed filesystem and process adapters. It does not reproduce the predecessor `eval $(get_feature_paths)` pattern (`.specify/scripts/bash/common.sh:71-88`), hard-code `specs/`, or delegate state construction to a shell script.

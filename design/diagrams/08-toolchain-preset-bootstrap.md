@@ -2,7 +2,7 @@ High-level startup flow and workflow-selected toolchain preparation.
 
 ```mermaid
 flowchart TD
-    START["Run an sdd command"] --> CONFIG["Read .sddtoolkit.json from the invocation directory;<br/>validate configuration and configured roots"]
+    START["Run an sdde workflow"] --> CONFIG["Read .sddtoolkit.json from the invocation directory;<br/>validate configuration and configured roots"]
     CONFIG --> WORKFLOWS["Discover workflow definitions and declared resources;<br/>validate and compile their operations"]
     WORKFLOWS --> SELECT["Select the requested workflow"]
     SELECT --> MODEL{"Selected workflow requires a model provider?"}

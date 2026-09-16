@@ -12,7 +12,7 @@ The predecessor toolkit defined a specification-first workflow in which requirem
 - `spec.md` remains business-facing. Supplementary design, visual-system, technical, and verification detail is carried in `reference-context.md` (`prompts/sdd-specify.md:178-238`).
 - `plan` uses the specification, its mandatory reference context, the current repository, and project principles to produce research and design artifacts (`prompts/sdd-plan.md:33-113`).
 - `tasks` turns the plan and its artifacts into a dependency-ordered, traceable, executable task graph (`prompts/sdd-tasks.md:92-149`).
-- `implement` executes that graph, applies relevant project principles, verifies work, and marks a task complete only after it succeeds (`prompts/sdd-implement.md:71-137`).
+- `implement` executes that graph, applies relevant project principles, verifies work, and marks a task complete only after it succeeds (`prompts/sdd-implement.md:71-137`). In SDDE, [ADR 0009](../decisions/0009-atomic-workflow-execution.md) further requires publishing task completion only with successful whole-workflow output.
 - Technology-agnostic workflow guidance becomes technology-specific only after the engine resolves the actual project environment (`README.md:315-328`).
 
 ### 2.2 Why a new engine is needed

@@ -13,6 +13,29 @@ const variants =
 ;
 const Case = struct { bytes: []const u8, rejection: ?validation.Rejection = null, path: ?[]const u8 = null };
 
+test "reconciliation repair definitions admit only the natively selected payload" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .limited(1_048_576));
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schema = try parser.compiler().compile(a, bytes);
+    try std.testing.expect(schema.select(.{ .bytes = "repair_content" }) == null);
+    for ([_][2][]const u8{
+        .{ "business_text", "{\"segments\":[{\"kind\":\"literal\",\"value\":\"Display a greeting.\"}]}" },
+        .{ "reference_text", "{\"nodes\":[{\"kind\":\"source\",\"source_id\":{\"ordinal\":1}}]}" },
+        .{ "token_reference", "{\"token_id\":{\"ordinal\":1}}" },
+    }) |example| {
+        const selected = schema.select(.{ .bytes = example[0] }).?;
+        try checkDocument(selected.modelBytes(), .{ .bytes = example[1] });
+        for ([_][]const u8{
+            "{\"kind\":\"preserved_token\",\"token_id\":{\"ordinal\":1}}",
+            "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[]}}",
+            "{\"current_value\":{}}",
+        }) |invalid| try checkDocument(selected.modelBytes(), .{ .bytes = invalid, .rejection = .unknown_property });
+    }
+}
+
 test "native generation projection preserves variants while full schema retains bound authority" {
     const contract =
         \\{"type":"object","properties":{"items":{"type":"array","minItems":2,"maxItems":3,"items":{"oneOf":[{"type":"object","properties":{"kind":{"const":"text"},"value":{"type":"string","minLength":1,"maxLength":2}},"required":["kind","value"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"count"},"value":{"type":"integer","minimum":1,"maximum":9}},"required":["kind","value"],"additionalProperties":false}]}}},"required":["items"],"additionalProperties":false}

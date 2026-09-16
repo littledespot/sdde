@@ -36,6 +36,8 @@ templates only under its separately accepted contract.
 **Source material:** [paths](paths.md), [schemas](schemas/),
 [configuration examples](examples/), [legacy preset examples](toolchainPresets/)
 and [principle templates](templates/). They are not runtime fallback data.
+The [preset authoring guide](toolchainPresets/README.md) distinguishes the source
+examples from current runtime inputs.
 References below to predecessor `prompts/`, `.specify/`, `docs/` and old README
 line ranges describe historical toolkit inputs outside this checkout; they
 are not current-source links or execution authorization.
@@ -675,19 +677,19 @@ The package layout reflects the required dependency boundaries and native Zig di
 - Implement plan IR, artifact applicability, and bounded applicable-principle selection over the bootstrap-captured free-text registry.
 - Add path/coverage/token/quickstart validators.
 - Integrate the shared reconciliation boundary for every planning-owned architecture, policy, repository/capability, dependency, design, and verification-strategy decision; no plan-domain fallback may bypass it.
-- Implement `P01..P99` clarification pause/resume/deduplication, full plan regeneration, generated-view rendering, explicit plan review, and the blocking tasks gate.
+- Implement `P01..P99` clarification persistence/deduplication and fresh reruns, full plan regeneration, generated-view rendering, explicit plan review, and the blocking tasks gate.
 
 ### Increment 4: Tasks
 
 - Implement obligation ledger and typed task proposal operations.
 - Build DAG, path/command validation, coverage, ordering, and parallel calculation.
 - Integrate the shared reconciliation boundary for task-owned decomposition, authorization, dependency, command/scenario, and evidence slots, with upstream gaps routed back rather than absorbed.
-- Implement `T01..T99` clarification pause/resume/deduplication, full graph regeneration, deterministic read-only `tasks.md`, explicit task review, and the blocking implement gate.
+- Implement `T01..T99` clarification persistence/deduplication and fresh reruns, full graph regeneration, deterministic read-only `tasks.md`, explicit task review, and the blocking implement gate.
 
 ### Increment 5: Implement
 
 - Implement authorized create/update/replace/copy operations, configured command execution, AST/import checks and evidence inside one private workflow candidate.
-- Rebuild reconciliation at implementation entry and before task/final commits; route every non-code authority gap to its earliest upstream owner and permit repair only inside fully resolved approved authority.
+- Rebuild reconciliation at implementation entry, after candidate task changes and before whole-workflow publication; route every non-code authority gap to its earliest upstream owner and permit repair only inside fully resolved approved authority.
 - Implement current-execution candidate ownership and cleanup, and final checks over the complete candidate before publishing workflow output; no persisted adapter checkpoints.
 - Start with sequential task execution; enable validated concurrency only after overlay/lock tests pass.
 
@@ -1076,7 +1078,7 @@ identifies the governing repair and authority rules.
 
 ## 34. Final design position
 
-The current workflow has the correct high-level shape but gives the model too much operational authority. The new engine should preserve the semantic progression and artifact intent while reversing that authority:
+The predecessor toolkit supplied the high-level workflow shape but delegated operational authority to model instructions. The new engine should preserve the semantic progression and artifact intent while reversing that authority:
 
 - The engine supplies facts and constraints before generation.
 - The engine proves every required authority is exactly reconciled or returns to its earliest owner; no stage repairs an authority gap locally.

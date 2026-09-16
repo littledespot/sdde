@@ -254,11 +254,7 @@
                       "const": "business"
                     },
                     "segments": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/business_segment"
-                      },
-                      "maxItems": 4294967295
+                      "$ref": "#/$defs/business_segments"
                     }
                   },
                   "required": [
@@ -274,11 +270,7 @@
                       "const": "design"
                     },
                     "nodes": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/reference_node"
-                      },
-                      "maxItems": 4294967295
+                      "$ref": "#/$defs/reference_nodes"
                     }
                   },
                   "required": [
@@ -294,11 +286,7 @@
                       "const": "technical"
                     },
                     "nodes": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/reference_node"
-                      },
-                      "maxItems": 4294967295
+                      "$ref": "#/$defs/reference_nodes"
                     }
                   },
                   "required": [
@@ -314,11 +302,7 @@
                       "const": "validation"
                     },
                     "nodes": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/reference_node"
-                      },
-                      "maxItems": 4294967295
+                      "$ref": "#/$defs/reference_nodes"
                     }
                   },
                   "required": [
@@ -334,11 +318,7 @@
                       "const": "implementation_assumption"
                     },
                     "nodes": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/reference_node"
-                      },
-                      "maxItems": 4294967295
+                      "$ref": "#/$defs/reference_nodes"
                     }
                   },
                   "required": [
@@ -354,11 +334,7 @@
                       "const": "open_question"
                     },
                     "nodes": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/reference_node"
-                      },
-                      "maxItems": 4294967295
+                      "$ref": "#/$defs/reference_nodes"
                     }
                   },
                   "required": [
@@ -374,11 +350,7 @@
                       "const": "scope_guard"
                     },
                     "segments": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/business_segment"
-                      },
-                      "maxItems": 4294967295
+                      "$ref": "#/$defs/business_segments"
                     }
                   },
                   "required": [
@@ -492,20 +464,13 @@
       "type": "object",
       "properties": {
         "nodes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/reference_node"
-          },
-          "maxItems": 4294967295
+          "$ref": "#/$defs/reference_nodes"
         }
       },
       "required": [
         "nodes"
       ],
       "additionalProperties": false
-    },
-    "repair_content": {
-      "$ref": "#/$defs/content"
     },
     "repair_disposition": {
       "$ref": "#/$defs/disposition"
@@ -561,6 +526,44 @@
       "required": [
         "kind",
         "summary"
+      ],
+      "additionalProperties": false
+    },
+    "business_segments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/business_segment"
+      },
+      "maxItems": 4294967295
+    },
+    "reference_nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reference_node"
+      },
+      "maxItems": 4294967295
+    },
+    "business_text": {
+      "type": "object",
+      "properties": {
+        "segments": {
+          "$ref": "#/$defs/business_segments"
+        }
+      },
+      "required": [
+        "segments"
+      ],
+      "additionalProperties": false
+    },
+    "token_reference": {
+      "type": "object",
+      "properties": {
+        "token_id": {
+          "$ref": "#/$defs/ordinal"
+        }
+      },
+      "required": [
+        "token_id"
       ],
       "additionalProperties": false
     }

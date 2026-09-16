@@ -461,7 +461,7 @@ subgraphs:
         with:
           prompt: support-prompt
           schema: support-schema
-          selection: resource
+          selection: input
           retry-limit: 1
         on: {ok: collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect:

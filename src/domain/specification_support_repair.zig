@@ -16,7 +16,7 @@ const Target = struct {
     }
 };
 const Selection = struct { provenance: @import("specification.zig").Selection, source_ids: []const @import("reference_identity.zig").SourceId };
-pub const Replacement = union(enum) { finding: review.Value, selection: Selection, detail: struct { detail: []const u8 }, disposition: struct { disposition: @FieldType(review.Value, "disposition") } };
+pub const Replacement = union(enum) { finding: review.Value, selection: Selection, detail: struct { detail: []const u8 } };
 const Facts = struct { inputs: authority.Inputs, sources: evidence.Inputs, candidate: review.Candidate };
 const Rule = struct {
     rejection: review.Rejection,
@@ -58,9 +58,8 @@ pub fn authorize(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Cont
     }
     const expected: Replacement = switch (rejection.issue) {
         .invalid_detail => .{ .detail = .{ .detail = value.detail } },
-        .invalid_disposition => .{ .disposition = .{ .disposition = value.disposition } },
         .invalid_provenance => .{ .selection = .{ .provenance = value.provenance, .source_ids = value.source_ids } },
-        .invalid_json, .unknown_requirement, .duplicate_requirement, .missing_requirement => return error.UnsafeSupportRepair,
+        .invalid_json, .unknown_requirement, .duplicate_requirement, .missing_requirement, .invalid_decision => return error.UnsafeSupportRepair,
     };
     return atomic.authorize(a, base.unit(), candidate.revision, target, expected, facts, .{ .rejection = rejection, .finding = value });
 }
@@ -73,7 +72,8 @@ pub fn packet(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context
         .insert => |value| value,
         .delete => return error.InvalidAtomicRepair,
     };
-    return atomic.packet(a, authorization, base, .{ .bytes = @tagName(kind) });
+    const definition = if (kind == .finding and try review.applicability(inputs, authorization.target.requirement) == .review) "applicability_finding" else @tagName(kind);
+    return atomic.packet(a, authorization, base, .{ .bytes = definition });
 }
 pub const parse = atomic.parse;
 pub fn merge(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, candidate: review.Candidate, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!review.Collection {
@@ -90,7 +90,6 @@ pub fn merge(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context,
         var next = finding;
         if (authorization.operation == .replace and index == target.index) switch (try atomic.copyReplacement(a, replacement.?)) {
             .detail => |value| next.value.detail = value.detail,
-            .disposition => |value| next.value.disposition = value.disposition,
             .selection => |value| {
                 next.value.provenance = value.provenance;
                 next.value.source_ids = value.source_ids;
@@ -113,7 +112,6 @@ fn valueAt(candidate: review.Candidate, index: usize, kind: std.meta.Tag(Replace
     return switch (kind) {
         .finding => .{ .finding = value },
         .detail => .{ .detail = .{ .detail = value.detail } },
-        .disposition => .{ .disposition = .{ .disposition = value.disposition } },
         .selection => .{ .selection = .{ .provenance = value.provenance, .source_ids = value.source_ids } },
     };
 }

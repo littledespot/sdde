@@ -1376,11 +1376,14 @@ test "configured specification generation YAML executes native references models
     const repeated_start = text_start + 3;
     const protocol_text_start = repeated_start + 2;
     const protocol_selection_scenario = protocol_text_start + 2;
-    const support_start = protocol_text_start + 3;
+    const protocol_content_start = protocol_selection_scenario + 1;
+    const support_start = protocol_content_start + 2;
     const support_faults = std.meta.tags(@import("../test_fixtures/spec_generation_responses.zig").SupportFault);
     const omission_scenario = support_start + support_faults.len * 2;
-    for (0..omission_scenario + 3) |scenario| {
-        const extraction_omission = scenario > omission_scenario;
+    const source_gap_start = omission_scenario + 3;
+    for (0..source_gap_start + 2) |scenario| {
+        const source_gaps = scenario >= source_gap_start;
+        const extraction_omission = scenario > omission_scenario and scenario < source_gap_start;
         const support_scenario = scenario >= support_start and scenario < omission_scenario;
         const reconciliation_scenario = scenario >= reconciliation_start and scenario < text_start;
         const citation_scenario = scenario >= citation_repair_start and scenario < reconciliation_start;
@@ -1388,6 +1391,7 @@ test "configured specification generation YAML executes native references models
         const text_scenario = scenario >= text_start and scenario < repeated_start;
         const repeated_scenario = scenario >= repeated_start and scenario < protocol_text_start;
         const protocol_text_scenario = scenario >= protocol_text_start and scenario < protocol_selection_scenario;
+        const protocol_content_scenario = scenario >= protocol_content_start and scenario < support_start;
         const fault: ?@TypeOf(faults[0]) = if (scenario >= 14 and scenario < classification_repair_start) faults[scenario - 14] else null;
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
@@ -1398,6 +1402,7 @@ test "configured specification generation YAML executes native references models
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         if (extraction_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == omission_scenario + 1) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
+        if (source_gaps) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == source_gap_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
         if (reconciliation_scenario) switch (reconciliation_faults[scenario - reconciliation_start]) {
             .occupied_summary, .occupied_signals => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Loan renewed!`.\n" }),
             .occupied_conflict => {
@@ -1463,6 +1468,7 @@ test "configured specification generation YAML executes native references models
         }
         driver.candidate_omission = scenario == omission_scenario;
         driver.extraction_omission = extraction_omission;
+        driver.source_gaps = source_gaps;
         if (extraction_omission) driver.malformed_once = true;
         driver.text_fault = text_scenario;
         driver.failed_text_repair = scenario == text_start + 2;
@@ -1485,8 +1491,12 @@ test "configured specification generation YAML executes native references models
             driver.reconciliation_fault = .mixed_selection;
             driver.reconciliation_protocol_fault = .envelope_then_json;
         }
+        if (protocol_content_scenario) {
+            driver.reconciliation_fault = .signal_coverage;
+            driver.reconciliation_protocol_fault = if (scenario == protocol_content_start) .token_once else .token_always;
+        }
         const result = driver.run();
-        const expected: workflow.OutcomeTag = if (extraction_omission) .invalid else if (scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
+        const expected: workflow.OutcomeTag = if (extraction_omission) .invalid else if (driver.reconciliation_protocol_fault == .token_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (source_gaps or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}\n", .{ scenario, try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (extraction_omission) {
@@ -1502,6 +1512,20 @@ test "configured specification generation YAML executes native references models
             try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
             try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
             try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/clarifications.json", .{}));
+        }
+        if (source_gaps) {
+            const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?.support_findings;
+            var negative: usize = 0;
+            for (diagnostic.evidence) |entry| if (entry.requirement.kind == .feature_intent and entry.requirement.unit == .feature) {
+                try std.testing.expectEqual(.unsupported, entry.finding);
+                negative += 1;
+            };
+            try std.testing.expectEqual(@as(usize, 7), negative);
+            try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.support_merges);
+            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
+            // Clarification forms do not establish a published specification.
+            try std.testing.expect(!view.contains(.specification_publication_state));
         }
         if (expected == .needs_user) {
             var notice_arena: std.heap.ArenaAllocator = .init(allocator);
@@ -1613,6 +1637,29 @@ test "configured specification generation YAML executes native references models
                 try std.testing.expectEqual(@as(usize, 1), merges.len);
                 try std.testing.expect(!merges[0].changed);
                 try std.testing.expectEqualDeep(diagnostic.origin, merges[0].origin);
+            }
+        }
+
+        if (protocol_content_scenario) {
+            try std.testing.expectEqual(@as(usize, 2), driver.reconciliation_repair_calls);
+            try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), driver.reconciliation_merges);
+            var attempts: usize = 0;
+            var request: ?*const @import("../domain/model_request_identity.zig").ModelRequestId = null;
+            for (runner.tokenLedger().accounted_operations.items) |operation| {
+                const id = operation.id.model_request_id;
+                if (id.immutable_unit_owner_id != .reference_global or id.purpose != .atomic_repair) continue;
+                if (request) |prior| try std.testing.expectEqualDeep(prior.*, id.*);
+                request = id;
+                attempts += 1;
+            }
+            try std.testing.expectEqual(@as(usize, 2), attempts);
+            if (expected == .failed) {
+                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
+                try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
+                try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
+                const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+                try std.testing.expect(!view.contains(.published_workflow_output));
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
             }
         }
 

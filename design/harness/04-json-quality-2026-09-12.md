@@ -3,7 +3,8 @@
 **Historical evidence:** This report describes the 12 September source and
 retained runs. Later fixes and current status are tracked in
 [FIX_001](../../fixes/IMP_001.md). Historical response fields and failures
-below are not current authoring instructions.
+below are not current authoring instructions. Linked `zig-out` evidence is local
+and untracked; it may be absent in another checkout.
 
 The shared projection and diagnostic changes are mechanically verified. Native
 activation did **not** improve the configured Bedrock GPT OSS 20B workflow: both

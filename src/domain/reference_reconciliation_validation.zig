@@ -42,7 +42,7 @@ fn matchingKind(left: d.ContentKind, right: d.ContentKind) bool {
     return std.meta.eql(left, right);
 }
 /// All selected claims must admit one content value. Exact tokens are indivisible.
-fn selectedKind(items: r.Items, ids: []const r.ClaimId) r.Error!?d.ContentKind {
+pub fn selectedKind(items: r.Items, ids: []const r.ClaimId) r.Error!?d.ContentKind {
     if (ids.len == 0) return null;
     const first = claimKind(try r.item(items, ids[0]));
     if (first == .preserved_token and ids.len != 1) return null;

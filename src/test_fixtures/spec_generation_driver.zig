@@ -14,6 +14,7 @@ pub const Driver = struct {
     fake: *@import("../adapters/provider/fake_llm_provider.zig").FakeLLMProvider,
     support_fault: ?@import("spec_generation_responses.zig").SupportFault = null,
     support_post: bool = false,
+    source_gaps: bool = false,
     candidate_omission: bool = false,
     extraction_omission: bool = false,
     support_repair_calls: usize = 0,
@@ -28,7 +29,7 @@ pub const Driver = struct {
     classification_failure_origin: ?@import("../domain/model_candidate_origin.zig").Origin = null,
     reconciliation_repair_fault: @FieldType(@import("spec_generation_responses.zig").Options, "reconciliation_repair_fault") = null,
     reconciliation_fault: ?@import("spec_generation_responses.zig").ReconciliationFault = null,
-    reconciliation_protocol_fault: ?enum { envelope_once, envelope_then_json } = null,
+    reconciliation_protocol_fault: ?enum { envelope_once, envelope_then_json, token_once, token_always } = null,
     reconciliation_repair_calls: usize = 0,
     reconciliation_merges: usize = 0,
     unchanged_reconciliation_merges: usize = 0,
@@ -76,7 +77,7 @@ pub const Driver = struct {
         defer arena.deinit();
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .support_fault = self.support_fault, .support_post = self.support_post, .candidate_omission = self.candidate_omission, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_post = self.support_post, .candidate_omission = self.candidate_omission, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             self.fake.invocation_plan.complete.content = if (self.malformed or (self.malformed_once and self.calls == 0)) "{" else body;
             const current_request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
@@ -86,6 +87,15 @@ pub const Driver = struct {
             const content = current_request.prepared().?.content;
             std.testing.expectEqual(base.len + @as(usize, if (attempt > 1) 3 else 0), content.len) catch unreachable;
             std.testing.expectEqualDeep(base, content[0..base.len]) catch unreachable;
+            if (current_request.id().purpose == .semantic_review) {
+                const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
+                const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
+                var permits_applicability = false;
+                for (input.value.object.get("requirements").?.array.items) |requirement| permits_applicability = permits_applicability or requirement.object.get("permitted_not_applicable").? != .null;
+                const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
+                const value = schema.value.object.get("properties").?.object.get("entries").?.object.get("items").?.object.get("properties").?.object.get("value").?;
+                assertReviewShape(value, permits_applicability) catch unreachable;
+            }
             if (current_request.id().purpose == .atomic_repair) {
                 if (current_request.id().immutable_unit_owner_id == .semantic_review) self.support_repair_calls += 1;
                 if (view.contains(@import("../application/specification_omission_repair_workflow.zig").schema.key)) self.omission_repair_calls += 1;
@@ -95,7 +105,9 @@ pub const Driver = struct {
             if (current_request.id().immutable_unit_owner_id == .reference_global and current_request.id().purpose == .atomic_repair) {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
                 if (self.reconciliation_protocol_fault) |fault| {
-                    if (self.reconciliation_repair_calls == 0 or fault == .envelope_then_json) {
+                    if (fault == .token_once or fault == .token_always) {
+                        if (self.reconciliation_repair_calls == 0 or fault == .token_always) self.fake.invocation_plan.complete.content = "{\"kind\":\"preserved_token\",\"token_id\":{\"ordinal\":1}}";
+                    } else if (self.reconciliation_repair_calls == 0 or fault == .envelope_then_json) {
                         const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
                         const echoed = std.json.Stringify.valueAlloc(arena.allocator(), input.value.object.get("repair").?, .{}) catch unreachable;
                         self.fake.invocation_plan.complete.content = if (self.reconciliation_repair_calls == 0) echoed else echoed[0 .. echoed.len - 1];
@@ -195,6 +207,23 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
     const decoded = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
     const user = decoded.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[0].object.get("text").?.string;
     try std.testing.expectEqualStrings(packet.body(), user);
+    const input = try std.json.parseFromSlice(std.json.Value, a, user, .{});
+    const repair = input.value.object.get("repair").?.object;
+    try std.testing.expect(!repair.contains("expected"));
+    try std.testing.expectEqual(std.mem.eql(u8, repair.get("operation").?.string, "replace"), repair.contains("current_value"));
+    if (packet.resultDefinition()) |definition| {
+        if (std.mem.eql(u8, definition.bytes, "finding") or std.mem.eql(u8, definition.bytes, "applicability_finding")) {
+            const schema = try std.json.parseFromSlice(std.json.Value, a, request.response_schema.modelBytes(), .{});
+            try assertReviewShape(schema.value, std.mem.eql(u8, definition.bytes, "applicability_finding"));
+        }
+        const payload: ?[]const u8 = if (std.mem.eql(u8, definition.bytes, "business_text")) "segments" else if (std.mem.eql(u8, definition.bytes, "reference_text")) "nodes" else if (std.mem.eql(u8, definition.bytes, "token_reference")) "token_id" else null;
+        if (payload) |field| {
+            const schema = try std.json.parseFromSlice(std.json.Value, a, request.response_schema.modelBytes(), .{});
+            const properties = schema.value.object.get("properties").?.object;
+            try std.testing.expectEqual(@as(usize, 1), properties.count());
+            try std.testing.expect(properties.contains(field));
+        }
+    }
     var schema_found = false;
     var instruction_found = false;
     for (decoded.value.object.get("system").?.array.items) |part| {
@@ -203,6 +232,17 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
         instruction_found = instruction_found or std.mem.indexOf(u8, value, "Return only the selected replacement, matching the supplied schema and evidence.") != null;
     }
     try std.testing.expect(schema_found and instruction_found);
+}
+
+fn assertReviewShape(schema: std.json.Value, permits_applicability: bool) !void {
+    const properties = schema.object.get("properties").?.object;
+    try std.testing.expectEqual(@as(usize, 4), properties.count());
+    try std.testing.expect(!properties.contains("finding") and !properties.contains("disposition"));
+    const decisions = properties.get("decision").?.object.get("enum").?.array.items;
+    try std.testing.expectEqual(@as(usize, if (permits_applicability) 6 else 5), decisions.len);
+    var has_not_applicable = false;
+    for (decisions) |decision| has_not_applicable = has_not_applicable or std.mem.eql(u8, decision.string, "not_applicable");
+    try std.testing.expectEqual(permits_applicability, has_not_applicable);
 }
 
 fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fault, "shape")) ![]const u8 {

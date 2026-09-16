@@ -24,14 +24,14 @@ flowchart TD
     UNDERSTAND -->|Missing or conflicting meaning| CLARIFY
     BRIEF -->|Clarification required| CLARIFY
     SPEC -->|Clarification required| CLARIFY
-    CHECK -->|Missing or unsupported business knowledge| CLARIFY
+    CHECK -->|Genuine source-authority gap| CLARIFY
     CLARIFY["Resolve clarification questions;<br/>reuse existing questions for the same subject"]
     CLARIFY -->|Protected answer needs reconsideration| BLOCKED["End blocked;<br/>user direction is required"]
     CLARIFY -->|Question can be created or refreshed| QUESTIONS["Create new forms; completely overwrite unresolved clarify/SNN.md at the same IDs;<br/>preserve user-resolved forms"]
     QUESTIONS --> NEEDSUSER["End needs_user;<br/>publish no partial specification"]
     NEEDSUSER -. User answers the questions and reruns the command .-> START
 
-    CHECK -->|Mechanical validation defect| REPAIR["Repair only the invalid content<br/>within the declared retry limits"]
+    CHECK -->|Repairable candidate defect or supported omission| REPAIR["Repair only the authorized content<br/>within the declared retry limits"]
     REPAIR -->|Repaired candidate| CHECK
     REPAIR -->|Retry limit exhausted| BLOCKED
 ```
@@ -69,7 +69,10 @@ flowchart LR
     B --> U["End needs_user; no spec.md"]
     B -->|Write failure| F
     C --> S["Model-assisted field support<br/>and shared authority gate"]
-    S --> M["Project, render and reparse;<br/>prepare specification, sidecar and canonical states"]
+    S -->|Supported complete candidate| M["Project, render and reparse;<br/>prepare specification, sidecar and canonical states"]
+    S -->|Genuine source gap| N
+    S -->|Repairable candidate omission| P
+    S -->|No independent supported repair target| F
     M --> PUB["Validate complete output and captured-input preconditions;<br/>replace registered files, workflow state last"]
     PUB -->|All writes succeed| DONE["End ok; published specification available to evaluator"]
     PUB -->|Write failure or interruption| FAIL["No new successful completion;<br/>replaced files may remain"]

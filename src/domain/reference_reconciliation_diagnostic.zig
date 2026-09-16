@@ -40,7 +40,7 @@ pub const Constraint = enum {
     conflict_pair_covered,
 
     /// Presentation scope only; every merged candidate still runs all validators.
-    pub const Scope = enum { all, key, selection, content, disposition, summary, conflict_detail };
+    pub const Scope = union(enum) { all, key, selection, content: ContentKind, disposition, summary, conflict_detail };
     pub fn appliesTo(self: Constraint, purpose: @FieldType(r.Input, "purpose"), scope: Scope) bool {
         const in_purpose = switch (self) {
             .unique_nonzero, .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token => true,
@@ -49,7 +49,7 @@ pub const Constraint = enum {
         return in_purpose and switch (scope) {
             .all => true,
             .key => self == .unique_nonzero,
-            .content => self == .matching_claim_content or self == .exact_selected_token,
+            .content => |kind| self == .matching_claim_content or (kind == .preserved_token and self == .exact_selected_token),
             .disposition => switch (self) {
                 .no_self_relation, .same_content_kind, .same_token_value, .nonconflicting_target, .reciprocal_conflict, .acyclic, .nonempty => true,
                 else => false,

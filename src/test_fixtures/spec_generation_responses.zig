@@ -12,6 +12,7 @@ pub const SupportFault = enum { missing_detail, foreign_provenance, missing_find
 pub const Options = struct {
     support_fault: ?SupportFault = null,
     support_post: bool = false,
+    source_gaps: bool = false,
     candidate_omission: bool = false,
     extraction_omission: bool = false,
     text_fault: bool = false,
@@ -76,7 +77,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 const repair = @import("../domain/reference_reconciliation_repair.zig");
                 const authorization = try @import("../application/reference_reconciliation_repair_workflow.zig").readAuthorization(&view);
                 if (options.reconciliation_repair_fault) |fault| {
-                    if (fault == .unchanged_text) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, authorization.operation.replace);
+                    if (fault == .unchanged_text) return @import("reference_reconciliation.zig").repairResponse(allocator, authorization.operation.replace);
                     const target = authorization.target.disposition;
                     const replacement: repair.Replacement = if (fault == .alternating and authorization.revision % 2 == 0)
                         .{ .disposition = .{ .duplicate = .{ .target_claim_id = .{ .ordinal = 999999 } } } }
@@ -102,7 +103,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                     .insert_conflict => .{ .conflict_detail = .{ .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The supplied claims state conflicting outcomes." } }} } } },
                     else => return error.UnexpectedScriptedRepair,
                 };
-                return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, replacement);
+                return @import("reference_reconciliation.zig").repairResponse(allocator, replacement);
             }
             if (input.purpose == .summary) {
                 var proposal = try @import("reference_reconciliation.zig").summary(allocator, input);
@@ -284,8 +285,9 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 const uncertain = options.uncertain or (options.brief_uncertain and inputs.brief != null and requirement.seed.id.slot == .description);
                 const conflict = requirement.seed.id.unit == .conflict or (eligible.len == 0 and context.references.records.conflicts.len != 0);
                 const omission = options.candidate_omission and inputs.specification != null and requirement.seed.id.slot == .functional_requirements and !g.spec.hasRecords(inputs.specification.?, .functional_requirement);
-                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .finding = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else .supported, .disposition = if (requirement.seed.id.kind == .entity_applicability and inputs.specification != null and inputs.specification.?.entities.disposition == .not_applicable) .not_applicable else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The sources require loan renewal, but the specification has no functional requirement for it." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else "" } };
-                if (options.extraction_omission) finding.value = .{ .finding = .candidate_omission, .disposition = .supported, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{context.inputs.corpus.sources[0].id}, .detail = "Extraction discarded the source-required behavior and exact message." };
+                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .decision = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The sources require loan renewal, but the specification has no functional requirement for it." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else "" } };
+                if (options.source_gaps and requirement.seed.id.kind == .feature_intent and requirement.seed.id.unit == .feature) finding.value = .{ .decision = .unsupported, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{}, .detail = "The source leaves this decision unspecified." };
+                if (options.extraction_omission) finding.value = .{ .decision = .candidate_omission, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{context.inputs.corpus.sources[0].id}, .detail = "Extraction discarded the source-required behavior and exact message." };
             }
             if (request.id().purpose == .atomic_repair) {
                 const repair = @import("../domain/specification_support_repair.zig");
@@ -300,7 +302,6 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 const replacement: repair.Replacement = switch (kind) {
                     .detail => .{ .detail = .{ .detail = "Which renewal deadline applies? The sources do not settle it." } },
                     .selection => .{ .selection = .{ .provenance = value.provenance, .source_ids = value.source_ids } },
-                    .disposition => .{ .disposition = .{ .disposition = value.disposition } },
                     .finding => .{ .finding = value },
                 };
                 return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, replacement);
@@ -309,7 +310,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
             if (options.support_fault) |fault| if ((inputs.specification != null) == options.support_post) {
                 switch (fault) {
                     .missing_detail => {
-                        findings[0].value.finding = .ambiguous;
+                        findings[0].value.decision = .ambiguous;
                         findings[0].value.detail = "";
                     },
                     .foreign_provenance => findings[0].value.provenance.claim_ids = &.{.{ .ordinal = 999999 }},

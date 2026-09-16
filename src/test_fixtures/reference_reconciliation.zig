@@ -18,6 +18,14 @@ pub const build_records = @import("../actions/reference/build_reference_reconcil
 pub const account = @import("../actions/reference/validate_reference_reconciliation_completeness.zig").Action{};
 pub const Context = @import("../domain/reference_reconciliation_validation.zig").TextContext;
 
+pub fn repairResponse(a: std.mem.Allocator, value: @import("../domain/reference_reconciliation_repair.zig").Replacement) ![]const u8 {
+    const json = @import("../domain/model_candidate_json.zig");
+    return if (value == .content) switch (value.content) {
+        .model => |model| json.encodeSelected(r.extraction.ProposalContent, a, model),
+        .preserved_token => |token| json.encode(r.TokenReference, a, token),
+    } else json.encodeSelected(@TypeOf(value), a, value);
+}
+
 pub fn content(claim: r.extraction.Claim) r.ContentProposal {
     return switch (claim.content) {
         .preserved_token => |token| .{ .preserved_token = .{ .token_id = token.value.id } },

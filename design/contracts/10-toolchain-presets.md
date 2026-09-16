@@ -13,6 +13,13 @@ baseline's authority and is subject to the accepted amendments in [§32](../desi
 
 [View the toolchain-preset bootstrap diagram](../diagrams/08-toolchain-preset-bootstrap.md).
 
+**Current authoring boundary:** [F0003 §3](../features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
+and the [authoring guide](../toolchainPresets/README.md) document the implemented
+closed package/project shapes and stable union of registered policy IDs. The richer
+policy concepts below are proposed design, not additional currently accepted YAML
+fields. The legacy examples remain useful source material; their format is not a
+runtime contract.
+
 - `design/toolchainPresets/_structure.yaml` inventories framework identity, package, build,
   test, path, quality, and AST concerns.
 - It is a seed, not a v1 schema.
@@ -25,15 +32,15 @@ baseline's authority and is subject to the accepted amendments in [§32](../desi
 
 - None of the supplied `design/toolchainPresets/*.yaml` examples is directly executable engine
   policy.
-- They lack the v1 `apiVersion`, `kind`, stable package identity, exact compositional dependency
-  versions, typed path-pattern objects, structured command descriptors, effect/sandbox
-  declarations, and complete parser/query identities.
+- They lack the current `schema`, `package`, `layer`, `extends` and `policies`
+  contract. The richer `apiVersion`/`metadata` illustration in sample 15 is also
+  proposed policy notation, not an alternative accepted YAML shape.
 - Several contain shell redirection, glob expansion, or nested quoting.
 - Bootstrap therefore rejects these legacy shapes with `PRESET_LEGACY_SCHEMA_UNSUPPORTED`; it
   never silently upgrades them.
-- A separate, explicit migration adapter may parse one legacy file into a candidate set of v1
-  layers, but every ambiguous, disabled, or unsafe value remains an unresolved migration
-  diagnostic for user review before installation into `paths.toolchainPreset`.
+- Runtime packages must be authored and validated explicitly against F0003. Runtime
+  bootstrap has no migration reader, automatic conversion or fallback. F0003 §5 retains
+  the separate offline migration proposal; it is not an implemented runtime path.
 
 The complete source-material treatment is:
 
@@ -364,6 +371,8 @@ Preset compilation uses one portable matching contract:
 ### 10.9 Legacy preset source material
 
 - The files in `design/toolchainPresets/` are historical source examples reviewed by F0003.
+- The [authoring guide](../toolchainPresets/README.md) distinguishes those inputs from
+  the current closed runtime package contract.
 - They do not satisfy the current package contract merely by being present.
 - Runtime bootstrap accepts only the closed current project/preset schemas and performs no
   conversion, aliasing, migration or fallback.

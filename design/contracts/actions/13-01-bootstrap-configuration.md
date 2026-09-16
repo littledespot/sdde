@@ -4,6 +4,11 @@ Part of [design §13](../../design.md#13-action-catalogue). Action names define 
 boundaries under [§6](../06-pipeline-nodes.md). Results remain execution-local until
 whole-workflow publication; [§25](../25-publication.md) and the clarification exception apply.
 
+[F0003](../../features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
+owns the current authored toolchain shapes and stable policy-ID union. The
+policy-compilation and field-override actions below retain the broader proposed
+design; they do not extend the current YAML schema or claim implemented capabilities.
+
 
 ## `LocateExactEngineConfigAction`
 
@@ -544,14 +549,14 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 ## `AssignToolchainPresetReservationIdAction`
 
 - **Input:** one provisional reservation in canonical inventory order, optional exact prior
-  reservation for the same retained entry, and current durable ledger ordinal/tombstones
+  reservation for the same retained entry, and current candidate ledger ordinal/tombstones
 - **Output:** retained/new stable reservation ID plus next ordinal/tombstones
 - **Responsibility:** Retain only the exact prior owner/outcome/byte binding; otherwise consume
   one monotonic reservation ordinal.
 
 ## `RetireRemovedToolchainPresetReservationAction`
 
-- **Input:** one unmatched prior reservation and current durable tombstones
+- **Input:** one unmatched prior reservation and current candidate tombstones
 - **Output:** next reservation tombstones
 - **Responsibility:** Retire exactly one removed/superseded reservation ID and never make it
   reusable.
@@ -561,7 +566,7 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Input:** chosen identity, validated complete provisional session, complete
   provisional-to-stable reservation map, next reservation ordinal/tombstones, optional prior
   ledger, and successor preset ID ledger
-- **Output:** immutable durable preset-budget ledger
+- **Output:** immutable candidate preset-budget ledger
 - **Responsibility:** Assemble stable retained/new/retired canonical reservations with exact
   totals in inventory order; perform no allocation or retirement itself and preserve no
   bootstrap-attempt identity.
@@ -1338,14 +1343,14 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 ## `AssignPrincipleReservationIdAction`
 
 - **Input:** one provisional reservation in canonical inventory order, optional exact prior
-  reservation for the same retained entry, and current durable ledger ordinal/tombstones
+  reservation for the same retained entry, and current candidate ledger ordinal/tombstones
 - **Output:** retained/new stable reservation ID plus next ordinal/tombstones
 - **Responsibility:** Retain only the exact prior owner/outcome/byte binding; otherwise consume
   one monotonic reservation ordinal.
 
 ## `RetireRemovedPrincipleReservationAction`
 
-- **Input:** one unmatched prior reservation and current durable tombstones
+- **Input:** one unmatched prior reservation and current candidate tombstones
 - **Output:** next reservation tombstones
 - **Responsibility:** Retire exactly one removed/superseded reservation ID and never make it
   reusable.
@@ -1355,7 +1360,7 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Input:** chosen identity, validated complete provisional session, complete
   provisional-to-stable reservation map, next reservation ordinal/tombstones, optional prior
   ledger, and successor principle ID ledger
-- **Output:** immutable durable principle-budget ledger
+- **Output:** immutable candidate principle-budget ledger
 - **Responsibility:** Assemble stable retained/new/retired canonical reservations with exact
   totals in inventory order; perform no allocation or retirement itself and preserve no
   bootstrap-attempt identity.
@@ -1699,7 +1704,7 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 
 ## `AssignBootstrapComponentIdAction`
 
-- **Input:** durable prospective bootstrap-authority-state ID, one exact component-type
+- **Input:** execution-local candidate bootstrap-authority-state ID, one exact component-type
   descriptor, and canonical component ordinal
 - **Output:** owner-local bootstrap-component identity
 - **Responsibility:** Construct `(bootstrapAuthorityStateId, componentTypeId, ordinal)` without

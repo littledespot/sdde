@@ -3,7 +3,7 @@
 Part of the [proposed design](../design.md#33-prompt-to-engine-migration-matrix). This section retains the
 baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
 
-This matrix assigns every material responsibility in the existing four prompts to an engine component. “Repair” always means the closed protocol in Section 22; engine/user/environment failures do not consume model repair attempts.
+This matrix maps the predecessor four-workflow responsibilities to the proposed engine owners. It is a responsibility map, not an implementation checklist or a dependency on external prompt files. “Repair” always means the closed protocol in Section 22; engine/user/environment failures do not consume model repair attempts.
 
 ### 33.0 Cross-cutting responsibilities removed from prompts
 
@@ -11,7 +11,7 @@ This matrix assigns every material responsibility in the existing four prompts t
 | --- | --- | --- | --- |
 | Bind project/config roots | Current-directory binding, config schema, root-registry, and path-derivation actions | None | Treat the invocation working directory as project root and use only its exact `.sddtoolkit.json`; missing config fails the invocation, parent/child directories are never searched, the exact eight-key `paths` object is required, `paths.providers` is the sole provider-document path authority, and `design/examples/` or packaged/source assets are never runtime fallbacks. |
 | Load project workflow authority | Workflow inventory/classification/capture/parse/schema actions, workflow compiler, variable-size registry, and selected-workflow resolver | None | Account for and compile every definition and declared resource beneath `paths.workflows`, excluding reserved `features/`; require unique workflow IDs and logging shortcodes; resolve the requested workflow exactly once; and reject executable payloads, unknown operations, hidden workflow behavior, invalid transitions, infrastructure selection, capability additions, gate weakening, or runner bypasses. |
-| Load mechanical toolchain policy | Project-toolchain capture/parse/schema/inheritance actions followed by the preset-package action subgraph statically owned by `BootstrapOrchestrator` | None | Read exact `<paths.principles>/toolchain.yaml`, account for every selected package beneath `paths.toolchainPreset`, reject every legacy/unresolved document, resolve the exact inheritance closure, and bind both the layer and immutable registry into bootstrap authority before any model call. |
+| Load mechanical toolchain policy | Registered capture, schema, inheritance, composition and safety actions selected by the workflow YAML | None | Read exact `<paths.principles>/toolchain.yaml`, validate the complete registry beneath `paths.toolchainPreset`, reject legacy/unresolved documents, resolve the selected inheritance closure, and expose only the safety-valid composition. Unrelated workflows perform no toolchain reads unless their compiled graphs select them. |
 | Load semantic project guidance | Markdown-only principle inventory/capture/filename-classification/chunk/registry actions; `SelectApplicablePrinciplesAction` and `BuildPrincipleGuidanceAction` only at technical stages | None for selection; the applicable stage model interprets exact cited free text | Exclude exact mechanical `toolchain.yaml`, preserve all semantic Markdown spans, use filenames only as category hints, load no principles into specification generation, and select every configured applicable chunk without summarizing, ranking, or compiling prose into mechanical rules. |
 | Keep init templates inert | Config/root-access validation for the initial SDD workflows; a future explicit `sdde init` operation owns materialization | None | Reserve `paths.templates` but grant no initial-SDD read/copy capability. A `*.template.md` affects project principles only after explicit init copies it into `paths.principles`; source templates and origin metadata never become automatic authority. |
 | Create/recover per-feature logging | `FeatureLoggingOrchestrator`, fixed-path binding actions, inspect/create-or-recover actions, and append/rotation/retention actions | None | After reference preflight and validated feature activation, create or recover `<featureDir>/logs/`; write fixed-header pipe-delimited `feature-log/v2` records with exact segment control rows and the selected compiled workflow's registry-validated shortcode, use the canonical level from root config, and admit only schema-valid redacted rows. Logging failure follows the fixed severity/failure policy and cannot recursively log itself. |
@@ -23,10 +23,10 @@ This matrix assigns every material responsibility in the existing four prompts t
 
 ### 33.1 Specify prompt
 
-| Current prompt responsibility | Deterministic action/orchestrator owner | YAML-declared model operation | Validation and repair unit | Side effect and gate |
+| Workflow responsibility | Deterministic action/orchestrator owner | YAML-declared model operation | Validation and repair unit | Side effect and gate |
 | --- | --- | --- | --- | --- |
-| Parse required reference selector | YAML-named invocation and preflight operations | None | Exact single-flag grammar; removed/unknown/positional inputs are user diagnostics | None before valid input |
-| Validate the supplied feature directory | Shared path normalization, containment/no-follow validation and fixed artifact-path resolution | None | The invocation selects the directory; no generated name, owner lookup or suffix. |
+| Parse feature and reference selectors | YAML-named invocation and preflight operations | None | Required independent `--feature` and `--reference` values; missing/duplicate/unknown/positional inputs are user diagnostics | None before valid input |
+| Validate the supplied feature directory | Shared path normalization, containment/no-follow validation and fixed artifact-path resolution | None | The invocation selects the directory; no generated name, owner lookup or suffix. | No output before valid preflight |
 | Resolve mandatory reference selector | Reference-root/inventory actions | None | Required non-empty selector, containment, type, symlink, size, and complete accounting; user/environment repair | No feature directory, per-spec log, model call, or artifact output before complete preflight |
 | Read arbitrary reference formats | Per-file reader orchestration and decode actions | The YAML-declared extraction operation only after deterministic decoding/region binding | Reader threshold/tie, decode status, block ledger | Stage canonical reference candidates only |
 | Extract requirements/signals/tokens | Structured-fact, chunk-ID, and chunk-accounting actions | The YAML-declared extraction operation per `ReferenceChunk` | Closed claims, chunk-bounded citations, exact values; one claim/citation repair | In-memory snapshot candidate |
@@ -40,7 +40,7 @@ This matrix assigns every material responsibility in the existing four prompts t
 
 ### 33.2 Plan prompt
 
-| Current prompt responsibility | Deterministic action/orchestrator owner | YAML-declared model operation | Validation and repair unit | Side effect and gate |
+| Workflow responsibility | Deterministic action/orchestrator owner | YAML-declared model operation | Validation and repair unit | Side effect and gate |
 | --- | --- | --- | --- | --- |
 | Resolve the current feature and check spec readiness | `StageGateOrchestrator`, supplied feature directory, artifact registry, and spec parser/validators | None | Engine-derived stored feature identity/reference selector, current editable spec, provenance/conflicts, and no open `SNN`; no new feature-description input | No writes before gate |
 | Load project principles | Principle root/inventory/capture/decode/filename-category/chunk/registry actions, then `SelectApplicablePrinciplesAction` and `BuildPrincipleGuidanceAction` | None for loading/selection; declared planning operations interpret exact cited free text | Complete file/chunk accounting, filename-hint mapping, configured category coverage; no prose schema or mechanical compilation | Immutable complete all-chunks selection bound to the exact principle-registry state; no model-call size-fit gate |
@@ -59,7 +59,7 @@ This matrix assigns every material responsibility in the existing four prompts t
 
 ### 33.3 Tasks prompt
 
-| Current prompt responsibility | Deterministic action/orchestrator owner | YAML-declared model operation | Validation and repair unit | Side effect and gate |
+| Workflow responsibility | Deterministic action/orchestrator owner | YAML-declared model operation | Validation and repair unit | Side effect and gate |
 | --- | --- | --- | --- | --- |
 | Load plan/design inputs | Stage gate and canonical-state readers | None | Current plan approval, spec-input equality, view equality | No writes before gate |
 | Select task-relevant principles | `SelectApplicablePrinciplesAction` and `BuildPrincipleGuidanceAction` over the bootstrap-bound free-text registry | None for deterministic category selection; declared task operations interpret the exact cited text | Complete configured stage/phase/file-kind category selection with all chunks and exact citations; no model ranking or prose compilation | Complete immutable task guidance; provider size failures follow explicit YAML transitions |
@@ -77,7 +77,7 @@ This matrix assigns every material responsibility in the existing four prompts t
 
 ### 33.4 Implement prompt
 
-| Current prompt responsibility | Deterministic action/orchestrator owner | YAML-declared model operation | Validation and repair unit | Side effect and gate |
+| Workflow responsibility | Deterministic action/orchestrator owner | YAML-declared model operation | Validation and repair unit | Side effect and gate |
 | --- | --- | --- | --- | --- |
 | Check readiness/current inputs | Stage gate and canonical-state readers | None | Current task approval, editable-spec equality, view equality, environment capability | No execution before gate |
 | Select next work and parallelism | Runnable-set/select/lease actions under scheduler | None | Dependency/runtime/lock compare-and-swap | Atomic task lease |
@@ -89,7 +89,7 @@ This matrix assigns every material responsibility in the existing four prompts t
 | Replace an existing file | Operation savepoint actions | The declared code-generation operation | One complete replacement; target state is engine-derived | Overlay only |
 | Copy code/file content in | Copy-source resolution/validation and operation actions | None for byte copy; the declared code-generation operation for a separately authorized adaptation | One immutable source ID/destination ID; provenance/media/permission/revisions | Overlay only |
 | Delete a file | Operation/policy actions | The declared code-generation operation for typed justification and operation | One plan/task-authorized delete; disabled by default | Overlay only |
-| Repair filename | Section 24.5 invalidation/reconciliation followed by planning repair; never implementation | The declared structured-repair operation in the regenerated plan | One `ProjectPathCandidate.repoRelativePath` before file-ID minting | New plan/task states and renewed approvals before resume |
+| Repair filename | Section 24.5 invalidation/reconciliation followed by planning repair; never implementation | The declared structured-repair operation in the regenerated plan | One `ProjectPathCandidate.repoRelativePath` before file-ID minting | New plan/task states and renewed approvals before a fresh Implement execution |
 | Repair code/tool failure | Atomic repair orchestration over discarded savepoint | The declared code-repair operation | One authorized hunk/declaration/file/group with revision preconditions | Rebuilt overlay only |
 | Run syntax/import/build/lint/test | Local validators then derived command actions | None | Executable evidence; diagnostic-local repair where allowed | Command effects remain in overlay and are diff-gated |
 | Record manual evidence | `BuildManualEvidenceAction` and `ValidateManualEvidenceAction` through the evidence API | None | Exact configured scenario/observer record | Evidence candidate |

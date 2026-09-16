@@ -210,7 +210,15 @@ fn replace(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target:
 }
 fn insertion(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target: Target, kind: std.meta.Tag(Replacement), rule: Rule) Error!Decision {
     if (try select(parsed, target) != null) return error.InvalidAtomicRepair;
-    return .{ .model = try atomic.authorizeInsert(a, try owner(a, parsed), parsed.source.revision, target, kind, facts, rule) };
+    var bound_rule = rule;
+    if (kind == .content) {
+        const claim = switch (target) {
+            inline .insert_statement, .insert_signal => |value| value.claim,
+            else => return error.InvalidAtomicRepair,
+        };
+        bound_rule.rejection.relations.content = (try v.selectedKind(parsed.input.progress.plan.layout.items, &.{claim})) orelse return error.InvalidAtomicRepair;
+    }
+    return .{ .model = try atomic.authorizeInsert(a, try owner(a, parsed), parsed.source.revision, target, kind, facts, bound_rule) };
 }
 fn deletion(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target: Target, rule: Rule) Error!Decision {
     return .{ .automatic = .{ .authorization = try atomic.authorizeDelete(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)) orelse return error.InvalidAtomicRepair, facts, rule), .replacement = null } };
@@ -228,7 +236,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
     const scope: d.Constraint.Scope = switch (kind) {
         .key => .key,
         .selection => .selection,
-        .content => .content,
+        .content => .{ .content = authorization.rule.rejection.relations.content orelse return error.InvalidAtomicRepair },
         .disposition => .disposition,
         .summary => .summary,
         .conflict_detail => .conflict_detail,
@@ -238,10 +246,23 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
     defer packets.release(base);
     const contextual = try packets.withContext(@FieldType(r.Parsed, "proposal"), a, base, "candidate", parsed.proposal);
     defer packets.release(contextual);
-    const definition = try std.fmt.allocPrint(scratch, "repair_{s}", .{@tagName(kind)});
+    const definition = if (scope == .content) switch (scope.content) {
+        .model => |model| switch (model) {
+            .business, .scope_guard => "business_text",
+            .design, .technical, .validation, .implementation_assumption, .open_question => "reference_text",
+        },
+        .preserved_token => "token_reference",
+    } else try std.fmt.allocPrint(scratch, "repair_{s}", .{@tagName(kind)});
     return atomic.packet(a, authorization, contextual, .{ .bytes = definition });
 }
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
+    if (try atomic.checkRequest(authorization, input) == .content) {
+        const json = @import("model_candidate_json.zig");
+        return .{ .content = switch (authorization.rule.rejection.relations.content orelse return error.InvalidAtomicRepair) {
+            .model => |kind| .{ .model = try json.decodeSelected(@FieldType(r.ContentProposal, "model"), a, kind, bytes) },
+            .preserved_token => .{ .preserved_token = try json.decode(r.TokenReference, a, bytes) },
+        } };
+    }
     return atomic.parse(a, authorization, input, bytes);
 }
 pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!r.Parsed {

@@ -949,8 +949,9 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Input:** current workflow/specification revision, optional prior plan-input authority,
   validated current feature `StateIdLedger`, and matching single-use namespace capability
 - **Output:** plan-input-authority reservation plus successor ledger
-- **Responsibility:** Reserve one immutable state revision and commit it before any plan model
-  call.
+- **Responsibility:** Allocate one immutable candidate state revision before any plan model
+  call. Keep it execution-local until complete workflow publication or the clarification
+  persistence exception; ID assignment performs no write.
 
 ## `ResolvePlanInputAuthorityStatePathAction`
 

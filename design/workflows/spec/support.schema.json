@@ -1,23 +1,71 @@
 {
   "$defs": {
-    "ordinal": {
+    "review": {
       "type": "object",
       "properties": {
-        "ordinal": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4294967295
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirement_ordinal": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              },
+              "value": {
+                "$ref": "#/$defs/finding"
+              }
+            },
+            "required": [
+              "requirement_ordinal",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
         }
       },
       "required": [
-        "ordinal"
+        "entries"
+      ],
+      "additionalProperties": false
+    },
+    "review_applicability": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirement_ordinal": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              },
+              "value": {
+                "$ref": "#/$defs/applicability_finding"
+              }
+            },
+            "required": [
+              "requirement_ordinal",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "entries"
       ],
       "additionalProperties": false
     },
     "finding": {
       "type": "object",
       "properties": {
-        "finding": {
+        "decision": {
           "enum": [
             "supported",
             "ambiguous",
@@ -25,9 +73,6 @@
             "unsupported",
             "candidate_omission"
           ]
-        },
-        "disposition": {
-          "$ref": "#/$defs/disposition_value"
         },
         "provenance": {
           "$ref": "#/$defs/provenance"
@@ -44,11 +89,59 @@
         }
       },
       "required": [
-        "finding",
-        "disposition",
+        "decision",
         "provenance",
         "source_ids",
         "detail"
+      ],
+      "additionalProperties": false
+    },
+    "applicability_finding": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "enum": [
+            "supported",
+            "ambiguous",
+            "conflicting",
+            "unsupported",
+            "candidate_omission",
+            "not_applicable"
+          ]
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ordinal"
+          },
+          "maxItems": 4294967295
+        },
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        }
+      },
+      "required": [
+        "decision",
+        "provenance",
+        "source_ids",
+        "detail"
+      ],
+      "additionalProperties": false
+    },
+    "ordinal": {
+      "type": "object",
+      "properties": {
+        "ordinal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      },
+      "required": [
+        "ordinal"
       ],
       "additionalProperties": false
     },
@@ -61,18 +154,6 @@
       },
       "required": [
         "detail"
-      ],
-      "additionalProperties": false
-    },
-    "disposition": {
-      "type": "object",
-      "properties": {
-        "disposition": {
-          "$ref": "#/$defs/disposition_value"
-        }
-      },
-      "required": [
-        "disposition"
       ],
       "additionalProperties": false
     },
@@ -123,41 +204,7 @@
     "detail_value": {
       "type": "string",
       "maxLength": 2000
-    },
-    "disposition_value": {
-      "enum": [
-        "supported",
-        "not_applicable"
-      ]
     }
   },
-  "type": "object",
-  "properties": {
-    "entries": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "requirement_ordinal": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 4294967295
-          },
-          "value": {
-            "$ref": "#/$defs/finding"
-          }
-        },
-        "required": [
-          "requirement_ordinal",
-          "value"
-        ],
-        "additionalProperties": false
-      },
-      "maxItems": 4294967295
-    }
-  },
-  "required": [
-    "entries"
-  ],
-  "additionalProperties": false
+  "$ref": "#/$defs/review"
 }

@@ -317,7 +317,7 @@ separate approved F0002 contract.
 At the user's request, this review inspected the local legacy
 `sdd-workflow-engine` working tree as it existed on 2026-08-29. The observations
 below are non-normative comparison evidence, not SDDE authority or a runtime
-dependency. Its current flow is:
+dependency. Its recorded flow was:
 
 ```text
 DefaultWorkflowToolchainService

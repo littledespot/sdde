@@ -32,7 +32,7 @@ implementation status and verification records are evidence, not new authority.
 | Harness operation and recorded validation | [Harness guide](harness/README.md) |
 | Closed document shapes | [Schemas](schemas/) |
 | Example inputs and workflow resources | [Examples](examples/), [workflows](workflows/) |
-| Target-project source material | [Preset examples](toolchainPresets/), [principle templates](templates/) |
+| Target-project source material | [Preset examples](toolchainPresets/), [preset authoring guide](toolchainPresets/README.md), [principle templates](templates/) |
 
 Schemas, examples, presets and templates retain their existing roles; design
 source material is not automatic runtime configuration. Templates are not an

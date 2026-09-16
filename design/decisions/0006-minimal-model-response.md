@@ -1,7 +1,6 @@
 # ADR 0006: Minimal model responses with runner-owned correlation
 
-- **Status:** Accepted design amendment; schema compilation implemented;
-  request/response execution pending
+- **Status:** Accepted design amendment
 - **Date:** 2026-09-05
 - **Decision authority:** User direction to derive a token-efficient response
   standard and update documentation without code changes
@@ -10,6 +9,12 @@
 - **Amends:** Design Sections 12.3, 12.7 and 22.4; F0006; F0007 request/schema projection
 - **Supersedes:** The metadata-bearing model response and repair-response
   examples in `design/code.md`, and F0007's requirement to echo those identities
+
+**Implementation:** Schema compilation and native request/response execution are
+implemented. [ADR 0012](0012-workflow-owned-model-request.md) records the
+request lifecycle integration; [F0100](../features/F0100-SpecWorkflow.md#implementation-status)
+tracks remaining workflow acceptance work. Implementation status does not alter
+this decision's scope.
 
 ## Decision
 

@@ -10,7 +10,7 @@ human-evaluation exclusions are retained with their original records.
 
 ## H-007 — Specification contract verification
 
-Current targeted verification: `zig build test-specification-contract
+Recorded targeted verification: `zig build test-specification-contract
 test-rubric-evaluator test-typed-text --summary all` passed 76 tests (12 contract,
 29 evaluator, 35 shared typed-text tests). `git diff --check` is clean.
 

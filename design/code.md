@@ -115,7 +115,9 @@ Immutable<T> {
   // immutable. It has no runtime mutation or reflection capability.
 }
 
-PipelineOutcomeStatus = ok | needs_user | invalid | blocked | failed | cancelled
+PipelineOutcomeStatus = ok | more | needs_user | invalid | blocked | failed | cancelled
+// more is successful bounded progress and must transition to another step,
+// never to a workflow terminal (F0005 §3.3).
 
 AppliedChildOutcome {
   status: PipelineOutcomeStatus,

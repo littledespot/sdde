@@ -90,22 +90,26 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             omitAbsent(repair.object.getPtr("target").?);
             omitAbsent(repair.object.getPtr("rule").?);
             if (authorization.operation == .replace) {
-                const expected = try strict.decode(std.json.Value, scratch, try json.encodeSelected(Replacement, scratch, authorization.operation.replace), limits);
-                try repair.object.put(scratch, "expected", expected);
+                const current_value = try strict.decode(std.json.Value, scratch, try json.encodeSelected(Replacement, scratch, authorization.operation.replace), limits);
+                try repair.object.put(scratch, "current_value", current_value);
             }
             const body = try std.json.Stringify.valueAlloc(scratch, .{ .input = input, .repair = repair }, .{});
             return packets.create(a, body, base.unit(), .{ .atomic_repair = authorization.id }, definition);
         }
 
         pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
+            return json.decodeSelected(Replacement, a, try checkRequest(authorization, input), bytes);
+        }
+
+        /// Retained authorization binds both default and domain-selected decoders.
+        pub fn checkRequest(authorization: Authorization, input: *const packets.Packet) Error!std.meta.Tag(Replacement) {
             if (!identity.unitOwnerEql(authorization.owner, input.unit()) or input.purpose() != .atomic_repair or
                 !std.mem.eql(u8, authorization.id.bytes, input.purpose().atomic_repair.bytes)) return error.InvalidAtomicRepair;
-            const kind = switch (authorization.operation) {
+            return switch (authorization.operation) {
                 .replace => |value| std.meta.activeTag(value),
                 .insert => |kind| kind,
                 .delete => return error.InvalidAtomicRepair,
             };
-            return json.decodeSelected(Replacement, a, kind, bytes);
         }
 
         /// Exact native old-value equality shared by authorization and merge.

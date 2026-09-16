@@ -144,5 +144,7 @@ the active names. FIX_001 remains active because its implementation is incomplet
 [Templates](design/templates/), [legacy preset source examples](design/toolchainPresets/)
 and [configuration examples](design/examples/) are design inputs. They are not
 an engine constitution, automatically installed policy or runtime fallback.
+The [preset authoring guide](design/toolchainPresets/README.md) distinguishes the
+source examples from the implemented closed input contract.
 This checkout develops SDDE; running it against a target project requires an
 explicit target and workflow.

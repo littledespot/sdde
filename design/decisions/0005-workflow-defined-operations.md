@@ -80,37 +80,15 @@ workflow behavior without duplicating large resources at every node.
 - The compiler obtains each parameter's type, bounds, and allowed values from the
   selected operation contract.
 
-A representative shape is:
+The exact compact schema is owned by [F0005](../features/F0005-WorkflowDefinitionRegistryService.md#32-root-shape)
+and its formal schema. The [provider-request example](../examples/provider-request.workflow.yaml)
+shows the implemented explicit request operations; the [Specify definition](../workflows/spec.workflow.yaml)
+shows reusable subgraphs. These sources replace the early `model.generate` sketch,
+which was not a registered compound operation.
 
-```yaml
-schema: workflow/v1
-id: specify
-version: 1
-shortcode: SPEC
-invoke: sdd.feature-invocation
-policy: sdd.hardened@1
-start: generate
-
-resources:
-  spec-prompt: prompts/spec.md
-  spec-result: schemas/spec-result.json
-
-steps:
-  generate:
-    use: model.generate
-    with:
-      slot: spec-generation
-      prompt: spec-prompt
-      result-schema: spec-result
-      retry-limit: 2
-    on: { ok: validate, invalid: repair, failed: end.failed, cancelled: end.cancelled }
-```
-
-- The exact compact schema is owned by F0005 and its formal schema.
-- The example establishes the required shape, not optional spellings: one operation
-  reference, one compact parameter map, and one outcome map per step.
-- The implementation must replace the current verbose v1 transport rather than retain a
-  second reader or compatibility form.
+Each operation step has one registered reference, optional compact parameters and
+an explicit outcome map. ADR 0013 permits `call` steps expanded by the same compiler.
+There is one current reader, with no verbose-transport compatibility form.
 
 - Large prompts, examples, and schemas may be declared once as workflow-owned resources
   and referenced by short local IDs.
@@ -185,4 +163,4 @@ An originating generic model-request step declares in YAML:
 - Concrete domain and model operations remain separate reviewed increments; no legacy
   syntax, built-in route fallback, or dual authority is retained.
 - This decision does not make project YAML executable code, allow dynamic plugins, or
-  weaken validation, path, provider, command, transaction, or capability boundaries.
+  weaken validation, path, provider, command, publication, or capability boundaries.

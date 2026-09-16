@@ -148,7 +148,7 @@ bootstrap:
   WorkflowDefinitionRegistryService](../features/F0005-WorkflowDefinitionRegistryService.md) and
   the formal [workflow-definition v1 schema](../schemas/workflow-definition-v1.schema.json).
 - Definitions are strict UTF-8 YAML 1.2 regular files discovered recursively by the exact
-  case-sensitive `*.workflow.yaml` suffix outside the two reserved descendant subtrees.
+  case-sensitive `*.workflow.yaml` suffix outside the reserved root `features/` subtree.
 - Each file contains one closed `schema: workflow/v1` mapping document; filenames never
   determine workflow identity.
 - Only bounded regular resources explicitly declared by a definition are captured alongside it.
@@ -263,7 +263,13 @@ when:
 
 Configuration and content authority are separate systems.
 
-Configuration is resolved in this order, from least to most specific:
+The root `.sddtoolkit.json` remains one closed document with no override or fallback
+merge layer. [F0003 §3](../features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
+owns the implemented toolchain format: exact package references and stable union of
+registered policy IDs. The broader field-level composition below remains proposed
+policy design; it adds no fields to the implemented configuration or toolchain schemas.
+
+The broader policy-composition proposal orders layers, from least to most specific:
 
 1. engine defaults;
 2. base language preset;

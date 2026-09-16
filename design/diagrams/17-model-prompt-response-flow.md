@@ -23,13 +23,15 @@ flowchart TD
     Grammar -->|Native mode only| Request
     Format --> System
     Input --> User["Bedrock user content<br/>input data and evidence"]
-    System --> Request["Prepare and authorize request<br/>serialize and send over HTTPS"]
-    User --> Request
+    System --> Accounting
+    User --> Accounting
     Config --> Request
     Policy --> Accounting
     Request --> LLM["Configured LLM"]
     LLM --> Response["Provider response<br/>final text, stop reason and token usage"]
-    Response --> Eligible{"Complete final text<br/>from the correct call?"}
+    Response --> Usage["Account all actual API-reported input and output tokens;<br/>retain usage on failure, stop or cancellation"]
+    Usage -->|Overshoot or usage unavailable| Stop
+    Usage -->|Accounting permits continuation| Eligible{"Complete final text<br/>from the correct call?"}
     Eligible -->|No| Stop["Failed or cancelled<br/>no candidate accepted"]
     Eligible -->|Yes| Syntax{"Strict JSON decoding<br/>one object, no fences or extra text"}
     Syntax -->|Valid JSON| Shape{"Matches the selected<br/>closed result schema?"}
@@ -47,7 +49,7 @@ flowchart TD
     Retry -->|No| Stop
     Retry -->|Yes| Correction["Original prompt, input and schema<br/>plus correction guidance and latest rejection<br/>No accumulated correction history"]
     Correction --> Accounting{"Existing attempt-accounting limit<br/>and global token budget allow a call?"}
-    Accounting -->|Yes| Request
+    Accounting -->|Yes| Request["Prepare and authorize request<br/>serialize and send over HTTPS"]
     Accounting -->|No| Exhausted["Stop with owning limit and count<br/>retain JSON or schema error and all attempts"]
 ```
 

@@ -234,8 +234,10 @@ The LLM generates bounded plan units:
 - A plan need is deduplicated through the shared registry and allocated `P01` through `P99` only
   when its subject key has never existed.
 - Its only path is `<paths.specs>/<featureId>/clarify/PNN.md`.
-- Persisting a new/reused open record enters `plan_clarification_pending` and atomically
-  persists a successor `PlanInputAuthorityState` bound to that next clarification revision.
+- The complete clarification output binds a new/reused open record and successor
+  `PlanInputAuthorityState` to the next clarification revision. It enters
+  `plan_clarification_pending` only after successful publication under §§23.2 and 25;
+  failed writes may leave replaced files but cannot record new successful completion.
 - Its `PlanIdLedger` includes every path-candidate/research allocation or tombstone consumed
   before the pause, so full-stage regeneration cannot reuse an abandoned ID.
 - No candidate `PlanState`, path-candidate record, accepted content unit, or plan view is

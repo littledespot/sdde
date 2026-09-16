@@ -47,29 +47,30 @@ F0005 owns YAML discovery, decoding, schema validation, and compilation.
 
 ## 2. Closed YAML shape
 
-The root contains exactly:
+The definition uses [F0005's closed root, step and subgraph contracts](F0005-WorkflowDefinitionRegistryService.md#32-root-shape):
 
 | Field | Meaning |
 | --- | --- |
 | `schema` | Closed `workflow/v1` schema identity. |
-| `id` | `specify`; identity comes from content, not the filename. |
+| `id` | Content-owned identity: the supplied implementation uses `spec-generation`; the complete initial-suite proposal names it `specify`. |
 | `version` | Positive workflow-definition version. |
 | `shortcode` | Validated unique four-character logging shortcode. |
 | `invoke` | Exact registered Specify invocation operation. |
 | `policy` | Exact registered workflow policy profile. |
 | `start` | Definition-local entry-step ID. |
-| `resources` | Concise aliases for bounded workflow-owned prompts, schemas, and examples. |
-| `steps` | Local step map selecting registered generic operations, native scalar parameters, and outcomes. |
+| `resources` | Optional aliases for bounded workflow-owned prompts, schemas, and examples. |
+| `steps` | Local step map selecting registered operations with `use` or definition-local subgraphs with `call`. |
+| `subgraphs` | Optional reusable graphs with `start` and `steps`; nested calls expand through the same compiler and recursion rejects. |
 
-- Each step contains `use`, optional `with`, and `on`.
+- Each step contains exactly one of `use` or `call`, optional `with`, and `on`.
 - `with` uses native YAML scalars whose types and allowed values come from the selected
-  operation contract; it does not repeat tagged parameter wrappers.
+  operation contract after explicit subgraph parameter substitution; it does not repeat tagged parameter wrappers.
 - `on` explicitly maps every declared outcome to another local step or a matching
   `end.*` terminal.
 
-- Each YAML transition uses one of `ok`, `needs-user`, `invalid`, `blocked`, `failed`,
+- Each YAML transition uses one of `ok`, `more`, `needs-user`, `invalid`, `blocked`, `failed`,
   or `cancelled`, and targets either another local step or the matching `end.*`
-  terminal.
+  terminal. `more` is non-terminal and must target another step.
 - The compiler rejects missing or duplicate outcome transitions, unbounded cycles,
   unreachable steps, invalid typed data flow, gate weakening, and capability escalation.
 - A retry or repair cycle is accepted only when it crosses a registered monotonic budget
@@ -77,39 +78,15 @@ The root contains exactly:
 
 ## 3. Structural outline
 
-This is a structural outline of the eventual complete workflow, not an
-executable definition. The implemented generation-only definition is linked in
-§3.11; §3.12 adds clarification persistence, not successful Specify completion.
+The [supplied workflow](../workflows/spec.workflow.yaml) is the executable source
+for operation IDs, resources, nested subgraphs and outcome mappings. It composes
+toolchain/input preparation, reference extraction and reconciliation, support
+review, generation, repair, clarification and registered publication.
 
-```yaml
-schema: workflow/v1
-id: specify
-version: <positive-u32>
-shortcode: "<validated-unique-four-character-shortcode>"
-invoke: specify-invocation
-policy: "<registered-ref@version>"
-start: generate
-
-resources:
-  spec-prompt: "<workflow-resource>"
-  spec-result: "<workflow-resource>"
-
-steps:
-  generate:
-    use: model.generate
-    with:
-      slot: spec-generation
-      prompt: spec-prompt
-      result-schema: spec-result
-    on: { ok: validate, invalid: repair, failed: end.failed, cancelled: end.cancelled }
-```
-
-- This is a shape outline, not an executable fixture.
-- A concrete definition is valid only after every placeholder is replaced by a
-  registered or captured workflow-owned value and every selected operation outcome has
-  exactly one mapping.
-- `validate` and `repair` are illustrative local steps and must also be declared in a
-  complete definition.
+Sections 3.1–3.12 describe those boundaries; [§4](#4-required-logical-coverage)
+retains the complete proposed scope. Published output from the implemented path
+does not establish every [acceptance criterion](#7-acceptance-criteria), including
+authenticated answer application and feature-log integration.
 
 ### 3.1 Explicit feature directory and reference preflight
 
@@ -703,6 +680,11 @@ closed requiredness/ownership policies, current support checks and outcomes.
 
 - Review collection and repair preserve the original authority-input projection;
   `apply-specification-support` advances it only after admission.
+- Model values contain one `decision`, provenance, source IDs and detail. Native
+  policy derives fixed applicability. Only unresolved entity applicability permits
+  `not_applicable`; an existing candidate instead supplies that fact for review.
+  Initial and missing-finding requests select the permitted schema. Superseded
+  `finding`/`disposition` response fields reject.
 - Review findings retain concise detail, canonical claim/citation/source associations
   and candidate revision. Request/attempt origins remain execution-local; published
   evidence validates without an earlier request ledger.
@@ -712,8 +694,9 @@ closed requiredness/ownership policies, current support checks and outcomes.
 - `candidate_omission` describes established meaning lost in extraction or generated
   content. Native missing-family obligations remain invalid even after a positive
   review. Genuine source gaps route to clarification or the earliest upstream owner.
-- Malformed review repair changes one authorized detail, selection, disposition or
-  missing/identical duplicate finding. It cannot change an existing substantive verdict.
+- Malformed review repair changes one authorized detail or evidence selection,
+  inserts a missing finding or deletes an identical duplicate. It cannot change an
+  existing substantive verdict or repair a forbidden applicability decision.
   Current inputs, old value and revision are checked before dispatch and merge.
 - Source-backed content repair reuses the existing coverage repair owner; unsafe targets
   block. Assembly, coverage and semantic review run again after a content edit.
@@ -752,7 +735,7 @@ validators:
   execution/retry ceiling.
 - `more` exposes bounded collection progress without reusing failure outcomes.
 
-- The ordinary [generation-only definition](../workflows/spec.workflow.yaml) connects
+- The ordinary [Specify definition](../workflows/spec.workflow.yaml) connects
   these operations, workflow-owned resources and H-008 review.
 - `retire-model-input` and `retire-model-request` explicitly release completed transport
   slots.
@@ -887,8 +870,9 @@ The compiled registered contracts collectively cover:
    `SpecificationIR`;
 8. render the exact Section 5 hierarchy and `reference-context.md`, reparse
    `spec.md`, and compare normalized IR; and
-9. atomically commit the complete artifact/state set before entering
-   `specified`.
+9. validate the complete artifact/state set, publish it under Design §25, and enter
+   `specified` only after every required write succeeds. A write failure may leave
+   replaced files but cannot record new successful completion.
 
 Exact grouping into definition-visible steps follows the registered operation
 contracts; this feature does not invent their IDs.
@@ -1024,8 +1008,8 @@ conflicting, the engine:
 1. returns the typed `clarification_needed` operation outcome;
 2. allocates or reuses the engine-owned `SNN` identity;
 3. renders the controlled form only beneath `<featureDir>/clarify/SNN.md`;
-4. atomically commits the clarification registry, form, required current
-   authorities, and `spec_clarification_pending` workflow state;
+4. validates and publishes the clarification registry, form, required current
+   authorities, and `spec_clarification_pending` workflow state under §§23.2 and 25;
 5. returns terminal `needs_user` with no partial `SpecificationIR` or `spec.md`;
    and
 6. after a current authenticated answer or authority resolution commits,
@@ -1263,9 +1247,10 @@ YAML definition.
 
 ## 7. Acceptance criteria
 
-1. `spec.workflow.yaml` is discovered, decoded, validated, compiled, selected,
-   and executed through the same generic YAML workflow-definition path as every
-   other definition, and has `id: specify`.
+1. The complete initial-suite `spec.workflow.yaml` is discovered, decoded, validated,
+   compiled, selected, and executed through the same generic YAML workflow-definition
+   path as every other definition, with proposed suite ID `specify`. The current
+   implementation's `spec-generation` ID does not change generic selection semantics.
 2. Every invocation, operation, parameter, resource, policy, outcome, gate, and capability
    reference resolves exactly through an engine registry.
 3. The graph is fully reachable, terminal-reachable, data-compatible,

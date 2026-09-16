@@ -233,11 +233,14 @@ An operation step contains one registered generic operation, an optional compact
 map, and one outcome map:
 
 ```yaml
-preflight:
-  use: repository.preflight
-  with: { scope: feature }
-  on: { ok: generate, failed: end.failed, cancelled: end.cancelled }
+capture:
+  use: capture-project-toolchain
+  on: { ok: parse, failed: end.failed }
 ```
+
+This excerpt uses a registered operation; a complete graph must supply its
+required inputs and define the `parse` successor, as in the
+[toolchain workflow fixture](../../src/test_fixtures/toolchain.workflow.yaml).
 
 - The step's mapping key is its unique `WorkflowStepId`.
 - `use` identifies a registered operation contract, not a concrete implementation or
@@ -301,8 +304,8 @@ typed content cannot change the compiled semantic graph.
 - Registered operation contracts alone validate substituted types, resource kinds and
   bounds.
 
-- Subgraphs contain operations only.
-- They can compose other definition-local subgraphs and forward explicit parameters.
+- Subgraphs contain registered operation steps or calls to other definition-local
+  subgraphs and can forward explicit parameters.
   Direct/indirect recursion rejects before execution. They cannot import files, use
   aliases, or execute templates. The fully expanded graph retains the existing limits,
   operation contracts, outcome checks and per-call execution identities.
@@ -337,8 +340,9 @@ steps:
     on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }
 ```
 
-This illustrates the structural schema, not a runnable installed workflow:
-operation/policy references must resolve to actual registered contracts.
+This illustrates the structural schema, not a runnable installed workflow. The
+operation and policy names in this sketch are illustrative placeholders; an installed
+definition must use actual registered contracts.
 `specify` is not a required registry member and the filename need not match it.
 For a complete current example, see
 [provider-request.workflow.yaml](../examples/provider-request.workflow.yaml).
@@ -374,8 +378,9 @@ allocation or continued traversal can exceed them:
 - F0003 owns its different YAML limits.
 
 - Transitions have no independent policy knob.
-- The six closed outcome tags and unique `(workflowStepId, outcomeTag)` mapping key
-  bound a 512-step graph to 3,072 transitions.
+- The seven closed outcome tags and unique `(workflowStepId, outcomeTag)` mapping key
+  bound a 512-step graph to 3,584 transitions. Six outcomes permit matching terminals;
+  `more` must target another step.
 - Zero definitions is a valid variable-size registry; a later selection against it
   returns the ordinary typed unknown-workflow diagnostic.
 

@@ -369,8 +369,9 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   validation/ID/build actions create canonical citations, tokens, and identified claims.
 
 - The reference-reconciliation result schema selected by the workflow is discriminated.
-- A bounded lower-level partition returns only a `ReferenceReconciliationSummaryProposal` whose
-  member IDs exactly equal its supplied partition.
+- A bounded lower-level partition returns a `ReferenceReconciliationSummaryProposal`.
+  The engine derives its enclosing member IDs from the supplied partition; model-authored
+  statements select supporting claims, and validators require complete partition coverage.
 - The final global partition returns one `ReferenceReconciliationProposal`: total
   claim-disposition proposals plus bounded signal and conflict proposals over the complete
   represented claim set.
@@ -385,8 +386,9 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - The model supplies a business title, description, and primary goal plus existing
   claim/citation or resolved clarification-response IDs; it cannot supply the `featureId`, any
   workflow or project path, or a reference selector.
-- The engine derives `featureId` before the call from every canonical validated selector segment
-  in order using the versioned workflow naming policy.
+- Before the call, the engine binds `featureId` to the validated supplied directory's lossless
+  `paths.specs`-relative key under [ADR 0010](../decisions/0010-explicit-feature-directory.md).
+  The independent reference selector and model output cannot name or rename the feature.
 - An unsupported fact takes the YAML-declared clarification branch; a path-shaped or
   structurally invalid value follows the normal passive-literal/atomic protocol.
 
@@ -415,9 +417,11 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - `ReferenceSnapshot.extractionContract` stores the exact compiled workflow ID/version/node
   identity, internal request-contract identity, selected result-schema resource identity, and
   partition contract.
-- Recovery/re-extraction must resolve that closed compiled authority and blocks with
+- Revalidation of a persisted snapshot must resolve that closed compiled authority and blocks with
   `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE` rather than silently using a newer schema,
   resource, or chunk boundary contract.
+- A fresh extraction starts at the selected workflow's `start`; it never resumes a saved request
+  or candidate from that snapshot.
 
 ### 12.8 Closed authority-reconciliation boundary
 
@@ -498,5 +502,6 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
 - Request/result validators still prove the exact current association before capture, and
   successors own their data; capture never grants semantic support.
 - This handoff is in memory only, with no snapshot files or recovery subsystem.
-- Production generation/evidence producers and clarification/publication consumers remain the
-  separate H-009–H-013 integration work.
+- Production generation, support review and registered publication use this boundary.
+  [F0100](../features/F0100-SpecWorkflow.md#implementation-status) tracks remaining
+  clarification and workflow acceptance work; the shared gate alone does not establish it.

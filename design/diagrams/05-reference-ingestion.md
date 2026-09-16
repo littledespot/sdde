@@ -23,24 +23,27 @@ flowchart TD
     CROSS --> GLOBAL["Group global summaries recursively;<br/>retain original claim membership and payloads"]
     GLOBAL --> DISPOSITIONS["Require one retained / superseded / duplicate / conflicting<br/>disposition per original claim; validate every relationship"]
     DISPOSITIONS --> RECORDS["Validate signal / citation / token / conflict joins;<br/>assign engine IDs and validate complete lineage"]
-    RECORDS -->|Unresolved conflict| BLOCKED
-    RECORDS -->|Structurally valid candidate| CHECK{"Required meaning supported and conflicts resolved?"}
+    RECORDS -->|Candidate and conflict evidence| CHECK{"Shared authority gate:<br/>required meaning supported and conflicts resolved?"}
     CHECK -->|Yes| CANDIDATE["Retain validated reference inputs<br/>for subsequent workflow steps"]
     CHECK -->|Clarification required| CLARIFY["Reuse subject IDs; completely overwrite unresolved forms;<br/>preserve user-resolved forms and end needs_user"]
-    CHECK -->|Repairable candidate defect| REPAIR["Repair the authorized unit<br/>within the declared retry limits"]
-    REPAIR -->|Revalidate repaired candidate| TEXT
-    REPAIR -->|Exhausted| BLOCKED["End blocked or failed"]
+    CHECK -->|Supported candidate omission| DIAGNOSTIC
+    DIAGNOSTIC{"Native diagnostic classification"} -->|Repairable candidate defect| REPAIR["Repair only the authorized unit;<br/>retain owner, revision, old value and dependencies"]
+    REPAIR -->|Merged within the declared limit| REVALIDATE["Rerun the owning validator, impacted dependents<br/>and complete candidate validation"]
+    REVALIDATE -->|Valid| CHECK
+    REVALIDATE -->|Rejected| DIAGNOSTIC
+    DIAGNOSTIC -->|Invalid trusted context or no safe target| BLOCKED["End blocked or failed"]
+    REPAIR -->|Exhausted, stale or unauthorized| BLOCKED
     INVENTORY -->|Unsafe, unreadable or unsupported| FAILED["End failed;<br/>publish no partial workflow output"]
     CAPTURE -->|Failed| FAILED
     DECODE -->|Incomplete or invalid| FAILED
-    ACCOUNT -->|Invalid| FAILED
-    TEXT -->|Invalid| FAILED
+    ACCOUNT -->|Invalid| DIAGNOSTIC
+    TEXT -->|Invalid candidate| DIAGNOSTIC
     FACTS -->|Uncitable or over-limit value| FAILED
-    CLASSIFY -->|Invalid| FAILED
-    TOKENS -->|Preservation contradicts positive empty| FAILED
+    CLASSIFY -->|Invalid candidate| DIAGNOSTIC
+    TOKENS -->|Preservation contradicts positive empty| DIAGNOSTIC
     LITERALS -->|Invalid or stale| FAILED
-    DISPOSITIONS -->|Missing, duplicate, foreign or invalid| FAILED
-    RECORDS -->|Incomplete or invalid| FAILED
+    DISPOSITIONS -->|Missing, duplicate, foreign or invalid| DIAGNOSTIC
+    RECORDS -->|Incomplete or invalid| DIAGNOSTIC
 ```
 
 Citation checks prove source location; semantic interpretation requires

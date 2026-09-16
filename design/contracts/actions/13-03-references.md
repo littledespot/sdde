@@ -10,8 +10,9 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Input:** feature ID, optional parent state ID, validated current feature `StateIdLedger`,
   and matching single-use namespace capability
 - **Output:** prospective reference-state reservation plus successor ledger
-- **Responsibility:** Reserve the state ID before any local ID/citation/blob binding and persist
-  it before external exposure.
+- **Responsibility:** Allocate the candidate state ID before any local ID/citation/blob binding.
+  Retain its successor ledger in the execution; publication follows §25 or the clarification
+  persistence exception, never a write-before-call prerequisite.
 
 ## `BuildReferenceIdLedgerAction`
 
@@ -159,8 +160,8 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 
 ## `AssignReferenceSourceIdAction`
 
-- **Input:** one ordered provisional source after the canonical reference-state reservation is
-  durable and current reference ID ledger
+- **Input:** one ordered provisional source, the execution-local candidate reference-state
+  identity, and current reference ID ledger
 - **Output:** canonical source mapping plus successor ledger
 - **Responsibility:** Allocate one monotonic source ID and return the exact ledger with
   `nextSourceOrdinal` advanced.
@@ -399,8 +400,8 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 
 ## `AssignReferenceBlockIdAction`
 
-- **Input:** one ordered provisional block after the canonical reference-state reservation is
-  durable and current reference ID ledger
+- **Input:** one ordered provisional block, the execution-local candidate reference-state
+  identity, and current reference ID ledger
 - **Output:** canonical block mapping plus successor ledger
 - **Responsibility:** Allocate one reference-state-global block ID, advance only
   `nextBlockOrdinal`, and claim no accounting.
@@ -443,8 +444,9 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
   and both provisional/canonical budget ledgers
 - **Output:** identity-map evidence
 - **Responsibility:** Prove total one-to-one source/block/blob/reservation coverage, order
-  preservation, no provisional ID survives in canonical state, and no canonical ID existed
-  before its durable reservation.
+  preservation, no provisional ID survives in canonical state, and every canonical ID belongs
+  to the current candidate state and its validated ledger. The candidate state ID must be
+  allocated before any canonical local ID, citation or blob binding; no durable write is required.
 
 ## `MaterializeReferenceSourceBudgetLedgerAction`
 

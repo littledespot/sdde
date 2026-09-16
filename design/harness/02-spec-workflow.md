@@ -140,7 +140,7 @@ H-008 is required at applicable production authority gates.
 - Implemented: engine-owned packets and exact result association, sequential extraction
   and hierarchical reconciliation, concise workflow-owned resources, explicit transport
   retirement, bounded protocol correction and H-008 evidence integration.
-- The generation-only [YAML](../workflows/spec.workflow.yaml) runs through the ordinary
+- The supplied [Specify YAML](../workflows/spec.workflow.yaml) runs through the ordinary
   compiler/registry/runner and existing provider port.
 - The production provider integration remains the configured Bedrock adapter;
   OpenAI/Bedrock judging is a separate harness concern.

@@ -11,7 +11,7 @@ An orchestrator “contains” children through composition. It does not contain
 
 - For project workflow execution, every reusable workflow operation described in this section is
   available through one unversioned registered operation ID and is selected only by a YAML
-  `steps.*.use` field.
+  `use` field, directly or inside compiler-expanded local subgraphs under ADR 0013.
 - An operation may coordinate the actions needed for its single atomic responsibility, but it
   returns a typed outcome without selecting the next workflow operation.
 - The YAML `on` mapping alone selects that successor.

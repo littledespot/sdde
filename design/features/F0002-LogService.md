@@ -499,7 +499,7 @@ compiler injects them only after validating the three user choices.
 | --- | --- |
 | Timestamp | `timestamp` is exactly `true` |
 | File | always enabled; every admitted event/prompt record must be durably appended to its bound `.log` segment before logging returns success |
-| Console | optional additional mirror only; delimiter is exactly `|`; when enabled, write the already-serialized data row plus its existing LF to `stderr`, with no heading, color, or prefix; console success never substitutes for file success |
+| Console | optional additional mirror only; delimiter is exactly `\|`; when enabled, write the already-serialized data row plus its existing LF to `stderr`, with no heading, color, or prefix; console success never substitutes for file success |
 | Record | `maxRecordBytes = 65,536`, including encoded cells and final LF |
 | Segment | `maxSegmentBytes = 8,388,608`, including heading and control rows |
 | Segment count | `maxSegments = 16` per feature/run/stream lifetime |

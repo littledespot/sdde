@@ -49,9 +49,19 @@ serialization emits the shared instruction once per call.
 **Atomic repair** receives:
 
 - Shared replacement prompt and validator diagnostic.
-- Selected unit, old value, scoped evidence and selected replacement schema.
+- Selected unit, `current_value` for replacements, scoped evidence and selected schema.
 
-The engine retains target/revision ownership and accepts only matching replacements.
+When native claim selection fixes the content kind, statement/signal repairs receive
+only that payload schema. Native decoding restores the retained kind; the model does
+not repeat it. Target/revision ownership, sibling preservation and full validation
+remain with the existing repair owners.
+
+**Support review** returns one `decision` with evidence and brief detail. Native
+policy supplies fixed applicability; `not_applicable` is a separate permitted
+decision only when applicability still needs review. Initial and missing-finding
+requests select the same closed shapes. Detail/evidence repairs preserve decisions;
+admission and persisted validation share native assembly. Source review assesses
+meaning sufficient to derive content, without requiring prewritten spec fields.
 
 **After every response**, the engine independently requires one complete JSON object.
 It rejects fences, duplicate keys, trailing text and schema violations. Rejected
