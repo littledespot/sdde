@@ -1381,8 +1381,10 @@ test "configured specification generation YAML executes native references models
     const support_faults = std.meta.tags(@import("../test_fixtures/spec_generation_responses.zig").SupportFault);
     const omission_scenario = support_start + support_faults.len * 2;
     const source_gap_start = omission_scenario + 3;
-    for (0..source_gap_start + 2) |scenario| {
-        const source_gaps = scenario >= source_gap_start;
+    const evidence_start = source_gap_start + 2;
+    for (0..evidence_start + 3) |scenario| {
+        const evidence_scenario = scenario >= evidence_start;
+        const source_gaps = scenario >= source_gap_start and scenario < evidence_start;
         const extraction_omission = scenario > omission_scenario and scenario < source_gap_start;
         const support_scenario = scenario >= support_start and scenario < omission_scenario;
         const reconciliation_scenario = scenario >= reconciliation_start and scenario < text_start;
@@ -1403,6 +1405,7 @@ test "configured specification generation YAML executes native references models
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         if (extraction_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == omission_scenario + 1) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
         if (source_gaps) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == source_gap_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
+        if (evidence_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == evidence_start + 1) "After renewal display `Loan renewed!` and the new return deadline.\n" else "On startup display `Hello, World!` and the current UTC date and time.\n" });
         if (reconciliation_scenario) switch (reconciliation_faults[scenario - reconciliation_start]) {
             .occupied_summary, .occupied_signals => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Loan renewed!`.\n" }),
             .occupied_conflict => {
@@ -1469,6 +1472,7 @@ test "configured specification generation YAML executes native references models
         driver.candidate_omission = scenario == omission_scenario;
         driver.extraction_omission = extraction_omission;
         driver.source_gaps = source_gaps;
+        if (evidence_scenario) driver.evidence_fault = if (scenario == evidence_start + 2) .unchanged else .recover;
         if (extraction_omission) driver.malformed_once = true;
         driver.text_fault = text_scenario;
         driver.failed_text_repair = scenario == text_start + 2;
@@ -1496,7 +1500,7 @@ test "configured specification generation YAML executes native references models
             driver.reconciliation_protocol_fault = if (scenario == protocol_content_start) .token_once else .token_always;
         }
         const result = driver.run();
-        const expected: workflow.OutcomeTag = if (extraction_omission) .invalid else if (driver.reconciliation_protocol_fault == .token_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (source_gaps or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
+        const expected: workflow.OutcomeTag = if (extraction_omission) .invalid else if (driver.evidence_fault == .unchanged or driver.reconciliation_protocol_fault == .token_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}\n", .{ scenario, try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (extraction_omission) {
@@ -1526,6 +1530,32 @@ test "configured specification generation YAML executes native references models
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             // Clarification forms do not establish a published specification.
             try std.testing.expect(!view.contains(.specification_publication_state));
+        }
+        if (evidence_scenario) {
+            const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?;
+            try std.testing.expectEqual(@as(usize, 2), driver.support_repair_calls);
+            try std.testing.expectEqual(@as(usize, 2), driver.support_merges);
+            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
+            try std.testing.expect(!view.contains(.specification_publication_state));
+            if (driver.evidence_fault == .recover) {
+                var negatives: usize = 0;
+                for (diagnostic.support_findings.evidence) |entry| if (entry.finding == .unsupported) {
+                    negatives += 1;
+                };
+                try std.testing.expectEqual(@as(usize, 9), negatives);
+            } else {
+                const rejected = diagnostic.support;
+                try std.testing.expectEqual(.missing_claims, rejected.evidence.?.issue);
+                try std.testing.expectEqual(@as(u64, 3), rejected.revision);
+                const identities = try @import("../application/pipeline_values.zig").read(&view, @import("../application/model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
+                var matched: usize = 0;
+                for (runner.tokenLedger().accounted_operations.items) |operation| if (rejected.origin.?.matches(identities, operation.id)) {
+                    try std.testing.expect(operation.id.model_request_id.purpose == .atomic_repair);
+                    matched += 1;
+                };
+                try std.testing.expectEqual(@as(usize, 1), matched);
+            }
         }
         if (expected == .needs_user) {
             var notice_arena: std.heap.ArenaAllocator = .init(allocator);

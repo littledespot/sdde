@@ -13,6 +13,7 @@ pub const Options = struct {
     support_fault: ?SupportFault = null,
     support_post: bool = false,
     source_gaps: bool = false,
+    evidence_fault: ?enum { recover, unchanged } = null,
     candidate_omission: bool = false,
     extraction_omission: bool = false,
     text_fault: bool = false,
@@ -293,6 +294,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 const repair = @import("../domain/specification_support_repair.zig");
                 const state = try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_repair_workflow.zig").schema, .support_repair);
                 const authorized = state.authorization;
+                if (options.evidence_fault == .unchanged) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, authorized.operation.replace);
                 const value = findings[authorized.target.ordinal - 1].value;
                 const kind = switch (authorized.operation) {
                     .replace => |replacement| std.meta.activeTag(replacement),
@@ -307,6 +309,19 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, replacement);
             }
             var entries: []const @import("../domain/specification_support.zig").Finding = findings;
+            if (options.evidence_fault != null) for (ledger.requirements, findings) |requirement, *finding| {
+                if (requirement.seed.id.kind == .entity_applicability) {
+                    finding.value.decision = .not_applicable;
+                    finding.value.provenance.claim_ids = &.{};
+                } else if (requirement.seed.id.unit == .token) {
+                    finding.value.provenance.claim_ids = &.{all.entries[0].claim.id};
+                } else {
+                    finding.value.decision = .unsupported;
+                    finding.value.provenance.claim_ids = &.{};
+                    finding.value.detail = "The source does not settle this requirement.";
+                }
+                finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
+            };
             if (options.support_fault) |fault| if ((inputs.specification != null) == options.support_post) {
                 switch (fault) {
                     .missing_detail => {

@@ -87,3 +87,14 @@ fn storage(packet: *const Packet) *Storage {
     const handle: *const Handle = @ptrCast(@alignCast(packet));
     return handle.owner;
 }
+
+/// Omit absent presentation fields only; retained native evidence is unchanged.
+pub fn omitAbsent(value: *std.json.Value) void {
+    if (value.* != .object) return;
+    var index: usize = 0;
+    while (index < value.object.count()) {
+        if (value.object.values()[index] == .null) {
+            value.object.orderedRemoveAt(index);
+        } else index += 1;
+    }
+}

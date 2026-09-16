@@ -1,6 +1,7 @@
 //! Scoped repair of mechanically invalid review data, never of a negative verdict.
 const std = @import("std");
 const review = @import("specification_support.zig");
+const admission = @import("specification_support_evidence.zig");
 const authority = @import("required_authority.zig");
 const evidence = @import("reference_evidence.zig");
 const shared = @import("atomic_repair.zig");
@@ -21,8 +22,8 @@ const Facts = struct { inputs: authority.Inputs, sources: evidence.Inputs, candi
 const Rule = struct {
     rejection: review.Rejection,
     finding: ?review.Value,
-    pub fn guidance(self: @This()) struct { issue: review.Issue, finding: ?review.Value } {
-        return .{ .issue = self.rejection.issue, .finding = self.finding };
+    pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, finding: ?review.Value } {
+        return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .finding = self.finding };
     }
 };
 const atomic = shared.Contract(Target, Replacement, Facts, Rule);
@@ -58,20 +59,20 @@ pub fn authorize(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Cont
     }
     const expected: Replacement = switch (rejection.issue) {
         .invalid_detail => .{ .detail = .{ .detail = value.detail } },
-        .invalid_provenance => .{ .selection = .{ .provenance = value.provenance, .source_ids = value.source_ids } },
+        .invalid_evidence => .{ .selection = .{ .provenance = value.provenance, .source_ids = value.source_ids } },
         .invalid_json, .unknown_requirement, .duplicate_requirement, .missing_requirement, .invalid_decision => return error.UnsafeSupportRepair,
     };
     return atomic.authorize(a, base.unit(), candidate.revision, target, expected, facts, .{ .rejection = rejection, .finding = value });
 }
 pub fn packet(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, candidate: review.Candidate, authorization: Authorization) Error!*packets.Packet {
     try atomic.checkDependencies(a, authorization, .{ .inputs = inputs, .sources = context.inputs, .candidate = candidate });
-    const base = try review.packetFor(a, inputs, context, authorization.target.requirement);
-    defer packets.release(base);
     const kind = switch (authorization.operation) {
         .replace => |value| std.meta.activeTag(value),
         .insert => |value| value,
         .delete => return error.InvalidAtomicRepair,
     };
+    const base = try review.packetFor(a, inputs, context, if (kind == .finding) .{ .finding = authorization.target.requirement } else .{ .correction = authorization.target.requirement });
+    defer packets.release(base);
     const definition = if (kind == .finding and try review.applicability(inputs, authorization.target.requirement) == .review) "applicability_finding" else @tagName(kind);
     return atomic.packet(a, authorization, base, .{ .bytes = definition });
 }

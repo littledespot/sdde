@@ -15,6 +15,7 @@ pub const Driver = struct {
     support_fault: ?@import("spec_generation_responses.zig").SupportFault = null,
     support_post: bool = false,
     source_gaps: bool = false,
+    evidence_fault: @FieldType(@import("spec_generation_responses.zig").Options, "evidence_fault") = null,
     candidate_omission: bool = false,
     extraction_omission: bool = false,
     support_repair_calls: usize = 0,
@@ -77,7 +78,7 @@ pub const Driver = struct {
         defer arena.deinit();
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_post = self.support_post, .candidate_omission = self.candidate_omission, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_post = self.support_post, .candidate_omission = self.candidate_omission, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             self.fake.invocation_plan.complete.content = if (self.malformed or (self.malformed_once and self.calls == 0)) "{" else body;
             const current_request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
@@ -91,7 +92,11 @@ pub const Driver = struct {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
                 const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
                 var permits_applicability = false;
-                for (input.value.object.get("requirements").?.array.items) |requirement| permits_applicability = permits_applicability or requirement.object.get("permitted_not_applicable").? != .null;
+                for (input.value.object.get("requirements").?.array.items) |requirement| {
+                    permits_applicability = permits_applicability or requirement.object.contains("permitted_not_applicable");
+                    std.testing.expect(requirement.object.contains("task") and requirement.object.contains("evidence")) catch unreachable;
+                    std.testing.expect(!requirement.object.contains("kind") and !requirement.object.contains("slot") and !requirement.object.contains("unit")) catch unreachable;
+                }
                 const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
                 const value = schema.value.object.get("properties").?.object.get("entries").?.object.get("items").?.object.get("properties").?.object.get("value").?;
                 assertReviewShape(value, permits_applicability) catch unreachable;
@@ -211,6 +216,15 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
     const repair = input.value.object.get("repair").?.object;
     try std.testing.expect(!repair.contains("expected"));
     try std.testing.expectEqual(std.mem.eql(u8, repair.get("operation").?.string, "replace"), repair.contains("current_value"));
+    if (request.model_request_id.immutable_unit_owner_id == .semantic_review) {
+        const rule = repair.get("rule").?.object;
+        if (std.mem.eql(u8, rule.get("issue").?.string, "invalid_evidence")) {
+            const current = rule.get("finding").?.object.get("decision").?.string;
+            const minimum = rule.get("evidence_rule").?.object.get("minimum").?.string;
+            if (std.mem.eql(u8, current, "supported") or std.mem.eql(u8, current, "not_applicable")) try std.testing.expectEqualStrings("claim_required", minimum);
+            try std.testing.expect(rule.contains("evidence_issue"));
+        }
+    }
     if (packet.resultDefinition()) |definition| {
         if (std.mem.eql(u8, definition.bytes, "finding") or std.mem.eql(u8, definition.bytes, "applicability_finding")) {
             const schema = try std.json.parseFromSlice(std.json.Value, a, request.response_schema.modelBytes(), .{});

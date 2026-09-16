@@ -87,8 +87,8 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             var repair = try strict.decode(std.json.Value, scratch, try json.encode(@TypeOf(facts), scratch, facts), limits);
             // Only optional presentation fields are omitted. Evidence, old values
             // and the native authorization retain their complete contracts.
-            omitAbsent(repair.object.getPtr("target").?);
-            omitAbsent(repair.object.getPtr("rule").?);
+            packets.omitAbsent(repair.object.getPtr("target").?);
+            packets.omitAbsent(repair.object.getPtr("rule").?);
             if (authorization.operation == .replace) {
                 const current_value = try strict.decode(std.json.Value, scratch, try json.encodeSelected(Replacement, scratch, authorization.operation.replace), limits);
                 try repair.object.put(scratch, "current_value", current_value);
@@ -165,14 +165,4 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             }).copy(a);
         }
     };
-}
-
-fn omitAbsent(value: *std.json.Value) void {
-    if (value.* != .object) return;
-    var index: usize = 0;
-    while (index < value.object.count()) {
-        if (value.object.values()[index] == .null) {
-            value.object.orderedRemoveAt(index);
-        } else index += 1;
-    }
 }

@@ -62,6 +62,11 @@ decision only when applicability still needs review. Initial and missing-finding
 requests select the same closed shapes. Detail/evidence repairs preserve decisions;
 admission and persisted validation share native assembly. Source review assesses
 meaning sufficient to derive content, without requiring prewritten spec fields.
+Packets replace native ledger tuples with short semantic tasks. The shared review
+evidence owner supplies claim minimums, eligible/exact sets and current candidate
+provenance to both admission and guidance. Corrections retain the precise failing
+rule once, preserving the decision; insertion retains the available choices.
+Absent presentation fields are omitted without removing source/extraction evidence.
 
 **After every response**, the engine independently requires one complete JSON object.
 It rejects fences, duplicate keys, trailing text and schema violations. Rejected

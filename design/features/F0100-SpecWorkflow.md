@@ -685,6 +685,13 @@ closed requiredness/ownership policies, current support checks and outcomes.
   `not_applicable`; an existing candidate instead supplies that fact for review.
   Initial and missing-finding requests select the permitted schema. Superseded
   `finding`/`disposition` response fields reject.
+- Review tasks describe source meaning and candidate support instead of exposing
+  native kind/unit/slot tuples. The evidence-admission owner also supplies request
+  constraints: positive claim minimums, eligible/exact sets and current candidate
+  provenance. Typed diagnostics distinguish missing, disallowed, incomplete and
+  candidate-inconsistent selections. Selection corrections receive the failing
+  rule once; initial/insertion requests retain all permitted decision constraints.
+  The same checks govern persisted evidence; no citation is chosen automatically.
 - Review findings retain concise detail, canonical claim/citation/source associations
   and candidate revision. Request/attempt origins remain execution-local; published
   evidence validates without an earlier request ledger.
