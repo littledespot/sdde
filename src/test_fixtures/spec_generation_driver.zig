@@ -216,6 +216,17 @@ pub const Driver = struct {
             }
             self.calls += 1;
         };
+        // Retain pre-merge evidence so the shared fixture can check siblings
+        // after the runner invalidates repair state and replaces the review.
+        const values = @import("../application/pipeline_values.zig");
+        var before_review: data.View = .{};
+        defer for (before_review.slots) |value| if (value) |retained| values.destroy(retained);
+        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-support-repair")) {
+            for ([_]@import("../domain/pipeline.zig").DataKey{ .specification_support_review, .specification_support_repair }) |key| {
+                const index = @intFromEnum(key);
+                before_review.slots[index] = values.retain(self.runner.envelope.slots[index].?) catch unreachable;
+            }
+        };
         const result = self.runner.bindings().invokeStep(id);
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, @import("../actions/reference/merge_reference_reconciliation_repair.zig").Action.contract.id) and result.status() == .ok) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
@@ -243,6 +254,7 @@ pub const Driver = struct {
         };
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-support-repair") and (result.status() == .ok or result.status() == .invalid)) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
+            assertSupportMerge(arena.allocator(), &before_review, &view) catch unreachable;
             const review_workflow = @import("../application/specification_support_workflow.zig");
             const current = review_workflow.progress(&view) catch unreachable;
             const merge = blk: {
@@ -283,6 +295,39 @@ pub const Driver = struct {
         return result;
     }
 };
+
+fn assertSupportMerge(allocator: std.mem.Allocator, before: *const data.View, after: *const data.View) !void {
+    const workflow_review = @import("../application/specification_support_workflow.zig");
+    const support = @import("../domain/specification_support.zig");
+    const previous = try workflow_review.progress(before);
+    const current = try workflow_review.progress(after);
+    try std.testing.expectEqual(workflow_review.purpose(previous), workflow_review.purpose(current));
+    inline for (.{ support.Purpose.source, .principles }) |purpose| if (workflow_review.purpose(current) == purpose) {
+        const old = (try workflow_review.collection(purpose, previous)).rejected.candidate.?;
+        const result = try workflow_review.collection(purpose, current);
+        const candidate = switch (result) {
+            .accepted => |accepted| accepted.candidate,
+            .rejected => |rejected| rejected.candidate.?,
+        };
+        const state = try @import("../application/required_authority_values.zig").read(before, @import("../application/specification_support_repair_workflow.zig").schema, if (purpose == .source) .support_repair else .principle_support_repair);
+        const authorization = state.authorization;
+        try std.testing.expectEqualDeep(old.origin, candidate.origin);
+        try std.testing.expectEqual(old.revision + 1, candidate.revision);
+        for (old.review.entries, 0..) |entry, index| {
+            if (index == authorization.target.index) {
+                if (authorization.operation == .replace and authorization.operation.replace != .finding)
+                    try std.testing.expectEqual(entry.value.decision, candidate.review.entries[index].value.decision);
+                continue;
+            }
+            const retained_index = if (authorization.operation == .delete and index > authorization.target.index) index - 1 else index;
+            try std.testing.expectEqualDeep(entry, candidate.review.entries[retained_index]);
+            try std.testing.expectEqualDeep(old.origins[index], candidate.origins[retained_index]);
+        }
+        const checked = try support.Contract(purpose).validate(allocator, authorization.dependencies.inputs, authorization.dependencies.sources, candidate);
+        try std.testing.expectEqual(std.meta.activeTag(result), std.meta.activeTag(checked));
+        if (checked == .rejected) try std.testing.expectEqualDeep(result.rejected.rejection, checked.rejected.rejection);
+    };
+}
 
 fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest, packet: *const @import("../domain/model_input_packet.zig").Packet) !void {
     // Exercise the real provider serializer, without making a network call.

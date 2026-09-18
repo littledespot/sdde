@@ -18,8 +18,13 @@
 
 - The originating step declares the repository slot, response controls, prompt, result
   schema and optional input resource once.
-- Separate registered identity, binding-validation and request-building operations
-  exchange immutable typed pipeline values.
+- Registered identity, binding-validation and request-building operations exchange
+  immutable typed pipeline values. The 2026-09-18 user-approved preparation amendment
+  also permits `prepare-model-request` to reuse those domain owners and publish
+  assignment, validation and preparation together in one runner-validated delta.
+- Both forms retain the same originating identity, selected resources and validation
+  rules. Failed consolidated preparation publishes no partial state. Detailed
+  operations remain available; actions never invoke other actions.
 - Consumers retain the originating request identity, binding, resources and content;
   they do not rebind to their own step or repeat selection parameters.
 - The existing data-dependency compiler proves the required handoff.
@@ -67,10 +72,19 @@
 
 ## Operation contracts
 
-Each operation is separately selected in YAML. The detailed catalogue retains
+YAML selects each operation; request preparation may use either the detailed
+operations or the consolidated pure preparation operation. This does not combine
+provider authorization, invocation, retries or accounting. The detailed catalogue retains
 its input, transition, ownership, rejection and cleanup rules. All integrations
 below were recorded as implemented on **2026-09-06**; accounting also retains
 its **2026-09-12** protocol-retry amendment.
+
+The 2026-09-18 user-approved response-admission amendment also permits
+`admit-model-response` to combine JSON decoding and selected-schema validation.
+It reuses their existing owners and publishes the existing envelope and payload
+results together in one runner-validated delta. Detailed operations remain
+available. No provider call, lifecycle change, retry, accounting, semantic review
+or child-node execution is added; the 512-step expansion limit remains unchanged.
 
 | Operation contract | Detailed rules |
 | --- | --- |
@@ -83,6 +97,7 @@ its **2026-09-12** protocol-retry amendment.
 | <a id="observation-validation-integration-implemented-2026-09-06"></a>Observation validation | [Contract](model-request-operation-contracts.md#observation-validation-integration-implemented-2026-09-06) |
 | <a id="json-decoding-integration-implemented-2026-09-06"></a>JSON decoding | [Contract](model-request-operation-contracts.md#json-decoding-integration-implemented-2026-09-06) |
 | <a id="payload-schema-validation-integration-implemented-2026-09-06"></a>Payload-schema validation | [Contract](model-request-operation-contracts.md#payload-schema-validation-integration-implemented-2026-09-06) |
+| Consolidated response admission | [Contract](model-request-operation-contracts.md#consolidated-response-admission) |
 | <a id="provider-operation-completion-integration-implemented-2026-09-06"></a>Provider-operation completion | [Contract](model-request-operation-contracts.md#provider-operation-completion-integration-implemented-2026-09-06) |
 | <a id="pre-call-operation-termination-integration-implemented-2026-09-06"></a>Pre-call operation termination | [Contract](model-request-operation-contracts.md#pre-call-operation-termination-integration-implemented-2026-09-06) |
 | <a id="logical-request-closure-integration-implemented-2026-09-06"></a>Logical-request closure | [Contract](model-request-operation-contracts.md#logical-request-closure-integration-implemented-2026-09-06) |
@@ -118,6 +133,12 @@ its **2026-09-12** protocol-retry amendment.
   unchanged upstream outcomes, missing/foreign evidence, overrides, owner lifetime,
   allocation failure, cancelled/rejected publication and validation at token-budget
   exhaustion.
+- Detailed/consolidated response admission must preserve selected requests,
+  diagnostics, current-authority dependencies, response ownership and actual usage.
+  Test exact output-pair contracts, rejected/cancelled atomic publication and
+  allocation cleanup, plus independent source/principle correction and repair
+  origins through the production runner. The consolidated pair shares one
+  publication generation; it does not require identical intermediate generations.
 - Completion cases cover exact terminal facts, malformed/schema-invalid content
   independence, missing/foreign/stale/duplicate evidence, forged facts/outcomes,
   allocation/cancellation cleanup, owner lifetime and unchanged usage at exhaustion.

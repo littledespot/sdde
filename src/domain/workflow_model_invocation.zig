@@ -11,6 +11,7 @@ pub const count_validation_requires = [_]pipeline.DataKey{ .model_request_identi
 pub const validation_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .invoked_provider_operation, .provider_invocation_result };
 pub const decode_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .provider_invocation_validation_result };
 pub const payload_schema_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .model_envelope_result };
+pub const admission_produces = [_]pipeline.DataKey{ .model_envelope_result, .model_payload_schema_result };
 
 pub fn validContract(contract: operation.Contract, ports: []const []const u8) bool {
     return valid(contract.requires, contract.produces, contract.optional, contract.replaces, contract.invalidates, contract.side_effect, contract.runner_accounting, contract.parameters.len, contract.retry_limit != null, ports);
@@ -26,7 +27,7 @@ fn valid(inputs: []const pipeline.DataKey, outputs: []const pipeline.DataKey, op
     }
     const response_inputs: ?[]const pipeline.DataKey = if (validatesCount(outputs)) &count_validation_requires else if (validates(outputs)) &validation_requires else if (std.mem.indexOfScalar(pipeline.DataKey, outputs, .model_envelope_result) != null) &decode_requires else if (std.mem.indexOfScalar(pipeline.DataKey, outputs, .model_payload_schema_result) != null) &payload_schema_requires else null;
     if (response_inputs) |required| {
-        if (outputs.len != 1 or effect != .none or accounting != .none or ports.len != 0 or
+        if ((outputs.len != 1 and !std.mem.eql(pipeline.DataKey, outputs, &admission_produces)) or effect != .none or accounting != .none or ports.len != 0 or
             optional.len != 0 or replaces.len != 0 or invalidates.len != 0 or parameters != 0 or retry) return false;
         for (required) |key| {
             if (std.mem.indexOfScalar(pipeline.DataKey, inputs, key) == null) return false;

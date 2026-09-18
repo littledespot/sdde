@@ -61,7 +61,7 @@ steps:
       blocked: review-source
       failed: end.failed
   review-source:
-    call: review-support
+    call: review-source
     with: {retry-limit: 2}
     on:
       ok: source-authority
@@ -105,13 +105,13 @@ steps:
   generate:
     call: generate-specification
     on:
-      ok: review-content
+      ok: review
       invalid: end.invalid
       needs-user: generation-gaps
       blocked: end.blocked
       failed: end.failed
       cancelled: end.cancelled
-  review-content:
+  review:
     call: review-specification
     on:
       ok: publish
@@ -506,7 +506,7 @@ subgraphs:
       merge:
         call: merge-reconciliation-candidate
         on: {ok: end.ok, failed: end.failed}
-  review-support:
+  review-source:
     start: project
     steps:
       project:
@@ -514,7 +514,40 @@ subgraphs:
         on: {ok: initialize, blocked: end.blocked}
       initialize:
         use: initialize-specification-review
-        on: {ok: input, failed: end.failed}
+        on: {ok: review, failed: end.failed}
+      review:
+        call: review-support
+        with: {retry-limit: {param: retry-limit}}
+        on: {ok: apply, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+      apply:
+        use: apply-specification-support
+        on: {ok: end.ok, failed: end.failed}
+  review-candidate:
+    start: project
+    steps:
+      project:
+        use: build-specification-authority-requirements
+        on: {ok: initialize, blocked: end.blocked}
+      initialize:
+        use: initialize-specification-review
+        on: {ok: source, failed: end.failed}
+      source:
+        call: review-support
+        with: {retry-limit: 1}
+        on: {ok: advance, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+      advance:
+        use: advance-specification-review
+        on: {ok: apply, more: policy, failed: end.failed}
+      policy:
+        call: review-support
+        with: {retry-limit: 1}
+        on: {ok: advance, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+      apply:
+        use: apply-specification-support
+        on: {ok: end.ok, failed: end.failed}
+  review-support:
+    start: input
+    steps:
       input:
         use: build-specification-support-input
         on: {ok: model, failed: end.failed}
@@ -531,12 +564,6 @@ subgraphs:
         on: {ok: release, invalid: authorize, failed: end.failed}
       release:
         call: release-request
-        on: {ok: advance, failed: end.failed}
-      advance:
-        use: advance-specification-review
-        on: {ok: apply, more: input, failed: end.failed}
-      apply:
-        use: apply-specification-support
         on: {ok: end.ok, failed: end.failed}
       authorize:
         use: authorize-specification-support-repair
@@ -644,8 +671,7 @@ subgraphs:
           retry-limit: 64
         on: {ok: assemble-specification, failed: end.failed}
       post:
-        call: review-support
-        with: {retry-limit: 1}
+        call: review-candidate
         on: {ok: gate, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
       omit:
         call: repair-omission
@@ -746,10 +772,10 @@ subgraphs:
         call: release-request
         on: {ok: end.ok, failed: end.failed}
   model-request:
-    start: assign
+    start: prepare
     steps:
-      assign:
-        use: assign-model-request-id
+      prepare:
+        use: prepare-model-request
         with:
           slot: spec_generation
           response-mode: prompt-only
@@ -757,12 +783,6 @@ subgraphs:
           prompt: {param: prompt}
           result-schema: {param: schema}
           result-selection: {param: selection}
-        on: {ok: validate, failed: end.failed}
-      validate:
-        use: validate-model-request-binding
-        on: {ok: build, failed: end.failed}
-      build:
-        use: build-model-request
         on: {ok: account, failed: end.failed}
       account:
         use: advance-model-attempt-accounting
@@ -800,12 +820,9 @@ subgraphs:
         on: {ok: complete-operation, failed: complete-operation, cancelled: complete-operation}
       complete-operation:
         use: complete-provider-operation
-        on: {ok: decode, failed: decode, cancelled: decode}
-      decode:
-        use: decode-model-envelope
-        on: {ok: payload, invalid: payload, failed: payload, cancelled: payload}
-      payload:
-        use: validate-model-payload-schema
+        on: {ok: admit, failed: admit, cancelled: admit}
+      admit:
+        use: admit-model-response
         on: {ok: close, invalid: retry, failed: close, cancelled: close}
       retry:
         use: build-model-protocol-retry

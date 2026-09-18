@@ -20,7 +20,7 @@ const count_observation = @import("../application/model_token_count_observation_
 
 const transport = @import("../application/model_transport_workflow.zig");
 const protocol = @import("../application/model_protocol_retry_workflow.zig");
-pub const count = 26;
+pub const count = 28;
 pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema, invocation.count_schema, count_observation.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
@@ -29,6 +29,7 @@ pub const Assembly = struct {
     assign: requests.Assign,
     validate: requests.Validate,
     build: requests.Build,
+    prepare: requests.Prepare,
     advance_attempt: attempts.Advance,
     assign_operation: provider_operations.Assign,
     prepare_authorization: authorization.Prepare,
@@ -38,6 +39,7 @@ pub const Assembly = struct {
     validate_observation: observation.Validate,
     decode_envelope: envelope.Decode,
     validate_payload: payload.Validate,
+    admit_response: payload.Admit,
     complete_operation: completion.Complete,
     complete_request: request_completion.Complete,
     terminate_operation: termination.Terminate,
@@ -59,6 +61,7 @@ pub const Assembly = struct {
             .assign = .{ .allocator = allocator },
             .validate = .{ .allocator = allocator },
             .build = .{ .allocator = allocator },
+            .prepare = .{ .allocator = allocator },
             .advance_attempt = .{},
             .assign_operation = .{},
             .prepare_authorization = .{ .allocator = allocator },
@@ -68,6 +71,7 @@ pub const Assembly = struct {
             .validate_observation = .{ .allocator = allocator },
             .decode_envelope = .{ .allocator = allocator },
             .validate_payload = .{ .allocator = allocator },
+            .admit_response = .{ .allocator = allocator },
             .complete_operation = .{},
             .complete_request = .{ .allocator = allocator },
             .terminate_operation = .{},
@@ -88,6 +92,7 @@ pub const Assembly = struct {
             entry(requests.Assign, &self.assign),
             entry(requests.Validate, &self.validate),
             entry(requests.Build, &self.build),
+            entry(requests.Prepare, &self.prepare),
             entry(attempts.Advance, &self.advance_attempt),
             entry(provider_operations.Assign, &self.assign_operation),
             entry(authorization.Prepare, &self.prepare_authorization),
@@ -97,6 +102,7 @@ pub const Assembly = struct {
             entry(observation.Validate, &self.validate_observation),
             entry(envelope.Decode, &self.decode_envelope),
             entry(payload.Validate, &self.validate_payload),
+            entry(payload.Admit, &self.admit_response),
             entry(completion.Complete, &self.complete_operation),
             entry(request_completion.Complete, &self.complete_request),
             entry(termination.Terminate, &self.terminate_operation),

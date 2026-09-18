@@ -28,6 +28,14 @@ pub fn validateReplacement(input: *const data.View, contract: pipeline.NodeContr
         const assigned = try values.read(&.{ .slots = delta.data_writes }, requests.assigned_schema, handoff.Request);
         if (assigned.ledger() != next) return error.ModelRequestBindingInvalid;
         try identity.validateAssignmentSuccessor(current, next, assigned.id());
+        // Consolidated preparation must publish children of this assignment.
+        // Detailed preparation publishes those children in later deltas.
+        for ([_]data.Schema{ requests.validated_schema, requests.prepared_schema }) |schema| {
+            if (delta.data_writes[@intFromEnum(schema.key)] != null) {
+                const request = try values.read(&.{ .slots = delta.data_writes }, schema, handoff.Request);
+                if (request.id() != assigned.id() or request.ledger() != next) return error.ModelRequestBindingInvalid;
+            }
+        }
     }
     return next;
 }

@@ -50,36 +50,58 @@ pub const Decode = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const source = try observation.readCurrent(&input.step.data);
-        const owner = self.allocator.create(Owner) catch return error.OperationExecutionFailed;
-        errdefer self.allocator.destroy(owner);
-        const retained = values.retain(input.step.data.slots[@intFromEnum(observation.schema.key)].?) catch return error.OperationExecutionFailed;
-        errdefer values.destroy(retained);
-        owner.* = .{
-            .allocator = self.allocator,
-            .retained = retained,
-            .source = source,
-            .outcome = switch (source.outcome()) {
-                .validated => |evidence| switch (evidence.result()) {
-                    .complete => |complete| decoded: {
-                        var diagnostic: ?envelope.Diagnostic = null;
-                        const parsed = self.action.execute(self.allocator, complete, &diagnostic) catch |err| break :decoded switch (err) {
-                            error.OutOfMemory => return error.OperationExecutionFailed,
-                            error.InvalidModelEnvelope => .{ .protocol_rejected = .{ .reason = error.InvalidModelEnvelope, .diagnostic = diagnostic orelse return error.OperationExecutionFailed } },
-                        };
-                        break :decoded .{ .decoded = parsed };
-                    },
-                    .stopped, .failed => .not_decoded,
-                },
-                .rejected, .cancelled => .not_decoded,
-            },
-        };
-        errdefer owner.releaseTree();
-        const value = values.adopt(self.allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch return error.OperationExecutionFailed;
+        var diagnostic: ?envelope.Diagnostic = null;
+        const decoded: ?envelope.Error!envelope.Owned = if (complete(source)) |candidate| self.action.execute(self.allocator, candidate, &diagnostic) else null;
+        const value = try capture(self.allocator, &input.step.data, decoded, diagnostic);
+        errdefer values.destroy(value);
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(schema.key)] = value;
-        return .{ .outcome = status(owner.view()), .delta = delta };
+        const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch return error.OperationExecutionFailed;
+        return .{ .outcome = status(result), .delta = delta };
     }
 };
+
+pub fn complete(source: *const observation.Result) ?*const @import("../domain/provider_invocation_validation.zig").CompleteCandidate {
+    return switch (source.outcome()) {
+        .validated => |evidence| switch (evidence.result()) {
+            .complete => |candidate| candidate,
+            .stopped, .failed => null,
+        },
+        .rejected, .cancelled => null,
+    };
+}
+
+/// Consumes the decoder tree/diagnostic on every path and retains its observation.
+/// Detailed and consolidated admission publish the same sealed result type.
+pub fn capture(allocator: std.mem.Allocator, view: *const data.View, decoded: ?envelope.Error!envelope.Owned, diagnostic: ?envelope.Diagnostic) operations.Error!*data.Value {
+    var outcome: Decoded = if (decoded) |result| decoded_result: {
+        const owned = result catch |err| break :decoded_result switch (err) {
+            error.OutOfMemory => return error.OperationExecutionFailed,
+            error.InvalidModelEnvelope => .{ .protocol_rejected = .{ .reason = error.InvalidModelEnvelope, .diagnostic = diagnostic orelse return error.OperationExecutionFailed } },
+        };
+        break :decoded_result .{ .decoded = owned };
+    } else .not_decoded;
+    errdefer release(allocator, &outcome);
+    const source = try observation.readCurrent(view);
+    if ((complete(source) != null) != (decoded != null)) return error.OperationExecutionFailed;
+    if (outcome == .decoded and outcome.decoded.candidate.association() != complete(source).?.association()) return error.OperationExecutionFailed;
+    const owner = allocator.create(Owner) catch return error.OperationExecutionFailed;
+    errdefer allocator.destroy(owner);
+    const retained = values.retain(view.slots[@intFromEnum(observation.schema.key)].?) catch return error.OperationExecutionFailed;
+    errdefer values.destroy(retained);
+    owner.* = .{ .allocator = allocator, .retained = retained, .source = source, .outcome = outcome };
+    return values.adopt(allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch error.OperationExecutionFailed;
+}
+
+const Decoded = union(enum) { decoded: envelope.Owned, protocol_rejected: Rejection, not_decoded };
+
+fn release(allocator: std.mem.Allocator, outcome: *Decoded) void {
+    switch (outcome.*) {
+        .decoded => |*owned| owned.deinit(),
+        .protocol_rejected => |rejected| rejected.diagnostic.deinit(allocator),
+        .not_decoded => {},
+    }
+}
 
 /// The sealed source owns association; consumers do not revalidate provider data.
 pub fn readCurrent(view: *const data.View) operations.Error!*const Result {
@@ -100,22 +122,14 @@ const Owner = struct {
     allocator: std.mem.Allocator,
     retained: *data.Value,
     source: *const observation.Result,
-    outcome: union(enum) { decoded: envelope.Owned, protocol_rejected: Rejection, not_decoded },
+    outcome: Decoded,
 
     fn view(self: *const Owner) *const Result {
         return @ptrCast(self);
     }
 
-    fn releaseTree(self: *Owner) void {
-        switch (self.outcome) {
-            .decoded => |*owned| owned.deinit(),
-            .protocol_rejected => |rejected| rejected.diagnostic.deinit(self.allocator),
-            .not_decoded => {},
-        }
-    }
-
     fn destroy(self: *Owner) void {
-        self.releaseTree();
+        release(self.allocator, &self.outcome);
         values.destroy(self.retained);
         self.allocator.destroy(self);
     }

@@ -576,6 +576,16 @@ test "payload validation uses only the retained schema and produces allocation-f
     try std.testing.expect(std.mem.indexOf(u8, source, "schema.findProperty(") != null);
 }
 
+test "consolidated response admission remains a pure action over existing response owners" {
+    const action = @import("actions/model/admit_model_response.zig").Action;
+    try std.testing.expectEqual(@as(usize, 0), @typeInfo(action).@"struct".fields.len);
+    try std.testing.expect(action.contract.side_effect == .none);
+    try std.testing.expect(action.contract.runner_accounting == .none);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{ .model_envelope_result, .model_payload_schema_result }, action.contract.produces);
+    const source = @embedFile("actions/model/admit_model_response.zig");
+    inline for (.{ "/actions/", "/application/", "/ports/", "/adapters/", "std.Io", "std.http", "std.process", "workflow_token_accounting", "logger", "schema.compile" }) |forbidden| try expectAbsent(source, forbidden);
+}
+
 test "model-binding requirement is immutable data not a provider-call capability" {
     const compilation = @import("domain/workflow_compilation.zig");
     const operation = @import("domain/workflow_operation.zig");
@@ -641,7 +651,10 @@ test "workflow request handoff retains authority without introducing operations 
     const preparation = @embedFile("application/model_request_workflow.zig");
     inline for (.{ "LLMProviderInterface", "invoke_model", "count_input_tokens", "authorization_lease", "retry_limit", "std.Io", "/adapters/" }) |forbidden| try expectAbsent(preparation, forbidden);
     const assembly = @embedFile("composition/model_request_operations.zig");
-    inline for (.{ "requests.Initialize", "requests.Assign", "requests.Validate", "requests.Build" }) |name| try std.testing.expect(std.mem.indexOf(u8, assembly, name) != null);
+    inline for (.{ "requests.Initialize", "requests.Assign", "requests.Validate", "requests.Build", "requests.Prepare" }) |name| try std.testing.expect(std.mem.indexOf(u8, assembly, name) != null);
+    const consolidated = @embedFile("actions/model/prepare_model_request.zig");
+    inline for (.{ "/actions/", "/application/", "/ports/", "/adapters/", "std.Io" }) |forbidden| try expectAbsent(consolidated, forbidden);
+    try std.testing.expect(std.mem.indexOf(u8, consolidated, "handoff.prepare(") != null);
     try expectAbsent(assembly, "operations.Registry");
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "self.model_requests.entries") != null);
 }
@@ -747,21 +760,23 @@ test "YAML decoding reuses the pure decoder without schema validation or account
     inline for (.{ "/adapters/", "std.Io", "std.json", "strict_json", "countInputTokens", "reconcile", "validateUsage", "validateInferenceInvocation", "utf8Validate", "LLMProviderInterface", "model_payload_schema", "retry_limit", "while (" }) |forbidden| try expectAbsent(source, forbidden);
 }
 
-test "YAML payload validation retains candidates and reuses only the bound schema validator" {
+test "YAML detailed and consolidated response bindings share payload ownership without effects" {
     const native = @import("application/model_payload_schema_workflow.zig");
     try std.testing.expect(@typeInfo(native.Result) == .@"opaque");
     try std.testing.expect(@FieldType(native.Outcome, "valid") == *const @import("domain/model_payload_schema.zig").Evidence);
     try std.testing.expect(@FieldType(native.Outcome, "not_validated") == *const @import("application/model_envelope_workflow.zig").Result);
     try std.testing.expect(native.schema.maximum_bytes == null);
-    const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(native.Validate, &.{});
-    try std.testing.expect(capabilities.valid and !capabilities.model_provider and !capabilities.provider_authorization);
-    try std.testing.expect(native.Validate.contract.side_effect == .none);
-    try std.testing.expect(native.Validate.contract.runner_accounting == .none);
-    try std.testing.expectEqual(@as(usize, 0), native.Validate.contract.parameters.len);
+    inline for (.{ native.Validate, native.Admit }) |Binding| {
+        const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(Binding, &.{});
+        try std.testing.expect(capabilities.valid and !capabilities.model_provider and !capabilities.provider_authorization);
+        try std.testing.expect(Binding.contract.side_effect == .none);
+        try std.testing.expect(Binding.contract.runner_accounting == .none);
+        try std.testing.expectEqual(@as(usize, 0), Binding.contract.parameters.len);
+    }
     const source = @embedFile("application/model_payload_schema_workflow.zig");
-    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.action.execute("));
+    try std.testing.expectEqual(@as(usize, 2), countOccurrences(source, "self.action.execute("));
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "values.retain("));
-    inline for (.{ "/adapters/", "std.Io", "std.json", "strict_json", "countInputTokens", "reconcile", "validateUsage", "validateInferenceInvocation", "validation.validate(", "utf8Validate", "LLMProviderInterface", "retry_limit", "while (" }) |forbidden| try expectAbsent(source, forbidden);
+    inline for (.{ "/adapters/", "std.Io", "std.json", "strict_json", "countInputTokens", "reconcile", "validateUsage", "validateInferenceInvocation", "validation.validate(", "decoding.decode(", "utf8Validate", "LLMProviderInterface", "retry_limit", "while (" }) |forbidden| try expectAbsent(source, forbidden);
 }
 
 test "YAML request lifecycle uses its existing action and publishes only a validated ledger successor" {
@@ -1128,6 +1143,7 @@ test "only request identity owners can produce or replace its ledger key" {
             try std.testing.expectEqual(@as(usize, 0), produces);
         }
         if (std.mem.eql(u8, entry.path, "model/assign_model_request_id.zig") or
+            std.mem.eql(u8, entry.path, "model/prepare_model_request.zig") or
             std.mem.eql(u8, entry.path, "model/advance_model_request_lifecycle.zig"))
         {
             try std.testing.expectEqual(@as(usize, 1), replaces);

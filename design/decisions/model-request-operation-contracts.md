@@ -150,6 +150,25 @@ No new decision or implementation claim is introduced here.
 - No parsing, copying of content, token charge, lifecycle transition or retry occurs.
 - Schema validity remains distinct from semantic correctness and commit authority.
 
+## Consolidated response admission
+
+- `admit-model-response` is a parameter-free pure alternative to the detailed
+  decoder and payload validator. It consumes the current request ledger,
+  prepared request and sealed observation.
+- The existing decoder parses complete evidence once; the existing schema
+  validator checks that exact candidate against its retained selected schema.
+  Shared result owners publish the existing envelope and payload keys together;
+  payload evidence retains the exact envelope and original observation.
+- The shared registered/compiled contract permits exactly this output pair with
+  the decoder prerequisites and existing pure-response restrictions. Other
+  response operations retain their single-output contracts.
+- Syntax/schema diagnostics and non-complete outcomes remain distinct. Failure
+  before publication releases both values. One delta-application/cancellation
+  boundary replaces two; current-authority dependencies remain required.
+- Detailed operations remain available. No new identity, schema selection,
+  provider call, retry, accounting, semantic authority or runtime coordinator is
+  introduced. Correction, closure and retirement remain explicit operations.
+
 ## Provider-operation completion integration (implemented 2026-09-06)
 
 - `complete-provider-operation` is a parameter-free binding of the existing lifecycle

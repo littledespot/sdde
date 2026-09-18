@@ -4,6 +4,8 @@ const pipeline = @import("../domain/pipeline.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const validation = @import("../domain/model_payload_schema.zig");
 const envelope = @import("model_envelope_workflow.zig");
+const decoding = @import("../domain/model_envelope.zig");
+const observation = @import("provider_observation_workflow.zig");
 const data = @import("../domain/pipeline_data.zig");
 const values = @import("pipeline_values.zig");
 
@@ -41,32 +43,80 @@ pub const Validate = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const source = try envelope.readCurrent(&input.step.data);
-        const owner = self.allocator.create(Owner) catch return error.OperationExecutionFailed;
-        errdefer self.allocator.destroy(owner);
-        const retained = values.retain(input.step.data.slots[@intFromEnum(envelope.schema.key)].?) catch return error.OperationExecutionFailed;
-        errdefer values.destroy(retained);
-        owner.* = .{
-            .allocator = self.allocator,
-            .retained = retained,
-            .source = source,
-            .outcome = switch (source.outcome()) {
-                .decoded => |candidate| switch (self.action.execute(candidate)) {
-                    .valid => |evidence| .{ .valid = evidence },
-                    .invalid => |reason| .{ .schema_rejected = reason },
-                },
-                .protocol_rejected, .not_decoded => .{ .not_validated = source },
-            },
+        const checked: ?validation.Result = switch (source.outcome()) {
+            .decoded => |candidate| self.action.execute(candidate),
+            .protocol_rejected, .not_decoded => null,
         };
-        const value = values.adopt(self.allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch return error.OperationExecutionFailed;
+        const value = try capture(self.allocator, &input.step.data, checked);
+        errdefer values.destroy(value);
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(schema.key)] = value;
-        return .{ .outcome = status(owner.view()), .delta = delta };
+        const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch return error.OperationExecutionFailed;
+        return .{ .outcome = status(result), .delta = delta };
     }
 };
 
+pub const Admit = struct {
+    pub const Action = @import("../actions/model/admit_model_response.zig").Action;
+    pub const contract: @import("../domain/workflow_operation.zig").Contract = .{
+        .id = Action.contract.id,
+        .kind = .step,
+        .requires = Action.contract.requires,
+        .produces = Action.contract.produces,
+        .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
+        .side_effect = Action.contract.side_effect,
+    };
+    allocator: std.mem.Allocator,
+    action: Action = .{},
+
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const source = try observation.readCurrent(&input.step.data);
+        var diagnostic: ?decoding.Diagnostic = null;
+        var checked: ?validation.Result = null;
+        const decoded: ?decoding.Error!decoding.Owned = if (envelope.complete(source)) |candidate| result: {
+            const admitted = self.action.execute(self.allocator, candidate, &diagnostic) catch |err| break :result err;
+            checked = admitted.validated;
+            break :result admitted.decoded;
+        } else null;
+        const envelope_value = try envelope.capture(self.allocator, &input.step.data, decoded, diagnostic);
+        errdefer values.destroy(envelope_value);
+        var view = input.step.data;
+        view.slots[@intFromEnum(envelope.schema.key)] = envelope_value;
+        const payload_value = try capture(self.allocator, &view, checked);
+        errdefer values.destroy(payload_value);
+        var delta: pipeline.NodeDelta = .{};
+        delta.data_writes[@intFromEnum(envelope.schema.key)] = envelope_value;
+        delta.data_writes[@intFromEnum(schema.key)] = payload_value;
+        const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch return error.OperationExecutionFailed;
+        return .{ .outcome = status(result), .delta = delta };
+    }
+};
+
+/// Retains the exact envelope; schema evidence borrows its parsed candidate.
+fn capture(allocator: std.mem.Allocator, view: *const data.View, checked: ?validation.Result) operations.Error!*data.Value {
+    const source = try envelope.readCurrent(view);
+    if ((source.outcome() == .decoded) != (checked != null)) return error.OperationExecutionFailed;
+    if (checked) |result| if (result == .valid and result.valid.candidate() != source.outcome().decoded) return error.OperationExecutionFailed;
+    const owner = allocator.create(Owner) catch return error.OperationExecutionFailed;
+    errdefer allocator.destroy(owner);
+    const retained = values.retain(view.slots[@intFromEnum(envelope.schema.key)].?) catch return error.OperationExecutionFailed;
+    errdefer values.destroy(retained);
+    owner.* = .{
+        .allocator = allocator,
+        .retained = retained,
+        .source = source,
+        .outcome = if (checked) |result| switch (result) {
+            .valid => |evidence| .{ .valid = evidence },
+            .invalid => |reason| .{ .schema_rejected = reason },
+        } else .{ .not_validated = source },
+    };
+    return values.adopt(allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch error.OperationExecutionFailed;
+}
+
 pub fn readCurrent(view: *const data.View) operations.Error!*const Result {
     const result = values.read(view, schema, Result) catch return error.OperationExecutionFailed;
-    try @import("provider_observation_workflow.zig").requireCurrent(view, result.source().source());
+    try observation.requireCurrent(view, result.source().source());
     return result;
 }
 

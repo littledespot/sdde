@@ -20,6 +20,15 @@ pub const validated_schema = values.schema(.validated_model_request, handoff.Req
 pub const prepared_schema = values.schema(.prepared_model_request, handoff.Request, 1, null).captured();
 pub const schemas = [_]data.Schema{ ledger_schema, assigned_schema, validated_schema, prepared_schema, packet_schema };
 
+const preparation_parameters = [_]operation.ParameterDescriptor{
+    .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
+    .{ .id = "prompt", .kind = .resource, .resource_kind = .prompt, .required = true, .workflow_definition_safe = true },
+    .{ .id = "protocol-prompt", .kind = .resource, .resource_kind = .prompt, .required = false, .workflow_definition_safe = true },
+    .{ .id = "result-schema", .kind = .resource, .resource_kind = .result_schema, .required = true, .workflow_definition_safe = true },
+    .{ .id = "result-selection", .kind = .enumeration, .required = false, .allowed_values = &.{ "resource", "input" }, .workflow_definition_safe = true },
+    .{ .id = "input", .kind = .resource, .resource_kind = .data, .required = false, .workflow_definition_safe = true },
+} ++ @import("../domain/workflow_model.zig").parameters;
+
 pub const Initialize = struct {
     pub const Action = @import("../actions/model/build_initial_model_request_identity_ledger.zig").Action;
     pub const contract = descriptor(Action.contract, &.{}, &.{.model_request_identity_ledger}, &.{});
@@ -41,14 +50,7 @@ pub const Assign = struct {
     pub const contract: operation.Contract = contract: {
         var result = descriptor(Action.contract, &.{.model_request_identity_ledger}, &.{.assigned_model_request}, &.{.model_request_identity_ledger});
         result.optional = &.{.model_input_packet};
-        result.parameters = &([_]operation.ParameterDescriptor{
-            .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
-            .{ .id = "prompt", .kind = .resource, .resource_kind = .prompt, .required = true, .workflow_definition_safe = true },
-            .{ .id = "protocol-prompt", .kind = .resource, .resource_kind = .prompt, .required = false, .workflow_definition_safe = true },
-            .{ .id = "result-schema", .kind = .resource, .resource_kind = .result_schema, .required = true, .workflow_definition_safe = true },
-            .{ .id = "result-selection", .kind = .enumeration, .required = false, .allowed_values = &.{ "resource", "input" }, .workflow_definition_safe = true },
-            .{ .id = "input", .kind = .resource, .resource_kind = .data, .required = false, .workflow_definition_safe = true },
-        } ++ @import("../domain/workflow_model.zig").parameters);
+        result.parameters = &preparation_parameters;
         break :contract result;
     };
     allocator: std.mem.Allocator,
@@ -57,33 +59,32 @@ pub const Assign = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const step = input.step;
-        const selected = step.model_binding orelse return error.OperationExecutionFailed;
         const current = values.read(&step.data, ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
-        const prompt = resource(step, "prompt") orelse return error.OperationExecutionFailed;
-        const result = resource(step, "result-schema") orelse return error.OperationExecutionFailed;
-        const packet = if (step.data.contains(.model_input_packet)) values.read(&step.data, packet_schema, packets.Packet) catch return error.OperationExecutionFailed else null;
-        const static_input = resource(step, "input");
-        if (packet != null and static_input != null) return error.OperationExecutionFailed;
-        var selection: handoff.ResultSelection = .resource;
-        for (step.step.parameters) |parameter| if (std.mem.eql(u8, parameter.id.bytes, "result-selection")) {
-            if (parameter.value != .enumeration) return error.OperationExecutionFailed;
-            selection = std.meta.stringToEnum(handoff.ResultSelection, parameter.value.enumeration) orelse return error.OperationExecutionFailed;
-        };
-        const assignment = self.action.execute(current, current.revision(), if (packet) |value| value.unit() else .workflow_step, selected.operation_id, if (packet) |value| value.purpose() else .initial_generation) catch return error.OperationExecutionFailed;
+        const selected = try selections(step);
+        const assignment = self.action.execute(current, current.revision(), selected.unit(), selected.binding.operation_id, selected.purpose()) catch return error.OperationExecutionFailed;
         defer identity.deinitOwner(assignment.owner);
-        const request = handoff.assign(self.allocator, assignment.owner, assignment.model_request_id, selected.*, prompt, result, if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null, resource(step, "protocol-prompt"), selection) catch return error.OperationExecutionFailed;
-        errdefer handoff.destroy(request);
-        identity.retainOwner(assignment.owner) catch return error.OperationExecutionFailed;
-        const ledger_value = adoptLedger(self.allocator, assignment.owner) catch {
-            identity.deinitOwner(assignment.owner);
-            return error.OperationExecutionFailed;
-        };
-        errdefer values.destroy(ledger_value);
-        const request_value = adoptRequest(self.allocator, assigned_schema, request) catch return error.OperationExecutionFailed;
-        var delta: pipeline.NodeDelta = .{};
-        delta.data_replacements[@intFromEnum(ledger_schema.key)] = ledger_value;
-        delta.data_writes[@intFromEnum(assigned_schema.key)] = request_value;
-        return .{ .outcome = .ok, .delta = delta };
+        const request = selected.bind(self.allocator, assignment) catch return error.OperationExecutionFailed;
+        return publishAssignment(self.allocator, assignment.owner, &.{request});
+    }
+};
+
+pub const Prepare = struct {
+    pub const Action = @import("../actions/model/prepare_model_request.zig").Action;
+    pub const contract: operation.Contract = contract: {
+        var result = descriptor(Action.contract, Action.contract.requires, Action.contract.produces, Action.contract.replaces);
+        result.optional = Action.contract.optional;
+        result.parameters = &preparation_parameters;
+        break :contract result;
+    };
+    allocator: std.mem.Allocator,
+    action: Action = .{},
+
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const current = values.read(&input.step.data, ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+        const prepared = self.action.execute(self.allocator, current, current.revision(), try selections(input.step)) catch return error.OperationExecutionFailed;
+        defer identity.deinitOwner(prepared.owner);
+        return publishAssignment(self.allocator, prepared.owner, &.{ prepared.assigned, prepared.validated, prepared.request });
     }
 };
 
@@ -116,8 +117,7 @@ pub const Build = struct {
         // These resources were selected once by the originating compiled step.
         var parts: [2]provider.ModelVisibleContent = undefined;
         var input_id: [32]u8 = undefined;
-        const id_bytes = std.fmt.bufPrint(&input_id, "input-{d}", .{request.ledger().revision().value}) catch return error.OperationExecutionFailed;
-        const source = request.source(.{ .bytes = id_bytes }) catch return error.OperationExecutionFailed;
+        const source = request.buildSource(&input_id) catch return error.OperationExecutionFailed;
         var owned = self.action.execute(self.allocator, source, request.content(&parts)) catch return error.OperationExecutionFailed;
         const next = handoff.prepared(request, owned) catch {
             owned.deinit();
@@ -126,6 +126,49 @@ pub const Build = struct {
         return publish(self.allocator, prepared_schema, next);
     }
 };
+
+fn selections(step: operations.StepInput) operations.Error!handoff.Selection {
+    const selected = step.model_binding orelse return error.OperationExecutionFailed;
+    const packet = if (step.data.contains(.model_input_packet)) values.read(&step.data, packet_schema, packets.Packet) catch return error.OperationExecutionFailed else null;
+    const static_input = resource(step, "input");
+    if (packet != null and static_input != null) return error.OperationExecutionFailed;
+    var selection: handoff.ResultSelection = .resource;
+    for (step.step.parameters) |parameter| if (std.mem.eql(u8, parameter.id.bytes, "result-selection")) {
+        if (parameter.value != .enumeration) return error.OperationExecutionFailed;
+        selection = std.meta.stringToEnum(handoff.ResultSelection, parameter.value.enumeration) orelse return error.OperationExecutionFailed;
+    };
+    return .{
+        .binding = selected.*,
+        .prompt = resource(step, "prompt") orelse return error.OperationExecutionFailed,
+        .result = resource(step, "result-schema") orelse return error.OperationExecutionFailed,
+        .input = if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null,
+        .protocol_prompt = resource(step, "protocol-prompt"),
+        .result_selection = selection,
+    };
+}
+
+/// Consumes each request; the ledger owner is borrowed. Partial allocation never
+/// publishes a delta, and detailed/consolidated preparation share this transfer.
+fn publishAssignment(allocator: std.mem.Allocator, owner: *identity.Owner, requests: []const *handoff.Request) operations.Error!execution.Candidate {
+    const request_schemas = [_]data.Schema{ assigned_schema, validated_schema, prepared_schema };
+    var transferred: usize = 0;
+    defer for (requests[transferred..]) |request| handoff.destroy(request);
+    var delta: pipeline.NodeDelta = .{};
+    errdefer {
+        for (delta.data_writes) |value| if (value) |owned| values.destroy(owned);
+        if (delta.data_replacements[@intFromEnum(ledger_schema.key)]) |owned| values.destroy(owned);
+    }
+    identity.retainOwner(owner) catch return error.OperationExecutionFailed;
+    delta.data_replacements[@intFromEnum(ledger_schema.key)] = adoptLedger(allocator, owner) catch {
+        identity.deinitOwner(owner);
+        return error.OperationExecutionFailed;
+    };
+    for (requests, request_schemas[0..requests.len]) |request, schema| {
+        delta.data_writes[@intFromEnum(schema.key)] = adoptRequest(allocator, schema, request) catch return error.OperationExecutionFailed;
+        transferred += 1;
+    }
+    return .{ .outcome = .ok, .delta = delta };
+}
 
 pub fn readCurrent(view: *const data.View, schema: data.Schema) operations.Error!*const handoff.Request {
     const current = values.read(view, ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;

@@ -76,6 +76,11 @@ pub const Request = opaque {
             else => null,
         };
     }
+
+    pub fn buildSource(self: *const Request, input_id: *[32]u8) preparation.ValidationError!preparation.Source {
+        const bytes = std.fmt.bufPrint(input_id, "input-{d}", .{self.ledger().revision().value}) catch return error.ModelRequestAssociationInvalid;
+        return self.source(.{ .bytes = bytes });
+    }
 };
 
 const Storage = struct {
@@ -95,6 +100,59 @@ const Storage = struct {
 };
 
 pub const Error = packets.Error || preparation.ValidationError;
+
+/// Compiled selections shared by detailed and consolidated preparation.
+pub const Selection = struct {
+    binding: binding_module.ValidatedProviderModelBinding,
+    prompt: compilation.CompiledResource,
+    result: compilation.CompiledResource,
+    input: ?Input,
+    protocol_prompt: ?compilation.CompiledResource,
+    result_selection: ResultSelection,
+
+    pub fn unit(self: Selection) identity.ImmutableUnitOwnerId {
+        return if (self.input != null and self.input.? == .packet) self.input.?.packet.unit() else .workflow_step;
+    }
+
+    pub fn purpose(self: Selection) identity.RequestPurposeBinding {
+        return if (self.input != null and self.input.? == .packet) self.input.?.packet.purpose() else .initial_generation;
+    }
+
+    pub fn bind(self: Selection, allocator: std.mem.Allocator, assignment: identity.Assignment) Error!*Request {
+        return assign(allocator, assignment.owner, assignment.model_request_id, self.binding, self.prompt, self.result, self.input, self.protocol_prompt, self.result_selection);
+    }
+};
+
+pub const Prepared = struct {
+    owner: *identity.Owner,
+    assigned: *Request,
+    validated: *Request,
+    request: *Request,
+
+    pub fn deinit(self: Prepared) void {
+        destroy(self.request);
+        destroy(self.validated);
+        destroy(self.assigned);
+        identity.deinitOwner(self.owner);
+    }
+};
+
+pub fn prepare(allocator: std.mem.Allocator, current: *const identity.ModelRequestIdentityLedger, revision: identity.LedgerRevision, selected: Selection) (Error || identity.Error)!Prepared {
+    const assignment = try identity.createSuccessor(current, revision, selected.unit(), selected.binding.operation_id, selected.purpose());
+    errdefer identity.deinitOwner(assignment.owner);
+    const assigned = try selected.bind(allocator, assignment);
+    errdefer destroy(assigned);
+    const ledger = identity.ledger(assignment.owner);
+    const evidence = try identity.validateBinding(ledger, ledger.revision(), assignment.model_request_id, selected.unit(), selected.binding.operation_id, selected.purpose());
+    const checked = try validated(assigned, evidence);
+    errdefer destroy(checked);
+    var input_id: [32]u8 = undefined;
+    var parts: [2]provider.ModelVisibleContent = undefined;
+    var owned = try preparation.build(allocator, try checked.buildSource(&input_id), checked.content(&parts));
+    errdefer owned.deinit();
+    const built = try prepared(checked, owned);
+    return .{ .owner = assignment.owner, .assigned = assigned, .validated = checked, .request = built };
+}
 
 pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *const identity.ModelRequestId, selected: binding_module.ValidatedProviderModelBinding, prompt: compilation.CompiledResource, result: compilation.CompiledResource, input: ?Input, protocol_prompt: ?compilation.CompiledResource, selection: ResultSelection) Error!*Request {
     if (protocol_prompt) |resource| if (resource.content != .prompt) return error.ModelRequestAssociationInvalid;

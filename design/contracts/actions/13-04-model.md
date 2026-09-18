@@ -66,6 +66,17 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Responsibility:** Project only needed guidance, evidence and compact result schema into
   model content; retain engine-only identity in the bound request.
 
+## `PrepareModelRequestAction`
+
+- **Input:** current request ledger/revision, compiled model binding and selected
+  prompt/schema/input resources or native input packet.
+- **Output:** one successor ledger and its assigned, validated and prepared request
+  values, published atomically by the runner.
+- **Responsibility:** Prepare one request using the existing identity, binding and
+  request-construction owners. This pure consolidated entrypoint performs no
+  authorization, model call, retry, accounting or continuation. Detailed preparation
+  operations remain available under ADR 0012.
+
 ## `InvokeModelAction`
 
 - **Input:** identified provider-neutral request, binding evidence, already-applied runner
@@ -73,6 +84,15 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Output:** raw provider result
 - **Responsibility:** Make one model call only after identity, operation-local retry accounting,
   and workflow actual-usage budget checks succeed; count evidence is not required.
+
+## `AdmitModelResponseAction`
+
+- **Input:** complete validated provider evidence with its retained selected schema.
+- **Output:** one decoded candidate and its schema-validation result. The binding
+  retains the existing envelope/payload owners and forwards non-complete outcomes.
+- **Responsibility:** Admit response syntax and shape through the existing decoder
+  and validator. Detailed operations remain available; no action invokes another
+  action. No semantic review, provider call, retry or accounting occurs.
 
 ## `BuildPromptBodyFragmentManifestAction`
 

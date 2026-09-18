@@ -470,6 +470,14 @@ The closed model classifications are:
 Compiled graphs retain a fixed 512-step capacity, including expanded subgraph
 instances. Specify reuses model-request/release subgraphs and compact outcome
 maps for its repair routes. This capacity is independent of operation retry limits and the workflow token budget.
+The request subgraph uses ADR 0012's pure `prepare-model-request` operation;
+detailed assignment, binding validation and request construction remain available.
+Both paths use the same native owners and produce identical model-visible content.
+The request body also uses pure `admit-model-response`, retaining detailed decoder
+and schema-validator operations. Pre-generation source, post-generation source and
+principle review each have distinct request/repair call sites; shared bodies do not
+share their retry counters. This composition expands to 498 operations. Prompts,
+schemas and per-operation retry limits are unchanged.
 
 - The reference-ingestion policy permits a distinct `invalid` terminal outcome.
 - The validator publishes `invalid` with the chunk scope, candidate revision,

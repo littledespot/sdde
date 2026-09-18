@@ -63,6 +63,13 @@ Its parameter-free result separates schema rejection from unchanged protocol,
 provider and cancellation outcomes. No parsing, accounting or semantic/commit
 authority is implicit.
 
+`admit-model-response` is the pure consolidated alternative: reuse both owners
+and publish the existing envelope and payload results in one runner-validated
+delta. It accepts only the decoder's existing inputs, preserves syntax/schema
+diagnostics and non-complete outcomes, and retains the exact observation/tree
+association. Detailed operations remain available. This grants no semantic,
+provider, retry, lifecycle or accounting authority (ADR 0012).
+
 ### 12.2 Initial guidance packet
 
 - Every model request includes the short engine-owned JSON framing instruction defined by [ADR
@@ -203,6 +210,9 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   packaged route descriptor, prompt, schema, slot assignment, or fallback.
 - Under ADR 0012, later YAML operations consume the same immutable request through their typed
   data dependencies.
+- Preparation may use detailed operations or the pure `prepare-model-request`
+  operation. Both reuse the same identity, binding and construction owners; the
+  consolidated form publishes their typed values together through runner validation.
 - They retain its slot, resources, controls and identity; they do not declare replacement
   selections for their own step.
 - The internal `model-request/v1` content contract is not a YAML resource; the workflow supplies
