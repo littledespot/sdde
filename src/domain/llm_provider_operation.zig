@@ -182,7 +182,10 @@ pub const ProviderFailure = struct {
     retry_class: ProviderRetryClass,
     delivery: ProviderDeliveryDisposition,
     transport: ?TransportDiagnostic = null,
+    content: ?ProviderContentDiagnostic = null,
 };
+
+pub const ProviderContentDiagnostic = enum { invalid_content, missing_final_text };
 
 pub const ProviderTokenCountObservation = union(enum) {
     counted: struct {
@@ -300,6 +303,13 @@ pub const ProviderNonCandidateStopReason = enum {
 };
 
 pub const RawProviderModelResult = union(enum) {
+    rejected: struct {
+        request_id: *const request_identity.ModelRequestId,
+        binding_id: binding.ProviderModelBindingId,
+        reason: ProviderContentDiagnostic,
+        usage: ProviderUsage,
+        provider_latency_ms: ?u32,
+    },
     complete: struct {
         request_id: *const request_identity.ModelRequestId,
         binding_id: binding.ProviderModelBindingId,
@@ -318,7 +328,7 @@ pub const RawProviderModelResult = union(enum) {
     pub fn deinit(self: *RawProviderModelResult) void {
         switch (self.*) {
             .complete => |*value| value.content.deinit(),
-            .stopped => {},
+            .stopped, .rejected => {},
         }
         self.* = undefined;
     }

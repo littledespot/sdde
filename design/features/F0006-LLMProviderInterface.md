@@ -890,6 +890,13 @@ RawProviderModelResult =
       usage,
       providerLatencyMs?
     }
+  | rejected {
+      requestId,
+      bindingId,
+      reason: invalid_content | missing_final_text,
+      usage,
+      providerLatencyMs?
+    }
 
 ProviderFailureCause =
   authentication_failed | authorization_denied | request_rejected |
@@ -906,7 +913,8 @@ ProviderFailure {
   operationId: ProviderOperationId,
   cause: ProviderFailureCause,
   retryClass: ProviderRetryClass,
-  delivery: ProviderDeliveryDisposition
+  delivery: ProviderDeliveryDisposition,
+  content?: invalid_content | missing_final_text
 }
 ```
 
@@ -943,11 +951,11 @@ Every terminal lifecycle fact retains delivery disposition, including
 cancellation outside `ProviderFailure`. An API request already sent cannot be
 undone; it does not make any candidate workflow output successful.
 
-- Both `RawProviderModelResult` variants contain only engine-supplied identities,
-  bounded nonnegative usage, and optional bounded latency; neither accepts an identity
+- All `RawProviderModelResult` variants contain only engine-supplied identities,
+  bounded nonnegative usage, and optional bounded latency; none accepts an identity
   from the provider.
 - Only `.complete` owns UTF-8 content.
-- `.stopped` contains no content member, so a missing/non-text provider output cannot be
+- `.stopped` and `.rejected` contain no content member, so a missing/non-text provider output cannot be
   represented by an empty-string sentinel.
 
 - `.stopped` publishes no candidate to `DecodeModelEnvelopeAction`.
@@ -966,6 +974,11 @@ undone; it does not make any candidate workflow output successful.
 - Identity/usage rejection returns a typed error without evidence.
 - Valid usage survives content rejection as `response_invalid`, with `response_received`
   delivery and no candidate.
+  Raw `.rejected` preserves independently decoded usage until the shared association
+  and usage validator admits it. The resulting failure retains the content diagnostic
+  and retry class `never`; this does not authorize JSON correction or another call.
+  Its declared envelope history retains the same immutable evidence owner through
+  transport/current-slot retirement for reports, without another accounting ledger.
 - Provider-reported size rejection uses the existing API-failure mapping; a provider
   output/context stop stays a stopped result.
 - No local `request_limit_exceeded` or `response_limit_exceeded` cause remains.

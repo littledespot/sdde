@@ -106,6 +106,7 @@ pub const Runner = struct {
         {
             return .{ .rejected = .authority };
         }
+        const occurrence = self.envelope.beginOccurrence(authority.invocation_operation_id.bytes) catch return .{ .rejected = .operation_failed };
         var candidate = entry.invoke(.{ .invocation = .{ .arguments = self.selected.invocation.arguments } }) catch {
             return .{ .rejected = .operation_failed };
         };
@@ -119,7 +120,7 @@ pub const Runner = struct {
             .produces = authority.invocation_outputs,
             .side_effect = .none,
         };
-        return self.applyCandidate(contract, &candidate, .none);
+        return self.applyCandidate(occurrence, contract, &candidate, .none);
     }
 
     fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
@@ -311,6 +312,7 @@ pub const Runner = struct {
                 else => |failure| authorizationRejected(failure),
             };
         }
+        const occurrence = self.envelope.beginOccurrence(step.operation_id.bytes) catch return .{ .rejected = .operation_failed };
         var candidate = entry.invoke(.{ .step = .{
             .data = input_data,
             .step = step,
@@ -350,13 +352,32 @@ pub const Runner = struct {
             const result = values.read(&.{ .slots = candidate.delta.data_writes }, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
             break :prepared bound.validate(result, candidate.outcome) catch |err| return authorizationRejected(err);
         } else false;
-        const applied = self.applyCandidate(stepPipelineContract(step.*), &candidate, expected);
+        const applied = self.applyCandidate(occurrence, stepPipelineContract(step.*), &candidate, expected);
         authorization_published = prepared and applied == .outcome and applied.outcome == .ok;
         return applied;
     }
 
     pub fn tokenLedger(self: *const Runner) *const @import("../domain/workflow_token_accounting.zig").Ledger {
         return self.token_accounting.current();
+    }
+
+    pub fn retryObservations(self: *const Runner, allocator: std.mem.Allocator) std.mem.Allocator.Error![]const retry.Observation {
+        var result: std.ArrayList(retry.Observation) = .empty;
+        errdefer {
+            for (result.items) |item| item.deinit(allocator);
+            result.deinit(allocator);
+        }
+        for (self.selected.graph.authority.steps, 0..) |step, index| if (step.retry_authority) |authority| {
+            const name = try allocator.dupe(u8, step.id.bytes);
+            errdefer allocator.free(name);
+            const defects = try self.repair_retry.observe(allocator, step.id);
+            errdefer {
+                for (defects) |defect| defect.deinit(allocator);
+                allocator.free(defects);
+            }
+            try result.append(allocator, .{ .step = name, .limit = authority.limit.value, .scope = authority.scope, .operation_executions = self.retry_execution_counts[index], .defects = defects });
+        };
+        return result.toOwnedSlice(allocator);
     }
 
     pub fn validateModelBindings(self: *Runner) resolve_provider_binding.Error!void {
@@ -409,7 +430,7 @@ pub const Runner = struct {
         return true;
     }
 
-    fn applyCandidate(self: *Runner, contract: pipeline.NodeContract, candidate: *execution.Candidate, expected: ExpectedAccounting) execution.Applied {
+    fn applyCandidate(self: *Runner, occurrence: envelope_module.Occurrence, contract: pipeline.NodeContract, candidate: *execution.Candidate, expected: ExpectedAccounting) execution.Applied {
         var request_owner: ?*identity.Owner = null;
         defer if (request_owner) |owner| identity.deinitOwner(owner);
         if (candidate.delta.data_replacements[@intFromEnum(pipeline.DataKey.model_request_identity_ledger)] != null) {
@@ -477,7 +498,7 @@ pub const Runner = struct {
             self.repair_retry.prepare(transition) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .operation_failed else .authority }
         else
             null;
-        self.envelope.apply(contract, &candidate.delta, candidate.outcome) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .outcome = .invalid };
+        self.envelope.applyOccurrence(occurrence, contract, &candidate.delta, candidate.outcome) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .outcome = .invalid };
         // No repair-state mutation occurs between preparation and this allocation-
         // free commit; the envelope and accepted native progress advance together.
         if (repair_pending) |prepared| self.repair_retry.commit(prepared) catch unreachable;

@@ -6271,6 +6271,68 @@ test "production Bedrock missing credentials follow explicit pre-call terminatio
 
 const bedrock_complete_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{\\\"answer\\\":\\\"candidate\\\"}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
 
+test "production missing-answer observation retains usage and information without granting retry" {
+    for ([_]bool{ false, true }) |overshoot| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithProvider(std.testing.allocator, 0);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try requestCompletionYaml(&fixture));
+        var environment = try bedrockEnvironment(std.testing.allocator);
+        defer environment.deinit();
+        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+            .environment = &environment,
+            .operations = &fixture.native,
+            .authorization = .{ .allocator = std.testing.allocator },
+            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+        };
+        defer runtime.deinit();
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        try std.testing.expectEqual(@as(usize, 0), runner.envelope.records.items.len);
+        try runtime.bind(&runner);
+        const body = if (overshoot)
+            "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":100000,\"outputTokens\":48,\"totalTokens\":100048}}"
+        else
+            "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"metrics\":{\"latencyMs\":416},\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}";
+        var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
+        runtime.provider.?.aws_bedrock.transport = wire.port();
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.failed, harness.run());
+        try std.testing.expectEqual(@as(usize, 1), wire.calls);
+        const tokens = runner.tokenLedger();
+        try std.testing.expectEqual(@as(u128, if (overshoot) 100048 else 932), tokens.committed());
+        try std.testing.expectEqual(@as(usize, 1), tokens.accounted_operations.items.len);
+        try std.testing.expectEqual(@as(u64, 1), tokens.revision().value);
+        if (overshoot) {
+            try std.testing.expectEqual(.exceeded, tokens.status());
+            try std.testing.expect(runner.bindings().invokeStep(.{ .bytes = "call" }) == .rejected);
+        } else {
+            const observation = @import("application/provider_observation_workflow.zig");
+            const history = runner.envelope.latestInformation(observation.schema.key);
+            const retained = try values.read(&history, observation.schema, observation.Result);
+            const evidence = retained.outcome().validated;
+            try std.testing.expectEqual(.response_invalid, evidence.result().failed.cause);
+            try std.testing.expectEqual(.never, evidence.result().failed.retry_class);
+            try std.testing.expectEqual(provider.ProviderContentDiagnostic.missing_final_text, evidence.result().failed.content.?);
+            try std.testing.expectEqual(@as(u64, 932), evidence.usage().?.total_tokens);
+            try std.testing.expectEqual(.available, tokens.status());
+            const record = runner.envelope.records.items[runner.envelope.records.items.len - 1];
+            const encode = @import("adapters/provider/bedrock_request.zig").encode;
+            const before = try encode(std.testing.allocator, evidence.request(), .inference);
+            defer std.testing.allocator.free(before);
+            _ = try runner.envelope.place(record.occurrence, record.value, record.origin);
+            const after = try encode(std.testing.allocator, evidence.request(), .inference);
+            defer std.testing.allocator.free(after);
+            try std.testing.expectEqualStrings(before, after);
+            try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = ".zig-cache/chunk18-stack-request-before.json", .data = before });
+            try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = ".zig-cache/chunk18-stack-request-after.json", .data = after });
+            try std.testing.expectEqual(@as(u128, 932), tokens.committed());
+            try std.testing.expectError(error.TokenUsageAlreadyAccounted, @import("domain/workflow_token_accounting.zig").proposeReconciliation(tokens, tokens.revision(), retained.operationId(), .{ .exact_usage = evidence.usage().? }));
+        }
+        try std.testing.expectEqual(@as(usize, 1), wire.calls);
+    }
+}
+
 fn bedrockEnvironment(allocator: std.mem.Allocator) !std.process.Environ.Map {
     var environment: std.process.Environ.Map = .init(allocator);
     errdefer environment.deinit();

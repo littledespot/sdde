@@ -58,11 +58,7 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
     report.total_tokens = ledger.committed();
     report.usage_complete = ledger.status() != .usage_unavailable;
     report.total_token_budget = ledger.totalTokenBudget().value;
-    var retry_settings: std.ArrayList(@typeInfo(@FieldType(c.Report, "retry_settings")).pointer.child) = .empty;
-    for (runner.selected.graph.authority.steps, 0..) |step, index| if (step.retry_authority) |retry| {
-        try retry_settings.append(allocator, .{ .step = try allocator.dupe(u8, step.id.bytes), .limit = retry.limit.value, .completed_executions = runner.retry_execution_counts[index] });
-    };
-    report.retry_settings = try retry_settings.toOwnedSlice(allocator);
+    report.retry_settings = try runner.retryObservations(allocator);
     const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
     var attempts: std.ArrayList(c.Attempt) = .empty;
     var used: std.ArrayList(models.GenerationModel) = .empty;
@@ -105,6 +101,28 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
         };
         if (!found) return error.MissingProviderEvidence;
     };
+    const observation = @import("../../../src/application/provider_observation_workflow.zig");
+    const information = runner.envelope.latestInformation(observation.schema.key);
+    if (information.contains(observation.schema.key)) {
+        const result = try values.read(&information, observation.schema, observation.Result);
+        if (latest(ledger, result.operationId())) switch (result.outcome()) {
+            .validated => |evidence| {
+                const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
+                report.last_model_origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, result.operationId()) orelse return error.MissingProviderEvidence;
+                report.last_model_usage = evidence.usage();
+                switch (evidence.result()) {
+                    .failed => |failure| {
+                        report.provider_diagnostic = @tagName(failure.cause);
+                        report.provider_content_diagnostic = failure.content;
+                    },
+                    .stopped => |reason| report.provider_diagnostic = @tagName(reason),
+                    .complete => {},
+                }
+            },
+            .rejected => |reason| report.provider_diagnostic = @errorName(reason),
+            .cancelled => {},
+        };
+    }
     if (view.slots[@intFromEnum(requests.prepared_schema.key)] != null) {
         const request = try requests.readCurrent(&view, requests.prepared_schema);
         const binding = request.binding();
@@ -116,30 +134,13 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
             .provider = try allocator.dupe(u8, binding.registry_entry.provider.bytes),
             .model = try allocator.dupe(u8, binding.registry_entry.model.bytes),
         });
-        const observation = @import("../../../src/application/provider_observation_workflow.zig");
-        if (view.slots[@intFromEnum(observation.schema.key)] != null) {
-            const result = try values.read(&view, observation.schema, observation.Result);
-            if (latest(ledger, result.operationId())) switch (result.outcome()) {
-                .validated => |evidence| {
-                    const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
-                    report.last_model_origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, result.operationId()) orelse return error.MissingProviderEvidence;
-                    report.last_model_usage = evidence.usage();
-                    switch (evidence.result()) {
-                        .failed => |failure| report.provider_diagnostic = @tagName(failure.cause),
-                        .stopped => |reason| report.provider_diagnostic = @tagName(reason),
-                        .complete => {},
-                    }
-                },
-                .rejected => |reason| report.provider_diagnostic = @errorName(reason),
-                .cancelled => {},
-            };
-        }
         if (report.workflow_outcome != .ok) {
             if (view.slots[@intFromEnum(authorization.schema.key)] != null) {
                 const result = try values.read(&view, authorization.schema, @import("../../../src/domain/provider_authorization_result.zig").Result);
                 switch (result.outcome().*) {
                     .failed => |failure| if (failure.operation_id.model_request_id == request.id()) {
                         report.provider_diagnostic = @tagName(failure.cause);
+                        report.provider_content_diagnostic = failure.content;
                     },
                     .prepared, .cancelled => {},
                 }
@@ -184,13 +185,16 @@ pub const Call = struct {
     transport: ?@import("../../../src/domain/llm_provider_operation.zig").TransportDiagnostic = null,
     // capture() emits static native tag/error names, never provider prose.
     provider_diagnostic: ?[]const u8 = null,
+    provider_content_diagnostic: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderContentDiagnostic = null,
 };
 
 /// Join only exact native associations. A prepared request or a retained older
 /// candidate never supplies the latest exchange's identity or token usage.
 pub fn correlate(a: std.mem.Allocator, calls: []Call, report: *c.Report) !void {
     if (report.provider_diagnostic) |diagnostic| if (report.last_model_origin) |origin| {
-        calls[try findCall(calls, origin)].provider_diagnostic = diagnostic;
+        const call = &calls[try findCall(calls, origin)];
+        call.provider_diagnostic = diagnostic;
+        call.provider_content_diagnostic = report.provider_content_diagnostic;
     };
     if (report.last_model_usage) |usage| {
         const origin = report.last_model_origin orelse return error.MissingRequestEvidence;
@@ -203,7 +207,10 @@ pub fn correlate(a: std.mem.Allocator, calls: []Call, report: *c.Report) !void {
         report.last_model_step = try a.dupe(u8, last.step);
         report.last_model_origin = last.origin;
         report.last_model_usage = last.usage;
-        if (report.provider_diagnostic == null) report.provider_diagnostic = last.provider_diagnostic;
+        if (report.provider_diagnostic == null) {
+            report.provider_diagnostic = last.provider_diagnostic;
+            report.provider_content_diagnostic = last.provider_content_diagnostic;
+        }
         report.last_model_output = if (last.output_available) try @import("../evidence.zig").Store.path(a, .generation, calls.len, .model_output) else null;
         report.exchange_evidence = .{
             .raw_response = if (last.raw_response_available) try @import("../evidence.zig").Store.path(a, .generation, calls.len, .response) else null,

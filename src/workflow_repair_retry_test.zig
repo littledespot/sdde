@@ -25,6 +25,16 @@ test "successful independent repairs continue beyond an operation-wide allowance
         try finish(&state, value, .resolved);
         try std.testing.expect(state.currentPermit() == null);
     }
+    const counts = try state.observe(std.testing.allocator, .{ .bytes = "repair-account" });
+    defer {
+        for (counts) |count| count.deinit(std.testing.allocator);
+        std.testing.allocator.free(counts);
+    }
+    try std.testing.expectEqual(@as(usize, 7), counts.len);
+    for (counts, 1..) |count, ordinal| {
+        try std.testing.expectEqualStrings(&std.fmt.bytesToHex(permit(@intCast(ordinal), 1, 1).key.target, .lower), count.key.target);
+        try std.testing.expectEqual(@as(u64, 1), count.completed_executions);
+    }
 }
 
 test "unchanged and alternating invalid values cannot reset the same defect allowance" {
@@ -56,6 +66,14 @@ test "a resolved defect returning after another target retains its history" {
     const returned = permit(1, 4, 4);
     try apply(&state, .{ .authorized = returned });
     try std.testing.expectEqualDeep(retry.AttemptResult{ .exhausted = 2 }, try state.beginAttempt(.repair, .{ .bytes = "repair-account" }, .{ .value = 1 }, returned));
+    const counts = try state.observe(std.testing.allocator, .{ .bytes = "repair-account" });
+    defer {
+        for (counts) |count| count.deinit(std.testing.allocator);
+        std.testing.allocator.free(counts);
+    }
+    try std.testing.expectEqual(@as(usize, 2), counts.len);
+    try std.testing.expectEqual(@as(u64, 2), counts[0].completed_executions);
+    try std.testing.expectEqual(@as(u64, 1), counts[1].completed_executions);
 }
 
 test "authorization merge and validation require exact ordered association" {
@@ -135,6 +153,14 @@ test "dependent semantic review keeps its parent pending across bounded child re
     try apply(&state, .{ .validated = .{ .permit = parent, .revision = 4, .result = .resolved } });
     try std.testing.expect(state.currentPermit() == null);
     try apply(&state, .{ .authorized = permit(3, 4, 4) });
+    const observed = try state.observe(std.testing.allocator, .{ .bytes = "review" });
+    defer {
+        for (observed) |count| count.deinit(std.testing.allocator);
+        std.testing.allocator.free(observed);
+    }
+    try std.testing.expectEqual(@as(usize, 1), observed.len);
+    try std.testing.expectEqualStrings(&std.fmt.bytesToHex(parent.key.target, .lower), observed[0].key.target);
+    try std.testing.expectEqual(@as(u64, 2), observed[0].completed_executions);
 }
 
 test "dependent request attempts require a merged semantic parent and retain recurrence counts" {
@@ -183,6 +209,11 @@ fn allocatingScenario(allocator: std.mem.Allocator) !void {
     _ = try state.beginAttempt(.repair, .{ .bytes = "repair-account" }, .{ .value = 1 }, child);
     try finish(&state, child, .resolved);
     try apply(&state, .{ .validated = .{ .permit = parent, .revision = 5, .result = .resolved } });
+    const observations = try state.observe(allocator, .{ .bytes = "repair-account" });
+    defer {
+        for (observations) |observation| observation.deinit(allocator);
+        allocator.free(observations);
+    }
 }
 
 test "repair progress releases every allocation on failure" {

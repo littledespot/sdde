@@ -145,7 +145,13 @@ pub const FakeLLMProvider = struct {
             plan.content,
         ) catch |err| return switch (err) {
             error.OutOfMemory => error.OutOfMemory,
-            error.InvalidUtf8 => responseFailure(operation_id, .response_invalid),
+            error.InvalidUtf8 => .{ .completed = .{ .operation_id = operation_id, .raw_result = .{ .rejected = .{
+                .request_id = request.model_request_id,
+                .binding_id = provider_binding.bindingId(),
+                .reason = .invalid_content,
+                .usage = usage,
+                .provider_latency_ms = plan.provider_latency_ms,
+            } } } },
         };
         errdefer content.deinit();
         return .{ .completed = .{

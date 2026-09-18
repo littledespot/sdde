@@ -113,7 +113,7 @@ pub fn validateUsage(call: Call, observation: *const provider.ProviderInvocation
         .completed => |completed| usage: {
             if (!completed.operation_id.eql(invoked.id)) return error.ProviderInvocationAssociationInvalid;
             switch (completed.raw_result) {
-                inline .complete, .stopped => |result| {
+                inline .complete, .stopped, .rejected => |result| {
                     if (result.request_id != request.model_request_id or
                         !result.binding_id.eql(request.binding_id)) return error.ProviderInvocationAssociationInvalid;
                     break :usage provider.ProviderUsage.init(result.usage.input_tokens, result.usage.output_tokens, result.usage.total_tokens) orelse return error.InvalidProviderTokenUsage;
@@ -136,11 +136,18 @@ pub fn validate(allocator: std.mem.Allocator, call: Call, observation: *const pr
         },
         .completed => |completed| {
             switch (completed.raw_result) {
-                inline .complete, .stopped => |result| {
+                inline .complete, .stopped, .rejected => |result| {
                     validated.provider_latency_ms = result.provider_latency_ms;
                 },
             }
             validated.result = switch (completed.raw_result) {
+                .rejected => |result| .{ .failed = .{
+                    .operation_id = call.operation_id,
+                    .cause = .response_invalid,
+                    .retry_class = .never,
+                    .delivery = .response_received,
+                    .content = result.reason,
+                } },
                 .stopped => |result| .{ .stopped = result.reason },
                 .complete => |result| complete: {
                     provider.CompleteOwnedUtf8.validate(result.content.bytes) catch {

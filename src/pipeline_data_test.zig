@@ -25,18 +25,127 @@ const consume: pipeline.NodeContract = .{
     .side_effect = .none,
 };
 
+test "workflow information placement is idempotent isolated and cannot revive historical authority" {
+    const recorded = context_schema.recorded();
+    var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{recorded});
+    defer envelope.deinit();
+    var other = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{recorded});
+    defer other.deinit();
+    const occurrence = try envelope.beginOccurrence(produce.id);
+    const foreign = try other.beginOccurrence(produce.id);
+    try std.testing.expect(!occurrence.scope.eql(foreign.scope));
+    try std.testing.expectEqual(occurrence.ordinal, foreign.ordinal);
+    var delta: pipeline.NodeDelta = .{};
+    defer envelope.discard(&delta);
+    delta.data_writes[context_index] = try values.create(std.testing.allocator, recorded, Context, .{ .text = "source meaning", .attempts = 1 });
+    try envelope.applyOccurrence(occurrence, produce, &delta, .ok);
+    const original = envelope.records.items[0];
+    const generation = envelope.generation;
+    for (0..3) |_| {
+        const placed = try envelope.place(occurrence, original.value, original.origin);
+        try std.testing.expect(placed.already_present == original);
+    }
+    try std.testing.expectEqual(@as(usize, 1), envelope.records.items.len);
+    try std.testing.expectEqual(generation, envelope.generation);
+    try std.testing.expectError(error.InvalidInformationOccurrence, other.place(occurrence, original.value, original.origin));
+    try std.testing.expectEqual(@as(usize, 0), other.records.items.len);
+    var wrong_origin = original.origin;
+    wrong_origin.outcome = .failed;
+    try std.testing.expectError(error.InformationConflict, envelope.place(occurrence, original.value, wrong_origin));
+    wrong_origin = original.origin;
+    wrong_origin.lineage[context_index] = 99;
+    try std.testing.expectError(error.InformationConflict, envelope.place(occurrence, original.value, wrong_origin));
+    const conflicting = try values.create(std.testing.allocator, recorded, Context, .{ .text = "different", .attempts = 1 });
+    defer values.destroy(conflicting);
+    try std.testing.expectError(error.InformationConflict, envelope.place(occurrence, conflicting, original.origin));
+    const wrong_schema = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "source meaning", .attempts = 1 });
+    defer values.destroy(wrong_schema);
+    try std.testing.expectError(error.DataSchemaMismatch, envelope.place(occurrence, wrong_schema, original.origin));
+
+    var replace = produce;
+    replace.produces = &.{};
+    replace.replaces = &.{recorded.key};
+    delta.data_replacements[context_index] = try values.create(std.testing.allocator, recorded, Context, .{ .text = "source meaning", .attempts = 1 });
+    try envelope.apply(replace, &delta, .ok);
+    try std.testing.expectEqual(generation + 1, envelope.generation);
+    try std.testing.expectEqual(@as(usize, 2), envelope.records.items.len);
+    const current = envelope.slots[context_index];
+    _ = try envelope.place(occurrence, original.value, original.origin);
+    try std.testing.expect(envelope.slots[context_index] == current);
+    const restricted = try envelope.view(.{ .id = "unrelated", .kind = .action, .requires = &.{}, .produces = &.{}, .side_effect = .none });
+    try std.testing.expect(!restricted.contains(recorded.key));
+    var invalidate: pipeline.NodeDelta = .{ .data_invalidations = .initOne(recorded.key) };
+    try envelope.apply(.{ .id = "retire", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{recorded.key}, .side_effect = .none }, &invalidate, .ok);
+    _ = try envelope.place(occurrence, original.value, original.origin);
+    try std.testing.expectError(error.MissingRequiredData, envelope.view(consume));
+    delta.data_writes[context_index] = original.value;
+    try std.testing.expectError(error.AliasedDataValue, envelope.apply(produce, &delta, .ok));
+    envelope.discard(&delta);
+    const history = envelope.latestInformation(recorded.key);
+    try std.testing.expectEqualStrings("source meaning", (try values.read(&history, recorded, Context)).text);
+}
+
+test "information retention and current-value publication are atomic under allocation failures" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, informationAllocationExercise, .{});
+}
+
+test "retained information shares payload ownership and duplicate placement allocates nothing" {
+    var live_bytes: [2]usize = undefined;
+    for ([_]data.Schema{ context_schema, context_schema.recorded() }, 0..) |schema, index| {
+        var measured = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+        {
+            var envelope = envelope_module.PipelineEnvelope.init(measured.allocator(), &.{schema});
+            defer envelope.deinit();
+            var delta: pipeline.NodeDelta = .{};
+            defer envelope.discard(&delta);
+            delta.data_writes[context_index] = try values.create(measured.allocator(), schema, Context, .{ .text = "retained source", .attempts = 1 });
+            try envelope.apply(produce, &delta, .ok);
+            live_bytes[index] = measured.allocated_bytes - measured.freed_bytes;
+            if (schema.history == .execution) {
+                const record = envelope.records.items[0];
+                try std.testing.expect(record.value == envelope.slots[context_index]);
+                const allocated = measured.allocated_bytes;
+                measured.fail_index = measured.alloc_index;
+                _ = try envelope.place(record.occurrence, record.value, record.origin);
+                try std.testing.expectEqual(allocated, measured.allocated_bytes);
+            }
+        }
+        try std.testing.expectEqual(measured.allocated_bytes, measured.freed_bytes);
+    }
+    try std.testing.expect(live_bytes[1] > live_bytes[0]);
+    std.debug.print("information retention bytes: transient={d}, recorded={d}, incremental={d}; duplicate=0\n", .{ live_bytes[0], live_bytes[1], live_bytes[1] - live_bytes[0] });
+}
+
+fn informationAllocationExercise(allocator: std.mem.Allocator) !void {
+    const recorded = context_schema.recorded();
+    var envelope = envelope_module.PipelineEnvelope.init(allocator, &.{recorded});
+    defer envelope.deinit();
+    var delta: pipeline.NodeDelta = .{};
+    defer envelope.discard(&delta);
+    delta.data_writes[context_index] = try values.create(allocator, recorded, Context, .{ .text = "retained evidence", .attempts = 1 });
+    envelope.apply(produce, &delta, .ok) catch |err| {
+        try std.testing.expectEqual(@as(u64, 0), envelope.generation);
+        try std.testing.expectEqual(@as(usize, 0), envelope.records.items.len);
+        try std.testing.expect(envelope.slots[context_index] == null);
+        return err;
+    };
+    const first = envelope.records.items[0];
+    try std.testing.expect((try envelope.place(first.occurrence, first.value, first.origin)).already_present == first);
+}
+
 test "shared gate checks source lineage and renewal after source and projection replacements" {
+    const retained_context = context_schema.recorded();
     const gate = @import("domain/workflow_gate.zig");
     const proof = values.schema(.workflow_operation_registry_evidence, gate.Decision, 1, 32);
     const contract: gate.Contract = .{ .id = .{ .bytes = "test.projection@1" }, .issuer = .{ .bytes = "test.validate-projection" }, .evidence = proof.key, .authority = &.{count_schema.key} };
-    const project: pipeline.NodeContract = .{ .id = "test.project", .kind = .action, .requires = &.{context_schema.key}, .produces = &.{count_schema.key}, .side_effect = .none };
+    const project: pipeline.NodeContract = .{ .id = "test.project", .kind = .action, .requires = &.{retained_context.key}, .produces = &.{count_schema.key}, .side_effect = .none };
     const validate: pipeline.NodeContract = .{ .id = contract.issuer.bytes, .kind = .action, .requires = &.{count_schema.key}, .produces = &.{proof.key}, .side_effect = .none };
     for ([_][]const u8{ "Business source", "Repository capability" }) |text| {
-        var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{ context_schema, count_schema, proof });
+        var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{ retained_context, count_schema, proof });
         defer envelope.deinit();
         var delta: pipeline.NodeDelta = .{};
         defer envelope.discard(&delta);
-        delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = text, .attempts = 1 });
+        delta.data_writes[context_index] = try values.create(std.testing.allocator, retained_context, Context, .{ .text = text, .attempts = 1 });
         try envelope.apply(produce, &delta, .ok);
         delta.data_writes[count_index] = try values.create(std.testing.allocator, count_schema, u32, 1);
         try envelope.apply(project, &delta, .ok);
@@ -47,11 +156,11 @@ test "shared gate checks source lineage and renewal after source and projection 
         refresh.requires = produce.produces;
         refresh.replaces = produce.produces;
         refresh.produces = &.{};
-        delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = text, .attempts = 1 });
+        delta.data_replacements[context_index] = try values.create(std.testing.allocator, retained_context, Context, .{ .text = text, .attempts = 1 });
         try envelope.apply(refresh, &delta, .ok);
         try std.testing.expectEqual(.stale_authority, envelope.checkGate(contract).?);
         var rebuild = project;
-        rebuild.requires = &.{ context_schema.key, count_schema.key };
+        rebuild.requires = &.{ retained_context.key, count_schema.key };
         rebuild.replaces = project.produces;
         rebuild.produces = &.{};
         delta.data_replacements[count_index] = try values.create(std.testing.allocator, count_schema, u32, 1);
@@ -63,8 +172,8 @@ test "shared gate checks source lineage and renewal after source and projection 
         delta.data_replacements[@intFromEnum(proof.key)] = try values.create(std.testing.allocator, proof, gate.Decision, .accepted);
         try envelope.apply(renew, &delta, .ok);
         try std.testing.expect(envelope.checkGate(contract) == null);
-        const remove: pipeline.NodeContract = .{ .id = "test.remove-source", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{context_schema.key}, .side_effect = .none };
-        delta.data_invalidations.insert(context_schema.key);
+        const remove: pipeline.NodeContract = .{ .id = "test.remove-source", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{retained_context.key}, .side_effect = .none };
+        delta.data_invalidations.insert(retained_context.key);
         try envelope.apply(remove, &delta, .ok);
         try std.testing.expectEqual(.missing_authority, envelope.checkGate(contract).?);
     }

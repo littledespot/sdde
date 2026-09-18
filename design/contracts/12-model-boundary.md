@@ -19,6 +19,11 @@ LLM interaction is deliberately split across actions:
 
 No one action both invokes and interprets the model. No model action reads or writes the workspace directly.
 
+Independently valid usage survives invalid answer content through the shared
+provider observation contract, including missing final text. Only complete content
+reaches decoding. The envelope retains declared observation history for reporting;
+storage does not change retry eligibility or the execution-wide token ledger.
+
 - Optional `CountModelInputTokensAction` is implemented and fake-provider tested.
 - It forwards the exact request, binding, invoked count operation and single-use lease through
   the existing provider port once, preserving counts, failures and cancellation.

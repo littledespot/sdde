@@ -7,6 +7,7 @@ pub const key_count = @typeInfo(pipeline.DataKey).@"enum".fields.len;
 /// The producer identity borrows the compiled contract's envelope-long lifetime.
 pub const Origin = struct {
     generation: u64,
+    occurrence: u64 = 0,
     producer: []const u8,
     outcome: @import("workflow.zig").OutcomeTag,
     inputs: [key_count]?u64,
@@ -23,6 +24,15 @@ pub const Schema = struct {
     type_name: []const u8,
     maximum_bytes: ?u32,
     retention: enum { current, captured, execution_control } = .current,
+    history: enum { transient, execution } = .transient,
+
+    /// Retain this immutable information occurrence until execution teardown.
+    /// This does not change its authority dependencies or current-value rules.
+    pub fn recorded(self: Schema) Schema {
+        var result = self;
+        result.history = .execution;
+        return result;
+    }
 
     /// Native-only declaration: successors retain this value's evidence, not
     /// its replaceable transport slot. Governing inputs remain current.
@@ -45,7 +55,7 @@ pub const Schema = struct {
 
     pub fn eql(self: Schema, other: Schema) bool {
         return self.key == other.key and self.version == other.version and
-            self.maximum_bytes == other.maximum_bytes and self.retention == other.retention and std.mem.eql(u8, self.type_name, other.type_name);
+            self.maximum_bytes == other.maximum_bytes and self.retention == other.retention and self.history == other.history and std.mem.eql(u8, self.type_name, other.type_name);
     }
 };
 

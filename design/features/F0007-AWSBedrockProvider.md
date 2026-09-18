@@ -166,6 +166,11 @@ The initial registered contracts are:
   discarded.
 - Empty server-tool usage is accepted; nonempty tool use, malformed reasoning metadata
   and missing or multiple final text blocks reject.
+- When the closed wire/usage portion is valid, content rejection retains actual
+  usage and latency in F0006's `.rejected` observation. Reasoning-only `end_turn`
+  identifies `missing_final_text`; other invalid content identifies `invalid_content`.
+  Both remain `response_invalid` with no retry permission. Invalid wire/usage cannot
+  supply trusted usage, and reasoning never becomes candidate text.
 
 Recognized non-candidate stops discard content and retain usage:
 

@@ -792,8 +792,8 @@ test "YAML request lifecycle uses its existing action and publishes only a valid
     inline for (.{ "/actions/", "/adapters/", "createLifecycleSuccessor", "envelope.apply", "std.Io" }) |forbidden| try expectAbsent(validation, forbidden);
     const runner = @embedFile("application/workflow_pipeline_runner.zig");
     try std.testing.expect(std.mem.indexOf(u8, runner, "authorization_binding.requirePrepared(").? < std.mem.indexOf(u8, runner, "var candidate = entry.invoke(.{ .step").?);
-    try std.testing.expect(std.mem.indexOf(u8, runner, "request_lifecycle_binding.validateReplacement(").? < std.mem.indexOf(u8, runner, "self.envelope.apply(").?);
-    try std.testing.expect(std.mem.indexOf(u8, runner, "self.envelope.apply(").? < std.mem.indexOf(u8, runner, "self.model_accounting.?.replaceRequests(").?);
+    try std.testing.expect(std.mem.indexOf(u8, runner, "request_lifecycle_binding.validateReplacement(").? < std.mem.indexOf(u8, runner, "self.envelope.applyOccurrence(").?);
+    try std.testing.expect(std.mem.indexOf(u8, runner, "self.envelope.applyOccurrence(").? < std.mem.indexOf(u8, runner, "self.model_accounting.?.replaceRequests(").?);
 }
 
 test "YAML request closure reuses lifecycle validation without new authority or effects" {
@@ -870,8 +870,8 @@ test "YAML provider invocation proposes one lifecycle change without receiving a
     inline for (.{ "lifecycle.apply(", "authorization_leases", "LLMProviderInterface", "timeout-ms", "retry-limit", "std.Io", "/adapters/", "reconcile(" }) |forbidden| try expectAbsent(source, forbidden);
     const runner = @embedFile("application/workflow_pipeline_runner.zig");
     try std.testing.expect(std.mem.indexOf(u8, runner, "authorization_binding.requirePrepared(").? < std.mem.indexOf(u8, runner, "var candidate = entry.invoke(.{ .step").?);
-    try std.testing.expect(std.mem.indexOf(u8, runner, "pending = state.prepareInvocation(").? < std.mem.indexOf(u8, runner, "self.envelope.apply(").?);
-    try std.testing.expect(std.mem.indexOf(u8, runner, "self.envelope.apply(").? < std.mem.indexOf(u8, runner, "self.model_accounting.?.commit(").?);
+    try std.testing.expect(std.mem.indexOf(u8, runner, "pending = state.prepareInvocation(").? < std.mem.indexOf(u8, runner, "self.envelope.applyOccurrence(").?);
+    try std.testing.expect(std.mem.indexOf(u8, runner, "self.envelope.applyOccurrence(").? < std.mem.indexOf(u8, runner, "self.model_accounting.?.commit(").?);
     const state = @embedFile("application/workflow_model_accounting.zig");
     try std.testing.expect(std.mem.indexOf(u8, state, "authorization_leases.deinit()").? < std.mem.indexOf(u8, state, "lifecycle.deinitOwner(").?);
     inline for (.{ "actions/", "adapters/", "LLMProviderInterface", "std.Io" }) |forbidden| try expectAbsent(state, forbidden);
@@ -890,8 +890,8 @@ test "YAML provider completion uses one lifecycle action and runner-published te
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.action.execute("));
     inline for (.{ "lifecycle.apply(", "authorization_leases", "LLMProviderInterface", "timeout-ms", "retry-limit", "std.Io", "/adapters/", "reconcile(", "validateUsage", "std.json", "values.adopt(" }) |forbidden| try expectAbsent(source, forbidden);
     const runner = @embedFile("application/workflow_pipeline_runner.zig");
-    try std.testing.expect(std.mem.indexOf(u8, runner, "pending = state.prepareCompletion(").? < std.mem.indexOf(u8, runner, "self.envelope.apply(").?);
-    try std.testing.expect(std.mem.indexOf(u8, runner, "self.envelope.apply(").? < std.mem.indexOf(u8, runner, "self.model_accounting.?.commit(").?);
+    try std.testing.expect(std.mem.indexOf(u8, runner, "pending = state.prepareCompletion(").? < std.mem.indexOf(u8, runner, "self.envelope.applyOccurrence(").?);
+    try std.testing.expect(std.mem.indexOf(u8, runner, "self.envelope.applyOccurrence(").? < std.mem.indexOf(u8, runner, "self.model_accounting.?.commit(").?);
 }
 
 test "YAML pre-call termination reuses one lifecycle action and canonical terminal publication" {
@@ -1017,7 +1017,7 @@ test "model attempt accounting has one runner-applied transition authority" {
     try expectAbsent(runner, "/adapters/");
     try expectAbsent(runner, "std.Io");
     const prepare_index = std.mem.indexOf(u8, runner, "pending = state.prepare(").?;
-    const validate_index = std.mem.indexOf(u8, runner, "self.envelope.apply(").?;
+    const validate_index = std.mem.indexOf(u8, runner, "self.envelope.applyOccurrence(").?;
     const commit_index = std.mem.indexOf(u8, runner, "self.model_accounting.?.commit(").?;
     try std.testing.expect(prepare_index < validate_index);
     try std.testing.expect(validate_index < commit_index);
@@ -1110,8 +1110,8 @@ test "provider lifecycle has one pure action and runner-owned immutable ledger" 
     inline for (.{ "lifecycle.apply(", "LLMProviderInterface", "ProviderAuthorization", "std.Io", "reconcile(" }) |forbidden| try expectAbsent(native, forbidden);
     const workflow_runner = @embedFile("application/workflow_pipeline_runner.zig");
     try expectAbsent(workflow_runner, "initial(state.operations)");
-    try std.testing.expect(std.mem.indexOf(u8, workflow_runner, "pending = state.prepareAssignment(").? < std.mem.indexOf(u8, workflow_runner, "self.envelope.apply(").?);
-    try std.testing.expect(std.mem.indexOf(u8, workflow_runner, "self.envelope.apply(").? < std.mem.indexOf(u8, workflow_runner, "self.model_accounting.?.commit(").?);
+    try std.testing.expect(std.mem.indexOf(u8, workflow_runner, "pending = state.prepareAssignment(").? < std.mem.indexOf(u8, workflow_runner, "self.envelope.applyOccurrence(").?);
+    try std.testing.expect(std.mem.indexOf(u8, workflow_runner, "self.envelope.applyOccurrence(").? < std.mem.indexOf(u8, workflow_runner, "self.model_accounting.?.commit(").?);
     const runner = @embedFile("provider_operation_lifecycle_runner_test_fixture.zig");
     try std.testing.expect(std.mem.indexOf(u8, runner, "envelope.applyDelta(").? < std.mem.indexOf(u8, runner, "lifecycle.apply(").?);
     const request_runner = @embedFile("model_request_identity_runner_test_fixture.zig");

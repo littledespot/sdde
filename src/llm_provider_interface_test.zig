@@ -30,7 +30,7 @@ test "fake provider conforms to count and inference through the sole interface" 
                     try std.testing.expectEqual(@as(u64, 15), complete.usage.total_tokens);
                     try std.testing.expectEqual(@as(?u32, 7), complete.provider_latency_ms);
                 },
-                .stopped => return error.ExpectedCompleteProviderResult,
+                .stopped, .rejected => return error.ExpectedCompleteProviderResult,
             }
         },
         .failed => return error.ExpectedCompletedProviderObservation,
@@ -87,6 +87,7 @@ test "inference needs no counter and preserves provider-reported large usage and
         const usage = switch (result.completed.raw_result) {
             .complete => |value| value.usage,
             .stopped => |value| value.usage,
+            .rejected => return error.ExpectedCompleteProviderResult,
         };
         try std.testing.expectEqual(@as(u64, 1_500_000), usage.total_tokens);
         try std.testing.expectEqual(@as(usize, 0), fake.count_call_count);
@@ -215,7 +216,7 @@ test "noncandidate stops carry no content" {
         switch (stopped) {
             .completed => |completed| switch (completed.raw_result) {
                 .stopped => |value| try std.testing.expectEqual(reason, value.reason),
-                .complete => return error.ExpectedStoppedProviderResult,
+                .complete, .rejected => return error.ExpectedStoppedProviderResult,
             },
             .failed => return error.ExpectedCompletedProviderObservation,
         }
@@ -244,7 +245,7 @@ test "provider cancellation stays distinct and destroys its consumed authorizati
     }
 }
 
-test "fake provider maps malformed and over-limit output to closed failures" {
+test "fake provider preserves valid usage on invalid text and rejects inconsistent usage" {
     const invalid_utf8 = [_]u8{0xff};
     const cases = [_]struct { plan: fake_provider.CompletePlan, cause: operation.ProviderFailureCause }{
         .{ .plan = .{ .content = &invalid_utf8, .input_tokens = 10, .output_tokens = 1 }, .cause = .response_invalid },
@@ -260,7 +261,10 @@ test "fake provider maps malformed and over-limit output to closed failures" {
         const inference = try fixture.finishCountAndStartInference(evidence);
         var result = try fake.interface().invoke(&fixture.provider_binding, &fixture.request, inference.reference, inference.invoked);
         defer result.deinit();
-        try expectFailure(result, case.cause, .response_received);
+        if (case.plan.input_tokens == 10) {
+            try std.testing.expectEqual(.invalid_content, result.completed.raw_result.rejected.reason);
+            try std.testing.expectEqual(@as(u64, 11), result.completed.raw_result.rejected.usage.total_tokens);
+        } else try expectFailure(result, case.cause, .response_received);
         try std.testing.expectEqual(@as(usize, 2), fixture.preloader.destroyed_count);
     }
 }

@@ -582,6 +582,15 @@ service is published.
 - Fixed kernel bindings retain their concrete typed owners; `DataShape` is
   dependency/effect metadata, not a workflow value store.
 
+- The same envelope implements [§6's execution-local information stack](../contracts/06-pipeline-nodes.md#execution-local-information-stack).
+  Native schemas declare retained history; producer occurrences are runner-assigned.
+  Identical placement of a canonical record is idempotent, while conflicting or
+  foreign placement rejects. Current authority and retained observations stay distinct.
+  This requires no YAML fields, model-visible metadata or additional workflow steps.
+- Retry reports project both ordinary operation counts and native-defect counts
+  from their runner owners, retaining compiled scope and each independent key.
+  They never compare an aggregate over independent defects with one defect's limit.
+
 - Runner rejections retain their closed diagnostic in the workflow result and do not
   follow YAML outcome edges.
 - Inference charges actual usage before any result publication rejection; an exceeded or

@@ -112,6 +112,33 @@ following a YAML outcome edge. Expected failures return their declared typed
 data and follow the ordinary validated YAML outcome; no successor may run on
 an error that failed to produce its promised inputs.
 
+#### Execution-local information stack
+
+The user-approved Chunk 18 implementation extends this same envelope; no second
+registry or workflow action is introduced. Each selected workflow execution owns
+a fresh stack. Steps, compiled subgraphs and retries share it; a new invocation
+starts empty, including after `needs_user` (ADR 0009).
+
+- Native schemas explicitly select execution-history retention independently of
+  `current`/`captured`/`execution_control` dependency semantics. Unselected values
+  retain their existing transient lifetime.
+- The runner assigns a native occurrence before invoking a producer. A recorded
+  entry binds that execution scope, occurrence and typed key to one sealed immutable
+  value owner and its exact origin/dependencies. Retention shares that owner.
+- Placing the same canonical value and origin again returns its existing reference
+  without another entry, generation or effect. Conflicting value identity or
+  provenance rejects. Independently allocated values are not inferred equivalent
+  from matching text; a new invocation/repair remains distinct.
+- A placement receipt proves recording only. Existing duplicate-delta, lifecycle,
+  token reconciliation, retry, telemetry and publication checks remain authoritative.
+- Retained history never becomes current through placement. Current slots and
+  gates retain their freshness rules; ordinary nodes still receive only declared
+  immutable inputs. Read-only report projections may select a registered historical
+  key. The stack is never added wholesale to model context.
+- Prepare record/value ownership before atomically applying the complete delta.
+  Release all retained records after terminal consumers finish on every outcome.
+  There is no persistence, replay of effects, checkpoint or cross-execution cache.
+
 ### 6.1 Action rules
 
 Every action must:

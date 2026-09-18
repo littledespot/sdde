@@ -654,6 +654,118 @@ test "provider cause survives request release without inventing a candidate reje
     }
 }
 
+test "production rejected-content observation reaches reports after request and runner release" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+    const captured = try fixture.capture(io, a, .cwd(), choice);
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try fixture.materialize(io, project.dir, captured);
+    var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed };
+    {
+        var runtime: @import("../../../src/composition/root.zig").Runtime = undefined;
+        runtime.init(io, std.testing.allocator, project.dir, .{});
+        defer runtime.deinit();
+        try std.testing.expect(runtime.boot == .ready);
+        var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, .{
+            .snapshot = try @import("../../../src/adapters/provider/bedrock_api_key.zig").Snapshot.capture(std.testing.allocator, "isolated-credential"),
+        });
+        defer invocation.deinit();
+        const bindings = invocation.bindings();
+        try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
+        try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
+        try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
+        try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
+        var wire: @import("../../../src/bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}" };
+        runtime.provider_runtime.provider.?.aws_bedrock.transport = wire.port();
+        const Prepared = struct {
+            fn selected(_: *anyopaque) @import("../../../src/application/workflow_engine_child_bindings.zig").SelectionStepOutcome {
+                return .ok;
+            }
+            fn ready(_: *anyopaque) @import("../../../src/application/workflow_engine_child_bindings.zig").PreparationOutcome {
+                return .ok;
+            }
+        };
+        // Bootstrap is already exercised; the production engine owns all execution transitions.
+        var prepared = bindings.vtable.*;
+        prepared.validate_operation_registry = Prepared.selected;
+        prepared.parse_invocation = Prepared.selected;
+        prepared.select_workflow = Prepared.selected;
+        prepared.prepare_workflow = Prepared.ready;
+        const outcome = @import("../../../src/application/workflow_engine_orchestrator.zig").run(.{ .context = bindings.context, .vtable = &prepared });
+        try std.testing.expectEqual(.failed, outcome.executionStatus().?);
+        try std.testing.expectEqual(@as(usize, 1), wire.calls);
+        const runner = &invocation.pipeline_runner.?;
+        // Retire current transport views through the common delta boundary before reporting.
+        const pipeline = @import("../../../src/domain/pipeline.zig");
+        const retired = [_]pipeline.DataKey{
+            @import("../../../src/application/model_request_workflow.zig").prepared_schema.key,
+            @import("../../../src/application/provider_observation_workflow.zig").schema.key,
+        };
+        var retirement: pipeline.NodeDelta = .{};
+        for (retired) |key| retirement.data_invalidations.insert(key);
+        try runner.envelope.apply(.{ .id = "test.retire-request", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &retired, .side_effect = .none }, &retirement, .ok);
+        for (retired) |key| try std.testing.expect(runner.envelope.slots[@intFromEnum(key)] == null);
+        report.workflow_outcome = outcome.executionStatus();
+        try @import("observation.zig").capture(a, runner, &report);
+    }
+    try std.testing.expectEqual(@as(u128, 932), report.total_tokens);
+    try std.testing.expectEqual(@as(u64, 932), report.last_model_usage.?.total_tokens);
+    try std.testing.expectEqualStrings("response_invalid", report.provider_diagnostic.?);
+    try std.testing.expectEqual(.missing_final_text, report.provider_content_diagnostic.?);
+    try std.testing.expect(report.usage_complete and report.last_model_output == null);
+    const encoded = try std.json.Stringify.valueAlloc(a, report, .{});
+    _ = try @import("../../../src/domain/strict_json.zig").decode(c.Report, a, encoded, .{ .maximum_depth = 64 });
+    try std.testing.expect(std.mem.indexOf(u8, try @import("report.zig").renderMarkdown(a, report), "missing_final_text") != null);
+}
+
+test "reports retain scoped retry history and rejected-content usage after owner release" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const retry = @import("../../../src/domain/workflow_retry.zig");
+    const counts = retained: {
+        var state = retry.State.init(std.testing.allocator);
+        defer state.deinit();
+        for (1..4) |ordinal| {
+            const permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(@intCast(ordinal)), .family = @splat(2) }, .authorization = @splat(@intCast(ordinal)), .revision = ordinal, .maximum_targets = 3 };
+            try state.commit(try state.prepare(.{ .authorized = permit }));
+            _ = try state.beginAttempt(.repair, .{ .bytes = "merge" }, .{ .value = 1 }, permit);
+            try state.commit(try state.prepare(.{ .merged_validated = .{ .permit = permit, .revision_after = ordinal + 1, .result = .resolved } }));
+        }
+        break :retained try state.observe(a, .{ .bytes = "merge" });
+    };
+    try std.testing.expectEqual(@as(usize, 3), counts.len);
+    var calls = [_]@import("observation.zig").Call{.{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .step = "repair", .raw_response_available = true, .status = 200 }};
+    var observed: c.Report = .{
+        .started_at_utc = "",
+        .status = .workflow_failed,
+        .workflow_outcome = .failed,
+        .provider_diagnostic = "response_invalid",
+        .provider_content_diagnostic = .missing_final_text,
+        .last_model_origin = calls[0].origin,
+        .last_model_usage = .{ .input_tokens = 884, .output_tokens = 48, .total_tokens = 932 },
+        .retry_settings = &.{.{ .step = "merge", .limit = 1, .scope = .repair, .operation_executions = 0, .defects = counts }},
+    };
+    try @import("observation.zig").correlate(a, &calls, &observed);
+    var retained: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .retry_settings = observed.retry_settings };
+    try @import("observation.zig").correlate(a, &calls, &retained);
+    try std.testing.expectEqual(@as(u64, 932), retained.last_model_usage.?.total_tokens);
+    try std.testing.expectEqual(@as(usize, 0), retained.repairs.len);
+    try std.testing.expect(retained.last_model_output == null);
+    const encoded = try std.json.Stringify.valueAlloc(a, retained, .{});
+    const decoded = try @import("../../../src/domain/strict_json.zig").decode(c.Report, a, encoded, .{ .maximum_depth = 64 });
+    const settings = try std.json.Stringify.valueAlloc(a, decoded.retry_settings, .{});
+    for ([_][]const u8{ encoded, try @import("report.zig").renderMarkdown(a, decoded) }) |output| {
+        try std.testing.expect(std.mem.indexOf(u8, output, settings) != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "missing_final_text") != null);
+    }
+    for (decoded.retry_settings[0].defects) |defect| try std.testing.expectEqual(@as(u64, 1), defect.completed_executions);
+}
+
 test "evidence store retains distinct attempts excludes credentials and refuses overwrites" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

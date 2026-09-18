@@ -97,7 +97,7 @@ fn statusFor(comptime kind: provider.ProviderOperationKind, outcome: results.For
         } else switch (observation) {
             .completed => |completed| switch (completed.raw_result) {
                 .complete => .ok,
-                .stopped => .failed,
+                .stopped, .rejected => .failed,
             },
             .failed => .failed,
         },

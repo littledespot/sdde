@@ -63,6 +63,39 @@ pub const CompiledAuthority = struct {
 };
 
 pub const Scope = enum { operation, repair, model_request };
+pub const DefectCount = struct {
+    key: struct { scope: []const u8, target: []const u8, family: []const u8 },
+    completed_executions: u64,
+
+    fn init(allocator: std.mem.Allocator, key: Key, completed: u64) std.mem.Allocator.Error!DefectCount {
+        const scope = try allocator.dupe(u8, &std.fmt.bytesToHex(key.scope, .lower));
+        errdefer allocator.free(scope);
+        const target = try allocator.dupe(u8, &std.fmt.bytesToHex(key.target, .lower));
+        errdefer allocator.free(target);
+        const family = try allocator.dupe(u8, &std.fmt.bytesToHex(key.family, .lower));
+        return .{ .key = .{ .scope = scope, .target = target, .family = family }, .completed_executions = completed };
+    }
+
+    pub fn deinit(self: DefectCount, allocator: std.mem.Allocator) void {
+        allocator.free(self.key.scope);
+        allocator.free(self.key.target);
+        allocator.free(self.key.family);
+    }
+};
+/// Owned read-only report projection; counts retain their independent scopes.
+pub const Observation = struct {
+    step: []const u8,
+    limit: u32,
+    scope: Scope,
+    operation_executions: u64,
+    defects: []const DefectCount,
+
+    pub fn deinit(self: Observation, allocator: std.mem.Allocator) void {
+        allocator.free(self.step);
+        for (self.defects) |defect| defect.deinit(allocator);
+        allocator.free(self.defects);
+    }
+};
 pub const Role = enum { none, authorize, merge, validate, merge_validate };
 /// Native repair membership uses u32 ordinals. This representational bound also
 /// bounds the execution's distinct keys across multiple native scopes.
@@ -161,6 +194,21 @@ pub const State = struct {
             if (std.meta.eql(attempt.key, key) and std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) return attempt.completed;
         }
         return 0;
+    }
+
+    pub fn observe(self: *const State, allocator: std.mem.Allocator, operation_id: workflow.WorkflowStepId) std.mem.Allocator.Error![]const DefectCount {
+        var result: std.ArrayList(DefectCount) = .empty;
+        errdefer {
+            for (result.items) |item| item.deinit(allocator);
+            result.deinit(allocator);
+        }
+        for (self.attempts.items) |attempt| {
+            if (!std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) continue;
+            const item = try DefectCount.init(allocator, attempt.key, attempt.completed);
+            errdefer item.deinit(allocator);
+            try result.append(allocator, item);
+        }
+        return result.toOwnedSlice(allocator);
     }
 
     pub fn prepare(self: *State, transition: Transition) StateError!Prepared {

@@ -49,7 +49,7 @@ pub fn inference(allocator: std.mem.Allocator, response: transport.Response, sel
 pub const Inference = struct {
     usage: operation.ProviderUsage,
     latency_ms: ?u32,
-    output: union(enum) { text: []const u8, stopped: operation.ProviderNonCandidateStopReason, invalid },
+    output: union(enum) { text: []const u8, stopped: operation.ProviderNonCandidateStopReason, invalid: operation.ProviderContentDiagnostic },
 };
 
 // Borrowed wire facts, with no workflow identities or completion authority.
@@ -71,7 +71,7 @@ pub fn decodeConverse(raw: std.json.Value) Invalid!Inference {
         try fields(metrics, &.{"latencyMs"});
         latency = std.math.cast(u32, try integer(try field(metrics, "latencyMs"))) orelse return error.InvalidResponse;
     }
-    return .{ .usage = reported, .latency_ms = latency, .output = decodeOutput(raw, stop) catch .invalid };
+    return .{ .usage = reported, .latency_ms = latency, .output = decodeOutput(raw, stop) catch .{ .invalid = .invalid_content } };
 }
 
 fn decodeOutput(raw: std.json.Value, stop: []const u8) Invalid!@FieldType(Inference, "output") {
@@ -94,7 +94,7 @@ fn decodeOutput(raw: std.json.Value, stop: []const u8) Invalid!@FieldType(Infere
                 try reasoning(try field(block, "reasoningContent"));
             }
         }
-        return .{ .text = text orelse return error.InvalidResponse };
+        return if (text) |answer| .{ .text = answer } else .{ .invalid = .missing_final_text };
     }
     const reason: operation.ProviderNonCandidateStopReason = if (std.mem.eql(u8, stop, "max_tokens")) .output_limit else if (std.mem.eql(u8, stop, "tool_use")) .unsupported_tool_request else if (std.mem.eql(u8, stop, "guardrail_intervened") or std.mem.eql(u8, stop, "content_filtered")) .content_filtered else if (std.mem.eql(u8, stop, "malformed_model_output") or std.mem.eql(u8, stop, "malformed_tool_use")) .malformed_output else if (std.mem.eql(u8, stop, "model_context_window_exceeded")) .context_limit else return error.InvalidResponse;
     return .{ .stopped = reason };
@@ -113,7 +113,13 @@ fn reasoning(raw: std.json.Value) Invalid!void {
 fn decodeInference(allocator: std.mem.Allocator, raw: std.json.Value, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) (Invalid || std.mem.Allocator.Error)!operation.ProviderInvocationObservation {
     const decoded = try decodeConverse(raw);
     return .{ .completed = .{ .operation_id = id, .raw_result = switch (decoded.output) {
-        .invalid => return error.InvalidResponse,
+        .invalid => |reason| .{ .rejected = .{
+            .request_id = request.model_request_id,
+            .binding_id = selected.bindingId(),
+            .reason = reason,
+            .usage = decoded.usage,
+            .provider_latency_ms = decoded.latency_ms,
+        } },
         .text => |text| .{ .complete = .{
             .request_id = request.model_request_id,
             .binding_id = selected.bindingId(),

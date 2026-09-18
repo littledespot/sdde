@@ -55,6 +55,12 @@ Markdown is a presentation format, not the internal source of truth while a stag
 
 ### 7.2 Stage IRs
 
+Execution-local information occurrences use the common envelope contract in
+[§6](06-pipeline-nodes.md#execution-local-information-stack): native scope and
+producer occurrence plus a registered typed key, retaining the canonical immutable
+value and origin. These are neither persisted artifact IDs nor new domain authority.
+Historical information cannot satisfy current authority by its presence alone.
+
 #### Specification IR
 
 The LLM returns `SpecificationContentProposal` semantic fields with no IDs or status. The engine assigns canonical record identifiers from the persisted `SpecificationIdLedger` and constructs `SpecificationIR`:

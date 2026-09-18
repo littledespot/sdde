@@ -378,13 +378,18 @@ test "Bedrock response rejects malformed UTF8 identity-shaped unknown data and i
         .{ "\"end_turn\"", "\"stop_sequence\"" },
         .{ "\"end_turn\"", "\"unknown\"" },
     };
-    for (changes) |change| {
+    for (changes, 0..) |change, index| {
         const bytes = try std.mem.replaceOwned(u8, std.testing.allocator, original, change[0], change[1]);
         defer std.testing.allocator.free(bytes);
         var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
         defer observed.deinit();
-        try std.testing.expectEqual(.response_invalid, observed.failed.cause);
-        try std.testing.expectEqual(.response_received, observed.failed.delivery);
+        if (index >= 6) {
+            try std.testing.expectEqual(.invalid_content, observed.completed.raw_result.rejected.reason);
+            try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.rejected.usage.total_tokens);
+        } else {
+            try std.testing.expectEqual(.response_invalid, observed.failed.cause);
+            try std.testing.expectEqual(.response_received, observed.failed.delivery);
+        }
     }
 }
 
@@ -420,7 +425,12 @@ test "Bedrock text normalization validates reasoning metadata without making it 
             try std.testing.expectEqualStrings("{}", observed.completed.raw_result.complete.content.bytes);
             try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.complete.usage.total_tokens);
         } else {
-            try std.testing.expectEqual(.response_invalid, observed.failed.cause);
+            if (std.mem.eql(u8, case.usage, "{}")) {
+                const rejected = observed.completed.raw_result.rejected;
+                try std.testing.expectEqual(@as(u64, 12), rejected.usage.total_tokens);
+                try std.testing.expect(rejected.request_id == fixture.base.model_request_id);
+                try std.testing.expect(rejected.binding_id.eql(fixture.base.provider_binding.bindingId()));
+            } else try std.testing.expectEqual(.response_invalid, observed.failed.cause);
         }
     }
 }

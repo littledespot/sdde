@@ -737,6 +737,9 @@ The new engine is ready for production evaluation when all of the following are 
       invocation and delta owner.
     - Bound-graph change classification compares stable semantic authority rather than source
       ordinal, registry identity, or validation evidence.
+    - Each execution has a fresh [envelope information stack](contracts/06-pipeline-nodes.md#execution-local-information-stack).
+      Repeated placement of one immutable occurrence has no additional effect;
+      conflicting or foreign placement rejects, and history cannot restore current authority.
 
 2. **Configuration and provider authority.**
     - Bootstrap treats the invocation working directory as project root and accepts only its

@@ -1878,6 +1878,19 @@ test "configured specification generation YAML executes native references models
                 else => 1,
             };
             try std.testing.expectEqual(merges, driver.support_merges);
+            const retry_observations = try runner.retryObservations(allocator);
+            defer {
+                for (retry_observations) |observation| observation.deinit(allocator);
+                allocator.free(retry_observations);
+            }
+            var recorded_merges: u64 = 0;
+            for (retry_observations) |observation| for (graph.authority.steps) |step| {
+                if (!std.mem.eql(u8, step.id.bytes, observation.step) or !std.mem.eql(u8, step.operation_id.bytes, "merge-specification-support-repair")) continue;
+                try std.testing.expectEqual(.repair, observation.scope);
+                try std.testing.expectEqual(@as(u64, 0), observation.operation_executions);
+                for (observation.defects) |defect| recorded_merges += defect.completed_executions;
+            };
+            try std.testing.expectEqual(@as(u64, merges), recorded_merges);
             try std.testing.expectEqual(if (driver.support_fault == .duplicate_finding) @as(usize, 0) else merges, driver.support_repair_calls);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());

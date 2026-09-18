@@ -51,6 +51,7 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
         .{ .label = "Candidate source step", .value = report.candidate_model_step },
         .{ .label = "Engine/harness error", .value = report.diagnostic },
         .{ .label = "Provider error", .value = report.provider_diagnostic },
+        .{ .label = "Provider content", .value = if (report.provider_content_diagnostic) |value| @tagName(value) else null },
         .{ .label = "Model validation error", .value = report.model_diagnostic },
         .{ .label = "Evidence capture error", .value = report.evidence_error },
     };
@@ -150,6 +151,7 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     try escape(writer, report.diagnostic orelse "none");
     try writer.writeAll("; provider: ");
     try escape(writer, report.provider_diagnostic orelse "none");
+    if (report.provider_content_diagnostic) |diagnostic| try writer.print(" ({s})", .{@tagName(diagnostic)});
     try writer.writeAll("; model validation: ");
     try escape(writer, report.model_diagnostic orelse "none");
     try writer.writeAll(".\n\n");

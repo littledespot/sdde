@@ -6,6 +6,42 @@ const build_request = @import("actions/model/build_model_request.zig");
 
 const Fixture = @import("provider_invocation_test_fixture.zig").Fixture;
 
+test "rejected content retains validated usage and latency without candidate or retry authority" {
+    var fixture: Fixture = undefined;
+    try fixture.init();
+    defer fixture.deinit();
+    var other: Fixture = undefined;
+    try other.init();
+    defer other.deinit();
+    var response: provider.ProviderInvocationObservation = .{ .completed = .{
+        .operation_id = fixture.call.operation_id,
+        .raw_result = .{ .rejected = .{
+            .request_id = fixture.call.request.model_request_id,
+            .binding_id = fixture.call.request.binding_id,
+            .reason = .missing_final_text,
+            .usage = .{ .input_tokens = 884, .output_tokens = 48, .total_tokens = 932 },
+            .provider_latency_ms = 416,
+        } },
+    } };
+    var owned = try validation.validate(std.testing.allocator, fixture.call, &response);
+    defer owned.deinit();
+    try std.testing.expectEqual(@as(u64, 932), owned.evidence.usage().?.total_tokens);
+    try std.testing.expectEqual(@as(?u32, 416), owned.evidence.providerLatencyMs());
+    try std.testing.expectEqual(.response_invalid, owned.evidence.result().failed.cause);
+    try std.testing.expectEqual(.never, owned.evidence.result().failed.retry_class);
+    try std.testing.expectEqual(provider.ProviderContentDiagnostic.missing_final_text, owned.evidence.result().failed.content.?);
+    for (0..3) |variant| {
+        var wrong = response;
+        switch (variant) {
+            0 => wrong.completed.raw_result.rejected.request_id = other.call.request.model_request_id,
+            1 => wrong.completed.raw_result.rejected.binding_id.registry_entry_id.ordinal += 1,
+            2 => wrong.completed.raw_result.rejected.usage.total_tokens += 1,
+            else => unreachable,
+        }
+        try std.testing.expectError(if (variant == 2) error.InvalidProviderTokenUsage else error.ProviderInvocationAssociationInvalid, validation.validate(std.testing.allocator, fixture.call, &wrong));
+    }
+}
+
 test "fake response validation retains exact call authority without copying content or mutating accounting" {
     var fixture: Fixture = undefined;
     try fixture.init();

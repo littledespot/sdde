@@ -4,13 +4,30 @@ const values = @import("pipeline_values.zig");
 const std = @import("std");
 const gate = @import("../domain/workflow_gate.zig");
 const workflow = @import("../domain/workflow.zig");
+const reference = @import("../domain/execution_reference.zig");
 
 pub const Error = pipeline.DeltaError || std.mem.Allocator.Error || error{
     DataSchemaMismatch,
     UnregisteredDataSchema,
     AliasedDataValue,
     DataGenerationExhausted,
+    DataReferenceOverflow,
+    InvalidInformationOccurrence,
+    InformationConflict,
 };
+
+/// Native placement identity, never a model key or an execution receipt.
+pub const Occurrence = struct { scope: reference.Ref, ordinal: u64, producer: []const u8 };
+pub const Record = struct {
+    occurrence: Occurrence,
+    value: *data.Value,
+    origin: data.Origin,
+
+    pub fn key(self: *const Record) pipeline.DataKey {
+        return values.valueSchema(self.value).key;
+    }
+};
+pub const Placement = union(enum) { inserted: *const Record, already_present: *const Record };
 
 /// Sole owner of accumulated workflow values. A node receives only a filtered
 /// immutable view; replacements become visible together after complete validation.
@@ -20,12 +37,17 @@ pub const PipelineEnvelope = struct {
     slots: data.Slots = data.empty_slots,
     origins: [data.key_count]?*data.Origin = @splat(null),
     generation: u64 = 0,
+    scope: ?reference.Ref = null,
+    occurrence_count: u64 = 0,
+    records: std.ArrayList(*const Record) = .empty,
 
     pub fn init(allocator: std.mem.Allocator, schemas: []const data.Schema) PipelineEnvelope {
         return .{ .allocator = allocator, .schemas = schemas };
     }
 
     pub fn deinit(self: *PipelineEnvelope) void {
+        for (self.records.items) |record| self.releaseRecord(record);
+        self.records.deinit(self.allocator);
         for (&self.slots) |*slot| {
             if (slot.*) |value| values.destroy(value);
             slot.* = null;
@@ -34,6 +56,44 @@ pub const PipelineEnvelope = struct {
             if (origin.*) |value| self.allocator.destroy(value);
             origin.* = null;
         }
+        if (self.scope) |scope| scope.release();
+    }
+
+    pub fn beginOccurrence(self: *PipelineEnvelope, producer: []const u8) Error!Occurrence {
+        if (producer.len == 0) return error.InvalidInformationOccurrence;
+        const ordinal = std.math.add(u64, self.occurrence_count, 1) catch return error.DataGenerationExhausted;
+        if (self.scope == null) self.scope = try reference.create(self.allocator);
+        self.occurrence_count = ordinal;
+        return .{ .scope = self.scope.?, .ordinal = ordinal, .producer = producer };
+    }
+
+    /// Same sealed value and origin for the same occurrence is a no-op. The
+    /// canonical immutable value owner supplies identity, not serialized text.
+    pub fn place(self: *PipelineEnvelope, occurrence: Occurrence, value: *data.Value, origin: data.Origin) Error!Placement {
+        if (try self.existing(occurrence, value, origin)) |record| return .{ .already_present = record };
+        const index = @intFromEnum(values.valueSchema(value).key);
+        const current_origin = self.origins[index] orelse return error.InvalidInformationOccurrence;
+        if (self.slots[index] != value or !sameOrigin(current_origin.*, origin)) return error.InvalidInformationOccurrence;
+        const record = try self.prepareRecord(occurrence, value, origin);
+        errdefer self.releaseRecord(record);
+        try self.records.append(self.allocator, record);
+        return .{ .inserted = record };
+    }
+
+    /// Historical information is available only through the requested native
+    /// key. It never re-enters the current slots or satisfies an authority gate.
+    pub fn latestInformation(self: *const PipelineEnvelope, key: pipeline.DataKey) data.View {
+        var result: data.View = .{};
+        var index = self.records.items.len;
+        while (index != 0) {
+            index -= 1;
+            const record = self.records.items[index];
+            if (record.key() == key) {
+                result.slots[@intFromEnum(key)] = record.value;
+                break;
+            }
+        }
+        return result;
     }
 
     pub fn view(self: *const PipelineEnvelope, contract: pipeline.NodeContract) Error!data.View {
@@ -45,6 +105,12 @@ pub const PipelineEnvelope = struct {
     }
 
     pub fn apply(self: *PipelineEnvelope, contract: pipeline.NodeContract, delta: *pipeline.NodeDelta, outcome: workflow.OutcomeTag) Error!void {
+        return self.applyOccurrence(try self.beginOccurrence(contract.id), contract, delta, outcome);
+    }
+
+    pub fn applyOccurrence(self: *PipelineEnvelope, occurrence: Occurrence, contract: pipeline.NodeContract, delta: *pipeline.NodeDelta, outcome: workflow.OutcomeTag) Error!void {
+        try self.checkOccurrence(occurrence);
+        if (!std.mem.eql(u8, occurrence.producer, contract.id)) return error.InvalidInformationOccurrence;
         _ = try self.shape().applyDelta(contract, delta);
         var seen: [data.key_count * 2]?*data.Value = @splat(null);
         var count: usize = 0;
@@ -61,7 +127,7 @@ pub const PipelineEnvelope = struct {
         }
 
         const generation = std.math.add(u64, self.generation, 1) catch return error.DataGenerationExhausted;
-        var origin: data.Origin = .{ .generation = generation, .producer = contract.id, .outcome = outcome, .inputs = @splat(null) };
+        var origin: data.Origin = .{ .generation = generation, .occurrence = occurrence.ordinal, .producer = contract.id, .outcome = outcome, .inputs = @splat(null) };
         inline for (.{ contract.requires, contract.optional }) |keys| {
             for (keys) |key| if (self.origins[@intFromEnum(key)]) |input| {
                 origin.inputs[@intFromEnum(key)] = input.generation;
@@ -85,7 +151,22 @@ pub const PipelineEnvelope = struct {
             prepared.* = try self.allocator.create(data.Origin);
             prepared.*.?.* = origin;
         }
+        var prepared_records: std.ArrayList(*const Record) = .empty;
+        defer prepared_records.deinit(self.allocator);
+        errdefer for (prepared_records.items) |record| self.releaseRecord(record);
+        inline for (.{ delta.data_writes, delta.data_replacements }) |slots| for (slots) |slot| {
+            const value = slot orelse continue;
+            if (values.valueSchema(value).history != .execution) continue;
+            if (try self.existing(occurrence, value, origin) != null) return error.InformationConflict;
+            const record = try self.prepareRecord(occurrence, value, origin);
+            prepared_records.append(self.allocator, record) catch |err| {
+                self.releaseRecord(record);
+                return err;
+            };
+        };
+        try self.records.ensureUnusedCapacity(self.allocator, prepared_records.items.len);
         // No allocation or fallible operation is allowed beyond this boundary.
+        self.records.appendSliceAssumeCapacity(prepared_records.items);
         self.generation = generation;
         var invalidations = delta.data_invalidations.iterator();
         while (invalidations.next()) |key| {
@@ -175,9 +256,52 @@ pub const PipelineEnvelope = struct {
     }
 
     fn owns(self: *const PipelineEnvelope, value: *data.Value) bool {
-        return contains(&self.slots, value);
+        if (contains(&self.slots, value)) return true;
+        for (self.records.items) |record| if (record.value == value) return true;
+        return false;
+    }
+
+    fn checkOccurrence(self: *const PipelineEnvelope, occurrence: Occurrence) Error!void {
+        const scope = self.scope orelse return error.InvalidInformationOccurrence;
+        if (!scope.eql(occurrence.scope) or occurrence.ordinal == 0 or occurrence.ordinal > self.occurrence_count)
+            return error.InvalidInformationOccurrence;
+    }
+
+    fn existing(self: *const PipelineEnvelope, occurrence: Occurrence, value: *data.Value, origin: data.Origin) Error!?*const Record {
+        try self.checkOccurrence(occurrence);
+        const schema = values.valueSchema(value);
+        const expected = data.find(self.schemas, schema.key) orelse return error.UnregisteredDataSchema;
+        if (!expected.eql(schema) or schema.history != .execution) return error.DataSchemaMismatch;
+        if (origin.occurrence != occurrence.ordinal or !std.mem.eql(u8, occurrence.producer, origin.producer)) return error.InvalidInformationOccurrence;
+        for (self.records.items) |record| {
+            if (record.occurrence.ordinal != occurrence.ordinal or record.key() != schema.key) continue;
+            if (record.value != value or !sameOrigin(record.origin, origin)) return error.InformationConflict;
+            return record;
+        }
+        return null;
+    }
+
+    fn prepareRecord(self: *PipelineEnvelope, occurrence: Occurrence, value: *data.Value, origin: data.Origin) Error!*const Record {
+        const record = try self.allocator.create(Record);
+        errdefer self.allocator.destroy(record);
+        const producer = try self.allocator.dupe(u8, occurrence.producer);
+        errdefer self.allocator.free(producer);
+        record.* = .{ .occurrence = .{ .scope = occurrence.scope, .ordinal = occurrence.ordinal, .producer = producer }, .value = try values.retain(value), .origin = origin };
+        record.origin.producer = producer;
+        return record;
+    }
+
+    fn releaseRecord(self: *PipelineEnvelope, record: *const Record) void {
+        values.destroy(record.value);
+        self.allocator.free(record.occurrence.producer);
+        self.allocator.destroy(record);
     }
 };
+
+fn sameOrigin(left: data.Origin, right: data.Origin) bool {
+    return left.generation == right.generation and left.occurrence == right.occurrence and std.mem.eql(u8, left.producer, right.producer) and left.outcome == right.outcome and
+        std.meta.eql(left.inputs, right.inputs) and std.meta.eql(left.lineage, right.lineage) and left.lineage_conflict == right.lineage_conflict;
+}
 
 fn mergeGeneration(origin: *data.Origin, index: usize, generation: u64) void {
     if (origin.lineage[index]) |prior| {
