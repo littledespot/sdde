@@ -58,9 +58,9 @@ arguments of the generic workflow engine.
    Reference changes follow normal reconciliation and downstream invalidation;
    they never change the feature directory or mint a second feature.
 6. Build and validate reference authority, the reference-grounded feature brief,
-   specification units and complete rendered/state candidates. Keep candidates
-   private to the execution. Missing business authority creates a clarification,
-   not a partial `spec.md`.
+   specification units, the principle assessment in §17.3.1 and complete rendered/state
+   candidates. Keep candidates private to the execution. Missing business authority
+   creates a clarification, not a partial `spec.md`.
 7. At successful workflow completion, publish only the complete validated output
    set to the same registered paths, completely replacing existing outputs.
    The clarification branch likewise completely replaces unresolved forms at
@@ -74,11 +74,12 @@ append, activation registry, transaction directory or recovery scan precedes it.
 
 ### 17.3 LLM work
 
-The LLM performs three semantic activities:
+The LLM performs these semantic activities:
 
 1. reference claim extraction and bounded hierarchical reconciliation;
 2. one reference-grounded feature brief containing the human title, description, and primary goal;
 3. specification content generation from the validated brief and complete reconciled claims.
+4. focused requirement–principle consistency assessment under §17.3.1.
 
 Calls are split into typed units:
 
@@ -127,8 +128,58 @@ For each feature-brief or specification unit, the declared model operation retur
 - Entries owned by later technical stages are carried as cited context/obligations without
   asking principles to invent business intent.
 
+### 17.3.1 Requirement–principle consistency review
+
+**Accepted design amendment; implementation pending** under
+[ADR 0015](../decisions/0015-specification-principle-review.md).
+
+After references and applicable validated answers establish business intent, compare
+that intent with the current principle selection from
+[§9.4](09-configuration.md#94-project-principle-resolution). Reassess affected business
+units after source/answer changes, generation or repair; require current complete
+evidence before publication. Reuse the existing semantic-assessment request, admission and authority
+owners with a distinct typed assessment purpose; do not create a second policy
+validator, source loader or summary model. YAML declares the calls and typed exits;
+actions retain one responsibility and the runner owns execution.
+
+- Source-preservation review remains independent: it distinguishes missing source
+  authority from extraction/reconciliation loss. Principles are policy evidence,
+  never reference claims, source citations or sufficient positive business support.
+- The assessment receives assigned business units supported by references or current
+  validated answers, plus the exact selected principle spans once, with their existing
+  typed IDs and citations.
+  Native checks establish assignment coverage, citation membership, current source,
+  answer and principle bindings, and closed findings. Compatibility remains
+  model-assisted; a structurally valid no-conflict result is not deterministic proof.
+- A clear business requirement conflicting with policy remains intact. Retain the
+  cited conflict and affected requirement identities as a mandatory Plan-owned
+  obligation. Do not force a user to restate known intent or create a `PNN` during
+  Specify, before Plan's predecessor and `PlanInputAuthorityState` exist.
+- A genuine business-choice gap uses the existing `SNN` route. Changing or waiving
+  project policy belongs to Plan/project approval. Neither the model nor an ordinary
+  clarification answer may silently amend principles or business requirements.
+- No open Spec clarification may be relabelled a deferred policy obligation. Plan
+  remains prohibited until every Spec clarification is resolved under the existing
+  answer/authority contract; Tasks remains prohibited while any Spec or Plan
+  clarification is open.
+- Spec publication requires complete assessment/evidence coverage and successful
+  resolution of its own business obligations. Outstanding policy decisions are
+  explicitly handed to Plan, never marked resolved or discarded as warnings. Plan
+  revalidates and resolves every applicable obligation before publishing its output.
+
+Persist the assessment's provenance, exact principle selection/revision and typed
+downstream obligations through the existing canonical evidence/context owners; render
+the cited handoff in `reference-context.md`. That view is not authority. Add no
+parallel summary store, copied principle registry or new fixed artifact. Fresh
+readback must recover the same associations. A principle change invalidates the
+dependent assessment; the consuming gate rebuilds it under §24.5 without rewriting
+unchanged business intent. An earlier no-conflict finding cannot certify Plan's
+current policy compliance.
+
 ### 17.4 Specification clarification behavior
 
+- Both need producers follow [shared clarification preparation](12-model-boundary.md#127-workflow-defined-model-operations)
+  before the existing refresh/render/publication path; a diagnostic alone is not a question.
 - A valid specification need is deduplicated by its engine-built subject tuple.
 - If it is new, the engine allocates the next `S01` through `S99` identity and derives
   `<paths.specs>/<featureId>/clarify/SNN.md`; otherwise it reuses the existing ID and path.
@@ -182,7 +233,9 @@ The engine validates:
 - unbound or operational technical leakage: foreign absolute paths, fenced code, stylesheet declarations, inline known source-file paths/extensions, known framework/package identifiers, and implementation-only handles; an exact validated passive display node is inert but remains subject to semantic business-relevance review;
 - mandatory `reference-context.md` existence, complete section set, and exact binding to the current reference snapshot;
 - equality between the reference inventory and the sidecar's rendered file inventory;
-- unresolved authoritative conflicts and blocking open questions;
+- unresolved specification-owned conflicts and blocking open questions;
+- complete current principle-assessment coverage and exact downstream policy-obligation
+  associations under §17.3.1; policy findings cannot erase source requirements;
 - complete successful authority reconciliation for every specification-owned required field/decision, with no warning-only, assumed, approximate, or later-stage substitute;
 - workflow artifact paths and complete output-set membership.
 
@@ -195,7 +248,7 @@ After validation:
 1. assign requirement IDs;
 2. render `spec.md` from `SpecificationIR` and the canonical template contract;
 3. render the mandatory `reference-context.md`;
-4. serialize the immutable reference-derived feature-request state, exact passive-literal registry revision, specification ID ledger, initial/next specification-acknowledgement and clarification-registry states, clarification views, specification-provenance state revision, and canonical reference snapshot;
+4. serialize the immutable reference-derived feature-request state, exact passive-literal registry revision, specification ID ledger, initial/next specification-acknowledgement and clarification-registry states, clarification views, specification-provenance state revision, canonical reference snapshot, and §17.3.1 evidence/obligations within their existing canonical owners;
 5. reparse `spec.md` and compare its normalized IR to the validated source IR;
 6. compare the read-only reference-context view with deterministic rendering from its canonical IR;
 7. stage the complete artifact set, exact workflow-artifact registry, bootstrap-authority state, feature-request state, passive-literal registry state, specification ID ledger, acknowledgement and clarification-registry states, writable clarification forms plus preservation preconditions for retained user-closed forms, specification-provenance state, canonical reference state, and next workflow-state record as one candidate output set;
@@ -253,5 +306,6 @@ first parent and is always rendered in this form:
 - the sidecar exists and passes when required;
 - no behavior-changing reference conflict remains unresolved;
 - no specification clarification record remains open;
+- the current §17.3.1 assessment and complete mandatory Plan-policy handoff validate;
 - all required output writes succeeded and current canonical state records completion;
 - workflow state recorded `specified` after the commit.

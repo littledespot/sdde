@@ -28,6 +28,10 @@ answers and protecting user-closed form bytes (§23.2).
 [approval record](../fixes/IMP_001.md#5-design-amendment-decisions)
 preserves the decision scope; subsequent defect reviews do not grant new authority.
 
+[ADR 0015](decisions/0015-specification-principle-review.md) adds early Spec
+requirement–principle assessment and shared actionable-question preparation.
+Implementation remains pending; it preserves business and policy ownership.
+
 **Scope:** Engine development in this repository. `init`, `drift`, `audit`,
 version-control integration and artifact fingerprinting remain outside the
 initial suite. A future explicitly selected `init` may materialize principle
@@ -669,6 +673,8 @@ The package layout reflects the required dependency boundaries and native Zig di
 - Implement the structured reference/spec operations declared by their workflow YAML definitions.
 - Add specification/reference-context validators, no-invention routing, atomic repair, rendering, and commit.
 - Integrate the shared reconciliation boundary for every specification-owned field, reference-meaning decision, and preserved obligation; specification-local rules may contribute requirements/candidates only.
+- Add the focused principle assessment in §17.3.1 using canonical principle selection;
+  retain policy conflicts as mandatory Plan obligations and prepare actionable needs.
 - Implement the complete `S01..S99` clarification lifecycle, exact subject deduplication, controlled forms, authority/user resolution, rerun regeneration, and the blocking plan gate.
 
 ### Increment 3: Plan
@@ -857,6 +863,8 @@ The new engine is ready for production evaluation when all of the following are 
     - Clarifications use only registered `<feature>/clarify/S01..S99.md`, `P01..P99.md`, and
       `T01..T99.md` identities/paths.
     - Exact subject keys prevent duplicates.
+    - Questions identify the requirement, current evidence and exact unresolved decision
+      under §12.7; equal wording across subjects does not authorize answer sharing.
     - Open forms expose only controlled fields; closed historical views are read-only.
     - Reruns reconsider current reference/principle/answer authorities and regenerate the
       complete owning stage.
@@ -877,9 +885,12 @@ The new engine is ready for production evaluation when all of the following are 
 22. **Project principle authority.**
     - Semantic Markdown principle filenames are category hints only; their complete bounded
       bodies remain free text.
-    - The exact current principle registry is loaded, selected, and cited at plan, tasks,
-      implement, and fresh clarification-rerun gates. It is never used to invent specification
-      requirements.
+    - The exact current principle registry is loaded, selected and cited for Spec's
+      focused consistency assessment (§17.3.1), and at plan, tasks, implement and fresh
+      clarification-rerun gates. It never invents or erases specification requirements.
+    - Spec proves assessment/evidence coverage and retains every Plan-owned policy
+      obligation. Plan rechecks current principles and resolves those obligations;
+      a successful Spec assessment does not certify policy approval.
     - Exact `toolchain.yaml` is closed mechanical policy inherited from validated preset
       packages and never enters semantic guidance.
 
@@ -1003,6 +1014,7 @@ decision history:
 | [0012](decisions/0012-workflow-owned-model-request.md) | Retain one execution-owned request/binding/resource identity across explicit YAML operations. |
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
+| [0015](decisions/0015-specification-principle-review.md) | Early Spec principle assessment and shared actionable questions; design accepted, implementation pending. |
 
 Additional accepted feature boundaries:
 

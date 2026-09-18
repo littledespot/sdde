@@ -109,6 +109,13 @@ It must select files by existing `fileId` where the plan already identified them
 
 ### 19.3 Tasks clarification behavior
 
+**Hard prerequisite:** if any Spec or Plan clarification remains open/unresolved,
+stop at the Tasks entry gate before decomposition, task generation or model calls.
+Only validated current resolution satisfies it; requested file status is not authority.
+
+Questions use the [shared preparation contract](12-model-boundary.md#127-workflow-defined-model-operations),
+preserving current evidence and the exact decision without merging different subjects.
+
 A task-generation need is deduplicated through the shared registry and allocated `T01` through `T99` only for a new subject. Its exact path is `<paths.specs>/<featureId>/clarify/TNN.md`. The clarification publication enters `tasks_clarification_pending` without committing a candidate `TaskDefinitionState`, runtime state, or `tasks.md`.
 
 - On a subsequent tasks run, the engine first rejects any open `SNN`/`PNN`, then refreshes the

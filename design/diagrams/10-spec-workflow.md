@@ -1,4 +1,6 @@
 High-level execution flow for the Specify workflow.
+The first diagram includes the accepted, pending [ADR 0015](../decisions/0015-specification-principle-review.md)
+assessment; it is not a claim that the current YAML implements that addition.
 
 ```mermaid
 flowchart TD
@@ -10,11 +12,14 @@ flowchart TD
     EXACT --> UNDERSTAND["Account for typed and preserved-token claims;<br/>reconcile within-source, cross-source and global groups"]
     UNDERSTAND --> RECONCILED["Validate total dispositions, signals and conflict joins;<br/>retain claim meaning, citations and exact tokens"]
     RECONCILED --> AUTH{"Shared required-authority gate:<br/>complete current support?"}
-    AUTH -->|Supported| BRIEF["Generate the feature title, description and goal"]
+    AUTH -->|Supported| POLICY["Review current selected principles against preserved intent;<br/>retain cited Plan-owned policy obligations"]
+    SETUP -. Canonical principle selection .-> POLICY
+    POLICY --> BRIEF["Generate the feature title, description and goal"]
+    POLICY -->|Invalid assessment evidence| BLOCKED
     AUTH -->|Business/reference gap| CLARIFY
     AUTH -->|Unknown ownership or policy| BLOCKED
     BRIEF --> SPEC["Generate scenarios, outcomes, edge cases and acceptance criteria;<br/>requirements, business rules and scope;<br/>key entities when the feature involves business data"]
-    SPEC --> CHECK{"Mechanical checks and shared<br/>required-authority gate pass?"}
+    SPEC --> CHECK{"Mechanical checks, current policy assessment and shared<br/>required-authority gate pass?"}
 
     CHECK -->|Yes| RENDER["Render and verify spec.md<br/>and reference-context.md"]
     RENDER --> PUBLISH["Completely replace registered outputs with validated artifacts and state;<br/>preserve user-resolved clarification files"]
@@ -25,7 +30,7 @@ flowchart TD
     BRIEF -->|Clarification required| CLARIFY
     SPEC -->|Clarification required| CLARIFY
     CHECK -->|Genuine source-authority gap| CLARIFY
-    CLARIFY["Resolve clarification questions;<br/>reuse existing questions for the same subject"]
+    CLARIFY["Prepare the requirement, evidence and exact user decision;<br/>reuse existing questions for the same subject"]
     CLARIFY -->|Protected answer needs reconsideration| BLOCKED["End blocked;<br/>user direction is required"]
     CLARIFY -->|Question can be created or refreshed| QUESTIONS["Create new forms; completely overwrite unresolved clarify/SNN.md at the same IDs;<br/>preserve user-resolved forms"]
     QUESTIONS --> NEEDSUSER["End needs_user;<br/>publish no partial specification"]
@@ -38,6 +43,8 @@ flowchart TD
 
 - `FEATURE` is relative to `paths.specs`; `SOURCE` is relative to `paths.references`.
 - Reference material and validated answers supply the title and requirements.
+- Open SNN prevents Plan execution; open SNN/PNN prevents Tasks execution. Early
+  policy obligations retain Plan ownership and cannot replace unresolved SNN.
 - The supplied definition declares `id: spec-generation`; filenames do not
   determine workflow identity.
 
@@ -46,8 +53,8 @@ reconciliation, shared authority gates, content and publication contracts. Its
 implementation-status sections distinguish H-008–H-012 evidence and remaining
 work from live completion and semantic quality.
 
-Generation YAML publishes unit-need forms or the complete validated
-specification/sidecar/state set:
+The current generation YAML publishes unit-need forms or the complete validated
+specification/sidecar/state set; the pending principle assessment is not shown here:
 
 ```mermaid
 flowchart LR

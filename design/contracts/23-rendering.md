@@ -166,6 +166,10 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
 
 - Unresolved-form replacement includes the complete question/schema/revision projection and
   controlled editable regions; an unsubmitted draft answer is not protected from replacement.
+- Prepare questions under [§12.7](12-model-boundary.md#127-workflow-defined-model-operations)
+  through the existing question/reason fields. The renderer formats prepared context;
+  it never classifies source support, policy conflicts or answer equivalence. Its
+  controlled-region template remains shared with parsing and protected-history readback.
 - An unchanged subject or question is not permission to retain the old form.
 - Reusing a clarification means retaining its identity and canonical history, not preserving
   unresolved file bytes.

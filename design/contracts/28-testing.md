@@ -97,12 +97,31 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
 - **Semantic Markdown principle capture:**
   - Use filename-only category hints and deterministic applicable-category selection.
   - Require complete chunk accounting and exact mechanical `toolchain.yaml` exclusion.
-  - Load no principles into specification generation.
+  - Supply current selected spans to the focused Spec policy assessment (§17.3.1),
+    keeping extraction, source-preservation and business generation authority separate.
+  - Cover the UTC/greeting conflict and unrelated privacy/retention constraints:
+    preserve clear requirements, cite mandatory Plan obligations and resolve them only
+    at the owning gate. Genuine business gaps remain SNN; source loss remains a defect.
+  - Reject omitted/foreign/stale assessment evidence and lost downstream obligations.
+    Changed principles refresh dependent assessments and approvals without rewriting
+    business intent. Empty/unrelated principles invent neither requirements nor questions.
+  - Prove no Spec-to-PNN predecessor cycle, no policy approval inferred from review,
+    and no old no-conflict result certifying Plan's current policy compliance.
+  - Include requirements supported only by validated answers and authenticated Spec
+    edits; their current bindings and policy assessment cannot be skipped on rerun.
 - **Clarifications:**
   - Prove subject-key equality/deduplication, `S/P/T` ordinal ceilings and execution-private allocation.
   - Distinguish open-submission from closed-audit view editability.
   - Require exact complete conflict-set/view projection.
   - Reject stale answers; exercise authority/user resolution on rerun.
+  - An open Spec clarification prevents all planning/model work; an open Spec or
+    Plan clarification prevents all task-generation/model work. Test policy-obligation
+    handoffs alongside open questions and reject attempts to relabel or drop those
+    questions. Closed file status without current validated resolution cannot pass.
+  - Both need producers prepare identifiable subjects, current evidence and exact user
+    decisions through §12.7. Identical review text for different S/P/T subjects must
+    not produce indistinguishable questions or shared answer authority. Preserve IDs,
+    controlled-region readback and closed/concurrently closed bytes; add no summary call.
 - **Logging:**
   - Normalize log-level case and `CRITICAL`/`WARN` aliases.
   - Use fixed `.log` feature event/prompt paths.

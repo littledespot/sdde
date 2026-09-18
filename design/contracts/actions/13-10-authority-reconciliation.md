@@ -98,6 +98,10 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Responsibility:** Build the bounded question/why/answer schema, subject descriptor, and
   exact requirement/evidence origin from registered fields and current evidence; accept no
   model/caller wording, owner, ID, path, resolution, or fallback.
+- Apply [shared clarification preparation](../12-model-boundary.md#127-workflow-defined-model-operations)
+  through existing question/reason fields: identify the requirement, relevant facts/evidence
+  and exact permitted decision. Model review detail remains evidence, not an automatic
+  question. Reuse registered descriptions; add no summary call or answer-grouping authority.
 
 
 These actions own the shared contract. Domain actions only produce registered requirements, candidates, and evidence. They may not create a parallel reconciliation outcome, clarification shortcut, or stage-specific success rule.

@@ -287,6 +287,10 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Output:** open clarification record
 - **Responsibility:** Preserve the canonical question, canonically deduplicate/append its origin
   list, or construct one new record; never resolve it or duplicate the subject.
+- Both generation and authority-gap needs use the actionable presentation in
+  [§12.7](../12-model-boundary.md#127-workflow-defined-model-operations). Prepare existing
+  question/reason fields before record construction; record building adds no semantic
+  interpretation, multi-subject grouping or summary-model invocation.
 
 ## `AssignClarificationStateIdAction`
 

@@ -12,6 +12,11 @@ counts directories, derives a name, registers ownership or auto-selects a featur
 
 The stage gate:
 
+**Hard prerequisite:** if any Spec clarification remains open/unresolved, stop at
+the entry gate before planning work or model calls. Validate the canonical registry
+and current answer authority; changing a form's requested status alone does not
+satisfy this gate. Early policy obligations never bypass an open `SNN`.
+
 1. requires current validated specification authority; each Plan invocation starts from its graph start and revalidates every input, without restoring an execution;
 2. requires and parses `spec.md`;
 3. requires `reference-context.md` and its canonical snapshot/view binding for every feature;
@@ -24,6 +29,13 @@ The stage gate:
 
 - The pre-generation boundary also rebuilds the shared authority-requirement projection for all
   planning-owned decision slots.
+- Consume every early Spec policy obligation from canonical evidence (§17.3.1),
+  recapture/select current principles and reassess stale findings through the shared
+  assessment contract. No earlier no-conflict result proves current compliance.
+  Assess the complete current business scope, including authenticated specification
+  edits and validated clarification-derived requirements, not only previously flagged units.
+  Unresolved policy decisions use the existing `PNN` path after Plan input authority
+  exists; no applicable obligation may disappear from Plan's ledger or publication gate.
 - A successful specification or preserved upstream obligation is not itself proof that the
   project can implement it: every required design, architecture, policy, repository/capability,
   dependency, and verification-strategy resolution must have exactly one current supported
@@ -231,6 +243,8 @@ The LLM generates bounded plan units:
 
 ### 18.4 Plan clarification behavior
 
+- Questions use the [shared preparation contract](12-model-boundary.md#127-workflow-defined-model-operations);
+  detecting a policy conflict during Specify does not change its Plan owner or approve it.
 - A plan need is deduplicated through the shared registry and allocated `P01` through `P99` only
   when its subject key has never existed.
 - Its only path is `<paths.specs>/<featureId>/clarify/PNN.md`.

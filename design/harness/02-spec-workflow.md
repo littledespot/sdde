@@ -193,7 +193,8 @@ H-008 is required at applicable production authority gates.
 
 ## H-010 — Generate and validate specification content
 
-**Status:** Implemented; final offline verification is in the [history](implementation-verification-history.md#h-009h-010--offline-verification-2026-09-07).
+**Status:** Original content scope implemented; ADR 0015 principle assessment pending.
+Original offline verification is in the [history](implementation-verification-history.md#h-009h-010--offline-verification-2026-09-07).
 **Owner:** registered specification actions and typed IR.
 **Dependencies:** H-007–H-009.
 
@@ -255,6 +256,10 @@ H-008 is required at applicable production authority gates.
   requirements. The generation packet follows Specify's business boundary.
 - [x] Fake tests cover supported content, malformed output, semantic uncertainty,
   preservation and failed repair without fixture-specific success rules.
+- [ ] Implement and verify [Spec principle assessment](../contracts/17-specify.md#1731-requirementprinciple-consistency-review)
+  through canonical selection/shared review; persist exact evidence and mandatory
+  Plan obligations. Cover changed principles, unrelated cases and fresh readback.
+  Existing source-only generation safety remains required.
 
 Recorded command results: [H-009/H-010 verification](implementation-verification-history.md#h-009h-010--offline-verification-2026-09-07).
 
@@ -291,6 +296,9 @@ H-010 supplies unit needs. Coordinate output handling with H-012.
 
 - Build/reuse stable subject-keyed `SNN` needs and controlled forms under
   `<paths.specs>/<feature>/clarify/`; never insert questions into `spec.md`.
+- Prepare both generation and shared-authority questions through [§12.7](../contracts/12-model-boundary.md#127-workflow-defined-model-operations),
+  retaining exact subjects/evidence and the decision requested; this adds no summary
+  model call or authority to share answers across different subjects.
 - Completely overwrite unresolved forms from current validated state on every rerun at
   the same IDs/paths, including unsubmitted answer drafts.
 - Reuse the subject identity, not the old form bytes.
@@ -313,6 +321,9 @@ H-010 supplies unit needs. Coordinate output handling with H-012.
   the protected file or publish partial successful specification output.
 - [ ] The harness observes clarification separately from generation failure and
   never invents answers to obtain a scoreable specification.
+- [ ] Equal review wording across distinct S/P/T subjects produces useful questions
+  without merging authority. Open SNN prevents planning/model work; open SNN or PNN
+  prevents task-generation/model work, including with deferred policy obligations.
 - [ ] Unchanged prior `spec.md` after a blocked rerun is not labelled new output.
 
 ## H-012 — Render and publish the complete workflow output

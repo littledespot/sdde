@@ -405,6 +405,22 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   necessary, persists its form under `clarify/`, and enters the matching clarification-pending
   state.
 
+**Shared clarification preparation:** the existing need builders prepare a concise
+question and reason naming the affected structural requirement, established facts
+and current evidence, exact unresolved decision and permitted answer. Reuse the
+registered requirement descriptors and existing `question`/`why_required` fields.
+Admitted model explanations remain attributed evidence; diagnostic prose is not
+automatically a question. Both generation needs and authority-gap needs follow this
+contract. Preparation performs no semantic reassessment, model call, publication or
+state transition; rendering formats its result through the existing controlled form.
+
+Consolidate only the same engine-built subject under existing identity rules.
+Equal wording or shared citations across subjects do not establish equivalent
+decisions or let one answer resolve multiple requirements. A related-needs display
+is a projection only. Broader answer sharing requires an explicitly approved
+membership/applicability contract. Preserve current bindings, earliest ownership,
+authenticated answer acceptance and protected history (§23.2).
+
 - The workflow-declared clarification-resolution result schema may only select one existing open
   clarification and existing current-authority IDs.
 - It is used on a subsequent stage run when exact deterministic lookup cannot decide semantic
@@ -469,6 +485,14 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   evidence binding.
 - Unknown ownership blocks administratively rather than falling back to the stage that noticed
   it.
+
+- Detection time does not change resolution ownership. Spec's early principle
+  assessment (§17.3.1) must completely account for its assigned evidence and findings;
+  project-policy findings enter the existing mandatory Plan-obligation projection.
+  They are not inserted as policy-resolution requirements into the Spec ledger or
+  relabelled resolved. Plan's ledger consumes and resolves them under current authority.
+  Genuine business-intent gaps remain Spec-owned; missing/invalid assessment evidence
+  follows the ordinary rejection path and cannot be deferred as a policy obligation.
 
 - The ledger is a deterministic projection over current canonical authorities, not a competing
   persisted truth or fingerprint.

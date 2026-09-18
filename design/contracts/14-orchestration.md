@@ -171,6 +171,8 @@ In non-interactive use, approval must arrive through an explicit API/CLI approva
   uniqueness, allocates only when absent, and prepares the complete registry/forms through
   §23.2's persistence exception.
 - It never interprets a question, chooses an answer or edits a form.
+- Existing need-building bindings apply [§12.7's preparation contract](12-model-boundary.md#127-workflow-defined-model-operations);
+  the orchestrator does not summarize evidence or merge answer authority.
 
 - Reference refresh reconciles the complete previous/current conflict-subject sets in canonical
   key order.

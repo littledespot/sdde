@@ -109,7 +109,7 @@ invalidation obligation; the detecting component cannot choose a shallower owner
 | Reference or reference-ingestion/specification contract | Specify; reingest when the reference contract changed | Affected reference/request/provenance, Plan input, plan, tasks, runtime/evidence and approvals |
 | Authenticated editable specification | Retain the validated edit, then Plan | Plan input, plan, task definitions, views, runtime/evidence and approvals |
 | Toolchain, environment, path, parser, command, dependency or capability policy | Plan under the new validated mechanical authority | Plan/task definitions, views, runtime/evidence and approvals |
-| Semantic principles | Plan with complete current cited selections | Plan input and affected downstream authority; never invent specification requirements |
+| Semantic principles | Refresh dependent policy assessments at their consuming gate; Plan retains policy-resolution ownership | Dependent assessment evidence, Plan input and affected downstream authority; preserve unchanged source-derived business content |
 | Plan decision/review feedback | Plan, then renewed Plan and Tasks review | Current plan approval and affected tasks/runtime/evidence/approval |
 | Task-definition feedback or gap | Tasks, then renewed task review | Affected task definitions/runtime/evidence and task approval |
 | Compatible logging/model binding or unrelated workflow definition | Same semantic stage; validated runtime refresh | None when all feature-bound semantic authority remains equal |

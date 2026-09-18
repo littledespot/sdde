@@ -354,9 +354,9 @@ Resolution is explicit:
 3. decode bounded UTF-8 text and preserve exact source-byte and line spans; no front matter, heading, Markdown structure, template placeholder, or content schema is required;
 4. split large files into deterministic transport chunks. A file with no headings or paragraph structure is still valid and receives a whole-file or fixed-window chunk;
 5. select categories solely from the configured stage/environment/file-kind hint table and include every chunk from those files in stable source order; no model classifies, summarizes, ranks, or omits principle prose;
-6. include the exact selected raw spans in plan, task, implementation, repair, and semantic-review guidance without truncation or a local size-fit gate; provider size errors follow the workflow's explicit outcome transitions;
+6. include the exact selected raw spans in Specify's focused requirement–principle assessment (§17.3.1), and in plan, task, implementation, repair and semantic-review guidance without truncation or a local size-fit gate; provider size errors follow the workflow's explicit outcome transitions;
 7. validate only transport facts deterministically: configured root, containment, identity, filename-to-hint mapping, UTF-8, source-capture byte/count ceilings, stable spans, registry joins, and prompt-selection coverage;
-8. treat content compliance or conflict as semantic judgment backed by exact principle citations and the plan/tasks user-review gates. If material ambiguity remains, create or retain a plan/task clarification rather than silently choosing a plausible interpretation.
+8. treat content compliance or conflict as model-assisted judgment backed by exact principle citations and the owning-stage authority gates. Specify retains policy findings as mandatory Plan obligations under §17.3.1; the technical stage creates or retains its clarification when resolution remains ambiguous.
 
 - Semantic principle prose is never parsed or compiled into a deterministic validator, even when
   it resembles YAML, a table, a template, or a formal rule.
@@ -372,19 +372,24 @@ Resolution is explicit:
 
 - The filename is a guide used by the engine, not a claim that the contents obey a schema.
 - Category selection deliberately errs toward inclusion: `core` and `custom` are considered for
-  all technical stages, while other category hints are selected by explicit configuration.
+  Spec consistency assessment and all technical stages; other category hints use explicit
+  configuration. The Spec assessment has an explicit selection scope in that same table;
+  missing selection authority is not an empty selection or a fallback to every file.
 - The model never chooses which files to open and never sees an operational principle path—only
   registered IDs, category hints, raw bounded spans, and citations.
 
 - Principles are captured once per command-run bootstrap, bound into `BootstrapAuthorityState`,
-  and compared by direct typed metadata/raw-byte equality at every plan, tasks, implement and
-  fresh clarification-rerun gate.
-- They are not supplied to workflow operations that generate specification content because
-  `spec.md` is business intent and principles must not invent missing product requirements.
+  and compared by direct typed metadata/raw-byte equality at every consuming Spec assessment,
+  plan, tasks, implement and fresh clarification-rerun gate.
+- [ADR 0015](../decisions/0015-specification-principle-review.md) admits selected principles
+  to the focused [Spec assessment](17-specify.md#1731-requirementprinciple-consistency-review).
+  Extraction, source-preservation review and business-content generation retain their
+  reference/answer authority; principle prose cannot invent, erase or override business intent.
 - An updated principle can resolve `PNN` or `TNN` only through cited, current authority
-  resolution; it cannot resolve an `SNN`.
-- A changed registry invalidates the current plan and downstream task approvals, then requires
-  the normal ordered regeneration and review path.
+  resolution; it cannot supply a missing business answer or resolve an `SNN` by itself.
+- A changed registry invalidates dependent policy assessments and the current plan/downstream
+  task approvals through shared dependency invalidation. Reassess at the consuming gate;
+  do not rewrite or re-extract unchanged business sources solely to refresh policy evidence.
 - No content fingerprint is used.
 
 - Bootstrap authority is immutable and versioned.
@@ -405,7 +410,7 @@ contract > planning > runtime-only`.
 | Reference reader, decoder, source map, chunker, extraction/reconciliation contract or reference safety | Reingest references in Specify and invalidate affected descendants. |
 | Specification schema, business boundary, passive-literal scanner or renderer/parser | Regenerate and revalidate Specify. |
 | Toolchain, project mechanical layer, environment, portability, file-kind/path, parser, command, dependency, sandbox or capability policy | Return to Plan; reconcile previously published implementation when applicable under §24.5. |
-| Semantic principles | Rebuild Plan's complete cited principle selection and invalidate affected plan/task approvals; do not change business requirements. |
+| Semantic principles | Refresh dependent policy assessments at the consuming gate, rebuild Plan's complete cited selection and invalidate affected plan/task approvals; do not change business requirements. |
 | Compatible logging/model binding or unrelated workflow definition | Retain the semantic stage; apply the validated runtime change and any logging-transition obligation. Changes are compared by bound `WorkflowId`, not inventory position. |
 | Project/artifact root, bound workflow identity/graph, serializer or unsupported schema/renderer change | Block with `BOOTSTRAP_ADMINISTRATIVE_MIGRATION_REQUIRED`; no implicit conversion, pointer advance or hot swap. |
 

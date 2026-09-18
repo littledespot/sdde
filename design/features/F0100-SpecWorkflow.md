@@ -7,6 +7,10 @@ generation clarifications. Answer application, feature logging and remaining
 clarification routes are unfinished. Phase 3 repair is verified offline. See
 [implementation status](#implementation-status).
 
+[ADR 0015](../decisions/0015-specification-principle-review.md) adds principle
+consistency review and shared actionable-question preparation to this design.
+Those additions are **not implemented** by the supplied workflow.
+
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
 rule.
@@ -874,6 +878,17 @@ validators:
 - A clarification publication ending in `needs_user` still does not claim a completed
   Specify workflow.
 
+### 3.13 Early principle assessment and actionable questions
+
+[§17.3.1](../contracts/17-specify.md#1731-requirementprinciple-consistency-review)
+owns the early consistency assessment and mandatory Plan-obligation handoff.
+[§12.7](../contracts/12-model-boundary.md#127-workflow-defined-model-operations)
+owns shared question preparation. Reuse canonical principle selection, model/evidence
+contracts and existing clarification builders; no workflow-local loader or summary call.
+Principle capture/selection bindings and assessment integration remain implementation
+work. Clear business intent survives policy conflicts; unresolved SNN still blocks
+Plan and unresolved SNN/PNN still blocks Tasks. H-011 authentication remains separate.
+
 ## 4. Required logical coverage
 
 The compiled registered contracts collectively cover:
@@ -1297,8 +1312,10 @@ YAML definition.
 9. `needs_user`, `invalid`, `blocked`, `failed`, and `cancelled` cannot be
    relabelled as `ok`.
 10. Success requires a committed valid specification, complete reference
-   accounting, valid `reference-context.md`, no open `SNN`, and workflow state
-   `specified`.
+    accounting, valid `reference-context.md`, no open `SNN`, and workflow state
+    `specified`. ADR 0015 additionally requires complete current policy-assessment
+    evidence and the exact mandatory Plan-obligation handoff (§17.3.1); this does
+    not assert that policy decisions are already resolved.
 11. Adding any other correctly configured workflow YAML composed only from
     registered generic operations requires no workflow-name branch, hidden
     operation, or engine rebuild.
@@ -1404,6 +1421,11 @@ membership, are [implemented and verified offline](../../fixes/IMP_001.md#c1-and
 Shared retained-claim eligibility (C3) remains consolidated in the provenance owner.
 
 **Known implementation gaps**
+
+ADR 0015's canonical principle selection and Spec assessment, persisted downstream
+obligations and shared actionable-question preparation remain pending. Existing
+native gates/lifecycle do not establish those new acceptance criteria. See the
+[implementation plan](../../fixes/IMP_001.md#spec-principle-review--approved-design-implementation-pending).
 
 Authenticated answer acceptance and remaining publication/readback assurance remain
 open. The [rollout](../../fixes/IMP_001.md) owns their status; offline verification
