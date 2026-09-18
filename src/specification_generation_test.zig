@@ -1044,6 +1044,56 @@ fn collectSupport(allocator: std.mem.Allocator, inputs: @import("domain/required
     };
 }
 
+test "R31 structurally corrected reviews still require complete findings and entity claim evidence" {
+    const support = @import("domain/specification_support.zig").Source;
+    const json = @import("domain/model_candidate_json.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited);
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schema = try parser.compiler().compile(a, bytes);
+    const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 3 } };
+    for ([_][]const u8{ "Display `Hello, World!` and the current UTC date and time.", "Display `Loan renewed!` and label the deadline `Return by`." }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, null, null);
+        const packet = try support.packet(a, inputs, fixture.context);
+        defer @import("domain/model_input_packet.zig").release(packet);
+        const selected = schema.select(packet.resultDefinition().?).?;
+        const good = try reviewFor(a, inputs);
+        const ledger = try @import("domain/required_authority.zig").build(a, inputs);
+        const entity = for (ledger.requirements, 0..) |requirement, index| {
+            if (requirement.seed.id.kind == .entity_applicability) break index;
+        } else return error.MissingEntityRequirement;
+        for (0..3) |scenario| {
+            const findings = try a.dupe(support.Finding, if (scenario == 1) good.entries[0..1] else good.entries);
+            if (scenario == 2) {
+                findings[entity].value.decision = .not_applicable;
+                findings[entity].value.detail = "No business data entity is needed.";
+                findings[entity].value.provenance.claim_ids = &.{};
+            }
+            const corrected = try json.encode(support.Review, a, .{ .entries = findings });
+            try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = corrected });
+            const result = try support.collect(a, inputs, fixture.context, corrected, origin);
+            if (scenario == 0) {
+                try std.testing.expectEqualDeep(good.entries, result.accepted.candidate.review.entries);
+                for (result.accepted.candidate.origins) |retained| try std.testing.expectEqualDeep(origin, retained.?);
+                try support.validateStored(a, result.accepted.inputs, fixture.context.inputs);
+            } else if (scenario == 1) {
+                try std.testing.expectEqual(good.entries.len - 1, result.rejected.rejection.diagnostics.len);
+                for (result.rejected.rejection.diagnostics) |issue| try std.testing.expectEqual(.missing_requirement, issue.issue);
+                try std.testing.expectEqualDeep(good.entries[0..1], result.rejected.candidate.?.review.entries);
+            } else {
+                try std.testing.expectEqual(@as(usize, 1), result.rejected.rejection.diagnostics.len);
+                try std.testing.expectEqual(.missing_claims, result.rejected.rejection.selected().?.evidence.?.issue);
+                try std.testing.expectEqualDeep(good.entries[0..entity], result.rejected.candidate.?.review.entries[0..entity]);
+                try std.testing.expectEqualDeep(good.entries[entity + 1 ..], result.rejected.candidate.?.review.entries[entity + 1 ..]);
+            }
+        }
+    }
+}
+
 test "review decisions preserve seven source gaps and reject forbidden applicability across requirement kinds" {
     const support = @import("domain/specification_support.zig").Source;
     const repair = @import("domain/specification_support_repair.zig").Source;

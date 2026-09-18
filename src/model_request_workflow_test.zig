@@ -3641,6 +3641,105 @@ test "protocol retries retain only latest repeated or alternating decoder reject
     }
 }
 
+test "R31 syntax nesting and sibling loss retain correction scope through recovery or exhaustion" {
+    for ([_]bool{ false, true }) |consolidated| {
+        for ([_]bool{ false, true }) |recover| {
+            var fixture: Fixture = undefined;
+            try fixture.init(std.testing.allocator);
+            defer fixture.deinit();
+            const a = fixture.arena.allocator();
+            const support_schema = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited);
+            const misplaced = try protocolReview(a, 11, true);
+            const cases = [_]struct { schema: []const u8, invalid: []const u8, dropped: []const u8, corrected: []const u8, path: []const u8, reason: payload_validation.Rejection }{
+                .{ .schema = support_schema, .invalid = misplaced, .dropped = try protocolReview(a, 1, true), .corrected = try protocolReview(a, 11, false), .path = "/entries/0/source_ids", .reason = .unknown_property },
+                .{
+                    .schema = "{\"type\":\"object\",\"properties\":{\"groups\":{\"type\":\"array\",\"maxItems\":3,\"items\":{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"maxItems\":3,\"items\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"text\"},\"value\":{\"type\":\"string\",\"maxLength\":40}},\"required\":[\"kind\",\"value\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"flag\"},\"value\":{\"type\":\"boolean\"}},\"required\":[\"kind\",\"value\"],\"additionalProperties\":false}]}}},\"required\":[\"items\"],\"additionalProperties\":false}}},\"required\":[\"groups\"],\"additionalProperties\":false}",
+                    .invalid = "{\"groups\":[{\"items\":[{\"value\":\"Keep this text.\"},{\"kind\":\"flag\",\"value\":true}]}]}",
+                    .dropped = "{\"groups\":[{\"items\":[{\"value\":\"Keep this text.\"}]}]}",
+                    .corrected = "{\"groups\":[{\"items\":[{\"kind\":\"text\",\"value\":\"Keep this text.\"},{\"kind\":\"flag\",\"value\":true}]}]}",
+                    .path = "/groups/0/items/0/kind",
+                    .reason = .missing_required_property,
+                },
+            };
+            for (cases) |case| {
+                const graph = try fixture.compileWithSchema(try responseAdmissionYaml(&fixture, try protocolRetryYaml(&fixture), consolidated), case.schema);
+                var runner = fixture.runner(graph, std.testing.allocator);
+                defer runner.deinit();
+                var fake = invocationProvider(&runner, std.testing.allocator);
+                fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+                const responses = [_][]const u8{ try std.mem.concat(a, u8, &.{ case.invalid, "}" }), case.invalid, if (recover) case.corrected else case.dropped };
+                var original: ?*const identity.ModelRequestId = null;
+                for (responses, 0..) |body, index| {
+                    fake.invocation_plan.complete.content = body;
+                    try prepareProtocolAttempt(&runner, index != 0);
+                    const request = try currentRequest(&runner);
+                    if (index == 0) original = request.id();
+                    try std.testing.expect(request.id() == original.?);
+                    try std.testing.expectEqualStrings(case.schema, request.prepared().?.response_schema.bytes());
+                    try std.testing.expectEqual(@as(u32, @intCast(index + 1)), (try invokedOperation(&runner)).operation().id.model_attempt_ordinal.value);
+                    for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step|
+                        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+                    if (!consolidated) try std.testing.expectEqual(@as(workflow.OutcomeTag, if (index == 0) .invalid else .ok), runner.bindings().invokeStep(.{ .bytes = "decode" }).outcome);
+                    const accepted = recover and index == 2;
+                    try std.testing.expectEqual(@as(workflow.OutcomeTag, if (accepted) .ok else .invalid), runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
+                    if (accepted) {
+                        const candidate = (try payloadResult(&runner)).outcome().valid.candidate();
+                        try std.testing.expectEqualStrings(case.corrected, candidate.association().result().complete.content());
+                        try std.testing.expect(candidate.association().request() == request.prepared().?);
+                        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "close-request" }).outcome);
+                        try std.testing.expectEqual(.accepted, (try requestLedger(&runner)).record(original.?).?.terminal_reason.?);
+                    } else {
+                        if (index > 0) {
+                            const reason = (try payloadResult(&runner)).outcome().schema_rejected;
+                            try std.testing.expectEqual(case.reason, reason.reason);
+                            try std.testing.expectEqualStrings(case.path, (try reason.describe(a)).path);
+                        } else try std.testing.expect((try envelopeResult(&runner)).outcome() == .protocol_rejected);
+                        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+                        const correction = (try currentRequest(&runner)).prepared().?;
+                        try std.testing.expect(correction.model_request_id == original.?);
+                        try std.testing.expect(correction.response_schema == request.prepared().?.response_schema);
+                        try std.testing.expectEqual(@as(usize, 5), correction.content.len);
+                        try std.testing.expectEqualStrings(prompt_bytes, correction.content[0].guidance);
+                        try std.testing.expectEqualStrings(input_bytes, correction.content[1].user);
+                        const latest = try std.json.parseFromSlice(std.json.Value, a, correction.content[4].evidence, .{});
+                        try std.testing.expectEqualStrings(body, latest.value.object.get("rejected_response").?.string);
+                    }
+                    try std.testing.expectEqual(@as(u128, (index + 1) * 7), runner.tokenLedger().committed());
+                    try std.testing.expectEqual(@as(u64, @intCast(index + 1)), runner.tokenLedger().revision().value);
+                }
+                if (!recover) {
+                    const exhausted = runner.bindings().invokeStep(.{ .bytes = "account" }).rejected.retry_limit;
+                    try std.testing.expectEqualStrings("account", exhausted.operation().bytes);
+                    try std.testing.expectEqual(@as(u32, 2), exhausted.limit.value);
+                    try std.testing.expectEqual(@as(u64, 3), exhausted.completed_executions);
+                    try std.testing.expectEqual(.invoked, (try requestLedger(&runner)).record(original.?).?.status);
+                }
+                try std.testing.expectEqual(@as(usize, 3), fake.effect_count);
+                try std.testing.expectEqual(@as(usize, 3), runner.tokenLedger().accounted_operations.items.len);
+                try std.testing.expectEqual(@as(u32, 3), attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved(original.?));
+                try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+            }
+        }
+    }
+}
+
+// Independently authored wire data: preserve all eleven distinct findings while
+// moving only the fields that R31 incorrectly placed beside `value`.
+fn protocolReview(a: std.mem.Allocator, count: usize, misplaced: bool) ![]const u8 {
+    const rows = try a.alloc([]const u8, count);
+    for (rows, 1..) |*row, ordinal| {
+        const provenance = .{ .claim_ids = .{.{ .ordinal = @as(u32, 1) }}, .clarification_response_ids = [0]u32{} };
+        const sources = .{.{ .ordinal = @as(u32, 1) }};
+        const detail = try std.fmt.allocPrint(a, "Evidence for requirement {d}.", .{ordinal});
+        const loss = .{ .kind = "unlocalized" };
+        row.* = if (misplaced)
+            try std.json.Stringify.valueAlloc(a, .{ .requirement_ordinal = ordinal, .value = .{ .decision = "supported", .provenance = provenance }, .source_ids = sources, .detail = detail, .loss = loss }, .{})
+        else
+            try std.json.Stringify.valueAlloc(a, .{ .requirement_ordinal = ordinal, .value = .{ .decision = "supported", .provenance = provenance, .source_ids = sources, .detail = detail, .loss = loss } }, .{});
+    }
+    return std.mem.concat(a, u8, &.{ "{\"entries\":[", try std.mem.join(a, ",", rows), "]}" });
+}
+
 test "metadata and diagnostic echoes exhaust protocol retries without acceptance or extra accounting" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);

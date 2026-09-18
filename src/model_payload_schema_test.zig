@@ -32,7 +32,7 @@ test "reconciliation repair definitions admit only the natively selected payload
             "{\"kind\":\"preserved_token\",\"token_id\":{\"ordinal\":1}}",
             "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[]}}",
             "{\"current_value\":{}}",
-        }) |invalid| try checkDocument(selected.modelBytes(), .{ .bytes = invalid, .rejection = .unknown_property });
+        }) |invalid| try checkDocument(selected.modelBytes(), .{ .bytes = invalid, .rejection = .unknown_property, .path = if (std.mem.startsWith(u8, invalid, "{\"kind\"")) "/kind" else "/current_value" });
     }
 }
 
@@ -138,6 +138,8 @@ test "selected protocol guidance explains duplicate property names and preserves
     const strict = @import("domain/strict_json.zig");
     const prompt = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/protocol.prompt.md", std.testing.allocator, .unlimited);
     defer std.testing.allocator.free(prompt);
+    for ([_][]const u8{ "complete corrected response", "original schema", "unaffected entries", "business meaning" }) |instruction|
+        try std.testing.expect(std.mem.indexOf(u8, prompt, instruction) != null);
     try std.testing.expect(std.mem.indexOf(u8, prompt, "examples") == null);
     try std.testing.expect(std.mem.indexOf(u8, prompt, "placeholder") == null);
     for ([_][]const u8{

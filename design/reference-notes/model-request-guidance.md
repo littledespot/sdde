@@ -42,9 +42,12 @@ for every workflow and both response modes:
 - For schema rejection: the exact expected schema node, its JSON Pointer and
   parent/value scope, preserving alternatives and bounds.
 
-The protocol prompt prohibits reconsidering business meaning. No candidate
-examples are generated. Retained retry content accumulates no framing copies;
-serialization emits the shared instruction once per call.
+The protocol prompt requires the complete corrected response, preserving unaffected
+entries and business meaning. The diagnostic locates the defect; it does not narrow
+the response schema. For an atomic repair, that schema is already the selected
+replacement, not the whole candidate. Schema and domain validation still apply;
+syntax correction cannot recover omitted requirements. No candidate examples or
+accumulated correction prompts are added.
 
 **Atomic repair** receives:
 

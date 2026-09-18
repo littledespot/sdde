@@ -121,6 +121,23 @@ test "shipped workflow conforms to native registrations and rejects contract dri
             // Exercise the existing registry's cross-owner checks, with no model
             // provider or workflow invocation. No parallel contract is constructed.
             try std.testing.expect(runtime.native.registry.validate());
+            const graph = runtime.boot.ready.workflows.registry().resolve(.{ .bytes = choice.workflow_id }).?;
+            const protocol = for (captured.files) |file| {
+                if (std.mem.eql(u8, file.mapping.source, "design/workflows/spec/protocol.prompt.md")) break file.bytes;
+            } else return error.MissingProtocolPrompt;
+            var model_requests: usize = 0;
+            for (graph.authority.steps) |step| {
+                if (step.model == null) continue;
+                model_requests += 1;
+                const prompt_id = for (step.parameters) |parameter| {
+                    if (std.mem.eql(u8, parameter.id.bytes, "protocol-prompt")) break parameter.value.resource;
+                } else return error.MissingProtocolPrompt;
+                const resource = for (graph.authority.resources) |resource| {
+                    if (std.mem.eql(u8, resource.id.bytes, prompt_id.bytes)) break resource;
+                } else return error.MissingProtocolPrompt;
+                try std.testing.expectEqualStrings(protocol, resource.content.prompt);
+            }
+            try std.testing.expect(model_requests > 0);
             var missing_schema = runtime.native.registry;
             missing_schema.data_schemas = &.{};
             try std.testing.expect(!missing_schema.validate());

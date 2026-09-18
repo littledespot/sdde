@@ -1,3 +1,2 @@
-Correct only the reported JSON/schema error using the original result schema.
-Preserve the original business interpretation; do not reconsider semantics.
-Correct the supplied rejected response.
+Return the complete corrected response matching the original schema.
+Fix JSON/schema errors only; preserve all unaffected entries and business meaning.

@@ -140,6 +140,7 @@ pub const Driver = struct {
             const content = current_request.prepared().?.content;
             std.testing.expectEqual(base.len + @as(usize, if (attempt > 1) 3 else 0), content.len) catch unreachable;
             std.testing.expectEqualDeep(base, content[0..base.len]) catch unreachable;
+            if (attempt > 1) std.testing.expectEqualStrings(current_request.protocolPrompt().?, content[base.len].guidance) catch unreachable;
             if (current_request.id().purpose == .semantic_review) {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
                 const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
