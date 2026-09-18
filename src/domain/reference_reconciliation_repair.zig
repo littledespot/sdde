@@ -5,6 +5,7 @@ const r = @import("reference_reconciliation.zig");
 const d = r.diagnostic;
 const v = @import("reference_reconciliation_validation.zig");
 const context = @import("reference_reconciliation_context.zig");
+const dispositions = @import("reference_disposition_validation.zig");
 const packets = @import("model_input_packet.zig");
 pub const Target = union(enum) {
     statement_key: usize,
@@ -50,6 +51,7 @@ pub const Replacement = union(enum) {
 pub const Rule = struct {
     rejection: d.Rejection,
     requirement: []const u8,
+    disposition_choices: ?dispositions.RepairChoices = null,
     const Guidance = struct {
         rule: d.Rule,
         requirement: ?[]const u8,
@@ -57,17 +59,19 @@ pub const Rule = struct {
         content: ?d.ContentKind,
         selection: ?[]const r.ClaimId,
         conflicting_pairs: ?@FieldType(d.Relations, "conflicting_pairs"),
+        disposition_choices: ?dispositions.RepairChoices,
     };
     pub fn guidance(self: Rule) Guidance {
         const expected = self.rejection.issue.expected;
         const relations = self.rejection.relations;
         return .{
             .rule = self.rejection.issue.rule,
-            .requirement = if (expected == .constraint or expected == .text_issue) self.requirement else null,
+            .requirement = if (self.disposition_choices == null and (expected == .constraint or expected == .text_issue)) self.requirement else null,
             .expected = if (expected == .count or expected == .constraint) null else expected,
             .content = relations.content,
             .selection = if (relations.selection.len == 0) null else relations.selection,
             .conflicting_pairs = if (relations.conflicting_pairs.len == 0) null else relations.conflicting_pairs,
+            .disposition_choices = self.disposition_choices,
         };
     }
 };
@@ -206,11 +210,14 @@ fn projectionTarget(kind: enum { statement, signal }, index: usize, rejection: d
 }
 
 fn replace(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target: Target, rule: Rule) Error!Decision {
-    return .{ .model = try atomic.authorize(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)) orelse return error.InvalidAtomicRepair, facts, rule) };
+    var bound_rule = rule;
+    bound_rule.disposition_choices = try dispositionChoices(a, parsed, target);
+    return .{ .model = try atomic.authorize(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)) orelse return error.InvalidAtomicRepair, facts, bound_rule) };
 }
 fn insertion(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target: Target, kind: std.meta.Tag(Replacement), rule: Rule) Error!Decision {
     if (try select(parsed, target) != null) return error.InvalidAtomicRepair;
     var bound_rule = rule;
+    bound_rule.disposition_choices = try dispositionChoices(a, parsed, target);
     if (kind == .content) {
         const claim = switch (target) {
             inline .insert_statement, .insert_signal => |value| value.claim,
@@ -237,7 +244,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .key => .key,
         .selection => .selection,
         .content => .{ .content = authorization.rule.rejection.relations.content orelse return error.InvalidAtomicRepair },
-        .disposition => .disposition,
+        .disposition => .{ .disposition = if (authorization.rule.disposition_choices == null) .rules else .choices },
         .summary => .summary,
         .conflict_detail => .conflict_detail,
         .statement, .disposition_record, .signal, .conflict => return error.InvalidAtomicRepair,
@@ -265,6 +272,13 @@ pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const p
     }
     return atomic.parse(a, authorization, input, bytes);
 }
+
+fn dispositionChoices(a: std.mem.Allocator, parsed: r.Parsed, target: Target) Error!?dispositions.RepairChoices {
+    return switch (target) {
+        inline .disposition, .insert_disposition => |value| dispositions.repairChoices(a, parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions, value.index, value.claim),
+        else => null,
+    };
+}
 pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!r.Parsed {
     const replacement = if (proposed_replacement) |value| try atomic.copyReplacement(a, value) else null;
     try v.input(a, parsed.input);
@@ -272,6 +286,9 @@ pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authori
     defer a.free(facts.lineage.history);
     const target = authorization.target;
     const merged = try atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try select(parsed, target), facts, authorization, replacement, origin);
+    return apply(a, parsed, target, replacement, merged, origin);
+}
+fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?Replacement, merged: shared.Merge, origin: ?@import("model_candidate_origin.zig").Origin) Error!r.Parsed {
     var result = parsed;
     if (parsed.proposal == .summary) {
         var statements: std.ArrayList(r.StatementProposal) = .empty;
@@ -335,7 +352,7 @@ pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authori
         }
         result.proposal = .{ .global = global };
     }
-    result.source = try origins(a, parsed.source, target, authorization.operation == .delete, origin);
+    result.source = try origins(a, parsed.source, target, merged.operation == .delete, origin);
     result.source.revision = merged.revision_after;
     result.source.last_repair = merged;
     return result;
@@ -419,3 +436,70 @@ fn origins(a: std.mem.Allocator, source: d.Source, target: Target, deleted: bool
     if (!deleted) try fields.append(a, .{ .unit = changed.unit, .field = changed.field, .origin = origin });
     return .{ .revision = source.revision, .origin = source.origin, .fields = try fields.toOwnedSlice(a) };
 }
+
+pub const Omission = struct {
+    const loss = @import("source_omission.zig");
+    pub const Facts = struct { reconciliation: context.Facts, support: loss.Support };
+    const OmissionRule = struct { finding: @import("required_authority.zig").ReviewEvidence, disposition_choices: ?dispositions.RepairChoices };
+    const Atomic = shared.Contract(Target, Replacement, Facts, OmissionRule);
+    pub const OmissionAuthorization = Atomic.Authorization;
+    pub const OmissionError = Atomic.Error || loss.Error;
+    pub fn facts(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support) OmissionError!Facts {
+        return .{ .reconciliation = try context.capture(a, parsed, ctx), .support = support };
+    }
+    pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support) OmissionError!OmissionAuthorization {
+        if (parsed.proposal != .global) return error.InvalidAtomicRepair;
+        try v.input(a, parsed.input);
+        const selected = try loss.select(a, ctx.inputs, support);
+        const finding = selected.finding.review.?;
+        const target: Target = switch (selected.location) {
+            .reconciliation_signal => |id| blk: {
+                if (id.ordinal == 0 or id.ordinal > parsed.proposal.global.signals.len) return error.InvalidAtomicRepair;
+                const index = id.ordinal - 1;
+                try r.sameSet(r.ClaimId, parsed.proposal.global.signals[index].claim_ids, finding.provenance.claim_ids);
+                break :blk .{ .signal_content = index };
+            },
+            .reconciliation_disposition => |id| blk: {
+                for (parsed.proposal.global.claim_dispositions, 0..) |value, index| if (std.meta.eql(value.claim_id, id)) break :blk .{ .disposition = .{ .index = index, .claim = id } };
+                return error.InvalidAtomicRepair;
+            },
+            else => return error.InvalidAtomicRepair,
+        };
+        const current = try facts(a, parsed, ctx, support);
+        defer a.free(current.reconciliation.lineage.history);
+        return Atomic.authorize(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)).?, current, .{ .finding = finding, .disposition_choices = try dispositionChoices(a, parsed, target) });
+    }
+    pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization) OmissionError!*packets.Packet {
+        const current = try facts(a, parsed, ctx, support);
+        defer a.free(current.reconciliation.lineage.history);
+        try Atomic.checkDependencies(a, auth, current);
+        const kind = if (auth.target == .signal_content) (try v.selectedKind(parsed.input.progress.plan.layout.items, parsed.proposal.global.signals[auth.target.signal_content].claim_ids)) orelse return error.InvalidAtomicRepair else null;
+        const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, if (kind) |value| .{ .content = value } else .{ .disposition = if (auth.rule.disposition_choices == null) .rules else .choices });
+        defer packets.release(base);
+        return Atomic.packet(a, auth, base, .{ .bytes = if (kind) |value| switch (value) {
+            .preserved_token => "token_reference",
+            .model => |model| switch (model) {
+                .business, .scope_guard => "business_text",
+                else => "reference_text",
+            },
+        } else "repair_disposition" });
+    }
+    pub fn parse(a: std.mem.Allocator, auth: OmissionAuthorization, input: *const packets.Packet, bytes: []const u8) OmissionError!Replacement {
+        const json = @import("model_candidate_json.zig");
+        if (try Atomic.checkRequest(auth, input) != .content) return Atomic.parse(a, auth, input, bytes);
+        const selected = auth.operation.replace.content;
+        return .{ .content = switch (selected) {
+            .model => |value| .{ .model = try json.decodeSelected(@FieldType(r.ContentProposal, "model"), a, std.meta.activeTag(value), bytes) },
+            .preserved_token => .{ .preserved_token = try json.decode(r.TokenReference, a, bytes) },
+        } };
+    }
+    pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!r.Parsed {
+        const replacement = try Atomic.copyReplacement(a, proposed);
+        const current = try facts(a, parsed, ctx, support);
+        defer a.free(current.reconciliation.lineage.history);
+        const merged = try Atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try select(parsed, auth.target), current, auth, replacement, origin);
+        return apply(a, parsed, auth.target, replacement, merged, origin);
+    }
+    pub const Authorization = OmissionAuthorization;
+    pub const Error = OmissionError;
+};

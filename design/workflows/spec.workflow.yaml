@@ -36,19 +36,21 @@ steps:
   extract:
     call: extract-references
     on:
-      ok: reconcile
+      ok: rebuild-extraction
       invalid: end.invalid
-      blocked: end.blocked
       failed: end.failed
       cancelled: end.cancelled
   reconcile:
     call: reconcile-references
     on:
-      ok: check-references
+      ok: validate
       invalid: end.invalid
       blocked: end.blocked
       failed: end.failed
       cancelled: end.cancelled
+  validate:
+    call: validate-reconciliation
+    on: {ok: check-references, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
   check-references:
     use: validate-reference-reconciliation-completeness
     on:
@@ -57,6 +59,7 @@ steps:
       failed: end.failed
   review-source:
     call: review-support
+    with: {retry-limit: 2}
     on:
       ok: source-authority
       invalid: end.invalid
@@ -67,10 +70,35 @@ steps:
     call: authority-gate
     on:
       ok: generate
-      invalid: end.invalid
+      invalid: repair-source
       needs-user: source-gaps
       blocked: end.blocked
       failed: end.failed
+  repair-upstream:
+    call: repair-upstream
+    on: {ok: rebuild-extraction, more: validate, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+  repair-source:
+    use: authorize-source-omission-repair
+    on: {ok: repair-extraction, more: repair-reconciliation, invalid: end.invalid, failed: end.failed}
+  repair-extraction:
+    call: repair-source-candidate
+    with: {schema: extraction-schema}
+    on: {ok: merge-source-extraction, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+  merge-source-extraction:
+    use: merge-source-extraction-repair
+    with: {retry-limit: 1}
+    on: {ok: rebuild-extraction, failed: end.failed}
+  rebuild-extraction:
+    call: validate-extraction
+    on: {ok: reconcile, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+  repair-reconciliation:
+    call: repair-source-candidate
+    with: {schema: reconciliation-schema}
+    on: {ok: merge-source-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+  merge-source-reconciliation:
+    use: merge-source-reconciliation-repair
+    with: {retry-limit: 1}
+    on: {ok: validate, failed: end.failed}
   generate:
     call: generate-specification
     on:
@@ -84,6 +112,7 @@ steps:
     call: review-specification
     on:
       ok: publish
+      more: repair-upstream
       invalid: end.invalid
       needs-user: candidate-gaps
       blocked: end.blocked
@@ -275,7 +304,7 @@ subgraphs:
         on: {ok: validate-extraction-text, failed: end.failed}
       validate-extraction-text:
         use: validate-reference-extraction-text
-        on: {ok: validate-selections, invalid: authorize-text-repair, failed: end.failed}
+        on: {ok: end.ok, invalid: authorize-text-repair, failed: end.failed}
       authorize-text-repair:
         use: authorize-reference-text-repair
         on: {ok: text-repair-input, invalid: end.invalid, failed: end.failed}
@@ -299,32 +328,35 @@ subgraphs:
       text-repair-release:
         call: release-request
         on: {ok: validate-extraction-text, failed: end.failed}
-      validate-selections:
+  validate-extraction:
+    start: selections
+    steps:
+      selections:
         use: validate-reference-selections
         on: {ok: assign-tokens, invalid: authorize-extraction-repair, failed: end.failed}
       authorize-extraction-repair:
         use: authorize-reference-extraction-repair
-        on: {ok: extraction-repair-input, invalid: end.invalid, failed: end.failed}
-      extraction-repair-input:
+        on: {ok: repair-input, invalid: end.invalid, failed: end.failed}
+      repair-input:
         use: build-reference-extraction-repair-input
-        on: {ok: extraction-repair, failed: end.failed}
-      extraction-repair:
+        on: {ok: request, failed: end.failed}
+      request:
         call: model-request
         with:
           prompt: repair-prompt
           schema: extraction-schema
           selection: input
           retry-limit: 1
-        on: {ok: parse-extraction-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      parse-extraction-repair:
+        on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      parse-repair:
         use: parse-reference-extraction-repair
-        on: {ok: merge-extraction-repair, invalid: end.invalid, failed: end.failed}
-      merge-extraction-repair:
+        on: {ok: merge-repair, invalid: end.invalid, failed: end.failed}
+      merge-repair:
         use: merge-reference-extraction-repair
-        on: {ok: extraction-repair-release, invalid: end.invalid, failed: end.failed}
-      extraction-repair-release:
+        on: {ok: release, invalid: end.invalid, failed: end.failed}
+      release:
         call: release-request
-        on: {ok: validate-selections, failed: end.failed}
+        on: {ok: selections, failed: end.failed}
       assign-tokens:
         use: assign-preserved-token-identities
         on: {ok: build-token-claims, failed: end.failed}
@@ -388,7 +420,7 @@ subgraphs:
         on: {ok: check-reconciliation, failed: end.failed}
       check-reconciliation:
         use: check-reference-reconciliation-purpose
-        on: {ok: validate-dispositions, more: validate-summary, failed: end.failed}
+        on: {ok: end.ok, more: validate-summary, failed: end.failed}
       validate-summary:
         use: validate-reference-reconciliation-summary
         on: {ok: assign-summary, invalid: authorize-summary-repair, failed: end.failed}
@@ -398,6 +430,18 @@ subgraphs:
       build-summary:
         use: build-reference-reconciliation-summary
         on: {ok: reconciliation-input, failed: end.failed}
+      authorize-summary-repair:
+        use: authorize-reference-summary-repair
+        on: {ok: repair-input, more: merge, blocked: end.blocked, failed: end.failed}
+      repair-input:
+        call: repair-reconciliation-candidate
+        on: {ok: check-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      merge:
+        call: merge-reconciliation-candidate
+        on: {ok: check-reconciliation, failed: end.failed}
+  validate-reconciliation:
+    start: validate-dispositions
+    steps:
       validate-dispositions:
         use: validate-reference-claim-dispositions
         on: {ok: validate-signals, invalid: authorize-dispositions-repair, failed: end.failed}
@@ -407,45 +451,57 @@ subgraphs:
       validate-conflicts:
         use: validate-reference-conflict-proposals
         on: {ok: assign-records, invalid: authorize-conflicts-repair, failed: end.failed}
-      authorize-summary-repair:
-        use: authorize-reference-summary-repair
-        on: {ok: reconciliation-repair-input, more: merge-reconciliation-repair, blocked: end.blocked, failed: end.failed}
       authorize-dispositions-repair:
         use: authorize-reference-dispositions-repair
-        on: {ok: reconciliation-repair-input, more: merge-reconciliation-repair, blocked: end.blocked, failed: end.failed}
+        on: {ok: repair-input, more: merge, blocked: end.blocked, failed: end.failed}
       authorize-signals-repair:
         use: authorize-reference-signals-repair
-        on: {ok: reconciliation-repair-input, more: merge-reconciliation-repair, blocked: end.blocked, failed: end.failed}
+        on: {ok: repair-input, more: merge, blocked: end.blocked, failed: end.failed}
       authorize-conflicts-repair:
         use: authorize-reference-conflicts-repair
-        on: {ok: reconciliation-repair-input, more: merge-reconciliation-repair, blocked: end.blocked, failed: end.failed}
-      reconciliation-repair-input:
+        on: {ok: repair-input, more: merge, blocked: end.blocked, failed: end.failed}
+      assign-records:
+        use: assign-reference-reconciliation-identities
+        on: {ok: build-records, failed: end.failed}
+      build-records:
+        use: build-reference-reconciliation-records
+        on: {ok: end.ok, failed: end.failed}
+      repair-input:
+        call: repair-reconciliation-candidate
+        on: {ok: validate-dispositions, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      merge:
+        call: merge-reconciliation-candidate
+        on: {ok: validate-dispositions, failed: end.failed}
+  merge-reconciliation-candidate:
+    start: merge
+    steps:
+      merge:
+        use: merge-reference-reconciliation-repair
+        with:
+          retry-limit: 128
+        on: {ok: end.ok, failed: end.failed}
+  repair-reconciliation-candidate:
+    start: repair-input
+    steps:
+      repair-input:
         use: build-reference-reconciliation-repair-input
-        on: {ok: reconciliation-repair, failed: end.failed}
-      reconciliation-repair:
+        on: {ok: request, failed: end.failed}
+      request:
         call: model-request
         with:
           prompt: repair-prompt
           schema: reconciliation-schema
           selection: input
           retry-limit: 1
-        on: {ok: parse-reconciliation-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      parse-reconciliation-repair:
+        on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      parse:
         use: parse-reference-reconciliation-repair
-        on: {ok: reconciliation-repair-release, failed: end.failed}
-      merge-reconciliation-repair:
-        use: merge-reference-reconciliation-repair
-        with:
-          retry-limit: 128
-        on: {ok: check-reconciliation, failed: end.failed}
-      reconciliation-repair-release:
+        on: {ok: release, failed: end.failed}
+      release:
         call: release-request
-        on: {ok: merge-reconciliation-repair, failed: end.failed}
-      assign-records:
-        use: assign-reference-reconciliation-identities
-        on: {ok: build-records, failed: end.failed}
-      build-records:
-        use: build-reference-reconciliation-records
+        on: {ok: merge, failed: end.failed}
+      merge:
+        call: merge-reconciliation-candidate
         on: {ok: end.ok, failed: end.failed}
   review-support:
     start: project
@@ -462,7 +518,7 @@ subgraphs:
           prompt: support-prompt
           schema: support-schema
           selection: input
-          retry-limit: 1
+          retry-limit: {param: retry-limit}
         on: {ok: collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect:
         use: collect-specification-support
@@ -580,6 +636,7 @@ subgraphs:
         on: {ok: assemble-specification, failed: end.failed}
       post:
         call: review-support
+        with: {retry-limit: 1}
         on: {ok: gate, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
       omit:
         call: repair-omission
@@ -591,7 +648,10 @@ subgraphs:
           cancelled: end.cancelled
       gate:
         call: authority-gate
-        on: {ok: end.ok, invalid: omit, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed}
+        on: {ok: end.ok, invalid: locate-loss, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed}
+      locate-loss:
+        use: check-source-omission
+        on: {ok: omit, more: end.more, failed: end.failed}
   publish-specification:
     start: project-document
     steps:
@@ -634,6 +694,48 @@ subgraphs:
       publish-pending-clarifications:
         call: clarification-output
         on: {ok: end.ok, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed}
+  repair-upstream:
+    start: authorize
+    steps:
+      authorize:
+        use: authorize-source-omission-repair
+        on: {ok: ex, more: rc, invalid: end.invalid, failed: end.failed}
+      ex:
+        call: repair-source-candidate
+        with: {schema: extraction-schema}
+        on: {ok: merge-extraction, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      merge-extraction:
+        use: merge-upstream-extraction-repair
+        with: {retry-limit: 1}
+        on: {ok: end.ok, failed: end.failed}
+      rc:
+        call: repair-source-candidate
+        with: {schema: reconciliation-schema}
+        on: {ok: merge-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      merge-reconciliation:
+        use: merge-upstream-reconciliation-repair
+        with: {retry-limit: 1}
+        on: {more: end.more, failed: end.failed}
+  repair-source-candidate:
+    start: input
+    steps:
+      input:
+        use: build-source-omission-repair-input
+        on: {ok: request, failed: end.failed}
+      request:
+        call: model-request
+        with:
+          prompt: repair-prompt
+          schema: {param: schema}
+          selection: input
+          retry-limit: 1
+        on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      parse:
+        use: parse-source-omission-repair
+        on: {ok: release, failed: end.failed}
+      release:
+        call: release-request
+        on: {ok: end.ok, failed: end.failed}
   model-request:
     start: assign
     steps:
@@ -709,13 +811,10 @@ subgraphs:
         use: terminate-model-request
         on: {failed: end.failed, cancelled: end.cancelled}
   release-request:
-    start: input
+    start: retire
     steps:
-      input:
-        use: retire-model-input
-        on: {ok: request, failed: end.failed}
-      request:
-        use: retire-model-request
+      retire:
+        use: retire-model-transport
         on: {ok: end.ok, failed: end.failed}
   authority-gate:
     start: ledger

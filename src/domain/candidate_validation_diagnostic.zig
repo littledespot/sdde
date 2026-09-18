@@ -19,7 +19,7 @@ pub const Diagnostic = union(enum) {
             .source_selections => |value| value.origin,
             .coverage => |value| value.origin,
             .support_findings => |value| value.origin,
-            .support => |value| value.origin,
+            .support => |value| if (value.selected()) |selected| selected.origin else null,
             .specification => |value| value.origin,
         };
     }

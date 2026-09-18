@@ -101,6 +101,18 @@ test "native domain packets traverse generic fake provider execution without res
         var changed = view;
         changed.slots[@intFromEnum(requests.packet_schema.key)] = foreign_value;
         try std.testing.expectError(error.OperationExecutionFailed, candidate_handoff.read(&changed));
+        try std.testing.expectEqual(expected, runner.bindings().invokeStep(.{ .bytes = "close-request" }).outcome);
+        const transport = @import("domain/model_transport.zig");
+        const ledger = try requestLedger(&runner);
+        const current = try currentRequest(&runner);
+        const status: workflow.OutcomeTag = if (std.mem.eql(u8, body, "{}")) .invalid else .ok;
+        const combined = try (@import("actions/model/retire_model_transport.zig").Action{}).execute(ledger, current.id(), status);
+        const input_only = try transport.retire(.input, ledger, current.id(), status);
+        const request_only = try transport.retire(.request, ledger, current.id(), status);
+        try std.testing.expectEqualDeep(input_only.data_invalidations.unionWith(request_only.data_invalidations), combined.data_invalidations);
+        const accounting = runner.tokenLedger().committed();
+        for (transport.keys(.request_and_input)) |key| try std.testing.expect(combined.data_invalidations.contains(key));
+        try std.testing.expectEqual(accounting, runner.tokenLedger().committed());
     }
 }
 
@@ -115,6 +127,7 @@ test "native YAML preparation retains one generic request across distinct steps"
     try std.testing.expectEqual(.ok, harness.run());
     try std.testing.expectEqual(@as(usize, 1), fixture.observer.calls);
     const retained = try currentRequest(&runner);
+    try std.testing.expectError(error.InvalidTransportRetirement, (@import("actions/model/retire_model_transport.zig").Action{}).execute(try requestLedger(&runner), retained.id(), .ok));
     const prepared = retained.prepared().?;
     try std.testing.expectEqual(.workflow_step, std.meta.activeTag(prepared.model_request_id.immutable_unit_owner_id));
     try std.testing.expectEqualStrings("origin", prepared.model_operation_id.workflow_step_id.bytes);

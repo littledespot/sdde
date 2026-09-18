@@ -19,6 +19,12 @@ An atomic repair changes the smallest independently valid IR unit associated wit
 
 Atomicity means unrelated valid units cannot change.
 
+The user-approved chunk 14 amendment (18 September 2026) permits execution-private
+repair of source-backed candidate omissions. The owning contract must establish a
+unique defective producer and its smallest safe target from captured source and
+review evidence. Source absence, ambiguous ownership and stale evidence do not
+authorize repair. A review verdict itself is never a repair target.
+
 - Reference extraction uses the shared replacement authorization for a chunk's coupled
   token-classification collection, one invalid source selection, or an empty claim-citation
   collection.
@@ -75,6 +81,9 @@ Configuration and environment errors never consume LLM repair attempts.
   exact policy revision.
 - `candidateRevision` is run-local compare-and-swap control for concurrent repair attempts; it
   is not persisted as an artifact-freshness fingerprint.
+- Omission authorization also binds the requirement, admitted review, producing
+  origin, original value or absence anchor, and complete dependency snapshot.
+  Reconciliation loss cannot authorize inserting an already extracted claim.
 
 The repair algebra is closed:
 
@@ -128,6 +137,13 @@ Valid response:
 8. If the unit passes, retain it and select the next diagnostic in stable order.
 9. When no local diagnostics remain, run the full candidate validation suite.
 10. Only a full pass can authorize rendering or commit.
+
+Upstream omission repair invalidates every dependent projection. Extraction changes
+rebuild canonical token, claim and citation identities across the corpus, then
+reconciliation, support review and downstream specification evidence. Preserve raw
+candidate siblings even when their derived identities change. Semantic regeneration
+uses explicit registered workflow steps and existing operation-local retry/token
+accounting; repair does not create a hidden execution path or saved continuation.
 
 The engine never trusts a model field such as `valid: true`.
 

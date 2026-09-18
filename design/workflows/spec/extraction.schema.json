@@ -131,76 +131,7 @@
     "token_classifications": {
       "type": "array",
       "items": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "const": "preserve"
-              },
-              "preserve": {
-                "type": "object",
-                "properties": {
-                  "token_candidate_id": {
-                    "$ref": "#/$defs/token_candidate_id"
-                  },
-                  "kind": {
-                    "enum": [
-                      "visual_color",
-                      "visual_spacing",
-                      "visual_dimension",
-                      "visual_typography",
-                      "visual_radius",
-                      "visual_shadow",
-                      "visual_motion",
-                      "business_exact_string",
-                      "numeric_constraint",
-                      "exact_identifier"
-                    ]
-                  }
-                },
-                "required": [
-                  "token_candidate_id",
-                  "kind"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "kind",
-              "preserve"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "const": "irrelevant"
-              },
-              "source_id": {
-                "$ref": "#/$defs/ordinal"
-              },
-              "extractor_id": {
-                "enum": [
-                  "markdown_inline_code_v1"
-                ]
-              },
-              "ordinal": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 4294967295
-              }
-            },
-            "required": [
-              "kind",
-              "source_id",
-              "extractor_id",
-              "ordinal"
-            ],
-            "additionalProperties": false
-          }
-        ]
+        "$ref": "#/$defs/classification"
       },
       "maxItems": 4294967295
     },
@@ -284,6 +215,235 @@
         "nodes"
       ],
       "additionalProperties": false
+    },
+    "claim": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "business"
+                },
+                "segments": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/business_segment"
+                  },
+                  "maxItems": 4294967295
+                }
+              },
+              "required": [
+                "kind",
+                "segments"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "design"
+                },
+                "nodes": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/reference_node"
+                  },
+                  "maxItems": 4294967295
+                }
+              },
+              "required": [
+                "kind",
+                "nodes"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "technical"
+                },
+                "nodes": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/reference_node"
+                  },
+                  "maxItems": 4294967295
+                }
+              },
+              "required": [
+                "kind",
+                "nodes"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "validation"
+                },
+                "nodes": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/reference_node"
+                  },
+                  "maxItems": 4294967295
+                }
+              },
+              "required": [
+                "kind",
+                "nodes"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "implementation_assumption"
+                },
+                "nodes": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/reference_node"
+                  },
+                  "maxItems": 4294967295
+                }
+              },
+              "required": [
+                "kind",
+                "nodes"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "open_question"
+                },
+                "nodes": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/reference_node"
+                  },
+                  "maxItems": 4294967295
+                }
+              },
+              "required": [
+                "kind",
+                "nodes"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "scope_guard"
+                },
+                "segments": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/business_segment"
+                  },
+                  "maxItems": 4294967295
+                }
+              },
+              "required": [
+                "kind",
+                "segments"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "citations": {
+          "$ref": "#/$defs/source_selections"
+        }
+      },
+      "required": [
+        "content",
+        "citations"
+      ],
+      "additionalProperties": false
+    },
+    "classification": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "preserve"
+            },
+            "preserve": {
+              "type": "object",
+              "properties": {
+                "token_candidate_id": {
+                  "$ref": "#/$defs/token_candidate_id"
+                },
+                "kind": {
+                  "enum": [
+                    "visual_color",
+                    "visual_spacing",
+                    "visual_dimension",
+                    "visual_typography",
+                    "visual_radius",
+                    "visual_shadow",
+                    "visual_motion",
+                    "business_exact_string",
+                    "numeric_constraint",
+                    "exact_identifier"
+                  ]
+                }
+              },
+              "required": [
+                "token_candidate_id",
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind",
+            "preserve"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "irrelevant"
+            },
+            "source_id": {
+              "$ref": "#/$defs/ordinal"
+            },
+            "extractor_id": {
+              "enum": [
+                "markdown_inline_code_v1"
+              ]
+            },
+            "ordinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            }
+          },
+          "required": [
+            "kind",
+            "source_id",
+            "extractor_id",
+            "ordinal"
+          ],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   "oneOf": [
@@ -296,161 +456,7 @@
         "claims": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "content": {
-                "oneOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "const": "business"
-                      },
-                      "segments": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/$defs/business_segment"
-                        },
-                        "maxItems": 4294967295
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "segments"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "const": "design"
-                      },
-                      "nodes": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/$defs/reference_node"
-                        },
-                        "maxItems": 4294967295
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "nodes"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "const": "technical"
-                      },
-                      "nodes": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/$defs/reference_node"
-                        },
-                        "maxItems": 4294967295
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "nodes"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "const": "validation"
-                      },
-                      "nodes": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/$defs/reference_node"
-                        },
-                        "maxItems": 4294967295
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "nodes"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "const": "implementation_assumption"
-                      },
-                      "nodes": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/$defs/reference_node"
-                        },
-                        "maxItems": 4294967295
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "nodes"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "const": "open_question"
-                      },
-                      "nodes": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/$defs/reference_node"
-                        },
-                        "maxItems": 4294967295
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "nodes"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "const": "scope_guard"
-                      },
-                      "segments": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/$defs/business_segment"
-                        },
-                        "maxItems": 4294967295
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "segments"
-                    ],
-                    "additionalProperties": false
-                  }
-                ]
-              },
-              "citations": {
-                "$ref": "#/$defs/source_selections"
-              }
-            },
-            "required": [
-              "content",
-              "citations"
-            ],
-            "additionalProperties": false
+            "$ref": "#/$defs/claim"
           },
           "maxItems": 4294967295
         },

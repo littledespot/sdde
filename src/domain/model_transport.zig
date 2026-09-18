@@ -1,6 +1,6 @@
 const pipeline = @import("pipeline.zig");
 
-pub const Retirement = enum { request, rejected_attempt, input };
+pub const Retirement = enum { request, rejected_attempt, input, request_and_input };
 pub const requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result };
 pub const attempt_keys = [_]pipeline.DataKey{
     .accounted_model_attempt,     .terminal_provider_operation,           .provider_authorization_result,
@@ -14,6 +14,7 @@ pub const request_keys = attempt_keys ++ [_]pipeline.DataKey{
 pub fn keys(comptime retirement: Retirement) []const pipeline.DataKey {
     return switch (retirement) {
         .request => &request_keys,
+        .request_and_input => &(request_keys ++ [_]pipeline.DataKey{.model_input_packet}),
         .rejected_attempt => &attempt_keys,
         .input => &.{.model_input_packet},
     };

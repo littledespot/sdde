@@ -86,6 +86,54 @@ fn preparedOutput(allocator: std.mem.Allocator, paths: artifacts.FeaturePaths) !
     };
 }
 
+test "shipped workflow conforms to native registrations and rejects contract drift before invocation" {
+    const Runtime = @import("../../../src/composition/root.zig").Runtime;
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+    const captured = try fixture.capture(io, a, .cwd(), choice);
+    const workflow_file = for (captured.files) |file| {
+        if (std.mem.eql(u8, file.mapping.source, "design/workflows/spec.workflow.yaml")) break file;
+    } else return error.MissingWorkflowFixture;
+    const mutations = [_][2][]const u8{
+        .{ "use: collect-specification-support", "use: unregistered-support-reader" },
+        .{ "use: collect-specification-support", "use: apply-specification-support" },
+        .{ "retry-limit: 1", "retry-limit: -1" },
+        .{ "selection: input", "selection: missing-definition" },
+    };
+    for (0..mutations.len + 1) |index| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try fixture.materialize(io, project.dir, captured);
+        if (index > 0) {
+            const change = mutations[index - 1];
+            const changed = try std.mem.replaceOwned(u8, a, workflow_file.bytes, change[0], change[1]);
+            try std.testing.expect(!std.mem.eql(u8, workflow_file.bytes, changed));
+            try project.dir.writeFile(io, .{ .sub_path = workflow_file.mapping.destination, .data = changed });
+        }
+        var runtime: Runtime = undefined;
+        runtime.init(io, std.testing.allocator, project.dir, .{});
+        defer runtime.deinit();
+        try std.testing.expectEqual(index == 0, runtime.boot == .ready);
+        if (index == 0) {
+            // Exercise the existing registry's cross-owner checks, with no model
+            // provider or workflow invocation. No parallel contract is constructed.
+            try std.testing.expect(runtime.native.registry.validate());
+            var missing_schema = runtime.native.registry;
+            missing_schema.data_schemas = &.{};
+            try std.testing.expect(!missing_schema.validate());
+            var duplicate = runtime.native.registry;
+            const entries = try a.alloc(@TypeOf(duplicate.operations[0]), duplicate.operations.len + 1);
+            @memcpy(entries[0..duplicate.operations.len], duplicate.operations);
+            entries[duplicate.operations.len] = duplicate.operations[0];
+            duplicate.operations = entries;
+            try std.testing.expect(!duplicate.validate());
+        }
+    }
+}
+
 test "shared production runtime preserves deferred environment capture and isolated snapshots" {
     const Runtime = @import("../../../src/composition/root.zig").Runtime;
     const key = @import("../../../src/adapters/provider/bedrock_api_key.zig");
@@ -717,7 +765,7 @@ test "step events keep the newer exchange usage separate from an older rejected 
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
 }
 
-test "reports preserve native extraction reconciliation and specification failures after source release" {
+test "reports preserve native extraction reconciliation specification and complete review failures after source release" {
     const reference_fixture = @import("../../../src/reference_reconciliation_test.zig");
     const references = @import("../../../src/test_fixtures/reference_reconciliation.zig");
     const Diagnostic = @import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic;
@@ -726,7 +774,7 @@ test "reports preserve native extraction reconciliation and specification failur
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var retained: [3]Diagnostic = undefined;
+    var retained: [4]Diagnostic = undefined;
     {
         var source: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer source.deinit();
@@ -741,6 +789,10 @@ test "reports preserve native extraction reconciliation and specification failur
         retained[0] = try (Diagnostic{ .reconciliation = rejected }).copy(a);
         const accounted = (try references.finish(scratch, global, proposal, input.context())).valid;
         const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = input.inputs, .references = accounted, .registry = input.context().registry, .current = input.context().current };
+        const review_inputs = try @import("../../../src/domain/specification_authority.zig").project(scratch, input.inputs.corpus.feature_id, accounted, null, null);
+        const missing = (try @import("../../../src/domain/specification_support.zig").collect(scratch, review_inputs, context, "{\"entries\":[]}", origin)).rejected;
+        try std.testing.expect(missing.rejection.diagnostics.len > 1);
+        retained[3] = try (Diagnostic{ .support = missing.rejection }).copy(a);
         var current = try @import("../../../src/domain/specification_session.zig").initialize(.{ .bytes = "chosen" }, context);
         current.completed = 1;
         const action = @import("../../../src/actions/specification/validate_specification_unit.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };

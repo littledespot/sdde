@@ -222,6 +222,14 @@ The linked diagram and this sequence are normative; an orchestrator must require
 
 `README.md` is flagged as an organizer for presentation, but its claims remain peer authoritative. A conflict with a sibling is treated like any other authoritative conflict.
 
+Source-preservation review may identify an established-source candidate omission.
+Under the user-approved chunk 14 amendment (18 September 2026), §22 permits repair
+only when captured evidence identifies a unique defective producer and minimal safe
+target. Repair extraction loss in extraction; repair reconciliation loss in
+reconciliation. Preserve unrelated raw units, rebuild all dependent identities and
+projections, and repeat full validation and support review. Unlocalized omissions
+remain candidate defects; genuinely missing source decisions remain clarifications.
+
 ### 16.5 Human correction without editing generated views
 
 `reference-context.md` remains read-only, but its semantic extraction is correctable. A user submits discriminated `ReferenceFeedback` through the API/CLI against the current `referenceStateId`; each intent admits exactly one compatible block, chunk, claim, or token target. `ValidateReferenceFeedbackTargetAction` proves the complete discriminated join before any change.

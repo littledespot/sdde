@@ -80,13 +80,13 @@ pub fn requirements(allocator: std.mem.Allocator, inputs: a.Inputs, id: a.Id) Er
         .supported_provenance = expectedProvenance(inputs, id),
     };
 }
-pub const Issue = enum { stale_authority, invalid_sources, ineligible_claim, invalid_selection, missing_claims, missing_evidence, wrong_claim_set, wrong_candidate_provenance };
+pub const Issue = enum { invalid_loss, stale_authority, invalid_sources, ineligible_claim, invalid_selection, missing_claims, missing_evidence, wrong_claim_set, wrong_candidate_provenance };
 pub const Rejection = struct { issue: Issue, rule: Rule };
 pub const Admission = union(enum) { accepted: a.ReviewEvidence, rejected: Rejection };
 
+/// Evidence checks are independent of detail/applicability checks in collection.
 pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, id: a.Id, finding: a.Finding, proposed: spec.Selection, source_ids: []const @import("reference_identity.zig").SourceId, detail: []const u8) Error!Admission {
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
-    if (!validDetail(finding, detail)) return error.InvalidRequiredAuthority;
     const required = try requirements(allocator, inputs, id);
     const rule = required.rule(finding);
     if (!records.items.state_id.eql(sources.corpus.state_id) or !a.contains(a.Authority, inputs.authorities, .{ .reference = records.items.state_id })) return reject(.stale_authority, rule);
@@ -128,6 +128,7 @@ pub fn validDetail(finding: a.Finding, detail: []const u8) bool {
 
 pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, evidence: a.Evidence) Error!void {
     const review = evidence.review orelse return error.InvalidRequiredAuthority;
+    if (!validDetail(evidence.finding, review.detail)) return error.InvalidRequiredAuthority;
     const result = try admit(allocator, inputs, sources, evidence.requirement, evidence.finding, .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, review.source_ids, review.detail);
     if (result != .accepted) return error.InvalidRequiredAuthority;
     try sameProvenance(result.accepted.provenance, review.provenance);

@@ -16,6 +16,64 @@ pub fn validate(allocator: std.mem.Allocator, parsed: r.Parsed) r.Error!d.Result
 
 pub const Result = union(enum) { valid: []const r.ClaimDisposition, invalid: d.RecordIssue };
 
+/// Mechanically valid edits with every other disposition held fixed. These
+/// choices say nothing about semantic support or signal/conflict coverage.
+pub const RepairChoices = struct {
+    retained: bool,
+    duplicate_targets: []const r.ClaimId,
+    superseded_targets: []const r.ClaimId,
+    conflicting_with_all: []const r.ClaimId,
+
+    pub fn retainedOnly(self: RepairChoices) bool {
+        return self.retained and self.duplicate_targets.len == 0 and self.superseded_targets.len == 0 and self.conflicting_with_all.len == 0;
+    }
+};
+
+/// Project the canonical checker, not a second relationship policy. A missing
+/// sibling or another defect can prevent any single edit from validating; in
+/// that case leave choices unresolved and retain ordinary bounded repair.
+pub fn repairChoices(a: std.mem.Allocator, items: r.Items, supplied: []const r.ClaimDispositionProposal, index: usize, claim: r.ClaimId) r.Error!?RepairChoices {
+    if (index > supplied.len) return error.InvalidReferenceReconciliation;
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    const values = try scratch.alloc(r.ClaimDisposition, supplied.len + @as(usize, if (index == supplied.len) 1 else 0));
+    for (supplied, 0..) |proposal, i| values[i] = try proposal.canonical(scratch);
+    const selected = &values[index];
+    selected.* = .{ .claim_id = claim, .disposition = .retained, .related_claim_ids = &.{} };
+    const retained = try permits(scratch, items, values);
+    var duplicates: std.ArrayList(r.ClaimId) = .empty;
+    var superseded: std.ArrayList(r.ClaimId) = .empty;
+    for (items.entries) |entry| {
+        selected.related_claim_ids = &.{entry.claim.id};
+        selected.disposition = .duplicate;
+        if (try permits(scratch, items, values)) try duplicates.append(scratch, entry.claim.id);
+        selected.disposition = .superseded;
+        if (try permits(scratch, items, values)) try superseded.append(scratch, entry.claim.id);
+    }
+    // Every unchanged peer pointing here must be reciprocated. Testing the
+    // complete set also handles conflicts with more than two participants.
+    var conflicts: std.ArrayList(r.ClaimId) = .empty;
+    for (values, 0..) |value, i| if (i != index and value.disposition == .conflicting and r.contains(r.ClaimId, value.related_claim_ids, claim)) {
+        try conflicts.append(scratch, value.claim_id);
+    };
+    selected.disposition = .conflicting;
+    selected.related_claim_ids = conflicts.items;
+    if (!try permits(scratch, items, values)) conflicts.clearRetainingCapacity();
+    if (!retained and duplicates.items.len == 0 and superseded.items.len == 0 and conflicts.items.len == 0) return null;
+    const duplicate_ids = try a.dupe(r.ClaimId, duplicates.items);
+    errdefer a.free(duplicate_ids);
+    const superseded_ids = try a.dupe(r.ClaimId, superseded.items);
+    errdefer a.free(superseded_ids);
+    return .{ .retained = retained, .duplicate_targets = duplicate_ids, .superseded_targets = superseded_ids, .conflicting_with_all = try a.dupe(r.ClaimId, conflicts.items) };
+}
+
+fn permits(a: std.mem.Allocator, items: r.Items, values: []const r.ClaimDisposition) r.Error!bool {
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    return (try check(arena.allocator(), items, values)) == .valid;
+}
+
 /// Canonical record validation, independent of live candidate/history wrappers.
 pub fn check(allocator: std.mem.Allocator, items: r.Items, supplied: []const r.ClaimDisposition) r.Error!Result {
     if (supplied.len != items.entries.len) return .{ .invalid = .{ .unit = .dispositions, .issue = .{ .rule = .cardinality, .observed = .{ .count = supplied.len }, .expected = .{ .count = items.entries.len } } } };

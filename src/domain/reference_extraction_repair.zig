@@ -138,3 +138,101 @@ fn select(current: extraction.TextValidated, scope: evidence.Scope, target: Targ
         .token_classifications => unreachable,
     };
 }
+
+/// Source-backed loss uses the same CAS algebra and canonical extraction
+/// validator; it cannot replace an entire partly-correct chunk.
+pub const Omission = struct {
+    const loss = @import("source_omission.zig");
+    pub const OmissionTarget = union(enum) { claim: usize, outcome, classification: usize };
+    pub const OmissionReplacement = union(enum) {
+        claim: extraction.Proposal,
+        outcome: union(enum) { no_feature_claim: extraction.text.ReferenceSemanticText, claim: extraction.Proposal },
+        classification: extraction.tokens.Classification,
+    };
+    pub const OmissionFacts = struct { extraction: @import("reference_extraction_context.zig").Facts, support: loss.Support };
+    const Atomic = shared.Contract(OmissionTarget, OmissionReplacement, OmissionFacts, @import("required_authority.zig").ReviewEvidence);
+    pub const OmissionAuthorization = Atomic.Authorization;
+    pub const OmissionError = Atomic.Error || loss.Error;
+
+    pub fn authorize(a: std.mem.Allocator, facts: OmissionFacts) OmissionError!OmissionAuthorization {
+        const selected = try loss.select(a, facts.extraction.inputs, facts.support);
+        const finding = selected.finding.review.?;
+        const scope = switch (selected.location) {
+            .extraction_claim => |id| evidence.Scope{ .state_id = facts.extraction.inputs.corpus.state_id, .chunk_id = id },
+            .token_classification => |id| scope: {
+                for (facts.extraction.candidate.entries) |entry| for (entry.token_classifications) |value| {
+                    if (std.meta.eql(value.id(), id)) break :scope entry.scope;
+                };
+                return error.InvalidAtomicRepair;
+            },
+            else => return error.InvalidAtomicRepair,
+        };
+        const entry = try entryAt(facts.extraction.candidate, scope);
+        const target: OmissionTarget = switch (selected.location) {
+            .extraction_claim => if (entry.outcome == .claims) .{ .claim = entry.outcome.claims.len } else .outcome,
+            .token_classification => |id| .{ .classification = for (entry.token_classifications, 0..) |value, index| {
+                if (std.meta.eql(value.id(), id)) break index;
+            } else return error.InvalidAtomicRepair },
+            else => unreachable,
+        };
+        const current = try valueAt(entry, target);
+        return if (current) |value| Atomic.authorize(a, unit(scope), facts.extraction.candidate.revision, target, value, facts, finding) else Atomic.authorizeInsert(a, unit(scope), facts.extraction.candidate.revision, target, .claim, facts, finding);
+    }
+    fn scopeOf(auth: OmissionAuthorization) OmissionError!evidence.Scope {
+        if (auth.owner != .reference_chunk) return error.InvalidAtomicRepair;
+        return .{ .state_id = .{ .bytes = auth.owner.reference_chunk.reference_state_id.bytes }, .chunk_id = .{ .bytes = auth.owner.reference_chunk.chunk_id.bytes } };
+    }
+    pub fn packet(a: std.mem.Allocator, facts: OmissionFacts, literals: @import("passive_literals.zig").Registry, auth: OmissionAuthorization) OmissionError!*packets.Packet {
+        try Atomic.checkDependencies(a, auth, facts);
+        const base = try @import("reference_model_input.zig").extractionPacket(a, facts.extraction.inputs, literals, facts.extraction.candidates, try Omission.scopeOf(auth));
+        defer packets.release(base);
+        return Atomic.packet(a, auth, base, .{ .bytes = if (auth.target == .classification) "classification" else "claim" });
+    }
+    pub fn parse(a: std.mem.Allocator, auth: OmissionAuthorization, input: *const packets.Packet, bytes: []const u8) OmissionError!OmissionReplacement {
+        _ = try Atomic.checkRequest(auth, input);
+        const json = @import("model_candidate_json.zig");
+        return switch (auth.target) {
+            .classification => .{ .classification = try json.decode(extraction.tokens.Classification, a, bytes) },
+            .claim => .{ .claim = try json.decode(extraction.Proposal, a, bytes) },
+            .outcome => .{ .outcome = .{ .claim = try json.decode(extraction.Proposal, a, bytes) } },
+        };
+    }
+    pub fn merge(a: std.mem.Allocator, validator: extraction.text.Validator, literals: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, facts: OmissionFacts, auth: OmissionAuthorization, proposed: OmissionReplacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!extraction.TextValidated {
+        const replacement = try Atomic.copyReplacement(a, proposed);
+        const scope = try Omission.scopeOf(auth);
+        const entry = try entryAt(facts.extraction.candidate, scope);
+        const merged = try Atomic.checkMerge(a, unit(scope), facts.extraction.candidate.revision, try valueAt(entry, auth.target), facts, auth, replacement, origin);
+        const entries = try a.dupe(extraction.TextValidatedResult, facts.extraction.candidate.entries);
+        for (entries) |*changed| if (changed.scope.chunk_id.eql(scope.chunk_id)) {
+            if (auth.target == .classification) {
+                const index = auth.target.classification;
+                if (!std.meta.eql(entry.token_classifications[index].id(), replacement.classification.id())) return error.InvalidAtomicRepair;
+                const classifications = try a.dupe(extraction.tokens.Classification, entry.token_classifications);
+                classifications[index] = replacement.classification;
+                changed.token_classifications = classifications;
+                changed.classification_origin = origin;
+            } else {
+                const claim = if (replacement == .claim) replacement.claim else if (replacement.outcome == .claim) replacement.outcome.claim else return error.InvalidAtomicRepair;
+                const checked = try @import("reference_extraction_text.zig").validate(validator, a, literals, current, facts.extraction.inputs, .{ .entries = &.{.{ .scope = scope, .origin = origin, .token_classifications = &.{}, .outcome = .{ .claims = &.{claim} } }} });
+                if (checked != .valid) return error.InvalidAtomicRepair;
+                var claims: std.ArrayList(extraction.TextValidatedProposal) = .empty;
+                if (entry.outcome == .claims) try claims.appendSlice(a, entry.outcome.claims);
+                try claims.append(a, checked.valid.entries[0].outcome.claims[0]);
+                changed.outcome = .{ .claims = try claims.toOwnedSlice(a) };
+            }
+        };
+        return .{ .revision = merged.revision_after, .last_repair = merged, .entries = entries };
+    }
+    fn valueAt(entry: extraction.TextValidatedResult, target: OmissionTarget) OmissionError!?OmissionReplacement {
+        return switch (target) {
+            .claim => |index| if (entry.outcome == .claims and index == entry.outcome.claims.len) null else error.InvalidAtomicRepair,
+            .outcome => if (entry.outcome == .no_feature_claim) .{ .outcome = .{ .no_feature_claim = entry.outcome.no_feature_claim.value } } else error.InvalidAtomicRepair,
+            .classification => |index| if (index < entry.token_classifications.len) .{ .classification = entry.token_classifications[index] } else error.InvalidAtomicRepair,
+        };
+    }
+    pub const Target = OmissionTarget;
+    pub const Replacement = OmissionReplacement;
+    pub const Facts = OmissionFacts;
+    pub const Authorization = OmissionAuthorization;
+    pub const Error = OmissionError;
+};

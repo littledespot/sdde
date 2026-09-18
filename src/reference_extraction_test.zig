@@ -31,7 +31,12 @@ fn raw(inputs: evidence.Inputs, index: usize, bytes: []const u8) extraction.RawR
 }
 pub fn finish(allocator: std.mem.Allocator, inputs: evidence.Inputs, results: []const extraction.RawResult) !extraction.Accounted {
     const parsed = try parse.execute(allocator, .{ .entries = results });
-    const tokens = try token_fixture.assignments(allocator, inputs, try text_fixture.check(allocator, inputs, parsed));
+    return finishText(allocator, inputs, try text_fixture.check(allocator, inputs, parsed));
+}
+pub fn finishText(allocator: std.mem.Allocator, inputs: evidence.Inputs, candidate: extraction.TextValidated) !extraction.Accounted {
+    const checked = try @import("domain/reference_selection_validation.zig").validate(allocator, inputs, try token_fixture.candidates(allocator, inputs), candidate);
+    if (checked != .valid) return error.InvalidSourceCitation;
+    const tokens = try token_fixture.assign.execute(allocator, checked.valid);
     const valid = try validate.execute(allocator, inputs, try token_fixture.build.execute(allocator, tokens));
     return account.execute(inputs, tokens, try build.execute(allocator, try assign.execute(allocator, switch (valid) {
         .valid => |value| value,

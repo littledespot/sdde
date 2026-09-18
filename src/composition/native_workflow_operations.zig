@@ -38,6 +38,7 @@ const reconciliation = @import("../application/reference_reconciliation_workflow
 const authority = @import("../application/required_authority_workflow.zig");
 const reference_model = @import("../application/reference_model_workflow.zig");
 const specification = @import("../application/specification_workflow.zig");
+const source_omission = @import("../application/source_omission_repair_workflow.zig");
 const omission_repair = @import("../application/specification_omission_repair_workflow.zig");
 const support_repair = @import("../application/specification_support_repair_workflow.zig");
 const specification_support = @import("../application/specification_support_workflow.zig");
@@ -156,6 +157,14 @@ pub const Assembly = struct {
     build_support_repair: support_repair.BuildInput,
     parse_support_repair: support_repair.Parse,
     merge_support_repair: support_repair.Merge,
+    authorize_source_omission: source_omission.Authorize,
+    build_source_omission: source_omission.BuildInput,
+    parse_source_omission: source_omission.Parse,
+    merge_source_extraction: source_omission.Merge(.extraction, .references),
+    merge_source_reconciliation: source_omission.Merge(.reconciliation, .references),
+    check_source_omission: source_omission.Check,
+    merge_upstream_extraction: source_omission.Merge(.extraction, .specification),
+    merge_upstream_reconciliation: source_omission.Merge(.reconciliation, .specification),
     authorize_omission_repair: omission_repair.Authorize,
     build_omission_repair: omission_repair.BuildInput,
     parse_omission_repair: omission_repair.Parse,
@@ -189,7 +198,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 138 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 146 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -317,6 +326,14 @@ pub const Assembly = struct {
             .build_support_repair = .{ .allocator = allocator },
             .parse_support_repair = .{ .allocator = allocator },
             .merge_support_repair = .{ .allocator = allocator },
+            .authorize_source_omission = .{ .allocator = allocator },
+            .build_source_omission = .{ .allocator = allocator },
+            .parse_source_omission = .{ .allocator = allocator },
+            .merge_source_extraction = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
+            .merge_source_reconciliation = .{ .allocator = allocator, .action = .{} },
+            .check_source_omission = .{ .allocator = allocator },
+            .merge_upstream_extraction = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
+            .merge_upstream_reconciliation = .{ .allocator = allocator, .action = .{} },
             .authorize_omission_repair = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } } },
             .build_omission_repair = .{ .allocator = allocator },
             .parse_omission_repair = .{ .allocator = allocator },
@@ -398,6 +415,14 @@ pub const Assembly = struct {
             entry(support_repair.BuildInput, &self.build_support_repair),
             entry(support_repair.Parse, &self.parse_support_repair),
             entry(support_repair.Merge, &self.merge_support_repair),
+            entry(source_omission.Authorize, &self.authorize_source_omission),
+            entry(source_omission.BuildInput, &self.build_source_omission),
+            entry(source_omission.Parse, &self.parse_source_omission),
+            entry(source_omission.Merge(.extraction, .references), &self.merge_source_extraction),
+            entry(source_omission.Merge(.reconciliation, .references), &self.merge_source_reconciliation),
+            entry(source_omission.Check, &self.check_source_omission),
+            entry(source_omission.Merge(.extraction, .specification), &self.merge_upstream_extraction),
+            entry(source_omission.Merge(.reconciliation, .specification), &self.merge_upstream_reconciliation),
             entry(omission_repair.Authorize, &self.authorize_omission_repair),
             entry(omission_repair.BuildInput, &self.build_omission_repair),
             entry(omission_repair.Parse, &self.parse_omission_repair),
@@ -496,7 +521,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ omission_repair.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
+const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ omission_repair.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write },

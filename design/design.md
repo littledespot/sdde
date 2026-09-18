@@ -968,6 +968,9 @@ The new engine is ready for production evaluation when all of the following are 
     approval gate, and pre-commit boundary rebuilds and validates the complete reconciliation
     projection from current canonical authority; upstream changes invalidate all affected
     descendants, approvals, runtime, and evidence through the ordinary Section 24.5 route.
+    Source-backed omission repair additionally proves unique producer/target selection,
+    raw sibling preservation and complete derived-identity rebuilding under §22;
+    ambiguous, stale and source-gap cases cannot enter repair.
 
 40. Conformance tests apply the same reconciliation and routing assertions to multiple unrelated
     requirement kinds and reject caller-, fixture-, format-, framework-, token-, filename-, or

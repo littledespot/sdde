@@ -33,6 +33,7 @@ pub const Decision = enum {
     }
 };
 pub const Value = struct {
+    loss: @import("source_omission.zig").Location = .{ .unlocalized = .{} },
     decision: Decision,
     provenance: spec.Selection,
     source_ids: []const @import("reference_identity.zig").SourceId,
@@ -46,7 +47,15 @@ pub const Candidate = struct {
     last_repair: ?@import("atomic_repair.zig").Merge = null,
 };
 pub const Issue = enum { invalid_json, unknown_requirement, duplicate_requirement, missing_requirement, invalid_detail, invalid_evidence, invalid_decision };
-pub const Rejection = struct { issue: Issue, requirement: ?a.Id, ordinal: ?u32, revision: u64, origin: ?Origin, evidence: ?admission.Rejection = null };
+pub const Diagnostic = struct { issue: Issue, requirement: ?a.Id, ordinal: ?u32, revision: u64, origin: ?Origin, entry_index: ?usize = null, evidence: ?admission.Rejection = null };
+pub const Rejection = struct {
+    diagnostics: []const Diagnostic,
+
+    /// Selection is derived from the collector's stable order, never a second ledger.
+    pub fn selected(self: Rejection) ?Diagnostic {
+        return if (self.diagnostics.len == 0) null else self.diagnostics[0];
+    }
+};
 pub const Collection = union(enum) {
     accepted: struct { inputs: a.Inputs, candidate: Candidate },
     rejected: struct { candidate: ?Candidate, rejection: Rejection },
@@ -150,7 +159,7 @@ fn task(allocator: std.mem.Allocator, id: a.Id) Error![]const u8 {
 pub fn collect(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, bytes: []const u8, origin: ?Origin) Error!Collection {
     const proposed = @import("model_candidate_json.zig").decode(Review, allocator, bytes) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
-        error.InvalidJsonDocument => .{ .rejected = .{ .candidate = null, .rejection = .{ .issue = .invalid_json, .requirement = null, .ordinal = null, .revision = 1, .origin = origin } } },
+        error.InvalidJsonDocument => .{ .rejected = .{ .candidate = null, .rejection = .{ .diagnostics = try allocator.dupe(Diagnostic, &.{.{ .issue = .invalid_json, .requirement = null, .ordinal = null, .revision = 1, .origin = origin }}) } } },
     };
     const origins = try allocator.alloc(?Origin, proposed.entries.len);
     @memset(origins, origin);
@@ -160,45 +169,64 @@ pub fn collect(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Contex
 pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, proposed: Candidate) Error!Collection {
     const ledger = try a.build(allocator, inputs);
     if (inputs.evidence.len != 0 or inputs.candidates.len != 0 or proposed.revision == 0 or proposed.origins.len != proposed.review.entries.len) return error.InvalidRequiredAuthority;
+    var diagnostics: std.ArrayList(Diagnostic) = .empty;
+    // Preserve selection order: association defects in response order, then
+    // missing/invalid findings in native requirement order. Inspect every sibling.
     for (proposed.review.entries, 0..) |finding, index| {
-        if (finding.requirement_ordinal == 0 or finding.requirement_ordinal > ledger.requirements.len) return reject(proposed, .unknown_requirement, null, finding.requirement_ordinal, proposed.origins[index]);
-        for (proposed.review.entries[0..index]) |prior| if (finding.requirement_ordinal == prior.requirement_ordinal) return reject(proposed, .duplicate_requirement, ledger.requirements[finding.requirement_ordinal - 1].seed.id, finding.requirement_ordinal, proposed.origins[index]);
+        if (finding.requirement_ordinal == 0 or finding.requirement_ordinal > ledger.requirements.len) {
+            try diagnostics.append(allocator, diagnostic(proposed, .unknown_requirement, null, finding.requirement_ordinal, index));
+            continue;
+        }
+        for (proposed.review.entries[0..index]) |prior| if (finding.requirement_ordinal == prior.requirement_ordinal) {
+            try diagnostics.append(allocator, diagnostic(proposed, .duplicate_requirement, ledger.requirements[finding.requirement_ordinal - 1].seed.id, finding.requirement_ordinal, index));
+            break;
+        };
     }
     const evidence = try allocator.alloc(a.Evidence, ledger.requirements.len);
     const candidates = try allocator.alloc(a.Candidate, if (inputs.specification != null) ledger.requirements.len else 0);
     const origins = try allocator.alloc(?Origin, evidence.len);
     for (ledger.requirements, evidence, origins, 0..) |requirement, *entry, *entry_origin, index| {
         const ordinal = try r.ordinal(index);
-        const position = for (proposed.review.entries, 0..) |finding, selected| {
-            if (finding.requirement_ordinal == ordinal) break selected;
-        } else return reject(proposed, .missing_requirement, requirement.seed.id, ordinal, proposed.origin);
-        const finding = proposed.review.entries[position];
-        const origin = proposed.origins[position];
         const required = try applicability(inputs, requirement.seed.id);
-        if (finding.value.decision == .not_applicable and required != .review) return reject(proposed, .invalid_decision, requirement.seed.id, ordinal, origin);
-        const semantic = finding.value.decision.finding();
-        if (!admission.validDetail(semantic, finding.value.detail)) return reject(proposed, .invalid_detail, requirement.seed.id, ordinal, origin);
-        const reviewed = try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail);
-        if (reviewed == .rejected) {
-            var rejection = reject(proposed, .invalid_evidence, requirement.seed.id, ordinal, origin);
-            rejection.rejected.rejection.evidence = reviewed.rejected;
-            return rejection;
+        var found = false;
+        for (proposed.review.entries, 0..) |finding, position| {
+            if (finding.requirement_ordinal != ordinal) continue;
+            found = true;
+            const before = diagnostics.items.len;
+            if (finding.value.decision == .not_applicable and required != .review) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
+            const semantic = finding.value.decision.finding();
+            if (!admission.validDetail(semantic, finding.value.detail)) try diagnostics.append(allocator, diagnostic(proposed, .invalid_detail, requirement.seed.id, ordinal, position));
+            var reviewed = try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail);
+            if (reviewed == .accepted) {
+                @import("source_omission.zig").validate(inputs, sources, semantic, reviewed.accepted, finding.value.loss) catch |err| {
+                    if (err == error.OutOfMemory) return error.OutOfMemory;
+                    reviewed = .{ .rejected = .{ .issue = .invalid_loss, .rule = (try admission.requirements(allocator, inputs, requirement.seed.id)).rule(semantic) } };
+                };
+            }
+            if (reviewed == .rejected) {
+                var invalid = diagnostic(proposed, .invalid_evidence, requirement.seed.id, ordinal, position);
+                invalid.evidence = reviewed.rejected;
+                try diagnostics.append(allocator, invalid);
+            }
+            if (diagnostics.items.len != before) continue;
+            const not_applicable: ?a.Rule = if (required == .not_applicable) required.not_applicable else if (finding.value.decision == .not_applicable) required.review else null;
+            if (inputs.specification != null) {
+                candidates[index] = .{ .id = .{ .ordinal = ordinal, .revision = inputs.revision }, .requirement = requirement.seed.id };
+            }
+            entry.* = .{
+                .id = .{ .ordinal = ordinal },
+                .requirement = requirement.seed.id,
+                .authorities = requirement.seed.input_authorities,
+                .resolution = if (not_applicable) |rule| .{ .not_applicable = rule } else if (inputs.specification != null and semantic != .candidate_omission) .{ .supported_candidate = candidates[index].id } else .{ .existing_authority = .{ .reference = sources.corpus.state_id } },
+                .finding = semantic,
+                .review = reviewed.accepted,
+                .method = .model_assisted,
+            };
+            entry_origin.* = proposed.origins[position];
         }
-        const not_applicable: ?a.Rule = if (required == .not_applicable) required.not_applicable else if (finding.value.decision == .not_applicable) required.review else null;
-        if (inputs.specification != null) {
-            candidates[index] = .{ .id = .{ .ordinal = ordinal, .revision = inputs.revision }, .requirement = requirement.seed.id };
-        }
-        entry.* = .{
-            .id = .{ .ordinal = ordinal },
-            .requirement = requirement.seed.id,
-            .authorities = requirement.seed.input_authorities,
-            .resolution = if (not_applicable) |rule| .{ .not_applicable = rule } else if (inputs.specification != null and semantic != .candidate_omission) .{ .supported_candidate = candidates[index].id } else .{ .existing_authority = .{ .reference = sources.corpus.state_id } },
-            .finding = semantic,
-            .review = reviewed.accepted,
-            .method = .model_assisted,
-        };
-        entry_origin.* = origin;
+        if (!found) try diagnostics.append(allocator, diagnostic(proposed, .missing_requirement, requirement.seed.id, ordinal, null));
     }
+    if (diagnostics.items.len != 0) return .{ .rejected = .{ .candidate = proposed, .rejection = .{ .diagnostics = try diagnostics.toOwnedSlice(allocator) } } };
     var result = inputs;
     result.evidence = evidence;
     result.candidates = candidates;
@@ -206,8 +234,8 @@ pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evide
     result.review_origins = origins;
     return .{ .accepted = .{ .inputs = result, .candidate = proposed } };
 }
-fn reject(candidate: Candidate, issue: Issue, requirement: ?a.Id, ordinal: ?u32, origin: ?Origin) Collection {
-    return .{ .rejected = .{ .candidate = candidate, .rejection = .{ .issue = issue, .requirement = requirement, .ordinal = ordinal, .revision = candidate.revision, .origin = origin } } };
+fn diagnostic(candidate: Candidate, issue: Issue, requirement: ?a.Id, ordinal: ?u32, index: ?usize) Diagnostic {
+    return .{ .issue = issue, .requirement = requirement, .ordinal = ordinal, .revision = candidate.revision, .origin = if (index) |position| candidate.origins[position] else candidate.origin, .entry_index = index };
 }
 
 /// Re-admit self-contained published findings without any prior call ledger.

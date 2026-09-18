@@ -20,7 +20,7 @@ const count_observation = @import("../application/model_token_count_observation_
 
 const transport = @import("../application/model_transport_workflow.zig");
 const protocol = @import("../application/model_protocol_retry_workflow.zig");
-pub const count = 25;
+pub const count = 26;
 pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema, invocation.count_schema, count_observation.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
@@ -50,6 +50,7 @@ pub const Assembly = struct {
     protocol_retry: protocol.Build,
     check_phase: protocol.Check,
     retire_input: transport.Retire(.input),
+    retire_transport: transport.Retire(.request_and_input),
     entries: [count]operations.Entry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator) void {
@@ -79,6 +80,7 @@ pub const Assembly = struct {
             .protocol_retry = .{ .allocator = allocator },
             .check_phase = .{},
             .retire_input = .{},
+            .retire_transport = .{},
             .entries = undefined,
         };
         self.entries = .{
@@ -107,6 +109,7 @@ pub const Assembly = struct {
             entry(protocol.Build, &self.protocol_retry),
             entry(protocol.Check, &self.check_phase),
             entry(transport.Retire(.input), &self.retire_input),
+            entry(transport.Retire(.request_and_input), &self.retire_transport),
         };
     }
 };

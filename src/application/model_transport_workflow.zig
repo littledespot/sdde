@@ -6,6 +6,7 @@ const payload = @import("model_payload_schema_workflow.zig");
 pub fn Retire(comptime retirement: transport.Retirement) type {
     return struct {
         pub const Action = switch (retirement) {
+            .request_and_input => @import("../actions/model/retire_model_transport.zig").Action,
             .request => @import("../actions/model/retire_model_request.zig").Action,
             .rejected_attempt => @compileError("Rejected attempt retirement belongs to protocol retry preparation"),
             .input => @import("../actions/model/retire_model_input.zig").Action,

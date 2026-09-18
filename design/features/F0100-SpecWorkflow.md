@@ -695,6 +695,14 @@ closed requiredness/ownership policies, current support checks and outcomes.
 - Review findings retain concise detail, canonical claim/citation/source associations
   and candidate revision. Request/attempt origins remain execution-local; published
   evidence validates without an earlier request ledger.
+- Rejected reviews retain an ordered diagnostic collection: foreign/duplicate
+  associations in response order, then missing and invalid findings in requirement
+  order. Each entry retains its subject, response index where present, revision and
+  origin. Independent detail and evidence defects remain visible together.
+  The first diagnostic selects one repair target; authorization rechecks the whole
+  collection. Observers/reports retain it unchanged, while correction guidance
+  contains only the selected rule. Merge rebuilds the collection through full
+  validation; remaining defects still block admission.
 - Original source text, extraction outcomes and token decisions with source coordinates
   let review detect discarded or misclassified evidence. These projections use the
   common evidence owner and do not grant model output authority.
@@ -707,6 +715,12 @@ closed requiredness/ownership policies, current support checks and outcomes.
   Current inputs, old value and revision are checked before dispatch and merge.
 - Source-backed content repair reuses the existing coverage repair owner; unsafe targets
   block. Assembly, coverage and semantic review run again after a content edit.
+- The approved upstream-repair draft attributes loss to an extraction chunk,
+  token classification, reconciliation signal or disposition. Native owners check
+  the target and source association; attribution remains model-assisted. Its
+  execution-private `loss` field is not persisted review authority. Recovery is
+  incomplete: the [shared lineage conflict](../../fixes/IMP_001.md#shared-lineage-decision-required)
+  must be resolved before this path is ready.
 - Persisted review requires `candidate_revision` and uses the same admission checks
   as live collection; earlier incomplete review states, erased findings,
   foreign provenance and stale candidate revisions reject.
@@ -744,8 +758,9 @@ validators:
 
 - The ordinary [Specify definition](../workflows/spec.workflow.yaml) connects
   these operations, workflow-owned resources and H-008 review.
-- `retire-model-input` and `retire-model-request` explicitly release completed transport
-  slots.
+- `retire-model-transport` releases completed request and input slots through the
+  existing retirement owner. Detailed `retire-model-input` and
+  `retire-model-request` operations remain available.
 - Native captured evidence keeps its current domain-source lineage, not the replaceable
   transport slot; source changes and mixed-generation joins still reject.
 - The request ledger is runner-validated execution control, not business authority.
@@ -1411,6 +1426,14 @@ does not establish complete Specify or live E2E acceptance.
   repeated instructions; original source evidence remains available for semantic review.
 - Schemas share local definitions and select the current generation unit, reconciliation
   purpose or authorized repair shape.
+- Disposition repair derives fixed-sibling choices through the canonical relationship
+  checker and binds them in existing authorizations. These facts replace general
+  constraint prose for insertion, replacement and source-omission repair. Unresolved
+  choices retain normal constraints; full validation and retry accounting remain.
+  Native automatic selection requires its separate authority decision; the existing
+  selected disposition schema remains in use.
+- Independent wire conformance tests check selected schemas against native decoding
+  and encoding; bootstrap tests reject drift in registrations and workflow contracts.
 - Model inputs share citation records and preserve their complete supplied evidence.
 ## 9. Traceability
 

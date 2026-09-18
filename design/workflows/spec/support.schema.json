@@ -86,13 +86,17 @@
         },
         "detail": {
           "$ref": "#/$defs/detail_value"
+        },
+        "loss": {
+          "$ref": "#/$defs/loss"
         }
       },
       "required": [
         "decision",
         "provenance",
         "source_ids",
-        "detail"
+        "detail",
+        "loss"
       ],
       "additionalProperties": false
     },
@@ -121,13 +125,17 @@
         },
         "detail": {
           "$ref": "#/$defs/detail_value"
+        },
+        "loss": {
+          "$ref": "#/$defs/loss"
         }
       },
       "required": [
         "decision",
         "provenance",
         "source_ids",
-        "detail"
+        "detail",
+        "loss"
       ],
       "additionalProperties": false
     },
@@ -204,6 +212,101 @@
     "detail_value": {
       "type": "string",
       "maxLength": 2000
+    },
+    "loss": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "unlocalized"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "extraction_claim"
+            },
+            "bytes": {
+              "type": "string",
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "kind",
+            "bytes"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "token_classification"
+            },
+            "source_id": {
+              "$ref": "#/$defs/ordinal"
+            },
+            "extractor_id": {
+              "const": "markdown_inline_code_v1"
+            },
+            "ordinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            }
+          },
+          "required": [
+            "kind",
+            "source_id",
+            "extractor_id",
+            "ordinal"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "reconciliation_signal"
+            },
+            "ordinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            }
+          },
+          "required": [
+            "kind",
+            "ordinal"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "reconciliation_disposition"
+            },
+            "ordinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            }
+          },
+          "required": [
+            "kind",
+            "ordinal"
+          ],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   "$ref": "#/$defs/review"

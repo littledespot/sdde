@@ -78,6 +78,8 @@ test "summary repair changes only a rejected field then inserts missing membersh
 test "disposition insertion ignores response metadata and preserves dependent validation" {
     const repair = @import("domain/reference_reconciliation_repair.zig");
     const packets = @import("domain/model_input_packet.zig");
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const correction: Origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 2 } };
     for ([_][]const u8{ "Display `Hello, World!`.\n", "Confirm `Loan renewed!`.\n" }) |source| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
@@ -86,11 +88,11 @@ test "disposition insertion ignores response metadata and preserves dependent va
         defer fixture.deinit();
         const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
         const good = try f.global(a, input);
-        var missing: r.Parsed = .{ .input = input, .proposal = .{ .global = good } };
+        var missing: r.Parsed = .{ .source = .{ .origin = correction }, .input = input, .proposal = .{ .global = good } };
         missing.proposal.global.claim_dispositions = good.claim_dispositions[0..1];
         const signals = try a.dupe(r.SignalProposal, good.signals);
         signals[0].claim_ids = &.{ input.items[0].claim.id, input.items[1].claim.id };
-        missing.proposal.global.signals = signals;
+        missing.proposal.global.signals = signals[0..1];
         const rejection = (try f.validate_dispositions.execute(a, missing)).invalid;
         const authorization = (try repair.authorize(a, missing, fixture.context(), rejection)).model;
         const packet = try repair.packet(a, missing, fixture.context(), authorization);
@@ -101,20 +103,129 @@ test "disposition insertion ignores response metadata and preserves dependent va
         try std.testing.expectEqual(@as(usize, 2), target.count());
         try std.testing.expectEqualStrings("insert_disposition", target.get("unit").?.string);
         try std.testing.expectEqual(@as(i64, 2), target.get("claim").?.object.get("ordinal").?.integer);
-        try std.testing.expectEqual(@as(usize, 1), task.get("rule").?.object.count());
+        try std.testing.expectEqualStrings("repair_disposition", packet.resultDefinition().?.bytes);
+        try std.testing.expect(task.get("rule").?.object.get("disposition_choices").?.object.get("retained").?.bool);
+        try std.testing.expectEqual(@as(usize, 2), task.get("rule").?.object.count());
         const constraints = body.value.object.get("input").?.object.get("constraints").?.array.items;
-        try std.testing.expectEqual(@as(usize, 7), constraints.len);
-        for (constraints) |constraint| try std.testing.expect(!std.mem.eql(u8, constraint.object.get("constraint").?.string, "exact_selected_token"));
+        try std.testing.expectEqual(@as(usize, 0), constraints.len);
         for ([_][]const u8{
             "{\"index\":1,\"unit\":\"signals\"}",
             "{\"kind\":\"count\",\"count\":2}",
             "{\"claim_dispositions\":[{\"kind\":\"retained\"}]}",
         }) |echo| try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, echo));
-        const filled = try repair.merge(a, missing, fixture.context(), authorization, try repair.parse(a, authorization, packet, "{\"kind\":\"retained\"}"), null);
+
+        // R26: both changed responses remain invalid. The canonical checker,
+        // origins and revisions agree even when the model ignores the choices.
+        var rejected_candidate = missing;
+        var selected = authorization;
+        for ([_][]const u8{
+            "{\"kind\":\"duplicate\",\"target_claim_id\":{\"ordinal\":1}}",
+            "{\"kind\":\"superseded\",\"related_claim_ids\":[{\"ordinal\":1}]}",
+        }, 0..) |bytes, i| {
+            const origin: Origin = .{ .request = .{ .value = @intCast(5 + i) }, .attempt = .{ .value = 1 } };
+            const request = try repair.packet(a, rejected_candidate, fixture.context(), selected);
+            defer packets.release(request);
+            rejected_candidate = try repair.merge(a, rejected_candidate, fixture.context(), selected, try repair.parse(a, selected, request, bytes), origin);
+            const invalid = (try f.validate_dispositions.execute(a, rejected_candidate)).invalid;
+            try std.testing.expectEqual(.same_content_kind, invalid.issue.expected.constraint);
+            try std.testing.expectEqual(@as(u64, 2 + i), invalid.revision);
+            try std.testing.expectEqualDeep(origin, invalid.origin.?);
+            try std.testing.expect(rejected_candidate.source.last_repair.?.changed);
+            try std.testing.expectEqualDeep(missing.proposal.global.signals, rejected_candidate.proposal.global.signals);
+            try std.testing.expectEqualDeep(good.claim_dispositions[0], rejected_candidate.proposal.global.claim_dispositions[0]);
+            selected = (try repair.authorize(a, rejected_candidate, fixture.context(), invalid)).model;
+            try std.testing.expect(selected.rule.disposition_choices.?.retainedOnly());
+        }
+        const origin: Origin = .{ .request = .{ .value = 5 }, .attempt = .{ .value = 1 } };
+        const filled = try repair.merge(a, missing, fixture.context(), authorization, try repair.parse(a, authorization, packet, "{\"kind\":\"retained\"}"), origin);
         try std.testing.expectEqualDeep(missing.proposal.global.signals, filled.proposal.global.signals);
         try std.testing.expectEqualDeep(missing.proposal.global.claim_dispositions, filled.proposal.global.claim_dispositions[0..1]);
         const dispositions = (try f.validate_dispositions.execute(a, filled)).valid;
-        try std.testing.expectEqual(.content, (try f.validate_signals.execute(a, dispositions, fixture.context())).invalid.issue.rule);
+        const mixed = (try f.validate_signals.execute(a, dispositions, fixture.context())).invalid;
+        try std.testing.expectEqual(.content, mixed.issue.rule);
+        try std.testing.expectEqualDeep(correction, mixed.origin.?);
+        const selection = (try repair.authorize(a, filled, fixture.context(), mixed)).model;
+        const projected = try repair.merge(a, filled, fixture.context(), selection, .{ .selection = .{ .claim_ids = selection.rule.rejection.relations.selection } }, .{ .request = .{ .value = 6 }, .attempt = .{ .value = 1 } });
+        try std.testing.expectEqualDeep(filled.proposal.global.claim_dispositions, projected.proposal.global.claim_dispositions);
+        try std.testing.expectEqualDeep(filled.proposal.global.signals[0].content, projected.proposal.global.signals[0].content);
+        const coverage = (try f.validate_signals.execute(a, (try f.validate_dispositions.execute(a, projected)).valid, fixture.context())).invalid;
+        try std.testing.expectEqual(.signal_coverage, coverage.issue.rule);
+        const token = (try repair.authorize(a, projected, fixture.context(), coverage)).automatic;
+        const complete = try repair.merge(a, projected, fixture.context(), token.authorization, token.replacement, null);
+        try std.testing.expectEqualDeep(projected.proposal.global.signals, complete.proposal.global.signals[0..1]);
+        try std.testing.expectEqualDeep(good.signals[1], complete.proposal.global.signals[1]);
+        try std.testing.expectEqual(@as(u64, 4), complete.source.revision);
+        _ = (try f.finish(a, input, complete.proposal.global, fixture.context())).valid;
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, complete, fixture.context(), authorization, .{ .disposition = .{ .retained = .{} } }, origin));
+    }
+}
+
+test "disposition choices reuse canonical graph validation with fixed siblings" {
+    const owner = @import("domain/reference_disposition_validation.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "Confirm the booking.\n", "Issue the receipt.\n", "Notify the traveller.\n" });
+    defer fixture.deinit();
+    const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    const items = input.progress.plan.layout.items;
+    const good = try f.global(a, input);
+    const values = try a.dupe(r.ClaimDispositionProposal, good.claim_dispositions);
+    const first = values[0].claim_id;
+    const second = values[1].claim_id;
+    const third = values[2].claim_id;
+    const choices = (try owner.repairChoices(a, items, values, 0, first)).?;
+    try std.testing.expect(choices.retained);
+    try std.testing.expectEqualDeep(&[_]r.ClaimId{ second, third }, choices.duplicate_targets);
+    try std.testing.expectEqualDeep(choices.duplicate_targets, choices.superseded_targets);
+    try std.testing.expectEqual(@as(usize, 0), choices.conflicting_with_all.len);
+    var distinct = items;
+    const distinct_entries = try a.dupe(r.Item, items.entries);
+    distinct.entries = distinct_entries;
+    distinct_entries[1].claim.content = .{ .model = .{ .technical = .{ .value = .{ .nodes = &.{.{ .literal = .{ .value = "A technical constraint." } }} } } } };
+    const typed = (try owner.repairChoices(a, distinct, values, 0, first)).?;
+    try std.testing.expectEqualDeep(&[_]r.ClaimId{third}, typed.duplicate_targets);
+    try std.testing.expectEqualDeep(typed.duplicate_targets, typed.superseded_targets);
+    values[1].disposition = .{ .duplicate = .{ .target_claim_id = first } };
+    const acyclic = (try owner.repairChoices(a, items, values, 0, first)).?;
+    try std.testing.expectEqualDeep(&[_]r.ClaimId{third}, acyclic.duplicate_targets);
+    try std.testing.expectEqualDeep(acyclic.duplicate_targets, acyclic.superseded_targets);
+    values[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{ first, third } } };
+    values[2].disposition = .{ .conflicting = .{ .related_claim_ids = &.{ first, second } } };
+    const reciprocal = (try owner.repairChoices(a, items, values, 0, first)).?;
+    try std.testing.expect(!reciprocal.retained);
+    try std.testing.expectEqual(@as(usize, 0), reciprocal.duplicate_targets.len + reciprocal.superseded_targets.len);
+    try std.testing.expectEqualDeep(&[_]r.ClaimId{ second, third }, reciprocal.conflicting_with_all);
+    values[1].disposition = .{ .duplicate = .{ .target_claim_id = .{ .ordinal = 999 } } };
+    try std.testing.expect((try owner.repairChoices(a, items, values, 0, first)) == null);
+    try std.testing.expect((try owner.repairChoices(a, items, good.claim_dispositions[0..1], 1, second)) == null);
+    // A complete, unrelated conflict forbids either peer as a directed target.
+    values[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{third} } };
+    values[2].disposition = .{ .conflicting = .{ .related_claim_ids = &.{second} } };
+    try std.testing.expect((try owner.repairChoices(a, items, values, 0, first)).?.retainedOnly());
+}
+
+test "disposition choices distinguish exact values without selecting token semantics" {
+    const owner = @import("domain/reference_disposition_validation.zig");
+    for ([_][]const u8{ "Display `Approved!`.\n", "Display `Declined!`.\n" }, 0..) |other, scenario| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try prepare(a, &.{ "Show `Approved!`.\n", other });
+        defer fixture.deinit();
+        const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+        const good = try f.global(a, input);
+        var token_ids: std.ArrayList(r.ClaimId) = .empty;
+        var index: usize = 0;
+        for (input.items, 0..) |item, i| if (item.claim.content == .preserved_token) {
+            if (token_ids.items.len == 0) index = i;
+            try token_ids.append(a, item.claim.id);
+        };
+        const choices = (try owner.repairChoices(a, input.progress.plan.layout.items, good.claim_dispositions, index, token_ids.items[0])).?;
+        try std.testing.expect(choices.retained);
+        try std.testing.expectEqual(@as(usize, if (scenario == 0) 1 else 0), choices.duplicate_targets.len);
+        try std.testing.expectEqualDeep(token_ids.items[1..], choices.superseded_targets);
+        try std.testing.expectEqual(@as(usize, 0), choices.conflicting_with_all.len);
     }
 }
 

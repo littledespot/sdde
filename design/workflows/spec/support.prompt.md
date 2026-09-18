@@ -13,3 +13,8 @@ Follow evidence_rules and each task's evidence. Positive claim rules apply to
 supported, not_applicable and candidate_omission; non-null supported_provenance
 must match for supported or not_applicable. Select only supplied IDs. Choose
 not_applicable only when its non-null permitted rule holds. Never invent authority.
+
+Use unlocalized unless candidate_omission has a clear producer: a missing claim's
+extraction chunk, an irrelevant token classification, or a defective reconciliation
+signal/disposition. Never attribute an extracted claim to extraction;
+specification-only loss is unlocalized.

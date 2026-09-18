@@ -20,7 +20,7 @@ const Selection = struct { provenance: @import("specification.zig").Selection, s
 pub const Replacement = union(enum) { finding: review.Value, selection: Selection, detail: struct { detail: []const u8 } };
 const Facts = struct { inputs: authority.Inputs, sources: evidence.Inputs, candidate: review.Candidate };
 const Rule = struct {
-    rejection: review.Rejection,
+    rejection: review.Diagnostic,
     finding: ?review.Value,
     pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, finding: ?review.Value } {
         return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .finding = self.finding };
@@ -35,7 +35,8 @@ pub fn authorize(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Cont
     const candidate = rejected.candidate orelse return error.UnsafeSupportRepair;
     const current = try review.validate(a, inputs, context.inputs, candidate);
     if (current != .rejected or !std.meta.eql(try shared.snapshot(review.Rejection, a, current.rejected.rejection), try shared.snapshot(review.Rejection, a, rejected.rejection))) return error.InvalidAtomicRepair;
-    const rejection = rejected.rejection;
+    const rejection = rejected.rejection.selected() orelse return error.InvalidAtomicRepair;
+    if (rejection.evidence) |invalid| if (invalid.issue == .invalid_loss) return error.UnsafeSupportRepair;
     const id = rejection.requirement orelse return error.UnsafeSupportRepair;
     if (authority.policy(id) == null) return error.UnsafeSupportRepair;
     const ordinal = rejection.ordinal orelse return error.UnsafeSupportRepair;
