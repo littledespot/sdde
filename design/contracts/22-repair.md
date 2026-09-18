@@ -149,6 +149,18 @@ The engine never trusts a model field such as `valid: true`.
 
 ### 22.6 Unparseable output
 
+For [configured response parts](../decisions/0016-configured-json-response-composition.md),
+the response/schema below is the complete assigned part. Corrections retain its
+request identity and current prerequisites; an unrelated admitted part remains
+unchanged. Assembly adds no repair authority: after handoff, native domain owners
+alone select targets and impacted validation/rebuilding. Configured part dependencies
+apply to active staging. Current native repair rebuilds derived data without
+converting it back into response parts or adding automatic part-generation calls.
+Existing selected-unit model repairs remain available. Historical parts cannot
+overwrite an already repaired candidate. Keep stable native candidate/defect identity
+separate from changing per-field producer origins. This pending integration changes
+no retry counter or global token rule.
+
 When a model response fails JSON decoding or its bound result schema, no valid
 IR is available. The YAML-declared protocol-retry builder prepares a narrowly
 defined response-level correction containing:

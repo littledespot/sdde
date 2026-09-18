@@ -75,6 +75,15 @@ remaining work. It is a registered, non-terminal outcome: YAML declares its
 successor and every cycle still requires the existing monotonic bound. No policy
 may admit `end.more`; it grants no acceptance, gate or completion authority.
 
+Configured JSON part composition is specified once in
+[ADR 0016](../decisions/0016-configured-json-response-composition.md). It reuses
+model-request subgraphs with explicit part call sites and ordinary typed transitions.
+The compiler proves declared part dependencies; the composition resource schedules
+nothing. Generic assembly is a pure child action with no model port or prompt.
+The approved finite graph-capacity increase preserves visible detailed operations
+and independent retry identities; it introduces no hidden dispatcher. This design
+is not yet implemented.
+
 ### 14.2 `StageGateOrchestrator`
 
 For the selected initial SDD workflow's predecessor gate it:

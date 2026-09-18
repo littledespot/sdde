@@ -1,5 +1,8 @@
 High-level flow for turning selected reference material into supported workflow inputs.
 
+The configured split below is the pending [ADR 0016](../decisions/0016-configured-json-response-composition.md)
+design; the current executable still requests extraction in one combined response.
+
 ```mermaid
 flowchart TD
     START["Workflow selects a reference directory"] --> INVENTORY["Inventory all sources in deterministic order;<br/>validate containment, supported formats and resource bounds"]
@@ -12,8 +15,11 @@ flowchart TD
     LITERALS --> TEXT["Validate typed extraction text;<br/>reject inline paths and out-of-scope IDs"]
     CHUNKS --> FACTS["Extract eligible exact facts;<br/>Markdown inline code only, not prose, quotes or fenced code"]
     FACTS --> TOKENIDS["Assign source/extractor-local candidate IDs;<br/>retain exact source bytes and citations"]
-    TOKENIDS --> EXTRACT["Propose typed claims and one preserve/irrelevant<br/>classification per supplied candidate"]
-    EXTRACT --> TEXT
+    TOKENIDS --> EXTRACT["Configured content request:<br/>claims with citations or no_feature_claim"]
+    EXTRACT --> PARTS["Configured dependent request:<br/>classify supplied exact-token candidates"]
+    TOKENIDS --> PARTS
+    PARTS --> ASSEMBLE["Generic native assembly with each producer's provenance;<br/>no LLM prompt or call; validate complete JSON shape"]
+    ASSEMBLE --> TEXT
     TEXT --> CLASSIFY["Validate total chunk-local token classifications;<br/>reject missing, duplicate, foreign or stale candidates"]
     CLASSIFY --> TOKENS["Assign preserved-token IDs and build deterministic claims;<br/>keep exact bytes and derive obligation identities"]
     TOKENS --> ACCOUNT["Validate and identify all claims and citations;<br/>prove total chunk coverage and one claim per preserved token"]

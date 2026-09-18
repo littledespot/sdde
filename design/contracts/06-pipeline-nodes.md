@@ -141,6 +141,13 @@ starts empty, including after `needs_user` (ADR 0009).
 
 ### 6.1 Action rules
 
+[ADR 0016](../decisions/0016-configured-json-response-composition.md) adds the
+design for generic JSON composition within this same envelope. Configured JSON
+schemas do not define native pipeline keys: sealed registered values retain the
+compiled parts, current dependencies and real producer origins. Assembly proposes
+one candidate delta; the runner alone applies it. Consumed staging becomes history,
+so it cannot overwrite a later native repair. Implementation remains pending.
+
 Every action must:
 
 - have one verb-object responsibility;

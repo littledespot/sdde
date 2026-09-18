@@ -258,9 +258,10 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   delta.
 - Rejection publishes neither.
 - Later visits use the accounting step's compiled authority and runner-owned counts.
-  Atomic repairs and their required dependent requests use the native defect key
-  under [§22.7](22-repair.md#227-repair-retry-limit-and-escalation); other requests
-  retain operation counts. Request ordinals never reset either.
+  Atomic repairs use native defect keys; ordinary requests use immutable assignment
+  keys, and required dependent requests additionally bind their native repair parent
+  under [§22.7](22-repair.md#227-repair-retry-limit-and-escalation). Request ordinals
+  never reset history. Other retry-capable operations retain invocation-wide counts.
 - A consumer must invalidate used attempt evidence before retry; foreign/stale evidence and
   another initial attempt cannot reset accounting.
 - This operation prepares no lease, advances no provider operation, performs no provider call
@@ -376,6 +377,11 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   `ReferenceClaimProposal` values, exactly one `PreservedTokenClassificationProposal` for every
   engine-supplied structured-token candidate, and a closed claims/positive-`no_feature_claim`
   outcome.
+- [ADR 0016](../decisions/0016-configured-json-response-composition.md) permits this
+  complete candidate to be assembled from separately admitted configured responses;
+  it is no longer required to originate in one model call. Until that implementation
+  lands, the executable still uses the combined response. Assembly retains every
+  contributing origin and does not invent provider evidence.
 - A preserve classification deterministically creates a canonical token and preserved-token
   claim, so `no_feature_claim` is valid only when no model or preserved-token claim remains.
 - Each model claim contains typed content plus one or more `SourceCitationProposal` values;
@@ -450,6 +456,14 @@ authenticated answer acceptance and protected history (§23.2).
 - `ReferenceSnapshot.extractionContract` stores the exact compiled workflow ID/version/node
   identity, internal request-contract identity, selected result-schema resource identity, and
   partition contract.
+- With ADR 0016 composition, this design-level binding covers the complete compiled
+  composition and its part operations/schema projections, not one chosen contributing
+  call. It supplies no persisted request/part checkpoint. The current native snapshot
+  stores canonical source/claim/token data without this named extraction-contract
+  field; that existing design requirement must not be described as implemented.
+  [ADR 0016's readiness boundary](../decisions/0016-configured-json-response-composition.md#persisted-contract-readiness)
+  requires its canonical writer/readback implementation or an explicit amendment
+  before full §12.7 conformance; in-memory composition does not close that gap.
 - Revalidation of a persisted snapshot must resolve that closed compiled authority and blocks with
   `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE` rather than silently using a newer schema,
   resource, or chunk boundary contract.
@@ -558,3 +572,17 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
 - Production generation, support review and registered publication use this boundary.
   [F0100](../features/F0100-SpecWorkflow.md#implementation-status) tracks remaining
   clarification and workflow acceptance work; the shared gate alone does not establish it.
+
+### 12.9 Configured JSON response composition
+
+[ADR 0016](../decisions/0016-configured-json-response-composition.md) owns the
+user-directed decomposition contract: configured shapes and partitions, derived
+part schemas, explicit independent request bindings, deterministic prompt-free
+assembly and complete validation. It also records the approved finite graph-limit
+increase. This is a pending implementation, not a new runtime configuration already
+accepted by the parser.
+
+The mechanism is shared across supported JSON shapes. Domain owners contribute
+facts and semantic validators; they do not gain separate assembly, retry, storage
+or continuation policies. An assembled candidate retains every real producer
+association and never becomes a fabricated provider response.

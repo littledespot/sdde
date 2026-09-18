@@ -29,6 +29,7 @@ implementation status and verification records are evidence, not new authority.
 | Configured roots and derived storage | [Path contract](paths.md) |
 | Visual control/data flow | [Mermaid diagrams](diagrams/) |
 | Model input, response and retry guidance | [Request guidance](reference-notes/model-request-guidance.md) |
+| Generic configured JSON decomposition and prompt-free assembly | [ADR 0016](decisions/0016-configured-json-response-composition.md), [flow](diagrams/20-configured-json-composition.md) |
 | Harness operation and recorded validation | [Harness guide](harness/README.md) |
 | Closed document shapes | [Schemas](schemas/) |
 | Example inputs and workflow resources | [Examples](examples/), [workflows](workflows/) |

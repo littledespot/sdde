@@ -76,6 +76,18 @@ It rejects fences, duplicate keys, trailing text and schema violations. Rejected
 bytes remain evidence. Valid shape yields candidate data, not business-quality
 proof or publication authority.
 
+## Configured smaller outputs — design pending implementation
+
+[ADR 0016](../decisions/0016-configured-json-response-composition.md) separates
+cohesive response parts while retaining relevant input evidence. Each call receives
+its configured task and exact derived part schema; correction requests that complete
+part. Replace combined-output instructions at each part's initial/correction call
+site; a narrowed schema must not accompany a prompt requesting sibling fields.
+Native assembly receives admitted values and a compiled structural mapping,
+with **no LLM prompt or call**. Existing full validation, native repair and total-token
+accounting remain. The configured first use separates extraction content from
+dependent token classifications; no model-quality improvement is yet measured.
+
 ## Provider mode and implementation evidence
 
 - In `native-schema` mode, the shared serializer projects Bedrock-supported

@@ -179,6 +179,13 @@ V1 acceptance is the conjunction of three non-overlapping contracts:
 
 ### 3.2 Root shape
 
+[ADR 0016](../decisions/0016-configured-json-response-composition.md) proposes one
+typed JSON-composition resource through the existing `resources` and operation
+parameter boundary. It references one complete result schema and owns only the
+part partition/dependencies. YAML continues to own calls, resources and transitions;
+no new repository configuration owner or executable resource is added. The closed
+encoding/resource compiler and formal schema changes remain implementation work.
+
 Every definition contains these exact concise fields:
 
 | Field | Exact v1 meaning |
@@ -349,8 +356,12 @@ For a complete current example, see
 
 ## 4. Compiler-owned bounds
 
-These proof-of-concept limits are fixed, non-configurable, and enforced before
-allocation or continued traversal can exceed them:
+These are the current compiler-owned, non-configurable implementation limits,
+enforced before allocation or continued traversal can exceed them. The user-approved
+[ADR 0016 graph-capacity amendment](../decisions/0016-configured-json-response-composition.md#graph-capacity)
+permits increasing the finite step ceiling. The table records the executable today;
+the new value, derived capacities and boundary evidence must change together during
+implementation. No workflow may bypass the currently compiled bound.
 
 | Constant | Value |
 | --- | ---: |

@@ -94,6 +94,16 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
   and validator. Detailed operations remain available; no action invokes another
   action. No semantic review, provider call, retry or accounting occurs.
 
+## Configured JSON composition responsibilities
+
+[ADR 0016 §3](../../decisions/0016-configured-json-response-composition.md#3-responsibilities-and-execution)
+owns the pending generic part-selection, retention and assembly contracts. Reuse
+the existing compiler, preparation, admission and validation implementations;
+keep these responsibilities as discrete callable operations. Assembly receives
+sealed admitted values and compiled destinations, returns a candidate and provenance,
+and has no prompt, provider, retry, parsing or successor-selection capability.
+Exact new operation IDs are assigned with implementation, not by this catalogue.
+
 ## `BuildPromptBodyFragmentManifestAction`
 
 - **Input:** typed request/result assembly, exact workflow-declared schemas, and

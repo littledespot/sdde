@@ -32,6 +32,12 @@ preserves the decision scope; subsequent defect reviews do not grant new authori
 requirement–principle assessment and shared actionable-question preparation.
 Implementation remains pending; it preserves business and policy ownership.
 
+[ADR 0016](decisions/0016-configured-json-response-composition.md) records the
+user-directed generic JSON response decomposition and deterministic assembly design.
+Shapes and partitions are workflow configuration; assembly needs no LLM prompt.
+The user also permits increasing the finite compiler graph ceiling. Implementation
+and measured live improvement remain pending; the configuration encoding is proposed.
+
 **Scope:** Engine development in this repository. `init`, `drift`, `audit`,
 version-control integration and artifact fingerprinting remain outside the
 initial suite. A future explicitly selected `init` may materialize principle
@@ -365,6 +371,7 @@ authority boundary.
 - <a id="126-semantic-review"></a>[12.6 Semantic review](contracts/12-model-boundary.md#126-semantic-review)
 - <a id="127-workflow-defined-model-operations"></a>[12.7 Workflow-defined model operations](contracts/12-model-boundary.md#127-workflow-defined-model-operations)
 - <a id="128-closed-authority-reconciliation-boundary"></a>[12.8 Closed authority-reconciliation boundary](contracts/12-model-boundary.md#128-closed-authority-reconciliation-boundary)
+- <a id="129-configured-json-response-composition"></a>[12.9 Configured JSON response composition](contracts/12-model-boundary.md#129-configured-json-response-composition)
 
 ---
 
@@ -842,6 +849,11 @@ The new engine is ready for production evaluation when all of the following are 
       estimates or static-capacity checks gate calls.
     - Actual reported input/output usage is retained even on budget overshoot, and no subsequent
       call is allowed at or above the execution budget.
+    - Configured response parts follow [ADR 0016](decisions/0016-configured-json-response-composition.md):
+      one complete schema, generic derived part schemas, independent request identities,
+      prompt-free native assembly with actual producer provenance, and full validation.
+      Prove the same behavior with unrelated JSON shapes. Increased finite graph capacity
+      is verified independently of unchanged token/retry limits.
 
 13. One invalid option/name-source/candidate selection, or one fallback-only filename defect,
     causes one atomic repair request; valid sibling output is preserved.
@@ -1020,6 +1032,7 @@ decision history:
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
 | [0015](decisions/0015-specification-principle-review.md) | Early Spec principle assessment and shared actionable questions; configuration/capture/review implemented, full readiness and question preparation pending. |
+| [0016](decisions/0016-configured-json-response-composition.md) | User-directed configured JSON decomposition and prompt-free assembly; finite graph-limit increase approved. Encoding proposed; implementation pending. |
 
 Additional accepted feature boundaries:
 

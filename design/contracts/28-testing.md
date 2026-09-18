@@ -155,6 +155,15 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
 
 ### 28.2 Property-based tests
 
+Configured JSON composition must satisfy the shared
+[ADR 0016 acceptance matrix](../decisions/0016-configured-json-response-composition.md#6-implementation-acceptance).
+Test extraction and unrelated nested-object/tagged-variant/whole-array contracts
+through the same owners. The matrix includes final-review counterexamples for
+schema ownership after registry cloning, prerequisite placements, request closure,
+atomic handoff and native repair/provenance. These are required regression cases, not evidence supplied
+by the design review. Compiler-bound increases require at/beyond-limit, overflow
+and storage/runtime checks, not removal of the expansion guard.
+
 Generate large path/task/requirement spaces to prove invariants:
 
 - normalized paths never escape the root;

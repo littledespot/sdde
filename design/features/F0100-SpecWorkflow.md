@@ -11,6 +11,14 @@ clarification routes are unfinished. Phase 3 repair is verified offline. See
 consistency review and shared actionable-question preparation to this design.
 Those additions are **not implemented** by the supplied workflow.
 
+[ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the
+pending generic response-composition integration: extraction content/citations,
+dependent token classifications, then native assembly and complete validation.
+The supplied workflow still uses the combined response. Configuration/compilation,
+per-part provenance and rebuilding must change together; the user permits increasing
+the finite graph limit. [Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition)
+owns implementation and verification, including unrelated JSON shapes.
+
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
 rule.
