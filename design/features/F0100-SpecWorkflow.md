@@ -732,12 +732,16 @@ closed requiredness/ownership policies, current support checks and outcomes.
 - The approved upstream-repair draft attributes loss to an extraction chunk,
   token classification, reconciliation signal or disposition. Native owners check
   the target and source association; attribution remains model-assisted. Its
-  execution-private `loss` field is not persisted review authority. Recovery is
-  incomplete: the [shared lineage conflict](../../fixes/IMP_001.md#shared-lineage-decision-required)
-  must be resolved before this path is ready.
+  execution-private `loss` field is not persisted review authority. The runner
+  renews explicitly replaced dependencies under §12.8 and requires complete
+  rebuilding. Semantic progress still needs a stable subject join; regenerated
+  ordinals alone cannot resolve the original omission.
 - Persisted review requires `candidate_revision` and uses the same admission checks
   as live collection; earlier incomplete review states, erased findings,
   foreign provenance and stale candidate revisions reject.
+- Selected detail repair receives the shared native text rule and explains the
+  retained finding. Negative detail must be nonblank; positive detail may be empty.
+  The same rule validates initial findings, insertion, replacement and readback.
 
 ### 3.11 Native reference/model execution (H-009)
 

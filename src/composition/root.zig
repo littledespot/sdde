@@ -1425,6 +1425,9 @@ test "configured specification generation YAML executes native references models
         if (support_scenario and (support_faults[(scenario - support_start) % support_faults.len] == .partial_findings or support_faults[(scenario - support_start) % support_faults.len] == .foreign_sources)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario - support_start < support_faults.len) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and label the deadline `Return by`.\n" });
         if (evidence_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == evidence_start + 1) "After renewal display `Loan renewed!` and the new return deadline.\n" else "On startup display `Hello, World!` and the current UTC date and time.\n" });
         if (disposition_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - disposition_start) % 2 == 0) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
+        // Keep the omitted claim and its exact token in the selected producer's
+        // chunk so the empty -> claim -> classification recovery is exercised.
+        if (source_repair_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" });
         if (reconciliation_scenario) switch (reconciliation_faults[scenario - reconciliation_start]) {
             .occupied_summary, .occupied_signals => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Loan renewed!`.\n" }),
             .occupied_conflict => {
@@ -1590,6 +1593,10 @@ test "configured specification generation YAML executes native references models
         if (source_repair_scenario) {
             try std.testing.expectEqual(@as(usize, if (driver.source_loss == .empty or driver.source_loss == .unchanged) 2 else 1), driver.source_repair_calls);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
+            if (driver.source_loss == .unchanged) {
+                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
+                try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
+            }
         }
         if (extraction_omission) {
             const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };

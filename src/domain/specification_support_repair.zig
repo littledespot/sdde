@@ -25,8 +25,8 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
         const Rule = struct {
             rejection: review.Diagnostic,
             finding: ?review.Value,
-            pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, finding: ?review.Value } {
-                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .finding = self.finding };
+            pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, detail_rule: ?@import("specification_support_evidence.zig").DetailRule.Guidance, finding: ?review.Value } {
+                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .detail_rule = if (self.rejection.issue == .invalid_detail and self.finding != null) @import("specification_support_evidence.zig").detailRule(self.finding.?.decision.finding()).guidance() else null, .finding = self.finding };
             }
         };
         const atomic = shared.Contract(Target, Replacement, Facts, Rule);

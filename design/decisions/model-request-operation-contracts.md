@@ -14,8 +14,9 @@ No new decision or implementation claim is introduced here.
 - The runner supplies read-only ledger snapshots and initial/retry classification,
   validates the proposed transition, and publishes sealed evidence from the applied
   record.
-- The runner owns retry counts: ordinary operation counts, or operation/native-defect
-  counts for atomic repair and its required dependent requests under the user-approved
+- The runner owns retry counts: operation/immutable-assignment counts for ordinary
+  requests, also bound to a pending native parent for dependent requests, and
+  operation/native-defect counts for atomic repairs under the user-requested
   2026-09-18 amendment in
   [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation). Request ordinals
   never become a second retry counter.

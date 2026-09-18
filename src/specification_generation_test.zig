@@ -1725,6 +1725,9 @@ test "review repair preserves negative verdicts and repairs only native findings
     const good = try reviewFor(a, inputs);
     const findings = try a.dupe(support.Finding, good.entries);
     findings[0].value.decision = .ambiguous;
+    findings[0].value.detail = "The source leaves the deadline ambiguous.";
+    try checkDetailRepair(.source, a, inputs, fixture.context, .{ .entries = findings });
+    findings[0].value.detail = "";
     const rejected = (try support.collect(a, inputs, fixture.context, try json.encode(support.Review, a, .{ .entries = findings }), original)).rejected;
     try std.testing.expectEqual(.invalid_detail, rejected.rejection.selected().?.issue);
     try std.testing.expectError(error.InvalidRequiredAuthority, (@import("actions/specification/apply_specification_support.zig").Action{}).execute(.{ .rejected = rejected }));
@@ -2244,6 +2247,7 @@ test "principle review preserves business authority and retains cited Plan oblig
         try std.testing.expect(std.mem.indexOf(u8, source_packet.body(), example[1]) == null);
         const findings = try a.alloc(policy_review.Finding, ledger.requirements.len);
         for (findings, 0..) |*finding, index| finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .decision = if (index == 0) .conflicting else .compatible, .citations = if (index == 0) &.{.{ .chunk = policies.chunks[0].id, .first_line = 1, .last_line = 1 }} else &.{}, .detail = if (index == 0) "The explicit business requirement conflicts with the selected policy; Plan must resolve the choice." else "" } };
+        try checkDetailRepair(.principles, a, policy_inputs, fixture.context, .{ .entries = findings });
         const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
         const good = try policy_review.collect(a, policy_inputs, fixture.context, try json.encode(policy_review.Review, a, .{ .entries = findings }), origin);
         try std.testing.expect(good == .accepted);
@@ -2416,4 +2420,54 @@ fn checkSourceOmissionProgress(a: std.mem.Allocator, permit: @import("domain/wor
     entries[0].review.?.source_ids = &.{.{ .ordinal = 999 }};
     foreign_evidence.evidence = entries;
     try std.testing.expectError(error.InvalidRequiredAuthority, support.validateStored(a, foreign_evidence, context.inputs));
+}
+
+fn checkDetailRepair(comptime purpose: @import("domain/specification_support.zig").Purpose, a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, good: @import("domain/specification_support.zig").Contract(purpose).Review) !void {
+    const review = @import("domain/specification_support.zig").Contract(purpose);
+    const repair = @import("domain/specification_support_repair.zig").Contract(purpose);
+    const detail_owner = @import("domain/specification_support_evidence.zig");
+    const original: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const corrected: @TypeOf(original) = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    const admitted = (try review.collect(a, inputs, context, try @import("domain/model_candidate_json.zig").encode(review.Review, a, good), original)).accepted;
+    try review.validateStored(a, admitted.inputs, context.inputs);
+    const oversized = try std.mem.concat(a, u8, &.{ "é" ** 1000, "x" });
+    for ([_][]const u8{ "", " \t\n", "\x00", oversized }) |invalid| {
+        const rows = try a.dupe(review.Finding, good.entries);
+        rows[0].value.detail = invalid;
+        var candidate = admitted.candidate;
+        candidate.review.entries = rows;
+        const rejected = (try review.validate(a, inputs, context.inputs, candidate)).rejected;
+        try std.testing.expectEqual(.invalid_detail, rejected.rejection.selected().?.issue);
+        const authorization = try repair.authorize(a, inputs, context, rejected);
+        const packet = try repair.packet(a, inputs, context, candidate, authorization);
+        defer @import("domain/model_input_packet.zig").release(packet);
+        const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+        const rule = body.value.object.get("repair").?.object.get("rule").?.object.get("detail_rule").?.object;
+        try std.testing.expect(!rule.get("allow_empty").?.bool);
+        try std.testing.expectEqual(@as(i64, @import("domain/clarification_inputs.zig").max_text_bytes), rule.get("maximum_utf8_bytes").?.integer);
+        try std.testing.expect(std.mem.indexOf(u8, rule.get("instruction").?.string, "retained finding") != null);
+        const unchanged = try repair.merge(a, inputs, context, candidate, authorization, .{ .detail = .{ .detail = invalid } }, corrected);
+        try std.testing.expect(unchanged == .rejected);
+        const fixed = (try repair.merge(a, inputs, context, candidate, authorization, .{ .detail = .{ .detail = good.entries[0].value.detail } }, corrected)).accepted;
+        try std.testing.expectEqualDeep(good, fixed.candidate.review);
+        try std.testing.expectEqualDeep(corrected, fixed.candidate.origins[0].?);
+        try std.testing.expectEqualDeep(original, fixed.candidate.origins[1].?);
+        try review.validateStored(a, fixed.inputs, context.inputs);
+        const proofs = try a.dupe(@import("domain/required_authority.zig").Evidence, fixed.inputs.evidence);
+        proofs[0].review.?.detail = invalid;
+        var corrupt = fixed.inputs;
+        corrupt.evidence = proofs;
+        try std.testing.expectError(error.InvalidRequiredAuthority, review.validateStored(a, corrupt, context.inputs));
+        // Missing-finding insertion uses the same full admission, including detail.
+        var absent = admitted.candidate;
+        absent.review.entries = good.entries[1..];
+        absent.origins = absent.origins[1..];
+        absent.occurrences = .{};
+        const missing = (try review.validate(a, inputs, context.inputs, absent)).rejected;
+        const insert = try repair.authorize(a, inputs, context, missing);
+        try std.testing.expect((try repair.merge(a, inputs, context, missing.candidate.?, insert, .{ .finding = rows[0].value }, corrected)) == .rejected);
+    }
+    try std.testing.expect(!detail_owner.detailRule(.supported).accepts("\xc0"));
+    try std.testing.expect(detail_owner.detailRule(.supported).accepts(""));
+    try std.testing.expect(!detail_owner.detailRule(.unsupported).accepts(""));
 }

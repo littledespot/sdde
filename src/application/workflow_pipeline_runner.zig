@@ -238,14 +238,12 @@ pub const Runner = struct {
             break :call .{ .request = request.prepared().?, .provider_binding = request.binding(), .operations = state.current_operations, .operation_id = id_value };
         } else null;
         const token_revision = self.token_accounting.current().revision();
-        var repair_attempt_kind: retry.AttemptKind = .repair;
         const repair_permit: ?retry.Permit = if (step.retry_authority) |authority| switch (authority.scope) {
             .operation => null,
             .repair => self.repair_retry.currentPermit() orelse return .{ .rejected = .authority },
             .model_request => permit: {
                 const request = retained_request orelse return .{ .rejected = .authority };
                 if (request.id().purpose != .atomic_repair) {
-                    repair_attempt_kind = .dependent_review;
                     break :permit self.repair_retry.currentDependentPermit();
                 }
                 const packet = request.packet() orelse return .{ .rejected = .authority };
@@ -255,6 +253,12 @@ pub const Runner = struct {
                 if (!std.meta.eql(authorization, value.authorization)) return .{ .rejected = .authority };
                 break :permit value;
             },
+        } else null;
+        const request_assignment: ?retry.Assignment = if (step.retry_authority) |authority| assignment: {
+            if (authority.scope != .model_request) break :assignment null;
+            const request = retained_request orelse return .{ .rejected = .authority };
+            if (request.id().purpose == .atomic_repair) break :assignment null;
+            break :assignment .{ .request = request.id(), .record = request.ledger().indexOf(request.id()) orelse return .{ .rejected = .authority }, .parent = if (repair_permit) |permit| permit.key else null };
         } else null;
         var attempt_input: @FieldType(operations.StepInput, "model_attempt") = null;
         var provider_input: @FieldType(operations.StepInput, "provider_operation") = null;
@@ -266,7 +270,7 @@ pub const Runner = struct {
             const current = attempt.accounting(state.attempts);
             if (!current.stageRunEpochId().eql(current_requests.stageRunEpochId())) return .{ .rejected = .authority };
             const authority = step.retry_authority orelse return .{ .rejected = .authority };
-            const executions = if (repair_permit) |permit| self.repair_retry.completedAttempts(step.id, permit.key) else self.retry_execution_counts[index];
+            const executions = if (request_assignment) |assignment| self.repair_retry.completedAssignmentAttempts(step.id, assignment) else if (repair_permit) |permit| self.repair_retry.completedAttempts(step.id, permit.key) else self.retry_execution_counts[index];
             attempt_input = .{
                 .accounting = current,
                 .operations = state.current_operations,
@@ -290,8 +294,11 @@ pub const Runner = struct {
             }
         }
         if (step.retry_authority) |authority| {
-            if (repair_permit) |permit| {
-                const admitted = self.repair_retry.beginAttempt(repair_attempt_kind, step.id, authority.limit, permit) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .operation_failed else .authority };
+            if (request_assignment) |assignment| {
+                const admitted = self.repair_retry.beginAssignmentAttempt(step.id, authority.limit, assignment) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .operation_failed else .authority };
+                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, admitted.exhausted) orelse return .{ .rejected = .authority } } };
+            } else if (repair_permit) |permit| {
+                const admitted = self.repair_retry.beginAttempt(step.id, authority.limit, permit) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .operation_failed else .authority };
                 if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, admitted.exhausted) orelse return .{ .rejected = .authority } } };
             } else {
                 if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, self.retry_execution_counts[index]) orelse return .{ .rejected = .authority } } };
@@ -375,7 +382,9 @@ pub const Runner = struct {
                 for (defects) |defect| defect.deinit(allocator);
                 allocator.free(defects);
             }
-            try result.append(allocator, .{ .step = name, .limit = authority.limit.value, .scope = authority.scope, .operation_executions = self.retry_execution_counts[index], .defects = defects });
+            const assignments = try self.repair_retry.observeAssignments(allocator, step.id);
+            errdefer allocator.free(assignments);
+            try result.append(allocator, .{ .step = name, .limit = authority.limit.value, .scope = authority.scope, .operation_executions = self.retry_execution_counts[index], .defects = defects, .assignments = assignments });
         };
         return result.toOwnedSlice(allocator);
     }

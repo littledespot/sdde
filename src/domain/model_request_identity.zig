@@ -566,6 +566,23 @@ pub fn unitOwnerEql(left: ImmutableUnitOwnerId, right: ImmutableUnitOwnerId) boo
     };
 }
 
+/// Retry identity excludes request ordinals. Reassigning the same immutable work
+/// cannot erase its attempts; unrelated units and purposes remain independent.
+pub fn sameAssignment(left: *const ModelRequestId, right: *const ModelRequestId) bool {
+    var a = left;
+    var b = right;
+    while (true) {
+        if (!a.stage_run_epoch_id.eql(b.stage_run_epoch_id) or
+            !unitOwnerEql(a.immutable_unit_owner_id, b.immutable_unit_owner_id) or
+            !a.model_operation_id.eql(b.model_operation_id) or
+            std.meta.activeTag(a.purpose) != std.meta.activeTag(b.purpose)) return false;
+        if (a.purpose != .context_followup) return purposeEqlBounded(a.purpose, b.purpose, 1);
+        if (a.purpose.context_followup.validated_context_request_ordinal.value != b.purpose.context_followup.validated_context_request_ordinal.value) return false;
+        a = a.purpose.context_followup.parent_model_request_id;
+        b = b.purpose.context_followup.parent_model_request_id;
+    }
+}
+
 fn validatePurpose(
     current: *const LedgerStorage,
     unit_owner_id: ImmutableUnitOwnerId,

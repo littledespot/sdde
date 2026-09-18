@@ -26,7 +26,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             candidate_omission,
             not_applicable,
 
-            fn finding(self: Decision) a.Finding {
+            pub fn finding(self: Decision) a.Finding {
                 return switch (self) {
                     .not_applicable => .supported,
                     inline else => |value| @field(a.Finding, @tagName(value)),

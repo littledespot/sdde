@@ -168,7 +168,7 @@ defined response-level correction containing:
 
 - The builder owns no retry counter or limit.
 - Each correction returns through the existing `advance-model-attempt-accounting` step, whose
-  compiler-validated local limit owns further model attempts.
+  compiler-validated local limit owns further attempts of that assignment (§22.7).
 - The execution's total-token budget continues across all requests and corrections.
 - Request IDs cannot reset either authority.
 - Every correction starts with the original retained task/schema/evidence inputs and the latest
@@ -186,9 +186,21 @@ The user-approved 2026-09-18 amendment makes successful repair progress independ
 of another target's retry allowance:
 
 - Each retry-capable operation instance still declares `retry-limit` in YAML.
-  Atomic repair requests, their required dependent requests and repair merges count
-  visits by compiled operation and native defect key. Other operations retain
-  invocation-wide counts.
+  Atomic repair requests and repair merges count visits by compiled operation and
+  native defect key. Ordinary model requests count visits by compiled operation
+  and immutable assignment; other operations retain invocation-wide counts.
+- The user-requested R32 amendment defines an assignment by execution, immutable
+  unit, model operation and purpose, excluding request ordinal. Context followups
+  retain their parent's assignment and native followup ordinal. Equal payload
+  bytes do not merge unrelated units. Reassignment cannot reset history.
+- Successful JSON and schema admission completes protocol correction. Changed
+  text, error kind/location, or syntax alone does not grant a new allowance.
+  Independent assignments have independent allowances; prior counts remain for
+  the execution. This changes no semantic validation or publication authority.
+- Required dependent requests additionally bind their pending native parent key.
+  Distinct rebuilding units can continue; repeating the same unit under the same
+  parent retains its allowance. Atomic repair requests keep the native defect
+  allowance, including schema-valid unsuccessful replacements.
 - A defect key identifies the original candidate scope, stable authorized target and
   closed validator-owned diagnostic family. Mutable values, request IDs, authorization
   IDs and revisions cannot create a new allowance. Native occurrence identities
@@ -203,13 +215,15 @@ of another target's retry allowance:
 - Semantic omission progress requires complete dependent rebuilding and admitted review.
   Required child repairs may run while that validation is pending; resolving a child
   restores the pending parent, without declaring the semantic defect resolved.
-  Rebuilding requests use that native pending parent's key; initial review attempts
-  cannot consume its allowance. Repeated requests and corrections for the same parent
-  retain their counts. The runner's native repair phase supplies this association,
+  Rebuilding requests use that native pending parent's key and immutable assignment;
+  initial review attempts cannot consume their allowance. Repeated requests and
+  corrections for the same parent/assignment retain their counts. The runner's native repair phase supplies this association,
   never a model value or a new request ordinal.
 - Each native scope freezes its finite target/family population at first authorization;
   model replacements cannot enlarge it. The shared u32 key representation bounds the
-  execution's distinct keys. The compiler uses that bound and declared per-operation
+  execution's distinct keys. Assignment counters have the same finite u32 population
+  bound. Both use the existing runner-owned retry state and report projections,
+  never a builder/provider counter. The compiler uses these bounds and declared per-operation
   allowances to retain a finite execution guard, including pure loops. The 512-step
   expansion ceiling is unchanged.
 - Protocol corrections retain the same logical request and selected defect allowance.

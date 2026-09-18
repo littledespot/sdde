@@ -1,5 +1,6 @@
 const std = @import("std");
 const workflow = @import("workflow.zig");
+const identity = @import("model_request_identity.zig");
 
 pub const parameter_id = "retry-limit";
 
@@ -89,17 +90,41 @@ pub const Observation = struct {
     scope: Scope,
     operation_executions: u64,
     defects: []const DefectCount,
+    assignments: []const AssignmentCount = &.{},
 
     pub fn deinit(self: Observation, allocator: std.mem.Allocator) void {
         allocator.free(self.step);
         for (self.defects) |defect| defect.deinit(allocator);
         allocator.free(self.defects);
+        allocator.free(self.assignments);
     }
 };
 pub const Role = enum { none, authorize, merge, validate, merge_validate };
 /// Native repair membership uses u32 ordinals. This representational bound also
 /// bounds the execution's distinct keys across multiple native scopes.
 pub const maximum_repair_keys: u32 = std.math.maxInt(u32);
+pub const maximum_request_assignments: u32 = std.math.maxInt(u32);
+
+pub const AssignmentCount = struct { request: identity.RecordIndex, completed_executions: u64 };
+/// Borrows canonical request identity from the runner's execution-long ledger.
+pub const Assignment = struct {
+    request: *const identity.ModelRequestId,
+    record: identity.RecordIndex,
+    parent: ?Key = null,
+};
+
+const AttemptKey = union(enum) {
+    defect: Key,
+    assignment: Assignment,
+
+    fn eql(a: AttemptKey, b: AttemptKey) bool {
+        if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
+        return switch (a) {
+            .defect => |key| std.meta.eql(key, b.defect),
+            .assignment => |value| std.meta.eql(value.parent, b.assignment.parent) and identity.sameAssignment(value.request, b.assignment.request),
+        };
+    }
+};
 
 pub fn permitsTransition(role: Role, transition: ?Transition) bool {
     const value = transition orelse return true;
@@ -130,7 +155,6 @@ pub const Permit = struct {
 
 pub const Validation = enum { resolved, recurring };
 pub const ValidationMode = enum { native, dependent_review };
-pub const AttemptKind = enum { repair, dependent_review };
 pub const Transition = union(enum) {
     authorized: Permit,
     merged: struct { permit: Permit, revision_after: u64, validation: ValidationMode = .native },
@@ -154,7 +178,7 @@ pub const State = struct {
 
     const Population = struct { id: [32]u8, maximum_targets: u32, targets: u32, revision: u64 };
     const Entry = struct { key: Key, authorization: [32]u8, revision: u64 };
-    const Attempt = struct { key: Key, operation_id: workflow.WorkflowStepId, limit: Limit, completed: u64 };
+    const Attempt = struct { key: AttemptKey, operation_id: workflow.WorkflowStepId, limit: Limit, completed: u64 };
     const Active = struct {
         permit: Permit,
         phase: union(enum) { authorized, merged: struct { revision: u64, validation: ValidationMode }, recurring },
@@ -190,8 +214,16 @@ pub const State = struct {
     }
 
     pub fn completedAttempts(self: *const State, operation_id: workflow.WorkflowStepId, key: Key) u64 {
+        return self.completed(operation_id, .{ .defect = key });
+    }
+
+    pub fn completedAssignmentAttempts(self: *const State, operation_id: workflow.WorkflowStepId, assignment: Assignment) u64 {
+        return self.completed(operation_id, .{ .assignment = assignment });
+    }
+
+    fn completed(self: *const State, operation_id: workflow.WorkflowStepId, key: AttemptKey) u64 {
         for (self.attempts.items) |attempt| {
-            if (std.meta.eql(attempt.key, key) and std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) return attempt.completed;
+            if (attempt.key.eql(key) and std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) return attempt.completed;
         }
         return 0;
     }
@@ -203,10 +235,20 @@ pub const State = struct {
             result.deinit(allocator);
         }
         for (self.attempts.items) |attempt| {
-            if (!std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) continue;
-            const item = try DefectCount.init(allocator, attempt.key, attempt.completed);
+            if (attempt.key != .defect or !std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) continue;
+            const item = try DefectCount.init(allocator, attempt.key.defect, attempt.completed);
             errdefer item.deinit(allocator);
             try result.append(allocator, item);
+        }
+        return result.toOwnedSlice(allocator);
+    }
+
+    pub fn observeAssignments(self: *const State, allocator: std.mem.Allocator, operation_id: workflow.WorkflowStepId) std.mem.Allocator.Error![]const AssignmentCount {
+        var result: std.ArrayList(AssignmentCount) = .empty;
+        errdefer result.deinit(allocator);
+        for (self.attempts.items) |attempt| {
+            if (attempt.key != .assignment or !std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) continue;
+            try result.append(allocator, .{ .request = attempt.key.assignment.record, .completed_executions = attempt.completed });
         }
         return result.toOwnedSlice(allocator);
     }
@@ -266,15 +308,24 @@ pub const State = struct {
 
     /// Returns the operation's completed count after admission, or its unchanged
     /// exhausted count. A resolved key retains every prior operation count.
-    pub fn beginAttempt(self: *State, kind: AttemptKind, operation_id: workflow.WorkflowStepId, limit: Limit, permit: Permit) StateError!AttemptResult {
+    pub fn beginAttempt(self: *State, operation_id: workflow.WorkflowStepId, limit: Limit, permit: Permit) StateError!AttemptResult {
         _ = workflow.WorkflowStepId.parse(operation_id.bytes) orelse return error.InvalidRepairProgress;
         const active = self.active orelse return error.InvalidRepairProgress;
-        if (!std.meta.eql(active.permit, permit) or !switch (kind) {
-            .repair => active.phase == .authorized,
-            .dependent_review => self.suspendsParent(),
-        }) return error.InvalidRepairProgress;
+        if (!std.meta.eql(active.permit, permit) or active.phase != .authorized) return error.InvalidRepairProgress;
+        return self.countAttempt(operation_id, limit, .{ .defect = permit.key });
+    }
+
+    pub fn beginAssignmentAttempt(self: *State, operation_id: workflow.WorkflowStepId, limit: Limit, assignment: Assignment) StateError!AttemptResult {
+        if (assignment.request.purpose == .atomic_repair) return error.InvalidRepairProgress;
+        const parent = self.currentDependentPermit();
+        if (!std.meta.eql(assignment.parent, if (parent) |value| value.key else null)) return error.InvalidRepairProgress;
+        return self.countAttempt(operation_id, limit, .{ .assignment = assignment });
+    }
+
+    fn countAttempt(self: *State, operation_id: workflow.WorkflowStepId, limit: Limit, key: AttemptKey) StateError!AttemptResult {
+        _ = workflow.WorkflowStepId.parse(operation_id.bytes) orelse return error.InvalidRepairProgress;
         for (self.attempts.items) |*attempt| {
-            if (!std.meta.eql(attempt.key, permit.key) or !std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) continue;
+            if (!attempt.key.eql(key) or !std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) continue;
             if (attempt.limit.value != limit.value) return error.InvalidRepairProgress;
             if (attempt.completed > limit.value) return .{ .exhausted = attempt.completed };
             const next_revision = std.math.add(u64, self.revision, 1) catch return error.InvalidRepairProgress;
@@ -282,10 +333,17 @@ pub const State = struct {
             self.revision = next_revision;
             return .{ .allowed = attempt.completed };
         }
+        if (key == .assignment) {
+            var count: u64 = 0;
+            for (self.attempts.items) |attempt| if (attempt.key == .assignment) {
+                count += 1;
+            };
+            if (count >= maximum_request_assignments) return error.InvalidRepairProgress;
+        }
         const next_revision = std.math.add(u64, self.revision, 1) catch return error.InvalidRepairProgress;
         const name = try self.allocator.dupe(u8, operation_id.bytes);
         errdefer self.allocator.free(name);
-        try self.attempts.append(self.allocator, .{ .key = permit.key, .operation_id = .{ .bytes = name }, .limit = limit, .completed = 1 });
+        try self.attempts.append(self.allocator, .{ .key = key, .operation_id = .{ .bytes = name }, .limit = limit, .completed = 1 });
         self.revision = next_revision;
         return .{ .allowed = 1 };
     }

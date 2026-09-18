@@ -530,10 +530,22 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
   §3.10](../features/F0100-SpecWorkflow.md#310-shared-required-authority-boundary).
 - The runner checks both direct authority generations and their source lineage; replacing a
   source requires rebuilding its affected projection and gate.
+- Only a directly consumed prior revision is a replacement's self-input. Reusing
+  an output key cannot turn an inherited stale dependency into that exception.
 - Native data schemas distinguish current authorities from captured immutable evidence.
 - A captured value carries its complete current-authority frontier into every successor;
   retiring or replacing its transport slot does not invalidate that evidence.
 - Conflicting source generations remain stale.
+- The user-requested Chunk 14 renewal amendment distinguishes repair evidence from
+  current dependencies. After exact native authorization/revision/old-value checks,
+  a merge requiring dependent review renews only its declared replacements. Its
+  native invalidation set and replaced generations become historical inputs;
+  every other source/policy dependency must still be current and conflict-free.
+  The envelope applies renewal and declared invalidation atomically. Original
+  input generations and retained evidence remain available as history. No gate
+  passes until all dependent projections and validation evidence are rebuilt.
+  YAML/model data cannot select renewal keys; ordinary replacement cannot renew
+  dependencies. Retry history and semantic-subject identity are not reset.
 - Gate authorities must use current schemas.
 - YAML and model output cannot change this classification.
 - Runner-validated execution-control records (such as the request identity ledger) are not

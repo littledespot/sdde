@@ -13,7 +13,7 @@ pub const Origin = struct {
     inputs: [key_count]?u64,
     // Current authority frontier after expanding captured, immutable inputs.
     lineage: [key_count]?u64 = @splat(null),
-    lineage_conflict: bool = false,
+    lineage_conflicts: std.enums.EnumSet(pipeline.DataKey) = .initEmpty(),
 };
 
 /// Compiled native value schema. Workflows reference keys, never supply schemas

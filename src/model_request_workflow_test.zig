@@ -3199,7 +3199,7 @@ test "response admission preserves selected requests captured authority and seri
         const first_origin = first.envelope.origins[@intFromEnum(payload_workflow.schema.key)].?;
         const second_origin = second.envelope.origins[@intFromEnum(payload_workflow.schema.key)].?;
         try std.testing.expectEqualDeep(first_origin.lineage, second_origin.lineage);
-        try std.testing.expect(!first_origin.lineage_conflict and !second_origin.lineage_conflict);
+        try std.testing.expect(first_origin.lineage_conflicts.count() == 0 and second_origin.lineage_conflicts.count() == 0);
         try std.testing.expectEqual(second_origin.generation, second.envelope.origins[@intFromEnum(envelope_workflow.schema.key)].?.generation);
         const before = (try currentRequest(&first)).prepared().?;
         const after = (try currentRequest(&second)).prepared().?;
@@ -3311,6 +3311,112 @@ fn prepareRequestClosure(runner: *runner_module.Runner, outcome: workflow.Outcom
 
 const malformed_protocol_items = "{\"items\":[{\"name\":\"first\",\"text\":\"one\"},{\"name\":\"second\",\"text\":\"two\",\"name\":\"third\",\"text\":\"three\"}]}";
 const malformed_protocol_record = "{\"result\":{\"settings\":{\"state\":\"open\",\"state\":\"closed\"}}}";
+
+test "bounded protocol assignments continue many valid units and stop repeated or alternating failures" {
+    const cases = [_]struct { schema: []const u8, valid: []const u8, invalid: []const u8, duplicate: []const u8 }{
+        .{ .schema = schema_bytes, .valid = "{\"answer\":\"Preserve all meaning\"}", .invalid = "{\"answer\":42}", .duplicate = "{\"answer\":\"one\",\"answer\":\"two\"}" },
+        .{
+            .schema = "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"segments\"],\"properties\":{\"segments\":{\"type\":\"array\",\"maxItems\":8,\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"kind\",\"text\"],\"properties\":{\"kind\":{\"enum\":[\"literal\"]},\"text\":{\"type\":\"string\",\"maxLength\":2000}}}}}}",
+            .valid = "{\"segments\":[{\"kind\":\"literal\",\"text\":\"Retain the return deadline\"}]}",
+            .invalid = "{\"segments\":[{\"kind\":\"preserved_token\",\"text\":\"Retain the return deadline\"}]}",
+            .duplicate = "{\"segments\":[],\"segments\":[]}",
+        },
+    };
+    for (cases) |example| for ([_]bool{ false, true }) |recover| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        var source = try protocolRetryYaml(&fixture);
+        for ([_][2][]const u8{
+            .{ "ok: origin, failed: end.failed", "ok: select, failed: end.failed" },
+            .{ ", input: input.txt", "" },
+            .{ ", input: input }", " }" },
+            .{ "use: test.observe-request, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }", "use: test.observe-request, on: { ok: retire, failed: end.failed, cancelled: end.cancelled }" },
+        }) |change| source = try std.mem.replaceOwned(u8, a, source, change[0], change[1]);
+        source = try std.fmt.allocPrint(a,
+            \\{s}
+            \\  select: {{ use: test.select-unit, with: {{retry-limit: 128}}, on: {{ok: origin, failed: end.failed}} }}
+            \\  retire: {{ use: retire-model-transport, on: {{ok: select, failed: end.failed}} }}
+            \\
+        , .{source});
+        var owner: ProtocolUnits = .{};
+        var entries = fixture.entries ++ [_]operations.Entry{.{
+            .contract = .{ .id = "test.select-unit", .kind = .step, .produces = &.{.model_input_packet}, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .parameters = &.{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 128 }}, .retry_limit = .{ .maximum = 128 } },
+            .binding = bindings.bind(ProtocolUnits, &owner, ProtocolUnits.select),
+        }};
+        fixture.registry.operations = &entries;
+        var profiles = core.profiles;
+        for (&profiles) |*profile| profile.total_model_token_budget.value = 10000;
+        fixture.registry.policies = &profiles;
+        const graph = try fixture.compileWithAssets(source, example.schema, false);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "initialize" }).outcome);
+        // The collection's capacity is 128; correction is bounded independently
+        // after many successful requests through the same compiled call site.
+        const successful_units: usize = 16;
+        for (0..successful_units + 1) |unit| {
+            for ([_][]const u8{ "select", "origin", "validate", "build" }) |step|
+                try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+            const request = (try currentRequest(&runner)).id();
+            const count: usize = if (unit == successful_units) 3 else 1;
+            for (0..count) |attempt_index| {
+                if (attempt_index > 0) try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+                const success = unit < successful_units or (recover and attempt_index == 2);
+                fake.invocation_plan.complete.content = if (success) example.valid else if (attempt_index == 1) example.invalid else example.duplicate;
+                for ([_][]const u8{ "account", "assign-operation", "authorize", "phase" }) |step|
+                    try std.testing.expectEqual(@as(workflow.OutcomeTag, if (std.mem.eql(u8, step, "phase") and attempt_index > 0) .more else .ok), runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+                if (attempt_index == 0) try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-request" }).outcome);
+                for ([_][]const u8{ "advance-operation", "call", "validate-response", "complete-operation" }) |step|
+                    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+                try std.testing.expectEqual(@as(workflow.OutcomeTag, if (success or attempt_index == 1) .ok else .invalid), runner.bindings().invokeStep(.{ .bytes = "decode" }).outcome);
+                try std.testing.expectEqual(@as(workflow.OutcomeTag, if (success) .ok else .invalid), runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
+                try std.testing.expect((try currentRequest(&runner)).id() == request);
+                if (success) for ([_][]const u8{ "close-request", "observe", "retire" }) |step|
+                    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+            }
+        }
+        if (recover) {
+            for ([_][]const u8{ "select", "origin", "validate", "build", "account" }) |step|
+                try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        } else {
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+            const exhausted = runner.bindings().invokeStep(.{ .bytes = "account" }).rejected.retry_limit;
+            try std.testing.expectEqual(@as(u32, 2), exhausted.limit.value);
+            try std.testing.expectEqual(@as(u64, 3), exhausted.completed_executions);
+        }
+        const observations = try runner.retryObservations(a);
+        const account = for (observations) |row| {
+            if (std.mem.eql(u8, row.step, "account")) break row;
+        } else return error.TestUnexpectedResult;
+        try std.testing.expectEqual(@as(u64, 0), account.operation_executions);
+        try std.testing.expectEqual(@as(usize, successful_units + 1 + @intFromBool(recover)), account.assignments.len);
+        for (account.assignments[0..successful_units], 1..) |row, index| {
+            try std.testing.expectEqual(index, row.request.value);
+            try std.testing.expectEqual(@as(u64, 1), row.completed_executions);
+        }
+        try std.testing.expectEqual(@as(u64, 3), account.assignments[successful_units].completed_executions);
+        try std.testing.expectEqual(@as(usize, successful_units + 3), fake.effect_count);
+        try std.testing.expectEqual(@as(u128, (successful_units + 3) * 7), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(usize, successful_units + @intFromBool(recover)), fixture.observer.calls);
+    };
+}
+
+const ProtocolUnits = struct {
+    next: u32 = 0,
+    fn select(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        self.next += 1;
+        var name: [32]u8 = undefined;
+        const unit: identity.ImmutableUnitOwnerId = .{ .reference_global = .{ .reference_state_id = .{ .bytes = "source" }, .unit_slot_id = .{ .bytes = std.fmt.bufPrint(&name, "partition-{d}", .{self.next}) catch return error.OperationExecutionFailed } } };
+        const packet = @import("domain/model_input_packet.zig").create(std.testing.allocator, "{}", unit, .initial_generation, null) catch return error.OperationExecutionFailed;
+        return requests.publishPacket(std.testing.allocator, packet);
+    }
+};
 
 fn protocolRetryYaml(fixture: *Fixture) ![]const u8 {
     const allocator = fixture.arena.allocator();
@@ -3508,7 +3614,7 @@ test "dependent reviews retain parent allowances through initial protocol correc
                 } else try prepareProtocolAttempt(&runner, true);
                 try std.testing.expect((try currentRequest(&runner)).id() == request);
                 try rejectProtocolResponse(&runner, false);
-                try std.testing.expectEqual(@as(u64, index + 1), runner.repair_retry.completedAttempts(.{ .bytes = "account" }, parent.key));
+                try std.testing.expectEqual(@as(u64, index + 1), runner.repair_retry.completedAssignmentAttempts(.{ .bytes = "account" }, .{ .request = request, .record = (try requestLedger(&runner)).indexOf(request).?, .parent = parent.key }));
                 try std.testing.expectEqual(@as(u32, @intCast(index + 1)), attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved(request));
                 try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
             }
@@ -3523,7 +3629,7 @@ test "dependent reviews retain parent allowances through initial protocol correc
                 const parent = runner.repair_retry.currentDependentPermit().?;
                 const request = (try currentRequest(&runner)).id();
                 try std.testing.expect(request.purpose != .atomic_repair);
-                try std.testing.expectEqual(@as(u64, 1), runner.repair_retry.completedAttempts(.{ .bytes = "account" }, parent.key));
+                try std.testing.expectEqual(@as(u64, 1), runner.repair_retry.completedAssignmentAttempts(.{ .bytes = "account" }, .{ .request = request, .record = (try requestLedger(&runner)).indexOf(request).?, .parent = parent.key }));
                 try std.testing.expectEqual(@as(u32, 1), attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved(request));
                 try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "observe" }).outcome);
                 try std.testing.expect(runner.repair_retry.currentPermit() == null);

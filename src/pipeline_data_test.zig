@@ -242,6 +242,70 @@ test "mixed-generation captured evidence cannot refresh a gate and execution con
     }
 }
 
+test "native repair renews declared dependencies atomically while preserving source freshness and history" {
+    const gate = @import("domain/workflow_gate.zig");
+    const candidate = values.schema(.model_input_packet, u32, 1, 32).captured().recorded();
+    const review = values.schema(.model_payload_schema_result, u32, 1, 32).captured().recorded();
+    const proof = values.schema(.workflow_operation_registry_evidence, gate.Decision, 1, 32);
+    const gate_contract: gate.Contract = .{ .id = .{ .bytes = "test.repair@1" }, .issuer = .{ .bytes = "test.validate" }, .evidence = proof.key, .authority = &.{count_schema.key} };
+    const project: pipeline.NodeContract = .{ .id = "test.project", .kind = .action, .requires = &.{candidate.key}, .produces = &.{count_schema.key}, .side_effect = .none };
+    const validate: pipeline.NodeContract = .{ .id = gate_contract.issuer.bytes, .kind = .action, .requires = &.{count_schema.key}, .produces = &.{proof.key}, .side_effect = .none };
+    for (0..7) |scenario| {
+        var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{ context_schema, candidate, count_schema, review, proof });
+        defer envelope.deinit();
+        var delta: pipeline.NodeDelta = .{};
+        defer envelope.discard(&delta);
+        delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "Current source or policy", .attempts = 1 });
+        try envelope.apply(produce, &delta, .ok);
+        delta.data_writes[@intFromEnum(candidate.key)] = try values.create(std.testing.allocator, candidate, u32, 1);
+        try envelope.apply(.{ .id = "test.candidate", .kind = .action, .requires = &.{context_schema.key}, .produces = &.{candidate.key}, .side_effect = .none }, &delta, .ok);
+        delta.data_writes[count_index] = try values.create(std.testing.allocator, count_schema, u32, 1);
+        try envelope.apply(project, &delta, .ok);
+        if (scenario == 5) {
+            delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "Changed before review", .attempts = 2 });
+            try envelope.apply(.{ .id = "test.change-source", .kind = .action, .requires = &.{}, .produces = &.{}, .replaces = &.{context_schema.key}, .side_effect = .none }, &delta, .ok);
+        }
+        delta.data_writes[@intFromEnum(review.key)] = try values.create(std.testing.allocator, review, u32, 1);
+        try envelope.apply(.{ .id = "test.review", .kind = .action, .requires = &.{ context_schema.key, candidate.key, count_schema.key }, .produces = &.{review.key}, .side_effect = .none }, &delta, .ok);
+        delta.data_writes[@intFromEnum(proof.key)] = try values.create(std.testing.allocator, proof, gate.Decision, .accepted);
+        try envelope.apply(validate, &delta, .ok);
+        if (scenario == 5) try std.testing.expectEqual(.stale_authority, envelope.checkGate(gate_contract).?) else try std.testing.expect(envelope.checkGate(gate_contract) == null);
+        const historical = envelope.records.items[1];
+        const original_frontier = historical.origin;
+        if (scenario == 1) {
+            delta.data_replacements[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "Changed source or policy", .attempts = 2 });
+            try envelope.apply(.{ .id = "test.change-source", .kind = .action, .requires = &.{}, .produces = &.{}, .replaces = &.{context_schema.key}, .side_effect = .none }, &delta, .ok);
+        }
+        if (scenario == 6) {
+            delta.data_replacements[count_index] = try values.create(std.testing.allocator, count_schema, u32, 2);
+            try envelope.apply(.{ .id = "test.rebuild-projection", .kind = .action, .requires = &.{candidate.key}, .produces = &.{}, .replaces = &.{count_schema.key}, .side_effect = .none }, &delta, .ok);
+        }
+        const generation = envelope.generation;
+        const invalidates: []const pipeline.DataKey = if (scenario == 2) &.{ review.key, proof.key } else &.{ count_schema.key, review.key, proof.key };
+        const merge: pipeline.NodeContract = .{ .id = "test.merge", .kind = .action, .requires = &.{ context_schema.key, candidate.key, review.key, count_schema.key }, .produces = &.{}, .replaces = &.{candidate.key}, .invalidates = invalidates, .side_effect = .none, .repair_role = if (scenario == 3) .none else .merge };
+        delta.data_replacements[@intFromEnum(candidate.key)] = try values.create(std.testing.allocator, candidate, u32, 2);
+        delta.data_invalidations = .initMany(invalidates);
+        const permit: @import("domain/workflow_retry.zig").Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 1 };
+        if (scenario != 4) delta.repair_transition = .{ .merged = .{ .permit = permit, .revision_after = 2, .validation = .dependent_review } };
+        if ((scenario >= 1 and scenario <= 3) or scenario == 5) {
+            try std.testing.expectError(if (scenario == 3) error.UndeclaredRepairTransition else error.InvalidRepairRenewal, envelope.apply(merge, &delta, .ok));
+            try std.testing.expectEqual(generation, envelope.generation);
+            try std.testing.expect(envelope.slots[count_index] != null);
+            continue;
+        }
+        try envelope.apply(merge, &delta, .ok);
+        delta = .{};
+        try std.testing.expectEqualDeep(original_frontier, historical.origin);
+        try std.testing.expect(envelope.checkGate(gate_contract) != null);
+        delta.data_writes[count_index] = try values.create(std.testing.allocator, count_schema, u32, 2);
+        try envelope.apply(project, &delta, .ok);
+        try std.testing.expectEqual(.missing_evidence, envelope.checkGate(gate_contract).?);
+        delta.data_writes[@intFromEnum(proof.key)] = try values.create(std.testing.allocator, proof, gate.Decision, .accepted);
+        try envelope.apply(validate, &delta, .ok);
+        if (scenario == 4) try std.testing.expect(envelope.checkGate(gate_contract) != null) else try std.testing.expect(envelope.checkGate(gate_contract) == null);
+    }
+}
+
 test "lineage allocation failure leaves all output slots and generations unpublished" {
     for (0..2) |index| {
         var failing: std.testing.FailingAllocator = .init(std.testing.allocator, .{ .fail_index = index });

@@ -105,7 +105,7 @@ pub fn calculateExecutionLimit(steps: []const CompiledStep) ?usize {
         if (step.retry_authority) |authority| {
             const visits: usize = if (authority.scope == .operation) authority.limit.value else bounded: {
                 const per_key = std.math.add(usize, authority.limit.value, 1) catch return null;
-                const keys = std.math.add(usize, workflow_retry.maximum_repair_keys, @intFromBool(authority.scope == .model_request)) catch return null;
+                const keys = std.math.add(usize, workflow_retry.maximum_repair_keys, if (authority.scope == .model_request) workflow_retry.maximum_request_assignments else 0) catch return null;
                 break :bounded std.math.mul(usize, per_key, keys) catch return null;
             };
             total_retry_limit = std.math.add(usize, total_retry_limit, visits) catch return null;

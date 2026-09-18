@@ -195,7 +195,7 @@ test "compiled native repair roles retain their counter scope and finite bound" 
     bounded.retry_authority.?.scope = .model_request;
     // The same compiled request-accounting step can see ordinary requests and
     // all bounded repair keys. Neither population may erase the other's visits.
-    try std.testing.expectEqual((@as(usize, retry.maximum_repair_keys) + 1) * 3 + 1, compiled.calculateExecutionLimit(&.{bounded}).?);
+    try std.testing.expectEqual((@as(usize, retry.maximum_repair_keys) + retry.maximum_request_assignments) * 3 + 1, compiled.calculateExecutionLimit(&.{bounded}).?);
     bounded.retry_authority.?.scope = .repair;
     bounded.retry_authority.?.limit.value = 0;
     try std.testing.expectEqual(@as(usize, retry.maximum_repair_keys) + 1, compiled.calculateExecutionLimit(&.{bounded}).?);

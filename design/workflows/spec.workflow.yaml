@@ -291,7 +291,7 @@ subgraphs:
           prompt: extraction-prompt
           schema: extraction-schema
           selection: resource
-          retry-limit: 128
+          retry-limit: 2
         on: {ok: collect-extraction, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-extraction:
         use: collect-reference-extraction-result
@@ -410,7 +410,7 @@ subgraphs:
           prompt: reconciliation-prompt
           schema: reconciliation-schema
           selection: input
-          retry-limit: 128
+          retry-limit: 2
         on: {ok: collect-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-reconciliation:
         use: collect-reference-reconciliation-result
@@ -608,7 +608,7 @@ subgraphs:
           prompt: generation-prompt
           schema: generation-schema
           selection: input
-          retry-limit: 64
+          retry-limit: 2
         on: {ok: collect-specification, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect-specification:
         use: collect-specification-model-result

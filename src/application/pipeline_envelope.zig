@@ -14,6 +14,7 @@ pub const Error = pipeline.DeltaError || std.mem.Allocator.Error || error{
     DataReferenceOverflow,
     InvalidInformationOccurrence,
     InformationConflict,
+    InvalidRepairRenewal,
 };
 
 /// Native placement identity, never a model key or an execution receipt.
@@ -126,6 +127,20 @@ pub const PipelineEnvelope = struct {
             }
         }
 
+        const renewal = if (delta.repair_transition) |transition| transition == .merged and transition.merged.validation == .dependent_review and contract.replaces.len != 0 else false;
+        var superseded = std.enums.EnumSet(pipeline.DataKey).initEmpty();
+        if (renewal) {
+            // These effects are locked to the native merge contract, never YAML
+            // parameters or model data. The runner admits the exact repair first.
+            if (contract.replaces.len == 0 or contract.produces.len != 0 or contract.invalidates.len == 0) return error.InvalidRepairRenewal;
+            superseded = delta.data_invalidations;
+            for (contract.replaces) |key| superseded.insert(key);
+            for (self.schemas) |schema| {
+                if (schema.retention != .current or superseded.contains(schema.key) or self.origins[@intFromEnum(schema.key)] == null) continue;
+                var visited = std.enums.EnumSet(pipeline.DataKey).initEmpty();
+                if (self.dependsOn(schema.key, superseded, &visited)) return error.InvalidRepairRenewal;
+            }
+        }
         const generation = std.math.add(u64, self.generation, 1) catch return error.DataGenerationExhausted;
         var origin: data.Origin = .{ .generation = generation, .occurrence = occurrence.ordinal, .producer = contract.id, .outcome = outcome, .inputs = @splat(null) };
         inline for (.{ contract.requires, contract.optional }) |keys| {
@@ -133,13 +148,21 @@ pub const PipelineEnvelope = struct {
                 origin.inputs[@intFromEnum(key)] = input.generation;
                 const schema = data.find(self.schemas, key) orelse return error.UnregisteredDataSchema;
                 if (schema.retention == .current) {
-                    mergeGeneration(&origin, @intFromEnum(key), input.generation);
+                    if (!superseded.contains(key)) mergeGeneration(&origin, @intFromEnum(key), input.generation);
                 } else if (schema.retention == .captured) {
-                    origin.lineage_conflict = origin.lineage_conflict or input.lineage_conflict;
+                    origin.lineage_conflicts.setUnion(input.lineage_conflicts.differenceWith(superseded));
                     for (input.lineage, 0..) |expected, index| if (expected) |value| {
-                        mergeGeneration(&origin, index, value);
+                        if (!superseded.contains(@enumFromInt(index))) mergeGeneration(&origin, index, value);
                     };
                 }
+            };
+        }
+        if (renewal) {
+            if (origin.lineage_conflicts.count() != 0) return error.InvalidRepairRenewal;
+            var checked = std.enums.EnumSet(pipeline.DataKey).initEmpty();
+            for (origin.lineage, 0..) |expected, index| if (expected) |value| {
+                const current = self.origins[index] orelse return error.InvalidRepairRenewal;
+                if (current.generation != value or self.checkAuthorityLineage(@enumFromInt(index), &checked) != null) return error.InvalidRepairRenewal;
             };
         }
         // Prepare lineage before committing any output. Keep the quadratic
@@ -219,15 +242,42 @@ pub const PipelineEnvelope = struct {
         if (checked.contains(key)) return null;
         checked.insert(key);
         const origin = self.origins[@intFromEnum(key)] orelse return .missing_authority;
-        if (origin.lineage_conflict) return .stale_authority;
+        if (origin.lineage_conflicts.count() != 0) return .stale_authority;
         for (origin.lineage, 0..) |generation, index| {
-            if (index == @intFromEnum(key)) continue;
             const expected = generation orelse continue;
+            // Only a directly consumed prior revision is a replacement's
+            // self-input. A captured dependency cannot turn stale authority into
+            // a self-input merely because a later projection reuses its key.
+            if (index == @intFromEnum(key) and origin.inputs[index] == expected) continue;
             const current = self.origins[index] orelse return .missing_authority;
             if (current.generation != expected) return .stale_authority;
             if (self.checkAuthorityLineage(@enumFromInt(index), checked)) |rejection| return rejection;
         }
         return null;
+    }
+
+    fn dependsOn(self: *const PipelineEnvelope, key: pipeline.DataKey, changed: std.enums.EnumSet(pipeline.DataKey), visited: *std.enums.EnumSet(pipeline.DataKey)) bool {
+        if (changed.contains(key)) return true;
+        if (visited.contains(key)) return false;
+        visited.insert(key);
+        const origin = self.origins[@intFromEnum(key)] orelse return false;
+        for (origin.inputs, 0..) |input, index| {
+            const generation = input orelse continue;
+            if (index == @intFromEnum(key)) continue;
+            const input_key: pipeline.DataKey = @enumFromInt(index);
+            const schema = data.find(self.schemas, input_key) orelse continue;
+            if (schema.retention == .execution_control) continue;
+            if (changed.contains(input_key)) return true;
+            // Reused transport slots may now describe a different request. Only
+            // follow the captured generation; current authority is also retained
+            // in the flattened lineage below.
+            const current = self.origins[index] orelse continue;
+            if (current.generation == generation and self.dependsOn(input_key, changed, visited)) return true;
+        }
+        for (origin.lineage, 0..) |input, index| {
+            if (input != null and index != @intFromEnum(key) and changed.contains(@enumFromInt(index))) return true;
+        }
+        return false;
     }
 
     /// Releases rejected/unapplied candidates exactly once, including aliased
@@ -300,12 +350,12 @@ pub const PipelineEnvelope = struct {
 
 fn sameOrigin(left: data.Origin, right: data.Origin) bool {
     return left.generation == right.generation and left.occurrence == right.occurrence and std.mem.eql(u8, left.producer, right.producer) and left.outcome == right.outcome and
-        std.meta.eql(left.inputs, right.inputs) and std.meta.eql(left.lineage, right.lineage) and left.lineage_conflict == right.lineage_conflict;
+        std.meta.eql(left.inputs, right.inputs) and std.meta.eql(left.lineage, right.lineage) and left.lineage_conflicts.eql(right.lineage_conflicts);
 }
 
 fn mergeGeneration(origin: *data.Origin, index: usize, generation: u64) void {
     if (origin.lineage[index]) |prior| {
-        if (prior != generation) origin.lineage_conflict = true;
+        if (prior != generation) origin.lineage_conflicts.insert(@enumFromInt(index));
     } else origin.lineage[index] = generation;
 }
 

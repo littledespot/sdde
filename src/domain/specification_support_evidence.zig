@@ -131,8 +131,26 @@ fn expectedProvenance(inputs: a.Inputs, id: a.Id) ?spec.Provenance {
     return if (inputs.specification) |content| candidateProvenance(content, id) else null;
 }
 
+pub const DetailRule = struct {
+    allow_empty: bool,
+
+    pub const Guidance = struct { instruction: []const u8, allow_empty: bool, maximum_utf8_bytes: usize };
+    pub fn guidance(self: DetailRule) Guidance {
+        return .{
+            .instruction = "Explain the retained finding, not the specification field. Nonempty detail must be nonblank UTF-8; only tab/newline control characters are allowed.",
+            .allow_empty = self.allow_empty,
+            .maximum_utf8_bytes = @import("clarification_inputs.zig").max_text_bytes,
+        };
+    }
+    pub fn accepts(self: DetailRule, detail: []const u8) bool {
+        return (self.allow_empty and detail.len == 0) or @import("clarification_inputs.zig").validText(detail, @import("clarification_inputs.zig").max_text_bytes);
+    }
+};
+pub fn detailRule(finding: a.Finding) DetailRule {
+    return .{ .allow_empty = finding == .supported };
+}
 pub fn validDetail(finding: a.Finding, detail: []const u8) bool {
-    return (finding == .supported and detail.len == 0) or @import("clarification_inputs.zig").validText(detail, @import("clarification_inputs.zig").max_text_bytes);
+    return detailRule(finding).accepts(detail);
 }
 
 pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, evidence: a.Evidence) Error!void {

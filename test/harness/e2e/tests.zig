@@ -750,12 +750,22 @@ test "reports retain scoped retry history and rejected-content usage after owner
         for (1..4) |ordinal| {
             const permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(@intCast(ordinal)), .family = @splat(2) }, .authorization = @splat(@intCast(ordinal)), .revision = ordinal, .maximum_targets = 3 };
             try state.commit(try state.prepare(.{ .authorized = permit }));
-            _ = try state.beginAttempt(.repair, .{ .bytes = "merge" }, .{ .value = 1 }, permit);
+            _ = try state.beginAttempt(.{ .bytes = "merge" }, .{ .value = 1 }, permit);
             try state.commit(try state.prepare(.{ .merged_validated = .{ .permit = permit, .revision_after = ordinal + 1, .result = .resolved } }));
         }
-        break :retained try state.observe(a, .{ .bytes = "merge" });
+        const epoch = try @import("../../../src/domain/execution_reference.zig").create(std.testing.allocator);
+        defer epoch.release();
+        const request: @import("../../../src/domain/model_request_identity.zig").ModelRequestId = .{
+            .stage_run_epoch_id = .{ .reference = epoch },
+            .immutable_unit_owner_id = .{ .reference_global = .{ .reference_state_id = .{ .bytes = "source" }, .unit_slot_id = .{ .bytes = "global" } } },
+            .model_operation_id = .{ .workflow_id = .{ .bytes = "spec" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "prepare" } },
+            .purpose = .initial_generation,
+            .request_ordinal = .{ .value = 1 },
+        };
+        for (0..3) |_| _ = try state.beginAssignmentAttempt(.{ .bytes = "account" }, .{ .value = 2 }, .{ .request = &request, .record = .{ .value = 1 } });
+        break :retained .{ .defects = try state.observe(a, .{ .bytes = "merge" }), .assignments = try state.observeAssignments(a, .{ .bytes = "account" }) };
     };
-    try std.testing.expectEqual(@as(usize, 3), counts.len);
+    try std.testing.expectEqual(@as(usize, 3), counts.defects.len);
     var calls = [_]@import("observation.zig").Call{.{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .step = "repair", .raw_response_available = true, .status = 200 }};
     var observed: c.Report = .{
         .started_at_utc = "",
@@ -765,7 +775,10 @@ test "reports retain scoped retry history and rejected-content usage after owner
         .provider_content_diagnostic = .missing_final_text,
         .last_model_origin = calls[0].origin,
         .last_model_usage = .{ .input_tokens = 884, .output_tokens = 48, .total_tokens = 932 },
-        .retry_settings = &.{.{ .step = "merge", .limit = 1, .scope = .repair, .operation_executions = 0, .defects = counts }},
+        .retry_settings = &.{
+            .{ .step = "merge", .limit = 1, .scope = .repair, .operation_executions = 0, .defects = counts.defects },
+            .{ .step = "account", .limit = 2, .scope = .model_request, .operation_executions = 0, .defects = &.{}, .assignments = counts.assignments },
+        },
     };
     try @import("observation.zig").correlate(a, &calls, &observed);
     var retained: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .retry_settings = observed.retry_settings };
@@ -781,6 +794,8 @@ test "reports retain scoped retry history and rejected-content usage after owner
         try std.testing.expect(std.mem.indexOf(u8, output, "missing_final_text") != null);
     }
     for (decoded.retry_settings[0].defects) |defect| try std.testing.expectEqual(@as(u64, 1), defect.completed_executions);
+    try std.testing.expectEqual(@as(usize, 1), decoded.retry_settings[1].assignments[0].request.value);
+    try std.testing.expectEqual(@as(u64, 3), decoded.retry_settings[1].assignments[0].completed_executions);
 }
 
 test "evidence store retains distinct attempts excludes credentials and refuses overwrites" {

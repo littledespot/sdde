@@ -587,8 +587,8 @@ service is published.
   Identical placement of a canonical record is idempotent, while conflicting or
   foreign placement rejects. Current authority and retained observations stay distinct.
   This requires no YAML fields, model-visible metadata or additional workflow steps.
-- Retry reports project both ordinary operation counts and native-defect counts
-  from their runner owners, retaining compiled scope and each independent key.
+- Retry reports project operation, immutable-request-assignment and native-defect
+  counts from the existing runner owner, retaining compiled scope and each independent key.
   They never compare an aggregate over independent defects with one defect's limit.
 
 - Runner rejections retain their closed diagnostic in the workflow result and do not
@@ -614,6 +614,9 @@ service is published.
   generations and their recorded source lineage.
 - A replaced or removed ancestor invalidates derived evidence; a replacement's
   self-input identifies its superseded revision, not a dependency on itself.
+- Native omission merges use [§12.8's renewal contract](../contracts/12-model-boundary.md#128-closed-authority-reconciliation-boundary):
+  retain historical inputs, invalidate the complete declared dependency set and
+  require fresh source/policy authority before rebuilding dependent evidence.
 - Missing, rejected, foreign, or stale evidence blocks execution.
 - Refresh and domain validation remain explicit YAML operations; guards perform no I/O
   or hidden validation workflow.
