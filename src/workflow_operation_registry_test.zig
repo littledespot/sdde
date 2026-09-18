@@ -227,6 +227,61 @@ test "validation action rejects a duplicate operation identity" {
     try std.testing.expectError(error.WorkflowOperationRegistryInvalid, (@import("actions/workflow/validate_workflow_operation_registry.zig").Action{}).execute(&registry));
 }
 
+test "repair roles keep declared guards native and cannot acquire accounting effects" {
+    const retry = @import("domain/workflow_retry.zig");
+    const parameters = [_]operation.ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 2 }};
+    inline for (.{ retry.Role.merge, retry.Role.merge_validate }) |role| {
+        const entry: Entry = .{
+            .contract = .{ .id = "test.merge", .kind = .step, .parameters = &parameters, .outcomes = &.{ .ok, .invalid }, .side_effect = .none, .repair_role = role, .retry_limit = .{ .maximum = 2, .scope = .repair } },
+            .binding = bindings.bind(void, null, fixture.unused),
+        };
+        var registry: Registry = .{ .operations = &.{entry}, .policies = &.{}, .gates = &.{} };
+        try std.testing.expect(registry.validate());
+        // A model request can guard the cycle; a merge need not duplicate that
+        // counter. Any counter the merge declares must retain repair scope.
+        var unguarded = entry;
+        unguarded.contract.retry_limit = null;
+        unguarded.contract.parameters = &.{};
+        registry.operations = &.{unguarded};
+        try std.testing.expect(registry.validate());
+        for (0..5) |fault| {
+            var changed = entry;
+            switch (fault) {
+                0 => changed.contract.retry_limit.?.scope = .operation,
+                1 => changed.contract.retry_limit.?.scope = .model_request,
+                2 => changed.contract.repair_role = .authorize,
+                3 => changed.contract.repair_role = .none,
+                4 => changed.contract.runner_accounting = .increment_model_attempt,
+                else => unreachable,
+            }
+            registry.operations = &.{changed};
+            try std.testing.expect(!registry.validate());
+        }
+    }
+    inline for (.{ retry.Role.authorize, retry.Role.validate }) |role| {
+        const entry: Entry = .{
+            .contract = .{ .id = "test.progress", .kind = .step, .outcomes = &.{ .ok, .invalid }, .side_effect = .none, .repair_role = role },
+            .binding = bindings.bind(void, null, fixture.unused),
+        };
+        var registry: Registry = .{ .operations = &.{entry}, .policies = &.{}, .gates = &.{} };
+        try std.testing.expect(registry.validate());
+        var changed = entry;
+        changed.contract.side_effect = .model_call;
+        registry.operations = &.{changed};
+        try std.testing.expect(!registry.validate());
+    }
+    var native: @import("application/model_attempt_workflow.zig").Advance = .{};
+    const entry: Entry = .{ .contract = @TypeOf(native).contract, .binding = bindings.bind(@TypeOf(native), &native, @TypeOf(native).invoke) };
+    var registry: Registry = .{ .operations = &.{entry}, .data_schemas = &@import("composition/model_request_operations.zig").schemas, .policies = &.{}, .gates = &.{} };
+    try std.testing.expect(registry.validate());
+    for ([_]retry.Scope{ .operation, .repair }) |scope| {
+        var changed = entry;
+        changed.contract.retry_limit.?.scope = scope;
+        registry.operations = &.{changed};
+        try std.testing.expect(!registry.validate());
+    }
+}
+
 test "pure model-binding contracts derive authority only from the typed slot" {
     const parameters = [_]operation.ParameterDescriptor{
         .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },

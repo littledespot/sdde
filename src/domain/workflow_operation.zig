@@ -21,6 +21,7 @@ pub const ParameterDescriptor = struct {
 
 pub const RetryLimitDescriptor = struct {
     maximum: u32,
+    scope: @import("workflow_retry.zig").Scope = .operation,
 };
 
 pub const Contract = struct {
@@ -35,6 +36,7 @@ pub const Contract = struct {
     outcomes: []const workflow.OutcomeTag,
     side_effect: pipeline.SideEffect,
     runner_accounting: pipeline.RunnerAccountingCapability = .none,
+    repair_role: @import("workflow_retry.zig").Role = .none,
     gates: []const []const u8 = &.{},
     retry_limit: ?RetryLimitDescriptor = null,
 
@@ -49,6 +51,17 @@ pub const Contract = struct {
         return false;
     }
 };
+
+pub fn validRepair(role: @import("workflow_retry.zig").Role, retry: ?@import("workflow_retry.zig").Scope, accounting: pipeline.RunnerAccountingCapability, effect: pipeline.SideEffect) bool {
+    if (role != .none and (effect != .none or accounting != .none)) return false;
+    if (accounting == .increment_model_attempt and retry != .model_request) return false;
+    if (retry) |scope| switch (scope) {
+        .operation => if (role == .merge or role == .merge_validate) return false,
+        .repair => if (role != .merge and role != .merge_validate) return false,
+        .model_request => if (accounting != .increment_model_attempt or role != .none) return false,
+    };
+    return true;
+}
 
 pub const PolicyProfile = struct {
     id: []const u8,

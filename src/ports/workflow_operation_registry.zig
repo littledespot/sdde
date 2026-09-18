@@ -21,6 +21,7 @@ pub const StepInput = struct {
     step: *const compilation.CompiledStep,
     resources: []const compilation.CompiledResource,
     model_binding: ?*const provider_binding.ValidatedProviderModelBinding,
+    repair_permit: ?workflow_retry.Permit = null,
     log: pipeline.WorkflowLog,
     model_request_lifecycle: ?*const @import("../domain/provider_operation_lifecycle.zig").Ledger = null,
     provider_invocation: ?@import("../domain/provider_invocation_validation.zig").Call = null,
@@ -172,6 +173,8 @@ pub const Registry = struct {
 };
 
 fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
+    if (!operation.validRepair(contract.repair_role, if (contract.retry_limit) |limit| limit.scope else null, contract.runner_accounting, contract.side_effect)) return false;
+    if (contract.repair_role != .none and (contract.kind != .step or capabilities.len != 0)) return false;
     if (!@import("../domain/workflow_model_invocation.zig").validContract(contract, capabilities)) return false;
     if (!@import("../domain/workflow_model_request_lifecycle.zig").validContract(contract, capabilities)) return false;
     if (!@import("../domain/workflow_provider_authorization.zig").validContract(contract, capabilities)) return false;

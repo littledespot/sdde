@@ -609,6 +609,7 @@ pub fn entry(comptime T: type, context: *T) operations.Entry {
             .outcomes = if (@hasDecl(T, "outcomes")) &T.outcomes else &.{ .ok, .failed },
             .gates = if (@hasDecl(T, "gates")) &T.gates else &.{},
             .retry_limit = if (@hasDecl(T, "retry_limit")) T.retry_limit else null,
+            .repair_role = if (@hasDecl(T, "repair_role")) T.repair_role else T.Action.contract.repair_role,
         },
         .binding = binding.bind(T, context, T.invoke),
     };

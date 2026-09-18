@@ -81,6 +81,59 @@ pub fn content(allocator: std.mem.Allocator, validator: r.text.Validator, contex
         },
     }
 }
+
+pub fn checkStatement(a: std.mem.Allocator, validator: r.text.Validator, context: TextContext, current: r.Input, values: []const r.StatementProposal, index: usize) r.Error!d.Check(r.ValidatedStatement) {
+    if (index >= values.len) return error.InvalidReferenceReconciliation;
+    const proposed = values[index];
+    if (statementKey(values, index)) |issue| return .{ .invalid = issue };
+    const items = current.progress.plan.layout.items;
+    if (claims(items, proposed.claim_ids, current.partition.group.claim_ids)) |issue| return .{ .invalid = issue };
+    return switch (try content(a, validator, context, items, proposed.claim_ids, proposed.content)) {
+        .valid => |accepted| .{ .valid = .{ .local_key = proposed.local_key, .claim_ids = proposed.claim_ids, .content = accepted } },
+        .invalid => |issue| .{ .invalid = issue },
+    };
+}
+
+pub fn statementKey(values: []const r.StatementProposal, index: usize) ?d.Issue {
+    const proposed = values[index];
+    const issue: d.Issue = .{ .rule = .local_key, .observed = .{ .count = proposed.local_key }, .expected = .{ .constraint = .unique_nonzero } };
+    if (proposed.local_key == 0) return issue;
+    for (values[0..index]) |prior| if (prior.local_key == proposed.local_key) return issue;
+    return null;
+}
+
+pub fn checkSignal(a: std.mem.Allocator, validator: r.text.Validator, context: TextContext, prior: r.CheckedDispositions, index: usize) r.Error!d.Check(r.ValidatedSignal) {
+    if (index >= prior.proposal.signals.len) return error.InvalidReferenceReconciliation;
+    const proposed = prior.proposal.signals[index];
+    const items = prior.input.progress.plan.layout.items;
+    if (try signalClaims(items, prior.dispositions, proposed.claim_ids, prior.input.partition.group.claim_ids)) |issue| return .{ .invalid = issue };
+    const accepted = switch (try content(a, validator, context, items, proposed.claim_ids, proposed.content)) {
+        .valid => |value| value,
+        .invalid => |issue| return .{ .invalid = issue },
+    };
+    if (!signalSelectionAvailable(prior.proposal.signals[0..index], index, proposed.claim_ids)) return .{ .invalid = .{ .rule = .duplicate_signal, .observed = .{ .claims = proposed.claim_ids }, .expected = .{ .constraint = .unique_members } } };
+    return .{ .valid = .{ .claim_ids = proposed.claim_ids, .citation_ids = try r.citationUnion(a, items, proposed.claim_ids), .content = accepted } };
+}
+
+pub fn checkConflict(a: std.mem.Allocator, validator: r.text.Validator, context: TextContext, prior: r.CheckedDispositions, index: usize) r.Error!d.Check(r.ValidatedConflict) {
+    if (index >= prior.proposal.conflicts.len) return error.InvalidReferenceReconciliation;
+    const proposed = prior.proposal.conflicts[index];
+    const items = prior.input.progress.plan.layout.items;
+    if (try conflictClaims(items, prior.dispositions, proposed.claim_ids, prior.input.partition.group.claim_ids)) |issue| return .{ .invalid = issue };
+    if (!conflictSelectionAvailable(prior.proposal.conflicts[0..index], index, proposed.kind, proposed.claim_ids)) return .{ .invalid = .{ .rule = .duplicate_conflict, .observed = .{ .claims = proposed.claim_ids }, .expected = .{ .constraint = .unique_members } } };
+    const summary = switch (try conflictSummary(a, validator, context, items, proposed.claim_ids, proposed.summary)) {
+        .valid => |checked| checked,
+        .invalid => |issue| return .{ .invalid = issue },
+    };
+    return .{ .valid = .{ .claim_ids = proposed.claim_ids, .citation_ids = try r.citationUnion(a, items, proposed.claim_ids), .kind = proposed.kind, .summary = summary, .resolution = .unresolved } };
+}
+
+pub fn conflictSummary(a: std.mem.Allocator, validator: r.text.Validator, context: TextContext, items: r.Items, claims_selected: []const r.ClaimId, summary: r.text.ReferenceSemanticText) r.Error!d.Check(r.text.ValidatedReferenceSemanticText) {
+    return switch (try validator.checkReferenceIn(a, try scopes(a, items, claims_selected, context), summary)) {
+        .valid => |checked| .{ .valid = checked },
+        .invalid => |issue| .{ .invalid = d.textFailure(issue, .{ .text = summary }) },
+    };
+}
 pub fn disposition(values: []const r.ClaimDisposition, id: r.ClaimId) r.Error!r.ClaimDisposition {
     for (values) |value| if (value.claim_id.ordinal == id.ordinal) return value;
     return error.InvalidReferenceReconciliation;
@@ -123,10 +176,20 @@ pub fn signalCoverage(a: std.mem.Allocator, items: r.Items, dispositions: []cons
         if (signal.content == .preserved_token) token_covered[id.ordinal - 1] = true;
     };
     for (dispositions, items.entries, covered, token_covered) |value, item, present, token_present| {
-        if (value.disposition == .retained and !present) return .{ .rule = .signal_coverage, .observed = .{ .disposition = value }, .expected = .{ .constraint = .retained_claim_covered } };
-        if (item.claim.content == .preserved_token and value.disposition != .conflicting and !token_present) return .{ .rule = .signal_coverage, .observed = .{ .disposition = value }, .expected = .{ .constraint = .token_projected } };
+        if (signalCoverageIssue(value, item, present, token_present)) |issue| return issue;
     }
     return null;
+}
+
+fn signalCoverageIssue(value: r.ClaimDisposition, item: r.Item, present: bool, token_present: bool) ?d.Issue {
+    if (value.disposition == .retained and !present) return .{ .rule = .signal_coverage, .observed = .{ .disposition = value }, .expected = .{ .constraint = .retained_claim_covered } };
+    if (item.claim.content == .preserved_token and value.disposition != .conflicting and !token_present) return .{ .rule = .signal_coverage, .observed = .{ .disposition = value }, .expected = .{ .constraint = .token_projected } };
+    return null;
+}
+
+pub fn selectedSignalCoverage(items: r.Items, dispositions: []const r.ClaimDisposition, signal: r.SignalProposal, claim: r.ClaimId) r.Error!?d.Issue {
+    const present = r.contains(r.ClaimId, signal.claim_ids, claim);
+    return signalCoverageIssue(try disposition(dispositions, claim), try r.item(items, claim), present, present and signal.content == .preserved_token);
 }
 
 pub fn conflictCoverage(a: std.mem.Allocator, items: r.Items, dispositions: []const r.ClaimDisposition, conflicts: []const r.ConflictProposal) r.Error!?d.Issue {

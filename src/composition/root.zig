@@ -1388,7 +1388,8 @@ test "configured specification generation YAML executes native references models
     const support_start = protocol_content_start + 2;
     const support_faults = std.meta.tags(@import("../test_fixtures/spec_generation_responses.zig").SupportFault);
     const omission_scenario = support_start + support_faults.len * 2;
-    const source_gap_start = omission_scenario + 3;
+    const extraction_omission_start = omission_scenario + 3;
+    const source_gap_start = extraction_omission_start + 2;
     const evidence_start = source_gap_start + 2;
     const disposition_start = evidence_start + 3;
     const source_repair_start = disposition_start + 4;
@@ -1398,7 +1399,8 @@ test "configured specification generation YAML executes native references models
         const disposition_scenario = scenario >= disposition_start and scenario < source_repair_start;
         const evidence_scenario = scenario >= evidence_start and scenario < disposition_start;
         const source_gaps = scenario >= source_gap_start and scenario < evidence_start;
-        const extraction_omission = scenario > omission_scenario and scenario < source_gap_start;
+        const candidate_omission = scenario >= omission_scenario and scenario < extraction_omission_start;
+        const extraction_omission = scenario >= extraction_omission_start and scenario < source_gap_start;
         const support_scenario = scenario >= support_start and scenario < omission_scenario;
         const reconciliation_scenario = scenario >= reconciliation_start and scenario < text_start;
         const citation_scenario = scenario >= citation_repair_start and scenario < reconciliation_start;
@@ -1417,9 +1419,10 @@ test "configured specification generation YAML executes native references models
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
         if (scenario <= 1 or scenario == 3) try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/core.md", .data = if (scenario == 1) "Delete loan receipts after thirty days.\n" else "Display time in UTC.\n" });
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
-        if (extraction_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == omission_scenario + 1) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
+        if (extraction_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == extraction_omission_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
+        if (candidate_omission and scenario != omission_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == omission_scenario + 1) "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" else "A traveller confirms a booking and sees its arrival date. Display `Booking confirmed!`.\n" });
         if (source_gaps) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == source_gap_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
-        if (support_scenario and support_faults[(scenario - support_start) % support_faults.len] == .partial_findings) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario - support_start < support_faults.len) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and label the deadline `Return by`.\n" });
+        if (support_scenario and (support_faults[(scenario - support_start) % support_faults.len] == .partial_findings or support_faults[(scenario - support_start) % support_faults.len] == .foreign_sources)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario - support_start < support_faults.len) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and label the deadline `Return by`.\n" });
         if (evidence_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == evidence_start + 1) "After renewal display `Loan renewed!` and the new return deadline.\n" else "On startup display `Hello, World!` and the current UTC date and time.\n" });
         if (disposition_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - disposition_start) % 2 == 0) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
         if (reconciliation_scenario) switch (reconciliation_faults[scenario - reconciliation_start]) {
@@ -1494,7 +1497,8 @@ test "configured specification generation YAML executes native references models
             driver.support_fault = support_faults[(scenario - support_start) % support_faults.len];
             driver.support_post = scenario - support_start >= support_faults.len;
         }
-        driver.candidate_omission = scenario == omission_scenario;
+        if (candidate_omission) driver.candidate_omissions = if (scenario == omission_scenario) .functional else .acceptance_and_functional;
+        if (scenario == omission_scenario + 2) driver.fault = .{ .stage = .candidate_review, .shape = .empty };
         driver.extraction_omission = extraction_omission;
         driver.source_gaps = source_gaps;
         if (evidence_scenario) driver.evidence_fault = if (scenario == evidence_start + 2) .unchanged else .recover;
@@ -1867,7 +1871,12 @@ test "configured specification generation YAML executes native references models
             try std.testing.expect((try @import("../application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/specification_rendering_workflow.zig").validated_schema, bool)).*);
         }
         if (support_scenario) {
-            const merges: usize = if (driver.support_fault == .partial_findings or driver.support_fault == .two_missing_findings) 2 else 1;
+            const merges: usize = switch (driver.support_fault.?) {
+                .foreign_sources => 8,
+                .partial_findings => 3,
+                .two_missing_findings => 2,
+                else => 1,
+            };
             try std.testing.expectEqual(merges, driver.support_merges);
             try std.testing.expectEqual(if (driver.support_fault == .duplicate_finding) @as(usize, 0) else merges, driver.support_repair_calls);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
@@ -1897,7 +1906,7 @@ test "configured specification generation YAML executes native references models
                 const selected = diagnostic.support.selected().?;
                 try std.testing.expectEqual(.ineligible_claim, selected.evidence.?.issue);
                 try std.testing.expectEqual(@as(u32, 3), selected.ordinal.?);
-                try std.testing.expectEqual(@as(u64, 3), selected.revision);
+                try std.testing.expectEqual(@as(u64, 4), selected.revision);
                 try std.testing.expect(!retained.candidate.?.last_repair.?.changed);
                 const identities = try @import("../application/pipeline_values.zig").read(&view, @import("../application/model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
                 try std.testing.expect(selected.origin.?.matches(identities, runner.tokenLedger().accounted_operations.items[driver.calls - 1].id));
@@ -1918,10 +1927,41 @@ test "configured specification generation YAML executes native references models
                 try std.testing.expect(!std.meta.eql(diagnostic.support_findings.origin.?, diagnostic.support_findings.origins[0].?));
             }
         }
-        if (driver.candidate_omission) {
-            try std.testing.expectEqual(@as(usize, 1), driver.omission_repair_calls);
-            const session = try @import("../application/specification_workflow.zig").readSession(&.{ .slots = runner.envelope.slots });
-            try std.testing.expect(session.units[3 + @intFromEnum(@import("../domain/specification.zig").Kind.functional_requirement)].?.response.content.records.len != 0);
+        if (driver.candidate_omissions) |omissions| {
+            const count: usize = if (omissions == .functional) 1 else 2;
+            try std.testing.expectEqual(count, driver.omission_repair_calls);
+            try std.testing.expectEqual(count, driver.omission_merges);
+            try std.testing.expectEqual(count, driver.omission_resolutions);
+            try std.testing.expect(runner.repair_retry.currentPermit() == null);
+            const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const session = try @import("../application/specification_workflow.zig").readSession(&view);
+            inline for ([_]@import("../domain/specification.zig").Kind{ .functional_requirement, .acceptance_criterion }) |kind| try std.testing.expect(session.units[3 + @intFromEnum(kind)].?.response.content.records.len != 0);
+            const authority_result = try @import("../application/required_authority_values.zig").read(&view, @import("../application/required_authority_workflow.zig").result_schema, .result);
+            try std.testing.expectEqual(.all_resolved, authority_result.continuation);
+            for (authority_result.entries) |entry| try std.testing.expect(entry.candidate_defect == null);
+            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
+            try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
+            const corrected_initial_review = scenario == omission_scenario + 2;
+            try std.testing.expectEqual(@as(usize, @intFromBool(corrected_initial_review)), driver.fault_calls);
+            if (corrected_initial_review) {
+                const request = driver.fault_request.?;
+                var attempts: usize = 0;
+                var same_site_requests: usize = 0;
+                var same_site_attempts: usize = 0;
+                for (runner.tokenLedger().accounted_operations.items) |operation| {
+                    if (operation.id.model_request_id == request) {
+                        attempts += 1;
+                        try std.testing.expectEqual(attempts, operation.id.model_attempt_ordinal.value);
+                    }
+                    if (operation.id.model_request_id.model_operation_id.eql(request.model_operation_id)) {
+                        same_site_attempts += 1;
+                        if (operation.id.model_attempt_ordinal.value == 1) same_site_requests += 1;
+                    }
+                }
+                try std.testing.expectEqual(@as(usize, 2), attempts);
+                try std.testing.expectEqual(@as(usize, 3), same_site_requests);
+                try std.testing.expectEqual(@as(usize, 4), same_site_attempts);
+            }
         }
         if (expected == .needs_user and !driver.generation_gap) {
             const refresh = @import("../application/clarification_refresh_workflow.zig");

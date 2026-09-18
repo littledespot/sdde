@@ -276,6 +276,14 @@ pub fn build(b: *std.Build) void {
     }) });
     b.step("test-model-attempt-accounting", "Test model attempt classification and immutable accounting transitions").dependOn(&b.addRunArtifact(attempt_accounting_tests).step);
 
+    const repair_retry_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/workflow_repair_retry_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) }));
+    b.step("test-workflow-repair-retry", "Test validated repair progress and bounded recurrence").dependOn(&repair_retry_tests.step);
+    test_step.dependOn(&repair_retry_tests.step);
+
     const invocation_validation_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/provider_invocation_validation_test.zig"),
         .target = target,

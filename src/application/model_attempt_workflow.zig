@@ -17,7 +17,7 @@ pub const Advance = struct {
         .side_effect = Action.contract.side_effect,
         .runner_accounting = Action.contract.runner_accounting,
         .parameters = &.{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }},
-        .retry_limit = .{ .maximum = std.math.maxInt(u32) },
+        .retry_limit = .{ .maximum = std.math.maxInt(u32), .scope = .model_request },
     };
     action: Action = .{},
 

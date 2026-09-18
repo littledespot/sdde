@@ -67,6 +67,7 @@ pub const Action = struct {
                     .outcomes = entry.contract.outcomes,
                     .side_effect = entry.contract.side_effect,
                     .runner_accounting = entry.contract.runner_accounting,
+                    .repair_role = entry.contract.repair_role,
                     .gates = try compileGates(allocator, self.registry, entry.contract.gates),
                     .capabilities = entry.binding.capabilities(),
                     .retry_authority = retry_authority,
@@ -263,6 +264,7 @@ fn resolveRetryAuthority(
         .workflow_version = item.workflow_version,
         .operation_instance_id = operation_instance_id,
         .limit = .{ .value = @intCast(parameter.value.integer) },
+        .scope = descriptor.scope,
     };
 }
 

@@ -80,6 +80,7 @@ pub const Parse = struct {
     }
 };
 pub const Validate = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const Action = @import("../actions/specification/validate_specification_unit.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .needs_user, .failed };
     allocator: std.mem.Allocator,
@@ -90,12 +91,15 @@ pub const Validate = struct {
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
         const checked = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), try readContext(&input.step.data), proposed) catch return error.OperationExecutionFailed;
-        if (checked == .invalid) {
-            owner.payload = .{ .unit_rejected = checked.invalid };
-            return publish(self.allocator, checked_schema, owner, .invalid);
-        }
-        owner.payload = .{ .checked = checked.valid };
-        return publish(self.allocator, checked_schema, owner, if (checked.valid.response == .clarification) .needs_user else .ok);
+        owner.payload = if (checked == .invalid) .{ .unit_rejected = checked.invalid } else .{ .checked = checked.valid };
+        const transition = if (proposed.pending_repair) |pending| transition: {
+            const active = input.step.repair_permit orelse break :transition null;
+            if (!std.meta.eql(active, pending.permit)) break :transition null;
+            break :transition @import("../domain/specification_repair.zig").retryValidation(owner.arena.allocator(), self.action.validator, try readSession(&input.step.data), try readContext(&input.step.data), proposed) catch return error.OperationExecutionFailed;
+        } else null;
+        var result = try publish(self.allocator, checked_schema, owner, if (checked == .invalid) .invalid else if (checked.valid.response == .clarification) .needs_user else .ok);
+        result.delta.repair_transition = transition;
+        return result;
     }
 };
 pub const Advance = struct {
@@ -135,6 +139,7 @@ pub const Assemble = struct {
     }
 };
 pub const ValidateCoverage = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const Action = @import("../actions/specification/validate_specification_coverage.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     allocator: std.mem.Allocator,
@@ -150,7 +155,15 @@ pub const ValidateCoverage = struct {
             .valid => |value| .{ .coverage = value },
             .invalid => |value| .{ .coverage_rejected = value },
         };
-        return publish(self.allocator, coverage_schema, owner, if (result == .valid) .ok else .invalid);
+        const transition = transition: {
+            const pending = current.pending_coverage_repair orelse break :transition null;
+            const active = input.step.repair_permit orelse break :transition null;
+            if (!std.meta.eql(active, pending.permit)) break :transition null;
+            break :transition @import("../domain/specification_coverage_repair.zig").coverageValidation(owner.arena.allocator(), current, try readContext(&input.step.data), content) catch return error.OperationExecutionFailed;
+        };
+        var output = try publish(self.allocator, coverage_schema, owner, if (result == .valid) .ok else .invalid);
+        output.delta.repair_transition = transition;
+        return output;
     }
 };
 

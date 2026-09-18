@@ -33,6 +33,7 @@ const model_invocation = @import("workflow_model_invocation.zig");
 const invocation_validation = @import("../domain/provider_invocation_validation.zig");
 const operation_completion = @import("provider_operation_completion_workflow.zig");
 const operation_termination = @import("provider_operation_termination_workflow.zig");
+const retry = @import("../domain/workflow_retry.zig");
 
 const ExpectedAccounting = union(enum) {
     none,
@@ -55,6 +56,7 @@ pub const Runner = struct {
     model_accounting: ?model_accounting.State = null,
     provider_clock: ?lease.Clock = null,
     retry_execution_counts: [definition.max_steps]u64 = [_]u64{0} ** definition.max_steps,
+    repair_retry: retry.State,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -76,10 +78,12 @@ pub const Runner = struct {
                 allocator,
                 selected.graph.authority.total_model_token_budget,
             ),
+            .repair_retry = retry.State.init(allocator),
         };
     }
 
     pub fn deinit(self: *Runner) void {
+        self.repair_retry.deinit();
         if (self.model_accounting) |*state| state.deinit();
         self.envelope.deinit();
         self.token_accounting.deinit();
@@ -233,6 +237,24 @@ pub const Runner = struct {
             break :call .{ .request = request.prepared().?, .provider_binding = request.binding(), .operations = state.current_operations, .operation_id = id_value };
         } else null;
         const token_revision = self.token_accounting.current().revision();
+        var repair_attempt_kind: retry.AttemptKind = .repair;
+        const repair_permit: ?retry.Permit = if (step.retry_authority) |authority| switch (authority.scope) {
+            .operation => null,
+            .repair => self.repair_retry.currentPermit() orelse return .{ .rejected = .authority },
+            .model_request => permit: {
+                const request = retained_request orelse return .{ .rejected = .authority };
+                if (request.id().purpose != .atomic_repair) {
+                    repair_attempt_kind = .dependent_review;
+                    break :permit self.repair_retry.currentDependentPermit();
+                }
+                const packet = request.packet() orelse return .{ .rejected = .authority };
+                const value = packet.repairPermit() orelse return .{ .rejected = .authority };
+                var authorization: [32]u8 = undefined;
+                std.crypto.hash.sha2.Sha256.hash(request.id().purpose.atomic_repair.bytes, &authorization, .{});
+                if (!std.meta.eql(authorization, value.authorization)) return .{ .rejected = .authority };
+                break :permit value;
+            },
+        } else null;
         var attempt_input: @FieldType(operations.StepInput, "model_attempt") = null;
         var provider_input: @FieldType(operations.StepInput, "provider_operation") = null;
         var expected: ExpectedAccounting = .none;
@@ -243,7 +265,7 @@ pub const Runner = struct {
             const current = attempt.accounting(state.attempts);
             if (!current.stageRunEpochId().eql(current_requests.stageRunEpochId())) return .{ .rejected = .authority };
             const authority = step.retry_authority orelse return .{ .rejected = .authority };
-            const executions = self.retry_execution_counts[index];
+            const executions = if (repair_permit) |permit| self.repair_retry.completedAttempts(step.id, permit.key) else self.retry_execution_counts[index];
             attempt_input = .{
                 .accounting = current,
                 .operations = state.current_operations,
@@ -267,9 +289,14 @@ pub const Runner = struct {
             }
         }
         if (step.retry_authority) |authority| {
-            if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = @import("../domain/workflow_retry.zig").Exhaustion.init(step.id, authority.limit, self.retry_execution_counts[index]) orelse return .{ .rejected = .authority } } };
-            // Compiled limits are u32; exhaustion is checked before increment.
-            self.retry_execution_counts[index] += 1;
+            if (repair_permit) |permit| {
+                const admitted = self.repair_retry.beginAttempt(repair_attempt_kind, step.id, authority.limit, permit) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .operation_failed else .authority };
+                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, admitted.exhausted) orelse return .{ .rejected = .authority } } };
+            } else {
+                if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, self.retry_execution_counts[index]) orelse return .{ .rejected = .authority } } };
+                // Compiled limits are u32; exhaustion is checked before increment.
+                self.retry_execution_counts[index] += 1;
+            }
         }
         var authorization: ?authorization_binding.Binding = null;
         var authorization_published = false;
@@ -289,6 +316,7 @@ pub const Runner = struct {
             .step = step,
             .resources = resources,
             .model_binding = if (retained_request) |request| request.binding() else if (resolved_binding) |*value| value else null,
+            .repair_permit = self.repair_retry.currentPermit(),
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
             .model_attempt = attempt_input,
             .model_request_lifecycle = if (advances_request) self.model_accounting.?.current_operations else null,
@@ -437,7 +465,22 @@ pub const Runner = struct {
             }
         }
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
+        if (!retry.permitsTransition(contract.repair_role, candidate.delta.repair_transition)) return .{ .rejected = .authority };
+        const repair_required = switch (contract.repair_role) {
+            .none, .validate => false,
+            .authorize => candidate.outcome == .ok or candidate.outcome == .more,
+            .merge => candidate.outcome == .ok or candidate.outcome == .more,
+            .merge_validate => candidate.outcome == .ok or candidate.outcome == .invalid,
+        };
+        if (repair_required and candidate.delta.repair_transition == null) return .{ .rejected = .authority };
+        const repair_pending = if (candidate.delta.repair_transition) |transition|
+            self.repair_retry.prepare(transition) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .operation_failed else .authority }
+        else
+            null;
         self.envelope.apply(contract, &candidate.delta, candidate.outcome) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .outcome = .invalid };
+        // No repair-state mutation occurs between preparation and this allocation-
+        // free commit; the envelope and accepted native progress advance together.
+        if (repair_pending) |prepared| self.repair_retry.commit(prepared) catch unreachable;
         if (request_owner) |owner| {
             self.model_accounting.?.replaceRequests(owner);
             request_owner = null;
@@ -473,6 +516,7 @@ fn stepPipelineContract(step: compilation.CompiledStep) pipeline.NodeContract {
         .invalidates = step.invalidates,
         .side_effect = step.side_effect,
         .runner_accounting = step.runner_accounting,
+        .repair_role = step.repair_role,
     };
 }
 fn contractMatchesStep(
@@ -488,6 +532,7 @@ fn contractMatchesStep(
         std.mem.eql(workflow.OutcomeTag, contract.outcomes, step.outcomes) and
         contract.side_effect == step.side_effect and
         contract.runner_accounting == step.runner_accounting and
+        contract.repair_role == step.repair_role and
         gateIdsMatch(contract.gates, step.gates) and
         retryContractMatches(contract, step);
 }
@@ -500,7 +545,8 @@ fn retryContractMatches(contract: operation.Contract, step: compilation.Compiled
     if (contract.retry_limit == null or step.retry_authority == null) {
         return contract.retry_limit == null and step.retry_authority == null;
     }
-    return step.retry_authority.?.limit.within(contract.retry_limit.?.maximum);
+    return step.retry_authority.?.limit.within(contract.retry_limit.?.maximum) and
+        step.retry_authority.?.scope == contract.retry_limit.?.scope;
 }
 fn equalStrings(left: []const []const u8, right: []const []const u8) bool {
     if (left.len != right.len) return false;

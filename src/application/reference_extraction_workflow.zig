@@ -33,6 +33,7 @@ pub const Parse = struct {
     }
 };
 pub const ValidateText = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     pub const Action = @import("../actions/reference/validate_reference_extraction_text.zig").Action;
     allocator: std.mem.Allocator,
@@ -50,10 +51,14 @@ pub const ValidateText = struct {
             .valid => |value| .{ .text_validated = value },
             .invalid => |rejection| .{ .text_rejected = rejection },
         };
-        return publish(self.allocator, text_schema, owner, if (result == .valid) .ok else .invalid);
+        const progress = @import("../domain/reference_extraction_text_repair.zig").progress(owner.arena.allocator(), self.action.validator, registry.*, current, source.*, prior.payload().parsed) catch return error.OperationExecutionFailed;
+        var published = try publish(self.allocator, text_schema, owner, if (result == .valid) .ok else .invalid);
+        published.delta.repair_transition = progress;
+        return published;
     }
 };
 pub const ValidateSelections = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     pub const Action = @import("../actions/reference/validate_reference_selections.zig").Action;
     allocator: std.mem.Allocator,
@@ -71,7 +76,10 @@ pub const ValidateSelections = struct {
             .token_classifications => |diagnostic| .{ .token_classification_rejected = diagnostic },
             .source_selections => |diagnostic| .{ .citation_rejected = diagnostic },
         };
-        return publish(self.allocator, selections_schema, owner, if (result == .valid) .ok else .invalid);
+        const progress = @import("../domain/reference_extraction_repair.zig").progress(owner.arena.allocator(), source.*, candidates.*, prior.payload().text_validated) catch return error.OperationExecutionFailed;
+        var published = try publish(self.allocator, selections_schema, owner, if (result == .valid) .ok else .invalid);
+        published.delta.repair_transition = progress;
+        return published;
     }
 };
 pub const Validate = struct {

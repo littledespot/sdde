@@ -167,8 +167,9 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
   of the YAML-selected retry-capable operation instance
 - **Output:** request-keyed compare-and-swap model-attempt transition
 - **Responsibility:** Reserve the initial attempt once.
-- Reserve a later attempt only after an explicit YAML retry transition and while that operation
-  instance's local retry counter remains below its declared limit.
+- Reserve a later attempt only after an explicit YAML retry transition and while the
+  runner's operation/defect count remains within its declared limit under
+  [§22.7](../22-repair.md#227-repair-retry-limit-and-escalation).
 - Assign monotonic ordinals for execution-local identity; impose no workflow-global attempt
   ceiling.
 
@@ -290,18 +291,6 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Output:** repair authorization
 - **Responsibility:** Bind one closed operation, current values, preconditions, and
   self-contained versioned rules used by the diagnostic.
-
-## `AdvanceAtomicRepairAttemptAccountingAction`
-
-- **Input:** selected ordinary repair diagnostic/authorization, exact stage-run epoch/unit,
-  current runner repair accounting, and the compiler-validated explicit `retry-limit` of the
-  YAML-selected repair operation instance
-- **Output:** operation-local compare-and-swap atomic-repair transition
-- **Responsibility:** Increment only that repair operation instance's local retry counter before
-  another repair invocation.
-- Reject a retry beyond its declared limit, never leak counts across operation instances or
-  stage epochs, and exclude the separate no-invention one-shot.
-- No stage-global or unit-global repair limit exists.
 
 ## `CreateNoInventionClarificationReplacementAuthorizationAction`
 

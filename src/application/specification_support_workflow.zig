@@ -140,6 +140,7 @@ pub const Advance = struct {
 /// Only admission of a completed review advances authority inputs. Repair keeps
 /// the source projection unchanged, preserving its generation and lineage.
 pub const Apply = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const Action = @import("../actions/specification/apply_specification_support.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -150,6 +151,11 @@ pub const Apply = struct {
         errdefer owned.destroy(owner);
         owner.payload = .{ .inputs = self.action.execute(reviewed) catch return error.OperationExecutionFailed };
         var delta: pipeline.NodeDelta = .{};
+        if (input.step.repair_permit) |active| {
+            delta.repair_transition = @import("../domain/specification_coverage_repair.zig").admittedOmissionValidation(owner.arena.allocator(), active, reviewed.accepted) catch return error.OperationExecutionFailed;
+            if (delta.repair_transition == null)
+                delta.repair_transition = @import("../domain/source_omission.zig").admittedValidation(owner.arena.allocator(), active, reviewed.accepted) catch return error.OperationExecutionFailed;
+        }
         delta.data_replacements[@intFromEnum(authority.inputs_schema.key)] = values.adopt(self.allocator, authority.inputs_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
         return .{ .outcome = .ok, .delta = delta };
     }

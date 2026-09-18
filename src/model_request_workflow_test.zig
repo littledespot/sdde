@@ -3349,6 +3349,231 @@ fn rejectProtocolResponse(runner: *runner_module.Runner, consolidated: bool) !vo
     try std.testing.expectEqual(.invalid, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
 }
 
+test "native repair progress permits independent requests while retaining the global token budget" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const a = fixture.arena.allocator();
+    var source = try requestCompletionYaml(&fixture);
+    for ([_][2][]const u8{
+        .{ "ok: origin, failed: end.failed", "ok: select, failed: end.failed" },
+        .{ ", input: input.txt", "" },
+        .{ ", input: input }", " }" },
+        .{ "use: test.observe-request, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }", "use: test.observe-request, with: {retry-limit: 0}, on: { ok: retire, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled }" },
+    }) |change| source = try std.mem.replaceOwned(u8, a, source, change[0], change[1]);
+    source = try std.fmt.allocPrint(a,
+        \\{s}
+        \\  select: {{ use: test.authorize-repair, on: {{ok: origin, invalid: end.invalid}} }}
+        \\  retire: {{ use: retire-model-transport, on: {{ok: select, failed: end.failed}} }}
+        \\
+    , .{source});
+    var owner: RepairSequence = .{};
+    const merger = &fixture.entries[fixture.entries.len - 1];
+    merger.contract.outcomes = &.{ .ok, .invalid, .failed, .cancelled };
+    merger.contract.parameters = &.{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 1 }};
+    merger.contract.retry_limit = .{ .maximum = 1, .scope = .repair };
+    merger.contract.repair_role = .merge_validate;
+    merger.contract.requires = &@import("application/model_candidate_handoff.zig").requires;
+    merger.binding = bindings.bind(RepairSequence, &owner, RepairSequence.merge);
+    var entries = fixture.entries ++ [_]operations.Entry{.{
+        .contract = .{ .id = "test.authorize-repair", .kind = .step, .produces = &.{.model_input_packet}, .outcomes = &.{ .ok, .invalid }, .side_effect = .none, .repair_role = .authorize },
+        .binding = bindings.bind(RepairSequence, &owner, RepairSequence.authorize),
+    }};
+    fixture.registry.operations = &entries;
+    var profiles = core.profiles;
+    for (&profiles) |*profile| profile.total_model_token_budget.value = 21;
+    fixture.registry.policies = &profiles;
+    const graph = try fixture.compileWithAssets(source, schema_bytes, false);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fake.invocation_plan.complete.content = "{\"answer\":\"repaired\"}";
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "initialize" }).outcome);
+    for (0..3) |index| {
+        for ([_][]const u8{ "select", "origin", "validate", "build", "account", "assign-operation", "authorize", "advance-request", "advance-operation", "call", "validate-response", "complete-operation", "decode", "validate-payload", "close-request", "observe" }) |step| {
+            const result = runner.bindings().invokeStep(.{ .bytes = step });
+            if (result == .rejected) std.debug.print("repair {d} step {s}: {any}\n", .{ index, step, result.rejected });
+            try std.testing.expect(result == .outcome);
+            try std.testing.expectEqual(.ok, result.outcome);
+        }
+        const request = try currentRequest(&runner);
+        const permit = request.packet().?.repairPermit().?;
+        try std.testing.expectEqual(@as(u64, 1), runner.repair_retry.completedAttempts(.{ .bytes = "account" }, permit.key));
+        try std.testing.expectEqual(@as(u64, 1), runner.repair_retry.completedAttempts(.{ .bytes = "observe" }, permit.key));
+        try std.testing.expectEqual(@as(u32, 1), attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved(request.id()));
+        try std.testing.expectEqual(@as(u128, (index + 1) * 7), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(usize, index + 1), runner.tokenLedger().accounted_operations.items.len);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retire" }).outcome);
+    }
+    var stopped = false;
+    for ([_][]const u8{ "select", "origin", "validate", "build", "account", "assign-operation", "authorize", "advance-request", "advance-operation", "call" }) |step| {
+        const result = runner.bindings().invokeStep(.{ .bytes = step });
+        if (result == .rejected) {
+            try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, result.rejected.token_budget);
+            stopped = true;
+            break;
+        }
+        try std.testing.expectEqual(.ok, result.outcome);
+    }
+    try std.testing.expect(stopped);
+    try std.testing.expectEqual(@as(usize, 3), owner.merges);
+    try std.testing.expectEqual(@as(usize, 3), fake.effect_count);
+    try std.testing.expectEqual(@as(u128, 21), runner.tokenLedger().committed());
+    try std.testing.expectEqual(@as(u64, 3), runner.tokenLedger().revision().value);
+}
+
+const RepairSequence = struct {
+    selected: u8 = 0,
+    merges: usize = 0,
+
+    fn authorize(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        self.selected += 1;
+        const authorization: [64]u8 = @splat('a' + self.selected);
+        var digest: [32]u8 = undefined;
+        std.crypto.hash.sha2.Sha256.hash(&authorization, &digest, .{});
+        const permit: @import("domain/workflow_retry.zig").Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(self.selected), .family = @splat(2) }, .authorization = digest, .revision = self.selected, .maximum_targets = 4 };
+        const unit: identity.ImmutableUnitOwnerId = .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = "repair-state" }, .chunk_id = .{ .bytes = "repair-chunk" } } };
+        const packet = @import("domain/model_input_packet.zig").createRepair(std.testing.allocator, "{}", unit, .{ .atomic_repair = .{ .bytes = &authorization } }, null, permit) catch return error.OperationExecutionFailed;
+        var result = try requests.publishPacket(std.testing.allocator, packet);
+        result.delta.repair_transition = .{ .authorized = permit };
+        return result;
+    }
+
+    fn merge(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        _ = try @import("application/model_candidate_handoff.zig").read(&input.step.data);
+        const permit = input.step.repair_permit orelse return error.OperationExecutionFailed;
+        context.?.merges += 1;
+        return .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .merged_validated = .{ .permit = permit, .revision_after = permit.revision + 1, .result = .resolved } } } };
+    }
+};
+
+test "dependent reviews retain parent allowances through initial protocol correction and global accounting" {
+    for ([_]bool{ false, true }) |recurring| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        var source = try protocolRetryYaml(&fixture);
+        source = try std.mem.replaceOwned(u8, a, source, "retry-limit: 2", "retry-limit: 1");
+        source = try std.mem.replaceOwned(u8, a, source, "use: test.observe-request, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }", "use: test.observe-request, on: { ok: retire, failed: end.failed, cancelled: end.cancelled }");
+        source = try std.fmt.allocPrint(a,
+            \\{s}
+            \\  retire: {{ use: retire-model-request, on: {{ok: select, failed: end.failed}} }}
+            \\  select: {{ use: test.authorize-dependent, on: {{ok: merge}} }}
+            \\  merge: {{ use: test.merge-dependent, on: {{ok: origin}} }}
+            \\
+        , .{source});
+        var owner: DependentReviewSequence = .{};
+        const observer = &fixture.entries[fixture.entries.len - 1];
+        observer.contract.repair_role = .validate;
+        observer.binding = bindings.bind(DependentReviewSequence, &owner, DependentReviewSequence.observe);
+        var entries = fixture.entries ++ [_]operations.Entry{
+            .{ .contract = .{ .id = "test.authorize-dependent", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none, .repair_role = .authorize }, .binding = bindings.bind(DependentReviewSequence, &owner, DependentReviewSequence.authorize) },
+            .{ .contract = .{ .id = "test.merge-dependent", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none, .repair_role = .merge }, .binding = bindings.bind(DependentReviewSequence, &owner, DependentReviewSequence.merge) },
+        };
+        fixture.registry.operations = &entries;
+        var profiles = core.profiles;
+        for (&profiles) |*profile| profile.total_model_token_budget.value = if (recurring) 1000 else 28;
+        fixture.registry.policies = &profiles;
+        const graph = try fixture.compile(source);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fake.invocation_plan.complete.content = "{";
+        try prepareProtocolAttempt(&runner, false);
+        const initial_id = (try currentRequest(&runner)).id();
+        try rejectProtocolResponse(&runner, false);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+        try prepareProtocolAttempt(&runner, true);
+        try std.testing.expect((try currentRequest(&runner)).id() == initial_id);
+        fake.invocation_plan.complete.content = "{\"answer\":\"valid\"}";
+        for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode", "validate-payload", "close-request", "observe", "retire" }) |step|
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        try std.testing.expectEqual(@as(u128, 14), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(usize, 0), owner.resolved);
+        if (recurring) {
+            for ([_][]const u8{ "select", "merge", "origin", "validate", "build" }) |step|
+                try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+            const parent = runner.repair_retry.currentDependentPermit().?;
+            const request = (try currentRequest(&runner)).id();
+            fake.invocation_plan.complete.content = "{";
+            for (0..2) |index| {
+                if (index == 0) {
+                    for ([_][]const u8{ "account", "assign-operation", "authorize", "phase", "advance-request", "advance-operation" }) |step|
+                        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+                } else try prepareProtocolAttempt(&runner, true);
+                try std.testing.expect((try currentRequest(&runner)).id() == request);
+                try rejectProtocolResponse(&runner, false);
+                try std.testing.expectEqual(@as(u64, index + 1), runner.repair_retry.completedAttempts(.{ .bytes = "account" }, parent.key));
+                try std.testing.expectEqual(@as(u32, @intCast(index + 1)), attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved(request));
+                try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+            }
+            const exhausted = runner.bindings().invokeStep(.{ .bytes = "account" });
+            try std.testing.expectEqual(@as(u64, 2), exhausted.rejected.retry_limit.completed_executions);
+            try std.testing.expectEqualDeep(parent, runner.repair_retry.currentDependentPermit().?);
+            try std.testing.expectEqual(@as(usize, 0), owner.resolved);
+        } else {
+            for (0..2) |index| {
+                for ([_][]const u8{ "select", "merge", "origin", "validate", "build", "account", "assign-operation", "authorize", "phase", "advance-request", "advance-operation", "call", "validate-response", "complete-operation", "decode", "validate-payload", "close-request" }) |step|
+                    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+                const parent = runner.repair_retry.currentDependentPermit().?;
+                const request = (try currentRequest(&runner)).id();
+                try std.testing.expect(request.purpose != .atomic_repair);
+                try std.testing.expectEqual(@as(u64, 1), runner.repair_retry.completedAttempts(.{ .bytes = "account" }, parent.key));
+                try std.testing.expectEqual(@as(u32, 1), attempt_accounting.accounting(runner.model_accounting.?.attempts).attemptsReserved(request));
+                try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "observe" }).outcome);
+                try std.testing.expect(runner.repair_retry.currentPermit() == null);
+                try std.testing.expectEqual(@as(usize, index + 1), owner.resolved);
+                try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retire" }).outcome);
+            }
+            var stopped = false;
+            for ([_][]const u8{ "select", "merge", "origin", "validate", "build", "account", "assign-operation", "authorize", "phase", "advance-request", "advance-operation", "call" }) |step| {
+                const result = runner.bindings().invokeStep(.{ .bytes = step });
+                if (result == .rejected) {
+                    try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, result.rejected.token_budget);
+                    stopped = true;
+                    break;
+                }
+                try std.testing.expectEqual(.ok, result.outcome);
+            }
+            try std.testing.expect(stopped);
+            try std.testing.expectEqual(@as(usize, 2), owner.resolved);
+        }
+        try std.testing.expectEqual(@as(usize, 4), fake.effect_count);
+        try std.testing.expectEqual(@as(u128, 28), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(u64, 4), runner.tokenLedger().revision().value);
+        try std.testing.expectEqual(@as(usize, 4), runner.tokenLedger().accounted_operations.items.len);
+    }
+}
+
+const DependentReviewSequence = struct {
+    selected: u8 = 0,
+    resolved: usize = 0,
+
+    fn authorize(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        self.selected += 1;
+        const permit: @import("domain/workflow_retry.zig").Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(self.selected), .family = @splat(2) }, .authorization = @splat(self.selected), .revision = self.selected, .maximum_targets = 3 };
+        return .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .authorized = permit } } };
+    }
+
+    fn merge(_: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const permit = input.step.repair_permit orelse return error.OperationExecutionFailed;
+        return .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .merged = .{ .permit = permit, .revision_after = permit.revision + 1, .validation = .dependent_review } } } };
+    }
+
+    fn observe(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        if ((try payload_workflow.readCurrent(&input.step.data)).outcome() != .valid) return error.OperationExecutionFailed;
+        const permit = input.step.repair_permit orelse return .{ .outcome = .ok, .delta = .{} };
+        context.?.resolved += 1;
+        return .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .validated = .{ .permit = permit, .revision = permit.revision + 1, .result = .resolved } } } };
+    }
+};
+
 test "protocol retries retain only latest repeated or alternating decoder rejection until local exhaustion" {
     for ([_]bool{ false, true }) |consolidated| {
         const sequences = [_][3][]const u8{

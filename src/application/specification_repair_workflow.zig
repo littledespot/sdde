@@ -12,6 +12,7 @@ pub const authorization_schema = values.schema(.specification_repair_authorizati
 pub const schemas = [_]data.Schema{authorization_schema};
 
 pub const Authorize = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/specification/authorize_specification_repair.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .blocked, .failed };
     allocator: std.mem.Allocator,
@@ -24,7 +25,9 @@ pub const Authorize = struct {
         errdefer owned.destroy(owner);
         const authorized = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), candidate, rejection) catch |err| return reject(self.allocator, authorization_schema, owner, err);
         owner.payload = .{ .repair_authorization = .{ .authorization = authorized } };
-        return owned.publish(self.allocator, authorization_schema, owner, if (authorized.operation == .delete) .more else .ok) catch error.OperationExecutionFailed;
+        var result = owned.publish(self.allocator, authorization_schema, owner, if (authorized.operation == .delete) .more else .ok) catch return error.OperationExecutionFailed;
+        result.delta.repair_transition = .{ .authorized = authorized.retry orelse return error.OperationExecutionFailed };
+        return result;
     }
 };
 pub const BuildInput = struct {
@@ -57,8 +60,9 @@ pub const Parse = struct {
     }
 };
 pub const Merge = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
     pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
-    pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32) };
+    pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
     pub const Action = @import("../actions/specification/merge_specification_repair.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -72,6 +76,7 @@ pub const Merge = struct {
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(spec.parsed_schema.key)] = values.adopt(self.allocator, spec.parsed_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
+        delta.repair_transition = .{ .merged = .{ .permit = state.authorization.retry orelse return error.OperationExecutionFailed, .revision_after = owner.payload.parsed.revision } };
         return .{ .outcome = .ok, .delta = delta };
     }
 };

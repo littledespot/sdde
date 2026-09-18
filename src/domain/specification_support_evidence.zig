@@ -5,6 +5,7 @@ const a = @import("required_authority.zig");
 const r = @import("reference_reconciliation.zig");
 const spec = @import("specification.zig");
 const refs = @import("reference_support.zig");
+const SourceId = @import("reference_identity.zig").SourceId;
 pub const Error = a.Error || r.Error || spec.Error;
 
 pub fn eligible(records: refs.Records, id: a.Id, claim: r.ClaimId) bool {
@@ -33,6 +34,12 @@ pub fn choices(allocator: std.mem.Allocator, records: refs.Records, id: a.Id) st
     return ids.toOwnedSlice(allocator);
 }
 
+pub fn sourceChoices(allocator: std.mem.Allocator, sources: r.evidence.Inputs) std.mem.Allocator.Error![]const SourceId {
+    const ids = try allocator.alloc(SourceId, sources.corpus.sources.len);
+    for (sources.corpus.sources, ids) |source, *id| id.* = source.id;
+    return ids;
+}
+
 /// The same facts constrain admission and describe evidence selection to a model.
 pub const Minimum = enum { optional, claim_required, claim_or_source_required };
 pub fn minimum(finding: a.Finding) Minimum {
@@ -46,15 +53,17 @@ pub const ClaimSet = union(enum) { eligible: []const r.ClaimId, exact: []const r
 pub const Rule = struct {
     minimum: Minimum,
     claims: ClaimSet,
+    eligible_source_ids: []const SourceId,
     provenance: ?spec.Provenance,
 
-    pub const Guidance = struct { minimum: Minimum, claims: ClaimSet, provenance: ?spec.Selection };
+    pub const Guidance = struct { minimum: Minimum, claims: ClaimSet, eligible_source_ids: []const SourceId, provenance: ?spec.Selection };
     pub fn guidance(self: Rule) Guidance {
-        return .{ .minimum = self.minimum, .claims = self.claims, .provenance = if (self.provenance) |value| selection(value) else null };
+        return .{ .minimum = self.minimum, .claims = self.claims, .eligible_source_ids = self.eligible_source_ids, .provenance = if (self.provenance) |value| selection(value) else null };
     }
 };
 pub const Requirements = struct {
     eligible_claim_ids: []const r.ClaimId,
+    eligible_source_ids: []const SourceId,
     positive_claims: enum { eligible_subset, exact_set },
     supported_provenance: ?spec.Provenance,
 
@@ -62,6 +71,7 @@ pub const Requirements = struct {
         return .{
             .minimum = minimum(finding),
             .claims = if (minimum(finding) != .optional and self.positive_claims == .exact_set) .{ .exact = self.eligible_claim_ids } else .{ .eligible = self.eligible_claim_ids },
+            .eligible_source_ids = self.eligible_source_ids,
             .provenance = if (finding == .supported) self.supported_provenance else null,
         };
     }
@@ -70,9 +80,12 @@ pub const Requirements = struct {
         return .{ .eligible_claim_ids = self.eligible_claim_ids, .positive_claims = self.positive_claims, .supported_provenance = if (self.supported_provenance) |value| selection(value) else null };
     }
 };
-pub fn requirements(allocator: std.mem.Allocator, inputs: a.Inputs, id: a.Id) Error!Requirements {
+pub fn requirements(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, id: a.Id) Error!Requirements {
+    const eligible_claim_ids = try choices(allocator, inputs.references orelse return error.InvalidRequiredAuthority, id);
+    errdefer allocator.free(eligible_claim_ids);
     return .{
-        .eligible_claim_ids = try choices(allocator, inputs.references orelse return error.InvalidRequiredAuthority, id),
+        .eligible_claim_ids = eligible_claim_ids,
+        .eligible_source_ids = try sourceChoices(allocator, sources),
         .positive_claims = switch (id.unit) {
             .signal, .conflict, .token => .exact_set,
             else => .eligible_subset,
@@ -85,17 +98,13 @@ pub const Rejection = struct { issue: Issue, rule: Rule };
 pub const Admission = union(enum) { accepted: a.ReviewEvidence, rejected: Rejection };
 
 /// Evidence checks are independent of detail/applicability checks in collection.
-pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, id: a.Id, finding: a.Finding, proposed: spec.Selection, source_ids: []const @import("reference_identity.zig").SourceId, detail: []const u8) Error!Admission {
+pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, id: a.Id, finding: a.Finding, proposed: spec.Selection, source_ids: []const SourceId, detail: []const u8) Error!Admission {
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
-    const required = try requirements(allocator, inputs, id);
+    const required = try requirements(allocator, inputs, sources, id);
     const rule = required.rule(finding);
     if (!records.items.state_id.eql(sources.corpus.state_id) or !a.contains(a.Authority, inputs.authorities, .{ .reference = records.items.state_id })) return reject(.stale_authority, rule);
-    r.unique(@import("reference_identity.zig").SourceId, source_ids) catch return reject(.invalid_sources, rule);
-    for (source_ids) |selected| {
-        for (sources.corpus.sources) |source| {
-            if (std.meta.eql(selected, source.id)) break;
-        } else return reject(.invalid_sources, rule);
-    }
+    r.unique(SourceId, source_ids) catch return reject(.invalid_sources, rule);
+    for (source_ids) |selected| if (!r.contains(SourceId, rule.eligible_source_ids, selected)) return reject(.invalid_sources, rule);
     for (proposed.claim_ids) |claim| if (!r.contains(r.ClaimId, required.eligible_claim_ids, claim)) return reject(.ineligible_claim, rule);
     const resolved = refs.select(allocator, records.items, sources, proposed) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else reject(.invalid_selection, rule);
     switch (rule.minimum) {

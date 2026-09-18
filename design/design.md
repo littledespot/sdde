@@ -831,7 +831,8 @@ The new engine is ready for production evaluation when all of the following are 
       one positive total-token budget initialized for each execution.
     - Every retry-capable operation instance supplies its own explicit compiler-validated
       `retry-limit`; no workflow policy, configuration, provider, adapter, or runner supplies a
-      retry default or global attempt ceiling.
+      retry default or global attempt ceiling. Atomic repair counts follow the native
+      defect identity and validated-progress rules in §22.7.
     - Normal filename selection packets contain only complete bounded option/candidate choices;
       complete raw-fallback rules are never truncated.
     - Provider APIs own model-call size limits; no engine/operation/slot byte ceilings, size
@@ -846,8 +847,9 @@ The new engine is ready for production evaluation when all of the following are 
     preconditions.
 
 15. Every repaired candidate receives impacted/dependent validation followed by full-candidate
-    validation before persistence; exhaustion of the selected repair operation instance's
-    explicit retry limit blocks/fails and never weakens policy.
+    validation before persistence. Validated resolution permits repair of another target;
+    recurrence retains its own history under §22.7. Exhaustion of the selected defect's
+    explicit operation retry allowance blocks/fails and never weakens policy.
 
 16. Unsupported references are reported and cannot be silently omitted; every selected source,
     decoded block, and bounded chunk has an exact disposition and accounting record.

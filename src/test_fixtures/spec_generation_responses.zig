@@ -8,18 +8,19 @@ const native = @import("../application/reference_extraction_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
 pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text, occupied_summary, occupied_signals, occupied_conflict, permuted_disposition, permuted_conflict_disposition };
-pub const SupportFault = enum { missing_detail, foreign_provenance, missing_finding, duplicate_finding, partial_findings, two_missing_findings };
+pub const SupportFault = enum { missing_detail, foreign_provenance, missing_finding, duplicate_finding, partial_findings, two_missing_findings, foreign_sources };
 pub const SourceLoss = enum { empty, partial, classification, signal, post_generation, unchanged };
 pub const Options = struct {
     disposition_sequence: ?enum { recover, exhaust } = null,
     attempt: u32 = 1,
     source_loss: ?SourceLoss = null,
     support_fault: ?SupportFault = null,
+    support_merges: usize = 0,
     support_post: bool = false,
     principle_conflict: bool = false,
     source_gaps: bool = false,
     evidence_fault: ?enum { recover, unchanged } = null,
-    candidate_omission: bool = false,
+    candidate_omissions: ?enum { functional, acceptance_and_functional } = null,
     extraction_omission: bool = false,
     text_fault: bool = false,
     failed_text_repair: bool = false,
@@ -251,7 +252,13 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
             if (request.id().purpose == .atomic_repair) {
                 const omission_schema = @import("../application/specification_omission_repair_workflow.zig").schema;
                 if (view.contains(omission_schema.key)) {
-                    const replacement: @import("../domain/specification_coverage_repair.zig").Replacement = .{ .record = .{ .content = .{ .functional_requirement = .{ .text = value.value } }, .provenance = value.provenance } };
+                    const state = try @import("../application/specification_values.zig").storage.read(&view, omission_schema, .omission_repair);
+                    const kind = (try @import("../domain/specification_session.zig").unit(state.authorization.target.unit)).records;
+                    const replacement: @import("../domain/specification_coverage_repair.zig").Replacement = .{ .record = .{ .content = switch (kind) {
+                        .functional_requirement => .{ .functional_requirement = .{ .text = value.value } },
+                        .acceptance_criterion => .{ .acceptance_criterion = .{ .given = value.value, .when = value.value, .then = value.value } },
+                        else => return error.UnexpectedScriptedRepair,
+                    }, .provenance = value.provenance } };
                     return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_coverage_repair.zig").Replacement, allocator, replacement);
                 }
                 var replacement = value;
@@ -270,7 +277,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                         const record: g.spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = value.value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = value.provenance };
                         break :result .{ .records = try allocator.dupe(g.spec.Model.RecordProposal, &.{record}) };
                     }
-                    if (options.candidate_omission and kind == .functional_requirement) break :result .{ .records = &.{} };
+                    if (omittedKind(options, kind)) break :result .{ .records = &.{} };
                     if ((kind != .functional_requirement and kind != .user_visible_outcome and kind != .acceptance_criterion) or (options.omit_exact and kind == .user_visible_outcome)) break :result .{ .records = &.{} };
                     var records: std.ArrayList(g.spec.Model.RecordProposal) = .empty;
                     for (all.entries) |item| {
@@ -346,8 +353,13 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 }
                 const uncertain = options.uncertain or (options.brief_uncertain and inputs.brief != null and requirement.seed.id.slot == .description);
                 const conflict = requirement.seed.id.unit == .conflict or (eligible.len == 0 and context.references.records.conflicts.len != 0);
-                const omission = options.candidate_omission and inputs.specification != null and requirement.seed.id.slot == .functional_requirements and !g.spec.hasRecords(inputs.specification.?, .functional_requirement);
-                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .decision = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The sources require loan renewal, but the specification has no functional requirement for it." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else "" } };
+                const omission_kind: ?g.spec.Kind = switch (requirement.seed.id.slot) {
+                    .functional_requirements => .functional_requirement,
+                    .acceptance_criteria => .acceptance_criterion,
+                    else => null,
+                };
+                const omission = if (omission_kind) |kind| omittedKind(options, kind) and inputs.specification != null and !g.spec.hasRecords(inputs.specification.?, kind) else false;
+                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .decision = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The specification omits the source-supported requirement." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else "" } };
                 if (options.source_gaps and requirement.seed.id.kind == .feature_intent and requirement.seed.id.unit == .feature) finding.value = .{ .decision = .unsupported, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{}, .detail = "The source leaves this decision unspecified." };
                 if (options.extraction_omission) finding.value = .{ .decision = .candidate_omission, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{context.inputs.corpus.sources[0].id}, .detail = "Extraction discarded the source-required behavior and exact message." };
             }
@@ -382,7 +394,9 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 const state = try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_repair_workflow.zig").schema, .support_repair);
                 const authorized = state.authorization;
                 if (options.evidence_fault == .unchanged) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, authorized.operation.replace);
+                if (options.support_fault == .foreign_sources and options.support_merges == 0) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, authorized.operation.replace);
                 var value = findings[authorized.target.ordinal - 1].value;
+                if (options.support_fault == .foreign_sources) value.source_ids = &.{context.inputs.corpus.sources[0].id};
                 if (options.support_fault == .partial_findings) {
                     if (authorized.operation == .replace) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, authorized.operation.replace);
                     value.provenance.claim_ids = &.{.{ .ordinal = @intCast(all.entries.len + 1) }};
@@ -423,6 +437,11 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                     .missing_finding => entries = findings[1..],
                     .partial_findings => entries = findings[0..2],
                     .two_missing_findings => entries = findings[2..],
+                    .foreign_sources => {
+                        // R29's seven findings confuse the source namespace with
+                        // claim ordinals. The first repair repeats that mistake.
+                        for ([_]usize{ 1, 4, 5, 6, 7, 8, 10 }) |index| findings[index].value.source_ids = &.{.{ .ordinal = 2 }};
+                    },
                     .duplicate_finding => entries = try std.mem.concat(allocator, @import("../domain/specification_support.zig").Source.Finding, &.{ findings, findings[0..1] }),
                 }
             };
@@ -503,4 +522,9 @@ fn selection(value: g.spec.Provenance) g.spec.Selection {
 
 fn extractedClaim(allocator: std.mem.Allocator, chunk: r.evidence.identity.ChunkId) ![]const u8 {
     return std.fmt.allocPrint(allocator, "The outcome from reference unit {s} is observable.", .{chunk.bytes});
+}
+
+fn omittedKind(options: Options, kind: g.spec.Kind) bool {
+    const selected = options.candidate_omissions orelse return false;
+    return kind == .functional_requirement or (selected == .acceptance_and_functional and kind == .acceptance_criterion);
 }

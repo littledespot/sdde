@@ -122,6 +122,7 @@ fn Unary(comptime A: type, comptime from: data.Schema, comptime from_tag: Tag, c
 }
 fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: data.Schema, comptime from_tag: Tag, comptime to: data.Schema, comptime to_tag: Tag) type {
     return struct {
+        pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
         pub const Action = A;
         pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
         allocator: std.mem.Allocator,
@@ -137,7 +138,29 @@ fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: d
                 .valid => |checked| @unionInit(owned.Payload, @tagName(to_tag), checked),
                 .invalid => |rejection| .{ .reconciliation_rejected = rejection },
             };
-            return extraction.publish(self.allocator, to, owner, if (result == .valid) .ok else .invalid);
+            const repair = @import("../domain/reference_reconciliation_repair.zig");
+            const parsed: r.Parsed = switch (from_tag) {
+                .reconciliation_parsed => prior.payload().reconciliation_parsed,
+                .reconciliation_dispositions => .{ .source = prior.payload().reconciliation_dispositions.source, .input = prior.payload().reconciliation_dispositions.input, .proposal = .{ .global = prior.payload().reconciliation_dispositions.proposal } },
+                .reconciliation_signals => .{ .source = prior.payload().reconciliation_signals.prior.source, .input = prior.payload().reconciliation_signals.prior.input, .proposal = .{ .global = prior.payload().reconciliation_signals.prior.proposal } },
+                else => unreachable,
+            };
+            const transition = if (!needs_text)
+                repair.dispositionProgress(owner.arena.allocator(), parsed) catch return error.OperationExecutionFailed
+            else
+                repair.progress(owner.arena.allocator(), self.action.validator, try textContext(&input.step.data), parsed, switch (to_tag) {
+                    .reconciliation_summary => .summary,
+                    .reconciliation_signals => .signals,
+                    .reconciliation_conflicts => .conflicts,
+                    else => unreachable,
+                }, switch (from_tag) {
+                    .reconciliation_dispositions => prior.payload().reconciliation_dispositions.dispositions,
+                    .reconciliation_signals => prior.payload().reconciliation_signals.prior.dispositions,
+                    else => &.{},
+                }) catch return error.OperationExecutionFailed;
+            var published = try extraction.publish(self.allocator, to, owner, if (result == .valid) .ok else .invalid);
+            published.delta.repair_transition = transition;
+            return published;
         }
     };
 }

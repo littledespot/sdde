@@ -122,6 +122,9 @@ An originating generic model-request step declares in YAML:
   `retry-limit` in `with`; the registered operation contract bounds that value and the
   compiler rejects a missing limit or an unbounded retry cycle.
 - An operation with no retry path does not acquire a hidden retry.
+- The user-approved 2026-09-18 amendment scopes atomic repair counts to native defects
+  with validated progress, as defined in [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation).
+  Registered contracts declare that scope; YAML supplies allowances, not defect identity.
 
 - The workflow never names a provider or model directly.
 - The originating step's selected slot must resolve through

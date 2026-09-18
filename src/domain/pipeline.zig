@@ -222,6 +222,7 @@ pub const NodeContract = struct {
     invalidates: []const DataKey = &.{},
     side_effect: SideEffect,
     runner_accounting: RunnerAccountingCapability = .none,
+    repair_role: @import("workflow_retry.zig").Role = .none,
 };
 
 pub const RuntimeStatus = enum {
@@ -246,6 +247,7 @@ pub const NodeDelta = struct {
     telemetry_facts: [telemetry.max_facts_per_delta]telemetry.WorkflowTelemetryFact = undefined,
     telemetry_fact_count: u8 = 0,
     runner_accounting_transition: ?runner_accounting.Transition = null,
+    repair_transition: ?@import("workflow_retry.zig").Transition = null,
 
     pub fn addedTelemetryFacts(self: *const NodeDelta) []const telemetry.WorkflowTelemetryFact {
         return self.telemetry_facts[0..self.telemetry_fact_count];
@@ -277,6 +279,7 @@ pub const NodeDelta = struct {
             .data_replacements = keys.replacements[0..replacements],
             .data_invalidations = keys.invalidations[0..invalidations],
             .runner_accounting_transition = self.runner_accounting_transition,
+            .repair_transition = self.repair_transition,
         };
     }
 };
@@ -294,6 +297,7 @@ pub const DataEffects = struct {
     data_replacements: []const DataKey = &.{},
     data_invalidations: []const DataKey = &.{},
     runner_accounting_transition: ?runner_accounting.Transition = null,
+    repair_transition: ?@import("workflow_retry.zig").Transition = null,
 
     pub fn fromContract(contract: NodeContract) DataEffects {
         return .{
@@ -345,6 +349,7 @@ pub const DeltaError = error{
     DuplicateInvalidation,
     UndeclaredRunnerAccountingTransition,
     MissingRunnerAccountingTransition,
+    UndeclaredRepairTransition,
     ConflictingDataEffects,
     InvalidTelemetryCount,
 };
@@ -382,6 +387,7 @@ pub const DataShape = struct {
         delta: DataEffects,
     ) DeltaError!DataShape {
         try self.validateInvocation(contract);
+        if (!@import("workflow_retry.zig").permitsTransition(contract.repair_role, delta.repair_transition)) return error.UndeclaredRepairTransition;
         try validateExactKeys(
             contract.produces,
             delta.data_writes,

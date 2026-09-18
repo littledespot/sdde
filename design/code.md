@@ -173,17 +173,17 @@ NodeContract {
     | { kind: none }
     | { kind: emit_exactly_one,
         transitionKind: increment_model_attempt |
-                        increment_atomic_repair_attempt |
                         reconcile_workflow_tokens |
                         advance_provider_operation |
                         consume_no_invention_replacement },
-  retryLimitContract?: { parameterId, operationLocalMaximum },
+  retryLimitContract?: { parameterId, operationLocalMaximum,
+                         scope: operation | repair | model_request },
+  repairRole: none | authorize | merge | validate | merge_validate,
   orderingBarriers[]
 }
 
 Runner accounting capability registry:
   AdvanceModelAttemptAccountingAction -> increment_model_attempt
-  AdvanceAtomicRepairAttemptAccountingAction -> increment_atomic_repair_attempt
   ReconcileWorkflowTokenUsageAction -> reconcile_workflow_tokens
   AdvanceProviderOperationLifecycleAction -> advance_provider_operation
   ValidateRepairScopeAction -> consume_no_invention_replacement only when its
@@ -239,8 +239,9 @@ PipelineEnvelope {
     operationAccounting: {
       stageRunEpochId,
       modelAttemptOrdinalsByRequestId: Map<ModelRequestId, NonnegativeInteger>,
-      retriesUsedByOperationInstanceId:
-        Map<CompiledWorkflowOperationInstanceId, NonnegativeInteger>,
+      operationRetryCounts:
+        Map<{ operation: CompiledWorkflowOperationInstanceId,
+              nativeDefectKey? }, NonnegativeInteger>,
       noInventionReplacementUsedByUnitId: Set<ImmutableUnitOwnerId>
     },
     workflowTokenAccounting: {
@@ -293,8 +294,18 @@ NodeDelta {
   evidenceAdded: Evidence[],
   diagnosticsAdded: Diagnostic[],
   telemetryFactsAdded: WorkflowTelemetryFact[],
-  runnerAccountingTransition?: RepairAccountingTransition
+  runnerAccountingTransition?: RepairAccountingTransition,
+  repairProgress?: NativeRepairProgress
 }
+
+// Native registered bindings supply facts; only the runner counts attempts.
+// Permit binds a stable scope/target/family, authorization, revision and frozen
+// target population. See §22.7 for recurrence and dependent rebuilding.
+NativeRepairProgress =
+  | Authorized { permit }
+  | Merged { permit, revisionAfter, validation: native | dependent_review }
+  | Validated { permit, revision, result: resolved | recurring }
+  | MergedValidated { permit, revisionAfter, result: resolved | recurring }
 
 RepairAccountingTransition =
   | IncrementModelAttempt {
@@ -302,12 +313,8 @@ RepairAccountingTransition =
       initialOrRetry,
       retryOperationInstanceId?, completedRetries?,
       explicitRetryLimit?
-      // Retry facts borrow the runner's existing operation-local counter.
+      // Retry facts borrow the runner's operation/defect count under §22.7.
       // The request's originating step remains unchanged.
-    }
-  | IncrementAtomicRepairAttempt {
-      stageRunEpochId, retryOperationInstanceId,
-      expectedRetryValue, nextRetryValue, explicitRetryLimit
     }
   | ReconcileWorkflowTokens {
       workflowExecutionId, providerOperationId,
@@ -333,7 +340,7 @@ RepairAccountingTransition =
 
 // PipelineRunner accepts this field only from the compiler-registered accounting
 // action contract, validates compare-and-swap and the explicit local retry
-// authority against its existing step counter, and constructs
+// authority against its operation/defect count, and constructs
 // the next envelope. It is not a general node-controlled runner mutation.
 // accounted_model_attempt is a sealed view of the applied canonical record.
 // Envelope publication and accounting installation succeed together or neither

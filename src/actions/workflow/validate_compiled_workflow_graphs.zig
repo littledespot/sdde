@@ -38,6 +38,8 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
         !graph.authority.total_model_token_budget.isValid() or
         graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return invalid())) return invalid();
     for (steps) |step| {
+        if (!@import("../../domain/workflow_operation.zig").validRepair(step.repair_role, if (step.retry_authority) |value| value.scope else null, step.runner_accounting, step.side_effect)) return invalid();
+        if (step.repair_role != .none and step.capabilities.len != 0) return invalid();
         if (workflow.OperationId.parse(step.operation_id.bytes) == null) return invalid();
         if (!@import("../../domain/workflow_operation.zig").validAccounting(step.runner_accounting, step.requires, step.produces, step.side_effect, step.retry_authority != null)) return invalid();
         if (!@import("../../domain/workflow_capability.zig").permits(graph.authority.allowed_capabilities, step.capabilities)) return invalid();

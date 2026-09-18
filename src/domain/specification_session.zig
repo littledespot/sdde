@@ -12,6 +12,8 @@ pub const Session = struct {
     completed: usize = 0,
     units: [unit_count]?g.Checked = @splat(null),
     starting_ledger: @import("specification_identity.zig").Ledger = .{},
+    omission_target_bound: ?u32 = null,
+    pending_coverage_repair: ?@import("atomic_repair.zig").Pending(@import("specification_coverage.zig").TokenSubject) = null,
 };
 pub const Error = @import("strict_json.zig").Error || g.Error || packets.Error;
 

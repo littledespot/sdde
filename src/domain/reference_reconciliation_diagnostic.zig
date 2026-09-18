@@ -10,6 +10,12 @@ pub const Source = struct {
     last_repair: ?@import("atomic_repair.zig").Merge = null,
     origin: ?Origin = null,
     fields: []const FieldOrigin = &.{},
+    statements: @import("repair_occurrences.zig").Set = .{},
+    dispositions: @import("repair_occurrences.zig").Set = .{},
+    signals: @import("repair_occurrences.zig").Set = .{},
+    conflicts: @import("repair_occurrences.zig").Set = .{},
+    pending_repair: ?@import("atomic_repair.zig").Pending(@import("reference_reconciliation_repair.zig").ObservationTarget) = null,
+    omission_retry: ?@import("workflow_retry.zig").Permit = null,
     pub fn at(self: Source, unit: Unit, field: Field) ?Origin {
         for (self.fields) |value| if (std.meta.eql(value.unit, unit) and value.field == field) return value.origin;
         for (self.fields) |value| if (std.meta.eql(value.unit, unit) and value.field == .record) return value.origin;

@@ -13,6 +13,69 @@ pub const Location = union(enum) {
 pub const Support = struct { review: @import("specification_support.zig").Source.Candidate, inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
 pub const Evidence = struct { finding: authority.Evidence, location: Location };
 pub const Error = authority.Error || r.Error || @import("specification_support.zig").Source.Error;
+const retry = @import("workflow_retry.zig");
+const atomic = @import("atomic_repair.zig");
+pub const Producer = enum { extraction, reconciliation };
+const Family = enum { source_omission };
+const Subject = union(enum) { feature: authority.Id, token: r.extraction.tokens.CandidateId, regenerated: authority.Id };
+
+fn subject(inputs: authority.Inputs, requirement: authority.Id) Error!Subject {
+    return switch (requirement.unit) {
+        .feature => .{ .feature = requirement },
+        .token => |id| token: {
+            for ((inputs.references orelse return error.InvalidRequiredAuthority).items.entries) |entry| {
+                if (entry.claim.content != .preserved_token) continue;
+                const value = entry.claim.content.preserved_token.value;
+                if (std.meta.eql(value.id, id)) break :token .{ .token = value.candidate_id };
+            }
+            return error.InvalidRequiredAuthority;
+        },
+        .record, .signal, .conflict, .decision => .{ .regenerated = requirement },
+    };
+}
+
+fn retryScope(a: std.mem.Allocator, producer: Producer, feature: @import("feature_identity.zig").FeatureId, state: r.extraction.identity.StateId) Error![32]u8 {
+    const scope = .{ .contract = @typeName(Family), .producer = producer, .feature = feature, .source_state = state };
+    return (try atomic.snapshot(@TypeOf(scope), a, scope)).bytes;
+}
+
+pub fn retryPermit(a: std.mem.Allocator, producer: Producer, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, authorization: @import("model_request_identity.zig").RepairAuthorizationId, revision: u64, support: Support, selected: authority.Id, previous: ?retry.Permit) Error!retry.Permit {
+    const records = support.inputs.references orelse return error.InvalidRequiredAuthority;
+    var result = try atomic.permit(Subject, Family, a, owner, try subject(support.inputs, selected), .source_omission, authorization, revision, std.math.cast(u32, support.inputs.seeds.len) orelse return error.InvalidRequiredAuthority);
+    result.key.scope = try retryScope(a, producer, support.inputs.feature, records.items.state_id);
+    if (previous) |prior| if (std.mem.eql(u8, &prior.key.scope, &result.key.scope)) {
+        result.maximum_targets = prior.maximum_targets;
+    };
+    return result;
+}
+
+/// The existing Source owner has already admitted this complete collection.
+/// Reuse that proof without capturing fresh pipeline dependencies at Apply.
+pub fn admittedValidation(a: std.mem.Allocator, permit: retry.Permit, admitted: @FieldType(@import("specification_support.zig").Source.Collection, "accepted")) Error!?retry.Transition {
+    const inputs = admitted.inputs;
+    if (!std.mem.eql(u8, &permit.key.family, &(try atomic.snapshot(Family, a, .source_omission)).bytes)) return null;
+    const records = inputs.references orelse return error.InvalidRequiredAuthority;
+    const matched_scope = for (std.meta.tags(Producer)) |producer| {
+        if (std.mem.eql(u8, &permit.key.scope, &try retryScope(a, producer, inputs.feature, records.items.state_id))) break true;
+    } else false;
+    if (!matched_scope) return error.InvalidRequiredAuthority;
+    const ledger = try authority.build(a, inputs);
+    const result = try authority.reconcile(a, ledger, try authority.buildObservations(a, ledger));
+    const revision = std.math.add(u64, permit.revision, 1) catch return error.InvalidRequiredAuthority;
+    for (result.entries) |entry| {
+        const selected = try subject(inputs, entry.requirement);
+        if (!std.mem.eql(u8, &permit.key.target, &(try atomic.snapshot(Subject, a, selected)).bytes)) continue;
+        if (selected == .regenerated) break;
+        const resolved = entry.candidate_defect == null and switch (entry.outcome) {
+            .resolved_exactly_one, .resolved_explicit_not_applicable, .resolved_explicit_exception => true,
+            .clarification_required, .upstream_rework_required, .administrative_block => false,
+        };
+        return .{ .validated = .{ .permit = permit, .revision = revision, .result = if (resolved) .resolved else .recurring } };
+    }
+    // A reused ordinal or removed subject cannot establish semantic progress.
+    if (result.continuation == .all_resolved) return error.InvalidRequiredAuthority;
+    return .{ .validated = .{ .permit = permit, .revision = revision, .result = .recurring } };
+}
 
 pub fn select(a: std.mem.Allocator, sources: r.evidence.Inputs, support: Support) Error!Evidence {
     var unreviewed = support.inputs;

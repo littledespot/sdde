@@ -3,10 +3,12 @@ const std = @import("std");
 const g = @import("specification_generation.zig");
 const identity = @import("model_request_identity.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
+const occurrences = @import("repair_occurrences.zig");
 pub const Subject = union(enum) { title, description, primary_goal, story, entity_basis, record: usize };
 pub const ValueField = union(enum) { value, given, when, then, text, condition, expected_outcome, name, business_meaning, relationship: usize };
 pub const Part = union(enum) { provenance, value: ValueField };
 pub const Target = union(enum) { provenance: Subject, value: struct { subject: Subject, field: ValueField }, record: usize };
+pub const StableTarget = struct { value: Target };
 pub const Replacement = union(enum) { provenance: g.spec.Selection, value: g.spec.BusinessValue, record: g.spec.Model.RecordProposal };
 pub const Rule = enum { provenance, typed_text, exact_copy, record_kind, duplicate_record, unit_kind };
 pub const Blocked = enum { competing_records, unit_kind, clarification_question };
@@ -26,6 +28,8 @@ pub const FieldOrigin = struct { target: Target, origin: ?Origin };
 pub const Origins = struct {
     initial: ?Origin = null,
     fields: []const FieldOrigin = &.{},
+    record_occurrences: occurrences.Set = .{},
+    repair_target_bound: ?u32 = null,
     pub fn at(self: Origins, field: Field) ?Origin {
         if (field == .target) {
             for (self.fields) |entry| if (std.meta.eql(entry.target, field.target)) return entry.origin;
@@ -43,9 +47,11 @@ pub const Origins = struct {
             try result.append(a, entry);
         }
         try result.append(a, .{ .target = target, .origin = origin });
-        return .{ .initial = self.initial, .fields = try result.toOwnedSlice(a) };
+        var next = self;
+        next.fields = try result.toOwnedSlice(a);
+        return next;
     }
-    pub fn deleting(self: Origins, a: std.mem.Allocator, index: usize) std.mem.Allocator.Error!Origins {
+    pub fn deleting(self: Origins, a: std.mem.Allocator, index: usize, length: usize) Error!Origins {
         var result: std.ArrayList(FieldOrigin) = .empty;
         for (self.fields) |entry| {
             var next = entry;
@@ -59,13 +65,30 @@ pub const Origins = struct {
             }
             try result.append(a, next);
         }
-        return .{ .initial = self.initial, .fields = try result.toOwnedSlice(a) };
+        var next = self;
+        next.fields = try result.toOwnedSlice(a);
+        next.record_occurrences = try self.record_occurrences.deleting(a, index, length);
+        return next;
+    }
+    pub fn stableTarget(self: Origins, target: Target, length: usize) Error!StableTarget {
+        var stable = target;
+        if (recordIndex(target)) |index| setRecordIndex(&stable, (try self.record_occurrences.at(index, length)).ordinal - 1);
+        return .{ .value = stable };
+    }
+    pub fn currentTarget(self: Origins, target: StableTarget, length: usize) Error!?Target {
+        const ordinal = recordIndex(target.value) orelse return target.value;
+        for (0..length) |index| if ((try self.record_occurrences.at(index, length)).ordinal - 1 == ordinal) {
+            var current = target.value;
+            setRecordIndex(&current, index);
+            return current;
+        };
+        return null;
     }
 };
-pub const Candidate = struct { revision: u64 = 1, last_repair: ?@import("atomic_repair.zig").Merge = null, response: g.Response, origins: Origins = .{} };
+pub const Candidate = struct { revision: u64 = 1, last_repair: ?@import("atomic_repair.zig").Merge = null, response: g.Response, origins: Origins = .{}, pending_repair: ?@import("atomic_repair.zig").Pending(StableTarget) = null };
 pub const Raw = struct { body: []const u8, origin: ?Origin };
 pub const Result = union(enum) { valid: g.Checked, invalid: Rejection };
-pub const Error = error{InvalidSpecificationRepair} || std.mem.Allocator.Error;
+pub const Error = error{InvalidSpecificationRepair} || occurrences.Error;
 pub fn locate(subject: Subject, part: Part) Target {
     return switch (part) {
         .provenance => .{ .provenance = subject },
@@ -79,6 +102,13 @@ fn recordIndex(selected: Target) ?usize {
         .value => |value| value.subject,
     };
     return if (subject == .record) subject.record else null;
+}
+fn setRecordIndex(target: *Target, index: usize) void {
+    switch (target.*) {
+        .record => |*value| value.* = index,
+        .provenance => |*subject| subject.record = index,
+        .value => |*value| value.subject.record = index,
+    }
 }
 fn attributed(comptime boundary: g.spec.Boundary, content: *g.Responses(boundary).Content, subject: Subject) Error!*g.spec.Values(boundary).AttributedValue {
     return switch (subject) {
@@ -169,19 +199,19 @@ pub fn replace(a: std.mem.Allocator, response: g.Response, selected: Target, rep
 
 /// The same field lens serves validated canonical session values during coverage
 /// repair; it never removes or reconstructs their provenance.
-pub fn canonicalValue(response: g.CanonicalResponse, subject: Subject, field: ValueField) Error!g.spec.AttributedValue {
+pub fn attributedValue(comptime boundary: g.spec.Boundary, response: g.Responses(boundary).Response, subject: Subject, field: ValueField) Error!g.spec.Values(boundary).AttributedValue {
     if (response != .content) return error.InvalidSpecificationRepair;
     var content = response.content;
     if (subject != .record) {
         if (field != .value) return error.InvalidSpecificationRepair;
-        return (try attributed(.canonical, &content, subject)).*;
+        return (try attributed(boundary, &content, subject)).*;
     }
     if (content != .records or subject.record >= content.records.len) return error.InvalidSpecificationRepair;
     var record = content.records[subject.record];
     return .{ .value = try valueField(&record.content, field), .provenance = record.provenance };
 }
 pub fn replaceCanonicalValue(a: std.mem.Allocator, response: g.CanonicalResponse, subject: Subject, field: ValueField, value: g.spec.BusinessValue) Error!g.CanonicalResponse {
-    _ = try canonicalValue(response, subject, field);
+    _ = try attributedValue(.canonical, response, subject, field);
     var result = response;
     if (subject != .record) {
         (try attributed(.canonical, &result.content, subject)).value = value;

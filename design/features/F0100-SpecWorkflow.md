@@ -699,8 +699,10 @@ closed requiredness/ownership policies, current support checks and outcomes.
   `finding`/`disposition` response fields reject.
 - Review tasks describe source meaning and candidate support instead of exposing
   native kind/unit/slot tuples. The evidence-admission owner also supplies request
-  constraints: positive claim minimums, eligible/exact sets and current candidate
-  provenance. Typed diagnostics distinguish missing, disallowed, incomplete and
+  constraints: positive claim minimums, eligible/exact claim sets, permitted source
+  IDs from the captured corpus and current candidate provenance. Source and claim
+  namespaces remain distinct; permitted empty/source-only evidence is unchanged.
+  Typed diagnostics distinguish missing, disallowed, incomplete and
   candidate-inconsistent selections. Selection corrections receive the failing
   rule once; initial/insertion requests retain all permitted decision constraints.
   The same checks govern persisted evidence; no citation is chosen automatically.

@@ -31,6 +31,17 @@ pub const Rejection = struct {
 pub const Result = union(enum) { valid: extraction.Classified, invalid: Rejection };
 
 pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tokens.Candidates, parsed: extraction.TextValidated) extraction.Error!Result {
+    return check(a, inputs, candidates, parsed, null);
+}
+
+/// The selected chunk uses the complete validator's classification checks.
+/// This observation does not publish a partially classified extraction.
+pub fn validScope(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tokens.Candidates, parsed: extraction.TextValidated, scope: evidence.Scope) extraction.Error!bool {
+    _ = try evidence.resolve(inputs, scope);
+    return (try check(a, inputs, candidates, parsed, scope)) == .valid;
+}
+
+fn check(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tokens.Candidates, parsed: extraction.TextValidated, selected_scope: ?evidence.Scope) extraction.Error!Result {
     try tokens.validateCandidates(a, inputs, candidates);
     if (parsed.revision == 0 or parsed.entries.len != inputs.chunks.entries.len) return error.InvalidReferenceExtraction;
     const ordered = try a.alloc(extraction.TextValidatedResult, parsed.entries.len);
@@ -44,9 +55,17 @@ pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: token
         }
         entry.* = selected orelse return error.InvalidReferenceExtraction;
     }
-    const selections = try a.alloc(tokens.Selected, candidates.entries.len);
+    const selection_count = if (selected_scope) |scope| count: {
+        var count: usize = 0;
+        for (candidates.entries) |candidate| if (candidate.fact.scope.chunk_id.eql(scope.chunk_id)) {
+            count += 1;
+        };
+        break :count count;
+    } else candidates.entries.len;
+    const selections = try a.alloc(tokens.Selected, selection_count);
     var index: usize = 0;
     for (ordered) |entry| {
+        if (selected_scope) |scope| if (!entry.scope.chunk_id.eql(scope.chunk_id)) continue;
         var missing: std.ArrayList(tokens.CandidateId) = .empty;
         var duplicate: std.ArrayList(tokens.CandidateId) = .empty;
         var unknown: std.ArrayList(tokens.CandidateId) = .empty;
@@ -88,5 +107,7 @@ pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: token
         }
     }
     if (index != selections.len) return error.InvalidStructuredTokens;
-    return .{ .valid = .{ .dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = parsed }), .text_validated = .{ .revision = parsed.revision, .entries = ordered }, .selections = selections } };
+    var retained = parsed;
+    retained.entries = ordered;
+    return .{ .valid = .{ .dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = parsed }), .text_validated = retained, .selections = selections } };
 }

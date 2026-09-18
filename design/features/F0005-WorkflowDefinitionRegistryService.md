@@ -659,7 +659,11 @@ service is published.
 - every retry cycle crosses a registered monotonic attempt/iteration-budget
   operation whose finite `retry-limit` is an explicitly supplied and validated
   scalar parameter on that retry-capable operation instance; the selected
-  workflow policy cannot supply or default it;
+  workflow policy cannot supply or default it. Registered repair scopes retain
+  monotonic counts per native key under [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation).
+  Execution bounds multiply their allowances by the finite native key population;
+  request-accounting sites also include their ordinary-request population. Arithmetic
+  overflow and incompatible repair roles/scopes reject before execution;
 - every step's `use` reference resolves to one current registered operation contract and every
   parameter satisfies that contract's closed definition-safe descriptor;
 - every declared resource is captured exactly once, has one compatible typed

@@ -51,6 +51,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             origin: ?Origin,
             origins: []const ?Origin,
             last_repair: ?@import("atomic_repair.zig").Merge = null,
+            occurrences: @import("repair_occurrences.zig").Set = .{},
         };
         pub const Issue = enum { invalid_json, unknown_requirement, duplicate_requirement, missing_requirement, invalid_detail, invalid_evidence, invalid_decision };
         pub const Diagnostic = struct { issue: Issue, requirement: ?a.Id, ordinal: ?u32, revision: u64, origin: ?Origin, entry_index: ?usize = null, evidence: ?evidence_admission.Rejection = null };
@@ -117,14 +118,14 @@ pub fn Contract(comptime purpose: Purpose) type {
                 const id = requirement.seed.id;
                 const required = try applicability(inputs, id);
                 review_applicability = review_applicability or required == .review;
-                try slots.append(scratch, .{ .ordinal = try r.ordinal(index), .task = try task(scratch, id), .permitted_not_applicable = if (required == .review) required.review else null, .evidence = (try admission.requirements(scratch, inputs, id)).guidance() });
+                try slots.append(scratch, .{ .ordinal = try r.ordinal(index), .task = try task(scratch, id), .permitted_not_applicable = if (required == .review) required.review else null, .evidence = (try admission.requirements(scratch, inputs, context.inputs, id)).guidance() });
             }
             if (target != null and slots.items.len != 1) return error.InvalidRequiredAuthority;
             const projected = try @import("model_evidence.zig").project(scratch, all.entries);
             const sources = try scratch.alloc(struct { id: @import("reference_identity.zig").SourceId, text: []const u8 }, context.inputs.corpus.sources.len);
             for (context.inputs.corpus.sources, sources) |source, *copy| copy.* = .{ .id = source.id, .text = source.bytes };
             const subject: Subject = if (inputs.specification != null or inputs.brief != null) .{ .candidate_support = .{ .candidate = inputs.specification, .brief = inputs.brief } } else .{ .source_preservation = .{} };
-            const payload = .{ .subject = subject, .evidence_rules = .{ .supported = admission.minimum(.supported), .not_applicable = admission.minimum(Decision.not_applicable.finding()), .candidate_omission = admission.minimum(.candidate_omission), .negative = admission.minimum(.unsupported) }, .requirements = slots.items, .sources = sources, .extraction = try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction), .dispositions = records.dispositions, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = try @import("model_evidence.zig").signals(scratch, records.signals), .conflicts = try @import("model_evidence.zig").conflicts(scratch, records.conflicts) };
+            const payload = .{ .subject = subject, .evidence_rules = .{ .eligible_source_ids = try admission.sourceChoices(scratch, context.inputs), .supported = admission.minimum(.supported), .not_applicable = admission.minimum(Decision.not_applicable.finding()), .candidate_omission = admission.minimum(.candidate_omission), .negative = admission.minimum(.unsupported) }, .requirements = slots.items, .sources = sources, .extraction = try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction), .dispositions = records.dispositions, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = try @import("model_evidence.zig").signals(scratch, records.signals), .conflicts = try @import("model_evidence.zig").conflicts(scratch, records.conflicts) };
             const encoded = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
             var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
             for (projected_input.object.getPtr("requirements").?.array.items) |*requirement| {
@@ -209,7 +210,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (purpose == .source and reviewed == .accepted) {
                         @import("source_omission.zig").validate(inputs, sources, semantic, reviewed.accepted, finding.value.loss) catch |err| {
                             if (err == error.OutOfMemory) return error.OutOfMemory;
-                            reviewed = .{ .rejected = .{ .issue = .invalid_loss, .rule = (try admission.requirements(allocator, inputs, requirement.seed.id)).rule(semantic) } };
+                            reviewed = .{ .rejected = .{ .issue = .invalid_loss, .rule = (try admission.requirements(allocator, inputs, sources, requirement.seed.id)).rule(semantic) } };
                         };
                     }
                     if (reviewed == .rejected) {

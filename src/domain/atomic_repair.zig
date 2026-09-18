@@ -3,6 +3,20 @@
 const std = @import("std");
 const identity = @import("model_request_identity.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
+const retry = @import("workflow_retry.zig");
+
+/// Selected native target retained until its owning validator observes the merge.
+pub fn Pending(comptime Target: type) type {
+    return struct { permit: retry.Permit, target: Target };
+}
+
+/// Only stable native subject/family projections enter recurrence identity.
+pub fn permit(comptime Target: type, comptime Family: type, a: std.mem.Allocator, owner: identity.ImmutableUnitOwnerId, target: Target, family: Family, authorization: identity.RepairAuthorizationId, revision: u64, maximum_targets: u32) std.mem.Allocator.Error!retry.Permit {
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(authorization.bytes, &digest, .{});
+    const Scope = struct { owner: identity.ImmutableUnitOwnerId, contract: []const u8 };
+    return .{ .key = .{ .scope = (try snapshot(Scope, a, .{ .owner = owner, .contract = @typeName(Family) })).bytes, .target = (try snapshot(Target, a, target)).bytes, .family = (try snapshot(Family, a, family)).bytes }, .authorization = digest, .revision = revision, .maximum_targets = maximum_targets };
+}
 
 /// Execution-local merge facts, published only with the resulting candidate.
 /// A changed value and a new revision do not establish validation acceptance.
@@ -14,6 +28,7 @@ pub const Merge = struct {
     revision_after: u64,
     changed: bool,
     origin: ?Origin,
+    retry: ?retry.Permit = null,
 
     pub fn copy(self: Merge, a: std.mem.Allocator) strict.Error!Merge {
         const bytes = try std.json.Stringify.valueAlloc(a, self, .{});
@@ -46,6 +61,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             operation: union(enum) { replace: Replacement, insert: std.meta.Tag(Replacement), delete: Replacement },
             rule: Rule,
             dependencies: Dependencies,
+            retry: ?retry.Permit = null,
         };
 
         pub fn authorize(a: std.mem.Allocator, owner: identity.ImmutableUnitOwnerId, revision: u64, target: Target, expected: Replacement, dependencies: Dependencies, rule: Rule) Error!Authorization {
@@ -94,7 +110,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
                 try repair.object.put(scratch, "current_value", current_value);
             }
             const body = try std.json.Stringify.valueAlloc(scratch, .{ .input = input, .repair = repair }, .{});
-            return packets.create(a, body, base.unit(), .{ .atomic_repair = authorization.id }, definition);
+            return packets.createRepair(a, body, base.unit(), .{ .atomic_repair = authorization.id }, definition, authorization.retry orelse return error.InvalidAtomicRepair);
         }
 
         pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
@@ -105,6 +121,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
         pub fn checkRequest(authorization: Authorization, input: *const packets.Packet) Error!std.meta.Tag(Replacement) {
             if (!identity.unitOwnerEql(authorization.owner, input.unit()) or input.purpose() != .atomic_repair or
                 !std.mem.eql(u8, authorization.id.bytes, input.purpose().atomic_repair.bytes)) return error.InvalidAtomicRepair;
+            if (authorization.retry == null or !std.meta.eql(authorization.retry, input.repairPermit())) return error.InvalidAtomicRepair;
             return switch (authorization.operation) {
                 .replace => |value| std.meta.activeTag(value),
                 .insert => |kind| kind,
@@ -162,6 +179,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
                 .revision_after = std.math.add(u64, revision, 1) catch return error.InvalidAtomicRepair,
                 .changed = try changed(a, authorization, replacement),
                 .origin = origin,
+                .retry = authorization.retry,
             }).copy(a);
         }
     };

@@ -22,6 +22,24 @@ const atomic = shared.Contract(Target, Replacement, context.TextFacts, Rule);
 pub const Authorization = atomic.Authorization;
 pub const Error = atomic.Error || e.Error;
 pub const Facts = context.TextFacts;
+const Family = enum { typed_text };
+
+pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@import("workflow_retry.zig").Permit {
+    const candidate = authorization.dependencies.candidate;
+    const entry = try entryAt(candidate, authorization.target);
+    const count: usize = switch (entry.outcome) {
+        .claims => |claims| claims.len,
+        .no_feature_claim => 1,
+        .blocked => return error.InvalidAtomicRepair,
+    };
+    var permit = try shared.permit(e.TextTarget, Family, a, authorization.owner, authorization.target.field, .typed_text, authorization.id, authorization.revision, std.math.cast(u32, count) orelse return error.InvalidAtomicRepair);
+    const scope = .{ .boundary = permit.key.scope, .origin = entry.origin };
+    permit.key.scope = (try shared.snapshot(@TypeOf(scope), a, scope)).bytes;
+    if (candidate.last_repair) |prior| if (prior.retry) |previous| if (std.mem.eql(u8, &previous.key.scope, &permit.key.scope)) {
+        permit.maximum_targets = previous.maximum_targets;
+    };
+    return permit;
+}
 
 pub fn authorize(a: std.mem.Allocator, facts: Facts, rejection: e.TextRejection) Error!Authorization {
     const parsed = facts.candidate;
@@ -39,7 +57,9 @@ pub fn authorize(a: std.mem.Allocator, facts: Facts, rejection: e.TextRejection)
         },
     };
     if (!try atomic.equal(a, expected, observed)) return error.InvalidAtomicRepair;
-    return atomic.authorize(a, unit(rejection.scope), parsed.revision, target, expected, facts, .{ .issue = rejection.issue, .requirement = rejection.issue.description() });
+    var result = try atomic.authorize(a, unit(rejection.scope), parsed.revision, target, expected, facts, .{ .issue = rejection.issue, .requirement = rejection.issue.description() });
+    result.retry = try retryPermit(a, result);
+    return result;
 }
 pub fn packet(a: std.mem.Allocator, facts: Facts, registry: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, candidates: e.tokens.Candidates, authorization: Authorization) Error!*packets.Packet {
     try atomic.checkDependencies(a, authorization, facts);
@@ -78,7 +98,14 @@ pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, p
         try origins.append(a, .{ .target = target.field, .origin = origin });
         entry.text_origins = try origins.toOwnedSlice(a);
     };
-    return .{ .revision = merged.revision_after, .last_repair = merged, .entries = entries };
+    return .{ .revision = merged.revision_after, .last_repair = merged, .pending_repair = if (authorization.retry) |permit| .{ .permit = permit, .target = .{ .field = target.field, .scope = .{ .bytes = try a.dupe(u8, target.scope.bytes) } } } else null, .entries = entries };
+}
+
+pub fn progress(a: std.mem.Allocator, validator: e.text.Validator, registry: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: @import("reference_evidence.zig").Inputs, candidate: e.Parsed) Error!?@import("workflow_retry.zig").Transition {
+    const pending = candidate.pending_repair orelse return null;
+    const scope: @import("reference_evidence.zig").Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = pending.target.scope };
+    const valid = try @import("reference_extraction_text.zig").validTarget(validator, a, registry, current, inputs, candidate, scope, pending.target.field);
+    return .{ .validated = .{ .permit = pending.permit, .revision = candidate.revision, .result = if (valid) .resolved else .recurring } };
 }
 fn entryAt(parsed: e.Parsed, target: Target) Error!e.ParsedResult {
     var result: ?e.ParsedResult = null;

@@ -15,6 +15,23 @@ const shared = @import("atomic_repair.zig");
 const atomic = shared.Contract(Target, Replacement, Facts, Rule);
 pub const Authorization = atomic.Authorization;
 pub const Error = atomic.Error || extraction.Error;
+const Family = enum { classifications, source_selection };
+
+pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@import("workflow_retry.zig").Permit {
+    const candidate = authorization.dependencies.candidate;
+    const entry = try entryAt(candidate, try scopeOf(authorization));
+    var count: usize = 1;
+    if (entry.outcome == .claims) for (entry.outcome.claims) |claim| {
+        count = std.math.add(usize, count, @max(1, claim.citations.len)) catch return error.InvalidAtomicRepair;
+    };
+    var permit = try shared.permit(Target, Family, a, authorization.owner, authorization.target, if (authorization.target == .token_classifications) .classifications else .source_selection, authorization.id, authorization.revision, std.math.cast(u32, count) orelse return error.InvalidAtomicRepair);
+    const scope = .{ .boundary = permit.key.scope, .origin = entry.origin };
+    permit.key.scope = (try shared.snapshot(@TypeOf(scope), a, scope)).bytes;
+    if (candidate.last_repair) |prior| if (prior.retry) |previous| if (std.mem.eql(u8, &previous.key.scope, &permit.key.scope)) {
+        permit.maximum_targets = previous.maximum_targets;
+    };
+    return permit;
+}
 
 pub const Rejection = union(enum) { token_classifications: validation.Rejection, source_selections: @import("reference_selection_validation.zig").Rejection };
 
@@ -28,13 +45,18 @@ pub fn authorize(a: std.mem.Allocator, facts: Facts, rejection: Rejection) Error
         .token_classifications => |diagnostic| {
             const entry = try entryAt(current, diagnostic.scope);
             if (current.revision != diagnostic.revision or !std.meta.eql(entry.classification_origin, diagnostic.origin) or !try atomic.equal(a, .{ .classifications = .{ .token_classifications = entry.token_classifications } }, .{ .classifications = .{ .token_classifications = diagnostic.observed } })) return error.InvalidAtomicRepair;
-            return atomic.authorize(a, unit(diagnostic.scope), current.revision, .token_classifications, try select(current, diagnostic.scope, .token_classifications), facts, .{ .token_classifications = .{ .issues = diagnostic.issues, .choices = diagnostic.choices } });
+            var result = try atomic.authorize(a, unit(diagnostic.scope), current.revision, .token_classifications, try select(current, diagnostic.scope, .token_classifications), facts, .{ .token_classifications = .{ .issues = diagnostic.issues, .choices = diagnostic.choices } });
+            result.retry = try retryPermit(a, result);
+            return result;
         },
         .source_selections => |diagnostic| {
             const claim = try claimAt(current, diagnostic.scope, diagnostic.claim_index);
             if (current.revision != diagnostic.revision or !std.meta.eql(try claim.rejectionOrigin(diagnostic.issue), diagnostic.origin) or !try atomic.equal(a, .{ .citations = .{ .citations = claim.citations } }, .{ .citations = .{ .citations = diagnostic.observed } })) return error.InvalidAtomicRepair;
-            const target: Target = if (diagnostic.issue.reason == .missing_selection) .{ .missing_citations = .{ .claim_index = diagnostic.claim_index } } else .{ .citation = .{ .claim_index = diagnostic.claim_index, .citation_index = diagnostic.issue.index } };
-            return atomic.authorize(a, unit(diagnostic.scope), current.revision, target, try select(current, diagnostic.scope, target), facts, .{ .source_selection = diagnostic.issue });
+            const retained_collection = if (current.pending_repair) |pending| pending.target == .missing_citations and pending.target.missing_citations.claim_index == diagnostic.claim_index else false;
+            const target: Target = if (diagnostic.issue.reason == .missing_selection or retained_collection) .{ .missing_citations = .{ .claim_index = diagnostic.claim_index } } else .{ .citation = .{ .claim_index = diagnostic.claim_index, .citation_index = diagnostic.issue.index } };
+            var result = try atomic.authorize(a, unit(diagnostic.scope), current.revision, target, try select(current, diagnostic.scope, target), facts, .{ .source_selection = diagnostic.issue });
+            result.retry = try retryPermit(a, result);
+            return result;
         },
     }
 }
@@ -96,7 +118,29 @@ pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, p
             },
         }
     };
-    return .{ .revision = merged.revision_after, .last_repair = merged, .entries = entries };
+    var result = current;
+    result.revision = merged.revision_after;
+    result.last_repair = merged;
+    result.pending_repair = if (authorization.retry) |permit| .{ .permit = permit, .target = authorization.target } else null;
+    result.entries = entries;
+    return result;
+}
+
+pub fn progress(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: extraction.tokens.Candidates, candidate: extraction.TextValidated) Error!?@import("workflow_retry.zig").Transition {
+    const pending = candidate.pending_repair orelse return null;
+    const merged = candidate.last_repair orelse return error.InvalidAtomicRepair;
+    if (merged.owner != .reference_chunk) return error.InvalidAtomicRepair;
+    const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = .{ .bytes = merged.owner.reference_chunk.chunk_id.bytes } };
+    const valid = switch (pending.target) {
+        .token_classifications => try validation.validScope(a, inputs, candidates, candidate, scope),
+        .citation => |target| blk: {
+            const claim = try claimAt(candidate, scope, target.claim_index);
+            if (target.citation_index >= claim.citations.len) return error.InvalidAtomicRepair;
+            break :blk (try selections.validate(a, inputs, scope, claim.citations[target.citation_index .. target.citation_index + 1])) == .valid;
+        },
+        .missing_citations => |target| (try selections.validate(a, inputs, scope, (try claimAt(candidate, scope, target.claim_index)).citations)) == .valid,
+    };
+    return .{ .validated = .{ .permit = pending.permit, .revision = candidate.revision, .result = if (valid) .resolved else .recurring } };
 }
 
 fn unit(scope: evidence.Scope) identity.ImmutableUnitOwnerId {
@@ -134,7 +178,9 @@ fn select(current: extraction.TextValidated, scope: evidence.Scope, target: Targ
     if (claim.citations.len != claim.citation_origins.len) return error.InvalidAtomicRepair;
     return switch (target) {
         .citation => |value| if (value.citation_index < claim.citations.len) .{ .citation = claim.citations[value.citation_index] } else error.InvalidAtomicRepair,
-        .missing_citations => if (claim.citations.len == 0) .{ .citations = .{ .citations = claim.citations } } else error.InvalidAtomicRepair,
+        // A failed collection insertion retains its authorized collection target
+        // until all supplied selections pass the same source validator.
+        .missing_citations => .{ .citations = .{ .citations = claim.citations } },
         .token_classifications => unreachable,
     };
 }
@@ -176,7 +222,13 @@ pub const Omission = struct {
             else => unreachable,
         };
         const current = try valueAt(entry, target);
-        return if (current) |value| Atomic.authorize(a, unit(scope), facts.extraction.candidate.revision, target, value, facts, finding) else Atomic.authorizeInsert(a, unit(scope), facts.extraction.candidate.revision, target, .claim, facts, finding);
+        var result = if (current) |value| try Atomic.authorize(a, unit(scope), facts.extraction.candidate.revision, target, value, facts, finding) else try Atomic.authorizeInsert(a, unit(scope), facts.extraction.candidate.revision, target, .claim, facts, finding);
+        result.retry = try Omission.retryPermit(a, result);
+        return result;
+    }
+    pub fn retryPermit(a: std.mem.Allocator, auth: OmissionAuthorization) OmissionError!@import("workflow_retry.zig").Permit {
+        const selected = try loss.select(a, auth.dependencies.extraction.inputs, auth.dependencies.support);
+        return loss.retryPermit(a, .extraction, auth.owner, auth.id, auth.revision, auth.dependencies.support, selected.finding.requirement, auth.dependencies.extraction.candidate.omission_retry);
     }
     fn scopeOf(auth: OmissionAuthorization) OmissionError!evidence.Scope {
         if (auth.owner != .reference_chunk) return error.InvalidAtomicRepair;
@@ -221,7 +273,13 @@ pub const Omission = struct {
                 changed.outcome = .{ .claims = try claims.toOwnedSlice(a) };
             }
         };
-        return .{ .revision = merged.revision_after, .last_repair = merged, .entries = entries };
+        var result = facts.extraction.candidate;
+        result.revision = merged.revision_after;
+        result.last_repair = merged;
+        result.pending_repair = null;
+        result.omission_retry = auth.retry orelse return error.InvalidAtomicRepair;
+        result.entries = entries;
+        return result;
     }
     fn valueAt(entry: extraction.TextValidatedResult, target: OmissionTarget) OmissionError!?OmissionReplacement {
         return switch (target) {

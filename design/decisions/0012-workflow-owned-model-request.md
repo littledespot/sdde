@@ -77,7 +77,7 @@ operations or the consolidated pure preparation operation. This does not combine
 provider authorization, invocation, retries or accounting. The detailed catalogue retains
 its input, transition, ownership, rejection and cleanup rules. All integrations
 below were recorded as implemented on **2026-09-06**; accounting also retains
-its **2026-09-12** protocol-retry amendment.
+its **2026-09-12** protocol-retry and **2026-09-18** validated repair-progress amendments.
 
 The 2026-09-18 user-approved response-admission amendment also permits
 `admit-model-response` to combine JSON decoding and selected-schema validation.

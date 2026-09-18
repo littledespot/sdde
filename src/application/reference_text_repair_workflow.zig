@@ -19,6 +19,7 @@ pub const schemas = [_]data.Schema{ authorization_schema, result_schema };
 const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
 
 pub const Authorize = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/reference/authorize_reference_text_repair.zig").Action;
     pub const outcomes = @import("reference_text_repair_workflow.zig").outcomes;
     allocator: std.mem.Allocator,
@@ -31,7 +32,10 @@ pub const Authorize = struct {
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
         owner.payload = .{ .authorization = self.action.execute(owner.arena.allocator(), try facts(&input.step.data, prior.payload().parsed), rejection) catch |err| return reject(self.allocator, authorization_schema, owner, err) };
-        return owned.publish(self.allocator, authorization_schema, owner, .ok) catch error.OperationExecutionFailed;
+        const permit = owner.payload.authorization.retry orelse return error.OperationExecutionFailed;
+        var result = owned.publish(self.allocator, authorization_schema, owner, .ok) catch return error.OperationExecutionFailed;
+        result.delta.repair_transition = .{ .authorized = permit };
+        return result;
     }
 };
 pub const BuildInput = struct {
@@ -66,6 +70,7 @@ pub const Parse = struct {
     }
 };
 pub const Merge = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
     pub const Action = @import("../actions/reference/merge_reference_text_repair.zig").Action;
     pub const outcomes = @import("reference_text_repair_workflow.zig").outcomes;
     allocator: std.mem.Allocator,
@@ -79,6 +84,7 @@ pub const Merge = struct {
         errdefer reference.destroy(owner);
         owner.payload = .{ .parsed = self.action.execute(owner.arena.allocator(), try facts(&input.step.data, prior.payload().parsed), authorization, replacement.value, replacement.origin) catch return error.OperationExecutionFailed };
         var delta: pipeline.NodeDelta = .{};
+        delta.repair_transition = .{ .merged = .{ .permit = authorization.retry orelse return error.OperationExecutionFailed, .revision_after = owner.payload.parsed.revision } };
         delta.data_replacements[@intFromEnum(extraction.parsed_schema.key)] = values.adopt(self.allocator, extraction.parsed_schema, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch return error.OperationExecutionFailed;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
         return .{ .outcome = .ok, .delta = delta };

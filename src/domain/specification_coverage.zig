@@ -10,6 +10,7 @@ pub const Account = struct {
 };
 pub const Obligation = struct { token_id: r.extraction.tokens.Id, citation_id: r.CitationId, exact_targets: []const Key, context_signals: []const r.SignalId };
 pub const Coverage = struct { accounts: []const Account, obligations: []const Obligation };
+pub const TokenSubject = struct { token_id: r.extraction.tokens.Id, citation_id: r.CitationId };
 pub const Error = std.mem.Allocator.Error || error{InvalidSpecificationCoverage};
 
 pub const Issue = union(enum) {
@@ -47,12 +48,7 @@ pub fn checkRecords(allocator: std.mem.Allocator, references: @import("reference
         if (!@import("specification_provenance.zig").eligibleClaim(disposition.disposition)) continue;
         const item = r.item(items, disposition.claim_id) catch return error.InvalidSpecificationCoverage;
         var targets: std.ArrayList(Key) = .empty;
-        const singletons = [_]struct { key: Key, value: spec.AttributedValue }{
-            .{ .key = .title, .value = brief.title },                 .{ .key = .description, .value = brief.description },
-            .{ .key = .primary_goal, .value = brief.primary_goal },   .{ .key = .primary_user_story, .value = candidate.primary_user_story },
-            .{ .key = .entities, .value = candidate.entities.basis },
-        };
-        for (singletons) |entry| if (r.contains(r.ClaimId, entry.value.provenance.claim_ids, item.claim.id)) try targets.append(allocator, entry.key);
+        for (singletons(brief, candidate)) |entry| if (r.contains(r.ClaimId, entry.value.provenance.claim_ids, item.claim.id)) try targets.append(allocator, entry.key);
         for (candidate.records) |record| if (r.contains(r.ClaimId, record.proposal.provenance.claim_ids, item.claim.id)) try targets.append(allocator, .{ .record = record.id });
         var signals: std.ArrayList(r.SignalId) = .empty;
         for (references.signals) |signal| if (r.contains(r.ClaimId, signal.value.claim_ids, item.claim.id)) try signals.append(allocator, signal.id);
@@ -68,15 +64,27 @@ pub fn checkRecords(allocator: std.mem.Allocator, references: @import("reference
         try accounts.append(allocator, .{ .claim_id = item.claim.id, .disposition = if (targets.items.len != 0) .{ .mapped = targets.items } else .{ .context_only = signals.items } });
         if (item.claim.content == .preserved_token) {
             const token = item.claim.content.preserved_token;
-            var exact: std.ArrayList(Key) = .empty;
-            for (singletons) |entry| if (copies(entry.value.value, token)) try exact.append(allocator, entry.key);
-            for (candidate.records) |record| if (recordCopies(record.proposal.content, token)) try exact.append(allocator, .{ .record = record.id });
-            if (token.value.kind == .business_exact_string and exact.items.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .{ .missing_exact_copy = token }, .targets = targets.items } };
-            if (exact.items.len == 0 and signals.items.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .missing_context_mapping, .targets = targets.items } };
-            try obligations.append(allocator, .{ .token_id = token.value.id, .citation_id = token.citation_id, .exact_targets = exact.items, .context_signals = signals.items });
+            const exact = try exactTargets(allocator, brief, candidate, token);
+            if (token.value.kind == .business_exact_string and exact.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .{ .missing_exact_copy = token }, .targets = targets.items } };
+            if (exact.len == 0 and signals.items.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .missing_context_mapping, .targets = targets.items } };
+            try obligations.append(allocator, .{ .token_id = token.value.id, .citation_id = token.citation_id, .exact_targets = exact, .context_signals = signals.items });
         }
     }
     return .{ .valid = .{ .accounts = accounts.items, .obligations = obligations.items } };
+}
+const AttributedTarget = struct { key: Key, value: spec.AttributedValue };
+fn singletons(brief: g.Brief, candidate: spec.IdentifiedContent) [5]AttributedTarget {
+    return .{
+        .{ .key = .title, .value = brief.title },                 .{ .key = .description, .value = brief.description },
+        .{ .key = .primary_goal, .value = brief.primary_goal },   .{ .key = .primary_user_story, .value = candidate.primary_user_story },
+        .{ .key = .entities, .value = candidate.entities.basis },
+    };
+}
+pub fn exactTargets(a: std.mem.Allocator, brief: g.Brief, candidate: spec.IdentifiedContent, token: r.extraction.tokens.Token) Error![]const Key {
+    var exact: std.ArrayList(Key) = .empty;
+    for (singletons(brief, candidate)) |entry| if (copies(entry.value.value, token)) try exact.append(a, entry.key);
+    for (candidate.records) |record| if (recordCopies(record.proposal.content, token)) try exact.append(a, .{ .record = record.id });
+    return exact.toOwnedSlice(a);
 }
 fn copies(value: spec.BusinessValue, token: r.extraction.tokens.Token) bool {
     return value == .exact_copy and value.exact_copy.token_id.ordinal == token.value.id.ordinal and value.exact_copy.citation_id.ordinal == token.citation_id.ordinal;

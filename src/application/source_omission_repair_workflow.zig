@@ -34,6 +34,7 @@ fn parsed(view: *const data.View) operations.Error!@import("../domain/reference_
     return (try extraction.read(view, rec.parsed_schema, .reconciliation_parsed)).payload().reconciliation_parsed;
 }
 pub const Authorize = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/reference/authorize_source_omission_repair.zig").Action;
     pub const outcomes = @import("source_omission_repair_workflow.zig").outcomes;
     allocator: std.mem.Allocator,
@@ -47,7 +48,12 @@ pub const Authorize = struct {
             return owned.publish(self.allocator, schema, owner, .invalid) catch error.OperationExecutionFailed;
         };
         owner.payload = .{ .repair = state };
-        return owned.publish(self.allocator, schema, owner, if (state.authorization == .extraction) .ok else .more) catch error.OperationExecutionFailed;
+        const permit = switch (state.authorization) {
+            inline else => |auth| auth.retry orelse return error.OperationExecutionFailed,
+        };
+        var result = owned.publish(self.allocator, schema, owner, if (state.authorization == .extraction) .ok else .more) catch return error.OperationExecutionFailed;
+        result.delta.repair_transition = .{ .authorized = permit };
+        return result;
     }
 };
 pub const BuildInput = struct {
@@ -80,13 +86,14 @@ pub const Parse = struct {
 };
 pub fn Merge(comptime kind: enum { extraction, reconciliation }, comptime scope: loss.Scope) type {
     return struct {
+        pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
         pub const Action = switch (kind) {
             .extraction => if (scope == .references) @import("../actions/reference/merge_source_extraction_repair.zig").Action else @import("../actions/reference/merge_upstream_extraction_repair.zig").Action,
             .reconciliation => if (scope == .references) @import("../actions/reference/merge_source_reconciliation_repair.zig").Action else @import("../actions/reference/merge_upstream_reconciliation_repair.zig").Action,
         };
         pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ if (kind == .reconciliation and scope == .specification) .more else .ok, .failed };
         pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
-        pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32) };
+        pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
         allocator: std.mem.Allocator,
         action: Action,
         pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -98,6 +105,9 @@ pub fn Merge(comptime kind: enum { extraction, reconciliation }, comptime scope:
             errdefer reference.destroy(owner);
             owner.payload = if (kind == .extraction) .{ .text_validated = self.action.execute(owner.arena.allocator(), try facts(&input.step.data), try rec.textContext(&input.step.data), state) catch return error.OperationExecutionFailed } else .{ .reconciliation_parsed = self.action.execute(owner.arena.allocator(), try parsed(&input.step.data), try rec.textContext(&input.step.data), try support(&input.step.data), state) catch return error.OperationExecutionFailed };
             var delta: pipeline.NodeDelta = .{};
+            const permit = (if (kind == .extraction) state.authorization.extraction.retry else state.authorization.reconciliation.retry) orelse return error.OperationExecutionFailed;
+            const revision = if (kind == .extraction) owner.payload.text_validated.revision else owner.payload.reconciliation_parsed.source.revision;
+            delta.repair_transition = .{ .merged = .{ .permit = permit, .revision_after = revision, .validation = .dependent_review } };
             delta.data_replacements[@intFromEnum(target.key)] = values.adopt(self.allocator, target, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch return error.OperationExecutionFailed;
             for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
             return .{ .outcome = if (kind == .reconciliation and scope == .specification) .more else .ok, .delta = delta };

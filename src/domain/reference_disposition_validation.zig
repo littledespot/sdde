@@ -90,20 +90,47 @@ pub fn check(allocator: std.mem.Allocator, items: r.Items, supplied: []const r.C
     }
     for (supplied, 0..) |proposal, position| {
         const value = dispositions[proposal.claim_id.ordinal - 1];
-        for (value.related_claim_ids) |id| {
-            const target = dispositions[id.ordinal - 1];
-            switch (value.disposition) {
-                .retained => unreachable,
-                .duplicate, .superseded => if (target.disposition == .conflicting) return failure(position, .relationship, value, .nonconflicting_target),
-                .conflicting => if (target.disposition != .conflicting or !r.contains(r.ClaimId, target.related_claim_ids, value.claim_id)) return failure(position, .relationship, value, .reciprocal_conflict),
-            }
-        }
+        if (relationship(dispositions, value)) |rejection| return .{ .invalid = .{ .unit = .{ .disposition = position }, .issue = rejection } };
     }
-    if (try cycle(allocator, dispositions)) |index| {
+    if (try cycle(allocator, dispositions, null)) |index| {
         for (supplied, 0..) |value, position| if (value.claim_id.ordinal == dispositions[index].claim_id.ordinal) return failure(position, .cycle, dispositions[index], .acyclic);
         return error.InvalidReferenceReconciliation;
     }
     return .{ .valid = dispositions };
+}
+
+fn relationship(values: []const r.ClaimDisposition, value: r.ClaimDisposition) ?d.Issue {
+    for (value.related_claim_ids) |id| {
+        const target = uniqueClaim(values, id) orelse return issue(.claim_selection, value, .nonempty_unique_allowed_claims);
+        switch (value.disposition) {
+            .retained => unreachable,
+            .duplicate, .superseded => if (target.disposition == .conflicting) return issue(.relationship, value, .nonconflicting_target),
+            .conflicting => if (target.disposition != .conflicting or !r.contains(r.ClaimId, target.related_claim_ids, value.claim_id)) return issue(.relationship, value, .reciprocal_conflict),
+        }
+    }
+    return null;
+}
+
+fn uniqueClaim(values: []const r.ClaimDisposition, id: r.ClaimId) ?r.ClaimDisposition {
+    var result: ?r.ClaimDisposition = null;
+    for (values) |value| if (value.claim_id.ordinal == id.ordinal) {
+        if (result != null) return null;
+        result = value;
+    };
+    return result;
+}
+
+/// Observe one native claim with the same record, relationship and cycle rules.
+/// Missing unrelated dispositions do not make a valid retained claim unresolved.
+pub fn validClaim(a: std.mem.Allocator, items: r.Items, proposals: []const r.ClaimDispositionProposal, id: r.ClaimId) r.Error!bool {
+    const values = try a.alloc(r.ClaimDisposition, proposals.len);
+    for (proposals, values) |proposal, *value| value.* = try proposal.canonical(a);
+    const selected = uniqueClaim(values, id) orelse return false;
+    if (record(items, selected) != null or relationship(values, selected) != null) return false;
+    return (cycle(a, values, id) catch |err| switch (err) {
+        error.InvalidReferenceReconciliation => return false,
+        else => return err,
+    }) == null;
 }
 
 fn record(items: r.Items, value: r.ClaimDisposition) ?d.Issue {
@@ -153,13 +180,14 @@ fn issue(rule: d.Rule, actual: r.ClaimDisposition, expected: d.Constraint) d.Iss
 
 /// Iterative graph proof: duplicate/supersession chains must terminate at
 /// retained claims. Conflict relationships are symmetric, not directed edges.
-fn cycle(allocator: std.mem.Allocator, values: []const r.ClaimDisposition) r.Error!?usize {
+fn cycle(allocator: std.mem.Allocator, values: []const r.ClaimDisposition, selected: ?r.ClaimId) r.Error!?usize {
     const Mark = enum { unseen, active, done };
     const marks = try allocator.alloc(Mark, values.len);
     @memset(marks, .unseen);
     const Frame = struct { index: usize, edge: usize };
     var stack: std.ArrayList(Frame) = .empty;
     for (values, 0..) |value, root| {
+        if (selected) |id| if (value.claim_id.ordinal != id.ordinal) continue;
         if (marks[root] == .done or value.disposition == .conflicting) continue;
         try stack.append(allocator, .{ .index = root, .edge = 0 });
         marks[root] = .active;
@@ -171,7 +199,11 @@ fn cycle(allocator: std.mem.Allocator, values: []const r.ClaimDisposition) r.Err
                 _ = stack.pop();
                 continue;
             }
-            const target = edges[frame.edge].ordinal - 1;
+            const target_id = edges[frame.edge];
+            _ = uniqueClaim(values, target_id) orelse return error.InvalidReferenceReconciliation;
+            const target = for (values, 0..) |candidate, index| {
+                if (candidate.claim_id.ordinal == target_id.ordinal) break index;
+            } else return error.InvalidReferenceReconciliation;
             frame.edge += 1;
             switch (marks[target]) {
                 .active => return frame.index,

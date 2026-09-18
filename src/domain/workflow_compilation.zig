@@ -65,6 +65,7 @@ pub const CompiledStep = struct {
     outcomes: []const workflow.OutcomeTag,
     side_effect: pipeline.SideEffect,
     runner_accounting: pipeline.RunnerAccountingCapability = .none,
+    repair_role: workflow_retry.Role = .none,
     gates: []const @import("workflow_gate.zig").Contract,
     capabilities: []const []const u8,
     retry_authority: ?workflow_retry.CompiledAuthority,
@@ -102,7 +103,12 @@ pub fn calculateExecutionLimit(steps: []const CompiledStep) ?usize {
     var total_retry_limit: usize = 0;
     for (steps) |step| {
         if (step.retry_authority) |authority| {
-            total_retry_limit = std.math.add(usize, total_retry_limit, authority.limit.value) catch return null;
+            const visits: usize = if (authority.scope == .operation) authority.limit.value else bounded: {
+                const per_key = std.math.add(usize, authority.limit.value, 1) catch return null;
+                const keys = std.math.add(usize, workflow_retry.maximum_repair_keys, @intFromBool(authority.scope == .model_request)) catch return null;
+                break :bounded std.math.mul(usize, per_key, keys) catch return null;
+            };
+            total_retry_limit = std.math.add(usize, total_retry_limit, visits) catch return null;
         }
     }
     const rounds = std.math.add(usize, total_retry_limit, 1) catch return null;

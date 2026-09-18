@@ -20,13 +20,11 @@ pub const Action = struct {
         try v.input(allocator, prior.input);
         try v.bind(allocator, items, context, self.validator);
         const signals = try allocator.alloc(r.ValidatedSignal, prior.proposal.signals.len);
-        for (prior.proposal.signals, signals, 0..) |proposal, *signal, index| {
-            if (try v.signalClaims(items, prior.dispositions, proposal.claim_ids, prior.input.partition.group.claim_ids)) |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, issue);
-            signal.* = .{ .claim_ids = proposal.claim_ids, .citation_ids = try r.citationUnion(allocator, items, proposal.claim_ids), .content = switch (try v.content(allocator, self.validator, context, items, proposal.claim_ids, proposal.content)) {
+        for (signals, 0..) |*signal, index| {
+            signal.* = switch (try v.checkSignal(allocator, self.validator, context, prior, index)) {
                 .valid => |value| value,
                 .invalid => |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, issue),
-            } };
-            if (!v.signalSelectionAvailable(prior.proposal.signals[0..index], index, proposal.claim_ids)) return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, .{ .rule = .duplicate_signal, .observed = .{ .claims = proposal.claim_ids }, .expected = .{ .constraint = .unique_members } });
+            };
         }
         if (try v.signalCoverage(allocator, items, prior.dispositions, prior.proposal.signals)) |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .signals, issue);
         return .{ .valid = .{ .prior = prior, .signals = signals } };

@@ -176,7 +176,9 @@ Actions and orchestrators can be reorganized without changing their implementati
 7. The workflow compiler rejects every unbounded cycle. A retry or repair cycle
    is valid only when it crosses a registered monotonic budget operation with a
    finite compiler-validated ceiling; the diagnostic identifies a cycle that
-   lacks such a guard before runtime.
+   lacks such a guard before runtime. Native repair progress uses the registered
+   roles, finite keys and monotonic per-key counts in [§22.7](22-repair.md#227-repair-retry-limit-and-escalation);
+   it does not reset a graph counter or hide child execution.
 
 This enables, for example, swapping one filename validator implementation,
 moving source parsing earlier, or composing a declared semantic-review step

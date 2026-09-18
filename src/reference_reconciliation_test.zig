@@ -1101,6 +1101,7 @@ fn reconciliationRepairAllocation(allocator: std.mem.Allocator, parsed: r.Parsed
     @memcpy(duplicate[0 .. duplicate.len - 1], merged.proposal.summary.statements);
     duplicate[duplicate.len - 1] = duplicate[0];
     var redundant = merged;
+    redundant.source.statements = try merged.source.statements.inserting(a, merged.proposal.summary.statements.len, merged.proposal.summary.statements.len);
     redundant.proposal.summary.statements = duplicate;
     const repeated = (try f.validate_summary.execute(a, redundant, context)).invalid;
     const deletion = (try repair.authorize(a, redundant, context, repeated)).automatic;
@@ -1604,5 +1605,63 @@ test "conflict selection respects occupied pairs without conflating conflict kin
             try std.testing.expectEqualDeep(conflicts[0], merged.proposal.global.conflicts[0]);
             try std.testing.expectEqual(.blocked, (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
         }
+    };
+}
+
+test "repair progress separates restored membership from invalid inserted content" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    const retry = @import("domain/workflow_retry.zig");
+    for ([_][2][]const u8{
+        .{ "Confirm the reservation.\n", "Issue a receipt.\n" },
+        .{ "Renew the loan.\n", "Notify the visitor.\n" },
+    }) |sources| for ([_]bool{ false, true }) |global| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try prepare(a, &sources);
+        defer fixture.deinit();
+        const initial = try f.initialize(a, fixture.inputs, fixture.extracted, 2);
+        const input = if (global) try f.summaries(a, initial, fixture.context()) else try f.build_input.execute(a, initial);
+        const good: r.Parsed = .{ .input = input, .proposal = if (global) .{ .global = try f.global(a, input) } else .{ .summary = try f.summary(a, input) } };
+        var missing = good;
+        if (global) missing.proposal.global.signals = good.proposal.global.signals[1..] else missing.proposal.summary.statements = good.proposal.summary.statements[1..];
+        const original = if (global) good.proposal.global.signals[0].content else good.proposal.summary.statements[0].content;
+        const insert = (try repair.authorize(a, missing, fixture.context(), (try textRejection(a, missing, fixture.context())).?)).model;
+        try std.testing.expect(insert.operation == .insert);
+        const bad: r.ContentProposal = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "source-0.md" } }} } } };
+        const inserted = try repair.merge(a, missing, fixture.context(), insert, .{ .content = bad }, null);
+        const rejection = (try textRejection(a, inserted, fixture.context())).?;
+        try std.testing.expectEqual(.typed_text, rejection.issue.rule);
+        const dispositions = if (global) (try f.validate_dispositions.execute(a, inserted)).valid.dispositions else &.{};
+        const stage: repair.ValidationStage = if (global) .signals else .summary;
+        const membership = (try repair.progress(a, text.validator, fixture.context(), inserted, stage, dispositions)).?.validated;
+        try std.testing.expectEqual(.resolved, membership.result);
+        var state = retry.State.init(std.testing.allocator);
+        defer state.deinit();
+        try state.commit(try state.prepare(.{ .authorized = insert.retry.? }));
+        try state.commit(try state.prepare(.{ .merged = .{ .permit = insert.retry.?, .revision_after = inserted.source.revision } }));
+        try state.commit(try state.prepare(.{ .validated = membership }));
+        const correction = (try repair.authorize(a, inserted, fixture.context(), rejection)).model;
+        try std.testing.expect(!std.meta.eql(correction.retry.?.key, insert.retry.?.key));
+        try state.commit(try state.prepare(.{ .authorized = correction.retry.? }));
+        const unchanged = try repair.merge(a, inserted, fixture.context(), correction, .{ .content = bad }, null);
+        _ = (try textRejection(a, unchanged, fixture.context())).?;
+        const repeated = (try repair.progress(a, text.validator, fixture.context(), unchanged, stage, dispositions)).?.validated;
+        try std.testing.expectEqual(.recurring, repeated.result);
+        try state.commit(try state.prepare(.{ .merged = .{ .permit = correction.retry.?, .revision_after = unchanged.source.revision } }));
+        try state.commit(try state.prepare(.{ .validated = repeated }));
+        const again = (try repair.authorize(a, unchanged, fixture.context(), (try textRejection(a, unchanged, fixture.context())).?)).model;
+        try std.testing.expectEqualDeep(correction.retry.?.key, again.retry.?.key);
+        try state.commit(try state.prepare(.{ .authorized = again.retry.? }));
+        const repaired = try repair.merge(a, unchanged, fixture.context(), again, .{ .content = original }, null);
+        try std.testing.expectEqual(@as(?r.diagnostic.Rejection, null), try textRejection(a, repaired, fixture.context()));
+        const completed = (try repair.progress(a, text.validator, fixture.context(), repaired, stage, dispositions)).?.validated;
+        try state.commit(try state.prepare(.{ .merged = .{ .permit = again.retry.?, .revision_after = repaired.source.revision } }));
+        try state.commit(try state.prepare(.{ .validated = completed }));
+        try std.testing.expectEqual(.resolved, completed.result);
+        if (global) {
+            try std.testing.expectEqualDeep(missing.proposal.global.signals, repaired.proposal.global.signals[0..missing.proposal.global.signals.len]);
+            _ = (try f.finish(a, input, repaired.proposal.global, fixture.context())).valid;
+        } else try std.testing.expectEqualDeep(missing.proposal.summary.statements, repaired.proposal.summary.statements[0..missing.proposal.summary.statements.len]);
     };
 }

@@ -112,8 +112,9 @@ The persisted stage status is advisory until these current artifacts pass. This 
 
 - The YAML-selected repair operation invokes ordering and selection, then
   `ClassifyRepairAuthorizationPurposeAction`.
-- The ordinary branch invokes `CreateRepairAuthorizationAction` and
-  `AdvanceAtomicRepairAttemptAccountingAction`; the unsupported-content branch invokes
+- The ordinary branch invokes `CreateRepairAuthorizationAction`; the runner applies
+  native progress and operation/defect accounting under [§22.7](22-repair.md#227-repair-retry-limit-and-escalation).
+  The unsupported-content branch invokes
   `CreateNoInventionClarificationReplacementAuthorizationAction` and consumes only its
   unit-local one-shot flag during scope validation.
 - It performs one authorized repair attempt and returns its typed result.

@@ -149,6 +149,61 @@ test "one invalid result schema rejects graph compilation without publishing par
     }
 }
 
+test "compiled native repair roles retain their counter scope and finite bound" {
+    const compiled = @import("domain/workflow_compilation.zig");
+    const retry = @import("domain/workflow_retry.zig");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var entries = operation_entries;
+    entries[1].contract.repair_role = .merge_validate;
+    entries[1].contract.retry_limit.?.scope = .repair;
+    entries[1].binding = operation_bindings.bind(void, null, unusedOperation);
+    var registry = operations;
+    registry.operations = &entries;
+    var parser: parser_adapter.Adapter = .{};
+    var schemas: result_schema_parser.Adapter = .{};
+    const raw = try (parse.Action{ .parser = parser.parser() }).execute(a, &.{.{ .ordinal = 1, .bytes = resource_workflow }});
+    const definitions = try (validate_schema.Action{}).execute(a, raw);
+    const manifest = try (resolve_resources.Action{}).execute(a, testInventory(), definitions);
+    const graphs = try (compile.Action{ .registry = &registry, .result_schema_compiler = schemas.compiler() }).execute(a, definitions, testInventory(), manifest, &.{
+        .{ .ordinal = 3, .bytes = "Generate one result." },
+        .{ .ordinal = 5, .bytes = result_schema_bytes },
+    });
+    _ = try (validate_graphs.Action{}).execute(a, graphs);
+    const graph = graphs[0];
+    try std.testing.expectEqual(.merge_validate, graph.authority.steps[0].repair_role);
+    try std.testing.expectEqual(.repair, graph.authority.steps[0].retry_authority.?.scope);
+    const repair_visits: usize = @as(usize, retry.maximum_repair_keys) * 3;
+    try std.testing.expectEqual(2 * (repair_visits + 1), graph.authority.maximum_step_executions);
+    for (0..5) |fault| {
+        var invalid = graph;
+        const steps = try a.dupe(compiled.CompiledStep, graph.authority.steps);
+        invalid.authority.steps = steps;
+        switch (fault) {
+            0 => steps[0].repair_role = .none,
+            1 => steps[0].retry_authority.?.scope = .operation,
+            2 => steps[0].retry_authority.?.scope = .model_request,
+            3 => invalid.authority.maximum_step_executions -= 1,
+            4 => steps[0].capabilities = &.{"model-provider"},
+            else => unreachable,
+        }
+        if (fault != 3) invalid.authority.maximum_step_executions = compiled.calculateExecutionLimit(steps).?;
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (validate_graphs.Action{}).execute(a, &.{invalid}));
+    }
+    var bounded = graph.authority.steps[0];
+    bounded.retry_authority.?.scope = .model_request;
+    // The same compiled request-accounting step can see ordinary requests and
+    // all bounded repair keys. Neither population may erase the other's visits.
+    try std.testing.expectEqual((@as(usize, retry.maximum_repair_keys) + 1) * 3 + 1, compiled.calculateExecutionLimit(&.{bounded}).?);
+    bounded.retry_authority.?.scope = .repair;
+    bounded.retry_authority.?.limit.value = 0;
+    try std.testing.expectEqual(@as(usize, retry.maximum_repair_keys) + 1, compiled.calculateExecutionLimit(&.{bounded}).?);
+    bounded.retry_authority.?.limit.value = std.math.maxInt(u32);
+    bounded.retry_authority.?.scope = .model_request;
+    try std.testing.expect(compiled.calculateExecutionLimit(&.{bounded}) == null);
+}
+
 test "non-schema resources are not parsed and a compiler cannot substitute a foreign schema" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

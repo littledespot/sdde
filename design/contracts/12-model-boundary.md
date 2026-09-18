@@ -252,8 +252,10 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   `accounted_model_attempt` evidence from that canonical record together with the envelope
   delta.
 - Rejection publishes neither.
-- Later visits use the accounting step's existing runner retry counter and compiled authority,
-  not the request origin or ordinal as a second retry policy.
+- Later visits use the accounting step's compiled authority and runner-owned counts.
+  Atomic repairs and their required dependent requests use the native defect key
+  under [§22.7](22-repair.md#227-repair-retry-limit-and-escalation); other requests
+  retain operation counts. Request ordinals never reset either.
 - A consumer must invalidate used attempt evidence before retry; foreign/stale evidence and
   another initial attempt cannot reset accounting.
 - This operation prepares no lease, advances no provider operation, performs no provider call

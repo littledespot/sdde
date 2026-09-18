@@ -17,6 +17,7 @@ fn retain(comptime selected: Purpose, owner: *owned.Owner, state: repair.Contrac
     owner.payload = if (selected == .source) .{ .support_repair = state } else .{ .principle_support_repair = state };
 }
 pub const Authorize = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/specification/authorize_specification_support_repair.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .blocked, .failed };
     allocator: std.mem.Allocator,
@@ -35,8 +36,11 @@ pub const Authorize = struct {
                 if (err == error.OutOfMemory) return error.OperationExecutionFailed;
                 return owned.publish(self.allocator, schema, owner, .blocked) catch error.OperationExecutionFailed;
             };
+            const permit = authorization.retry orelse return error.OperationExecutionFailed;
             retain(selected, owner, .{ .authorization = authorization });
-            return owned.publish(self.allocator, schema, owner, if (authorization.operation == .delete) .more else .ok) catch error.OperationExecutionFailed;
+            var candidate = owned.publish(self.allocator, schema, owner, if (authorization.operation == .delete) .more else .ok) catch return error.OperationExecutionFailed;
+            candidate.delta.repair_transition = .{ .authorized = permit };
+            return candidate;
         };
         unreachable;
     }
@@ -80,10 +84,11 @@ pub const Parse = struct {
     }
 };
 pub const Merge = struct {
+    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge_validate;
     pub const Action = @import("../actions/specification/merge_specification_support_repair.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
-    pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32) };
+    pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -95,12 +100,17 @@ pub const Merge = struct {
             if (current != .rejected or current.rejected.candidate == null) return error.OperationExecutionFailed;
             const state = try read(selected, &input.step.data);
             const context_value = try spec.readContext(&input.step.data);
+            const permit = state.authorization.retry orelse return error.OperationExecutionFailed;
             const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
             const result = self.action.execute(selected, owner.arena.allocator(), source, context_value, current.rejected.candidate.?, state) catch {
                 owned.destroy(owner);
                 return error.OperationExecutionFailed;
             };
             var candidate = try support.publish(selected, self.allocator, owner, progress, result);
+            candidate.delta.repair_transition = .{ .merged_validated = .{ .permit = permit, .revision_after = switch (result) {
+                .accepted => |value| value.candidate.revision,
+                .rejected => |value| value.candidate.?.revision,
+            }, .result = repair.Contract(selected).progress(state.authorization, result) } };
             for (Action.contract.invalidates) |key| candidate.delta.data_invalidations.insert(key);
             return candidate;
         };

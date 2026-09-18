@@ -142,7 +142,7 @@ Upstream omission repair invalidates every dependent projection. Extraction chan
 rebuild canonical token, claim and citation identities across the corpus, then
 reconciliation, support review and downstream specification evidence. Preserve raw
 candidate siblings even when their derived identities change. Semantic regeneration
-uses explicit registered workflow steps and existing operation-local retry/token
+uses explicit registered workflow steps and the shared progress-sensitive retry/token
 accounting; repair does not create a hidden execution path or saved continuation.
 
 The engine never trusts a model field such as `valid: true`.
@@ -182,13 +182,42 @@ to success. Whole-stage regeneration is not used.
 
 ### 22.7 Repair retry limit and escalation
 
-- There is no workflow-, stage-, or unit-global repair limit.
-- Every retry-capable repair operation instance declares its own bounded `retry-limit` in
-  workflow YAML.
-- The registered operation contract supplies its finite operation-local maximum, and the
-  compiler rejects a missing limit or an unbounded cycle.
-- Repeated identical failure at the same pointer may terminate that operation early without
-  granting another retry.
+The user-approved 2026-09-18 amendment makes successful repair progress independent
+of another target's retry allowance:
+
+- Each retry-capable operation instance still declares `retry-limit` in YAML.
+  Atomic repair requests, their required dependent requests and repair merges count
+  visits by compiled operation and native defect key. Other operations retain
+  invocation-wide counts.
+- A defect key identifies the original candidate scope, stable authorized target and
+  closed validator-owned diagnostic family. Mutable values, request IDs, authorization
+  IDs and revisions cannot create a new allowance. Native occurrence identities
+  survive array replacement/deletion; recurrence history lasts for the execution.
+- Only the canonical validator can report `resolved` or `recurring` for the selected
+  defect. A changed value, revision increment, fewer diagnostics or a different first
+  error is insufficient. Other unresolved targets retain independent allowances.
+  Both model-account and pure-merge guards follow this rule.
+- Registered capability-free bindings publish typed authorization, merge and validation
+  facts with their candidate delta. The runner validates that transition before applying
+  it and owns all counters. Domain owners never grant retries or reset accounting.
+- Semantic omission progress requires complete dependent rebuilding and admitted review.
+  Required child repairs may run while that validation is pending; resolving a child
+  restores the pending parent, without declaring the semantic defect resolved.
+  Rebuilding requests use that native pending parent's key; initial review attempts
+  cannot consume its allowance. Repeated requests and corrections for the same parent
+  retain their counts. The runner's native repair phase supplies this association,
+  never a model value or a new request ordinal.
+- Each native scope freezes its finite target/family population at first authorization;
+  model replacements cannot enlarge it. The shared u32 key representation bounds the
+  execution's distinct keys. The compiler uses that bound and declared per-operation
+  allowances to retain a finite execution guard, including pure loops. The 512-step
+  expansion ceiling is unchanged.
+- Protocol corrections retain the same logical request and selected defect allowance.
+  A new authorization cannot erase earlier failures. Actual input/output token usage
+  remains cumulative across every target, correction and successful fix; no further
+  call is permitted at or above the workflow budget.
+- Exhaustion blocks/fails without changing validation or broadening repair scope.
+
 - Exhaustion returns:
 
 - last schema-valid candidate, if one exists;

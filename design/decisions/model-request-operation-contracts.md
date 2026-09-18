@@ -14,7 +14,10 @@ No new decision or implementation claim is introduced here.
 - The runner supplies read-only ledger snapshots and initial/retry classification,
   validates the proposed transition, and publishes sealed evidence from the applied
   record.
-- Its existing step-execution counter alone supplies retries used; request ordinals
+- The runner owns retry counts: ordinary operation counts, or operation/native-defect
+  counts for atomic repair and its required dependent requests under the user-approved
+  2026-09-18 amendment in
+  [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation). Request ordinals
   never become a second retry counter.
 - Retry authority names the accounting step, not the request origin.
 - Consumers retain that original request and must invalidate consumed attempt evidence

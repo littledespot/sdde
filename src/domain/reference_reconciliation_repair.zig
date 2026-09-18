@@ -81,6 +81,76 @@ pub const Authorization = atomic.Authorization;
 pub const Error = atomic.Error || r.Error;
 pub const Block = d.RepairBlock;
 pub const Decision = union(enum) { model: Authorization, automatic: struct { authorization: Authorization, replacement: ?Replacement }, blocked: Block };
+const occurrences = @import("repair_occurrences.zig");
+const Family = enum { key, selection, content, disposition, membership, coverage, duplicate };
+const StableTarget = union(enum) {
+    statement: occurrences.Id,
+    disposition: r.ClaimId,
+    disposition_occurrence: occurrences.Id,
+    signal: occurrences.Id,
+    conflict: occurrences.Id,
+    missing_statement: r.ClaimId,
+    missing_signal: r.ClaimId,
+    missing_conflict: struct { left: r.ClaimId, right: r.ClaimId },
+};
+pub const ObservationTarget = struct { selected: Target, stable: StableTarget, rule: d.Rule, operation: enum { replace, insert, delete } };
+
+fn stableTarget(source: d.Source, proposal: @FieldType(r.Parsed, "proposal"), target: Target) Error!StableTarget {
+    return switch (target) {
+        .statement_key, .statement_selection, .statement_content, .statement => |index| .{ .statement = source.statements.at(index, proposal.summary.statements.len) catch return error.InvalidAtomicRepair },
+        .disposition => |value| .{ .disposition = value.claim },
+        .disposition_record => |index| .{ .disposition_occurrence = source.dispositions.at(index, proposal.global.claim_dispositions.len) catch return error.InvalidAtomicRepair },
+        .insert_disposition => |value| .{ .disposition = value.claim },
+        .signal_selection, .signal_content, .signal => |index| .{ .signal = source.signals.at(index, proposal.global.signals.len) catch return error.InvalidAtomicRepair },
+        .conflict_selection, .conflict_summary, .conflict => |index| .{ .conflict = source.conflicts.at(index, proposal.global.conflicts.len) catch return error.InvalidAtomicRepair },
+        .insert_statement => |value| .{ .missing_statement = value.claim },
+        .insert_signal => |value| .{ .missing_signal = value.claim },
+        .insert_conflict => |value| blk: {
+            if (value.claims.len != 2 or value.claims[0].ordinal == value.claims[1].ordinal) return error.InvalidAtomicRepair;
+            const first = value.claims[0].ordinal < value.claims[1].ordinal;
+            break :blk .{ .missing_conflict = .{ .left = value.claims[if (first) 0 else 1], .right = value.claims[if (first) 1 else 0] } };
+        },
+    };
+}
+
+pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@import("workflow_retry.zig").Permit {
+    const facts = authorization.dependencies;
+    const source = facts.source;
+    const proposal = facts.proposal;
+    const existing = if (proposal == .summary) proposal.summary.statements.len else count: {
+        const records = proposal.global;
+        const first = std.math.add(usize, records.claim_dispositions.len, records.signals.len) catch return error.InvalidAtomicRepair;
+        break :count std.math.add(usize, first, records.conflicts.len) catch return error.InvalidAtomicRepair;
+    };
+    const claims = facts.partition.group.claim_ids.len;
+    const pairs = std.math.mul(usize, claims, claims -| 1) catch return error.InvalidAtomicRepair;
+    const linear = std.math.mul(usize, claims, 3) catch return error.InvalidAtomicRepair;
+    const additions = std.math.add(usize, linear, pairs / 2) catch return error.InvalidAtomicRepair;
+    const subjects = std.math.add(usize, existing, additions) catch return error.InvalidAtomicRepair;
+    const maximum = std.math.mul(usize, subjects, std.meta.tags(Family).len) catch return error.InvalidAtomicRepair;
+    const family: Family = switch (authorization.target) {
+        .statement_key => .key,
+        .statement_selection, .signal_selection, .conflict_selection => .selection,
+        .statement_content, .signal_content, .conflict_summary => .content,
+        .disposition, .insert_disposition => .disposition,
+        .statement, .signal, .conflict, .disposition_record => .duplicate,
+        .insert_statement => .membership,
+        .insert_signal, .insert_conflict => .coverage,
+    };
+    var permit = try shared.permit(StableTarget, Family, a, authorization.owner, try stableTarget(source, proposal, authorization.target), family, authorization.id, authorization.revision, std.math.cast(u32, maximum) orelse return error.InvalidAtomicRepair);
+    const scope = .{ .boundary = permit.key.scope, .origin = source.origin };
+    permit.key.scope = (try shared.snapshot(@TypeOf(scope), a, scope)).bytes;
+    if (source.last_repair) |prior| if (prior.retry) |previous| if (std.mem.eql(u8, &previous.key.scope, &permit.key.scope)) {
+        permit.maximum_targets = previous.maximum_targets;
+    };
+    return permit;
+}
+
+fn withRetry(a: std.mem.Allocator, authorization: Authorization) Error!Authorization {
+    var result = authorization;
+    result.retry = try retryPermit(a, result);
+    return result;
+}
 
 pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rejection: d.Rejection) Error!Decision {
     try v.input(a, parsed.input);
@@ -212,7 +282,7 @@ fn projectionTarget(kind: enum { statement, signal }, index: usize, rejection: d
 fn replace(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target: Target, rule: Rule) Error!Decision {
     var bound_rule = rule;
     bound_rule.disposition_choices = try dispositionChoices(a, parsed, target);
-    return .{ .model = try atomic.authorize(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)) orelse return error.InvalidAtomicRepair, facts, bound_rule) };
+    return .{ .model = try withRetry(a, try atomic.authorize(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)) orelse return error.InvalidAtomicRepair, facts, bound_rule)) };
 }
 fn insertion(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target: Target, kind: std.meta.Tag(Replacement), rule: Rule) Error!Decision {
     if (try select(parsed, target) != null) return error.InvalidAtomicRepair;
@@ -225,10 +295,10 @@ fn insertion(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, targe
         };
         bound_rule.rejection.relations.content = (try v.selectedKind(parsed.input.progress.plan.layout.items, &.{claim})) orelse return error.InvalidAtomicRepair;
     }
-    return .{ .model = try atomic.authorizeInsert(a, try owner(a, parsed), parsed.source.revision, target, kind, facts, bound_rule) };
+    return .{ .model = try withRetry(a, try atomic.authorizeInsert(a, try owner(a, parsed), parsed.source.revision, target, kind, facts, bound_rule)) };
 }
 fn deletion(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target: Target, rule: Rule) Error!Decision {
-    return .{ .automatic = .{ .authorization = try atomic.authorizeDelete(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)) orelse return error.InvalidAtomicRepair, facts, rule), .replacement = null } };
+    return .{ .automatic = .{ .authorization = try withRetry(a, try atomic.authorizeDelete(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)) orelse return error.InvalidAtomicRepair, facts, rule)), .replacement = null } };
 }
 pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization) Error!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(a);
@@ -286,7 +356,18 @@ pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authori
     defer a.free(facts.lineage.history);
     const target = authorization.target;
     const merged = try atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try select(parsed, target), facts, authorization, replacement, origin);
-    return apply(a, parsed, target, replacement, merged, origin);
+    var result = try apply(a, parsed, target, replacement, merged, origin);
+    if (authorization.retry) |permit| result.source.pending_repair = .{ .permit = permit, .target = .{
+        .selected = if (target == .insert_conflict) .{ .insert_conflict = .{ .index = target.insert_conflict.index, .claims = try a.dupe(r.ClaimId, target.insert_conflict.claims) } } else target,
+        .stable = try stableTarget(parsed.source, parsed.proposal, target),
+        .rule = authorization.rule.rejection.issue.rule,
+        .operation = switch (authorization.operation) {
+            .replace => .replace,
+            .insert => .insert,
+            .delete => .delete,
+        },
+    } };
+    return result;
 }
 fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?Replacement, merged: shared.Merge, origin: ?@import("model_candidate_origin.zig").Origin) Error!r.Parsed {
     var result = parsed;
@@ -353,9 +434,116 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
         result.proposal = .{ .global = global };
     }
     result.source = try origins(a, parsed.source, target, merged.operation == .delete, origin);
+    result.source.pending_repair = null;
+    switch (target) {
+        .statement => |index| result.source.statements = parsed.source.statements.deleting(a, index, parsed.proposal.summary.statements.len) catch |err| return occurrenceError(err),
+        .insert_statement => |value| result.source.statements = parsed.source.statements.inserting(a, value.index, parsed.proposal.summary.statements.len) catch |err| return occurrenceError(err),
+        .disposition_record => |index| result.source.dispositions = parsed.source.dispositions.deleting(a, index, parsed.proposal.global.claim_dispositions.len) catch |err| return occurrenceError(err),
+        .insert_disposition => |value| result.source.dispositions = parsed.source.dispositions.inserting(a, value.index, parsed.proposal.global.claim_dispositions.len) catch |err| return occurrenceError(err),
+        .signal => |index| result.source.signals = parsed.source.signals.deleting(a, index, parsed.proposal.global.signals.len) catch |err| return occurrenceError(err),
+        .insert_signal => |value| result.source.signals = parsed.source.signals.inserting(a, value.index, parsed.proposal.global.signals.len) catch |err| return occurrenceError(err),
+        .conflict => |index| result.source.conflicts = parsed.source.conflicts.deleting(a, index, parsed.proposal.global.conflicts.len) catch |err| return occurrenceError(err),
+        .insert_conflict => |value| result.source.conflicts = parsed.source.conflicts.inserting(a, value.index, parsed.proposal.global.conflicts.len) catch |err| return occurrenceError(err),
+        else => {},
+    }
     result.source.revision = merged.revision_after;
     result.source.last_repair = merged;
     return result;
+}
+
+fn occurrenceError(err: occurrences.Error) Error {
+    return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.InvalidRepairOccurrence => error.InvalidAtomicRepair,
+    };
+}
+
+pub const ValidationStage = enum { summary, dispositions, signals, conflicts };
+
+pub fn dispositionProgress(a: std.mem.Allocator, parsed: r.Parsed) Error!?@import("workflow_retry.zig").Transition {
+    const pending = parsed.source.pending_repair orelse return null;
+    if (stageOf(pending.target.selected) != .dispositions) return null;
+    const valid = if (pending.target.operation == .delete)
+        !try containsOccurrence(parsed.source.dispositions, parsed.proposal.global.claim_dispositions.len, pending.target.stable.disposition_occurrence)
+    else switch (pending.target.selected) {
+        inline .disposition, .insert_disposition => |value| try dispositions.validClaim(a, parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions, value.claim),
+        else => return error.InvalidAtomicRepair,
+    };
+    return .{ .validated = .{ .permit = pending.permit, .revision = parsed.source.revision, .result = if (valid) .resolved else .recurring } };
+}
+
+fn stageOf(target: Target) ValidationStage {
+    return switch (target) {
+        .statement_key, .statement_selection, .statement_content, .statement, .insert_statement => .summary,
+        .disposition, .disposition_record, .insert_disposition => .dispositions,
+        .signal_selection, .signal_content, .signal, .insert_signal => .signals,
+        .conflict_selection, .conflict_summary, .conflict, .insert_conflict => .conflicts,
+    };
+}
+
+fn containsOccurrence(set: occurrences.Set, count: usize, id: occurrences.Id) Error!bool {
+    for (0..count) |index| if (std.meta.eql(set.at(index, count) catch |err| return occurrenceError(err), id)) return true;
+    return false;
+}
+
+/// Observe the selected native rule after the ordinary stage validator has run.
+/// Other failed records do not substitute for proof about this authorized unit.
+pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextContext, parsed: r.Parsed, stage: ValidationStage, checked_dispositions: []const r.ClaimDisposition) Error!?@import("workflow_retry.zig").Transition {
+    const pending = parsed.source.pending_repair orelse return null;
+    const watch = pending.target;
+    const target = watch.selected;
+    if (stageOf(target) != stage) return null;
+    const items = parsed.input.progress.plan.layout.items;
+    const valid = if (watch.operation == .delete) switch (watch.stable) {
+        .statement => |id| !try containsOccurrence(parsed.source.statements, parsed.proposal.summary.statements.len, id),
+        .disposition_occurrence => |id| !try containsOccurrence(parsed.source.dispositions, parsed.proposal.global.claim_dispositions.len, id),
+        .signal => |id| !try containsOccurrence(parsed.source.signals, parsed.proposal.global.signals.len, id),
+        .conflict => |id| !try containsOccurrence(parsed.source.conflicts, parsed.proposal.global.conflicts.len, id),
+        else => return error.InvalidAtomicRepair,
+    } else switch (target) {
+        .statement_key => |index| v.statementKey(parsed.proposal.summary.statements, index) == null,
+        .statement_selection => |index| blk: {
+            const value = parsed.proposal.summary.statements[index];
+            if (v.claims(items, value.claim_ids, parsed.input.partition.group.claim_ids) != null) break :blk false;
+            break :blk if (watch.rule == .content) (try v.contentIssue(items, value.claim_ids, value.content)) == null else true;
+        },
+        .statement_content => |index| blk: {
+            const value = parsed.proposal.summary.statements[index];
+            break :blk (try v.content(a, validator, ctx, items, value.claim_ids, value.content)) == .valid;
+        },
+        .insert_statement => |value| blk: {
+            const selected = parsed.proposal.summary.statements[value.index];
+            break :blk v.claims(items, selected.claim_ids, parsed.input.partition.group.claim_ids) == null and r.contains(r.ClaimId, selected.claim_ids, value.claim);
+        },
+        inline .disposition, .insert_disposition => |value| try dispositions.validClaim(a, items, parsed.proposal.global.claim_dispositions, value.claim),
+        .signal_selection => |index| blk: {
+            const value = parsed.proposal.global.signals[index];
+            if (try v.signalClaims(items, checked_dispositions, value.claim_ids, parsed.input.partition.group.claim_ids) != null) break :blk false;
+            break :blk if (watch.rule == .content) (try v.contentIssue(items, value.claim_ids, value.content)) == null else true;
+        },
+        .signal_content => |index| blk: {
+            const value = parsed.proposal.global.signals[index];
+            break :blk (try v.content(a, validator, ctx, items, value.claim_ids, value.content)) == .valid;
+        },
+        .insert_signal => |value| blk: {
+            const selected = parsed.proposal.global.signals[value.index];
+            break :blk try v.signalClaims(items, checked_dispositions, selected.claim_ids, parsed.input.partition.group.claim_ids) == null and try v.selectedSignalCoverage(items, checked_dispositions, selected, value.claim) == null;
+        },
+        .conflict_selection => |index| blk: {
+            const value = parsed.proposal.global.conflicts[index];
+            break :blk (try v.conflictClaims(items, checked_dispositions, value.claim_ids, parsed.input.partition.group.claim_ids)) == null;
+        },
+        .conflict_summary => |index| blk: {
+            const value = parsed.proposal.global.conflicts[index];
+            break :blk (try v.conflictSummary(a, validator, ctx, items, value.claim_ids, value.summary)) == .valid;
+        },
+        .insert_conflict => |value| blk: {
+            const selected = parsed.proposal.global.conflicts[value.index];
+            break :blk try v.conflictClaims(items, checked_dispositions, selected.claim_ids, parsed.input.partition.group.claim_ids) == null and v.sameMembers(selected.claim_ids, value.claims);
+        },
+        .statement, .disposition_record, .signal, .conflict => return error.InvalidAtomicRepair,
+    };
+    return .{ .validated = .{ .permit = pending.permit, .revision = parsed.source.revision, .result = if (valid) .resolved else .recurring } };
 }
 fn select(parsed: r.Parsed, target: Target) Error!?Replacement {
     const summary = parsed.proposal == .summary;
@@ -434,7 +622,9 @@ fn origins(a: std.mem.Allocator, source: d.Source, target: Target, deleted: bool
         try fields.append(a, retained);
     }
     if (!deleted) try fields.append(a, .{ .unit = changed.unit, .field = changed.field, .origin = origin });
-    return .{ .revision = source.revision, .origin = source.origin, .fields = try fields.toOwnedSlice(a) };
+    var result = source;
+    result.fields = try fields.toOwnedSlice(a);
+    return result;
 }
 
 pub const Omission = struct {
@@ -467,7 +657,14 @@ pub const Omission = struct {
         };
         const current = try facts(a, parsed, ctx, support);
         defer a.free(current.reconciliation.lineage.history);
-        return Atomic.authorize(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)).?, current, .{ .finding = finding, .disposition_choices = try dispositionChoices(a, parsed, target) });
+        var result = try Atomic.authorize(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)).?, current, .{ .finding = finding, .disposition_choices = try dispositionChoices(a, parsed, target) });
+        result.retry = try Omission.retryPermit(a, result);
+        return result;
+    }
+    pub fn retryPermit(a: std.mem.Allocator, auth: OmissionAuthorization) OmissionError!@import("workflow_retry.zig").Permit {
+        const current = auth.dependencies;
+        const selected = try loss.select(a, current.reconciliation.text.?.inputs, current.support);
+        return loss.retryPermit(a, .reconciliation, auth.owner, auth.id, auth.revision, current.support, selected.finding.requirement, current.reconciliation.source.omission_retry);
     }
     pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization) OmissionError!*packets.Packet {
         const current = try facts(a, parsed, ctx, support);
@@ -498,7 +695,9 @@ pub const Omission = struct {
         const current = try facts(a, parsed, ctx, support);
         defer a.free(current.reconciliation.lineage.history);
         const merged = try Atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try select(parsed, auth.target), current, auth, replacement, origin);
-        return apply(a, parsed, auth.target, replacement, merged, origin);
+        var result = try apply(a, parsed, auth.target, replacement, merged, origin);
+        result.source.omission_retry = auth.retry orelse return error.InvalidAtomicRepair;
+        return result;
     }
     pub const Authorization = OmissionAuthorization;
     pub const Error = OmissionError;

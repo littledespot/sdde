@@ -23,14 +23,11 @@ pub const Action = struct {
         const statements = try allocator.alloc(r.ValidatedStatement, proposal.statements.len);
         var represented: std.ArrayList(r.ClaimId) = .empty;
         for (proposal.statements, statements, 0..) |statement, *result, index| {
-            if (statement.local_key == 0) return d.reject(r.CheckedSummary, parsed.input, parsed.source, .{ .statement = index }, .{ .rule = .local_key, .observed = .{ .count = statement.local_key }, .expected = .{ .constraint = .unique_nonzero } });
-            for (proposal.statements[0..index]) |prior| if (prior.local_key == statement.local_key) return d.reject(r.CheckedSummary, parsed.input, parsed.source, .{ .statement = index }, .{ .rule = .local_key, .observed = .{ .count = statement.local_key }, .expected = .{ .constraint = .unique_nonzero } });
-            if (validation.claims(parsed.input.progress.plan.layout.items, statement.claim_ids, parsed.input.partition.group.claim_ids)) |issue| return d.reject(r.CheckedSummary, parsed.input, parsed.source, .{ .statement = index }, issue);
-            try represented.appendSlice(allocator, statement.claim_ids);
-            result.* = .{ .local_key = statement.local_key, .claim_ids = statement.claim_ids, .content = switch (try validation.content(allocator, self.validator, context, parsed.input.progress.plan.layout.items, statement.claim_ids, statement.content)) {
+            result.* = switch (try validation.checkStatement(allocator, self.validator, context, parsed.input, proposal.statements, index)) {
                 .valid => |value| value,
                 .invalid => |issue| return d.reject(r.CheckedSummary, parsed.input, parsed.source, .{ .statement = index }, issue),
-            } };
+            };
+            try represented.appendSlice(allocator, statement.claim_ids);
         }
         r.sameSet(r.ClaimId, represented.items, parsed.input.partition.group.claim_ids) catch return d.reject(r.CheckedSummary, parsed.input, parsed.source, .summary, .{ .rule = .membership, .observed = .{ .claims = represented.items }, .expected = .{ .claims = parsed.input.partition.group.claim_ids } });
         std.mem.sort(r.ValidatedStatement, statements, {}, struct {
