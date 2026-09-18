@@ -790,7 +790,7 @@ test "reports preserve native extraction reconciliation specification and comple
         const accounted = (try references.finish(scratch, global, proposal, input.context())).valid;
         const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = input.inputs, .references = accounted, .registry = input.context().registry, .current = input.context().current };
         const review_inputs = try @import("../../../src/domain/specification_authority.zig").project(scratch, input.inputs.corpus.feature_id, accounted, null, null);
-        const missing = (try @import("../../../src/domain/specification_support.zig").collect(scratch, review_inputs, context, "{\"entries\":[]}", origin)).rejected;
+        const missing = (try @import("../../../src/domain/specification_support.zig").Source.collect(scratch, review_inputs, context, "{\"entries\":[]}", origin)).rejected;
         try std.testing.expect(missing.rejection.diagnostics.len > 1);
         retained[3] = try (Diagnostic{ .support = missing.rejection }).copy(a);
         var current = try @import("../../../src/domain/specification_session.zig").initialize(.{ .bytes = "chosen" }, context);

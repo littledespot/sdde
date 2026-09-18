@@ -1462,7 +1462,9 @@ SDDToolKitConfig {
   paths: {
     specs, references, specsArchive, workflows,
     toolchainPreset, principles, templates, providers
-  }
+  },
+  principles?: { filenameHints: map<basename, category>,
+                 selections: { stage, environment, fileKind, categories[] }[] }
 }
 ```
 

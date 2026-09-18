@@ -6,7 +6,7 @@ const reference = @import("reference_snapshot.zig");
 const authority = @import("required_authority.zig");
 const clarification = @import("clarification_inputs.zig");
 const ids = @import("specification_identity.zig");
-pub const schema = "specification-state/v1";
+pub const schema = "specification-state/v2";
 pub const max_bytes = 64 * 1024 * 1024;
 pub const State = struct {
     schema: []const u8,
@@ -19,6 +19,7 @@ pub const State = struct {
     id_ledger: ids.Ledger,
     coverage: @import("specification_coverage.zig").Coverage,
     clarification: struct { state_ordinal: u64, revision: u64 },
+    principle_assessment: @import("principle_assessment.zig").Canonical,
     review: struct {
         candidate_revision: u64,
         seeds: []const authority.Seed,
@@ -89,6 +90,7 @@ fn validateAssociations(backing: std.mem.Allocator, state: State) !void {
     inputs.seeds = state.review.seeds;
     inputs.evidence = state.review.evidence;
     inputs.candidates = state.review.candidates;
-    try @import("specification_support.zig").validateStored(allocator, inputs, state.reference.inputs);
+    try @import("specification_support.zig").Source.validateStored(allocator, inputs, state.reference.inputs);
+    try @import("principle_assessment.zig").validateStored(allocator, inputs, state.reference.inputs, state.principle_assessment);
     if (!try authority.validate(allocator, inputs, state.review.observations, state.review.result)) return error.InvalidSpecificationState;
 }

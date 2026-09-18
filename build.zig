@@ -349,6 +349,14 @@ pub fn build(b: *std.Build) void {
     const ingestion_step = b.step("test-reference-ingestion", "Test read-only Markdown reference evidence");
     ingestion_step.dependOn(&b.addRunArtifact(ingestion_tests).step);
 
+    const principle_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/principle_registry_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    b.step("test-principle-registry", "Test canonical principle capture and configured selection").dependOn(&b.addRunArtifact(principle_tests).step);
+
     const evidence_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/reference_evidence_test.zig"),
         .target = target,

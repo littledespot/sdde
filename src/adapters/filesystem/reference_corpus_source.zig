@@ -34,36 +34,11 @@ pub const Adapter = struct {
     }
     /// The caller owns an arena, including any partial inventory on failure.
     fn scan(self: *Adapter, allocator: std.mem.Allocator, root: std.Io.Dir) source.Error![]const reference.Descriptor {
-        var entries: std.ArrayList(reference.Descriptor) = .empty;
-        try self.walk(allocator, root, "", 1, .now(self.io, .boot), &entries);
-        return entries.toOwnedSlice(allocator);
-    }
-    fn walk(self: *Adapter, allocator: std.mem.Allocator, parent: std.Io.Dir, prefix: []const u8, depth: usize, started: std.Io.Clock.Timestamp, entries: *std.ArrayList(reference.Descriptor)) source.Error!void {
-        var iterator = parent.iterate();
-        while (iterator.next(self.io) catch return error.ReferenceUnavailable) |entry| {
-            try self.checkTime(started);
-            if (entries.items.len >= reference.limits.entries or depth > reference.limits.depth) return error.ReferenceLimitExceeded;
-            const path = try std.mem.concat(allocator, u8, &.{ prefix, entry.name });
-            paths.validate(path) catch return error.ReferenceUnavailable;
-            const index = entries.items.len;
-            try entries.append(allocator, .{ .raw_path = path, .observation = .{ .unreadable = {} } });
-            switch (entry.kind) {
-                .directory => {
-                    const child = directories.open(self.io, parent, entry.name) catch continue;
-                    defer child.close(self.io);
-                    const id = directories.inspectReadable(self.io, child) catch continue;
-                    entries.items[index].observation = .{ .directory = id };
-                    const next = try std.mem.concat(allocator, u8, &.{ path, "/" });
-                    try self.walk(allocator, child, next, depth + 1, started, entries);
-                },
-                .file => {
-                    const observation = files.observe(self.io, parent, entry.name) catch continue;
-                    entries.items[index].observation = .{ .file = observation };
-                },
-                .sym_link => entries.items[index].observation = .{ .symlink = {} },
-                else => entries.items[index].observation = .{ .special = {} },
-            }
-        }
+        return @import("directory_inventory.zig").scan(self.io, allocator, root, .{ .entries = reference.limits.entries, .depth = reference.limits.depth, .duration_ms = reference.limits.duration_ms }) catch |err| return switch (err) {
+            error.OutOfMemory => error.OutOfMemory,
+            error.SourceLimitExceeded => error.ReferenceLimitExceeded,
+            error.SourceUnavailable => error.ReferenceUnavailable,
+        };
     }
     fn capture(context: *anyopaque, capability: *const roots.ReferenceContentReadCapability, allocator: std.mem.Allocator, inventory: reference.Inventory) source.Error!reference.CapturedCorpus {
         const self: *Adapter = @ptrCast(@alignCast(context));

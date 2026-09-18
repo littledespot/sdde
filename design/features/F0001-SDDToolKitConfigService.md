@@ -56,7 +56,8 @@ The reader-facing contract mirrors the repository fixture:
 SDDToolKitConfig {
   logs: LogsConfig,
   models: ModelsConfig,
-  paths: PathsConfig
+  paths: PathsConfig,
+  principles?: PrinciplesConfig | null
 }
 
 LogsConfig {
@@ -73,6 +74,12 @@ ModelsConfig {
   }>
 }
 
+PrinciplesConfig {
+  filenameHints: map<normalizedMarkdownBasename, PrincipleCategory>,
+  selections: { stage, environment: string | null, fileKind: string | null,
+                categories: PrincipleCategory[] }[]
+}
+
 PathsConfig {
   specs: string,
   references: string,
@@ -86,7 +93,11 @@ PathsConfig {
 ```
 
 - The root and every fixed nested object are closed by `sddtoolkit-config.schema.json`.
-- Missing, duplicate, unknown, or wrong-kind members are rejected.
+- Missing required, duplicate, unknown, or wrong-kind members are rejected.
+- Optional `principles` is the sole selection-policy input under [ADR 0015](../decisions/0015-specification-principle-review.md).
+  F0001 decodes its structure; the shared principle-policy compiler validates names,
+  collisions, scopes and category coverage before any consuming operation. An absent
+  section supplies no default policy. [§9.4](../contracts/09-configuration.md#94-project-principle-resolution) owns the rules.
 - Model slot names are data, but every slot value has the same closed shape.
 - `promptCapture` is a unique list of at most the four closed selectors shown above; an
   empty list disables body capture.

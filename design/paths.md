@@ -66,7 +66,7 @@ The engine derives these paths; they are not separate configuration fields.
 | `<paths.workflows>/features/<feature-directory>/state/clarifications.json` | Native clarification registry and response input. |
 
 - [F0100 §3.12](features/F0100-SpecWorkflow.md#312-clarification-refresh-and-registered-publication)
-  owns Specify's separate capture/validation of `specification-state/v1`.
+  owns Specify's separate capture/validation of `specification-state/v2`.
 - [F0100 §3.2](features/F0100-SpecWorkflow.md#32-read-only-artifact-and-clarification-inputs)
   owns read-only clarification preparation, closed schema and limits.
 

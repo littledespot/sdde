@@ -7,8 +7,9 @@ pub const Diagnostic = union(enum) {
     token_classifications: @import("token_classification_validation.zig").Rejection,
     source_selections: @import("reference_selection_validation.zig").Rejection,
     coverage: @import("specification_coverage.zig").Rejection,
-    support_findings: struct { revision: u64, evidence: []const @import("required_authority.zig").Evidence, origins: []const ?@import("model_candidate_origin.zig").Origin, origin: ?@import("model_candidate_origin.zig").Origin },
-    support: @import("specification_support.zig").Rejection,
+    support_findings: struct { purpose: @import("specification_support.zig").Purpose = .source, revision: u64, evidence: []const @import("required_authority.zig").Evidence, origins: []const ?@import("model_candidate_origin.zig").Origin, origin: ?@import("model_candidate_origin.zig").Origin },
+    support: @import("specification_support.zig").Source.Rejection,
+    principle_review: @import("specification_support.zig").Contract(.principles).Rejection,
     specification: @import("specification_candidate.zig").Rejection,
 
     pub fn origin(self: Diagnostic) ?@import("model_candidate_origin.zig").Origin {
@@ -20,6 +21,7 @@ pub const Diagnostic = union(enum) {
             .coverage => |value| value.origin,
             .support_findings => |value| value.origin,
             .support => |value| if (value.selected()) |selected| selected.origin else null,
+            .principle_review => |value| if (value.selected()) |selected| selected.origin else null,
             .specification => |value| value.origin,
         };
     }

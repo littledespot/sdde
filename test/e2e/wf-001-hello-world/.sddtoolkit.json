@@ -22,5 +22,78 @@
     "principles": ".sddtoolkit/principles",
     "templates": ".sddtoolkit/templates",
     "providers": ".sddtoolkit/providers/.sddproviders.json"
+  },
+  "principles": {
+    "filenameHints": {
+      "core.md": "core",
+      "architecture.md": "architecture",
+      "project-structure.md": "project_structure",
+      "security.md": "security",
+      "validation.md": "validation",
+      "observability.md": "observability",
+      "user-interface.md": "user_interface"
+    },
+    "selections": [
+      {
+        "stage": "spec",
+        "environment": null,
+        "fileKind": null,
+        "categories": [
+          "core",
+          "architecture",
+          "project_structure",
+          "security",
+          "validation",
+          "observability",
+          "user_interface",
+          "custom"
+        ]
+      },
+      {
+        "stage": "plan",
+        "environment": null,
+        "fileKind": null,
+        "categories": [
+          "core",
+          "architecture",
+          "project_structure",
+          "security",
+          "validation",
+          "observability",
+          "user_interface",
+          "custom"
+        ]
+      },
+      {
+        "stage": "tasks",
+        "environment": null,
+        "fileKind": null,
+        "categories": [
+          "core",
+          "architecture",
+          "project_structure",
+          "security",
+          "validation",
+          "observability",
+          "user_interface",
+          "custom"
+        ]
+      },
+      {
+        "stage": "implement",
+        "environment": null,
+        "fileKind": null,
+        "categories": [
+          "core",
+          "architecture",
+          "project_structure",
+          "security",
+          "validation",
+          "observability",
+          "user_interface",
+          "custom"
+        ]
+      }
+    ]
   }
 }

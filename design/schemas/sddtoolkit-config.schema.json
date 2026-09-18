@@ -8,7 +8,8 @@
   "properties": {
     "logs": { "$ref": "#/$defs/logs" },
     "models": { "$ref": "#/$defs/models" },
-    "paths": { "$ref": "#/$defs/paths" }
+    "paths": { "$ref": "#/$defs/paths" },
+    "principles": { "anyOf": [{ "$ref": "#/$defs/principles" }, { "type": "null" }] }
   },
   "$defs": {
     "logs": {
@@ -72,6 +73,79 @@
         "principles": { "type": "string" },
         "templates": { "type": "string" },
         "providers": { "type": "string" }
+      }
+    },
+    "principleCategory": {
+      "enum": [
+        "core",
+        "architecture",
+        "project_structure",
+        "security",
+        "validation",
+        "observability",
+        "user_interface",
+        "custom"
+      ]
+    },
+    "principles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filenameHints",
+        "selections"
+      ],
+      "properties": {
+        "filenameHints": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": {
+            "$ref": "#/$defs/principleCategory"
+          }
+        },
+        "selections": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "stage",
+              "environment",
+              "fileKind",
+              "categories"
+            ],
+            "properties": {
+              "stage": {
+                "enum": [
+                  "spec",
+                  "plan",
+                  "tasks",
+                  "implement"
+                ]
+              },
+              "environment": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fileKind": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "categories": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/principleCategory"
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

@@ -5,7 +5,8 @@ baseline's authority and is subject to the accepted amendments in [§32](../desi
 
 - `design/schemas/sddtoolkit-config.schema.json` defines the current reader-facing JSON
   contract, and `design/examples/.sddtoolkit.json` is one accepted instance.
-- The closed top-level members are `logs`, `models`, and `paths`.
+- The closed top-level members are required `logs`, `models` and `paths`, plus optional
+  `principles` under ADR 0015.
 - Neither file is a runtime default, packaged asset, search location, or fallback.
 - Bootstrap captures and canonicalizes the native executable's invocation working directory once
   and uses it as the project root.
@@ -67,9 +68,9 @@ exists.
 - For the bounded F0001 reader increment, the current closed shape is the formal [JSON
   Schema](../schemas/sddtoolkit-config.schema.json), the repository example, and the typed contract
   in [F0001 — SDDToolKitConfigService](../features/F0001-SDDToolKitConfigService.md).
-- The root has exactly `logs`, `models`, and `paths`; fixed records reject missing, duplicate,
-  and unknown members.
-- `models.slots` is the one keyed collection and each value has the closed slot shape.
+- The root requires `logs`, `models` and `paths` and permits optional `principles`;
+  fixed records reject missing required, duplicate and unknown members.
+- `models.slots` and `principles.filenameHints` are keyed collections; each model slot has the closed slot shape.
 - The `logs` object contains exactly the F0002 threshold, optional console-mirror boolean, and
   closed prompt-capture selector list.
 - File logging is mandatory and has no configuration switch.
@@ -303,6 +304,18 @@ Content authority is domain-specific:
 - generic prompt examples have the lowest authority.
 
 ### 9.4 Project-principle resolution
+
+The optional `.sddtoolkit.json` `principles` section is the sole selection-policy
+input ([ADR 0015](../decisions/0015-specification-principle-review.md)).
+`filenameHints` maps exact normalized Markdown basenames to category hints.
+`selections` contains closed `{stage, environment, fileKind, categories}` rows;
+null environment/file-kind explicitly includes every matching scope. Matching rows
+contribute their category union; every row includes `core` and `custom`. Spec uses
+an explicit Spec row with null environment/file-kind. Missing section or applicable
+row rejects a principle-consuming operation. Unrelated workflows need not supply it.
+The existing config reader owns structural decoding; one principle-policy compiler
+validates rows, names and categories. No model, workflow prompt or mechanical
+`toolchain.yaml` supplies another selection table.
 
 - The new engine calls this authority **principles**.
 - It fulfils the role that constitution/memory material has in the basis workflow: overarching

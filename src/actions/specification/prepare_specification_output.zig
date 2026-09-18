@@ -22,7 +22,7 @@ pub const Action = struct {
         const rendered = try codec.render(allocator, document);
         const reparsed = try codec.render(allocator, try codec.parse(allocator, specification));
         if (!std.mem.eql(u8, specification, rendered) or !std.mem.eql(u8, specification, reparsed) or
-            !std.mem.eql(u8, reference_context, try @import("../../domain/reference_context.zig").render(allocator, value.reference))) return error.InvalidWorkflowOutput;
+            !std.mem.eql(u8, reference_context, try @import("../../domain/reference_context.zig").render(allocator, value.reference, value.principle_assessment))) return error.InvalidWorkflowOutput;
         var prepared = try @import("../../domain/clarification_output.zig").prepare(allocator, feature, paths, captured, inputs, clarifications, views);
         const canonical = try @import("../../domain/canonical_json.zig").encode(state.State, allocator, value);
         _ = try state.parse(allocator, canonical, feature.selector.feature_id);

@@ -20,14 +20,8 @@ pub const SourceId = struct { ordinal: u32 };
 pub const BlockId = struct { source: SourceId, ordinal: u32 };
 pub const RelativePath = struct { bytes: []const u8 };
 pub const FileObservation = identity.FileObservation;
-pub const Observation = union(enum) {
-    directory: identity.FileIdentity,
-    file: FileObservation,
-    symlink: void,
-    special: void,
-    unreadable: void,
-};
-pub const Descriptor = struct { raw_path: []const u8, observation: Observation };
+pub const Observation = @import("source_inventory.zig").Observation;
+pub const Descriptor = @import("source_inventory.zig").Descriptor;
 pub const RawInventory = struct { directory: reference.Directory, entries: []const Descriptor };
 pub const Entry = struct {
     id: SourceId,
@@ -67,8 +61,8 @@ pub const CapturedCorpus = struct {
 };
 /// Offsets are zero-based UTF-8 bytes; line/column are one-based Unicode scalar
 /// coordinates. End positions are exclusive. CRLF is one line ending.
-pub const Position = struct { byte: usize, line: u32, column: u32 };
-pub const Span = struct { start: Position, end: Position };
+pub const Position = @import("source_coordinates.zig").Position;
+pub const Span = @import("source_coordinates.zig").Span;
 pub const BlockProposal = struct { span: Span };
 pub const ReaderId = enum { markdown_source_v1 };
 pub const Decoded = struct {
@@ -105,22 +99,6 @@ pub const Inputs = struct {
     decoded_bytes: usize,
 };
 
-/// Shared byte-coordinate advancement; this does not interpret Markdown.
 pub fn advance(bytes: []const u8, position: Position) error{InvalidReferenceAccounting}!Position {
-    if (position.byte >= bytes.len) return error.InvalidReferenceAccounting;
-    var result = position;
-    const byte = bytes[position.byte];
-    const length = std.unicode.utf8ByteSequenceLength(byte) catch return error.InvalidReferenceAccounting;
-    if (length > bytes.len - position.byte) return error.InvalidReferenceAccounting;
-    _ = std.unicode.utf8Decode(bytes[position.byte..][0..length]) catch return error.InvalidReferenceAccounting;
-    result.byte += length;
-    if (byte == '\r') {
-        if (result.byte < bytes.len and bytes[result.byte] == '\n') result.byte += 1;
-        result.line += 1;
-        result.column = 1;
-    } else if (byte == '\n') {
-        result.line += 1;
-        result.column = 1;
-    } else result.column += 1;
-    return result;
+    return @import("source_coordinates.zig").advance(bytes, position) catch error.InvalidReferenceAccounting;
 }

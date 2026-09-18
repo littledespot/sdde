@@ -105,3 +105,24 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 
 
 These actions own the shared contract. Domain actions only produce registered requirements, candidates, and evidence. They may not create a parallel reconciliation outcome, clarification shortcut, or stage-specific success rule.
+
+### Native source and principle review
+
+`specification_support.Contract` specializes the existing collection, diagnostics,
+atomic repair and persisted-evidence validation by native review purpose. Source
+findings retain the business-evidence contract. Principle findings contain only
+`decision`, `citations` and `detail`; permitted decisions are `compatible`,
+`conflicting` and `uncertain`. Native policy assigns the Plan owner.
+
+`initialize-specification-review` binds progress to the current authority projection.
+`advance-specification-review` advances accepted source review to policy assessment
+only after complete business content is supported; empty selected prose needs no
+model call. Both assessments use the same declared request and repair loop. Only
+completed review replaces the source authority inputs. No action selects a successor,
+invokes another action, or changes a negative verdict to obtain admission.
+
+The v2 canonical Specify state requires the assessment. Readback reconstructs the
+business requirements and policy ledger, re-admits evidence against the exact registry
+and selection, and compares the complete reconciled result. Missing, stale, foreign
+or erased obligations reject. `reference-context.md` renders this canonical handoff;
+it is never imported as policy authority.

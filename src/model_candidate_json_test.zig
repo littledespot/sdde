@@ -247,9 +247,9 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
     } else if (comptime selection != null and !std.mem.startsWith(u8, selection.?, "review")) {
         const selected = selection.?;
         if (comptime std.mem.eql(u8, selected, "loss")) return nativeWire(@import("domain/source_omission.zig").Location, a, bytes);
-        const T = @import("domain/specification_support_repair.zig").Replacement;
+        const T = @import("domain/specification_support_repair.zig").Source.Replacement;
         return selectedWire(T, a, if (comptime std.mem.eql(u8, selected, "applicability_finding")) .finding else @field(std.meta.Tag(T), selected), bytes);
-    } else return nativeWire(@import("domain/specification_support.zig").Review, a, bytes);
+    } else return nativeWire(@import("domain/specification_support.zig").Source.Review, a, bytes);
 }
 
 test "final proposal schemas and native readers reject deterministic echoes and mixed shapes" {

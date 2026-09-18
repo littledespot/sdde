@@ -37,10 +37,13 @@ pub fn read(a: std.mem.Allocator, view: *const data.View) (values.Error || @impo
     if (view.contains(support.schema.key)) {
         const owned = @import("required_authority_values.zig");
         const value = owned.payload(try values.read(view, support.schema, owned.Value));
-        if (value.* == .support) try append(a, &result, switch (value.support) {
-            .accepted => |accepted| accepted.candidate.last_repair,
-            .rejected => |rejected| if (rejected.candidate) |candidate| candidate.last_repair else null,
-        });
+        inline for (.{ .support, .principle_support }) |tag| if (value.* == tag) {
+            const selected = if (tag == .support) value.support else value.principle_support.result;
+            try append(a, &result, switch (selected) {
+                .accepted => |accepted| accepted.candidate.last_repair,
+                .rejected => |rejected| if (rejected.candidate) |candidate| candidate.last_repair else null,
+            });
+        };
     }
     return result.toOwnedSlice(a);
 }

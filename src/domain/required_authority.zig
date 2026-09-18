@@ -73,6 +73,8 @@ pub const ReviewEvidence = struct {
     detail: []const u8,
     provenance: @import("specification.zig").Provenance,
     source_ids: []const @import("reference_identity.zig").SourceId,
+    principle_citations: []const @import("principle_registry.zig").Citation = &.{},
+    principle_registry: ?@import("principle_registry.zig").Id = null,
 };
 pub const Evidence = struct {
     id: EvidenceId,
@@ -88,7 +90,9 @@ pub const Exception = struct { id: ExceptionId, requirement: Id, authority: Auth
 pub const ForcedGap = struct { requirement: Id, reason: GapReason, subject: enum { authority, candidate } = .authority };
 pub const Inputs = struct {
     feature: @import("feature_identity.zig").FeatureId,
-    projection: enum { specification, registered_obligations } = .registered_obligations,
+    projection: enum { specification, principle_assessment, registered_obligations } = .registered_obligations,
+    principle_context: ?@import("principle_assessment.zig").Context = null,
+    principle_assessment: ?@import("principle_assessment.zig").Canonical = null,
     specification: ?@import("specification.zig").IdentifiedContent = null,
     brief: ?@import("specification.zig").Brief = null,
     detected_at: DetectionStage,
@@ -133,6 +137,15 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
         }
         try sameSet(ForcedGap, expected.forced_gaps, inputs.forced_gaps);
     }
+    if (inputs.projection == .principle_assessment) {
+        const expected = @import("principle_assessment.zig").project(allocator, inputs.principle_context orelse return error.InvalidRequiredAuthority) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
+        if (expected.seeds.len != inputs.seeds.len or inputs.specification != null or inputs.candidates.len != 0 or inputs.forced_gaps.len != 0) return error.InvalidRequiredAuthority;
+        for (expected.seeds, inputs.seeds) |required, actual| {
+            if (!std.meta.eql(required.id, actual.id) or !std.meta.eql(required.requiredness, actual.requiredness)) return error.InvalidRequiredAuthority;
+            try sameSet(Authority, required.input_authorities, actual.input_authorities);
+        }
+        try sameSet(Authority, expected.authorities, inputs.authorities);
+    } else if (inputs.principle_context != null) return error.InvalidRequiredAuthority;
     try unique(Authority, inputs.authorities);
     for (inputs.authorities, 0..) |authority, index| {
         if (!authority.valid()) return error.InvalidRequiredAuthority;
@@ -177,6 +190,16 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!Observations
         error.OutOfMemory => error.OutOfMemory,
         error.InvalidJsonDocument => error.InvalidRequiredAuthority,
     };
+}
+
+pub fn buildObservations(allocator: std.mem.Allocator, ledger: Ledger) Error!Observations {
+    const entries = try allocator.alloc(Observation, ledger.requirements.len);
+    for (ledger.requirements, entries) |requirement, *entry| {
+        var ids: std.ArrayList(EvidenceId) = .empty;
+        for (ledger.inputs.evidence) |evidence| if (std.meta.eql(evidence.requirement, requirement.seed.id)) try ids.append(allocator, evidence.id);
+        entry.* = .{ .requirement = requirement.seed.id, .inspected_authorities = requirement.seed.input_authorities, .evidence_ids = try ids.toOwnedSlice(allocator) };
+    }
+    return .{ .entries = entries };
 }
 
 pub fn reconcile(allocator: std.mem.Allocator, ledger: Ledger, observations: Observations) Error!Result {

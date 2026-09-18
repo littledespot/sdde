@@ -16,6 +16,7 @@ pub const Options = struct {
     source_loss: ?SourceLoss = null,
     support_fault: ?SupportFault = null,
     support_post: bool = false,
+    principle_conflict: bool = false,
     source_gaps: bool = false,
     evidence_fault: ?enum { recover, unchanged } = null,
     candidate_omission: bool = false,
@@ -289,11 +290,25 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
             return @import("../domain/model_candidate_json.zig").encode(g.ModelResponse, allocator, g.ModelResponse.from(proposed));
         },
         .semantic_review => {
+            const workflow = @import("../application/specification_support_workflow.zig");
+            const progress = try workflow.progress(&view);
+            if (workflow.purpose(progress) == .principles) {
+                const policy_inputs = try workflow.inputs(&view, progress);
+                const policy = @import("../domain/specification_support.zig").Contract(.principles);
+                const findings = try allocator.alloc(policy.Finding, policy_inputs.seeds.len);
+                const id = policy_inputs.principle_context.?.selection.chunks[0];
+                for (findings, 0..) |*finding, index| finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .decision = if (options.principle_conflict and index == 0) .conflicting else .compatible, .citations = if (options.principle_conflict and index == 0) &.{.{ .chunk = .{ .ordinal = 999 }, .first_line = 1, .last_line = 1 }} else &.{}, .detail = if (options.principle_conflict and index == 0) "The business retention requirement conflicts with policy; Plan must resolve it." else "" } };
+                if (request.id().purpose == .atomic_repair) {
+                    if (options.attempt == 1) return "{}";
+                    return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_support_repair.zig").Contract(.principles).Replacement, allocator, .{ .selection = .{ .citations = &.{.{ .chunk = id, .first_line = 1, .last_line = 1 }} } });
+                }
+                return @import("../domain/model_candidate_json.zig").encode(policy.Review, allocator, .{ .entries = findings });
+            }
             const inputs = try @import("../application/required_authority_values.zig").read(&view, @import("../application/required_authority_workflow.zig").inputs_schema, .inputs);
             const ledger = try a.build(allocator, inputs);
             const context = try @import("../application/specification_workflow.zig").readContext(&view);
             const all = try @import("../domain/specification_provenance.zig").items(context);
-            const findings = try allocator.alloc(@import("../domain/specification_support.zig").Finding, ledger.requirements.len);
+            const findings = try allocator.alloc(@import("../domain/specification_support.zig").Source.Finding, ledger.requirements.len);
             for (ledger.requirements, findings, 0..) |requirement, *finding, index| {
                 const eligible = try @import("../domain/specification_support_evidence.zig").choices(allocator, inputs.references.?, requirement.seed.id);
                 var selected: g.spec.Selection = .{ .claim_ids = if (eligible.len == 0) &.{} else eligible[0..1], .clarification_response_ids = &.{} };
@@ -363,7 +378,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 }
             }
             if (request.id().purpose == .atomic_repair) {
-                const repair = @import("../domain/specification_support_repair.zig");
+                const repair = @import("../domain/specification_support_repair.zig").Source;
                 const state = try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_repair_workflow.zig").schema, .support_repair);
                 const authorized = state.authorization;
                 if (options.evidence_fault == .unchanged) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, authorized.operation.replace);
@@ -384,7 +399,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 };
                 return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, replacement);
             }
-            var entries: []const @import("../domain/specification_support.zig").Finding = findings;
+            var entries: []const @import("../domain/specification_support.zig").Source.Finding = findings;
             if (options.evidence_fault != null) for (ledger.requirements, findings) |requirement, *finding| {
                 if (requirement.seed.id.kind == .entity_applicability) {
                     finding.value.decision = .not_applicable;
@@ -408,10 +423,10 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                     .missing_finding => entries = findings[1..],
                     .partial_findings => entries = findings[0..2],
                     .two_missing_findings => entries = findings[2..],
-                    .duplicate_finding => entries = try std.mem.concat(allocator, @import("../domain/specification_support.zig").Finding, &.{ findings, findings[0..1] }),
+                    .duplicate_finding => entries = try std.mem.concat(allocator, @import("../domain/specification_support.zig").Source.Finding, &.{ findings, findings[0..1] }),
                 }
             };
-            return @import("../domain/model_candidate_json.zig").encode(@import("../domain/specification_support.zig").Review, allocator, .{ .entries = entries });
+            return @import("../domain/model_candidate_json.zig").encode(@import("../domain/specification_support.zig").Source.Review, allocator, .{ .entries = entries });
         },
         else => return error.InvalidFixture,
     }

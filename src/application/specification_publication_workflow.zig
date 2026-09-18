@@ -41,7 +41,13 @@ pub const Parse = struct {
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
         owner.payload = .{ .prior_state = self.action.execute(owner.arena.allocator(), (try readFeature(&input.step.data)).selector.feature_id, bytes.*) catch return error.OperationExecutionFailed };
-        return owned.publish(self.allocator, prior_schema, owner, .ok) catch error.OperationExecutionFailed;
+        const prior_principles = if (owner.payload.prior_state.state) |state_value| state_value.principle_assessment.registry else null;
+        const principle_schema = @import("principle_workflow.zig").prior_schema;
+        const projected = values.create(self.allocator, principle_schema, ?@import("../domain/principle_registry.zig").Registry, prior_principles) catch return error.OperationExecutionFailed;
+        errdefer values.destroy(projected);
+        var result = owned.publish(self.allocator, prior_schema, owner, .ok) catch return error.OperationExecutionFailed;
+        result.delta.data_writes[@intFromEnum(principle_schema.key)] = projected;
+        return result;
     }
 };
 pub const ResolvedNeeds = struct {
@@ -104,7 +110,7 @@ pub const RenderReference = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const current = owned.read(&input.step.data, snapshot_schema, .reference_snapshot) catch return error.OperationExecutionFailed;
+        const current = owned.read(&input.step.data, state_schema, .publication_state) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
         owner.payload = .{ .reference_context = self.action.execute(owner.arena.allocator(), current) catch return error.OperationExecutionFailed };

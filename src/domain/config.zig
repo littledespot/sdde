@@ -41,6 +41,7 @@ pub const SDDToolKitConfig = struct {
     logs: LogsConfig,
     models: ModelsConfig,
     paths: PathsConfig,
+    principles: ?@import("principle_policy.zig").Config = null,
 };
 
 pub const Owned = struct {

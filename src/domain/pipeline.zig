@@ -2,6 +2,11 @@ const runner_accounting = @import("runner_accounting.zig");
 const data = @import("pipeline_data.zig");
 
 pub const DataKey = enum {
+    raw_principle_inventory,
+    principle_inventory,
+    captured_principles,
+    principle_registry,
+    prior_principle_registry,
     invocation_working_directory,
     exact_engine_config_file,
     raw_engine_config,

@@ -10,15 +10,15 @@ pub const Location = union(enum) {
     reconciliation_signal: r.SignalId,
     reconciliation_disposition: r.ClaimId,
 };
-pub const Support = struct { review: @import("specification_support.zig").Candidate, inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
+pub const Support = struct { review: @import("specification_support.zig").Source.Candidate, inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
 pub const Evidence = struct { finding: authority.Evidence, location: Location };
-pub const Error = authority.Error || r.Error || @import("specification_support.zig").Error;
+pub const Error = authority.Error || r.Error || @import("specification_support.zig").Source.Error;
 
 pub fn select(a: std.mem.Allocator, sources: r.evidence.Inputs, support: Support) Error!Evidence {
     var unreviewed = support.inputs;
     unreviewed.evidence = &.{};
     unreviewed.candidates = &.{};
-    const checked = try @import("specification_support.zig").validate(a, unreviewed, sources, support.review);
+    const checked = try @import("specification_support.zig").Source.validate(a, unreviewed, sources, support.review);
     if (checked != .accepted or !std.meta.eql(try @import("atomic_repair.zig").snapshot(authority.Inputs, a, checked.accepted.inputs), try @import("atomic_repair.zig").snapshot(authority.Inputs, a, support.inputs))) return error.InvalidRequiredAuthority;
     for (support.result.entries) |entry| {
         const finding = (try authority.supportedOmission(a, support.inputs, support.observations, support.result, entry.requirement)) orelse continue;

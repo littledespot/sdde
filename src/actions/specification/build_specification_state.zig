@@ -32,6 +32,7 @@ pub const Action = struct {
             .id_ledger = ledger,
             .coverage = accounted,
             .clarification = .{ .state_ordinal = clarification.state_ordinal, .revision = clarification.revision },
+            .principle_assessment = inputs.principle_assessment orelse return error.InvalidSpecificationState,
             .review = .{ .candidate_revision = inputs.revision, .seeds = inputs.seeds, .evidence = inputs.evidence, .candidates = inputs.candidates, .observations = observations, .result = result },
         };
         try state.validate(allocator, value, inputs.feature);

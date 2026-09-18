@@ -48,11 +48,14 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
     if (view.contains(support.schema.key)) {
         const storage_authority = @import("required_authority_values.zig");
         const value = storage_authority.payload(try values.read(view, support.schema, storage_authority.Value));
-        if (value.* == .support) switch (value.support) {
-            .rejected => |rejected| return .{ .support = rejected.rejection },
-            .accepted => |accepted| for (accepted.inputs.evidence) |evidence| {
-                if (evidence.finding != .supported) return .{ .support_findings = .{ .revision = accepted.inputs.revision, .evidence = accepted.inputs.evidence, .origins = accepted.inputs.review_origins, .origin = accepted.inputs.review_origin } };
-            },
+        inline for (.{ .support, .principle_support }) |tag| if (value.* == tag) {
+            const selected = if (tag == .support) value.support else value.principle_support.result;
+            switch (selected) {
+                .rejected => |rejected| return if (tag == .support) .{ .support = rejected.rejection } else .{ .principle_review = rejected.rejection },
+                .accepted => |accepted| for (accepted.inputs.evidence) |evidence| {
+                    if (evidence.finding != .supported) return .{ .support_findings = .{ .purpose = if (tag == .support) .source else .principles, .revision = accepted.inputs.revision, .evidence = accepted.inputs.evidence, .origins = accepted.inputs.review_origins, .origin = accepted.inputs.review_origin } };
+                },
+            }
         };
     }
     return null;

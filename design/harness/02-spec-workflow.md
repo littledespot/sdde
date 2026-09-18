@@ -338,7 +338,7 @@ H-010 supplies unit needs. Coordinate output handling with H-012.
 - A shared registered writer publishes prepared clarification output with exact
   captured-input rechecks and complete replacement.
 - The successful YAML branch now renders the reference sidecar, builds closed
-  `specification-state/v1`, and prepares the specification, sidecar, clarification
+  `specification-state/v2`, and prepares the specification, sidecar, clarification
   registry and canonical state together.
 - Preparation rechecks normalized Markdown and state/view joins; the writer rechecks
   captured clarification and workflow state before each replacement and writes

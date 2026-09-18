@@ -14,6 +14,9 @@ pub const Driver = struct {
     fake: *@import("../adapters/provider/fake_llm_provider.zig").FakeLLMProvider,
     support_fault: ?@import("spec_generation_responses.zig").SupportFault = null,
     support_post: bool = false,
+    principle_conflict: bool = false,
+    principle_calls: usize = 0,
+    measurement_prefix: ?[]const u8 = null,
     source_gaps: bool = false,
     source_loss: ?@import("spec_generation_responses.zig").SourceLoss = null,
     source_repair_calls: usize = 0,
@@ -117,9 +120,17 @@ pub const Driver = struct {
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_post = self.support_post, .candidate_omission = self.candidate_omission, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_post = self.support_post, .principle_conflict = self.principle_conflict, .candidate_omission = self.candidate_omission, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             self.fake.invocation_plan.complete.content = if (self.malformed or (self.malformed_once and self.calls == 0)) "{" else body;
             const current_request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
+            if (self.measurement_prefix) |prefix| if (current_request.id().immutable_unit_owner_id == .semantic_review) {
+                const Part = struct { kind: []const u8, text: []const u8 };
+                const parts = arena.allocator().alloc(Part, current_request.prepared().?.content.len) catch unreachable;
+                for (parts, current_request.prepared().?.content) |*part, content_part| part.* = .{ .kind = @tagName(content_part), .text = content_part.bytes() };
+                const measured = std.json.Stringify.valueAlloc(arena.allocator(), .{ .purpose = @tagName(current_request.id().purpose), .content = parts, .schema = current_request.prepared().?.response_schema.modelBytes() }, .{}) catch unreachable;
+                const path = std.fmt.allocPrint(arena.allocator(), "{s}-{d}-{d}.json", .{ prefix, self.calls, attempt }) catch unreachable;
+                std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = path, .data = measured }) catch unreachable;
+            };
             const validated = requests.readCurrent(&view, requests.validated_schema) catch unreachable;
             var base_buffer: [2]@import("../domain/llm_provider_operation.zig").ModelVisibleContent = undefined;
             const base = validated.content(&base_buffer);
@@ -129,15 +140,26 @@ pub const Driver = struct {
             if (current_request.id().purpose == .semantic_review) {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
                 const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
-                var permits_applicability = false;
-                for (input.value.object.get("requirements").?.array.items) |requirement| {
-                    permits_applicability = permits_applicability or requirement.object.contains("permitted_not_applicable");
-                    std.testing.expect(requirement.object.contains("task") and requirement.object.contains("evidence")) catch unreachable;
-                    std.testing.expect(!requirement.object.contains("kind") and !requirement.object.contains("slot") and !requirement.object.contains("unit")) catch unreachable;
+                const policy = input.value.object.get("subject").? == .string;
+                if (policy) {
+                    self.principle_calls += 1;
+                    std.testing.expectEqualStrings("principle_consistency", input.value.object.get("subject").?.string) catch unreachable;
+                    std.testing.expect(input.value.object.get("principles").?.array.items.len != 0) catch unreachable;
+                    const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
+                    const properties = schema.value.object.get("properties").?.object.get("entries").?.object.get("items").?.object.get("properties").?.object.get("value").?.object.get("properties").?.object;
+                    std.testing.expectEqual(@as(usize, 3), properties.count()) catch unreachable;
+                    std.testing.expect(properties.contains("decision") and properties.contains("citations") and properties.contains("detail")) catch unreachable;
+                } else {
+                    var permits_applicability = false;
+                    for (input.value.object.get("requirements").?.array.items) |requirement| {
+                        permits_applicability = permits_applicability or requirement.object.contains("permitted_not_applicable");
+                        std.testing.expect(requirement.object.contains("task") and requirement.object.contains("evidence")) catch unreachable;
+                        std.testing.expect(!requirement.object.contains("kind") and !requirement.object.contains("slot") and !requirement.object.contains("unit")) catch unreachable;
+                    }
+                    const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
+                    const value = schema.value.object.get("properties").?.object.get("entries").?.object.get("items").?.object.get("properties").?.object.get("value").?;
+                    assertReviewShape(value, permits_applicability) catch unreachable;
                 }
-                const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
-                const value = schema.value.object.get("properties").?.object.get("entries").?.object.get("items").?.object.get("properties").?.object.get("value").?;
-                assertReviewShape(value, permits_applicability) catch unreachable;
             }
             if (current_request.id().purpose == .atomic_repair) {
                 if (view.contains(.source_omission_repair)) self.source_repair_calls += 1;
@@ -221,10 +243,17 @@ pub const Driver = struct {
         };
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-support-repair") and (result.status() == .ok or result.status() == .invalid)) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
-            const support = @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_workflow.zig").schema, .support) catch unreachable;
-            const merge = switch (support) {
-                .accepted => |accepted| accepted.candidate.last_repair.?,
-                .rejected => |rejected| rejected.candidate.?.last_repair.?,
+            const review_workflow = @import("../application/specification_support_workflow.zig");
+            const current = review_workflow.progress(&view) catch unreachable;
+            const merge = blk: {
+                inline for (.{ @import("../domain/specification_support.zig").Purpose.source, .principles }) |review_purpose| if (review_workflow.purpose(current) == review_purpose) {
+                    const review = review_workflow.collection(review_purpose, current) catch unreachable;
+                    break :blk switch (review) {
+                        .accepted => |accepted| accepted.candidate.last_repair.?,
+                        .rejected => |rejected| rejected.candidate.?.last_repair.?,
+                    };
+                };
+                unreachable;
             };
             const observations = @import("../application/candidate_repair_observations.zig").read(arena.allocator(), &view) catch unreachable;
             var matches: usize = 0;
@@ -267,7 +296,7 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
     try std.testing.expectEqual(std.mem.eql(u8, repair.get("operation").?.string, "replace"), repair.contains("current_value"));
     if (request.model_request_id.immutable_unit_owner_id == .semantic_review) {
         const rule = repair.get("rule").?.object;
-        if (std.mem.eql(u8, rule.get("issue").?.string, "invalid_evidence")) {
+        if (std.mem.eql(u8, rule.get("issue").?.string, "invalid_evidence") and rule.get("evidence_rule").?.object.contains("minimum")) {
             const current = rule.get("finding").?.object.get("decision").?.string;
             const minimum = rule.get("evidence_rule").?.object.get("minimum").?.string;
             if (std.mem.eql(u8, current, "supported") or std.mem.eql(u8, current, "not_applicable")) try std.testing.expectEqualStrings("claim_required", minimum);
@@ -299,7 +328,7 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
 
 fn assertReviewShape(schema: std.json.Value, permits_applicability: bool) !void {
     const properties = schema.object.get("properties").?.object;
-    const fields = @typeInfo(@import("../domain/specification_support.zig").Value).@"struct".fields;
+    const fields = @typeInfo(@import("../domain/specification_support.zig").Source.Value).@"struct".fields;
     try std.testing.expectEqual(fields.len, properties.count());
     inline for (fields) |field| try std.testing.expect(properties.contains(field.name));
     try std.testing.expect(!properties.contains("finding") and !properties.contains("disposition"));

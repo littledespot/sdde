@@ -852,7 +852,13 @@ validators:
   registered outputs before the writer runs.
 - `workflow.json` is written last.
 
-- The native closed `specification-state/v1` singleton contains the feature key,
+- The principle consistency assessment uses the current configured registry and complete
+  Spec selection after source support is accepted. Canonical state retains registry identity,
+  exact spans, selected chunks, business-subject associations and cited findings. Conflicts
+  remain mandatory Plan-owned obligations, rendered in `reference-context.md`; Specify
+  creates no Plan form and cannot use policy findings as business provenance. Plan must
+  reassess current principles and resolve those obligations under its own input authority.
+- The native closed `specification-state/v2` singleton contains the feature key,
   revision, `specified` stage, captured reference sources/chunks/claims/citations,
   reconciliation and passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and required-authority
@@ -1425,7 +1431,7 @@ Shared retained-claim eligibility (C3) remains consolidated in the provenance ow
 ADR 0015's canonical principle selection and Spec assessment, persisted downstream
 obligations and shared actionable-question preparation remain pending. Existing
 native gates/lifecycle do not establish those new acceptance criteria. See the
-[implementation plan](../../fixes/IMP_001.md#spec-principle-review--approved-design-implementation-pending).
+[implementation plan](../../fixes/IMP_001.md#spec-principle-review--approved-design-and-native-delivery).
 
 Authenticated answer acceptance and remaining publication/readback assurance remain
 open. The [rollout](../../fixes/IMP_001.md) owns their status; offline verification

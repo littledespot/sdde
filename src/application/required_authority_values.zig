@@ -1,6 +1,20 @@
 //! Closed authority payloads; allocation/retention has one shared owner.
 const a = @import("../domain/required_authority.zig");
-pub const Payload = union(enum) { inputs: a.Inputs, support: @import("../domain/specification_support.zig").Collection, support_repair: @import("../domain/specification_support_repair.zig").State, ledger: a.Ledger, raw: []const u8, observations: a.Observations, result: a.Result, content: @import("../domain/specification.zig").IdentifiedContent, rejected: enum { invalid_contract } };
+pub const Payload = union(enum) {
+    inputs: a.Inputs,
+    support_initial,
+    support: @import("../domain/specification_support.zig").Source.Collection,
+    principle_pending: @import("../domain/specification_review.zig").Pending,
+    principle_support: @import("../domain/specification_review.zig").PolicyResult,
+    support_repair: @import("../domain/specification_support_repair.zig").Source.State,
+    principle_support_repair: @import("../domain/specification_support_repair.zig").Contract(.principles).State,
+    ledger: a.Ledger,
+    raw: []const u8,
+    observations: a.Observations,
+    result: a.Result,
+    content: @import("../domain/specification.zig").IdentifiedContent,
+    rejected: enum { invalid_contract },
+};
 const storage = @import("retained_candidate.zig").Storage(Payload, .{ .rejected = .invalid_contract });
 pub const Value = storage.Value;
 pub const Owner = storage.Owner;

@@ -307,6 +307,123 @@
           "additionalProperties": false
         }
       ]
+    },
+    "principle_finding": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "enum": [
+            "compatible",
+            "conflicting",
+            "uncertain"
+          ]
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "chunk": {
+                "$ref": "#/$defs/ordinal"
+              },
+              "first_line": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              },
+              "last_line": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            },
+            "required": [
+              "chunk",
+              "first_line",
+              "last_line"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        },
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        }
+      },
+      "required": [
+        "decision",
+        "citations",
+        "detail"
+      ],
+      "additionalProperties": false
+    },
+    "principle_selection": {
+      "type": "object",
+      "properties": {
+        "citations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "chunk": {
+                "$ref": "#/$defs/ordinal"
+              },
+              "first_line": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              },
+              "last_line": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            },
+            "required": [
+              "chunk",
+              "first_line",
+              "last_line"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "citations"
+      ],
+      "additionalProperties": false
+    },
+    "principle_review": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirement_ordinal": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              },
+              "value": {
+                "$ref": "#/$defs/principle_finding"
+              }
+            },
+            "required": [
+              "requirement_ordinal",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "additionalProperties": false
     }
   },
   "$ref": "#/$defs/review"

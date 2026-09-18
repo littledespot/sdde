@@ -26,8 +26,11 @@ steps:
   inputs:
     call: prepare-inputs
     on:
-      ok: references
+      ok: principles
       failed: end.failed
+  principles:
+    use: capture-principle-registry
+    on: {ok: references, failed: end.failed}
   references:
     call: prepare-references
     on:
@@ -508,7 +511,10 @@ subgraphs:
     steps:
       project:
         use: build-specification-authority-requirements
-        on: {ok: input, blocked: end.blocked}
+        on: {ok: initialize, blocked: end.blocked}
+      initialize:
+        use: initialize-specification-review
+        on: {ok: input, failed: end.failed}
       input:
         use: build-specification-support-input
         on: {ok: model, failed: end.failed}
@@ -525,7 +531,10 @@ subgraphs:
         on: {ok: release, invalid: authorize, failed: end.failed}
       release:
         call: release-request
-        on: {ok: apply, failed: end.failed}
+        on: {ok: advance, failed: end.failed}
+      advance:
+        use: advance-specification-review
+        on: {ok: apply, more: input, failed: end.failed}
       apply:
         use: apply-specification-support
         on: {ok: end.ok, failed: end.failed}

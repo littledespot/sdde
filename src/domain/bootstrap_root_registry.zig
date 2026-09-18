@@ -130,6 +130,15 @@ pub fn bindWorkflowAuthorityAdapter(
 }
 
 pub const ToolchainAuthorityKind = enum { principles, preset_registry };
+/// Semantic readers receive the same validated root with no preset or project-write access.
+pub fn bindPrincipleSourcesAdapter(capability: *const ConfiguredBaseRootCapability) ?ReferenceSourcesAdapterBinding {
+    const stored = capabilityStorage(capability);
+    if (stored.path_key != .principles or stored.root_role != .project_principles or stored.access_class != .engine_only or stored.existence_policy != .optional_directory) return null;
+    return switch (stored.observation) {
+        .absent => null,
+        .directory => |identity| .{ .project_relative_path = stored.configured_relative_path, .physical_identity = identity },
+    };
+}
 pub const ReferenceSourcesAdapterBinding = struct {
     project_relative_path: []const u8,
     physical_identity: roots.PhysicalDirectoryIdentity,

@@ -1285,6 +1285,27 @@ design; they do not extend the current YAML schema or claim implemented capabili
   schema-compatible operand; perform no composition and make no claim that the eventual merged
   result preserves locked safety rules.
 
+### Native principle capture bindings
+
+The native registry exposes detailed `inventory-principle-sources`,
+`validate-principle-inventory`, `capture-principle-sources` and
+`build-principle-registry` operations. `capture-principle-registry` consolidates
+capture through the same narrow source port and canonical inventory, policy and
+registry functions. It reads no alternate root and does not invoke another action.
+The shipped Spec workflow uses the consolidated operation.
+
+Reference and principle capture share physical traversal, normalization/collision
+checks and source-coordinate advancement. Principle classification alone owns the
+exact `toolchain.yaml` exclusion. The mechanical lane remains separately typed.
+Capture is bounded to 1,024 entries, depth 16, five seconds, 1 MiB per semantic
+source and 8 MiB total semantic bytes. Deterministic UTF-8 chunks cover every byte;
+these source-capture bounds are not model-request ceilings.
+
+The optional `.sddtoolkit.json` `principles` section supplies filename hints and
+selection rows. One compiler validates that policy, and one registry selector
+supplies the complete applicable chunks. Model guidance contains exact selected
+prose and line coordinates; no summary, truncation or model-selected membership.
+
 ## `BuildPrincipleIdLedgerAction`
 
 - **Input:** validated bootstrap-root registry and optional prior validated principle

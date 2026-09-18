@@ -1937,3 +1937,32 @@ test "candidate repairs share authority and expose only native scoped operations
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{.text_validated_reference_extraction}, tokens.Merge.Action.contract.replaces);
     try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .ok, .invalid, .failed }, &@import("application/reference_extraction_workflow.zig").ValidateSelections.outcomes);
 }
+
+test "principle root access stays in its narrow source adapter and shares physical traversal" {
+    inline for (.{ @import("actions/principle/inventory_principle_sources.zig").Action, @import("actions/principle/capture_principle_sources.zig").Action, @import("actions/principle/capture_principle_registry.zig").Action }) |Action| {
+        try std.testing.expectEqual(.filesystem_read, Action.contract.side_effect);
+        try std.testing.expect(@import("application/workflow_operation_binding.zig").inspect(Action, &.{}).principle_read);
+    }
+    const io = std.testing.io;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(std.testing.allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.eql(u8, entry.path, "domain/bootstrap_root_registry.zig") or
+            std.mem.eql(u8, entry.path, "adapters/filesystem/principle_source.zig") or
+            std.mem.eql(u8, entry.path, "architecture_test.zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, std.testing.allocator, .limited(1024 * 1024));
+        defer std.testing.allocator.free(source);
+        try expectAbsent(source, "bindPrincipleSourcesAdapter");
+    }
+    inline for (.{ @embedFile("adapters/filesystem/principle_source.zig"), @embedFile("adapters/filesystem/reference_corpus_source.zig") }) |source| {
+        try std.testing.expect(std.mem.indexOf(u8, source, "directory_inventory.zig") != null);
+        try std.testing.expect(std.mem.indexOf(u8, source, "files.capture(") != null);
+    }
+    const review = @embedFile("domain/principle_assessment.zig");
+    try expectAbsent(review, "/adapters/");
+    try expectAbsent(review, "std.Io.Dir");
+    try std.testing.expect(std.mem.indexOf(u8, review, "a.reconcile(") != null);
+}

@@ -128,6 +128,7 @@ pub fn validDetail(finding: a.Finding, detail: []const u8) bool {
 
 pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, evidence: a.Evidence) Error!void {
     const review = evidence.review orelse return error.InvalidRequiredAuthority;
+    if (review.principle_citations.len != 0 or review.principle_registry != null) return error.InvalidRequiredAuthority;
     if (!validDetail(evidence.finding, review.detail)) return error.InvalidRequiredAuthority;
     const result = try admit(allocator, inputs, sources, evidence.requirement, evidence.finding, .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, review.source_ids, review.detail);
     if (result != .accepted) return error.InvalidRequiredAuthority;

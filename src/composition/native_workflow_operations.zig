@@ -46,11 +46,17 @@ const specification_repair = @import("../application/specification_repair_workfl
 const specification_rendering = @import("../application/specification_rendering_workflow.zig");
 const output = @import("../application/workflow_output_binding.zig");
 const clarification_refresh = @import("../application/clarification_refresh_workflow.zig");
+const principles = @import("../application/principle_workflow.zig");
 const publication = @import("../application/specification_publication_workflow.zig");
 
 /// Composition of native implementations, not a workflow graph. No setup action
 /// executes until the selected YAML reaches its registered operation.
 pub const Assembly = struct {
+    inventory_principles: principles.Inventory,
+    validate_principle_inventory: principles.ValidateInventory,
+    capture_principles: principles.Capture,
+    capture_principle_registry: principles.CaptureRegistry,
+    build_principles: principles.Build,
     capture_project: runners.CaptureProject,
     inventory_presets: runners.InventoryPresets,
     capture_presets: runners.CapturePresets,
@@ -172,6 +178,8 @@ pub const Assembly = struct {
     build_specification_support: specification_support.BuildInput,
     collect_specification_support: specification_support.Collect,
     apply_specification_support: specification_support.Apply,
+    advance_specification_review: specification_support.Advance,
+    initialize_specification_review: specification_support.Initialize,
     build_authority_observations: authority.BuildObservations,
     retire_authority: authority.Retire,
     authorize_coverage_repair: coverage_repair.Authorize,
@@ -198,11 +206,16 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 146 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 153 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
         self.* = .{
+            .inventory_principles = .{ .allocator = allocator, .action = .{} },
+            .validate_principle_inventory = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder } },
+            .capture_principles = .{ .allocator = allocator, .action = .{} },
+            .capture_principle_registry = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder } },
+            .build_principles = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder } },
             .capture_project = .{ .allocator = allocator, .action = .{ .source = project_source } },
             .inventory_presets = .{ .allocator = allocator, .action = .{ .source = preset_source } },
             .capture_presets = .{ .allocator = allocator, .action = .{ .source = preset_capture } },
@@ -341,6 +354,8 @@ pub const Assembly = struct {
             .build_specification_support = .{ .allocator = allocator },
             .collect_specification_support = .{ .allocator = allocator },
             .apply_specification_support = .{ .allocator = allocator },
+            .advance_specification_review = .{ .allocator = allocator },
+            .initialize_specification_review = .{ .allocator = allocator },
             .build_authority_observations = .{ .allocator = allocator },
             .retire_authority = .{},
             .check_specification = .{},
@@ -355,6 +370,11 @@ pub const Assembly = struct {
         };
         self.model_requests.init(allocator);
         self.entries = core.entries ++ self.model_requests.entries ++ [_]operations.Entry{
+            entry(principles.Inventory, &self.inventory_principles),
+            entry(principles.ValidateInventory, &self.validate_principle_inventory),
+            entry(principles.Capture, &self.capture_principles),
+            entry(principles.CaptureRegistry, &self.capture_principle_registry),
+            entry(principles.Build, &self.build_principles),
             entry(runners.CaptureProject, &self.capture_project),
             entry(runners.InventoryPresets, &self.inventory_presets),
             entry(runners.CapturePresets, &self.capture_presets),
@@ -430,6 +450,8 @@ pub const Assembly = struct {
             entry(specification_support.BuildInput, &self.build_specification_support),
             entry(specification_support.Collect, &self.collect_specification_support),
             entry(specification_support.Apply, &self.apply_specification_support),
+            entry(specification_support.Advance, &self.advance_specification_review),
+            entry(specification_support.Initialize, &self.initialize_specification_review),
             entry(authority.BuildObservations, &self.build_authority_observations),
             entry(authority.Retire, &self.retire_authority),
             entry(structured_tokens.Extract, &self.extract_structured_facts),
@@ -505,6 +527,16 @@ pub const Assembly = struct {
         self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{authority.gate_contract} };
     }
 
+    pub fn bindPrinciples(self: *Assembly, root: *const roots.ConfiguredBaseRootCapability, config: *const @import("../domain/config.zig").SDDToolKitConfig, reader: @import("../ports/principle_source.zig").Reader, enumerator: @import("../ports/principle_source.zig").Enumerator, capturer: @import("../ports/principle_source.zig").Capturer) void {
+        self.inventory_principles.action.source = enumerator;
+        self.inventory_principles.action.source.?.capability = root;
+        self.capture_principles.action.source = capturer;
+        self.capture_principles.action.source.?.capability = root;
+        self.capture_principle_registry.action.source = reader;
+        self.capture_principle_registry.action.source.?.capability = root;
+        self.capture_principle_registry.action.config = if (config.principles) |value| @import("../domain/principle_policy.zig").Input.fromConfig(value) else null;
+        self.build_principles.action.config = if (config.principles) |value| @import("../domain/principle_policy.zig").Input.fromConfig(value) else null;
+    }
     pub fn bindRoots(self: *Assembly, registry: *const roots.BootstrapRootRegistry) void {
         self.capture_project.action.source.capability = registry.projectPrinciples();
         self.inventory_presets.action.source.capability = registry.toolchainPresetRegistry();
@@ -521,10 +553,10 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ omission_repair.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
+const schemas = principles.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ omission_repair.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
-    .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write },
+    .allowed_capabilities = &.{ capabilities.principle_read, capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write },
     .allowed_terminal_outcomes = &.{ .ok, .invalid, .needs_user, .blocked, .failed, .cancelled },
     .total_model_token_budget = .{ .value = 100_000 },
 }, .{

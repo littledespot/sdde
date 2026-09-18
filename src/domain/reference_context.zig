@@ -5,9 +5,10 @@ const snapshot = @import("reference_snapshot.zig");
 const r = @import("reference_reconciliation.zig");
 const text = @import("typed_text.zig");
 const markdown = @import("specification_markdown.zig");
-pub const Error = snapshot.Error || markdown.Error;
+const principles = @import("principle_assessment.zig");
+pub const Error = snapshot.Error || markdown.Error || principles.Error;
 
-pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot) Error![]const u8 {
+pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment: ?principles.Canonical) Error![]const u8 {
     var out: std.Io.Writer.Allocating = .init(allocator);
     errdefer out.deinit();
     const w = &out.writer;
@@ -66,6 +67,36 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot) Error![]co
             try markdown.code(w, bytes);
         }
         try write(w, "\n");
+    }
+    if (assessment) |review| {
+        const registry = @import("principle_registry.zig");
+        try write(w, "\n## Principle Consistency\n\nModel-assisted assessment; Plan must reassess current principles.\n\n");
+        w.print("Registry {d}, revision {d}. Selected chunks:", .{ review.registry.id.ordinal, review.registry.id.revision }) catch return error.OutOfMemory;
+        for (review.selection.chunks) |id| w.print(" POL-{d}", .{id.ordinal}) catch return error.OutOfMemory;
+        try write(w, "\n\n### Policy Obligations for Plan\n\n");
+        var obligations: usize = 0;
+        for (review.evidence) |finding| {
+            if (finding.finding == .supported) continue;
+            const ordinal = finding.requirement.unit.decision.ordinal;
+            if (ordinal == 0 or ordinal > review.requirements.len) return error.InvalidRequiredAuthority;
+            const subject = review.requirements[ordinal - 1];
+            w.print("- **POLICY-{d}** ({s}, {s}/{s}): ", .{ ordinal, @tagName(finding.finding), @tagName(subject.kind), @tagName(subject.slot) }) catch return error.OutOfMemory;
+            const evidence = finding.review orelse return error.InvalidRequiredAuthority;
+            try markdown.literal(w, evidence.detail);
+            for (evidence.principle_citations) |citation| {
+                const chunk = try registry.chunkFor(review.registry, citation.chunk);
+                const source = try registry.sourceFor(review.registry, chunk.source);
+                const entry = review.registry.inventory.entries[source.entry - 1];
+                w.print(" (POL-{d}, ", .{chunk.id.ordinal}) catch return error.OutOfMemory;
+                const path = try std.mem.concat(allocator, u8, &.{ review.registry.inventory.root.path, "/", entry.descriptor.path });
+                defer allocator.free(path);
+                try markdown.code(w, path);
+                w.print(", lines {d}–{d})", .{ citation.first_line, citation.last_line }) catch return error.OutOfMemory;
+            }
+            try write(w, "\n");
+            obligations += 1;
+        }
+        if (obligations == 0) try write(w, "No policy obligations recorded.\n");
     }
     return out.toOwnedSlice();
 }

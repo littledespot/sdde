@@ -1014,7 +1014,7 @@ decision history:
 | [0012](decisions/0012-workflow-owned-model-request.md) | Retain one execution-owned request/binding/resource identity across explicit YAML operations. |
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
-| [0015](decisions/0015-specification-principle-review.md) | Early Spec principle assessment and shared actionable questions; design accepted, implementation pending. |
+| [0015](decisions/0015-specification-principle-review.md) | Early Spec principle assessment and shared actionable questions; configuration/capture/review implemented, full readiness and question preparation pending. |
 
 Additional accepted feature boundaries:
 
