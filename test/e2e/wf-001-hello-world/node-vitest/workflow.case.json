@@ -47,6 +47,26 @@
       "destination": ".sddtoolkit/workflows/spec/reconciliation.prompt.md"
     },
     {
+      "source": "design/workflows/spec/reconciliation-summary.composition.json",
+      "destination": ".sddtoolkit/workflows/spec/reconciliation-summary.composition.json"
+    },
+    {
+      "source": "design/workflows/spec/reconciliation-global.composition.json",
+      "destination": ".sddtoolkit/workflows/spec/reconciliation-global.composition.json"
+    },
+    {
+      "source": "design/workflows/spec/reconciliation-dispositions.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/reconciliation-dispositions.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/reconciliation-signals.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/reconciliation-signals.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/reconciliation-conflicts.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/reconciliation-conflicts.prompt.md"
+    },
+    {
       "source": "design/workflows/spec/reconciliation.schema.json",
       "destination": ".sddtoolkit/workflows/spec/reconciliation.schema.json"
     },

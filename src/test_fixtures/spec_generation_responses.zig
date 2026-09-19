@@ -11,6 +11,7 @@ pub const ReconciliationFault = enum { summary_membership, duplicate_disposition
 pub const SupportFault = enum { missing_detail, foreign_provenance, missing_finding, duplicate_finding, partial_findings, two_missing_findings, foreign_sources };
 pub const SourceLoss = enum { empty, partial, classification, signal, post_generation, unchanged };
 pub const Options = struct {
+    global_sequence: ?@import("global_protocol_sequence.zig").Mode = null,
     summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
     disposition_sequence: ?enum { recover, exhaust } = null,
     attempt: u32 = 1,
@@ -42,6 +43,10 @@ pub const Options = struct {
 };
 
 pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {
+    return partResponse(allocator, try requests.readCurrent(&view, requests.prepared_schema), try completeResponse(allocator, view, options));
+}
+
+fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {
     const request = try requests.readCurrent(&view, requests.prepared_schema);
     switch (request.id().immutable_unit_owner_id) {
         .reference_chunk => |scope| {
@@ -80,7 +85,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 for (choices, discarded) |choice, *decision| decision.* = .{ .irrelevant = choice.id() };
                 // R21: a protocol-valid correction abandons the source task.
                 const reply = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .no_feature_claim = .{ .reason = .{ .nodes = &.{.{ .literal = .{ .value = "The rejected response JSON has a syntax error in its claims array." } }} }, .token_classifications = &.{} } });
-                return extractionResponse(allocator, request, try @import("reference_tokens.zig").wire(allocator, reply, discarded));
+                return @import("reference_tokens.zig").wire(allocator, reply, discarded);
             }
             const claim = if (options.script) |script| (try @import("specification_script.zig").extraction(script, selected_chunk.bytes)).claim else try extractedClaim(allocator, chunk.id);
             const citation: @import("../domain/source_selections.zig").Selection = if (options.citation_fault == .unknown) .{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } else @import("../reference_extraction_test.zig").wholeChunk(chunk);
@@ -89,7 +94,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
             if (options.source_loss == .classification) for (choices) |*choice| {
                 choice.* = .{ .irrelevant = choice.id() };
             };
-            return extractionResponse(allocator, request, try @import("reference_tokens.zig").wire(allocator, body, if (options.missing_classifications) &.{} else choices));
+            return @import("reference_tokens.zig").wire(allocator, body, if (options.missing_classifications) &.{} else choices);
         },
         .reference_global => {
             const input = (try native.read(&view, @import("../application/reference_reconciliation_workflow.zig").input_schema, .reconciliation_input)).payload().reconciliation_input;
@@ -139,6 +144,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 return @import("reference_reconciliation.zig").repairResponse(allocator, replacement);
             }
             if (input.purpose == .summary) {
+                if (options.global_sequence != null) return @import("summary_protocol_sequence.zig").response(allocator, input, if (input.progress.summary_count == 0 or options.attempt > 1) 3 else 1, .recover);
                 if (options.summary_sequence) |mode| return @import("summary_protocol_sequence.zig").response(allocator, input, options.attempt, mode);
                 var proposal = try @import("reference_reconciliation.zig").summary(allocator, input);
                 if (options.reconciliation_fault == .occupied_summary) {
@@ -156,6 +162,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 return @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .summary = proposal });
             }
             var proposal = try @import("reference_reconciliation.zig").global(allocator, input);
+            if (options.global_sequence != null) proposal = try @import("global_protocol_sequence.zig").mixed(allocator, input, proposal);
             if (options.disposition_sequence != null) {
                 const signals = try allocator.dupe(r.SignalProposal, proposal.signals[0..1]);
                 signals[0].claim_ids = try allocator.dupe(r.ClaimId, &.{ input.items[0].claim.id, input.items[1].claim.id });
@@ -165,7 +172,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 const body = try json.encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .global = proposal });
                 if (options.attempt > 1) return body;
                 var parsed = try std.json.parseFromSlice(std.json.Value, allocator, body, .{});
-                _ = parsed.value.object.getPtr("signals").?.array.items[0].object.getPtr("content").?.object.swapRemove("kind");
+                _ = parsed.value.object.getPtr("claim_dispositions").?.array.items[0].object.getPtr("disposition").?.object.swapRemove("kind");
                 return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
             }
             if (options.source_loss == .signal or options.source_loss == .post_generation or options.source_loss == .unchanged) {
@@ -526,10 +533,10 @@ fn extractedClaim(allocator: std.mem.Allocator, chunk: r.evidence.identity.Chunk
     return std.fmt.allocPrint(allocator, "The outcome from reference unit {s} is observable.", .{chunk.bytes});
 }
 
-/// The scripted extraction source remains one fixture; each provider call gets
+/// The scripted complete source remains one fixture; each provider call gets
 /// only its configured fields. Protocol faults are injected afterward
 /// by Driver, so this projection cannot repair or conceal a malformed response.
-fn extractionResponse(allocator: std.mem.Allocator, request: *const @import("../domain/model_request_handoff.zig").Request, body: []const u8) ![]const u8 {
+fn partResponse(allocator: std.mem.Allocator, request: *const @import("../domain/model_request_handoff.zig").Request, body: []const u8) ![]const u8 {
     const part = request.part() orelse return body;
     const parsed = try std.json.parseFromSlice(std.json.Value, allocator, body, .{});
     defer parsed.deinit();

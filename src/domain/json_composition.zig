@@ -30,6 +30,12 @@ pub const Plan = opaque {
     pub fn resultSchema(self: *const Plan) *const schema.Schema {
         return storage(self).canonical;
     }
+    pub fn definition(self: *const Plan) ?schema.DefinitionId {
+        return storage(self).definition;
+    }
+    pub fn completeSchema(self: *const Plan) *const schema.Schema {
+        return if (self.definition()) |id| self.resultSchema().select(id).? else self.resultSchema();
+    }
     pub fn parts(self: *const Plan) []const Part {
         return storage(self).parts;
     }
@@ -90,7 +96,7 @@ pub const Plan = opaque {
                 .alternatives = &.{},
             };
         }
-        return derive(allocator, copied, self.resultAlias(), self.bytes(), canonical);
+        return derive(allocator, copied, self.resultAlias(), self.bytes(), canonical, self.definition());
     }
 };
 
@@ -98,6 +104,7 @@ const Storage = struct {
     bytes: []const u8,
     result_alias: workflow.WorkflowResourceId,
     canonical: *const schema.Schema,
+    definition: ?schema.DefinitionId,
     parts: []const Part,
 };
 fn storage(plan: *const Plan) *const Storage {
@@ -105,16 +112,29 @@ fn storage(plan: *const Plan) *const Storage {
 }
 
 pub fn resultAlias(raw: std.json.Value) Error!workflow.WorkflowResourceId {
-    if (raw != .object or raw.object.count() != 3) return invalid();
+    if (raw != .object) return invalid();
+    for (raw.object.keys()) |key| {
+        if (!std.mem.eql(u8, key, "schema") and !std.mem.eql(u8, key, "result") and
+            !std.mem.eql(u8, key, "definition") and !std.mem.eql(u8, key, "parts")) return invalid();
+    }
     const tag = raw.object.get("schema") orelse return invalid();
     const result = raw.object.get("result") orelse return invalid();
     const parts = raw.object.get("parts") orelse return invalid();
     if (tag != .string or !std.mem.eql(u8, tag.string, version) or result != .string or parts != .object) return invalid();
+    _ = try definitionId(raw);
     return workflow.WorkflowResourceId.parse(result.string) orelse invalid();
+}
+
+fn definitionId(raw: std.json.Value) Error!?schema.DefinitionId {
+    const value = raw.object.get("definition") orelse return null;
+    if (value != .string) return invalid();
+    return schema.DefinitionId.parse(value.string) orelse invalid();
 }
 
 pub fn compile(allocator: std.mem.Allocator, raw: std.json.Value, bytes: []const u8, canonical: *const schema.Schema) Error!*const Plan {
     const alias = try resultAlias(raw);
+    const definition = try definitionId(raw);
+    const complete = if (definition) |id| canonical.select(id) orelse return invalid() else canonical;
     const entries = raw.object.get("parts").?.object;
     if (entries.count() == 0 or entries.count() > schema.max_properties) return invalid();
     const parts = try allocator.alloc(Part, entries.count());
@@ -156,30 +176,31 @@ pub fn compile(allocator: std.mem.Allocator, raw: std.json.Value, bytes: []const
 
     // Selectors are resolved against all variants, never compared as raw prefixes.
     for (parts, 0..) |part, index| for (part.paths, 0..) |path, path_index| {
-        if (!try resolves(canonical.root(), path.segments)) return invalid();
+        if (!try resolves(complete.root(), path.segments)) return invalid();
         for (parts[0 .. index + 1], 0..) |prior_part, prior_index| {
             const prior_paths = if (prior_index == index) prior_part.paths[0..path_index] else prior_part.paths;
             for (prior_paths) |prior| if (prior.isPrefixOf(path) or path.isPrefixOf(prior)) return invalid();
         }
     };
-    return derive(allocator, parts, alias, bytes, canonical);
+    return derive(allocator, parts, alias, bytes, canonical, definition);
 }
 
-fn derive(allocator: std.mem.Allocator, parts: []Part, alias: workflow.WorkflowResourceId, bytes: []const u8, canonical: *const schema.Schema) Error!*const Plan {
+fn derive(allocator: std.mem.Allocator, parts: []Part, alias: workflow.WorkflowResourceId, bytes: []const u8, canonical: *const schema.Schema, definition: ?schema.DefinitionId) Error!*const Plan {
+    const complete = if (definition) |id| canonical.select(id) orelse return invalid() else canonical;
     var compiler: Compiler = .{ .allocator = allocator, .parts = parts };
-    try compiler.cover(canonical.root(), .{ .segments = &.{} });
+    try compiler.cover(complete.root(), .{ .segments = &.{} });
     for (parts, 0..) |*part, index| {
-        const projections = try compiler.project(canonical.root(), .{ .segments = &.{} }, index);
+        const projections = try compiler.project(complete.root(), .{ .segments = &.{} }, index);
         if (projections.len == 0) return invalid();
         const alternatives = try allocator.alloc(Alternative, projections.len);
         for (projections, alternatives) |projection, *alternative| {
             if (projection.node.* != .object and projection.node.* != .one_of) return invalid();
-            alternative.* = .{ .schema = try schema.project(allocator, canonical, projection.node), .conditions = projection.conditions };
+            alternative.* = .{ .schema = try schema.project(allocator, complete, projection.node), .conditions = projection.conditions };
         }
         part.alternatives = alternatives;
     }
     const result = try allocator.create(Storage);
-    result.* = .{ .bytes = try allocator.dupe(u8, bytes), .result_alias = .{ .bytes = try allocator.dupe(u8, alias.bytes) }, .canonical = canonical, .parts = parts };
+    result.* = .{ .bytes = try allocator.dupe(u8, bytes), .result_alias = .{ .bytes = try allocator.dupe(u8, alias.bytes) }, .canonical = canonical, .definition = if (definition) |id| .{ .bytes = try allocator.dupe(u8, id.bytes) } else null, .parts = parts };
     return @ptrCast(result);
 }
 

@@ -13,9 +13,10 @@ Those additions are **not implemented** by the supplied workflow.
 
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the
 implemented generic response-composition integration: extraction content/citations,
-dependent token classifications, then native assembly and complete validation.
-The supplied workflow uses separate content and classification requests with one
-shared request body. Native repairs retain per-value provenance and their existing
+dependent token classifications, and global claim dispositions/signals/conflicts,
+then deterministic assembly and complete validation. Global parts select the existing
+`global` definition in the reconciliation schema; summaries select `summary` as one
+part. The supplied workflow shares request, retention and assembly subgraphs. Native repairs retain per-value provenance and their existing
 rebuilding path. The finite graph limit is 1,024. [Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition)
 owns implementation and verification, including unrelated JSON shapes.
 
@@ -484,10 +485,14 @@ Both paths use the same native owners and produce identical model-visible conten
 The request body also uses pure `admit-model-response`, retaining detailed decoder
 and schema-validator operations. Pre-generation source, post-generation source and
 principle review each have distinct request/repair call sites; shared bodies do not
-share their retry counters. The integrated graph has 519 operations. The split adds
-an independently retried extraction request and pure composition steps. Both part schemas derive from the same complete extraction schema; the
-combined prompt is replaced by concise part-specific guidance. Retry allowances
-and the workflow token budget are unchanged.
+share their retry counters. The integrated graph has 577 operations. Extraction
+parts derive from one complete extraction schema; reconciliation parts derive from
+existing named definitions in one reconciliation schema. Signals and conflicts
+receive the exact retained dispositions as prerequisites. Part schemas validate
+before retention; these candidate dispositions are context, not native acceptance.
+Complete assembly undergoes relationship, signal, conflict and coverage validation.
+Native repair revalidates the complete candidate without reassembling provider JSON.
+Retry allowances and the workflow token budget are unchanged.
 
 - The reference-ingestion policy permits a distinct `invalid` terminal outcome.
 - The validator publishes `invalid` with the chunk scope, candidate revision,
@@ -770,8 +775,12 @@ validators:
   with request-local IDs, scoped passive choices and token candidates.
 - Reconciliation packets retain all partition claim/summary membership and exact-token
   references.
-- Collection checks the immutable request/packet association; models cannot select
-  another chunk or partition.
+- Collection reads only a fully schema-validated assembly and checks its immutable
+  packet scope; models cannot select another chunk or partition. Reconciliation
+  records retain each collection's producer in the existing `Source.fields`; field
+  repairs override only their target. Mixed-origin roots have no single producer.
+  Retry identity includes the unchanged collection producers, so rebuilding an
+  assignment cannot alias an earlier candidate's repair scope.
 - Existing domain validators still own interpretation/accounting.
 
 - `assign-model-request-id` accepts either a native `model_input_packet` or the declared

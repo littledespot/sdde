@@ -80,7 +80,15 @@ requirement or become a post-assembly semantic repair policy. No resource suppli
 callbacks, model dispatch, defaults, conditional business policy or capabilities.
 
 The existing resource compiler admits only the closed `json-composition/v1`
-object above: `schema`, `result` and `parts` are required; each part has nonempty
+object above: `schema`, `result` and `parts` are required; optional `definition`
+selects an existing `DefinitionId` through the referenced schema's `Schema.select`.
+Without `definition`, the resource root is the complete schema. Unknown or malformed
+definitions reject before inference. The resource and selection remain bound through
+registry cloning, request preparation/admission, assembly and complete validation;
+cloning resolves the selection against the destination resource owner. Captured
+composition bytes include the selection. No copied schema or second registry is
+introduced. This focused §12.9 amendment was approved on 19 September 2026.
+Each part has nonempty
 `paths` and optional `requires`; unknown fields reject. Part IDs and the result
 alias use the existing resource-ID contract. The existing schema-profile bound
 limits parts/selectors; dependencies and paths validate before inference.
@@ -183,9 +191,12 @@ required. New part revisions or schema selections cannot replenish retry attempt
 
 ### Graph capacity
 
-The integrated Spec graph compiles to **519 operations**, compared with 498 before
-response decomposition. The added request uses the same 14-operation lifecycle body
-and separate preparation; part retention, assembly and validation are explicit.
+The integrated Spec graph compiles to **577 operations**, compared with 519 after
+extraction decomposition and 498 before composition. Global reconciliation now uses
+three whole-array parts selected from the existing `global` definition. Summaries
+use one part selected from `summary`, sharing assembled-candidate collection. All
+requests reuse the lifecycle body; retention and complete assembly/validation use
+shared subgraphs with independent compiled call sites.
 
 The user explicitly permits raising this arbitrary implementation limit. The bound
 is now **1,024**, defined once by `workflow_definition.max_steps`; schema validation,

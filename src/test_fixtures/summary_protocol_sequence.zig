@@ -42,7 +42,7 @@ pub fn response(a: std.mem.Allocator, input: r.Input, attempt: u32, mode: Mode) 
     return std.json.Stringify.valueAlloc(a, parsed.value, .{});
 }
 
-pub fn assertMerge(before: *const data.View, after: *const data.View, ordinal: usize) !void {
+pub fn assertMerge(before: *const data.View, after: *const data.View, ordinal: usize, initial_attempt: u32) !void {
     const prior = (try native.read(before, workflow.parsed_schema, .reconciliation_parsed)).payload().reconciliation_parsed;
     const current = (try native.read(after, workflow.parsed_schema, .reconciliation_parsed)).payload().reconciliation_parsed;
     const left = prior.proposal.summary.statements;
@@ -50,7 +50,7 @@ pub fn assertMerge(before: *const data.View, after: *const data.View, ordinal: u
     try std.testing.expectEqual(@as(u64, ordinal + 1), prior.source.revision);
     try std.testing.expectEqual(prior.source.revision + 1, current.source.revision);
     try std.testing.expectEqualDeep(prior.source.origin, current.source.origin);
-    try std.testing.expectEqual(@as(u32, 3), current.source.origin.?.attempt.value);
+    try std.testing.expectEqual(initial_attempt, current.source.origin.?.attempt.value);
     if (ordinal == 0) {
         try std.testing.expectEqual(left.len, right.len);
         try std.testing.expectEqual(@as(usize, 2), left[0].claim_ids.len);

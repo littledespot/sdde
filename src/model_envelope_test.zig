@@ -100,6 +100,30 @@ test "malformed non-object fenced prefixed and trailing model output rejects wit
     }) |bytes| try checkDocument(bytes, false);
 }
 
+test "R36 stray quote then unchanged missing signal brace never becomes an admitted candidate" {
+    const initial =
+        \\{"claim_dispositions":[{"claim_id":{"ordinal":1},"disposition":{"kind":"retained"}},"{"claim_id":{"ordinal":2},"disposition":{"kind":"retained"}}],"signals":[{"claim_ids":[{"ordinal":1}],"content":{"kind":"model","model":{"kind":"business","segments":[{"kind":"literal","value":"The application must start successfully.When started, the application must display `Hello, World!`.Should also output date and time in UTC"}]}}],"conflicts":[]}
+    ;
+    const correction =
+        \\{"claim_dispositions":[{"claim_id":{"ordinal":1},"disposition":{"kind":"retained"}} ,{"claim_id":{"ordinal":2},"disposition":{"kind":"retained"}}],"signals":[{"claim_ids":[{"ordinal":1},{"ordinal":2}],"content":{"kind":"model","model":{"kind":"business","segments":[{"kind":"literal","value":"The application must start successfully.When started, the application must display `Hello, World!`.Should also output date and time in UTC"}]}}],"conflicts":[]}
+    ;
+    for ([_][]const u8{ initial, correction, correction }) |body| try checkDocument(body, false);
+    const fixed = try std.mem.replaceOwned(u8, std.testing.allocator, correction, "}}],\"conflicts\"", "}}}],\"conflicts\"");
+    defer std.testing.allocator.free(fixed);
+    try checkDocument(fixed, true);
+    // Syntax acceptance grants no meaning/coverage authority: the production
+    // R36 sequence separately rejects and repairs this mixed-kind selection.
+    for ([_][]const u8{
+        "{\"rows\":[{\"content\":{\"value\":\"Loan renewed!\"}}]}",
+        "{\"rows\":[{\"content\":{\"value\":\"Inventory received\"}}]}",
+    }) |body| {
+        const missing = try std.mem.replaceOwned(u8, std.testing.allocator, body, "}}]", "}]");
+        defer std.testing.allocator.free(missing);
+        try checkDocument(missing, false);
+        try checkDocument(body, true);
+    }
+}
+
 test "duplicate decoded keys reject at every depth including escaped equivalents" {
     for ([_][]const u8{
         "{\"x\":1,\"x\":2}",

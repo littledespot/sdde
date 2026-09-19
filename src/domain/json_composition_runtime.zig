@@ -157,7 +157,7 @@ pub const Candidate = struct {
 
     /// A successful part alone never proves the complete candidate's shape.
     pub fn validate(self: Candidate) ?payload.Diagnostic {
-        return payload.validateValue(envelope.value(&self.value), self.plan.resultSchema().root());
+        return payload.validateValue(envelope.value(&self.value), self.plan.completeSchema().root());
     }
 
     pub fn producer(self: Candidate, segments: []const []const u8) ?Origin {

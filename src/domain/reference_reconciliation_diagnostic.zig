@@ -19,6 +19,14 @@ pub const Source = struct {
     pub fn at(self: Source, unit: Unit, field: Field) ?Origin {
         for (self.fields) |value| if (std.meta.eql(value.unit, unit) and value.field == field) return value.origin;
         for (self.fields) |value| if (std.meta.eql(value.unit, unit) and value.field == .record) return value.origin;
+        const parent: ?Unit = switch (unit) {
+            .statement => .summary,
+            .disposition => .dispositions,
+            .signal => .signals,
+            .conflict => .conflicts,
+            else => null,
+        };
+        if (parent) |collection| return self.at(collection, .record);
         return self.origin;
     }
 };

@@ -1,0 +1,10 @@
+{
+  "schema": "json-composition/v1",
+  "result": "reconciliation-schema",
+  "definition": "global",
+  "parts": {
+    "dispositions": {"paths": ["/claim_dispositions"]},
+    "signals": {"paths": ["/signals"], "requires": ["dispositions"]},
+    "conflicts": {"paths": ["/conflicts"], "requires": ["dispositions"]}
+  }
+}

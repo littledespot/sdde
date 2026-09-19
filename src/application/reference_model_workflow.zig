@@ -9,10 +9,8 @@ const values = @import("pipeline_values.zig");
 const extraction = @import("reference_extraction_workflow.zig");
 const reconciliation = @import("reference_reconciliation_workflow.zig");
 const requests = @import("model_request_workflow.zig");
-const packets = @import("../domain/model_input_packet.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
-const handoff = @import("model_candidate_handoff.zig");
 
 pub const progress_schema = values.schema(.reference_extraction_progress, owned.Value, 1, null).captured();
 pub const schemas = [_]data.Schema{progress_schema};
@@ -116,9 +114,11 @@ pub const CollectReconciliation = struct {
         const prior = try extraction.read(&input.step.data, reconciliation.input_schema, .reconciliation_input);
         const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        const response = try handoff.read(&input.step.data);
-        owner.payload = .{ .reconciliation_raw = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_input, try readPacket(&input.step.data), response.body, response.origin) catch return error.OperationExecutionFailed };
-        return extraction.publish(self.allocator, reconciliation.raw_schema, owner, .ok);
+        const candidate = try @import("json_composition_workflow.zig").readValidated(&input.step.data);
+        owner.payload = .{ .reconciliation_raw = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_input, candidate) catch return error.OperationExecutionFailed };
+        var result = try extraction.publish(self.allocator, reconciliation.raw_schema, owner, .ok);
+        for (Action.contract.invalidates) |key| result.delta.data_invalidations.insert(key);
+        return result;
     }
 };
 fn readInputs(view: *const data.View) operations.Error!*const source.Inputs {
@@ -126,7 +126,4 @@ fn readInputs(view: *const data.View) operations.Error!*const source.Inputs {
 }
 fn readLiterals(view: *const data.View) operations.Error!*const @import("../domain/passive_literals.zig").Registry {
     return values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch error.OperationExecutionFailed;
-}
-fn readPacket(view: *const data.View) operations.Error!*const packets.Packet {
-    return values.read(view, requests.packet_schema, packets.Packet) catch error.OperationExecutionFailed;
 }

@@ -177,16 +177,16 @@ test "assembly retains required containers with absent optional leaves without i
     }
 }
 
-test "independent sibling placement preserves prerequisite bindings and deterministic assembly" {
+test "named schema assembly preserves sibling placement and rejects stale prerequisite bindings" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var adapter: schema_adapter.Adapter = .{};
     const canonical = try adapter.compiler().compile(a,
-        \\{"type":"object","properties":{"left":{"type":"string","maxLength":16},"middle":{"type":"boolean"},"right":{"type":"array","items":{"type":"integer","minimum":0,"maximum":9},"maxItems":3}},"required":["left","middle","right"],"additionalProperties":false}
+        \\{"$ref":"#/$defs/other","$defs":{"other":{"type":"object","properties":{"ignored":{"type":"boolean"}},"required":["ignored"],"additionalProperties":false},"record":{"type":"object","properties":{"left":{"type":"string","maxLength":16},"middle":{"type":"boolean"},"right":{"type":"array","items":{"type":"integer","minimum":0,"maximum":9},"maxItems":3}},"required":["left","middle","right"],"additionalProperties":false}}}
     );
     const plan = try adapter.compiler().compileComposition(a,
-        \\{"schema":"json-composition/v1","result":"result","parts":{"first":{"paths":["/left"]},"sibling":{"paths":["/middle"]},"dependent":{"paths":["/right"],"requires":["first"]}}}
+        \\{"schema":"json-composition/v1","result":"result","definition":"record","parts":{"first":{"paths":["/left"]},"sibling":{"paths":["/middle"]},"dependent":{"paths":["/right"],"requires":["first"]}}}
     , canonical);
     var fixture: Fixture = undefined;
     try fixture.initWithCompiledSchema(try plan.selectSchema(0, &.{}));
@@ -223,9 +223,14 @@ test "independent sibling placement preserves prerequisite bindings and determin
     defer sibling_request.deinit();
     var dependent = try Attempt.accept(&fixture, "{\"right\":[3,1,2]}");
     defer dependent.deinit();
+    try std.testing.expectError(error.InvalidCompositionBinding, repeated.retain(a, stale, dependent.proof(), dependent.producer, fixture.base.requests.ledger().?));
     const final = try repeated.retain(a, dependent_binding, dependent.proof(), dependent.producer, fixture.base.requests.ledger().?);
     const candidate = try final.assemble(a);
     try std.testing.expect(candidate.validate() == null);
+    try std.testing.expect(payload.validateValue(envelope.value(&candidate.value), canonical.root()) != null);
+    var incomplete = candidate;
+    incomplete.value = (try std.json.parseFromSlice(std.json.Value, a, "{\"left\":\"original\"}", .{})).value;
+    try std.testing.expect(incomplete.validate() != null);
     try std.testing.expectEqualStrings("{\"left\":\"original\",\"middle\":true,\"right\":[3,1,2]}", candidate.body);
     try std.testing.expectEqualDeep(first.producer, candidate.origin);
     try std.testing.expectEqualDeep(first.producer, candidate.producer(&.{"left"}).?);

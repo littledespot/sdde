@@ -581,6 +581,10 @@ part schemas, explicit independent request bindings, deterministic prompt-free
 assembly and complete validation. It also records the approved finite graph-limit
 increase. The closed `json-composition/v1` resource is compiled through the existing
 resource boundary and selects parts through ordinary request preparation.
+The optional composition `definition` selects an existing named definition in its
+`result` resource; otherwise the resource root is selected. Compilation rejects
+unresolved selections. Projections, requests and complete validation retain this
+same binding, and registry transfer rebinds to its destination schema owner.
 
 The mechanism is shared across supported JSON shapes. Domain owners contribute
 facts and semantic validators; they do not gain separate assembly, retry, storage

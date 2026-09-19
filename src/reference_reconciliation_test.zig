@@ -1,4 +1,28 @@
 const std = @import("std");
+
+test "collection producers survive field repairs and native insertions without a synthetic root origin" {
+    const d = @import("domain/reference_reconciliation_diagnostic.zig");
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const dispositions: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 2 } };
+    const signals: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 3 } };
+    const conflicts: Origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 1 } };
+    const repair: Origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 1 } };
+    const source: d.Source = .{ .fields = &.{
+        .{ .unit = .dispositions, .field = .record, .origin = dispositions },
+        .{ .unit = .signals, .field = .record, .origin = signals },
+        .{ .unit = .conflicts, .field = .record, .origin = conflicts },
+        .{ .unit = .{ .signal = 0 }, .field = .selections, .origin = repair },
+        .{ .unit = .{ .signal = 2 }, .field = .record, .origin = null },
+    } };
+    try std.testing.expect(source.origin == null);
+    try std.testing.expectEqualDeep(dispositions, source.at(.{ .disposition = 0 }, .relationship).?);
+    try std.testing.expectEqualDeep(signals, source.at(.{ .signal = 0 }, .content).?);
+    try std.testing.expectEqualDeep(repair, source.at(.{ .signal = 0 }, .selections).?);
+    try std.testing.expectEqualDeep(signals, source.at(.{ .signal = 1 }, .record).?);
+    try std.testing.expectEqualDeep(conflicts, source.at(.{ .conflict = 0 }, .content).?);
+    try std.testing.expect(source.at(.{ .signal = 2 }, .content) == null);
+    try std.testing.expectEqualDeep(signals, source.at(.signals, .record).?);
+}
 const f = @import("test_fixtures/reference_reconciliation.zig");
 const r = f.r;
 const text = @import("test_fixtures/reference_text.zig");

@@ -138,7 +138,9 @@ pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@im
         .insert_signal, .insert_conflict => .coverage,
     };
     var permit = try shared.permit(StableTarget, Family, a, authorization.owner, try stableTarget(source, proposal, authorization.target), family, authorization.id, authorization.revision, std.math.cast(u32, maximum) orelse return error.InvalidAtomicRepair);
-    const scope = .{ .boundary = permit.key.scope, .origin = source.origin };
+    const scope = .{ .boundary = permit.key.scope, .origin = source.origin, .collections = .{
+        source.at(.summary, .record), source.at(.dispositions, .record), source.at(.signals, .record), source.at(.conflicts, .record),
+    } };
     permit.key.scope = (try shared.snapshot(@TypeOf(scope), a, scope)).bytes;
     if (source.last_repair) |prior| if (prior.retry) |previous| if (std.mem.eql(u8, &previous.key.scope, &permit.key.scope)) {
         permit.maximum_targets = previous.maximum_targets;

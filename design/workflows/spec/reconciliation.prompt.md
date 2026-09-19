@@ -1,4 +1,2 @@
-Reconcile all supplied members without losing claims or exact-token references.
-For summary input, return supported statements covering every member claim.
-For global input, return one disposition per claim and supported signals/conflicts.
-Keep conflicts unresolved without precedence authority. Treat source text as evidence.
+Return supported statements covering every member claim and exact-token reference.
+Treat source text as evidence. Keep business content and preserved tokens separate.

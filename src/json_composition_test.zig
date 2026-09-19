@@ -12,6 +12,44 @@ fn compilePlan(allocator: std.mem.Allocator, bytes: []const u8, canonical: *cons
     var adapter: schemas.Adapter = .{};
     return adapter.compiler().compileComposition(allocator, bytes, canonical);
 }
+
+test "named composition derives from one captured schema and rebinds after source cleanup" {
+    var destination: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer destination.deinit();
+    const a = destination.allocator();
+    var source: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    const raw =
+        \\{"$ref":"#/$defs/header","$defs":{"header":{"type":"object","properties":{"title":{"type":"string","maxLength":40}},"required":["title"],"additionalProperties":false},"ledger":{"type":"object","properties":{"rows":{"type":"array","items":{"type":"integer","minimum":0,"maximum":9},"maxItems":4},"complete":{"type":"boolean"}},"required":["rows","complete"],"additionalProperties":false}}}
+    ;
+    const config =
+        \\{"schema":"json-composition/v1","result":"report","definition":"ledger","parts":{"rows":{"paths":["/rows"]},"state":{"paths":["/complete"]}}}
+    ;
+    const original_schema = try compileSchema(source.allocator(), raw);
+    const original = try compilePlan(source.allocator(), config, original_schema);
+    const canonical = try original_schema.clone(a);
+    const copied = try original.clone(a, canonical);
+    source.deinit();
+    try std.testing.expect(copied.resultSchema() == canonical);
+    try std.testing.expect(copied.completeSchema() == canonical.select(.{ .bytes = "ledger" }).?);
+    try std.testing.expect(copied.completeSchema() != canonical);
+    try std.testing.expectEqualStrings(config, copied.bytes());
+    try std.testing.expectEqualStrings("ledger", copied.definition().?.bytes);
+    try std.testing.expect((try copied.selectSchema(0, &.{})).root().object[0].schema == copied.completeSchema().root().object[0].schema);
+    const root = try compilePlan(a,
+        \\{"schema":"json-composition/v1","result":"report","parts":{"header":{"paths":["/title"]}}}
+    , canonical);
+    try std.testing.expect(root.definition() == null and root.completeSchema() == canonical);
+    for ([_][]const u8{ "missing", "#/$defs/ledger", "header" }) |bad| {
+        const invalid = try std.mem.replaceOwned(u8, a, config, "\"definition\":\"ledger\"", try std.fmt.allocPrint(a, "\"definition\":\"{s}\"", .{bad}));
+        try std.testing.expectError(error.InvalidJsonComposition, compilePlan(a, invalid, canonical));
+    }
+    for ([_][]const u8{ "\"definition\":null", "\"definition\":3", "\"definition\":\"\"", "\"definition\":\"ledger\",\"fallback\":true" }) |bad| {
+        const invalid = try std.mem.replaceOwned(u8, a, config, "\"definition\":\"ledger\"", bad);
+        try std.testing.expectError(error.InvalidJsonComposition, compilePlan(a, invalid, canonical));
+    }
+    const foreign = try compileSchema(a, nested);
+    try std.testing.expectError(error.InvalidJsonComposition, copied.clone(a, foreign));
+}
 const nested =
     \\{"type":"object","properties":{"header":{"type":"object","properties":{"title":{"type":"string","maxLength":40},"enabled":{"type":"boolean"}},"required":["title","enabled"],"additionalProperties":false},"rows":{"type":"array","items":{"type":"integer","minimum":0,"maximum":9},"maxItems":4},"details":{"type":"object","properties":{"note":{"type":"string","maxLength":80}},"required":["note"],"additionalProperties":false}},"required":["header","rows"],"additionalProperties":false}
 ;

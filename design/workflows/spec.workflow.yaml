@@ -13,6 +13,11 @@ resources:
   extraction-composition: spec/extraction.composition.json
   reconciliation-prompt: spec/reconciliation.prompt.md
   reconciliation-schema: spec/reconciliation.schema.json
+  reconciliation-summary: spec/reconciliation-summary.composition.json
+  reconciliation-global: spec/reconciliation-global.composition.json
+  dispositions-prompt: spec/reconciliation-dispositions.prompt.md
+  signals-prompt: spec/reconciliation-signals.prompt.md
+  conflicts-prompt: spec/reconciliation-conflicts.prompt.md
   generation-prompt: spec/generation.prompt.md
   generation-schema: spec/generation.schema.json
   repair-prompt: spec/repair.prompt.md
@@ -297,10 +302,7 @@ subgraphs:
           prompt: extraction-content-prompt
           composition-part: content
           retry-limit: 2
-        on: {ok: retain-content, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      retain-content:
-        use: retain-json-part
-        on: {ok: release-content, failed: end.failed}
+        on: {ok: release-content, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       release-content:
         use: retire-model-request
         on: {ok: classifications, failed: end.failed}
@@ -310,15 +312,9 @@ subgraphs:
           prompt: extraction-classifications-prompt
           composition-part: classifications
           retry-limit: 2
-        on: {ok: retain-classifications, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      retain-classifications:
-        use: retain-json-part
-        on: {ok: assemble, failed: end.failed}
+        on: {ok: assemble, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       assemble:
-        use: assemble-json
-        on: {ok: validate-assembly, failed: end.failed}
-      validate-assembly:
-        use: validate-assembled-json
+        call: assemble-response
         on: {ok: collect-extraction, failed: end.failed}
       collect-extraction:
         use: collect-reference-extraction-result
@@ -430,15 +426,58 @@ subgraphs:
         on: {ok: reconciliation-packet, failed: end.failed}
       reconciliation-packet:
         use: build-reference-reconciliation-model-input
-        on: {ok: rc, failed: end.failed}
-      rc:
-        call: model-request
+        on: {ok: select-composition, failed: end.failed}
+      select-composition:
+        use: check-reference-reconciliation-purpose
+        on: {ok: initialize-global, more: initialize-summary, failed: end.failed}
+      initialize-summary:
+        use: initialize-json-composition
+        with: {composition: reconciliation-summary}
+        on: {ok: summary, failed: end.failed}
+      summary:
+        call: composition-request
         with:
           prompt: reconciliation-prompt
-          schema: reconciliation-schema
-          selection: input
+          composition-part: summary
           retry-limit: 2
-        on: {ok: collect-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: assemble-summary, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      initialize-global:
+        use: initialize-json-composition
+        with: {composition: reconciliation-global}
+        on: {ok: dispositions, failed: end.failed}
+      dispositions:
+        call: composition-request
+        with:
+          prompt: dispositions-prompt
+          composition-part: dispositions
+          retry-limit: 2
+        on: {ok: release-dispositions, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      release-dispositions:
+        use: retire-model-request
+        on: {ok: signals, failed: end.failed}
+      signals:
+        call: composition-request
+        with:
+          prompt: signals-prompt
+          composition-part: signals
+          retry-limit: 2
+        on: {ok: release-signals, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      release-signals:
+        use: retire-model-request
+        on: {ok: conflicts, failed: end.failed}
+      conflicts:
+        call: composition-request
+        with:
+          prompt: conflicts-prompt
+          composition-part: conflicts
+          retry-limit: 2
+        on: {ok: assemble-global, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      assemble-summary:
+        call: assemble-response
+        on: {ok: collect-reconciliation, failed: end.failed}
+      assemble-global:
+        call: assemble-response
+        on: {ok: collect-reconciliation, failed: end.failed}
       collect-reconciliation:
         use: collect-reference-reconciliation-result
         on: {ok: rc-release, failed: end.failed}
@@ -798,6 +837,15 @@ subgraphs:
       release:
         call: release-request
         on: {ok: end.ok, failed: end.failed}
+  assemble-response:
+    start: assemble
+    steps:
+      assemble:
+        use: assemble-json
+        on: {ok: validate, failed: end.failed}
+      validate:
+        use: validate-assembled-json
+        on: {ok: end.ok, failed: end.failed}
   model-request:
     start: prepare
     steps:
@@ -830,7 +878,10 @@ subgraphs:
       request:
         call: model-request-body
         with: {retry-limit: {param: retry-limit}}
-        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: retain, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      retain:
+        use: retain-json-part
+        on: {ok: end.ok, failed: end.failed}
   model-request-body:
     start: account
     steps:
