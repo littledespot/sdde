@@ -27,12 +27,14 @@ pub const Plan = opaque {
     pub fn resultAlias(self: *const Plan) workflow.WorkflowResourceId {
         return storage(self).result_alias;
     }
+    /// Captured resource owner used for association and registry transfer.
     pub fn resultSchema(self: *const Plan) *const schema.Schema {
         return storage(self).canonical;
     }
     pub fn definition(self: *const Plan) ?schema.DefinitionId {
         return storage(self).definition;
     }
+    /// Selected complete response shape used for projections and validation.
     pub fn completeSchema(self: *const Plan) *const schema.Schema {
         return if (self.definition()) |id| self.resultSchema().select(id).? else self.resultSchema();
     }

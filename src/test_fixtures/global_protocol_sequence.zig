@@ -30,8 +30,11 @@ pub fn corrupt(a: std.mem.Allocator, body: []const u8, part: []const u8, attempt
     if (std.mem.eql(u8, part, "signals") and (attempt < 3 or mode == .exhaust)) {
         // Remove only the signal object's final brace, keeping inner objects
         // intact. Repeating this body exercises the unchanged-error limit.
-        const marker = std.mem.indexOf(u8, body, "}}}") orelse return error.MissingFixtureSignal;
-        return std.mem.concat(a, u8, &.{ body[0 .. marker + 2], body[marker + 3 ..] });
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, body, .{});
+        const first = try std.json.Stringify.valueAlloc(a, parsed.value.object.get("signals").?.array.items[0], .{});
+        const marker = (std.mem.indexOf(u8, body, first) orelse return error.MissingFixtureSignal) + first.len - 1;
+        try std.testing.expectEqual(@as(u8, '}'), body[marker]);
+        return std.mem.concat(a, u8, &.{ body[0..marker], body[marker + 1 ..] });
     }
     return body;
 }
@@ -100,8 +103,8 @@ pub fn verify(driver: *@import("spec_generation_driver.zig").Driver, result: @im
         defer arena.deinit();
         const contents = request.prepared().?.content;
         const previous = try std.json.parseFromSlice(std.json.Value, arena.allocator(), contents[contents.len - 1].bytes(), .{});
-        const observation = try @import("../application/model_payload_schema_workflow.zig").readCurrent(&view);
-        try std.testing.expectEqualStrings(previous.value.object.get("rejected_response").?.string, @import("../application/model_envelope_workflow.zig").complete(observation.source().source()).?.content());
+        const body = try @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = .exhaust });
+        try std.testing.expectEqualStrings(try corrupt(arena.allocator(), body, "signals", 3, .exhaust), previous.value.object.get("rejected_response").?.string);
         try std.testing.expect(!view.contains(.published_workflow_output));
     } else {
         try std.testing.expectEqual(.ok, result.executionStatus().?);

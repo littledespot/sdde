@@ -209,7 +209,8 @@ retain their existing validated string representation with a 128-byte compiler-o
 bound; authored local IDs remain 64 bytes. Retry-exhaustion evidence derives its
 owned name storage from the same compiled bound. The measured Spec graph fits this
 bound; no additional capacity configuration is introduced. Verification and measured
-resource/request costs are recorded in [Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition).
+resource/request costs are recorded in [Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition)
+and its [R36 delivery](../../fixes/IMP_001.md#r36-follow-up--validated-slices-before-cross-slice-reconciliation).
 
 Do not introduce request orchestration machinery solely to preserve 512. Detailed
 operations and distinct request identities remain visible. Consolidate only where

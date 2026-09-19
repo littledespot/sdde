@@ -1,10 +1,9 @@
 const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
 const r = @import("../../domain/reference_reconciliation.zig");
-const inputs = @import("../../domain/reference_model_input.zig");
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{ .id = "collect-reference-reconciliation-result", .kind = .action, .requires = &.{ .reference_reconciliation_input, .assembled_json, .validated_assembled_json }, .produces = &.{.raw_reference_reconciliation}, .invalidates = &.{ .assembled_json, .validated_assembled_json }, .side_effect = .none };
-    pub fn execute(_: Action, allocator: std.mem.Allocator, input: r.Input, candidate: *const @import("../../domain/json_composition_runtime.zig").Candidate) (r.Error || inputs.Error)!r.Raw {
+    pub fn execute(_: Action, allocator: std.mem.Allocator, input: r.Input, candidate: *const @import("../../domain/json_composition_runtime.zig").Candidate) r.Error!r.Raw {
         const packet = candidate.base;
         const unit = packet.unit();
         if (unit != .reference_global or packet.purpose() != .initial_generation or !std.mem.eql(u8, unit.reference_global.reference_state_id.bytes, input.progress.plan.layout.items.state_id.bytes)) return error.InvalidReferenceReconciliation;

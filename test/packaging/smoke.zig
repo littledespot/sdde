@@ -602,7 +602,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         inline for (.{ "reconciliation", "generation", "support", "repair" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
             _ = directory.addCopyFile(b.path("design/workflows/spec/" ++ name ++ "." ++ extension), ".sddtoolkit/workflows/spec/" ++ name ++ "." ++ extension);
         };
-        inline for (.{ "extraction-content.prompt.md", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json" }) |name| {
+        inline for (.{ "extraction-content.prompt.md", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation-summary.composition.json", "reconciliation-global.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md" }) |name| {
             _ = directory.addCopyFile(b.path("design/workflows/spec/" ++ name), ".sddtoolkit/workflows/spec/" ++ name);
         }
         _ = directory.addCopyFile(b.path("design/workflows/spec/protocol.prompt.md"), ".sddtoolkit/workflows/spec/protocol.prompt.md");
