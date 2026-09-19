@@ -40,6 +40,7 @@ pub const Assembly = struct {
             .allocator = self.authorization.allocator,
             .authorization_leases = .{ .context = @ptrCast(runner), .clock = self.transport.clock, .runtime = runner.runtime, .consume_fn = consume },
             .transport = self.transport.port(),
+            .capture = runner.model_capture.port(),
         } };
         self.operations.prepare_authorization.action = .{ .authorization = self.authorization.port() };
         self.operations.invoke_model.action = .{ .provider = self.provider.?.port() };

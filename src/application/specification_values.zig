@@ -12,6 +12,7 @@ pub const Payload = union(enum) {
     document: @import("../domain/specification.zig").CapturedDocument,
     rendered: []const u8,
     prior_state: @import("../domain/specification_state.zig").Prior,
+    incomplete_state: @import("../domain/incomplete_specification.zig").State,
     publication_state: @import("../domain/specification_state.zig").State,
     reference_context: []const u8,
     reference_snapshot: @import("../domain/reference_snapshot.zig").Snapshot,

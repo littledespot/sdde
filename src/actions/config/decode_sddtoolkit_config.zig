@@ -32,26 +32,13 @@ pub const Action = struct {
             },
         ) catch return error.EngineConfigParseError;
 
-        if (!promptCaptureIsUnique(owned.config.logs.promptCapture)) {
-            return error.EngineConfigParseError;
-        }
-
         return owned;
     }
 };
 
-fn promptCaptureIsUnique(values: []const config.PromptCapture) bool {
-    var seen: std.EnumSet(config.PromptCapture) = .initEmpty();
-    for (values) |value| {
-        if (seen.contains(value)) return false;
-        seen.insert(value);
-    }
-    return true;
-}
-
 const valid_config =
     \\{
-    \\  "logs": { "level": "debug", "console": true, "promptCapture": [] },
+    \\  "logs": { "level": "debug", "console": true },
     \\  "models": { "slots": { "implementation": { "provider": "openai", "model": "gpt-5.4-mini" } } },
     \\  "paths": {
     \\    "specs": "specs/", "references": "references/",
@@ -87,37 +74,33 @@ test "rejects malformed unknown missing duplicate and wrong-kind input" {
     const invalid = [_][]const u8{
         "{",
         valid_config ++ "\ntrue",
-        \\{"version":"legacy","logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"version":"legacy","logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"extra":true,"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"extra":true,"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}}}
+        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"logs":{"level":"info","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"logs":{"level":"info","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":"no","promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":"no"},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[],"extra":true},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false,"extra":true},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug"},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{},"extra":true},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"models":{"slots":{},"extra":true},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":[]},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"models":{"slots":[]},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{"implementation":{"provider":"openai"}}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"models":{"slots":{"implementation":{"provider":"openai"}}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json","extra":"x"}}
+        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json","extra":"x"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":1,"references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":1,"references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":["unknown"]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
-        ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":["request","request"]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
-        ,
-        \\{"logs":{"level":"debug","console":false,"promptCapture":[]},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
         ,
     };
 
@@ -129,9 +112,15 @@ test "rejects malformed unknown missing duplicate and wrong-kind input" {
     }
 }
 
+test "rejects the removed promptCapture configuration field" {
+    const legacy = try std.mem.replaceOwned(u8, std.testing.allocator, valid_config, "\"console\": true", "\"console\": true, \"promptCapture\": []");
+    defer std.testing.allocator.free(legacy);
+    try std.testing.expectError(error.EngineConfigParseError, (Action{}).execute(std.testing.allocator, legacy));
+}
+
 test "accepts JSON member reordering" {
     const reordered =
-        \\{"paths":{"providers":".sddproviders.json","templates":"x","principles":"p","toolchainPreset":"t","workflows":"w","specsArchive":"s/a","references":"r","specs":"s"},"models":{"slots":{}},"logs":{"promptCapture":[],"console":false,"level":"INFO"}}
+        \\{"paths":{"providers":".sddproviders.json","templates":"x","principles":"p","toolchainPreset":"t","workflows":"w","specsArchive":"s/a","references":"r","specs":"s"},"models":{"slots":{}},"logs":{"console":false,"level":"INFO"}}
     ;
     var decoded = try (Action{}).execute(std.testing.allocator, reordered);
     defer decoded.deinit();

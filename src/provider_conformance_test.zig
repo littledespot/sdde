@@ -9,6 +9,8 @@ const fake = @import("adapters/provider/fake_llm_provider.zig");
 const contracts = @import("composition/provider_model_contracts.zig");
 const response = @import("adapters/provider/bedrock_response.zig");
 const strict = @import("domain/strict_json.zig");
+const capture_port = @import("ports/model_exchange_capture.zig");
+const prompt_log = @import("domain/sanitized_prompt_log.zig");
 
 test {
     _ = @import("bedrock_http_test.zig");
@@ -16,6 +18,72 @@ test {
 
 const Backend = enum { fake, bedrock };
 const Wire = @import("bedrock_transport_test_fixture.zig").Wire;
+
+const CaptureSpy = struct {
+    allocator: std.mem.Allocator,
+    expected_secret: []const u8,
+    calls: std.ArrayList(Call) = .empty,
+    block_direction: ?prompt_log.PromptDirection = null,
+    allocation_failed: bool = false,
+
+    const Call = struct {
+        direction: prompt_log.PromptDirection,
+        body: []u8,
+        kind: std.meta.Tag(capture_port.Body),
+        credential_matches: bool,
+    };
+
+    fn port(self: *CaptureSpy) capture_port.Port {
+        return .{ .context = @ptrCast(self), .capture_fn = capture };
+    }
+
+    fn deinit(self: *CaptureSpy) void {
+        for (self.calls.items) |call| self.allocator.free(call.body);
+        self.calls.deinit(self.allocator);
+    }
+
+    fn capture(context: *capture_port.Context, direction: prompt_log.PromptDirection, body: capture_port.Body, credentials: []const []const u8) capture_port.Outcome {
+        const self: *CaptureSpy = @ptrCast(@alignCast(context));
+        const owned = (switch (body) {
+            .provider_body, .partial_provider_body => |bytes| self.allocator.dupe(u8, bytes),
+            .transport_outcome => |outcome| std.json.Stringify.valueAlloc(self.allocator, outcome, .{}),
+        }) catch {
+            self.allocation_failed = true;
+            return .blocked;
+        };
+        self.calls.append(self.allocator, .{
+            .direction = direction,
+            .body = owned,
+            .kind = std.meta.activeTag(body),
+            .credential_matches = credentials.len == 1 and std.mem.eql(u8, credentials[0], self.expected_secret),
+        }) catch {
+            self.allocator.free(owned);
+            self.allocation_failed = true;
+            return .blocked;
+        };
+        return if (self.block_direction == direction) .blocked else .recorded;
+    }
+};
+
+const CaptureObservedWire = struct {
+    inner: *Wire,
+    capture: *CaptureSpy,
+    request_matches_prior_capture: bool = false,
+    fail_allocation: bool = false,
+
+    fn port(self: *CaptureObservedWire) transport.Port {
+        return .{ .context = @ptrCast(self), .exchange_fn = exchange };
+    }
+
+    fn exchange(context: *transport.Context, allocator: std.mem.Allocator, request: transport.Request) transport.Error!transport.Response {
+        const self: *CaptureObservedWire = @ptrCast(@alignCast(context));
+        self.request_matches_prior_capture = self.capture.calls.items.len == 1 and
+            self.capture.calls.items[0].direction == .request and
+            std.mem.eql(u8, self.capture.calls.items[0].body, request.body);
+        if (self.fail_allocation) return error.OutOfMemory;
+        return self.inner.port().exchange(allocator, request);
+    }
+};
 
 const Fixture = struct {
     base: fixture_module.Fixture,
@@ -100,6 +168,251 @@ test "shared fake and Bedrock inference conformance: identity usage owned conten
         try std.testing.expectEqual(.authorization_denied, reused.failed.cause);
         try std.testing.expectEqual(.not_sent, reused.failed.delivery);
         try std.testing.expectEqual(@as(usize, 1), fixture.effects());
+    }
+}
+
+test "Bedrock captures exact serialized requests and raw responses before response admission" {
+    const Expected = enum { complete, malformed, stopped, rejected, http_error };
+    const cases = [_]struct { body: []const u8, status: u16 = 200, exception: ?[]const u8 = null, expected: Expected }{
+        .{ .body = @import("bedrock_transport_test_fixture.zig").complete, .expected = .complete },
+        .{ .body = "\xffnot-json", .expected = .malformed },
+        .{ .body = "{\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}", .expected = .stopped },
+        .{ .body = "{\"stopReason\":\"unknown\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}", .expected = .rejected },
+        .{ .body = "{\"message\":\"unparsed provider error detail\"}", .status = 429, .exception = "ThrottlingException", .expected = .http_error },
+    };
+    for (cases) |case| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator, .bedrock);
+        defer fixture.deinit();
+        var capture: CaptureSpy = .{ .allocator = std.testing.allocator, .expected_secret = fixture.auth.material.ready.bytes };
+        defer capture.deinit();
+        var wire: CaptureObservedWire = .{ .inner = &fixture.wire, .capture = &capture };
+        fixture.real.capture = capture.port();
+        fixture.real.transport = wire.port();
+        fixture.wire.result = .{ .received = .{ .status = case.status, .exception = case.exception, .body = case.body } };
+        const authorized = try fixture.start(.inference);
+        var observed = try fixture.call(authorized);
+        defer observed.deinit();
+        try std.testing.expect(wire.request_matches_prior_capture);
+        try std.testing.expect(!capture.allocation_failed);
+        try std.testing.expectEqual(@as(usize, 2), capture.calls.items.len);
+        try std.testing.expectEqual(.response, capture.calls.items[1].direction);
+        try std.testing.expectEqual(.provider_body, capture.calls.items[1].kind);
+        try std.testing.expectEqualSlices(u8, case.body, capture.calls.items[1].body);
+        for (capture.calls.items) |call| try std.testing.expect(call.credential_matches);
+        switch (case.expected) {
+            .complete => try std.testing.expectEqualStrings("{}", observed.completed.raw_result.complete.content.bytes),
+            .malformed => try std.testing.expectEqual(.response_invalid, observed.failed.cause),
+            .stopped => try std.testing.expectEqual(.output_limit, observed.completed.raw_result.stopped.reason),
+            .rejected => try std.testing.expectEqual(.invalid_content, observed.completed.raw_result.rejected.reason),
+            .http_error => try std.testing.expectEqual(.throttled, observed.failed.cause),
+        }
+    }
+}
+
+test "Bedrock captures token-count request and raw response with sanitizer credential authority" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator, .bedrock);
+    defer fixture.deinit();
+    var capture: CaptureSpy = .{ .allocator = std.testing.allocator, .expected_secret = fixture.auth.material.ready.bytes };
+    defer capture.deinit();
+    var wire: CaptureObservedWire = .{ .inner = &fixture.wire, .capture = &capture };
+    fixture.real.capture = capture.port();
+    fixture.real.transport = wire.port();
+    const observed = try fixture.count(try fixture.start(.input_token_count));
+    const evidence = try operation.ExactInputTokenCountEvidence.fromObservation(observed, fixture.base.request, fixture.base.provider_binding);
+    try std.testing.expectEqual(@as(u64, 10), evidence.input_tokens);
+    try std.testing.expect(wire.request_matches_prior_capture);
+    try std.testing.expect(!capture.allocation_failed);
+    try std.testing.expectEqual(@as(usize, 2), capture.calls.items.len);
+    try std.testing.expectEqual(.response, capture.calls.items[1].direction);
+    try std.testing.expectEqualStrings("{\"inputTokens\":10}", capture.calls.items[1].body);
+    for (capture.calls.items) |call| try std.testing.expect(call.credential_matches);
+}
+
+test "Bedrock request capture failure prevents transport for inference and token counting" {
+    for (std.enums.values(operation.ProviderOperationKind)) |kind| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator, .bedrock);
+        defer fixture.deinit();
+        var capture: CaptureSpy = .{ .allocator = std.testing.allocator, .expected_secret = fixture.auth.material.ready.bytes, .block_direction = .request };
+        defer capture.deinit();
+        fixture.real.capture = capture.port();
+        const authorized = try fixture.start(kind);
+        switch (kind) {
+            .inference => try std.testing.expectError(error.ModelLoggingBlocked, fixture.call(authorized)),
+            .input_token_count => try std.testing.expectError(error.ModelLoggingBlocked, fixture.count(authorized)),
+        }
+        try std.testing.expectEqual(@as(usize, 0), fixture.effects());
+        try std.testing.expectEqual(@as(usize, 1), capture.calls.items.len);
+        try std.testing.expect(capture.calls.items[0].credential_matches);
+        switch (kind) {
+            .inference => {
+                var reused = try fixture.call(authorized);
+                defer reused.deinit();
+                try std.testing.expectEqual(.authorization_denied, reused.failed.cause);
+            },
+            .input_token_count => try std.testing.expectEqual(.authorization_denied, (try fixture.count(authorized)).failed.cause),
+        }
+        try std.testing.expectEqual(@as(usize, 2), capture.calls.items.len);
+        try std.testing.expectEqual(.transport_outcome, capture.calls.items[1].kind);
+        try std.testing.expect(std.mem.indexOf(u8, capture.calls.items[1].body, "rejected_before_send") != null);
+        try std.testing.expectEqual(@as(usize, 0), fixture.effects());
+    }
+}
+
+test "Bedrock response capture failure preserves completed stopped and rejected usage" {
+    const bodies = [_][]const u8{
+        @import("bedrock_transport_test_fixture.zig").complete,
+        "{\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}",
+        "{\"stopReason\":\"unknown\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}",
+    };
+    for (bodies) |body| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator, .bedrock);
+        defer fixture.deinit();
+        var capture: CaptureSpy = .{ .allocator = std.testing.allocator, .expected_secret = fixture.auth.material.ready.bytes, .block_direction = .response };
+        defer capture.deinit();
+        fixture.real.capture = capture.port();
+        fixture.wire.inference_body = body;
+        var observed = try fixture.call(try fixture.start(.inference));
+        defer observed.deinit();
+        const usage = switch (observed.completed.raw_result) {
+            .complete => |result| result.usage,
+            .stopped => |result| result.usage,
+            .rejected => |result| result.usage,
+        };
+        try std.testing.expectEqual(@as(u64, 10), usage.input_tokens);
+        try std.testing.expectEqual(@as(u64, 2), usage.output_tokens);
+        try std.testing.expectEqual(@as(u64, 12), usage.total_tokens);
+        try std.testing.expectEqual(@as(usize, 1), fixture.effects());
+        try std.testing.expectEqual(@as(usize, 2), capture.calls.items.len);
+    }
+}
+
+test "Bedrock response capture failure preserves exact input token count" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator, .bedrock);
+    defer fixture.deinit();
+    var capture: CaptureSpy = .{ .allocator = std.testing.allocator, .expected_secret = fixture.auth.material.ready.bytes, .block_direction = .response };
+    defer capture.deinit();
+    fixture.real.capture = capture.port();
+    const observed = try fixture.count(try fixture.start(.input_token_count));
+    const evidence = try operation.ExactInputTokenCountEvidence.fromObservation(observed, fixture.base.request, fixture.base.provider_binding);
+    try std.testing.expectEqual(@as(u64, 10), evidence.input_tokens);
+    try std.testing.expectEqual(@as(usize, 1), fixture.effects());
+    try std.testing.expectEqual(@as(usize, 2), capture.calls.items.len);
+}
+
+test "transport observation survives failure to capture its diagnostic" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator, .bedrock);
+    defer fixture.deinit();
+    var capture: CaptureSpy = .{ .allocator = std.testing.allocator, .expected_secret = fixture.auth.material.ready.bytes, .block_direction = .response };
+    defer capture.deinit();
+    fixture.real.capture = capture.port();
+    fixture.wire.result = .{ .failed = .{ .cause = .service_unavailable, .retry_class = .policy_eligible, .delivery = .not_sent } };
+    var observed = try fixture.call(try fixture.start(.inference));
+    defer observed.deinit();
+    try std.testing.expectEqual(.service_unavailable, observed.failed.cause);
+    try std.testing.expectEqual(.not_sent, observed.failed.delivery);
+    try std.testing.expectEqual(.transport_outcome, capture.calls.items[1].kind);
+}
+
+test "Bedrock captures concrete HTTP failure bodies before metadata for inference and counting" {
+    const http = @import("bedrock_http_test_fixture.zig");
+    for (std.enums.values(operation.ProviderOperationKind)) |kind| {
+        for ([_]http.Fault{ .none, .eof, .reset, .deadline, .cancelled }) |fault| {
+            var fixture: Fixture = undefined;
+            try fixture.init(std.testing.allocator, .bedrock);
+            defer fixture.deinit();
+            var capture: CaptureSpy = .{ .allocator = std.testing.allocator, .expected_secret = fixture.auth.material.ready.bytes };
+            defer capture.deinit();
+            fixture.real.capture = capture.port();
+            const body = try std.fmt.allocPrint(std.testing.allocator, "echo {s} " ++ "retained body " ** 500, .{fixture.auth.material.ready.bytes});
+            defer std.testing.allocator.free(body);
+            const wire = try std.fmt.allocPrint(std.testing.allocator, "HTTP/1.1 {s}\r\nContent-Length: {d}\r\n\r\n{s}", .{ if (fault == .none) "307 Temporary Redirect" else "200 OK", body.len, body });
+            defer std.testing.allocator.free(wire);
+            var connection: http.Fixture = undefined;
+            connection.init(wire);
+            defer connection.deinit();
+            connection.expected_host = "bedrock-runtime.us-west-2.amazonaws.com";
+            connection.fault = fault;
+            connection.body_prefix_bytes = body.len - 3;
+            connection.maximum_read = 257;
+            var adapter = connection.adapter();
+            fixture.real.transport = adapter.port();
+            const authorized = try fixture.start(kind);
+            connection.now_ms.store(authorized.invoked.deadline_monotonic_ms - 100, .release);
+            if (fault == .cancelled) {
+                switch (kind) {
+                    .inference => try std.testing.expectError(error.Cancelled, fixture.call(authorized)),
+                    .input_token_count => try std.testing.expectError(error.Cancelled, fixture.count(authorized)),
+                }
+            } else {
+                const observed = switch (kind) {
+                    .inference => observed: {
+                        var value = try fixture.call(authorized);
+                        defer value.deinit();
+                        break :observed value.failed;
+                    },
+                    .input_token_count => (try fixture.count(authorized)).failed,
+                };
+                try std.testing.expectEqual(@as(operation.ProviderFailureCause, if (fault == .none) .response_invalid else if (fault == .deadline) .timeout else .transport_failed), observed.cause);
+                try std.testing.expectEqual(@as(operation.ProviderDeliveryDisposition, if (fault == .none) .response_received else .accepted_or_unknown), observed.delivery);
+            }
+            try std.testing.expectEqual(@as(usize, 3), capture.calls.items.len);
+            try std.testing.expectEqual(.request, capture.calls.items[0].direction);
+            try std.testing.expectEqual(.response, capture.calls.items[1].direction);
+            try std.testing.expectEqual(@as(std.meta.Tag(capture_port.Body), if (fault == .none) .provider_body else .partial_provider_body), capture.calls.items[1].kind);
+            try std.testing.expectEqualStrings(if (fault == .none) body else body[0 .. body.len - 3], capture.calls.items[1].body);
+            try std.testing.expectEqual(.transport_outcome, capture.calls.items[2].kind);
+            try std.testing.expect(std.mem.indexOf(u8, capture.calls.items[2].body, "retained body") == null);
+            try std.testing.expect(std.mem.indexOf(u8, capture.calls.items[2].body, if (fault == .cancelled) "cancelled" else "transport_failed") != null);
+            for (capture.calls.items) |call_record| try std.testing.expect(call_record.credential_matches);
+            try std.testing.expect(!capture.allocation_failed);
+            try connection.expectJoined();
+        }
+    }
+}
+
+test "Bedrock captures explicit no-body outcomes on failed cancelled and allocation-failed transport" {
+    for ([_][]const u8{ "transport_failed", "cancelled", "allocation_failed" }, 0..) |outcome, scenario| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator, .bedrock);
+        defer fixture.deinit();
+        var capture: CaptureSpy = .{ .allocator = std.testing.allocator, .expected_secret = fixture.auth.material.ready.bytes };
+        defer capture.deinit();
+        var wire: CaptureObservedWire = .{ .inner = &fixture.wire, .capture = &capture };
+        fixture.real.capture = capture.port();
+        fixture.real.transport = wire.port();
+        const authorized = try fixture.start(.inference);
+        switch (scenario) {
+            0 => {
+                fixture.wire.result = .{ .failed = .{ .cause = .service_unavailable, .retry_class = .policy_eligible, .delivery = .not_sent } };
+                var observed = try fixture.call(authorized);
+                defer observed.deinit();
+                try std.testing.expectEqual(.service_unavailable, observed.failed.cause);
+            },
+            1 => {
+                fixture.wire.cancelled = true;
+                try std.testing.expectError(error.Cancelled, fixture.call(authorized));
+            },
+            2 => {
+                wire.fail_allocation = true;
+                try std.testing.expectError(error.OutOfMemory, fixture.call(authorized));
+            },
+            else => unreachable,
+        }
+        try std.testing.expect(wire.request_matches_prior_capture);
+        try std.testing.expectEqual(@as(usize, 2), capture.calls.items.len);
+        try std.testing.expectEqual(.response, capture.calls.items[1].direction);
+        for (capture.calls.items) |call| try std.testing.expect(call.credential_matches);
+        var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, capture.calls.items[1].body, .{});
+        try std.testing.expectEqual(.transport_outcome, capture.calls.items[1].kind);
+        defer parsed.deinit();
+        try std.testing.expectEqualStrings(outcome, parsed.value.object.get("outcome").?.string);
+        try std.testing.expect(!parsed.value.object.contains("response_body"));
     }
 }
 

@@ -22,6 +22,9 @@ fn refAllDeclsRecursive(comptime T: type) void {
 
 test {
     _ = @import("provider_conformance_test.zig");
+    _ = @import("model_log_redaction_test.zig");
+    _ = @import("model_exchange_capture_test.zig");
+    _ = @import("feature_log_layout_test.zig");
     _ = @import("required_authority_test.zig");
     _ = @import("specification_contract_test.zig");
     _ = @import("reference_model_input_test.zig");

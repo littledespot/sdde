@@ -10,6 +10,8 @@ const barrier_port = @import("ports/telemetry_barrier.zig");
 const runner_module = @import("application/workflow_pipeline_runner.zig");
 const engine = @import("application/workflow_engine_orchestrator.zig");
 const engine_bindings = @import("application/workflow_engine_child_bindings.zig");
+const run_outcome = @import("domain/run_outcome.zig");
+const finalization = @import("ports/feature_log_activation.zig");
 
 test "generic engine preserves every YAML-compiled terminal outcome" {
     inline for (test_outcomes) |expected| {
@@ -30,6 +32,109 @@ test "generic engine preserves every YAML-compiled terminal outcome" {
         try std.testing.expectEqual(expected, engine.run(children.bindings()).executionStatus().?);
         try std.testing.expectEqual(@as(usize, 1), barrier.calls);
     }
+}
+
+test "generic engine finalizes every terminal outcome and propagates close failures" {
+    for (test_outcomes) |expected| {
+        for ([_]bool{ false, true }) |fail| {
+            var control: OperationControl = .{ .state = .{ .outcome = expected } };
+            var barrier: FakeBarrier = .{};
+            var graph = try testGraph();
+            var registry = testRegistry(&control);
+            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+            defer runner.deinit();
+            var finalizer: FakeFinalizer = .{ .fail = fail };
+            var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner, .finalizer = finalizer.port() };
+            const result = engine.run(children.bindings());
+            try std.testing.expectEqual(@as(usize, 1), finalizer.calls);
+            try std.testing.expectEqualDeep(@as(run_outcome.Outcome, .{ .execution = expected }), finalizer.last.?);
+            if (fail) {
+                try std.testing.expectEqualDeep(@as(execution.Rejection, .{ .logging = .LOG_FLUSH_FAILURE }), result.execution_rejected);
+            } else {
+                try std.testing.expectEqualDeep(finalizer.last.?, result);
+            }
+        }
+    }
+}
+
+test "generic engine finalizes selection and preparation failures before any operation" {
+    for (0..3) |selection_index| {
+        for ([_]engine_bindings.SelectionStepOutcome{ .invocation_invalid, .failed, .cancelled }) |terminal| {
+            var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+            var barrier: FakeBarrier = .{};
+            var graph = try testGraph();
+            var registry = testRegistry(&control);
+            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+            defer runner.deinit();
+            var finalizer: FakeFinalizer = .{};
+            var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner, .finalizer = finalizer.port() };
+            children.selection_results[selection_index] = terminal;
+            const result = engine.run(children.bindings());
+            const expected: run_outcome.Outcome = switch (terminal) {
+                .ok => unreachable,
+                .invocation_invalid => .invocation_invalid,
+                .failed => .{ .execution = .failed },
+                .cancelled => .{ .execution = .cancelled },
+            };
+            try std.testing.expectEqualDeep(expected, result);
+            try std.testing.expectEqualDeep(expected, finalizer.last.?);
+            try std.testing.expectEqual(@as(usize, 1), finalizer.calls);
+            try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+            try std.testing.expectEqual(selection_index + 1, children.selection_calls);
+        }
+    }
+    for ([_]engine_bindings.PreparationOutcome{ .{ .failed = .LLM_PROVIDER_MODEL_BINDING_INVALID }, .cancelled }) |preparation| {
+        var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+        var barrier: FakeBarrier = .{};
+        var graph = try testGraph();
+        var registry = testRegistry(&control);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        var finalizer: FakeFinalizer = .{};
+        var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner, .finalizer = finalizer.port(), .preparation_result = preparation };
+        const expected: run_outcome.Outcome = switch (preparation) {
+            .ok => unreachable,
+            .failed => |failure| .{ .bootstrap_failed = failure },
+            .cancelled => .{ .execution = .cancelled },
+        };
+        try std.testing.expectEqualDeep(expected, engine.run(children.bindings()));
+        try std.testing.expectEqualDeep(expected, finalizer.last.?);
+        try std.testing.expectEqual(@as(usize, 1), finalizer.calls);
+        try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+    }
+}
+
+test "publication effects finalize logging before the shared runner invokes any writer" {
+    for ([_]pipeline.SideEffect{ .workflow_publication, .filesystem_write, .none }) |effect| {
+        for ([_]bool{ false, true }) |fail| {
+            var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+            var barrier: FakeBarrier = .{};
+            var graph = try testGraph();
+            var steps = test_steps;
+            steps[0].side_effect = effect;
+            graph.authority.steps = &steps;
+            var registry = testRegistry(&control);
+            control.entries[1].contract.side_effect = effect;
+            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+            defer runner.deinit();
+            var finalizer: FakeFinalizer = .{ .fail = fail, .operations = &control.state };
+            runner.publication_finalizer = finalizer.port();
+            try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
+            const result = runner.bindings().invokeStep(steps[0].id);
+            const publication = effect == .workflow_publication;
+            try std.testing.expectEqual(@as(usize, if (publication) 1 else 0), finalizer.calls);
+            try std.testing.expectEqual(@as(usize, 0), finalizer.operations_at_finish);
+            if (publication and fail) {
+                try std.testing.expectEqualDeep(@as(execution.Rejection, .{ .logging = .LOG_FLUSH_FAILURE }), result.rejected);
+                try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+                try std.testing.expectEqual(@as(usize, 0), barrier.calls);
+            } else {
+                try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), result);
+                try std.testing.expectEqual(@as(usize, 1), control.state.calls);
+            }
+        }
+    }
+    try std.testing.expectEqual(pipeline.SideEffect.workflow_publication, @import("actions/workflow/publish_workflow_output.zig").Action.contract.side_effect);
 }
 
 test "maximum graph validates executes every operation and rejects cycles and overflow" {
@@ -429,15 +534,22 @@ const TestEngineBindings = struct {
     runner: *runner_module.Runner,
     rejection: ?execution.Rejection = null,
     reject_invocation: bool = false,
+    selection_results: [3]engine_bindings.SelectionStepOutcome = .{ .ok, .ok, .ok },
+    selection_calls: usize = 0,
+    preparation_result: engine_bindings.PreparationOutcome = .ok,
+    finalizer: ?finalization.Finalizer = null,
 
     fn bindings(self: *TestEngineBindings) engine_bindings.ChildBindings {
         return .{ .context = self, .vtable = &test_engine_vtable };
     }
-    fn selectionOk(_: *anyopaque) engine_bindings.SelectionStepOutcome {
-        return .ok;
+    fn selectionOk(context: *anyopaque) engine_bindings.SelectionStepOutcome {
+        const self: *TestEngineBindings = @ptrCast(@alignCast(context));
+        defer self.selection_calls += 1;
+        return self.selection_results[self.selection_calls];
     }
-    fn preparationOk(_: *anyopaque) engine_bindings.PreparationOutcome {
-        return .ok;
+    fn preparationOk(context: *anyopaque) engine_bindings.PreparationOutcome {
+        const self: *TestEngineBindings = @ptrCast(@alignCast(context));
+        return self.preparation_result;
     }
     fn selectedGraph(context: *const anyopaque) *const compilation.CompiledWorkflow {
         const self: *const TestEngineBindings = @ptrCast(@alignCast(context));
@@ -453,6 +565,10 @@ const TestEngineBindings = struct {
         if (!self.reject_invocation) if (self.rejection) |reason| return .{ .rejected = reason };
         return self.runner.bindings().invokeStep(id);
     }
+    fn finalize(context: *anyopaque, outcome: run_outcome.Outcome) run_outcome.Outcome {
+        const self: *TestEngineBindings = @ptrCast(@alignCast(context));
+        return if (self.finalizer) |finalizer| finalizer.finish(outcome) else outcome;
+    }
 };
 
 test "workflow outcomes preserve exact runner rejections at invocation and step boundaries" {
@@ -464,11 +580,14 @@ test "workflow outcomes preserve exact runner rejections at invocation and step 
             var registry = testRegistry(&control);
             var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
             defer runner.deinit();
-            var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner, .rejection = reason, .reject_invocation = invocation };
+            var finalizer: FakeFinalizer = .{};
+            var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner, .rejection = reason, .reject_invocation = invocation, .finalizer = finalizer.port() };
             const outcome = engine.run(children.bindings());
             try std.testing.expectEqualDeep(reason, outcome.execution_rejected);
             try std.testing.expectEqual(reason.status(), outcome.executionStatus().?);
             try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+            try std.testing.expectEqual(@as(usize, 1), finalizer.calls);
+            try std.testing.expectEqualDeep(outcome, finalizer.last.?);
         }
     }
 }
@@ -503,6 +622,26 @@ const test_engine_vtable: engine_bindings.ChildBindings.VTable = .{
     .selected_graph = TestEngineBindings.selectedGraph,
     .invoke_invocation = TestEngineBindings.invokeInvocation,
     .invoke_step = TestEngineBindings.invokeStep,
+    .finalize = TestEngineBindings.finalize,
+};
+
+const FakeFinalizer = struct {
+    calls: usize = 0,
+    last: ?run_outcome.Outcome = null,
+    fail: bool = false,
+    operations: ?*const OperationState = null,
+    operations_at_finish: usize = 0,
+
+    fn port(self: *FakeFinalizer) finalization.Finalizer {
+        return .{ .context = @ptrCast(self), .finish_fn = finish };
+    }
+    fn finish(context: *finalization.Context, outcome: run_outcome.Outcome) run_outcome.Outcome {
+        const self: *FakeFinalizer = @ptrCast(@alignCast(context));
+        self.calls += 1;
+        self.last = outcome;
+        if (self.operations) |operations_state| self.operations_at_finish = operations_state.calls;
+        return if (self.fail) .{ .execution_rejected = .{ .logging = .LOG_FLUSH_FAILURE } } else outcome;
+    }
 };
 
 const OperationControl = struct {

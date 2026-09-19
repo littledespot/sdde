@@ -11,6 +11,7 @@ pub fn For(comptime kind: provider.ProviderOperationKind) type {
             },
             cancelled,
             allocation_failed,
+            logging_blocked_before_send,
         };
 
         /// Owns the untrusted response, not validation evidence or workflow authority.
@@ -53,7 +54,7 @@ pub fn For(comptime kind: provider.ProviderOperationKind) type {
             pub fn destroy(self: *Owner) void {
                 if (self.outcome) |*outcome| switch (outcome.*) {
                     .observation => |*observation| if (kind == .inference) observation.deinit(),
-                    .cancelled, .allocation_failed => {},
+                    .cancelled, .allocation_failed, .logging_blocked_before_send => {},
                 };
                 identity.deinitOwner(self.requests);
                 self.allocator.destroy(self);

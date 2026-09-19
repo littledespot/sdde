@@ -91,6 +91,7 @@ pub const DataKey = enum {
     normalized_feature_directory,
     relative_feature_directory,
     feature_directory,
+    activated_feature_directory,
     feature_artifact_paths,
     raw_clarification_inputs,
     parsed_clarification_state,
@@ -104,6 +105,8 @@ pub const DataKey = enum {
     raw_workflow_state,
     prior_specification_state,
     specification_publication_state,
+    incomplete_specification_state,
+    rendered_incomplete_specification,
     reference_snapshot,
     rendered_reference_context,
     raw_reference_inventory,
@@ -200,6 +203,7 @@ pub const SideEffect = enum {
     none,
     filesystem_read,
     filesystem_write,
+    workflow_publication,
     model_call,
 };
 

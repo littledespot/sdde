@@ -3,6 +3,10 @@ const workflow = @import("../domain/workflow.zig");
 const bindings = @import("workflow_engine_child_bindings.zig");
 
 pub fn run(children: bindings.ChildBindings) run_outcome.Outcome {
+    return children.finalizeOutcome(runSelected(children));
+}
+
+fn runSelected(children: bindings.ChildBindings) run_outcome.Outcome {
     if (selectionTerminal(children.invokeValidateOperationRegistry())) |outcome| return outcome;
     if (selectionTerminal(children.invokeParseInvocation())) |outcome| return outcome;
     if (selectionTerminal(children.invokeSelectWorkflow())) |outcome| return outcome;

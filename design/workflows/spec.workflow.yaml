@@ -41,8 +41,11 @@ steps:
   references:
     call: prepare-references
     on:
-      ok: extract
+      ok: logging
       failed: end.failed
+  logging:
+    use: activate-feature-logging
+    on: {ok: extract, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
   extract:
     call: extract-references
     on:
@@ -791,7 +794,7 @@ subgraphs:
         on: {ok: publish-specification, failed: end.failed}
       publish-specification:
         use: publish-workflow-output
-        on: {ok: end.ok, failed: end.failed}
+        on: {ok: end.ok, needs-user: end.needs-user, failed: end.failed}
       publish-pending-clarifications:
         call: clarification-output
         on: {ok: end.ok, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed}
@@ -959,20 +962,29 @@ subgraphs:
         use: validate-required-authority-reconciliation
         on: {ok: end.ok, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked}
   clarification-output:
-    start: render
+    start: check
     steps:
+      check:
+        use: check-clarification-progress
+        on: {ok: render, needs-user: render, blocked: end.blocked}
       render:
         use: render-clarification-forms
+        on: {ok: snapshot, failed: end.failed}
+      snapshot:
+        use: build-reference-snapshot
+        on: {ok: build, failed: end.failed}
+      build:
+        use: build-incomplete-specification
+        on: {ok: document, failed: end.failed}
+      document:
+        use: render-incomplete-specification
         on: {ok: prepare, failed: end.failed}
       prepare:
-        use: prepare-clarification-output
+        use: prepare-incomplete-specification-output
         on: {ok: publish, failed: end.failed}
       publish:
         use: publish-workflow-output
-        on: {ok: check, failed: end.failed}
-      check:
-        use: check-clarification-progress
-        on: {ok: end.ok, needs-user: end.needs-user, blocked: end.blocked}
+        on: {ok: end.ok, needs-user: end.needs-user, failed: end.failed}
   authority-clarifications:
     start: needs
     steps:

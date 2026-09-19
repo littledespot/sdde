@@ -6,6 +6,10 @@
 integration remains open under F0100. See [implementation
 status](#implementation-status).
 
+[ADR 0018](../decisions/0018-debug-model-exchange-logging.md) is the accepted amendment
+for complete production model-exchange capture at `debug`/`trace`. Its verification
+must cover the production invocation path, not only the E2E evidence wrapper.
+
 **Compatibility:** None. This is a pre-release proof of concept with no
 deployed predecessor. `feature-log/v2` and its two column schemas are updated
 in place; the implementation MUST NOT contain migrations,
@@ -55,7 +59,7 @@ The runner invokes the logging graph with:
 - one trusted runner lifecycle fact attributed through the active workflow's
   `WorkflowLog`, validated `WorkflowTelemetryFact` from an applied node delta,
   or validated transient `SanitizedPromptExchangeLogRecord` from the separate
-  optional-content sanitization pipeline;
+  selected-content sanitization pipeline;
 - the active validated `FeatureLogPolicy`;
 - the exact `FeatureLogBinding`; and
 - the immutable compiler-owned `LogEventDefinitionRegistry`.
@@ -93,13 +97,16 @@ canonical level. `ValidateLoggingPolicyAction` consumes that canonical result
 and validates the remaining logging policy; it does not canonicalize the level
 again. F0002 receives only the validated result.
 
-The accepted `LogsConfig` has exactly three values:
+The accepted `LogsConfig` has exactly two values:
 
 - `level`: the emission threshold spelling;
 - `console`: whether an additional pipe-delimited data-row mirror is enabled;
-  it never controls the mandatory file sink; and
-- `promptCapture`: a unique list drawn from `request`, `response`,
-  `reference_body`, and `code_body`; `[]` disables body capture.
+  it never controls the mandatory file sink.
+
+The shared effective policy selects all request/response body content at `debug`/`trace`.
+Higher thresholds emit metadata only. The superseded `promptCapture` field is rejected;
+no inert selectors, migration or compatibility reader remain. Prompt rows retain their
+registered `debug` severity.
 
 - F0001's direct typed decoder enforces the closed contract published as
   `design/schemas/sddtoolkit-config.schema.json`; no generic JSON tree or runtime schema
@@ -378,7 +385,8 @@ Logging-internal nodes are not recursively observed.
 | `security.denied` | `warning` | `rule_id`, `diagnostic_code`, `outcome` | — |
 | `model.prompt_fragment` | `debug` | `attempt`, `request_id`, `model_operation_id`, `model_slot_id`, `fragment_id`, `direction`, `body_class`, `content`, `retained_bytes`, `truncated`, `redacted` | — |
 
-- `model.prompt_fragment` exists only in the optional prompt stream.
+- `model.prompt_fragment` exists only in the prompt stream, enabled automatically by
+  `debug`/`trace` under ADR 0018.
 - Its `content` field is classified `sanitized_content`, never public metadata, and is
   accepted only from the validated sanitization pipeline.
 - All other events exist only in the event stream.
@@ -404,27 +412,39 @@ Logging-internal nodes are not recursively observed.
 The hard-coded headings are:
 
 ```text
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_operation_id|model_slot_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|model_operation_id|model_slot_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
 ```
 
-- The first is the 38-column event heading; the second is the 30-column prompt heading.
+- The first is the event heading; the second is the 30-column prompt heading.
+- Existing wire columns `model_route_id` (events) and `route_id` (prompts) carry
+  the workflow model-operation identity; `model_profile_id` carries the repository
+  model-slot identity. ADR 0018 does not rename columns or introduce a route registry.
 - Every prompt data row represents exactly one sanitized fragment.
 - The prompt pipeline sorts selected fragments by canonical `promptBodyFragmentId` and
   emits one row per fragment in that order.
+- Production complete-body fragment IDs retain operation kind, direction, body provenance, encoding and
+  zero-padded byte offset. Their order reconstructs the entire sanitized body; splitting
+  does not authorize omission of a tail.
 - It emits no prompt row when no fragment is selected; the ordinary metadata event
   remains available in the event stream.
 
 - Prompt columns are scalar: `direction` is `request` or `response`; `body_class` is
-  `ordinary`, `reference_body`, or `code_body`; `retained_bytes` is canonical unsigned
+  `ordinary`, `reference_body`, `code_body`, or `complete_body`; `retained_bytes` is canonical unsigned
   decimal ASCII; and `truncated` and `redacted` are lowercase `true` or `false`.
-- `content` is only the redacted, then UTF-8-boundary-truncated fragment and uses the
-  escaping below.
+- `complete_body` is internal, not a configuration selector. Debug/trace captures both
+  directions and every body class. A typed body variant and fragment identity distinguish
+  complete `provider_body` bytes, incomplete `partial_provider_body` prefixes and
+  engine-authored `transport_outcome` diagnostics.
+- `content` is a bounded fragment of the complete sanitized body and uses the escaping
+  below. Valid UTF-8 retains its exact redacted text; invalid UTF-8 uses complete base64
+  with encoding identified in the fragment ID. Complete-body records have `truncated=false`.
 - Request/response metadata is represented by event-stream model events and is not
   duplicated.
-- Redaction/truncation evidence IDs remain internal validation evidence and are not
+- Redaction/fragment accounting evidence IDs remain internal validation evidence and are not
   serialized.
-- There is no JSON, list delimiter, nested row, or other composite-cell grammar.
+- Metadata/evidence vectors have no JSON, list delimiter, nested row or other composite-cell
+  grammar. Sanitized body text may itself contain JSON without becoming a new cell type.
 
 `record_kind` is one of `segment_header`, `event`, `prompt`, or
 `segment_trailer`. Adding or reordering a column is an implementation contract
@@ -453,7 +473,7 @@ For example, the registered `task.started` event at `info` can produce this
 segment:
 
 ```text
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_operation_id|model_slot_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
 segment_header|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
 event|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0042|42|2026-08-28T10:15:30Z|1205|info|task.started|task.started/v1|RUN-001|F0002|implement|\N|\N|\N|\N|TASK-001|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
 ```
@@ -461,10 +481,10 @@ event|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-
 `IMPL` is illustrative only; the selected compiled workflow's definition
 supplies the actual shortcode through the runner-created `WorkflowLog` binding.
 
-When prompt capture is explicitly enabled, one sanitized fragment is one row:
+When prompt capture is enabled, one sanitized fragment is one row:
 
 ```text
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|model_operation_id|model_slot_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
 segment_header|feature-log/v2|prompt|prompt-columns/v2|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
 prompt|feature-log/v2|prompt|prompt-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0043|43|2026-08-28T10:15:31Z|1206|debug|model.prompt_fragment|model.prompt_fragment/v1|RUN-001|F0002|implement|\N|1|REQ-001|ROUTE-001|PROFILE-001|FRAG-001|request|ordinary|Create plan with [REDACTED_SECRET]|34|false|true
 ```
@@ -482,18 +502,32 @@ The mandatory event stream is metadata-only. At every level, including
 raw paths, arbitrary caller text, prompts/responses, references, source code,
 patches, file content, and command output.
 
-- Optional prompt/body capture remains a separate, default-off sanitization pipeline
-  governed by Sections 13.4 and 26.5.
+- Prompt/body capture remains a separate sanitization pipeline governed by Sections
+  13.4 and 26.5 and ADR 0018. Debug/trace selects complete capture; higher thresholds
+  emit metadata only. `logs.level` is the sole capture control.
 - F0002 accepts only its validated transient sanitized fragment records; it never
   receives or sanitizes raw bodies a second time.
-- Direction/class opt-ins, redaction-before-truncation, UTF-8/size validation, canonical
+- Effective level selection, redaction-before-splitting, UTF-8/size validation, canonical
   fragment ordering, and transient-handle cleanup remain owned by that pipeline.
+- The shared production capture runner records each exact serialized model-facing request
+  before transport and each available raw response body before decoding, including HTTP
+  failures, malformed model output and retries. It redacts credential values held by the
+  invocation authorization and their JSON-escaped forms before splitting. Authentication
+  headers, credential configuration and environment secrets are not added to capture; this
+  is not a claim to discover arbitrary unknown secrets in reference or model text.
+- Request IDs derive from the current request ledger; operation kind, slot and attempt
+  remain exact. Interrupted transport retains every received prefix with
+  `partial_provider_body` provenance, including cancellation and deadline failure.
+  The original failure also produces a metadata-only `transport_outcome` diagnostic.
+  Neither diagnostic nor partial bytes imply a complete response.
+  If response logging fails, provider decoding and actual token accounting still run before
+  the invocation blocks; no candidate or further business work is released.
 
 ### 6.4 Proof-of-concept policy constants
 
 These values are compiler constants, not defaults and not user-tunable
 configuration. A change edits the PoC contract in place. The logging-policy
-compiler injects them only after validating the three user choices.
+compiler injects them only after validating the two user choices.
 
 | Concern | Exact proof-of-concept contract |
 | --- | --- |
@@ -507,9 +541,9 @@ compiler injects them only after validating the three user choices.
 | Flush level | `flushAtOrAbove` is exactly `error`; `error`, `fatal`, and terminal stage/task events force flush |
 | Lower-level flush | flush after 32 records or 1,000 monotonic ms since the last successful flush, whichever occurs first |
 | Failure mode | exactly `block_new_work` |
-| Redaction policy | exactly `redaction/default-v1`; mandatory built-in detectors only, with no configured patterns |
-| Prompt switches | `promptCapture=[]` disables body capture; a non-empty list must contain `request` or `response`; `reference_body`/`code_body` only refine selected directions |
-| Prompt content | `maxContentBytes = 5,000` per sanitized fragment |
+| Redaction policy | compiler-owned `redaction/default-v1`; production complete-body capture removes exact authorized credentials and JSON-escaped forms before splitting; classified fragments retain their existing detector contract; no configured patterns |
+| Prompt capture | `debug`/`trace` selects every direction/body class; higher thresholds emit metadata only; no independent selector setting |
+| Prompt content | `maxContentBytes = 5,000` per sanitized chunk; complete selected exchanges use lossless ordered chunks, never tail truncation |
 | Stream lock | compiler constant 2,000 ms from first acquisition attempt; one attempt, no retry or backoff |
 | Emergency write | one direct `stderr` write attempt, maximum 128 ASCII bytes, no allocation from failed record content and no recursive logging |
 
@@ -650,10 +684,12 @@ F0002 does not:
     control/event/prompt row has that heading's exact column count and order,
     and malformed, repeated, missing, reordered, duplicate, or unknown headings
     or control rows and row-width mismatches fail closed.
-11. Metadata remains free of prohibited content at every threshold; optional
-    body capture is default-off and emits one scalar-only row per separately
-    sanitized fragment in canonical fragment-ID order, with no composite cell
-    encoding.
+11. Metadata remains free of prohibited content at every threshold. Debug/trace
+    captures every production model attempt's full request and available raw response,
+    including malformed/failed attempts.
+    Credential redaction precedes lossless chunking into scalar rows in canonical
+    fragment-ID order. Higher thresholds emit metadata only; the removed selector
+    field is rejected rather than retained without effect.
 12. Every persistent record uses the exact feature/run binding and registered
    feature-log collection; no shared persistent sink exists, console output
    never substitutes for it, and success is impossible without the required
@@ -669,7 +705,7 @@ F0002 does not:
 18. The closed event table in Section 6.2 is exhaustive and every event maps to
     exactly one level, `<event_type>/v1` template, field set, and sensitivity;
     unregistered events and fields fail closed.
-19. Configuration contains only `level`, `console`, and `promptCapture`; the
+19. Configuration contains only `level` and `console`; the
     compiled policy injects every fixed behavior in Section 6.4, including the
     2,000 ms one-attempt lock deadline, exact pipe-delimited console mirror, and exact
     bounded emergency-line grammar.
@@ -683,7 +719,7 @@ negative cases:
 
 **Authority**
 
-- three-value config-to-compiler-to-runtime handoff, rejection of every removed tuning
+- two-value config-to-compiler-to-runtime handoff, rejection of every removed tuning
   key, one level canonicalizer, workflow-definition shortcode syntax plus registry
   uniqueness, runner-owned `WorkflowLog` construction, exact shortcode/fact binding, and
   rejection of raw config/path/message/shortcode inputs or runtime file rereads;
@@ -707,14 +743,21 @@ negative cases:
 - rejection of unknown and dangling escapes and of any configured/dynamic heading
 - heading/control-row/row-width corruption
 - fixed pipe-delimited serialization
-- one scalar row per prompt fragment in canonical order
+- one scalar row per prompt fragment in canonical order, complete reconstruction beyond
+  5,000 bytes, multibyte UTF-8 and tagged base64 for invalid UTF-8
+- debug/trace full capture and metadata-only higher thresholds, removed-selector rejection,
+  request/response attribution across retries, raw malformed/failed responses, and typed
+  no-response failure distinction
+- production-path capture before transport/decoding, including usage accounting before
+  blocking on a response-log failure
 - zero-fragment behavior
 - runner barrier behavior;
 
 **Privacy**
 
-- prohibited metadata, default-off prompt capture, sanitization handoff, and transient
-  cleanup;
+- prohibited metadata, exact authorized-credential redaction including JSON-escaped values
+  and would-be chunk boundaries, effective capture policy, body-provenance separation,
+  sanitization handoff, and transient cleanup;
 
 **Storage**
 

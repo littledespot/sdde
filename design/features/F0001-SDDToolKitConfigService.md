@@ -62,8 +62,7 @@ SDDToolKitConfig {
 
 LogsConfig {
   level: string,
-  console: boolean, // optional pipe-delimited mirror; file logging is always enabled
-  promptCapture: ("request" | "response" | "reference_body" | "code_body")[]
+  console: boolean // optional pipe-delimited mirror; file logging is always enabled
 }
 
 ModelsConfig {
@@ -99,8 +98,10 @@ PathsConfig {
   collisions, scopes and category coverage before any consuming operation. An absent
   section supplies no default policy. [§9.4](../contracts/09-configuration.md#94-project-principle-resolution) owns the rules.
 - Model slot names are data, but every slot value has the same closed shape.
-- `promptCapture` is a unique list of at most the four closed selectors shown above; an
-  empty list disables body capture.
+- Under [ADR 0018](../decisions/0018-debug-model-exchange-logging.md), the shared
+  effective F0002 policy selects complete capture at `debug`/`trace` and metadata
+  only at higher thresholds. The removed `promptCapture` field is rejected, with
+  no compatibility reader or migration.
 - All sink, format, size, retention, flush, redaction, failure, prompt-size, and lock
   values are F0002 compiler constants, not configuration.
 - There is no file-output switch: every admitted F0002 record is written to its
@@ -121,8 +122,7 @@ owns the semantic join to the provider catalogue:
 Structural decoding does not grant operational authority. In particular:
 
 - a decoded path string is not normalized, contained, or authorized;
-- a decoded log level or prompt-capture selector list is not canonical or
-  validated logging policy; and
+- a decoded log level is not canonical or validated logging policy; and
 - a decoded provider/model string is neither repository-authorized nor a
   resolved model binding until it joins exactly to the validated provider
   catalogue.
@@ -142,7 +142,7 @@ Semantic ownership remains outside F0001:
 
 | Consumer | Owned semantic work |
 | --- | --- |
-| Logging-policy compiler | Canonicalize `config.logs.level` once, validate console/prompt choices, inject every F0002 operational constant, and produce the persisted logging-policy fragment. |
+| Logging-policy compiler | Canonicalize `config.logs.level` once, validate the console choice, inject every F0002 operational constant, and produce the persisted logging-policy fragment; shared policy derives capture from the canonical level. |
 | F0006 repository-model allowlist boundary | Validate every `config.models.slots` tuple against the complete provider catalogue, publish immutable slot-to-catalogue-entry references without copying provider configuration, and resolve the slot selected by each originating YAML request step; consumers retain that binding under ADR 0012. |
 | [F0004 bootstrap-root path-policy boundary](F0004-BootstrapRootRegistryService.md) | Validate the seven configured directory roots plus `config.paths.providers`, reserve their distinct typed roles, and construct the `BootstrapRootRegistry`; F0001 does not resolve a path itself. |
 | [F0008 provider-config reader](F0008-LLMProviderConfigService.md) | Consume only F0004's opaque provider-document capability and capture its bytes; it does not reread F0001 or resolve the raw string. |

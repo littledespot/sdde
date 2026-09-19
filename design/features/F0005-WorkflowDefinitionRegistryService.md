@@ -700,6 +700,10 @@ service is published.
   undeclared outcome has a transition, and every node/terminal target is valid;
 - data-key versions, required/optional inputs, producers, replacements,
   invalidations, side-effect barriers, and ordering constraints compose;
+- every `workflow_publication` operation transitions directly to its matching
+  terminal for every declared outcome, including after subgraph expansion. No
+  later pure, filesystem, model, logging or publication operation is permitted;
+  preparation selects the validated `ok` or `needs_user` terminal before writing;
 - every terminal target preserves its source tag exactly, and graph policy
   cannot discard a failure, invalid result, user-input need, block, or
   cancellation along a later branch;

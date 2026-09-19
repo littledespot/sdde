@@ -25,7 +25,7 @@ flowchart TD
     RESULT -->|Genuine knowledge gap| CLARIFY
     OUTPUT -->|Unresolved clarification| CLARIFY
     CLARIFY["Prepare the affected requirement, evidence and exact decision;<br/>refresh forms with stable IDs and preserve user-closed files"]
-    CLARIFY -->|Forms saved| NEEDSUSER["End needs_user;<br/>no partial specification published"]
+    CLARIFY -->|Forms saved| NEEDSUSER["End needs_user;<br/>incomplete spec and question links published"]
     NEEDSUSER -. User answers and starts a fresh run .-> START
 
     RESULT -->|Repairable candidate defect| REPAIR["Repair only authorized content<br/>within the declared retry limit"]

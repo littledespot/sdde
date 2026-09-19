@@ -62,8 +62,8 @@ Model and reference content are untrusted data:
 - The effective threshold is always compiled from v2 `.sddtoolkit.json` `logs.level`; neither a
   prompt, model response, action, nor orchestrator may override it.
 - File logging is always enabled and cannot be configured away.
-- The only other logging inputs are the optional `logs.console` mirror boolean and unique
-  `logs.promptCapture` selector list.
+- The only other logging input is the optional `logs.console` mirror boolean.
+  The removed `logs.promptCapture` field rejects; capture follows the level alone.
 - Console output never substitutes for a successful file append.
 - Configuration supplies no path, file-enable switch, timestamp, format, size, retention, flush,
   failure, redaction, prompt byte limit, lock value, per-event level, column-schema ID, or
@@ -79,8 +79,8 @@ Model and reference content are untrusted data:
 | `ERROR` | `error` / 50 | An operation, task, required command, stage, or durable write failed while the engine remains in a known stable state; the affected feature is broken/blocked. |
 | `WARNING`, `WARN` | `warning` / 40 | An unexpected, rejected, stale, or retryable condition occurred and the engine recovered or safely blocked it, but it needs attention. |
 | `INFO` | `info` / 30 | Normal run/stage/task/review lifecycle and publication outcomes. |
-| `DEBUG` | `debug` / 20 | Developer detail such as node lifecycle, validator summary, operation/slot/token counts, and output entry counts. |
-| `TRACE` | `trace` / 10 | The most verbose step/branch/scheduling, typed-key/ID, rule-ID, and bounded count detail. It never enables raw content or weakens redaction. |
+| `DEBUG` | `debug` / 20 | Developer detail plus complete credential-redacted model requests and responses in the separate prompt stream under ADR 0018. |
+| `TRACE` | `trace` / 10 | Debug capture plus the most verbose step/branch/scheduling, typed-key/ID, rule-ID, and bounded count detail. Credential redaction remains mandatory. |
 
 - An event is emitted iff `rank(event) >= rank(configured threshold)`.
 - The closed proof-of-concept `LogEventDefinitionRegistry` is exactly the table in F0002 Section
@@ -94,7 +94,7 @@ Model and reference content are untrusted data:
 Every activated run writes beneath the spec being run, never into the editable specification itself:
 
 - events: `<paths.specs>/<featureId>/logs/events/<runId>/<featureLogBindingId>/<segmentOrdinal>.log`;
-- prompt exchanges, only when enabled: `<paths.specs>/<featureId>/logs/prompts/<runId>/<featureLogBindingId>/<segmentOrdinal>.log`.
+- prompt exchanges, enabled by debug/trace: `<paths.specs>/<featureId>/logs/prompts/<runId>/<featureLogBindingId>/<segmentOrdinal>.log`.
 
 - These collection roots are fixed entries in the exact `WorkflowArtifactRegistry`; the engine
   renders the binding tuple to one registered portable path token, so no user/model/config path
@@ -108,9 +108,10 @@ Every activated run writes beneath the spec being run, never into the editable s
   new target's feature root is activated is that buffer flushed into its feature log.
 - A **new-target** preactivation failure has no feature/spec directory and therefore uses only
   the process/emergency engine sink.
-- An existing-target rerun already has its validated active feature directory and current log
-  authority, so its preactivation failure remains feature-logged under that existing binding as
-  defined by the startup flow.
+- Under ADRs 0009 and 0018, an existing-target rerun also receives a fresh run/binding
+  after preflight. Prior logs remain observations; a preactivation failure never
+  revives a previous execution or reuses its logging authority. No model dispatch
+  occurs before the current logging activation succeeds.
 
 - The event stream is metadata-only.
 - It may contain only the registered IDs, enums, counts, durations, diagnostic codes, workflow
@@ -119,22 +120,35 @@ Every activated run writes beneath the spec being run, never into the editable s
 - It never contains diagnostic `message`/`actual`/`expected`, environment-variable values,
   credentials, raw prompts, reference bodies, source code, patches, command output, or arbitrary
   maps.
-- Prompt/body logging defaults off even when the threshold is `trace`.
-- Enabling it requires independent request, response, reference-body, and code-body opt-ins.
-- The engine builds a complete fragment manifest from the typed workflow operation
-  request/result before provider serialization; every body field is exactly one `ordinary`,
-  `reference_body`, or `code_body` fragment.
-- A request/response direction opt-in is necessary for every fragment in that direction, and
-  reference/code fragments additionally require their class opt-in.
-- Opaque whole-body capture is forbidden, so disabling reference/code capture cannot leak those
-  bytes inside an enabled request.
-- Structured secret fields, mandatory credential/key detectors, and configured bounded RE2
-  detectors run first per selected fragment; replacement uses a fixed category marker that
-  reveals neither value nor original length.
-- Truncation happens only afterward at a UTF-8 scalar boundary.
+- [ADR 0018](../decisions/0018-debug-model-exchange-logging.md) enables full request and
+  response capture at `debug`/`trace`, including reference and code bodies.
+  Higher thresholds emit metadata only; there is no direction/class configuration.
+- The production invocation boundary captures every complete assembled model-facing request
+  before dispatch and every available raw returned body before response parsing or disposal.
+  Include failed/malformed attempts and separate retry attribution; a no-body failure retains
+  a typed `transport_outcome` diagnostic distinct from actual `provider_body` bytes.
+  Preserve interrupted response prefixes as `partial_provider_body`, redacting them
+  before capture and retaining the original failure/cancellation semantics.
+- Internal fragment classes retain body provenance. The `complete_body` class permits complete
+  serialized model-facing bodies without parsing their semantic shape. Capture never converts
+  these bytes into business authority.
+- Authentication headers, credential configuration and environment secrets are not added to
+  model-facing body capture. Production capture removes exact credential values held by the
+  invocation's authorization, including JSON-escaped forms, before splitting; fixed markers
+  reveal neither value nor original length. It does not claim discovery of unknown secrets
+  embedded in reference/model text. Classified fragments retain their existing sanitization
+  contract; configured detectors remain unsupported under the compiler-owned policy.
+- Split sanitized content at UTF-8 boundaries into bounded fragments; never truncate or
+  summarize it. Stable engine-owned fragment identities and ordering permit complete
+  reconstruction after redaction, including credentials spanning would-be chunk boundaries.
+  Invalid UTF-8 bodies use base64 with an encoding-tagged fragment ID rather than losing bytes.
 - Selected sanitized fragments are sorted by `promptBodyFragmentId` and each becomes one
   scalar-only prompt pipe-delimited row; metadata and evidence vectors are not packed into
-  composite cells.
+  composite cells. Existing record/segment limits remain enforced and fail closed instead of
+  silently dropping any fragment.
+- Prompt rows retain their registry-owned `debug` severity and the ordinary level threshold.
+  A response-capture failure still permits provider decoding
+  and actual-usage accounting before blocking, never candidate release or further work.
 - Zero selected fragments produce zero prompt rows.
 - Every transient fragment handle is destroyed whether its row is emitted or filtered out.
 
@@ -170,8 +184,9 @@ Every activated run writes beneath the spec being run, never into the editable s
 - The exact PoC constants are F0002 Section 6.4: timestamp enabled; pipe-delimited file and
   optional console output; 65,536-byte records; 8,388,608-byte segments; 16 segments per
   feature/run/stream; 14-day retention; lower-level flush after 32 records or 1,000 monotonic
-  ms; 5,000-byte sanitized prompt fragments; built-in `redaction/default-v1` detectors with no
-  configured additions; `error` forced-flush threshold; and `block_new_work`.
+  ms; 5,000-byte sanitized prompt chunks without an exchange truncation ceiling;
+  compiler-owned `redaction/default-v1` with no configured additions; `error`
+  forced-flush threshold; and `block_new_work`.
 - These are compiler-owned constants rather than configurable values or defaults.
 
 - The canonical dialect is UTF-8 without BOM, ASCII `|` delimiter, no quoting, and one LF after

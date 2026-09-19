@@ -3,17 +3,9 @@ const std = @import("std");
 pub const engine_config_basename = ".sddtoolkit.json";
 pub const max_engine_config_bytes: usize = 1024 * 1024;
 
-pub const PromptCapture = enum {
-    request,
-    response,
-    reference_body,
-    code_body,
-};
-
 pub const LogsConfig = struct {
     level: []const u8,
     console: bool,
-    promptCapture: []const PromptCapture,
 };
 
 pub const ModelSlotConfig = struct {

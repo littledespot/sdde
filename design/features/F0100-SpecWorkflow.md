@@ -862,8 +862,10 @@ validators:
 - The definition converts validated authority gaps with
   `build-required-authority-clarification-needs` and generation needs with
   `build-specification-clarification-need`. Both reuse `refresh-clarifications`,
-  `render-clarification-forms`, `prepare-clarification-output`,
-  `publish-workflow-output` and `check-clarification-progress`.
+  `render-clarification-forms`, `build-reference-snapshot`,
+  `build-incomplete-specification`, `render-incomplete-specification`,
+  `prepare-incomplete-specification-output`, `publish-workflow-output` and
+  `check-clarification-progress`.
 - The shared refresh retains subject IDs across invocations and replaces open drafts,
   including when the question is unchanged.
 - New submitted answers remain blocked pending trusted authentication and applicability
@@ -892,7 +894,10 @@ validators:
   remain mandatory Plan-owned obligations, rendered in `reference-context.md`; Specify
   creates no Plan form and cannot use policy findings as business provenance. Plan must
   reassess current principles and resolve those obligations under its own input authority.
-- The native closed `specification-state/v2` singleton contains the feature key,
+- The native closed `specification-state/v3` contract distinguishes `specified` and
+  `spec_clarification_pending`. The pending variant holds the current reference snapshot,
+  clarification binding/open IDs and prior ID ledger; it cannot supply completed content.
+  The specified variant contains the feature key,
   revision, `specified` stage, captured reference sources/chunks/claims/citations,
   exact compiled extraction-contract comparison evidence, reconciliation and
   passive-literal records, accepted brief/content/provenance,
@@ -1075,7 +1080,7 @@ The approved native contract requires `entities.disposition` as `required` or
 decision: the shared authority gate must validate its support. Parsing a missing
 entity section captures only `omitted`, never a supported non-applicability fact.
 
-### 5.5 Clarification is not specification content
+### 5.5 Incomplete specification and controlled clarifications
 
 `spec.md` never contains `[CLARIFICATION]`, `[CLAFIFICATION]`,
 `[NEEDS CLARIFICATION: ...]`, `TBD`, unresolved template instructions, or an
@@ -1090,8 +1095,10 @@ conflicting, the engine:
 3. renders the controlled form only beneath `<featureDir>/clarify/SNN.md`;
 4. validates and publishes the clarification registry, form, required current
    authorities, and `spec_clarification_pending` workflow state under §§23.2 and 25;
-5. returns terminal `needs_user` with no partial `SpecificationIR` or `spec.md`;
-   and
+5. publishes a visibly incomplete `spec.md` with retained cited business content
+   and links to every open `SNN`, then returns `needs_user`. This is the distinct
+   pending projection in [ADR 0017](../decisions/0017-incomplete-specification-publication.md),
+   not a partial completed `SpecificationIR`; and
 6. after a current authenticated answer or authority resolution commits,
    regenerates every specification unit before validation and rendering.
 
@@ -1109,7 +1116,8 @@ conflicting, the engine:
 - Reuse the same subject ID, not the old form bytes, even when the question is
   unchanged.
 - This replacement also applies to a clarification publication ending in `needs_user`;
-  it does not publish a partial specification.
+  it publishes the separately validated incomplete specification and pending state
+  under ADR 0017, never completed specification authority.
 - Design Section 23.2 applies this rule to all workflow executions and every registered
   clarification family.
 
@@ -1346,12 +1354,13 @@ YAML definition.
    definition.
 6. A model returns typed candidate content only; the engine owns IDs, paths,
    headings, validation, rendering, repair scope, persistence, and completion.
-7. `spec.md` renders the Section 5.1 hierarchy, omits empty optional sections,
+7. Completed `spec.md` renders the Section 5.1 hierarchy, omits empty optional sections,
    retains mandatory parent/content sections and validates conditional entities.
    Empty mandatory content cannot pass the shared authority gate or state load.
 8. `spec.md` contains no template placeholder, inline clarification marker, or
    unresolved specification question; all such needs use `clarify/SNN.md` and
-   terminal `needs_user` with no partial specification.
+   terminal `needs_user` with a validated incomplete specification linking those forms.
+   Completed-spec structure/authority checks remain mandatory for `specified`.
 9. `needs_user`, `invalid`, `blocked`, `failed`, and `cancelled` cannot be
    relabelled as `ok`.
 10. Success requires a committed valid specification, complete reference
@@ -1446,9 +1455,11 @@ YAML definition.
   in Sections 3.1–3.9 are implemented.
 - Model-connected extraction/reconciliation (§3.11) and in-memory specification
   generation/validation/repair (§5.7) are implemented through ordinary YAML.
-- Generation needs now refresh and publish controlled clarification forms (§3.12);
-  validated specification content renders, reparses and publishes alongside its
-  reference sidecar and canonical state.
+- Every Spec clarification branch now publishes the incomplete business view, current
+  reference sidecar, controlled forms/registry and pending state under ADR 0017.
+  Completed specification content still renders, reparses and publishes only after
+  all required decisions resolve. The E2E harness verifies pending publication but
+  never grades it as a completed specification.
 - Answer application, feature-log integration and remaining clarification routes are
   unfinished.
 - Generated-name code is removed.

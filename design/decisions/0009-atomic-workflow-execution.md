@@ -48,7 +48,9 @@
 
 ### Clarification exception
 
-- Clarifications are the explicit persistence exception.
+- Clarifications are the explicit persistence exception. [ADR 0017](0017-incomplete-specification-publication.md)
+  extends this exception to the validated incomplete specification, current reference
+  context and pending workflow state published alongside Spec clarifications.
 - Preserve their stable identity and relevant answers across executions; do not
   duplicate them or overwrite user-resolved (user-closed) clarification files.
 - Unresolved forms are completely overwritten at the same registered paths, retaining

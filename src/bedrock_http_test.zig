@@ -15,6 +15,8 @@ test "concrete HTTP captures request identity and rejects duplicate identity hea
         const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
         if (duplicate) {
             try std.testing.expectEqual(.response_invalid, result.failed.cause);
+            try std.testing.expectEqualStrings("hello", result.failed.body.?.bytes);
+            try std.testing.expect(result.failed.body.?.complete);
         } else {
             try std.testing.expectEqualStrings("request-one", result.received.request_id.?);
             try std.testing.expectEqualStrings("hello", result.received.body);
@@ -138,8 +140,80 @@ test "concrete HTTP preserves timeout when a response finishes during cancellati
     try std.testing.expectEqual(.timeout, result.failed.cause);
     try std.testing.expectEqual(.accepted_or_unknown, result.failed.delivery);
     try std.testing.expectEqual(fixture.response.len, fixture.cursor);
+    try std.testing.expectEqualStrings("hello", result.failed.body.?.bytes);
+    try std.testing.expect(result.failed.body.?.complete);
     try std.testing.expectEqual(@as(usize, 1), fixture.socket_cancellations.load(.acquire));
     try fixture.expectJoined();
+}
+
+test "concrete HTTP retains received body prefixes through truncation reset timeout and cancellation" {
+    for ([_]bool{ false, true }) |chunked| {
+        for ([_]fixture_module.Fault{ .eof, .reset, .deadline, .cancelled, .held }) |fault| {
+            var fixture: fixture_module.Fixture = undefined;
+            fixture.init(if (chunked) "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n" else good);
+            defer fixture.deinit();
+            fixture.fault = fault;
+            fixture.body_prefix_bytes = if (chunked) 6 else 3;
+            var adapter = fixture.adapter();
+            var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+            defer arena.deinit();
+            var body_on_error: ?transport.ResponseBody = null;
+            var request = fixture.request(.inference);
+            request.response_body_on_error = &body_on_error;
+            var retained: transport.ResponseBody = undefined;
+            if (fault == .held) {
+                var future = try fixture.io().concurrent(call, .{ &adapter, arena.allocator(), request });
+                defer std.testing.expectError(error.Cancelled, future.cancel(fixture.io())) catch @panic("caller cancellation must join the exchange");
+                try fixture.reached.waitTimeout(fixture.io(), .{ .duration = .{ .raw = .fromSeconds(5), .clock = .awake } });
+                try std.testing.expectError(error.Cancelled, future.cancel(fixture.io()));
+                retained = body_on_error.?;
+            } else if (fault == .cancelled) {
+                try std.testing.expectError(error.Cancelled, adapter.port().exchange(arena.allocator(), request));
+                retained = body_on_error.?;
+            } else {
+                const result = try adapter.port().exchange(arena.allocator(), request);
+                try std.testing.expectEqual(@as(@import("domain/llm_provider_operation.zig").ProviderFailureCause, if (fault == .deadline) .timeout else .transport_failed), result.failed.cause);
+                try std.testing.expectEqual(.accepted_or_unknown, result.failed.delivery);
+                retained = result.failed.body.?;
+                try std.testing.expect(body_on_error == null);
+            }
+            try std.testing.expectEqualStrings("hel", retained.bytes);
+            try std.testing.expect(!retained.complete);
+            try fixture.expectJoined();
+        }
+    }
+}
+
+test "header policy rejection retains raw complete or interrupted bodies without changing failure authority" {
+    const cases = [_]struct { headers: []const u8, body: []const u8, delivery: @import("domain/llm_provider_operation.zig").ProviderDeliveryDisposition }{
+        .{ .headers = "HTTP/1.1 307 Temporary Redirect\r\nLocation: https://outside.invalid/\r\n", .body = "redirect-details", .delivery = .response_received },
+        .{ .headers = "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\n", .body = "\x1f\x8b\xff\x00encoded", .delivery = .accepted_or_unknown },
+        .{ .headers = "HTTP/1.1 429 Error\r\nX-Amzn-ErrorType: First\r\nx-amzn-errortype: Second\r\n", .body = "{broken-json", .delivery = .accepted_or_unknown },
+        .{ .headers = "HTTP/1.1 200 OK\r\nX-Amzn-RequestId: First\r\nx-amzn-requestid: Second\r\n", .body = "duplicate-details", .delivery = .accepted_or_unknown },
+    };
+    for (cases) |case| {
+        for ([_]fixture_module.Fault{ .none, .eof, .reset, .deadline }) |fault| {
+            var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+            defer arena.deinit();
+            const wire = try std.fmt.allocPrint(arena.allocator(), "{s}Content-Length: {d}\r\n\r\n{s}", .{ case.headers, case.body.len, case.body });
+            var fixture: fixture_module.Fixture = undefined;
+            fixture.init(wire);
+            defer fixture.deinit();
+            fixture.fault = fault;
+            fixture.body_prefix_bytes = 3;
+            var adapter = fixture.adapter();
+            const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+            try std.testing.expectEqual(.response_invalid, result.failed.cause);
+            try std.testing.expectEqual(.never, result.failed.retry_class);
+            try std.testing.expectEqual(case.delivery, result.failed.delivery);
+            try std.testing.expectEqual(.response_headers, result.failed.diagnostic.?.phase);
+            try std.testing.expectEqual(.malformed_response, result.failed.diagnostic.?.cause);
+            try std.testing.expectEqualStrings(if (fault == .none) case.body else case.body[0..3], result.failed.body.?.bytes);
+            try std.testing.expectEqual(fault == .none, result.failed.body.?.complete);
+            try std.testing.expectEqual(@as(usize, 1), fixture.connects);
+            try fixture.expectJoined();
+        }
+    }
 }
 
 test "concrete HTTP partial sends and interrupted heads fail without a resend" {
@@ -207,6 +281,8 @@ test "concrete HTTP returns AWS error responses once and never follows redirects
             try std.testing.expectEqual(.response_invalid, result.failed.cause);
             try std.testing.expectEqual(.never, result.failed.retry_class);
             try std.testing.expectEqual(.response_received, result.failed.delivery);
+            try std.testing.expectEqualStrings("{}", result.failed.body.?.bytes);
+            try std.testing.expect(result.failed.body.?.complete);
         } else {
             try std.testing.expectEqual(status, result.received.status);
             try std.testing.expectEqualStrings("TestException", result.received.exception.?);

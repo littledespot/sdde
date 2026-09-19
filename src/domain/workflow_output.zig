@@ -5,7 +5,9 @@ const c = @import("clarification_inputs.zig");
 const artifacts = @import("workflow_artifact_registry.zig");
 pub const Target = union(enum) { artifact: enum { specification, reference_context, clarification_state, workflow_state }, form: c.Id };
 pub const File = struct { target: Target, bytes: []const u8 };
+pub const TerminalOutcome = enum { ok, needs_user };
 pub const Prepared = struct {
+    terminal_outcome: TerminalOutcome,
     feature: @import("feature_directory.zig").Directory,
     paths: artifacts.FeaturePaths,
     prior: c.Captures,

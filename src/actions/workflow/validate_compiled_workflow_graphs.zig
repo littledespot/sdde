@@ -35,6 +35,7 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
     if (workflow.OperationId.parse(graph.authority.invocation_operation_id.bytes) == null) return invalid();
     try validateDataSchemas(graph.authority);
     if (steps.len == 0 or steps.len > definition.max_steps or
+        !compilation.publicationTerminates(graph.authority) or
         !compilation.validResourceBindings(graph.authority.resources) or
         !graph.authority.total_model_token_budget.isValid() or
         graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return invalid())) return invalid();
@@ -208,6 +209,67 @@ test "bounded progress can never be a compiled workflow terminal state" {
         .{ .from = step.id, .outcome = .more, .target = .{ .terminal = .more } },
     };
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(arena.allocator(), &.{testGraph(&.{step}, &transitions)}));
+}
+
+test "publication ends every outcome directly without a later pure or effectful operation" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var publication = testStep("publish", null);
+    publication.side_effect = .workflow_publication;
+    publication.outcomes = &.{ .ok, .needs_user, .failed };
+    const terminal = [_]workflow.Transition{
+        .{ .from = publication.id, .outcome = .ok, .target = .{ .terminal = .ok } },
+        .{ .from = publication.id, .outcome = .needs_user, .target = .{ .terminal = .needs_user } },
+        .{ .from = publication.id, .outcome = .failed, .target = .{ .terminal = .failed } },
+    };
+    var accepted = testGraph(&.{publication}, &terminal);
+    accepted.authority.maximum_step_executions = compilation.calculateExecutionLimit(accepted.authority.steps).?;
+    _ = try (Action{}).execute(a, &.{accepted});
+    for ([_]pipeline.SideEffect{ .none, .filesystem_read, .filesystem_write, .model_call, .workflow_publication }) |effect| {
+        var after = testStep("later", null);
+        after.side_effect = effect;
+        for (0..terminal.len) |redirected| {
+            var transitions = terminal ++ [_]workflow.Transition{
+                .{ .from = after.id, .outcome = .ok, .target = .{ .terminal = .ok } },
+                .{ .from = after.id, .outcome = .failed, .target = .{ .terminal = .failed } },
+            };
+            transitions[redirected].target = .{ .step = after.id };
+            var rejected = testGraph(&.{ publication, after }, &transitions);
+            rejected.authority.maximum_step_executions = compilation.calculateExecutionLimit(rejected.authority.steps).?;
+            try std.testing.expect(!compilation.publicationTerminates(rejected.authority));
+            try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(a, &.{rejected}));
+        }
+    }
+    var loop = terminal;
+    loop[0].target = .{ .step = publication.id };
+    accepted.authority.transitions = &loop;
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(a, &.{accepted}));
+    var wrong_terminal = terminal;
+    wrong_terminal[1].target = .{ .terminal = .ok };
+    accepted.authority.transitions = &wrong_terminal;
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (Action{}).execute(a, &.{accepted}));
+}
+
+test "separate workflow branches may each select their own terminal publication" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const select = testStep("select", null);
+    var first = testStep("first-output", null);
+    first.side_effect = .workflow_publication;
+    var second = testStep("second-output", null);
+    second.side_effect = .workflow_publication;
+    const transitions = [_]workflow.Transition{
+        .{ .from = select.id, .outcome = .ok, .target = .{ .step = first.id } },
+        .{ .from = select.id, .outcome = .failed, .target = .{ .step = second.id } },
+        .{ .from = first.id, .outcome = .ok, .target = .{ .terminal = .ok } },
+        .{ .from = first.id, .outcome = .failed, .target = .{ .terminal = .failed } },
+        .{ .from = second.id, .outcome = .ok, .target = .{ .terminal = .ok } },
+        .{ .from = second.id, .outcome = .failed, .target = .{ .terminal = .failed } },
+    };
+    var graph = testGraph(&.{ select, first, second }, &transitions);
+    graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(graph.authority.steps).?;
+    _ = try (Action{}).execute(arena.allocator(), &.{graph});
 }
 
 fn testStep(id: []const u8, retry_limit: ?u32) compilation.CompiledStep {

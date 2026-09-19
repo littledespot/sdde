@@ -1,5 +1,6 @@
 const std = @import("std");
 
+pub const feature_logging = "feature-logging";
 pub const model_provider = "model-provider";
 pub const provider_authorization = "provider-authorization";
 pub const principle_read = "principle-read";
@@ -14,7 +15,7 @@ pub const reference_decode = "reference-decode";
 pub const reference_identity = "reference-identity";
 
 pub fn known(id: []const u8) bool {
-    inline for (.{ principle_read, model_provider, provider_authorization, toolchain_read, toolchain_parser, reference_read, feature_read, feature_input_read, feature_output_write, reference_content_read, reference_decode, reference_identity }) |known_id| {
+    inline for (.{ feature_logging, principle_read, model_provider, provider_authorization, toolchain_read, toolchain_parser, reference_read, feature_read, feature_input_read, feature_output_write, reference_content_read, reference_decode, reference_identity }) |known_id| {
         if (std.mem.eql(u8, id, known_id)) return true;
     }
     return false;

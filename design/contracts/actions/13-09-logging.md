@@ -12,6 +12,19 @@ contract IDs are the only compiler-locked instrumentation-internal IDs and are
 not observed recursively. The logging orchestrator coordinates them but has no
 clock, filesystem, redaction, serializer, or sink port itself.
 
+[ADR 0018](../../decisions/0018-debug-model-exchange-logging.md) makes production
+activation a selected-graph operation: `activate-feature-logging` runs after
+preflight, materializes only the observed selected target and registered log layout,
+then installs the composition-owned active runner. It returns fresh directory
+observations backed by a run-local capability. It grants no model or workflow
+completion authority.
+
+The common runner closes active logging before a registered `workflow_publication`
+operation can write outputs. A common terminal child binding closes all other
+outcomes and reports close failures before releasing the sink. Ordinary filesystem
+writes do not imply workflow publication. Both barriers use the same finalization
+owner and cannot finalize twice or discard an earlier logging failure.
+
 ## `AcquireFeatureLogStreamLockAction`
 
 - **Input:** validated current feature-log binding and exact stream
@@ -208,8 +221,8 @@ clock, filesystem, redaction, serializer, or sink port itself.
 - **Input:** transient fragment-manifest/candidate/sanitized handle set plus terminal
   emit/drop/error outcome
 - **Output:** destruction evidence
-- **Responsibility:** Release every raw, redacted, and truncated fragment handle on every
-  branch, including selection/redaction/truncation/validation failure; no emitted record is a
+- **Responsibility:** Release every raw, redacted, and split fragment handle on every
+  branch, including selection/redaction/splitting/validation failure; no emitted record is a
   precondition.
 
 ## `EmitEmergencyLogFailureRecordAction`

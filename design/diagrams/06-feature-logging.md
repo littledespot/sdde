@@ -11,8 +11,8 @@ flowchart TD
     FACT --> REDACT["Select permitted fields and redact sensitive values"]
     REDACT --> LEVEL{"Event meets the configured severity threshold?"}
     LEVEL -->|No| CONTINUE["Continue the workflow"]
-    LEVEL -->|Yes| BODY{"Prompt or response capture explicitly enabled?"}
-    BODY -->|Yes| SANITIZE["Redact and bound permitted body fragments"]
+    LEVEL -->|Yes| BODY{"Body capture enabled by debug/trace?"}
+    BODY -->|Yes| SANITIZE["Redact credentials, then split complete selected bodies<br/>into ordered bounded fragments without truncation"]
     BODY -->|No| METADATA["Keep metadata only"]
     SANITIZE --> RECORD["Validate and encode records in the fixed log format"]
     METADATA --> RECORD
@@ -29,6 +29,9 @@ flowchart TD
     FINISH["Workflow ends"] --> CLOSE["Flush and close active streams;<br/>apply retention to eligible closed segments"]
 ```
 
-[F0002](../features/F0002-LogService.md) owns severity, opt-in body capture,
-redaction, limits and failure behavior. Log-tail recovery repairs log records;
+[F0002](../features/F0002-LogService.md) and
+[ADR 0018](../decisions/0018-debug-model-exchange-logging.md) own severity, debug/trace
+exchange capture, redaction, limits and failure behavior.
+The production invocation boundary captures requests before dispatch and available
+raw responses before admission, including failed attempts. Log-tail recovery repairs log records;
 it never resumes a workflow or establishes completion.

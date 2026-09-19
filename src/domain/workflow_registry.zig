@@ -143,6 +143,7 @@ fn graphProjectsDefinition(
         !graph.authority.total_model_token_budget.isValid() or
         graph.authority.resources.len != declared.resources.len or
         graph.authority.steps.len != declared.steps.len or
+        !compilation.publicationTerminates(graph.authority) or
         !compilation.validResourceBindings(graph.authority.resources)) return false;
 
     for (graph.authority.resources, declared.resources) |compiled, resource| {

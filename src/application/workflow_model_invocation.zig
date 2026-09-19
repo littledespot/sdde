@@ -13,6 +13,7 @@ pub fn validateCount(call: validation.Call, candidate: *const execution.Candidat
     if (!observed.operationId().eql(call.operation_id)) return .authority;
     const outcome = observed.outcome() orelse return .authority;
     if (outcome.* == .allocation_failed) return .{ .operation_failed = error.OperationExecutionFailed };
+    if (outcome.* == .logging_blocked_before_send) return .{ .logging = .LOG_SINK_FAILURE };
     return if (candidate.outcome == invocation.countStatus(outcome.*)) null else .authority;
 }
 
@@ -47,6 +48,10 @@ fn classify(call: validation.Call, candidate: ?*const execution.Candidate, resol
         },
         .cancelled => {},
         .allocation_failed => return .{ .operation_failed = error.OperationExecutionFailed },
+        .logging_blocked_before_send => {
+            resolution.* = .not_sent;
+            return .{ .logging = .LOG_SINK_FAILURE };
+        },
     }
     if (value.outcome != invocation.status(outcome.*)) return .authority;
     return null;

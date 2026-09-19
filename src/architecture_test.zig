@@ -1404,6 +1404,33 @@ test "feature log paths have one opaque artifact authority and one sink consumer
     try expectAbsent(sink, "createDirPathOpen");
 }
 
+test "feature log activation owns only registered target write authority" {
+    const activation = @import("application/feature_logging_workflow.zig");
+    const inspection = comptime @import("application/workflow_operation_binding.zig").inspect(activation.Activate, &.{});
+    try std.testing.expect(inspection.valid and inspection.feature_logging);
+    try std.testing.expect(!inspection.model_provider and !inspection.feature_output_write);
+    const io = std.testing.io;
+    var sources = try std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true });
+    defer sources.close(io);
+    var walker = try sources.walk(std.testing.allocator);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig") or
+            std.mem.eql(u8, entry.path, "domain/bootstrap_root_registry.zig") or
+            std.mem.eql(u8, entry.path, "domain/workflow_artifact_registry.zig") or
+            std.mem.eql(u8, entry.path, "adapters/filesystem/feature_log_layout.zig") or
+            std.mem.eql(u8, entry.path, "adapters/filesystem/workflow_output.zig") or
+            std.mem.eql(u8, entry.path, "architecture_test.zig")) continue;
+        const source = try entry.dir.readFileAlloc(io, entry.basename, std.testing.allocator, .limited(1024 * 1024));
+        defer std.testing.allocator.free(source);
+        try expectAbsent(source, "bindFeatureOutputAdapter");
+    }
+    const adapter = @embedFile("adapters/filesystem/feature_log_layout.zig");
+    try expectAbsent(adapter, "*const roots.BootstrapRootRegistry");
+    try expectAbsent(adapter, "bindFeatureInputAdapter");
+    try expectAbsent(@embedFile("application/feature_logging_workflow.zig"), "/adapters/");
+}
+
 test "feature logging lifecycle coordinates bindings without filesystem authority" {
     const lifecycle = @embedFile("application/feature_log_runtime_lifecycle.zig");
     try expectAbsent(lifecycle, "/adapters/");

@@ -17,7 +17,7 @@ pub const Lifecycle = struct {
     active: ?feature_log_bindings.ChildBindings = null,
 
     pub fn barrier(self: *Lifecycle) barrier_port.Barrier {
-        return .{ .context = self, .process_fn = process };
+        return .{ .context = self, .process_fn = process, .select_prompt_fn = selectPrompt, .process_prompt_fn = processPrompt, .report_failure_fn = reportFailure };
     }
 
     pub fn activate(
@@ -84,5 +84,20 @@ pub const Lifecycle = struct {
         const self: *Lifecycle = @ptrCast(@alignCast(context));
         const active = self.active orelse return .{ .blocked = .LOG_SINK_FAILURE };
         return feature_log_orchestrator.processEvent(active, fact);
+    }
+    fn selectPrompt(context: *anyopaque, fragment: @import("../domain/sanitized_prompt_log.zig").SanitizedPromptFragment) bool {
+        const self: *Lifecycle = @ptrCast(@alignCast(context));
+        // An absent required active logger fails at persistence, never silently drops.
+        const active = self.active orelse return true;
+        return active.invokeEvaluatePrompt(fragment) == .emit;
+    }
+    fn processPrompt(context: *anyopaque, fragment: @import("../domain/sanitized_prompt_log.zig").SanitizedPromptFragment) log_stream.Outcome {
+        const self: *Lifecycle = @ptrCast(@alignCast(context));
+        const active = self.active orelse return .{ .blocked = .LOG_SINK_FAILURE };
+        return feature_log_orchestrator.processPrompt(active, fragment);
+    }
+    fn reportFailure(context: *anyopaque, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) void {
+        const self: *Lifecycle = @ptrCast(@alignCast(context));
+        if (self.active) |active| _ = active.invokeReportFailure(shortcode, failure);
     }
 };

@@ -225,10 +225,13 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
 - Neither correction path synthesizes a candidate example.
 
 - `evaluated` means generation, publication checks and a scored evaluation completed.
-- `awaiting_clarification` preserves native `needs_user` as a normal pause. Both
+- `awaiting_clarification` preserves native `needs_user` as a normal pause. The
+  harness verifies the complete pending publication, including the incomplete
+  `spec.md`, reports its path and `publication: passed`, and never grades the draft. Both
   CLI entrypoints exit 0 and show registered open clarification IDs and paths.
   Harness paths point into the retained run's `project/`; JSON paths are relative
-  to that project. Unattempted specification publication and grading are `not_run`.
+  to that project. Incomplete publication is checked; semantic quality and grading
+  remain `not_run`.
   After validated answers, a fresh workflow invocation starts at `start`.
 - Exit 0 alone does not establish the published/scored baseline: require `evaluated`.
 - A low score is still a completed evaluation; inspect `score_percent` and the

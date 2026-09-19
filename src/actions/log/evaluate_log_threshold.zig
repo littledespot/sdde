@@ -26,7 +26,6 @@ test "drops before any identity or sink work" {
     const policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .warning, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &.{},
     };
     try @import("std").testing.expectEqual(Decision.drop, (Action{}).execute(policy, .info));
 }

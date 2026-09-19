@@ -52,7 +52,7 @@ pub const Runner = struct {
     }
 
     pub fn barrier(self: *Runner) barrier_port.Barrier {
-        return .{ .context = self, .process_fn = processBarrier };
+        return .{ .context = self, .process_fn = processBarrier, .select_prompt_fn = selectPromptBarrier, .process_prompt_fn = processPromptBarrier, .report_failure_fn = reportFailureBarrier };
     }
 
     pub fn process(
@@ -94,7 +94,7 @@ pub const Runner = struct {
         if (self.event_state == null) {
             if (self.prepareOne(.event, reading)) |failure| return self.block(shortcode, failure);
         }
-        if (self.policy.prompt_capture.len != 0 and self.prompt_state == null) {
+        if (log_policy.promptCaptureEnabled(self.policy.*) and self.prompt_state == null) {
             if (self.prepareOne(.prompt, reading)) |failure| return self.block(shortcode, failure);
         }
         self.prepared = true;
@@ -429,8 +429,7 @@ fn evaluatePromptBinding(
     fragment: prompt_log.SanitizedPromptFragment,
 ) child_bindings.Decision {
     const self = castConst(context);
-    if ((select_prompt.Action{}).execute(self.policy.*, fragment) == .drop or
-        (threshold.Action{}).execute(self.policy.*, .debug) == .drop) return .drop;
+    if ((select_prompt.Action{}).execute(self.policy.*, fragment) == .drop) return .drop;
     return .emit;
 }
 
@@ -519,6 +518,15 @@ const bindings_vtable: child_bindings.ChildBindings.VTable = .{
 fn processBarrier(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) log_stream.Outcome {
     const self: *Runner = @ptrCast(@alignCast(context));
     return self.process(fact);
+}
+fn selectPromptBarrier(context: *anyopaque, fragment: prompt_log.SanitizedPromptFragment) bool {
+    return evaluatePromptBinding(context, fragment) == .emit;
+}
+fn processPromptBarrier(context: *anyopaque, fragment: prompt_log.SanitizedPromptFragment) log_stream.Outcome {
+    return cast(context).processPrompt(fragment);
+}
+fn reportFailureBarrier(context: *anyopaque, shortcode: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) void {
+    _ = cast(context).reportFailure(shortcode, failure);
 }
 
 const PersistError = error{

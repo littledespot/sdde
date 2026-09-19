@@ -11,7 +11,8 @@ pub fn bind(comptime T: type, context: ?*T, comptime invoke: *const fn (?*T, ope
         const implementation: operations.Binding.Implementation = .{
             .invoke_fn = call,
             .context_required = T != void,
-            .capabilities = &(if (derived.model_provider) [_][]const u8{@import("../domain/workflow_capability.zig").model_provider} else [_][]const u8{}) ++
+            .capabilities = &(if (derived.feature_logging) [_][]const u8{@import("../domain/workflow_capability.zig").feature_logging} else [_][]const u8{}) ++
+                (if (derived.model_provider) [_][]const u8{@import("../domain/workflow_capability.zig").model_provider} else [_][]const u8{}) ++
                 (if (derived.provider_authorization) [_][]const u8{@import("../domain/workflow_capability.zig").provider_authorization} else [_][]const u8{}) ++
                 (if (derived.principle_read) [_][]const u8{@import("../domain/workflow_capability.zig").principle_read} else [_][]const u8{}) ++
                 (if (derived.toolchain_read) [_][]const u8{@import("../domain/workflow_capability.zig").toolchain_read} else [_][]const u8{}) ++
@@ -32,9 +33,10 @@ pub fn bind(comptime T: type, context: ?*T, comptime invoke: *const fn (?*T, ope
     return .{ .context = @ptrCast(context), .implementation = &compiled.implementation };
 }
 
-pub const Inspection = struct { valid: bool = true, principle_read: bool = false, model_provider: bool = false, provider_authorization: bool = false, toolchain_read: bool = false, toolchain_parser: bool = false, reference_read: bool = false, feature_read: bool = false, feature_input_read: bool = false, feature_output_write: bool = false, reference_content_read: bool = false, reference_decode: bool = false, reference_identity: bool = false };
+pub const Inspection = struct { valid: bool = true, feature_logging: bool = false, principle_read: bool = false, model_provider: bool = false, provider_authorization: bool = false, toolchain_read: bool = false, toolchain_parser: bool = false, reference_read: bool = false, feature_read: bool = false, feature_input_read: bool = false, feature_output_write: bool = false, reference_content_read: bool = false, reference_decode: bool = false, reference_identity: bool = false };
 
 pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
+    if (T == @import("../ports/feature_log_activation.zig").Activator) return .{ .feature_logging = true };
     if (T == provider.LLMProviderInterface) return .{ .model_provider = true };
     if (T == @import("../ports/provider_operation_authorization.zig").Port) return .{ .provider_authorization = true };
     if (T == @import("../ports/unicode_normalizer.zig").Normalizer) return .{};
@@ -69,6 +71,7 @@ pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
             inline for (info.fields) |field| {
                 const child = inspect(field.type, next);
                 result.valid = result.valid and child.valid;
+                result.feature_logging = result.feature_logging or child.feature_logging;
                 result.principle_read = result.principle_read or child.principle_read;
                 result.model_provider = result.model_provider or child.model_provider;
                 result.provider_authorization = result.provider_authorization or child.provider_authorization;

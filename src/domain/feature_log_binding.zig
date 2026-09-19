@@ -76,8 +76,9 @@ pub fn sameBinding(value: *const ValidatedFeatureLogBinding, candidate: BindingC
 }
 
 fn validPathIdentifier(value: telemetry.Identifier) bool {
-    return value.bytes.len != 0 and !std.mem.eql(u8, value.bytes, ".") and
-        !std.mem.eql(u8, value.bytes, "..");
+    if (telemetry.Identifier.validate(value.bytes) == null) return false;
+    @import("relative_directory_path.zig").validate(value.bytes) catch return false;
+    return true;
 }
 
 fn bindingStorage(value: *const ValidatedFeatureLogBinding) *const BindingStorage {
@@ -100,4 +101,20 @@ test "validated feature log binding owns one immutable identity tuple" {
     const owner = try createValidated(std.testing.allocator, candidate);
     defer deinitOwner(owner);
     try std.testing.expect(sameBinding(binding(owner), candidate));
+}
+
+test "log path identity fields reject manually constructed non-component identifiers" {
+    const valid: BindingCandidate = .{
+        .log_policy_id = .{ .bytes = "LOGPOL-1" },
+        .binding_id = .{ .bytes = "LOGBIND-1" },
+        .run_id = .{ .bytes = "RUN-1" },
+        .feature_id = .{ .bytes = "Group/Café" },
+    };
+    for ([_][]const u8{ "", ".", "..", "../outside", "a/b", "a\\b", "a\x00b", "a\nb", "CON", "a." }) |bytes| {
+        inline for (.{ "log_policy_id", "binding_id", "run_id" }) |field| {
+            var candidate = valid;
+            @field(candidate, field) = .{ .bytes = bytes };
+            try std.testing.expectError(error.InvalidFeatureLogBinding, createValidated(std.testing.allocator, candidate));
+        }
+    }
 }

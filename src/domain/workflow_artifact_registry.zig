@@ -1,5 +1,6 @@
 const std = @import("std");
 pub const specification_filename = "spec.md";
+pub const clarification_directory_name = "clarify";
 pub const reference_context_filename = "reference-context.md";
 pub const clarification_state_filename = "clarifications.json";
 pub const workflow_state_filename = "workflow.json";
@@ -39,7 +40,7 @@ pub fn resolveFeaturePaths(allocator: std.mem.Allocator, configured: FeatureRoot
     inline for (.{
         .{ Artifact.specification, Root.specs, specification_filename },
         .{ Artifact.reference_context, Root.specs, reference_context_filename },
-        .{ Artifact.clarification_forms, Root.specs, "clarify" },
+        .{ Artifact.clarification_forms, Root.specs, clarification_directory_name },
         .{ Artifact.clarification_state, Root.workflows, "state/" ++ clarification_state_filename },
         .{ Artifact.workflow_state, Root.workflows, "state/" ++ workflow_state_filename },
         .{ Artifact.event_logs, Root.specs, "logs/events" },
@@ -102,6 +103,33 @@ pub fn createValidated(
     const specs = bootstrap.bindSpecsArtifactRegistry(roots.specsArtifacts()) orelse {
         return error.InvalidWorkflowArtifactRegistry;
     };
+    return createForSpecs(backing_allocator, roots.featureArtifactRoots(), binding, specs);
+}
+
+/// A run-local activation may materialize an absent bootstrap root. Its exact
+/// observed identity is retained separately; bootstrap authority stays immutable.
+pub fn createForActive(
+    backing_allocator: std.mem.Allocator,
+    authority: *const bootstrap.FeatureOutputWriteCapability,
+    binding: *const log_binding.ValidatedFeatureLogBinding,
+    active: *const @import("active_feature_directory.zig").Capability,
+) Error!*Owner {
+    const activated = @import("active_feature_directory.zig");
+    const current = activated.directory(active);
+    const effective = activated.bindInput(active, bootstrap.bindFeatureOutputAdapter(authority), current) orelse return error.InvalidWorkflowArtifactRegistry;
+    if (!std.mem.eql(u8, binding.featureId().bytes, current.selector.feature_id.bytes)) return error.InvalidWorkflowArtifactRegistry;
+    return createForSpecs(backing_allocator, effective.binding.paths, binding, .{
+        .project_relative_path = effective.binding.paths.specs,
+        .physical_identity = effective.binding.specs_observation.directory,
+    });
+}
+
+fn createForSpecs(
+    backing_allocator: std.mem.Allocator,
+    configured: FeatureRoots,
+    binding: *const log_binding.ValidatedFeatureLogBinding,
+    specs: bootstrap.SpecsArtifactAdapterBinding,
+) Error!*Owner {
     const owner = backing_allocator.create(OwnerStorage) catch return error.InvalidWorkflowArtifactRegistry;
     errdefer backing_allocator.destroy(owner);
     owner.* = .{ .backing_allocator = backing_allocator, .arena = .init(backing_allocator), .registry = undefined };
@@ -110,7 +138,6 @@ pub fn createValidated(
     const feature = binding.featureId().bytes;
     const run = binding.runId().bytes;
     const binding_id = binding.bindingId().bytes;
-    const configured = roots.featureArtifactRoots();
     const selected = directory.validate(allocator, .{ .bytes = feature }, .{ .specs = configured.specs, .archive = configured.archive }) catch return error.InvalidWorkflowArtifactRegistry;
     const paths = resolveFeaturePaths(allocator, configured, selected) catch return error.InvalidWorkflowArtifactRegistry;
     const event_run = std.fmt.allocPrint(allocator, "{s}/{s}", .{ paths.get(.event_logs).root_relative, run }) catch return error.InvalidWorkflowArtifactRegistry;

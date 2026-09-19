@@ -203,7 +203,7 @@ references, and normative resolutions are retained in the linked sections.
     workflow-owned resource aliases. Large prompts and schemas are declared
     once and referenced; they are never hidden packaged defaults or repeatedly
     copied into nodes.
-30. The whole workflow is validated before publication. Non-success abandons unpublished candidates; a new execution starts at `start`. Publication failure may leave already-replaced files but never records new successful completion (Section 25). No transaction, durable checkpoint or provider-recovery subsystem may be introduced.
+30. The whole workflow is validated before publication. [ADR 0017](decisions/0017-incomplete-specification-publication.md) permits a separately validated incomplete specification with clarification publication, never completion authority. Other non-success abandons unpublished candidates; a new execution starts at `start`. Publication failure may leave already-replaced files but never records new successful completion (Section 25). No transaction, durable checkpoint or provider-recovery subsystem may be introduced.
 31. Clarification persistence and rerun replacement:
     - Clarification records and answers survive output replacement and abandoned executions.
     - One stable target/owner/subject/slot has one clarification ID. A new execution, authority
@@ -619,6 +619,9 @@ logging boundaries.
 
 The runner supplies workflow attribution. Registered logging actions transform typed telemetry
 into safe records without making logs workflow authority.
+At `debug` and `trace`, [ADR 0018](decisions/0018-debug-model-exchange-logging.md)
+requires complete credential-redacted production model requests and available raw
+responses, including failed attempts, in the registered prompt stream.
 
 [Complete §27 contract](contracts/27-observability.md).
 
@@ -817,7 +820,8 @@ The new engine is ready for production evaluation when all of the following are 
       -> warning` aliases.
     - Logging survives prior-run tail recovery and fails closed without becoming workflow
       authority.
-    - Body/prompt logging remains independently opt-in, redacted, bounded, and off by default.
+    - Debug/trace captures complete credential-redacted model exchanges in bounded chunks;
+      higher thresholds emit metadata only. `logs.level` is the sole capture control.
 
 9. Fixed workflow artifact paths are engine-assigned, and every path-like model field is
     structured, normalized, contained, classified, preset-validated, and authorized before it
@@ -954,7 +958,8 @@ The new engine is ready for production evaluation when all of the following are 
     - A new invocation starts again.
     - No project/feature transaction store, WAL, transaction-ID ledger, durable checkpoint or
       provider-effect recovery is permitted.
-    - Clarifications retain their explicit persistence exception.
+    - Clarifications retain their explicit persistence exception, including ADR 0017
+      incomplete specification/reference views and pending state; these never authorize Plan.
 
 32. Stage state, fresh-invocation validation, comparisons and invalidation work without
     storing/comparing artifact fingerprints and without depending on Git flow.
@@ -969,8 +974,10 @@ The new engine is ready for production evaluation when all of the following are 
     - Section 23.2 applies to every registered workflow, with no append, merge, skip, suffix or
       separate overwrite approval.
 
-34. Prompt/response body logging cannot be enabled without the required direction/class opt-ins,
-    redaction, truncation, retention, and sink protections.
+34. `debug` and `trace` capture every production model attempt's complete assembled request
+    and available raw response, with credential redaction before lossless bounded chunking.
+    Higher thresholds emit metadata only; the removed `promptCapture` field rejects.
+    Retention, sink protections and fail-closed capture failures remain mandatory.
 
 35. **Offline integration and fault injection.**
     - Fake-model tests cover valid flow, exact CLI/config roots, variable-size workflow
@@ -1042,6 +1049,8 @@ decision history:
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
 | [0015](decisions/0015-specification-principle-review.md) | Early Spec principle assessment and shared actionable questions; configuration/capture/review implemented, full readiness and question preparation pending. |
 | [0016](decisions/0016-configured-json-response-composition.md) | User-directed configured JSON decomposition and prompt-free assembly; finite graph-limit increase approved. Configured object-part compiler and extraction integration implemented; live improvement pending. |
+| [0017](decisions/0017-incomplete-specification-publication.md) | Clarification pauses publish a validated incomplete specification and pending state without completion authority. |
+| [0018](decisions/0018-debug-model-exchange-logging.md) | Debug/trace capture complete credential-redacted production model exchanges, including failed attempts, without silent truncation. |
 
 Additional accepted feature boundaries:
 

@@ -53,7 +53,6 @@ test "policy transitions require a new compatible binding in the same run" {
     const current_policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .info, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &.{},
     };
     var next_policy = current_policy;
     next_policy.level.threshold = .debug;

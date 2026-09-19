@@ -415,6 +415,21 @@ pub fn build(b: *std.Build) void {
     }) });
     b.step("test-model-candidate-json", "Test compact model wire contracts against independent schema cases").dependOn(&b.addRunArtifact(candidate_json_tests).step);
 
+    const model_logging_step = b.step("test-model-logging", "Test complete model exchange capture and credential redaction");
+    for ([_][]const u8{
+        "src/model_log_redaction_test.zig",
+        "src/model_exchange_capture_test.zig",
+        "src/feature_log_layout_test.zig",
+    }) |source| {
+        const tests = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path(source),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+        }) });
+        model_logging_step.dependOn(&b.addRunArtifact(tests).step);
+    }
+
     const structured_token_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/structured_token_test.zig"),
         .target = target,

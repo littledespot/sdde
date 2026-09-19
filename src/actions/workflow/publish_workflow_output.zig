@@ -8,7 +8,7 @@ pub const Action = struct {
         .kind = .action,
         .requires = &.{.prepared_workflow_output},
         .produces = &.{.published_workflow_output},
-        .side_effect = .filesystem_write,
+        .side_effect = .workflow_publication,
     };
     pub fn execute(self: Action, allocator: std.mem.Allocator, prepared: output.Prepared) output.Error!void {
         return (self.writer orelse return error.OutputWriteFailed).publish(allocator, prepared);

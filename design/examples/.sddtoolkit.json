@@ -1,8 +1,7 @@
 {
   "logs": {
     "level": "debug",
-    "console": true,
-    "promptCapture": []
+    "console": true
   },
   "models": {
     "slots": {

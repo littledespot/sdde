@@ -16,6 +16,7 @@ const invocation_values = @import("../application/specify_invocation_values.zig"
 const reference_values = @import("../application/reference_workflow_values.zig");
 const normalizer = @import("../ports/unicode_normalizer.zig");
 const reference_source = @import("../ports/reference_directory_inspector.zig");
+const logging = @import("../application/feature_logging_workflow.zig");
 const feature = @import("../application/feature_directory_workflow.zig");
 const feature_source = @import("../ports/feature_directory_inspector.zig");
 const clarification = @import("../application/clarification_input_workflow.zig");
@@ -47,6 +48,7 @@ const specification_rendering = @import("../application/specification_rendering_
 const output = @import("../application/workflow_output_binding.zig");
 const clarification_refresh = @import("../application/clarification_refresh_workflow.zig");
 const principles = @import("../application/principle_workflow.zig");
+const incomplete = @import("../application/incomplete_specification_workflow.zig");
 const publication = @import("../application/specification_publication_workflow.zig");
 
 /// Composition of native implementations, not a workflow graph. No setup action
@@ -75,6 +77,7 @@ pub const Assembly = struct {
     normalize_feature: feature.Normalize,
     validate_feature: feature.Validate,
     inspect_feature: feature.Inspect,
+    activate_feature_logging: logging.Activate,
     resolve_feature_paths: clarification.ResolvePaths,
     capture_clarifications: clarification.Capture,
     parse_clarification_state: clarification.ParseState,
@@ -203,10 +206,13 @@ pub const Assembly = struct {
     parse_specification_state: publication.Parse,
     build_resolved_needs: publication.ResolvedNeeds,
     build_specification_state: publication.Build,
+    build_incomplete_specification: incomplete.Build,
+    render_incomplete_specification: incomplete.Render,
+    prepare_incomplete_specification_output: incomplete.Prepare,
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 153 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 157 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -233,6 +239,7 @@ pub const Assembly = struct {
             .inspect_directory = .{ .allocator = allocator, .action = .{ .inspector = directory_inspector } },
             .normalize_feature = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .validate_feature = .{ .allocator = allocator },
+            .activate_feature_logging = .{ .allocator = allocator },
             .inspect_feature = .{ .allocator = allocator, .action = .{ .inspector = feature_inspector } },
             .resolve_feature_paths = .{ .allocator = allocator },
             .capture_clarifications = .{ .allocator = allocator, .action = .{ .source = input_capture } },
@@ -323,6 +330,9 @@ pub const Assembly = struct {
             .parse_specification_state = .{ .allocator = allocator },
             .build_resolved_needs = .{ .allocator = allocator },
             .build_specification_state = .{ .allocator = allocator },
+            .build_incomplete_specification = .{ .allocator = allocator },
+            .render_incomplete_specification = .{ .allocator = allocator },
+            .prepare_incomplete_specification_output = .{ .allocator = allocator },
             .build_reference_snapshot = .{ .allocator = allocator },
             .render_reference_context = .{ .allocator = allocator },
             .prepare_specification_output = .{ .allocator = allocator },
@@ -393,6 +403,7 @@ pub const Assembly = struct {
             entry(feature.Normalize, &self.normalize_feature),
             entry(feature.Validate, &self.validate_feature),
             entry(feature.Inspect, &self.inspect_feature),
+            .{ .contract = logging.Activate.contract, .binding = binding.bind(logging.Activate, &self.activate_feature_logging, logging.Activate.invoke) },
             entry(clarification.ResolvePaths, &self.resolve_feature_paths),
             entry(clarification.Capture, &self.capture_clarifications),
             entry(clarification.ParseState, &self.parse_clarification_state),
@@ -520,6 +531,9 @@ pub const Assembly = struct {
             entry(publication.Parse, &self.parse_specification_state),
             entry(publication.ResolvedNeeds, &self.build_resolved_needs),
             entry(publication.Build, &self.build_specification_state),
+            entry(incomplete.Build, &self.build_incomplete_specification),
+            entry(incomplete.Render, &self.render_incomplete_specification),
+            entry(incomplete.Prepare, &self.prepare_incomplete_specification_output),
             entry(publication.BuildSnapshot, &self.build_reference_snapshot),
             entry(publication.RenderReference, &self.render_reference_context),
             entry(publication.Prepare, &self.prepare_specification_output),
@@ -541,6 +555,8 @@ pub const Assembly = struct {
         const contracts = registry.contractSource();
         self.parse_specification_state.action.contracts = contracts;
         self.build_specification_state.action.contracts = contracts;
+        self.build_incomplete_specification.action.contracts = contracts;
+        self.prepare_incomplete_specification_output.action.contracts = contracts;
         self.prepare_specification_output.action.contracts = contracts;
     }
     pub fn bindRoots(self: *Assembly, registry: *const roots.BootstrapRootRegistry) void {
@@ -559,10 +575,10 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = principles.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ omission_repair.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas;
+const schemas = principles.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ omission_repair.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
-    .allowed_capabilities = &.{ capabilities.principle_read, capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write },
+    .allowed_capabilities = &.{ capabilities.principle_read, capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write, capabilities.feature_logging },
     .allowed_terminal_outcomes = &.{ .ok, .invalid, .needs_user, .blocked, .failed, .cancelled },
     .total_model_token_budget = .{ .value = 100_000 },
 }, .{

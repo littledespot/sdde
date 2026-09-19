@@ -78,6 +78,7 @@ fn preparedOutput(allocator: std.mem.Allocator, paths: artifacts.FeaturePaths) !
         .bytes = "published bytes\n",
     };
     return .{
+        .terminal_outcome = .ok,
         .feature = .{ .selector = paths.feature, .root_observation = .absent, .observation = .absent },
         .paths = paths,
         .prior = .{ .state = null, .forms = &.{} },
@@ -430,6 +431,7 @@ test "E2E oracle requires actual publication and every expected file" {
         try project.dir.writeFile(io, .{ .sub_path = path, .data = "published bytes\n" });
     }
     try std.testing.expectEqual(.publication_missing, (try oracle.inspect(io, a, project.dir, .ok, .not_observed, &expected, paths)).status);
+    try std.testing.expectEqual(.publication_missing, (try oracle.inspect(io, a, project.dir, .needs_user, .not_observed, &expected, paths)).status);
     const passed = try oracle.inspect(io, a, project.dir, .ok, .{ .confirmed = &prepared }, &expected, paths);
     try std.testing.expectEqual(.generated, passed.status);
     try std.testing.expectEqualStrings("outputs/chosen/spec.md", passed.specification.?);
@@ -438,7 +440,10 @@ test "E2E oracle requires actual publication and every expected file" {
     for (outcomes, statuses) |outcome, status| {
         const result = try oracle.inspect(io, a, project.dir, outcome, .{ .confirmed = &prepared }, &expected, paths);
         try std.testing.expectEqual(status, result.status);
-        try std.testing.expect(result.specification == null);
+        if (outcome == .needs_user) {
+            try std.testing.expectEqualStrings("outputs/chosen/spec.md", result.specification.?);
+            try std.testing.expect(result.specification_bytes == null);
+        } else try std.testing.expect(result.specification == null);
         try std.testing.expectEqual(outcome == .needs_user, result.status.commandSucceeded());
     }
     try project.dir.deleteFile(io, paths.get(.workflow_state).project_relative);
@@ -446,6 +451,7 @@ test "E2E oracle requires actual publication and every expected file" {
     try std.testing.expectEqual(.artifact_missing, missing.status);
     try std.testing.expectEqual(.workflow_state, missing.missing_artifact.?);
     try std.testing.expect(missing.specification == null);
+    try std.testing.expectEqual(.artifact_missing, (try oracle.inspect(io, a, project.dir, .needs_user, .{ .confirmed = &prepared }, &expected, paths)).status);
 }
 
 test "clarification reports are ungraded normal pauses with registered IDs and paths" {
@@ -458,14 +464,14 @@ test "clarification reports are ungraded normal pauses with registered IDs and p
     const output = try @import("report.zig").Output.reserve(io, dir.dir);
     defer output.close(io);
     const id = @import("../../../src/domain/clarification_inputs.zig").Id.parse("S02").?;
-    const report: c.Report = .{ .started_at_utc = "2026-09-16T00:00:00Z", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .clarifications = &.{.{ .id = id, .path = try @import("../../../src/domain/workflow_output.zig").path(a, try resolve(a), .{ .form = id }) }} };
+    const report: c.Report = .{ .started_at_utc = "2026-09-16T00:00:00Z", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed, .specification = "outputs/chosen/spec.md", .clarifications = &.{.{ .id = id, .path = try @import("../../../src/domain/workflow_output.zig").path(a, try resolve(a), .{ .form = id }) }} };
     try output.save(io, a, report);
     const bytes = try @import("../files.zig").read(io, a, dir.dir, "report.json");
     const retained = try @import("../contracts.zig").decode(c.Report, a, bytes);
     try std.testing.expectEqualDeep(report.clarifications, retained.clarifications);
-    try std.testing.expectEqual(.not_run, retained.publication_check);
+    try std.testing.expectEqual(.passed, retained.publication_check);
     try std.testing.expectEqual(.not_run, retained.semantic_quality);
-    try std.testing.expect(retained.diagnostic == null and retained.evaluation == null and retained.specification == null);
+    try std.testing.expect(retained.diagnostic == null and retained.evaluation == null and retained.specification != null);
     try std.testing.expect(retained.status.commandSucceeded());
     for (std.meta.tags(c.Status)) |status| try std.testing.expectEqual(status == .awaiting_clarification or status == .evaluated, status.commandSucceeded());
     const markdown = try @import("../files.zig").read(io, a, dir.dir, "report.md");
@@ -474,7 +480,7 @@ test "clarification reports are ungraded normal pauses with registered IDs and p
         try std.testing.expect(std.mem.indexOf(u8, rendered, "Awaiting clarification") != null);
         try std.testing.expect(std.mem.indexOf(u8, rendered, "S02") != null);
         try std.testing.expect(std.mem.indexOf(u8, rendered, "outputs/chosen/clarify/S02.md") != null);
-        try std.testing.expect(std.mem.indexOf(u8, rendered, "publication: not_run") != null);
+        try std.testing.expect(std.mem.indexOf(u8, rendered, "publication: passed") != null);
         try std.testing.expect(std.mem.indexOf(u8, rendered, "Engine/harness error") == null);
     }
 }
@@ -744,6 +750,20 @@ test "missing-answer exhaustion retains usage and diagnostics after request and 
         const outcome = @import("../../../src/application/workflow_engine_orchestrator.zig").run(.{ .context = bindings.context, .vtable = &prepared });
         try std.testing.expectEqual(.failed, outcome.executionStatus().?);
         try std.testing.expectEqual(@as(usize, 3), wire.calls);
+        // Production activation, capture, retry attribution and closure use real
+        // registered files even when the provider body is rejected.
+        const log_runtime = &runtime.logging.?;
+        const log_artifacts = @import("../../../src/domain/workflow_artifact_registry.zig");
+        const log_binding = @import("../../../src/domain/feature_log_binding.zig");
+        const log_paths = log_artifacts.bindFeatureLogSinkAdapter(log_artifacts.registry(log_runtime.artifact_owner.?), log_binding.binding(log_runtime.binding_owner.?)).?;
+        const prompt_path = try std.fmt.allocPrint(a, "{s}/{s}/0001.log", .{ log_paths.specs_root_path, log_paths.prompt_binding_path });
+        const prompt_bytes = try project.dir.readFileAlloc(io, prompt_path, a, .limited(8 * 1024 * 1024));
+        try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, "inference-request-provider_body-utf8-00000000000000000000"));
+        try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, "inference-response-provider_body-utf8-00000000000000000000"));
+        try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, wire.inference_body));
+        try std.testing.expect(std.mem.indexOf(u8, prompt_bytes, "segment_trailer|") != null);
+        try std.testing.expect(std.mem.indexOf(u8, prompt_bytes, "isolated-credential") == null);
+        try std.testing.expect(log_runtime.finalized and runtime.boot.ready.logs.lifecycle.active == null);
         try std.testing.expectEqual(@as(u64, 3), outcome.execution_rejected.retry_limit.completed_executions);
         try std.testing.expectEqual(@as(u32, 2), outcome.execution_rejected.retry_limit.limit.value);
         report.terminal_rejection = c.TerminalRejection.fromNative(outcome.execution_rejected);

@@ -12,12 +12,22 @@ pub const Request = struct {
     body: []const u8,
     api_key: []const u8,
     deadline_monotonic_ms: u64,
+    // Error-union exits cannot carry a response. The caller may retain the
+    // received prefix through this borrowed slot; the exchange joins all tasks
+    // before publishing it, and the call-local arena owns its bytes.
+    response_body_on_error: ?*?ResponseBody = null,
 };
+pub const ResponseBody = struct { bytes: []const u8, complete: bool };
 pub const Failure = struct {
     cause: operation.ProviderFailureCause,
     retry_class: operation.ProviderRetryClass,
     delivery: operation.ProviderDeliveryDisposition,
     diagnostic: ?operation.TransportDiagnostic = null,
+    body: ?ResponseBody = null,
+
+    pub fn metadata(self: Failure) @import("../../domain/model_exchange.zig").TransportFailure {
+        return .{ .cause = self.cause, .retry_class = self.retry_class, .delivery = self.delivery, .diagnostic = self.diagnostic };
+    }
 };
 pub const Response = union(enum) {
     received: struct { status: u16, exception: ?[]const u8 = null, request_id: ?[]const u8 = null, body: []const u8 },

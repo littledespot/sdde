@@ -3,7 +3,6 @@
 const std = @import("std");
 const snapshot = @import("reference_snapshot.zig");
 const r = @import("reference_reconciliation.zig");
-const text = @import("typed_text.zig");
 const markdown = @import("specification_markdown.zig");
 const principles = @import("principle_assessment.zig");
 pub const Error = snapshot.Error || markdown.Error || principles.Error;
@@ -37,8 +36,8 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment
             w.print("- **SIG-{d}** ", .{signal.id.ordinal}) catch return error.OutOfMemory;
             const content = @field(signal.value.content.model, @tagName(section[0])).value;
             if (comptime section[0] == .business or section[0] == .scope_guard) {
-                try business(w, value, content);
-            } else try semantic(w, value, content);
+                try @import("reference_markdown.zig").business(w, value, content);
+            } else try @import("reference_markdown.zig").semantic(w, value, content);
             try citations(w, signal.value.citation_ids);
         }
     }
@@ -55,7 +54,7 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment
     try write(w, "\n## Conflicts\n\n");
     for (value.conflicts) |conflict| {
         w.print("- **CON-{d}** ({s}, unresolved): ", .{ conflict.id.ordinal, @tagName(conflict.value.kind) }) catch return error.OutOfMemory;
-        try semantic(w, value, conflict.value.summary.value);
+        try @import("reference_markdown.zig").semantic(w, value, conflict.value.summary.value);
         try citations(w, conflict.value.citation_ids);
     }
     try write(w, "\n## Source Citations\n\n");
@@ -108,26 +107,4 @@ fn citations(w: *std.Io.Writer, ids: []const r.CitationId) Error!void {
     try write(w, " (citations:");
     for (ids) |id| w.print(" CIT-{d}", .{id.ordinal}) catch return error.OutOfMemory;
     try write(w, ")\n");
-}
-fn passive(w: *std.Io.Writer, value: snapshot.Snapshot, id: @import("passive_literals.zig").Id) Error!void {
-    if (id.ordinal == 0 or id.ordinal > value.passive_records.len) return error.InvalidReferenceSnapshot;
-    const record = value.passive_records[id.ordinal - 1];
-    if (record.id.ordinal != id.ordinal) return error.InvalidReferenceSnapshot;
-    try markdown.code(w, record.value);
-}
-fn business(w: *std.Io.Writer, value: snapshot.Snapshot, content: text.BusinessText) Error!void {
-    for (content.segments) |segment| switch (segment) {
-        .literal => |literal| try markdown.literal(w, literal.value),
-        .passive => |reference| try passive(w, value, reference.passive_literal_id),
-    };
-}
-fn semantic(w: *std.Io.Writer, value: snapshot.Snapshot, content: text.ReferenceSemanticText) Error!void {
-    for (content.nodes) |node| switch (node) {
-        .literal => |literal| try markdown.literal(w, literal.value),
-        .passive => |reference| try passive(w, value, reference.passive_literal_id),
-        .source => |reference| {
-            if (reference.source_id.ordinal == 0 or reference.source_id.ordinal > value.inputs.corpus.sources.len) return error.InvalidReferenceSnapshot;
-            try markdown.code(w, value.inputs.corpus.sources[reference.source_id.ordinal - 1].path.bytes);
-        },
-    };
 }

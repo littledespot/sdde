@@ -6575,6 +6575,172 @@ fn noTelemetry(_: *anyopaque, _: @import("domain/telemetry.zig").WorkflowTelemet
     return .dropped;
 }
 
+const ModelCaptureSink = struct {
+    const prompt = @import("domain/sanitized_prompt_log.zig");
+    const stream = @import("domain/feature_log_stream.zig");
+    allocator: std.mem.Allocator,
+    fail_direction: ?prompt.PromptDirection = null,
+    fragments: std.ArrayList(prompt.SanitizedPromptFragment) = .empty,
+
+    fn barrier(self: *@This()) @import("ports/telemetry_barrier.zig").Barrier {
+        return .{ .context = self, .process_fn = noTelemetry, .select_prompt_fn = selected, .process_prompt_fn = process };
+    }
+    fn selected(_: *anyopaque, _: prompt.SanitizedPromptFragment) bool {
+        return true;
+    }
+    fn process(context: *anyopaque, fragment: prompt.SanitizedPromptFragment) stream.Outcome {
+        const self: *@This() = @ptrCast(@alignCast(context));
+        if (self.fail_direction == fragment.direction) return .{ .blocked = .LOG_FLUSH_FAILURE };
+        var retained = fragment;
+        retained.request_id.bytes = self.allocator.dupe(u8, fragment.request_id.bytes) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        retained.fragment_id.bytes = self.allocator.dupe(u8, fragment.fragment_id.bytes) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        retained.content = self.allocator.dupe(u8, fragment.content) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        self.fragments.append(self.allocator, retained) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        return .{ .persisted = .{ .sequence = self.fragments.items.len, .segment_ordinal = 1, .bytes_written = retained.content.len, .flushed = true } };
+    }
+};
+
+test "production request capture failure records non-delivery and response capture failure retains usage" {
+    const Case = struct { direction: ModelCaptureSink.prompt.PromptDirection, overshoot: bool = false };
+    for ([_]Case{ .{ .direction = .request }, .{ .direction = .response }, .{ .direction = .response, .overshoot = true } }) |case| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithProvider(std.testing.allocator, 0);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try invocationYaml(&fixture));
+        var environment = try bedrockEnvironment(std.testing.allocator);
+        defer environment.deinit();
+        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+            .environment = &environment,
+            .operations = &fixture.native,
+            .authorization = .{ .allocator = std.testing.allocator },
+            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+        };
+        defer runtime.deinit();
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var sink: ModelCaptureSink = .{ .allocator = fixture.arena.allocator(), .fail_direction = case.direction };
+        runner.model_capture.logs = sink.barrier();
+        try runtime.bind(&runner);
+        const body = if (case.overshoot) try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":2,\"totalTokens\":100002") else bedrock_complete_body;
+        var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
+        runtime.provider.?.aws_bedrock.transport = wire.port();
+        var harness: Harness = .{ .runner = &runner };
+        const outcome = harness.result();
+        try std.testing.expectEqual(.LOG_FLUSH_FAILURE, outcome.execution_rejected.logging);
+        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        try std.testing.expect(runner.model_capture.current == null);
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
+        const tokens = runner.tokenLedger();
+        try std.testing.expectEqual(@as(usize, 1), tokens.accounted_operations.items.len);
+        try std.testing.expectEqual(@as(u64, 1), tokens.revision().value);
+        const accounted = tokens.accounted_operations.items[0];
+        try std.testing.expect(accounted.id.eql((try invokedOperation(&runner)).operation().id));
+        if (case.direction == .request) {
+            try std.testing.expectEqual(@as(usize, 0), wire.calls);
+            try std.testing.expect(accounted.reconciliation == .not_sent);
+            try std.testing.expectEqual(@as(u128, 0), tokens.committed());
+            try std.testing.expectEqual(.available, tokens.status());
+            try std.testing.expectEqual(@as(usize, 0), sink.fragments.items.len);
+        } else {
+            const expected: u64 = if (case.overshoot) 100002 else 12;
+            try std.testing.expectEqual(@as(usize, 1), wire.calls);
+            try std.testing.expectEqual(expected, accounted.reconciliation.exact_usage.total_tokens);
+            try std.testing.expectEqual(@as(u128, expected), tokens.committed());
+            try std.testing.expectEqual(@as(@TypeOf(tokens.status()), if (case.overshoot) .exceeded else .available), tokens.status());
+            try std.testing.expect(sink.fragments.items.len > 0);
+            for (sink.fragments.items) |fragment| try std.testing.expectEqual(.request, fragment.direction);
+        }
+    }
+}
+
+test "production count capture failure blocks inference without changing token accounting" {
+    for ([_]ModelCaptureSink.prompt.PromptDirection{ .request, .response }) |direction| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithProvider(std.testing.allocator, 1);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try countInferenceYaml(&fixture));
+        var environment = try bedrockEnvironment(std.testing.allocator);
+        defer environment.deinit();
+        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+            .environment = &environment,
+            .operations = &fixture.native,
+            .authorization = .{ .allocator = std.testing.allocator },
+            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+        };
+        defer runtime.deinit();
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var sink: ModelCaptureSink = .{ .allocator = fixture.arena.allocator(), .fail_direction = direction };
+        runner.model_capture.logs = sink.barrier();
+        try runtime.bind(&runner);
+        var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
+        runtime.provider.?.aws_bedrock.transport = wire.port();
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.LOG_FLUSH_FAILURE, harness.result().execution_rejected.logging);
+        try std.testing.expectEqual(@as(usize, if (direction == .request) 0 else 1), wire.calls);
+        try std.testing.expectEqual(@as(u64, 0), runner.tokenLedger().revision().value);
+        try std.testing.expectEqual(@as(usize, 0), runner.tokenLedger().accounted_operations.items.len);
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.count_schema.key)] == null);
+        try std.testing.expect(runner.model_capture.current == null);
+    }
+}
+
+test "production capture attributes count and inference bodies to the existing request ledger" {
+    var fixture: Fixture = undefined;
+    try fixture.initWithProvider(std.testing.allocator, 1);
+    defer fixture.deinit();
+    const a = fixture.arena.allocator();
+    const graph = try fixture.compile(try countInferenceYaml(&fixture));
+    var environment = try bedrockEnvironment(std.testing.allocator);
+    defer environment.deinit();
+    var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+        .environment = &environment,
+        .operations = &fixture.native,
+        .authorization = .{ .allocator = std.testing.allocator },
+        .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+    };
+    defer runtime.deinit();
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var sink: ModelCaptureSink = .{ .allocator = a };
+    runner.model_capture.logs = sink.barrier();
+    try runtime.bind(&runner);
+    var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
+    runtime.provider.?.aws_bedrock.transport = wire.port();
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.ok, harness.run());
+    try std.testing.expectEqual(@as(usize, 2), wire.calls);
+    const request = try currentRequest(&runner);
+    const ledger = try requestLedger(&runner);
+    const request_id = try std.fmt.allocPrint(a, "request-{d}", .{ledger.indexOf(request.id()).?.value});
+    const completed = (try completedOperation(&runner)).record().id;
+    for ([_]provider.ProviderOperationKind{ .input_token_count, .inference }) |kind| {
+        for ([_]ModelCaptureSink.prompt.PromptDirection{ .request, .response }) |direction| {
+            const prefix = try std.fmt.allocPrint(a, "{s}-{s}-provider_body-utf8-", .{ @tagName(kind), @tagName(direction) });
+            var body: std.ArrayList(u8) = .empty;
+            for (sink.fragments.items) |fragment| {
+                try std.testing.expectEqualStrings(request_id, fragment.request_id.bytes);
+                try std.testing.expectEqual(completed.model_attempt_ordinal.value, fragment.attempt);
+                try std.testing.expectEqualStrings(request.prepared().?.model_operation_id.workflow_step_id.bytes, fragment.route_id.bytes);
+                try std.testing.expectEqualStrings(request.binding().slot_id.bytes, fragment.model_profile_id.bytes);
+                try std.testing.expectEqualDeep(graph.shortcode, fragment.workflow_shortcode);
+                if (!std.mem.startsWith(u8, fragment.fragment_id.bytes, prefix)) continue;
+                try std.testing.expectEqualStrings(if (kind == .input_token_count) "call" else "infer", fragment.node_id.?.bytes);
+                try body.appendSlice(a, fragment.content);
+            }
+            const expected = if (direction == .request)
+                try @import("adapters/provider/bedrock_request.zig").encode(a, request.prepared().?, kind)
+            else if (kind == .input_token_count)
+                "{\"inputTokens\":10}"
+            else
+                bedrock_complete_body;
+            try std.testing.expectEqualStrings(expected, body.items);
+        }
+    }
+    try std.testing.expectEqual(@as(u128, 12), runner.tokenLedger().committed());
+    try std.testing.expect(runner.model_capture.current == null);
+}
+
 test "production Bedrock composition executes count inference validation and request closure from YAML" {
     for ([_]bool{ false, true }) |count_first| {
         var fixture: Fixture = undefined;

@@ -156,6 +156,17 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Responsibility:** Bind only the selected target and authorized operations; no ownership
   record, activation transaction, or successful-output claim.
 
+Under [ADR 0018](../../decisions/0018-debug-model-exchange-logging.md), current-run
+activation uses the immutable bootstrap observation plus this fresh capability;
+it does not mutate bootstrap roots or reuse an earlier run. The production policy
+ID fingerprints the validated compiled logging policy, and a fresh run ID separates
+its binding and streams.
+
+The historical maintenance catalogue below is deferred source material. Its saved
+bootstrap-policy-lineage and restart prerequisites were withdrawn by
+[ADR 0009](../../decisions/0009-atomic-workflow-execution.md); they are not
+requirements to activate or capture the current execution.
+
 ## `ScanFeatureLogRunInventoryAction`
 
 - **Input:** validated feature log collection paths, active-feature capability, bounded
@@ -251,7 +262,7 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Input:** log-policy candidate and exact bound bootstrap compiled-policy/artifact authorities
 - **Output:** feature-log-policy evidence
 - **Responsibility:** Recompute and prove the closed ID tuple, persisted fragment equality,
-  level rank/aliases, console boolean, prompt-capture selectors, compiler-fixed
+  level rank/aliases, console boolean, level-owned prompt-capture selection, compiler-fixed
   redaction/limits, and fixed per-feature destinations; equal restart inputs must reproduce the
   same policy identity.
 

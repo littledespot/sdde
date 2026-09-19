@@ -30,6 +30,14 @@ create intermediate publication or restart checkpoints.
 - Publication may replace files sequentially across configured roots.
 - If a write fails or execution is interrupted, already-replaced files may remain; report
   failure when possible and never record new successful completion.
+- Under [ADR 0018](../decisions/0018-debug-model-exchange-logging.md), registered
+  `workflow_publication` operations must pass the common logging-finalization barrier
+  before any output write. A failed stream close prevents publication.
+- Every compiled successor of a publication operation is the corresponding terminal
+  outcome. No later node may perform work, emit telemetry or fail after publication.
+  Preparation selects a closed `ok` or `needs_user` outcome from validated state;
+  the publisher returns it only after all writes succeed. A blocked clarification
+  refresh is rejected before writing. Pure progress checks also precede publication.
 - Write successful completion state only after all required outputs have been written.
 - Existing files alone do not prove the current run succeeded.
 - This explicit failure rule does not relax protected clarification checks or authorize
@@ -49,6 +57,10 @@ create intermediate publication or restart checkpoints.
 - Clarifications are the explicit persistence exception: preserve stable identity and relevant
   validated answers, completely overwrite unresolved forms at the same IDs/paths, do not
   duplicate subjects, and never overwrite user-resolved forms.
+- [ADR 0017](../decisions/0017-incomplete-specification-publication.md) extends Spec
+  clarification publication to a validated incomplete `spec.md`, current reference
+  context and explicit pending state. The full pending set is validated before writes,
+  and its state is written last. It grants no completed-stage or downstream authority.
 - Section 23.2 owns this rule for every workflow execution.
 - Outstanding spec, plan or tasks clarifications prevent `implement` from executing.
 

@@ -60,10 +60,13 @@ arguments of the generic workflow engine.
 6. Build and validate reference authority, the reference-grounded feature brief,
    specification units, the principle assessment in §17.3.1 and complete rendered/state
    candidates. Keep candidates private to the execution. Missing business authority
-   creates a clarification, not a partial `spec.md`.
+   creates a clarification and a validated incomplete `spec.md` under
+   [ADR 0017](../decisions/0017-incomplete-specification-publication.md). It never
+   creates completed specification authority from unresolved content.
 7. At successful workflow completion, publish only the complete validated output
    set to the same registered paths, completely replacing existing outputs.
-   The clarification branch likewise completely replaces unresolved forms at
+   The clarification branch publishes the incomplete specification, current reference
+   context and pending workflow state, and completely replaces unresolved forms at
    their existing IDs/paths. Recheck containment and user-closed
    clarification protection immediately before writes. Clarification persistence
    is the explicit exception in ADR 0009; failure is never `specified`.

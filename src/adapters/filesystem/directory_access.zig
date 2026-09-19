@@ -33,6 +33,10 @@ pub fn open(io: std.Io, base: std.Io.Dir, relative: []const u8) Error!std.Io.Dir
 /// Materialize only missing components, then use the same exact-name/no-follow
 /// reader. An unexpected concurrent creation is rejected rather than adopted.
 pub fn ensure(io: std.Io, base: std.Io.Dir, relative: []const u8) Error!std.Io.Dir {
+    return ensureWithPermissions(io, base, relative, .default_dir);
+}
+
+pub fn ensureWithPermissions(io: std.Io, base: std.Io.Dir, relative: []const u8, permissions: std.Io.File.Permissions) Error!std.Io.Dir {
     @import("../../domain/relative_directory_path.zig").validate(relative) catch return error.DirectoryUnavailable;
     var current = base;
     var owned = false;
@@ -41,7 +45,10 @@ pub fn ensure(io: std.Io, base: std.Io.Dir, relative: []const u8) Error!std.Io.D
     while (segments.next()) |segment| {
         const next = open(io, current, segment) catch |err| blk: {
             if (err != error.DirectoryMissing) return err;
-            current.createDir(io, segment, .default_dir) catch return error.DirectoryUnavailable;
+            current.createDir(io, segment, permissions) catch |creation_error| return switch (creation_error) {
+                error.Canceled => error.Cancelled,
+                else => error.DirectoryUnavailable,
+            };
             break :blk try open(io, current, segment);
         };
         if (owned) current.close(io);

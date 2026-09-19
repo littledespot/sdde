@@ -74,7 +74,7 @@ pub const Validate = struct {
                     break :observed .{ .validated = evidence };
                 },
                 .cancelled => .cancelled,
-                .allocation_failed => return error.OperationExecutionFailed,
+                .allocation_failed, .logging_blocked_before_send => return error.OperationExecutionFailed,
             },
         };
         errdefer owner.releaseEvidence();

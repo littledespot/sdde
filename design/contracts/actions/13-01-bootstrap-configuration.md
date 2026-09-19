@@ -51,11 +51,11 @@ design; they do not extend the current YAML schema or claim implemented capabili
 
 ## `ValidateLoggingPolicyAction`
 
-- **Input:** complete three-value `LogsConfig`, canonical level and alias evidence,
+- **Input:** complete two-value `LogsConfig`, canonical level and alias evidence,
   event-definition registry, and compiler-locked F0002 policy/delimiter constants
 - **Output:** validated logging policy fragment
-- **Responsibility:** Validate the console boolean and unique closed prompt-capture selectors,
-  require a direction for non-empty capture, and inject the exact F0002 Section 6.4 timestamp,
+- **Responsibility:** Validate the console boolean, apply the level-owned capture policy,
+  and inject the exact F0002 Section 6.4 timestamp,
   delimiter, size, retention, flush, failure, redaction, prompt-byte, lock, and emergency
   constants.
 - Do not default/reinterpret the configured level or accept any operational override/dynamic

@@ -326,7 +326,7 @@ H-010 supplies unit needs. Coordinate output handling with H-012.
   prevents task-generation/model work, including with deferred policy obligations.
 - [ ] Unchanged prior `spec.md` after a blocked rerun is not labelled new output.
 
-## H-012 — Render and publish the complete workflow output
+## H-012 — Render and publish validated workflow output
 
 **Status:** Partial. **Owner:** production renderers/parser and publication boundary.
 **Dependencies:** H-007/H-010; H-011 protection on clarification branches.
@@ -338,7 +338,7 @@ H-010 supplies unit needs. Coordinate output handling with H-012.
 - A shared registered writer publishes prepared clarification output with exact
   captured-input rechecks and complete replacement.
 - The successful YAML branch now renders the reference sidecar, builds closed
-  `specification-state/v2`, and prepares the specification, sidecar, clarification
+  `specification-state/v3`, and prepares the specification, sidecar, clarification
   registry and canonical state together.
 - Preparation rechecks normalized Markdown and state/view joins; the writer rechecks
   captured clarification and workflow state before each replacement and writes
@@ -436,3 +436,6 @@ track implementation. H-007 fixes the production projection contract.
   boilerplate or hidden engine defaults.
 - [ ] Packaged execution works without loading workflows/resources from `design/`
   or another source-tree fallback.
+
+ADR 0017 adds incomplete specification publication to every Spec clarification pause.
+Pending state and draft views do not satisfy completed-generation or grading evidence.

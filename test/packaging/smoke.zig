@@ -8,7 +8,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     );
     const configuration =
         \\{
-        \\  "logs": { "level": "debug", "console": false, "promptCapture": [] },
+        \\  "logs": { "level": "debug", "console": false },
         \\  "models": { "slots": {} },
         \\  "paths": {
         \\    "specs": "requirements/current", "references": "references",

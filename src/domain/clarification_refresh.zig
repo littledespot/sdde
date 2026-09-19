@@ -17,6 +17,15 @@ pub const Result = union(enum) {
     blocked: enum { authentication_required, protected_clarification, limit_exceeded },
 };
 
+pub const Progress = enum { ready, needs_user, blocked };
+
+pub fn progress(result: Result) Progress {
+    if (result != .ready) return .blocked;
+    const state = result.ready.value orelse return .blocked;
+    for (state.records) |record| if (record.status == .open) return .needs_user;
+    return .ready;
+}
+
 /// Caller arena owns new records; unchanged history continues to borrow input.
 /// Missing prior subjects are retained, never inferred resolved from absence.
 pub fn refresh(allocator: std.mem.Allocator, inputs: c.Inputs, needs: Needs) Error!c.ValidatedState {

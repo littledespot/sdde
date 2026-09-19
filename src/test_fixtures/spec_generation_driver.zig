@@ -12,6 +12,7 @@ pub const Fault = struct {
 pub const Driver = struct {
     runner: *@import("../application/workflow_pipeline_runner.zig").Runner,
     fake: *@import("../adapters/provider/fake_llm_provider.zig").FakeLLMProvider,
+    finalizer: ?@import("../ports/feature_log_activation.zig").Finalizer = null,
     support_fault: ?@import("spec_generation_responses.zig").SupportFault = null,
     support_post: bool = false,
     principle_conflict: bool = false,
@@ -67,7 +68,11 @@ pub const Driver = struct {
     fault_requests: usize = 0,
     fault_request: ?*const @import("../domain/model_request_identity.zig").ModelRequestId = null,
     pub fn run(self: *Driver) @import("../domain/run_outcome.zig").Outcome {
-        return @import("../application/workflow_engine_orchestrator.zig").run(.{ .context = self, .vtable = &.{ .validate_operation_registry = selected, .parse_invocation = selected, .select_workflow = selected, .prepare_workflow = ready, .selected_graph = graph, .invoke_invocation = invocation, .invoke_step = step } });
+        return @import("../application/workflow_engine_orchestrator.zig").run(.{ .context = self, .vtable = &.{ .validate_operation_registry = selected, .parse_invocation = selected, .select_workflow = selected, .prepare_workflow = ready, .selected_graph = graph, .invoke_invocation = invocation, .invoke_step = step, .finalize = finalize } });
+    }
+    fn finalize(context: *anyopaque, outcome: @import("../domain/run_outcome.zig").Outcome) @import("../domain/run_outcome.zig").Outcome {
+        const self: *Driver = @ptrCast(@alignCast(context));
+        return if (self.finalizer) |finalizer| finalizer.finish(outcome) else outcome;
     }
     pub fn verifyDispositionSequence(self: *Driver, result: @import("../domain/run_outcome.zig").Outcome) !void {
         const exhausted = self.disposition_sequence == .exhaust;

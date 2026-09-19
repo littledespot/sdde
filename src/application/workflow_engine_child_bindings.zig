@@ -2,6 +2,7 @@ const bootstrap_error = @import("../domain/bootstrap_error.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const workflow = @import("../domain/workflow.zig");
 const compilation = @import("../domain/workflow_compilation.zig");
+const run_outcome = @import("../domain/run_outcome.zig");
 
 pub const SelectionStepOutcome = enum { ok, invocation_invalid, failed, cancelled };
 
@@ -23,6 +24,7 @@ pub const ChildBindings = struct {
         selected_graph: *const fn (*const anyopaque) *const compilation.CompiledWorkflow,
         invoke_invocation: *const fn (*anyopaque) execution.Applied,
         invoke_step: *const fn (*anyopaque, workflow.WorkflowStepId) execution.Applied,
+        finalize: ?*const fn (*anyopaque, run_outcome.Outcome) run_outcome.Outcome = null,
     };
 
     pub fn invokeValidateOperationRegistry(self: ChildBindings) SelectionStepOutcome {
@@ -45,5 +47,8 @@ pub const ChildBindings = struct {
     }
     pub fn invokeStep(self: ChildBindings, id: workflow.WorkflowStepId) execution.Applied {
         return self.vtable.invoke_step(self.context, id);
+    }
+    pub fn finalizeOutcome(self: ChildBindings, outcome: run_outcome.Outcome) run_outcome.Outcome {
+        return if (self.vtable.finalize) |finish| finish(self.context, outcome) else outcome;
     }
 };

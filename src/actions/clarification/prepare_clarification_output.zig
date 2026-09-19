@@ -7,7 +7,7 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "prepare-clarification-output",
         .kind = .action,
-        .requires = &.{ .feature_directory, .feature_artifact_paths, .raw_clarification_inputs, .clarification_inputs, .refreshed_clarification_state, .clarification_views },
+        .requires = &.{ .activated_feature_directory, .feature_artifact_paths, .raw_clarification_inputs, .clarification_inputs, .refreshed_clarification_state, .clarification_views },
         .produces = &.{.prepared_workflow_output},
         .side_effect = .none,
     };

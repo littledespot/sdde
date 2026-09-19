@@ -33,7 +33,7 @@ flowchart TD
     CLARIFY["Prepare the requirement, evidence and exact user decision;<br/>reuse existing questions for the same subject"]
     CLARIFY -->|Protected answer needs reconsideration| BLOCKED["End blocked;<br/>user direction is required"]
     CLARIFY -->|Question can be created or refreshed| QUESTIONS["Create new forms; completely overwrite unresolved clarify/SNN.md at the same IDs;<br/>preserve user-resolved forms"]
-    QUESTIONS --> NEEDSUSER["End needs_user;<br/>publish no partial specification"]
+    QUESTIONS --> NEEDSUSER["End needs_user;<br/>publish incomplete spec and question links"]
     NEEDSUSER -. User answers the questions and reruns the command .-> START
 
     CHECK -->|Repairable candidate defect or supported omission| REPAIR["Repair only the authorized content<br/>within the declared retry limits"]

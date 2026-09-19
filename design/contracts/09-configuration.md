@@ -32,6 +32,10 @@ F0001 failure or vice versa.
 - Each section-owning compiler queries only its applicable typed field and owns that section's
   semantic validation.
 - The `logs` object follows F0001's closed structure; F0002 owns its semantics.
+- Under [ADR 0018](../decisions/0018-debug-model-exchange-logging.md), `debug` and
+  `trace` select complete request/response capture, including reference and code
+  bodies. Higher thresholds emit metadata only. The removed `promptCapture` field
+  is rejected; `logs` contains only `level` and `console`. Credentials remain redacted.
 - The companion samples define no alternate accepted members.
 
 The runner owns the complete immutable value and returns one
@@ -71,8 +75,8 @@ exists.
 - The root requires `logs`, `models` and `paths` and permits optional `principles`;
   fixed records reject missing required, duplicate and unknown members.
 - `models.slots` and `principles.filenameHints` are keyed collections; each model slot has the closed slot shape.
-- The `logs` object contains exactly the F0002 threshold, optional console-mirror boolean, and
-  closed prompt-capture selector list.
+- The `logs` object contains exactly the F0002 threshold and optional console-mirror boolean.
+  The threshold alone selects prompt capture under ADR 0018.
 - File logging is mandatory and has no configuration switch.
 - The delimiter, timestamp, size, retention, flush, redaction, failure, prompt-size, emergency,
   and lock policy is compiler-owned.
@@ -216,8 +220,8 @@ though unrelated workflows are not placed into that sequence.
   operation.
 
 The logging-policy compiler rejects a structurally valid `logs` value before
-any LLM call unless its level, console boolean, and unique prompt-capture
-selector list form one valid F0002 policy. It injects every operational
+any LLM call unless its level and console boolean form one valid F0002 policy.
+It injects every operational
 constant, including the pipe-delimited dialect and column schemas; none is configurable.
 
 Bootstrap and the current section-owning compilers additionally reject every
@@ -253,9 +257,8 @@ when:
 - `references.followSymlinks` is anything other than the required v1 constant `false`; followed reference symlinks are deliberately unsupported until a separate version defines containment, loop, depth, deduplication, and accounting semantics;
 - a reference traversal/decoder limit (`maxEntries`, directory depth, source/decoded byte totals, blocks, pages, cells, decoder time/memory, or archive expansion limits when applicable) is absent or exceeds the engine hard maximum;
 - a repository-discovery file/depth/time/memory limit is absent or exceeds the engine hard maximum;
-- `promptCapture` is non-empty without a request/response direction, contains a
-  duplicate/unknown selector, or attempts to override fixed redaction,
-  retention, or size policy;
+- the removed `promptCapture` field is supplied, or logging input attempts to
+  override fixed redaction, retention, or size policy;
 - `useFingerprints` is set to true in this design version;
 - a hardened workflow disables required plan or task approval without an explicitly selected non-interactive policy profile;
 - the post-composition effective merged preset policy conflicts with or weakens a compiler-locked path, command, capability, sandbox, network, resource, effect, or validator rule.

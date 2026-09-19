@@ -3,7 +3,11 @@ const c = @import("clarification_inputs.zig");
 const views = @import("clarification_views.zig");
 const output = @import("workflow_output.zig");
 pub fn prepare(allocator: std.mem.Allocator, feature: @import("feature_directory.zig").Directory, paths: @import("workflow_artifact_registry.zig").FeaturePaths, prior: c.Captures, inputs: c.Inputs, state: @import("clarification_refresh.zig").Result, rendered: []const views.View) (output.Error || c.Error || @import("canonical_json.zig").Error)!output.Prepared {
-    if (state != .ready) return error.InvalidWorkflowOutput;
+    const terminal_outcome: output.TerminalOutcome = switch (@import("clarification_refresh.zig").progress(state)) {
+        .ready => .ok,
+        .needs_user => .needs_user,
+        .blocked => return error.InvalidWorkflowOutput,
+    };
     const value = state.ready.value orelse return error.InvalidWorkflowOutput;
     _ = try c.validate(.{ .value = value }, feature.selector.feature_id);
     const expected = try views.render(allocator, state.ready, inputs.protected_forms);
@@ -22,7 +26,7 @@ pub fn prepare(allocator: std.mem.Allocator, feature: @import("feature_directory
     const bytes = try @import("canonical_json.zig").encode(c.State, allocator, value);
     if (bytes.len > c.max_state_bytes) return error.InvalidWorkflowOutput;
     try files.append(allocator, .{ .target = .{ .artifact = .clarification_state }, .bytes = bytes });
-    const prepared: output.Prepared = .{ .feature = feature, .paths = paths, .prior = prior, .files = try files.toOwnedSlice(allocator) };
+    const prepared: output.Prepared = .{ .terminal_outcome = terminal_outcome, .feature = feature, .paths = paths, .prior = prior, .files = try files.toOwnedSlice(allocator) };
     try output.validateShape(prepared);
     return prepared;
 }

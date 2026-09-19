@@ -161,8 +161,12 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
   output-exists failure, or separate overwrite approval.
 - Specify therefore overwrites `spec.md` and `reference-context.md`, including prior user edits
   to `spec.md`; it does not delete and recreate the feature directory.
-- Validation and predecessor/review gates still apply before commit; a blocked or failed
-  generation does not publish partial replacement output.
+- Validation and predecessor/review gates still apply before commit; blocked or failed
+  executions publish no new specification. A clarification pause (`needs_user`)
+  publishes the validated incomplete projection authorized by
+  [ADR 0017](../decisions/0017-incomplete-specification-publication.md), together with
+  current reference context, forms/registry and pending state. It cannot publish
+  incomplete content as a completed specification.
 
 - Unresolved-form replacement includes the complete question/schema/revision projection and
   controlled editable regions; an unsubmitted draft answer is not protected from replacement.

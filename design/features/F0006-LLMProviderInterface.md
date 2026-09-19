@@ -1124,10 +1124,15 @@ the common port and typed values. A provider adapter has no filesystem,
 command, project-state, workflow, transaction, log-sink, or child-node
 capability.
 
-Ordinary metadata logs never contain raw provider bodies. Optional F0002 prompt
-capture selects typed fragments before provider serialization, then applies its
-existing opt-in, redaction, and byte limits. Logs are observations and have no
-retry, validation, provider, or workflow authority.
+Ordinary metadata logs never contain raw provider bodies. Under
+[ADR 0018](../decisions/0018-debug-model-exchange-logging.md), debug/trace captures
+complete serialized model-facing requests and available raw provider bodies through
+a composition-injected narrow observation port. The common runner owns attribution
+and lifetime; the capture runner and active logging lifecycle own redaction, bounded
+lossless fragments and persistence. Providers receive no sink, child bindings or
+business graph control. A typed body variant distinguishes provider bytes from
+engine-authored no-response transport diagnostics. Higher thresholds emit metadata
+only. Logs have no retry, validation, provider, or workflow authority.
 
 - Every raw/configured/validated request buffer, response buffer, binding, transport
   handle, authorization table slot/capability, lease reference and observation has

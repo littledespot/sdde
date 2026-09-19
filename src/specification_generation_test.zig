@@ -383,6 +383,9 @@ const Fixture = struct {
         return initExtraction(a, bytes, kind, true);
     }
     fn initExtraction(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool) !Fixture {
+        return initContent(a, bytes, kind, has_claims, "An extracted business claim.");
+    }
+    fn initContent(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool, claim_text: []const u8) !Fixture {
         var ids: evidence.IdSource = .{};
         const inputs = try evidence.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "stories.md", bytes));
         const passive = try text.prepare(a, inputs);
@@ -392,7 +395,7 @@ const Fixture = struct {
         for (inputs.chunks.entries, raw) |chunk, *entry| {
             var choices: std.ArrayList(@import("domain/structured_tokens.zig").Classification) = .empty;
             for (candidates.entries) |candidate| if (candidate.fact.scope.chunk_id.eql(chunk.id)) try choices.append(a, if (kind) |selected| .{ .preserve = .{ .token_candidate_id = candidate.id, .kind = selected } } else .{ .irrelevant = candidate.id });
-            const reply = try tokens.wire(a, if (has_claims) try extraction.reply(a, chunk, "An extracted business claim.") else extraction.no_claim, choices.items);
+            const reply = try tokens.wire(a, if (has_claims) try extraction.reply(a, chunk, claim_text) else extraction.no_claim, choices.items);
             entry.* = .{ .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = reply } };
         }
         const parsed = try @import("domain/reference_extraction_parser.zig").parse(a, .{ .entries = raw });
@@ -2181,10 +2184,25 @@ test "published support validates without an execution ledger and rejects erased
         .clarification = .{ .state_ordinal = 1, .revision = 1 },
         .review = .{ .candidate_revision = inputs.revision, .seeds = reviewed.seeds, .evidence = reviewed.evidence, .candidates = reviewed.candidates, .observations = decision.observations, .result = decision.result },
     };
+    // A later clarification pause replaces prior completion and preserves ID allocation.
+    const cf = @import("test_fixtures/clarification_inputs.zig");
+    const c = @import("domain/clarification_inputs.zig");
+    var clarification_record = cf.record("S01");
+    clarification_record.authority = &.{.{ .reference = value.reference.inputs.corpus.state_id }};
+    var pending_questions = cf.state(&.{clarification_record});
+    pending_questions.feature_id = current.feature.bytes;
+    const pending = try @import("domain/incomplete_specification.zig").build(a, .{ .captured = try std.json.Stringify.valueAlloc(a, value, .{}), .value = .{ .specified = value } }, value.reference, try c.validate(.{ .value = pending_questions }, current.feature), contracts.port());
+    try std.testing.expectEqual(value.revision + 1, pending.revision);
+    try std.testing.expectEqualDeep(value.id_ledger, pending.id_ledger);
+    const pending_prior = try state.parse(a, try std.json.Stringify.valueAlloc(a, pending, .{}), current.feature, contracts.port());
+    try std.testing.expect(pending_prior.specified() == null);
+    const restarted = try (@import("actions/specification/initialize_specification_generation.zig").Action{}).execute(current.feature, fixture.context, pending_prior);
+    try std.testing.expectEqual(@as(usize, 0), restarted.completed);
+    try std.testing.expectEqualDeep(value.id_ledger, restarted.starting_ledger);
     const bytes = try std.json.Stringify.valueAlloc(a, value, .{});
     var fresh = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer fresh.deinit();
-    const restored = (try state.parse(fresh.allocator(), bytes, current.feature, contracts.port())).state.?;
+    const restored = (try state.parse(fresh.allocator(), bytes, current.feature, contracts.port())).specified().?;
     try std.testing.expectEqualStrings(bytes, try std.json.Stringify.valueAlloc(a, restored, .{}));
     const document = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
     try std.testing.expect(document.value.object.get("review").?.object.get("origin") == null);
@@ -2560,4 +2578,107 @@ test "persisted extraction binding resolves fresh compiled authority after origi
     resources[1].content = .{ .json_composition = changed_plan };
     current.authority.resources = resources;
     try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, contract.validate(a, stored, &current.authority, .source_blocks_v1));
+}
+
+test "incomplete specifications publish supported business evidence and bound questions without completion authority" {
+    const draft = @import("domain/incomplete_specification.zig");
+    const codec = @import("domain/incomplete_specification_markdown.zig");
+    const state = @import("domain/specification_state.zig");
+    const c = @import("domain/clarification_inputs.zig");
+    const cf = @import("test_fixtures/clarification_inputs.zig");
+    const json = @import("domain/canonical_json.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "When started, display Hello, World! and the UTC date and time.", "The borrower receives a renewal receipt." }) |source| {
+        var fixture = try Fixture.initContent(a, source, .business_exact_string, true, source);
+        defer fixture.deinit();
+        const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
+        const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
+        const snapshot = try @import("domain/reference_snapshot.zig").build(.{ .bytes = "first" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry, contract);
+        var record = cf.record("S01");
+        record.authority = &.{.{ .reference = snapshot.inputs.corpus.state_id }};
+        var clarification = cf.state(&.{record});
+        clarification.feature_id = snapshot.inputs.corpus.feature_id.bytes;
+        const validated = try c.validate(.{ .value = clarification }, snapshot.inputs.corpus.feature_id);
+        const prior: state.Prior = .{ .captured = null };
+        const value = try draft.build(a, prior, snapshot, validated, contracts.port());
+        const rendered = try codec.render(a, value, validated);
+        try std.testing.expect(std.mem.indexOf(u8, rendered, "Status: Incomplete") != null);
+        // Exact business text is escaped by the canonical Markdown owner.
+        var escaped: std.Io.Writer.Allocating = .init(a);
+        try @import("domain/specification_markdown.zig").literal(&escaped.writer, source);
+        try std.testing.expect(std.mem.indexOf(u8, rendered, escaped.written()) != null);
+        try std.testing.expect(std.mem.indexOf(u8, rendered, "[S01](clarify/S01.md)") != null);
+        // The pending projection shares reference classification, not keyword rules.
+        var technical = value;
+        const technical_claims = try a.dupe(@import("domain/reference_extraction.zig").Claim, value.reference.extraction.claims);
+        const technical_signals = try a.dupe(@import("domain/reference_reconciliation.zig").Signal, value.reference.signals);
+        try std.testing.expectEqual(@as(usize, 1), technical_claims.len);
+        try std.testing.expectEqual(@as(usize, 1), technical_signals.len);
+        technical_claims[0].content = .{ .model = .{ .technical = .{ .value = .{ .nodes = &.{.{ .literal = .{ .value = source } }} } } } };
+        technical_signals[0].value.content = .{ .model = technical_claims[0].content.model };
+        technical.reference.extraction.claims = technical_claims;
+        technical.reference.signals = technical_signals;
+        try draft.validate(a, technical, value.feature, contracts.port());
+        const without_technical = try codec.render(a, technical, validated);
+        try std.testing.expect(std.mem.indexOf(u8, without_technical, escaped.written()) == null);
+        try std.testing.expect(std.mem.indexOf(u8, try @import("domain/reference_context.zig").render(a, technical.reference, null), escaped.written()) != null);
+
+        try std.testing.expectError(error.InvalidSpecification, @import("domain/specification_markdown.zig").parse(a, rendered));
+        const bytes = try json.encode(draft.State, a, value);
+        const unknown = try std.mem.concat(a, u8, &.{ "{\"unknown\":true,", bytes[1..] });
+        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, unknown, value.feature, contracts.port()));
+        const restored = try state.parse(a, bytes, value.feature, contracts.port());
+        try std.testing.expect(restored.value == .pending and restored.specified() == null);
+        try std.testing.expectEqualStrings(rendered, try codec.render(a, restored.value.pending, validated));
+        try std.testing.expectEqual(@as(u64, 2), try state.nextRevision(restored));
+        var successor = restored;
+        successor.value.pending.id_ledger.next[0] = 42;
+        const next = try draft.build(a, successor, snapshot, validated, contracts.port());
+        try std.testing.expectEqual(@as(u32, 42), next.id_ledger.next[0]);
+        try std.testing.expectEqual(@as(u64, 2), next.revision);
+        try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, state.parse(a, bytes, value.feature, null));
+        for (0..8) |mode| {
+            var bad = value;
+            switch (mode) {
+                0 => bad.open_clarifications = &.{},
+                1 => bad.open_clarifications = &.{ .{ .stage = .spec, .ordinal = 1 }, .{ .stage = .spec, .ordinal = 1 } },
+                2 => bad.open_clarifications = &.{.{ .stage = .plan, .ordinal = 1 }},
+                3 => bad.open_clarifications = &.{.{ .stage = .spec, .ordinal = 0 }},
+                4 => bad.feature = .{ .bytes = "foreign" },
+                5 => bad.clarification.revision = 0,
+                6 => bad.schema = "specification-state/v2",
+                7 => bad.id_ledger.next[0] = 0,
+                else => unreachable,
+            }
+            try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try json.encode(draft.State, a, bad), value.feature, contracts.port()));
+        }
+        const forged = try std.mem.replaceOwned(u8, a, bytes, "spec_clarification_pending", "specified");
+        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, forged, value.feature, contracts.port()));
+        var stale = value;
+        stale.clarification.revision += 1;
+        try std.testing.expectError(error.InvalidIncompleteSpecification, codec.render(a, stale, validated));
+        stale = value;
+        stale.open_clarifications = &.{.{ .stage = .spec, .ordinal = 2 }};
+        try std.testing.expectError(error.InvalidIncompleteSpecification, codec.render(a, stale, validated));
+        const closed_records = try a.dupe(c.Record, clarification.records);
+        closed_records[0].status = .resolved_by_authority;
+        closed_records[0].authority_resolution = "Resolved from current sources.";
+        var closed = clarification;
+        closed.records = closed_records;
+        try std.testing.expectError(error.InvalidIncompleteSpecification, draft.build(a, prior, snapshot, try c.validate(.{ .value = closed }, value.feature), contracts.port()));
+        const selected = try @import("domain/feature_directory.zig").validate(a, .{ .bytes = value.feature.bytes }, .{ .specs = "requirements", .archive = "archive" });
+        const paths = try @import("domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, .{ .specs = "requirements", .archive = "archive", .workflows = "engine" }, selected);
+        const directory: @import("domain/feature_directory.zig").Directory = .{ .selector = selected, .root_observation = .absent, .observation = .absent };
+        const inputs: c.Inputs = .{ .state = .{ .value = null }, .submissions = &.{}, .protected_forms = &.{} };
+        const forms = try @import("domain/clarification_views.zig").render(a, validated, &.{});
+        const prepare: @import("actions/specification/prepare_incomplete_specification_output.zig").Action = .{ .contracts = contracts.port() };
+        const prepared = try prepare.execute(a, directory, paths, .{ .state = null, .forms = &.{} }, inputs, .{ .ready = validated }, forms, prior, value, rendered);
+        try std.testing.expectEqual(.needs_user, prepared.terminal_outcome);
+        try std.testing.expectEqual(@as(usize, 5), prepared.files.len);
+        try std.testing.expectEqual(.specification, prepared.files[0].target.artifact);
+        try std.testing.expectEqual(.workflow_state, prepared.files[prepared.files.len - 1].target.artifact);
+        try std.testing.expectError(error.InvalidWorkflowOutput, prepare.execute(a, directory, paths, .{ .state = null, .forms = &.{} }, inputs, .{ .ready = validated }, forms, prior, value, "forged spec"));
+    }
 }

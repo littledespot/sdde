@@ -438,5 +438,5 @@ const FakeBarrier = struct {
 };
 
 const toolkit_config =
-    \\{"logs":{"level":"info","console":false,"promptCapture":[]},"models":{"slots":{"spec-generation":{"provider":"compiled-provider","model":"model-a","reasoningEffort":"low"}}},"paths":{"specs":"specs","references":"references","specsArchive":"specs/archive","workflows":"workflows","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":".sddproviders.json"}}
+    \\{"logs":{"level":"info","console":false},"models":{"slots":{"spec-generation":{"provider":"compiled-provider","model":"model-a","reasoningEffort":"low"}}},"paths":{"specs":"specs","references":"references","specsArchive":"specs/archive","workflows":"workflows","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":".sddproviders.json"}}
 ;

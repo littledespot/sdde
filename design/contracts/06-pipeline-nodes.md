@@ -97,6 +97,12 @@ Examples of keys are `environment.compiled.web@1`, `reference.manifest@1`, `spec
 
 The pipeline runner validates node contracts before execution, applies immutable deltas after a successful node, and refuses a chain with missing inputs, undeclared writes, incompatible schema versions, duplicate producers, or invalid side-effect ordering. An orchestrator schedules nodes; the runner performs contract/data plumbing.
 
+The registered `workflow_publication` effect ends execution. The shared compiled
+graph validator and registry admission require each publication outcome to target
+its matching workflow terminal directly, including after subgraph expansion.
+Preparing the final outcome and every fallible or telemetry-producing operation
+must precede publication; even a capability-free step is not a valid successor.
+
 - Runtime execution guards use the [F0005 execution-guard
   contract](../features/F0005-WorkflowDefinitionRegistryService.md#execution-guards).
 - Gate evidence is produced by explicit YAML-visible validation operations and bound by the

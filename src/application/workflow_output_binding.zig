@@ -16,7 +16,7 @@ pub const PrepareClarifications = struct {
         const self = context.?;
         const read = @import("clarification_input_workflow.zig");
         const refresh = @import("clarification_refresh_workflow.zig");
-        const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").directory, @import("../domain/feature_directory.zig").Directory) catch return error.OperationExecutionFailed;
+        const feature = values.read(&input.step.data, @import("feature_logging_workflow.zig").directory, @import("../domain/feature_directory.zig").Directory) catch return error.OperationExecutionFailed;
         const paths = values.read(&input.step.data, read.paths_schema, @import("../domain/workflow_artifact_registry.zig").FeaturePaths) catch return error.OperationExecutionFailed;
         const prior = values.read(&input.step.data, read.captures_schema, c.Captures) catch return error.OperationExecutionFailed;
         const inputs = values.read(&input.step.data, read.inputs_schema, c.Inputs) catch return error.OperationExecutionFailed;
@@ -30,12 +30,19 @@ pub const PrepareClarifications = struct {
 };
 pub const Publish = struct {
     pub const Action = @import("../actions/workflow/publish_workflow_output.zig").Action;
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .needs_user, .failed };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prepared = values.read(&input.step.data, prepared_schema, output.Prepared) catch return error.OperationExecutionFailed;
+        var candidate = try publish(self.allocator, published_schema, bool, true);
+        errdefer values.destroy(candidate.delta.data_writes[@intFromEnum(published_schema.key)].?);
+        candidate.outcome = switch (prepared.terminal_outcome) {
+            .ok => .ok,
+            .needs_user => .needs_user,
+        };
         self.action.execute(self.allocator, prepared.*) catch return error.OperationExecutionFailed;
-        return publish(self.allocator, published_schema, bool, true);
+        return candidate;
     }
 };

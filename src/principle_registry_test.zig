@@ -56,7 +56,7 @@ test "principle selection has one explicit configuration owner and rejects incom
         "{\"filenameHints\":{\"core.md\":\"unknown\"},\"selections\":[]}",
         "{\"filenameHints\":{},\"selections\":[{\"stage\":\"spec\",\"environment\":null,\"fileKind\":null,\"categories\":[\"core\"],\"autoSelect\":true}]}",
     }) |bytes| {
-        const full = try std.fmt.allocPrint(a, "{{\"logs\":{{\"level\":\"info\",\"console\":false,\"promptCapture\":[]}},\"models\":{{\"slots\":{{}}}},\"paths\":{{\"specs\":\"s\",\"references\":\"r\",\"specsArchive\":\"s/a\",\"workflows\":\"w\",\"toolchainPreset\":\"t\",\"principles\":\"p\",\"templates\":\"x\",\"providers\":\".sddproviders.json\"}},\"principles\":{s}}}", .{bytes});
+        const full = try std.fmt.allocPrint(a, "{{\"logs\":{{\"level\":\"info\",\"console\":false}},\"models\":{{\"slots\":{{}}}},\"paths\":{{\"specs\":\"s\",\"references\":\"r\",\"specsArchive\":\"s/a\",\"workflows\":\"w\",\"toolchainPreset\":\"t\",\"principles\":\"p\",\"templates\":\"x\",\"providers\":\".sddproviders.json\"}},\"principles\":{s}}}", .{bytes});
         try std.testing.expectError(error.EngineConfigParseError, (@import("actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, full));
     }
 }

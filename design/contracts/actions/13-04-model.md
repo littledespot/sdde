@@ -106,45 +106,50 @@ Exact new operation IDs are assigned with implementation, not by this catalogue.
 
 ## `BuildPromptBodyFragmentManifestAction`
 
-- **Input:** typed request/result assembly, exact workflow-declared schemas, and
-  fragment-classification registry
+- **Input:** assembled model-facing request or available raw provider body, exact
+  workflow-declared schemas, effective capture policy and fragment-classification registry
 - **Output:** complete prompt-body fragment manifest
-- **Responsibility:** Before provider serialization, bind every loggable typed body field to one
-  `ordinary`, `reference_body`, or `code_body` fragment and prove complete pointer coverage;
-  never reclassify opaque whole serialized bytes.
+- **Responsibility:** Bind every loggable typed body field to one `ordinary`,
+  `reference_body`, or `code_body` fragment and prove complete coverage.
+  The shared production capture runner additionally supplies ADR 0018 `complete_body`
+  candidates from complete model-facing serialized bytes, including malformed returned
+  content, without parsing them into business authority or adding credential material.
+  Capture follows `logs.level` alone; no direction/class selectors remain.
 
 ## `BuildPromptLogCandidateAction`
 
 - **Input:** complete fragment manifest, provider metadata, exact model operation/slot, and
   enabled feature-log policy
 - **Output:** prompt-exchange candidate
-- **Responsibility:** Select request fragments only when request capture is enabled, response
-  fragments only when response capture is enabled, and additionally require the matching
-  reference/code opt-in for those classes; an unclassified or multiply classified fragment
-  blocks capture.
-- Do not redact, truncate, or emit.
+- **Responsibility:** Apply the shared effective level selection; debug/trace selects every
+  direction and body class under ADR 0018 and higher levels select no body content.
+  Retain the exact request/operation/slot/attempt association on every branch.
+- Do not redact, split, or emit.
 
 ## `RedactPromptLogContentAction`
 
-- **Input:** one prompt candidate, structured secret-field registry, mandatory credential
-  detectors, and configured bounded RE2 detectors
+- **Input:** one complete selected classified prompt candidate, structured secret-field
+  registry and mandatory credential detectors
 - **Output:** redacted prompt candidate and evidence
-- **Responsibility:** Remove secrets before any size truncation and never retain an original
+- **Responsibility:** Remove secrets before chunking and never retain an original
   value/length in the replacement.
 
-## `TruncatePromptLogContentAction`
-
-- **Input:** redacted prompt candidate and compiler-fixed 5,000-byte UTF-8 content ceiling
-- **Output:** bounded redacted prompt candidate and evidence
-- **Responsibility:** Truncate only at a UTF-8 scalar boundary after redaction.
+For production `complete_body` capture, the shared capture boundary redacts exact
+authorized credential values and their JSON-escaped forms. It splits the resulting
+valid UTF-8 only at scalar boundaries into at most 5,000-byte fragments; invalid
+UTF-8 uses encoding-tagged base64. Operation kind, direction, body provenance, encoding and padded
+byte offsets determine stable fragment identities and complete reconstruction.
+This replaces the superseded truncation responsibility without assigning a new
+workflow operation. Existing prompt validation and logging actions receive each
+bounded fragment; no tail truncation is permitted.
 
 ## `ValidatePromptLogContentAction`
 
 - **Input:** bounded redacted prompt candidate, feature-log policy, fragment manifest,
   event/field registry, and record-byte ceiling
 - **Output:** transient logging-internal `SanitizedPromptExchangeLogRecord`
-- **Responsibility:** Prove complete fragment accounting, all direction/class opt-ins, field
-  schemas, redaction-before-truncation evidence, per-fragment/final byte limits, and canonical
+- **Responsibility:** Prove complete fragment accounting, effective level selection,
+  field schemas, redaction-before-splitting evidence, per-fragment/final byte limits, and canonical
   `promptBodyFragmentId` order.
 - Retain scalar sanitized fragments and internal evidence separately; no metadata/evidence
   vector is a delimited cell.

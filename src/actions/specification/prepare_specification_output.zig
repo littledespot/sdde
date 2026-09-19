@@ -9,7 +9,7 @@ pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{
         .id = "prepare-specification-output",
         .kind = .action,
-        .requires = &.{ .feature_directory, .feature_artifact_paths, .raw_clarification_inputs, .clarification_inputs, .refreshed_clarification_state, .clarification_views, .prior_specification_state, .specification_publication_state, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .rendered_specification, .validated_specification_rendering, .rendered_reference_context },
+        .requires = &.{ .activated_feature_directory, .feature_artifact_paths, .raw_clarification_inputs, .clarification_inputs, .refreshed_clarification_state, .clarification_views, .prior_specification_state, .specification_publication_state, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .rendered_specification, .validated_specification_rendering, .rendered_reference_context },
         .produces = &.{.prepared_workflow_output},
         .side_effect = .none,
     };
@@ -25,6 +25,7 @@ pub const Action = struct {
         if (!std.mem.eql(u8, specification, rendered) or !std.mem.eql(u8, specification, reparsed) or
             !std.mem.eql(u8, reference_context, try @import("../../domain/reference_context.zig").render(allocator, value.reference, value.principle_assessment))) return error.InvalidWorkflowOutput;
         var prepared = try @import("../../domain/clarification_output.zig").prepare(allocator, feature, paths, captured, inputs, clarifications, views);
+        if (prepared.terminal_outcome != .ok) return error.InvalidWorkflowOutput;
         const canonical = try @import("../../domain/canonical_json.zig").encode(state.State, allocator, value);
         _ = try state.parse(allocator, canonical, feature.selector.feature_id, self.contracts);
         const files = try allocator.alloc(output.File, prepared.files.len + 3);

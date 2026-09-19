@@ -26,25 +26,11 @@ pub const Action = struct {
     }
 };
 
-test "rejects duplicate selectors and body classes without a direction" {
-    const canonicalized = try log_policy.canonicalizeConfiguredLevel("debug");
-    try std.testing.expectError(error.LoggingPolicyInvalid, (Action{}).execute(
-        std.testing.allocator,
-        .{ .level = "debug", .console = false, .promptCapture = &.{ .request, .request } },
-        canonicalized,
-    ));
-    try std.testing.expectError(error.LoggingPolicyInvalid, (Action{}).execute(
-        std.testing.allocator,
-        .{ .level = "debug", .console = false, .promptCapture = &.{.code_body} },
-        canonicalized,
-    ));
-}
-
 test "rejects canonicalization evidence from a different config value" {
     const canonicalized = try log_policy.canonicalizeConfiguredLevel("debug");
     try std.testing.expectError(error.LoggingPolicyInvalid, (Action{}).execute(
         std.testing.allocator,
-        .{ .level = "info", .console = false, .promptCapture = &.{} },
+        .{ .level = "info", .console = false },
         canonicalized,
     ));
 }

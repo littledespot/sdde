@@ -22,7 +22,7 @@ pub const Error = e.Error || error{InvalidReferenceSnapshot};
 /// projects only their accepted canonical records, retaining every source.
 pub fn build(directory: @import("reference_ingestion.zig").RelativePath, inputs: e.Inputs, extracted: x.Accounted, reconciled: r.Accounted, registry: passive.Registry, contract: @import("reference_extraction_contract.zig").Binding) Error!Snapshot {
     const global = reconciled.records.assignments.checked.prior.prior;
-    if (extracted.outcome != .complete or reconciled.outcome != .complete or
+    if (extracted.outcome != .complete or reconciled.outcome != (if (reconciled.records.conflicts.len == 0) @as(@TypeOf(reconciled.outcome), .complete) else .blocked) or
         !inputs.corpus.state_id.eql(extracted.ledger.state_id) or
         !inputs.corpus.state_id.eql(global.input.progress.plan.layout.items.state_id) or
         !inputs.corpus.state_id.eql(registry.grammar.reference_state_id)) return error.InvalidReferenceSnapshot;

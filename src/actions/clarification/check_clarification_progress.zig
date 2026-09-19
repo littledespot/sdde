@@ -9,9 +9,10 @@ pub const Action = struct {
         .side_effect = .none,
     };
     pub fn execute(_: Action, result: refresh.Result) @import("../../domain/workflow.zig").OutcomeTag {
-        if (result == .blocked) return .blocked;
-        const state = result.ready.value orelse return .blocked;
-        for (state.records) |record| if (record.status == .open) return .needs_user;
-        return .ok;
+        return switch (refresh.progress(result)) {
+            .ready => .ok,
+            .needs_user => .needs_user,
+            .blocked => .blocked,
+        };
     }
 };

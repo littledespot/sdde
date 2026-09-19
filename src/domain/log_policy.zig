@@ -32,7 +32,6 @@ fn canonicalizedLevel(raw: []const u8, threshold: telemetry.CanonicalLogLevel, e
 pub const CompiledLoggingPolicy = struct {
     level: CanonicalizedLevel,
     console: bool,
-    prompt_capture: []const config.PromptCapture,
     timestamp_enabled: bool = true,
     file_enabled: bool = true,
     max_record_bytes: usize = limits.max_record_bytes,
@@ -60,19 +59,7 @@ pub fn createValidated(
     logs: config.LogsConfig,
     canonicalized: CanonicalizedLevel,
 ) Error!*Owner {
-    if (!std.mem.eql(u8, logs.level, canonicalized.source) or
-        logs.promptCapture.len > @typeInfo(config.PromptCapture).@"enum".fields.len)
-    {
-        return error.InvalidLoggingPolicy;
-    }
-    var has_direction = false;
-    for (logs.promptCapture, 0..) |selector, index| {
-        if (selector == .request or selector == .response) has_direction = true;
-        for (logs.promptCapture[0..index]) |previous| {
-            if (selector == previous) return error.InvalidLoggingPolicy;
-        }
-    }
-    if (logs.promptCapture.len != 0 and !has_direction) return error.InvalidLoggingPolicy;
+    if (!std.mem.eql(u8, logs.level, canonicalized.source)) return error.InvalidLoggingPolicy;
 
     const owner = allocator.create(OwnerStorage) catch return error.InvalidLoggingPolicy;
     errdefer allocator.destroy(owner);
@@ -85,10 +72,6 @@ pub fn createValidated(
             .source = owner.arena.allocator().dupe(u8, canonicalized.source) catch return error.InvalidLoggingPolicy,
         },
         .console = logs.console,
-        .prompt_capture = owner.arena.allocator().dupe(
-            config.PromptCapture,
-            logs.promptCapture,
-        ) catch return error.InvalidLoggingPolicy,
     };
     return @ptrCast(owner);
 }
@@ -106,6 +89,10 @@ pub fn deinitOwner(owner: *Owner) void {
 
 pub fn isEmitted(policy_value: CompiledLoggingPolicy, level_value: telemetry.CanonicalLogLevel) bool {
     return level_value.rank() >= policy_value.level.threshold.rank();
+}
+
+pub fn promptCaptureEnabled(policy_value: CompiledLoggingPolicy) bool {
+    return isEmitted(policy_value, .debug);
 }
 
 pub fn transitionCompatible(current: CompiledLoggingPolicy, next: CompiledLoggingPolicy) bool {
@@ -141,7 +128,6 @@ test "canonical level aliases have one owner and threshold comparison is exhaust
         const policy_value: CompiledLoggingPolicy = .{
             .level = .{ .threshold = configured, .alias_evidence = .none },
             .console = false,
-            .prompt_capture = &.{},
         };
         for (levels) |event_level| {
             try std.testing.expectEqual(
@@ -156,7 +142,6 @@ test "policy transitions permit user choices but preserve hard logging contracts
     const current: CompiledLoggingPolicy = .{
         .level = .{ .threshold = .info, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &.{},
     };
     var next = current;
     next.level.threshold = .debug;
@@ -164,4 +149,15 @@ test "policy transitions permit user choices but preserve hard logging contracts
     try std.testing.expect(transitionCompatible(current, next));
     next.max_segments -= 1;
     try std.testing.expect(!transitionCompatible(current, next));
+}
+
+test "only debug and trace enable complete prompt bodies" {
+    for (std.enums.values(telemetry.CanonicalLogLevel)) |level| {
+        const value: CompiledLoggingPolicy = .{
+            .level = .{ .threshold = level, .alias_evidence = .none },
+            .console = false,
+        };
+        const expected = level == .debug or level == .trace;
+        try std.testing.expectEqual(expected, promptCaptureEnabled(value));
+    }
 }

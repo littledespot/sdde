@@ -1,6 +1,7 @@
 const std = @import("std");
 const roots = @import("../../domain/bootstrap_root_registry.zig");
 const directory = @import("../../domain/feature_directory.zig");
+const active_directory = @import("../../domain/active_feature_directory.zig");
 const artifacts = @import("../../domain/workflow_artifact_registry.zig");
 const clarification = @import("../../domain/clarification_inputs.zig");
 const source = @import("../../ports/feature_input_source.zig");
@@ -9,6 +10,7 @@ const directories = @import("directory_access.zig");
 pub const Adapter = struct {
     io: std.Io,
     project_root: std.Io.Dir,
+    active_feature: ?*const active_directory.Capability = null,
 
     pub fn capturer(self: *Adapter) source.Capturer {
         return .{ .context = self, .capture_fn = capture };
@@ -21,8 +23,9 @@ pub const Adapter = struct {
         return self.captureWorkflowStateBound(roots.bindFeatureInputAdapter(capability), allocator, observed, paths);
     }
     pub fn captureWorkflowStateBound(self: *Adapter, binding: roots.FeatureInputAdapterBinding, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!?[]const u8 {
-        try validateBinding(binding, allocator, observed, paths);
-        return self.captureState(binding, allocator, paths.get(.workflow_state), @import("../../domain/specification_state.zig").max_bytes);
+        const effective = try self.bindActive(binding, observed);
+        try validateBinding(effective.binding, allocator, effective.directory, paths);
+        return self.captureState(effective.binding, allocator, paths.get(.workflow_state), @import("../../domain/specification_state.zig").max_bytes);
     }
     fn capture(context: *anyopaque, capability: *const roots.FeatureInputReadCapability, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!clarification.Captures {
         const self: *Adapter = @ptrCast(@alignCast(context));
@@ -33,8 +36,15 @@ pub const Adapter = struct {
     /// Adapter-local reuse for write-time rechecks after authorized creation.
     /// The caller has opened/revalidated these exact physical root identities.
     pub fn captureBound(self: *Adapter, binding: roots.FeatureInputAdapterBinding, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!clarification.Captures {
-        try validateBinding(binding, allocator, observed, paths);
-        return self.captureClarifications(binding, allocator, observed, paths);
+        const effective = try self.bindActive(binding, observed);
+        try validateBinding(effective.binding, allocator, effective.directory, paths);
+        return self.captureClarifications(effective.binding, allocator, effective.directory, paths);
+    }
+    fn bindActive(self: *const Adapter, binding: roots.FeatureInputAdapterBinding, observed: directory.Directory) source.Error!active_directory.BoundInput {
+        return if (self.active_feature) |active|
+            active_directory.bindInput(active, binding, observed) orelse error.FeatureInputUnavailable
+        else
+            .{ .binding = binding, .directory = observed };
     }
     fn validateBinding(binding: roots.FeatureInputAdapterBinding, allocator: std.mem.Allocator, observed: directory.Directory, paths: artifacts.FeaturePaths) source.Error!void {
         if (!std.mem.eql(u8, observed.selector.feature_id.bytes, paths.feature.feature_id.bytes) or

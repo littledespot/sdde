@@ -23,7 +23,26 @@ pub const LogService = struct {
     }
 
     pub fn barrier(self: *LogService) barrier_port.Barrier {
-        return self.lifecycle.barrier();
+        return .{ .context = self, .process_fn = process, .select_prompt_fn = selectPrompt, .process_prompt_fn = processPrompt, .report_failure_fn = reportFailure };
+    }
+
+    fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("../domain/feature_log_stream.zig").Outcome {
+        const self: *LogService = @ptrCast(@alignCast(context));
+        return self.lifecycle.barrier().process(fact);
+    }
+    fn selectPrompt(context: *anyopaque, fragment: @import("../domain/sanitized_prompt_log.zig").SanitizedPromptFragment) bool {
+        const self: *LogService = @ptrCast(@alignCast(context));
+        // Threshold selection precedes activation and allocation. Missing active
+        // storage must still fail closed when capture is required.
+        return log_policy.promptCaptureEnabled(self.policy().*) and self.lifecycle.barrier().selectPrompt(fragment);
+    }
+    fn processPrompt(context: *anyopaque, fragment: @import("../domain/sanitized_prompt_log.zig").SanitizedPromptFragment) @import("../domain/feature_log_stream.zig").Outcome {
+        const self: *LogService = @ptrCast(@alignCast(context));
+        return self.lifecycle.barrier().processPrompt(fragment);
+    }
+    fn reportFailure(context: *anyopaque, shortcode: telemetry.WorkflowShortcode, failure: @import("../domain/feature_log_stream.zig").FailureCode) void {
+        const self: *LogService = @ptrCast(@alignCast(context));
+        self.lifecycle.barrier().reportFailure(shortcode, failure);
     }
 
     pub fn activate(
@@ -68,3 +87,30 @@ pub const LogService = struct {
         self.* = undefined;
     }
 };
+
+test "production capture selection respects threshold before feature activation" {
+    const std = @import("std");
+    const fragment: @import("../domain/sanitized_prompt_log.zig").SanitizedPromptFragment = .{
+        .workflow_shortcode = try telemetry.WorkflowShortcode.parse("TEST"),
+        .node_id = .{ .bytes = "invoke" },
+        .attempt = 1,
+        .request_id = .{ .bytes = "request-1" },
+        .route_id = .{ .bytes = "generate" },
+        .model_profile_id = .{ .bytes = "generation" },
+        .fragment_id = .{ .bytes = "body-0" },
+        .direction = .request,
+        .body_class = .complete_body,
+        .content = "body",
+        .retained_bytes = 4,
+        .truncated = false,
+        .redacted = false,
+    };
+    for ([_][]const u8{ "info", "debug", "trace" }, 0..) |level, index| {
+        const owner = try log_policy.createValidated(std.testing.allocator, .{ .level = level, .console = false }, try log_policy.canonicalizeConfiguredLevel(level));
+        var service = LogService.init(owner);
+        defer service.deinit();
+        const barrier = service.barrier();
+        try std.testing.expectEqual(index != 0, barrier.selectPrompt(fragment));
+        if (index != 0) try std.testing.expectEqual(.blocked, std.meta.activeTag(barrier.processPrompt(fragment)));
+    }
+}

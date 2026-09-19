@@ -19,6 +19,7 @@ pub const Fixture = struct {
     finish_after_cancel: bool = false,
     maximum_read: usize = 7,
     maximum_write: usize = 13,
+    body_prefix_bytes: usize = 1,
     cursor: usize = 0,
     body_start: usize,
     fault_fired: bool = false,
@@ -147,10 +148,10 @@ pub const Fixture = struct {
         _ = self.active_socket_calls.fetchAdd(1, .acq_rel);
         defer _ = self.active_socket_calls.fetchSub(1, .release);
         // Expose part of the body before its fault, even with a large read buffer.
-        const point: Point = if (self.cursor < self.body_start + 1) .head else .body;
+        const point: Point = if (self.cursor < self.body_start + self.body_prefix_bytes) .head else .body;
         if (self.cursor > 0 and try self.interrupt(point)) return if (self.fault == .eof) 0 else error.ConnectionResetByPeer;
         if (self.cursor == self.response.len) return 0;
-        const boundary = if (self.cursor < self.body_start + 1) @min(self.body_start + 1, self.response.len) else self.response.len;
+        const boundary = if (self.cursor < self.body_start + self.body_prefix_bytes) @min(self.body_start + self.body_prefix_bytes, self.response.len) else self.response.len;
         const n = @min(buffers[0].len, self.maximum_read, boundary - self.cursor);
         @memcpy(buffers[0][0..n], self.response[self.cursor..][0..n]);
         self.cursor += n;

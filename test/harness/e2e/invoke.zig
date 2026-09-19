@@ -93,7 +93,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     report.status = observed.status;
     report.missing_artifact = observed.missing_artifact;
     report.specification = observed.specification;
-    report.publication_check = if (outcome != .ok) .not_run else if (observed.status == .generated) .passed else .failed;
+    report.publication_check = if (outcome != .ok and outcome != .needs_user) .not_run else if (observed.status == .generated or observed.status == .awaiting_clarification) .passed else .failed;
     if (observed.status == .publication_missing) report.diagnostic = "WORKFLOW_OUTPUT_NOT_PUBLISHED";
     if (observed.status == .artifact_changed) report.diagnostic = "PUBLISHED_ARTIFACT_CHANGED";
     return observed.specification_bytes;

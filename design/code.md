@@ -1464,7 +1464,7 @@ an earlier extended sample whose fields F0001 rejects.
 
 ```text
 SDDToolKitConfig {
-  logs: { level, console, promptCapture[] },
+  logs: { level, console },
   models: { slots: map<slotName, { provider, model, reasoningEffort? }> },
   paths: {
     specs, references, specsArchive, workflows,

@@ -117,6 +117,27 @@ pub const CompiledWorkflow = struct {
 
 pub const ValidatedGraphs = struct { values: []const CompiledWorkflow };
 
+/// Publication includes required observation finalization. No operation may run
+/// afterward, including a pure node that could still emit telemetry or fail.
+pub fn publicationTerminates(authority: SemanticAuthority) bool {
+    for (authority.steps) |step| {
+        if (step.side_effect != .workflow_publication) continue;
+        for (step.outcomes) |outcome| {
+            var found = false;
+            for (authority.transitions) |edge| {
+                if (!std.mem.eql(u8, edge.from.bytes, step.id.bytes) or edge.outcome != outcome) continue;
+                if (edge.target != .terminal or edge.target.terminal != outcome) return false;
+                found = true;
+            }
+            if (!found) return false;
+        }
+        for (authority.transitions) |edge| {
+            if (std.mem.eql(u8, edge.from.bytes, step.id.bytes) and edge.target != .terminal) return false;
+        }
+    }
+    return true;
+}
+
 pub fn calculateExecutionLimit(steps: []const CompiledStep) ?usize {
     if (steps.len == 0) return null;
     var total_retry_limit: usize = 0;

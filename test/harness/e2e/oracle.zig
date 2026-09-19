@@ -9,8 +9,7 @@ pub const Result = struct { status: c.Status, missing_artifact: ?c.Artifact = nu
 
 pub fn inspect(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, outcome: @import("../../../src/domain/workflow.zig").OutcomeTag, publication: Publication, expected: []const c.Artifact, resolved: paths.FeaturePaths) !Result {
     switch (outcome) {
-        .ok => {},
-        .needs_user => return .{ .status = .awaiting_clarification },
+        .ok, .needs_user => {},
         .invalid => return .{ .status = .workflow_invalid },
         .blocked => return .{ .status = .workflow_blocked },
         .cancelled => return .{ .status = .workflow_cancelled },
@@ -44,8 +43,8 @@ pub fn inspect(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, ou
         if (!std.mem.eql(u8, published, bytes)) {
             return .{ .status = .artifact_changed, .missing_artifact = artifact };
         }
-        if (artifact == .specification) specification_bytes = try allocator.dupe(u8, bytes);
+        if (artifact == .specification and outcome == .ok) specification_bytes = try allocator.dupe(u8, bytes);
     }
     retained = true;
-    return .{ .status = .generated, .specification = resolved.get(.specification).project_relative, .specification_bytes = specification_bytes };
+    return .{ .status = if (outcome == .needs_user) .awaiting_clarification else .generated, .specification = resolved.get(.specification).project_relative, .specification_bytes = specification_bytes };
 }

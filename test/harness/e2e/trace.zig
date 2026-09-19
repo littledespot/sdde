@@ -57,6 +57,7 @@ pub const Trace = struct {
             .selected_graph = graph,
             .invoke_invocation = invoke,
             .invoke_step = step,
+            .finalize = finalize,
         } };
     }
     fn cast(context: *anyopaque) *Trace {
@@ -99,6 +100,10 @@ pub const Trace = struct {
             self.fail(err);
         };
         return result;
+    }
+
+    fn finalize(context: *anyopaque, outcome: @import("../../../src/domain/run_outcome.zig").Outcome) @import("../../../src/domain/run_outcome.zig").Outcome {
+        return cast(context).invocation.bindings().finalizeOutcome(outcome);
     }
 
     fn exchange(context: *transport.Context, a: std.mem.Allocator, request: transport.Request) transport.Error!transport.Response {

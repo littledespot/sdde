@@ -48,6 +48,7 @@ pub const Runner = struct {
     selected: execution.SelectedWorkflow,
     operation_registry: *const operations.Registry,
     barrier: telemetry_barrier.Barrier,
+    model_capture: @import("model_exchange_capture.zig").Capture,
     runtime: pipeline.NodeRuntime,
     model_provider_services: ?*const provider_services.ModelProviderBootstrapServices = null,
     resolve_provider_binding_action: resolve_provider_binding.Action = .{},
@@ -55,6 +56,7 @@ pub const Runner = struct {
     token_accounting: workflow_token_runner.Runner,
     model_accounting: ?model_accounting.State = null,
     provider_clock: ?lease.Clock = null,
+    publication_finalizer: ?@import("../ports/feature_log_activation.zig").Finalizer = null,
     retry_execution_counts: [definition.max_steps]u64 = [_]u64{0} ** definition.max_steps,
     repair_retry: retry.State,
 
@@ -71,6 +73,7 @@ pub const Runner = struct {
             .selected = selected,
             .operation_registry = operation_registry,
             .barrier = barrier,
+            .model_capture = .{ .allocator = allocator, .logs = barrier },
             .runtime = runtime,
             .model_provider_services = model_provider_services,
             .envelope = .init(allocator, selected.graph.authority.data_schemas),
@@ -320,6 +323,26 @@ pub const Runner = struct {
             };
         }
         const occurrence = self.envelope.beginOccurrence(step.operation_id.bytes) catch return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
+        if (calls_model) {
+            const invoked = call.?;
+            const ledger = identity.ledger(self.model_accounting.?.requests);
+            const origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, invoked.operation_id) orelse return .{ .rejected = .authority };
+            self.model_capture.begin(.{
+                .workflow = self.selected.graph.shortcode,
+                .node = .{ .bytes = step.id.bytes },
+                .operation = .{ .bytes = invoked.provider_binding.operation_id.workflow_step_id.bytes },
+                .model_slot = .{ .bytes = invoked.provider_binding.slot_id.bytes },
+                .origin = origin,
+            });
+        }
+        defer if (calls_model) self.model_capture.end();
+        if (step.side_effect == .workflow_publication) {
+            if (self.publication_finalizer) |finalizer| switch (finalizer.finish(.{ .execution = .ok })) {
+                .execution => |outcome| if (outcome != .ok) return .{ .rejected = .authority },
+                .execution_rejected => |reason| return .{ .rejected = reason },
+                .bootstrap_failed, .invocation_invalid => return .{ .rejected = .authority },
+            };
+        }
         var candidate = entry.invoke(.{ .step = .{
             .data = input_data,
             .step = step,
@@ -337,14 +360,18 @@ pub const Runner = struct {
         } }) catch |err| {
             if (calls_model and !calls_count) {
                 const invoked = call.?;
-                if (model_invocation.reconcile(&self.token_accounting, token_revision, invoked, null)) |reason| return .{ .rejected = reason };
+                const rejection = model_invocation.reconcile(&self.token_accounting, token_revision, invoked, null);
+                if (self.model_capture.failure) |failure| return .{ .rejected = .{ .logging = failure } };
+                if (rejection) |reason| return .{ .rejected = reason };
             }
+            if (calls_model) if (self.model_capture.failure) |failure| return .{ .rejected = .{ .logging = failure } };
             return .{ .rejected = .{ .operation_failed = err } };
         };
         defer self.envelope.discard(&candidate.delta);
         if (calls_model) {
             const invoked = call.?;
             const rejection = if (calls_count) model_invocation.validateCount(invoked, &candidate) else model_invocation.reconcile(&self.token_accounting, token_revision, invoked, &candidate);
+            if (self.model_capture.failure) |failure| return .{ .rejected = .{ .logging = failure } };
             if (rejection) |reason| return .{ .rejected = reason };
             if (candidate.outcome != .cancelled) authorization_binding.checkDeadline(self.provider_clock.?, self.runtime, authorization_deadline.?) catch |err| return authorizationRejected(err);
         }

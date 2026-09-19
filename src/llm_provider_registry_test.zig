@@ -276,7 +276,7 @@ const unsupported_option_slots_config = toolkitPrefix() ++
 
 fn toolkitPrefix() []const u8 {
     return
-    \\{"logs":{"level":"info","console":false,"promptCapture":[]},"models":{"slots":
+    \\{"logs":{"level":"info","console":false},"models":{"slots":
     ;
 }
 

@@ -60,7 +60,6 @@ test "runner barrier persists recovers and sequences feature events" {
     const policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .debug, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &.{},
     };
     var sink_adapter = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
     var clock: FakeClock = .{};
@@ -101,7 +100,7 @@ test "restart recovery truncates only an incomplete final row" {
     const candidate = bindingCandidate();
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(owner);
-    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false, .prompt_capture = &.{} };
+    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
     var first_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
@@ -129,7 +128,7 @@ test "restart recovery resumes after a durably closed tail" {
     const candidate = bindingCandidate();
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(owner);
-    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false, .prompt_capture = &.{} };
+    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
     const shortcode = try telemetry.WorkflowShortcode.parse("IMPL");
@@ -159,7 +158,7 @@ test "restart rejects an insecure segment permission instead of trusting its byt
     const candidate = bindingCandidate();
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(owner);
-    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false, .prompt_capture = &.{} };
+    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
     var first_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
@@ -183,7 +182,7 @@ test "stream lock acquisition rejects a symbolic link" {
     const candidate = bindingCandidate();
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(owner);
-    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false, .prompt_capture = &.{} };
+    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
     var sink_adapter = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
@@ -202,7 +201,6 @@ test "threshold drop performs no clock sink or identity work" {
     const policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .fatal, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &.{},
     };
     var rejecting_sink: RejectingSink = .{};
     var clock: FakeClock = .{};
@@ -222,18 +220,16 @@ test "threshold drop performs no clock sink or identity work" {
     try std.testing.expectEqual(@as(usize, 0), rejecting_sink.calls);
 }
 
-test "enabled sanitized prompt fragments persist in their separate stream" {
+test "debug captures response code content without explicit prompt selectors" {
     const io = std.testing.io;
     var directory = std.testing.tmpDir(.{ .iterate = true });
     defer directory.cleanup();
     const candidate = bindingCandidate();
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(owner);
-    const captures = [_]@import("domain/config.zig").PromptCapture{.request};
     const policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .debug, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &captures,
     };
     var sink_adapter = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
     var clock: FakeClock = .{};
@@ -246,13 +242,13 @@ test "enabled sanitized prompt fragments persist in their separate stream" {
     };
     const outcome = runner.processPrompt(.{
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("PLAN"),
-        .attempt = 1,
+        .attempt = 70_000,
         .request_id = telemetry.Identifier.validate("REQ-1").?,
         .route_id = telemetry.Identifier.validate("ROUTE-1").?,
         .model_profile_id = telemetry.Identifier.validate("PROFILE-1").?,
         .fragment_id = telemetry.Identifier.validate("FRAG-1").?,
-        .direction = .request,
-        .body_class = .ordinary,
+        .direction = .response,
+        .body_class = .code_body,
         .content = "sanitized",
         .retained_bytes = 9,
         .truncated = false,
@@ -263,7 +259,91 @@ test "enabled sanitized prompt fragments persist in their separate stream" {
     defer std.testing.allocator.free(bytes);
     try std.testing.expect(std.mem.startsWith(u8, bytes, @import("domain/feature_log_format.zig").prompt_heading));
     try std.testing.expect(std.mem.indexOf(u8, bytes, "|PLAN|") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "|70000|") != null);
     try std.testing.expect(std.mem.indexOf(u8, bytes, "|sanitized|9|false|true\n") != null);
+}
+
+test "production capture resolves the active lifecycle and persists complete debug exchanges" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    var events = std.testing.tmpDir(.{ .iterate = true });
+    defer events.cleanup();
+    var prompts = std.testing.tmpDir(.{ .iterate = true });
+    defer prompts.cleanup();
+    const candidate = bindingCandidate();
+    const owner = try log_binding.createValidated(a, candidate);
+    defer log_binding.deinitOwner(owner);
+    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
+    var sink = filesystem_sink.Adapter.initForTest(io, events.dir, candidate);
+    sink.prompt_directory = prompts.dir;
+    sink.prompt_run_directory = prompts.dir;
+    var clock: FakeClock = .{};
+    var outputs: FakeOutputs = .{};
+    var runner: runner_module.Runner = .{ .allocator = a, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&sink, clock.port(), outputs.console(), outputs.emergency()) };
+    var lifecycle: runtime_lifecycle.Lifecycle = .{};
+    const exchange = @import("application/model_exchange_capture.zig");
+    // Production constructs the barrier before workflow feature activation.
+    var capture: exchange.Capture = .{ .allocator = a, .logs = lifecycle.barrier() };
+    const shortcode = try telemetry.WorkflowShortcode.parse("SPEC");
+    try std.testing.expectEqual(.ok, lifecycle.activate(runner.childBindings(), shortcode));
+    capture.begin(.{ .workflow = shortcode, .node = .{ .bytes = "invoke" }, .operation = .{ .bytes = "generate" }, .model_slot = .{ .bytes = "generation" }, .origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 2 } } });
+    defer capture.end();
+    const padding = try a.alloc(u8, 11000);
+    defer a.free(padding);
+    @memset(padding, 'x');
+    const request = try std.mem.concat(a, u8, &.{ "first prompt credential-value ", padding, " final prompt text" });
+    defer a.free(request);
+    try std.testing.expectEqual(.recorded, capture.port().capture(.request, .{ .provider_body = request }, &.{"credential-value"}));
+    try std.testing.expectEqual(.recorded, capture.port().capture(.response, .{ .provider_body = "malformed response credential-value {" }, &.{"credential-value"}));
+    try std.testing.expect(runner.close(shortcode) != .blocked);
+    const logged = try prompts.dir.readFileAlloc(io, "0001.log", a, .limited(log_limits.max_segment_bytes));
+    defer a.free(logged);
+    try std.testing.expectEqual(@as(usize, 4), std.mem.count(u8, logged, "|model.prompt_fragment|"));
+    try std.testing.expect(std.mem.indexOf(u8, logged, "first prompt [REDACTED_CREDENTIAL]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "final prompt text") != null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "malformed response [REDACTED_CREDENTIAL] {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "credential-value") == null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "|request-3|generate|generation|") != null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "|request|complete_body|") != null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "|response|complete_body|") != null);
+    try std.testing.expectEqual(@as(usize, 0), outputs.emergency_count);
+    // A retired active logger cannot silently discard future bodies.
+    try std.testing.expectEqual(.blocked, capture.port().capture(.request, .{ .provider_body = "next" }, &.{}));
+}
+
+test "info logging filters complete prompt bodies before effects" {
+    const candidate = bindingCandidate();
+    const owner = try log_binding.createValidated(std.testing.allocator, candidate);
+    defer log_binding.deinitOwner(owner);
+    const policy: log_policy.CompiledLoggingPolicy = .{
+        .level = .{ .threshold = .info, .alias_evidence = .none },
+        .console = false,
+    };
+    var sink: RejectingSink = .{};
+    var clock: FakeClock = .{};
+    var outputs: FakeOutputs = .{};
+    var runner: runner_module.Runner = .{
+        .allocator = std.testing.allocator,
+        .policy = &policy,
+        .binding = log_binding.binding(owner),
+        .actions = childrenFor(&sink, clock.port(), outputs.console(), outputs.emergency()),
+    };
+    try std.testing.expect(runner.processPrompt(.{
+        .workflow_shortcode = try telemetry.WorkflowShortcode.parse("PLAN"),
+        .attempt = 1,
+        .request_id = telemetry.Identifier.validate("REQ-1").?,
+        .route_id = telemetry.Identifier.validate("ROUTE-1").?,
+        .model_profile_id = telemetry.Identifier.validate("PROFILE-1").?,
+        .fragment_id = telemetry.Identifier.validate("FRAG-1").?,
+        .direction = .request,
+        .body_class = .complete_body,
+        .content = "sanitized",
+        .retained_bytes = 9,
+        .truncated = false,
+        .redacted = true,
+    }) == .dropped);
+    try std.testing.expectEqual(@as(usize, 0), clock.calls);
+    try std.testing.expectEqual(@as(usize, 0), sink.calls);
 }
 
 test "prompt batches persist in canonical fragment id order and consume transient ownership" {
@@ -273,8 +353,7 @@ test "prompt batches persist in canonical fragment id order and consume transien
     const candidate = bindingCandidate();
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(owner);
-    const captures = [_]@import("domain/config.zig").PromptCapture{.request};
-    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false, .prompt_capture = &captures };
+    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
     var sink_adapter = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
@@ -308,7 +387,7 @@ test "fault barriers distinguish lock recovery flush console rotation and retent
     const candidate = bindingCandidate();
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(owner);
-    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = true, .prompt_capture = &.{} };
+    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = true };
     const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .event_type = .run_completed, .fields = .{ .outcome = .completed } } };
 
     inline for (.{ Fault.lock, Fault.recovery, Fault.flush, Fault.console, Fault.rotation }) |fault| {
@@ -369,12 +448,20 @@ test "same-run policy transition closes the old binding and continues sequence a
     const io = std.testing.io;
     var root = std.testing.tmpDir(.{ .iterate = true });
     defer root.cleanup();
+    var prompt_root = std.testing.tmpDir(.{ .iterate = true });
+    defer prompt_root.cleanup();
     try root.dir.createDir(io, "LOGBIND-1", std.Io.File.Permissions.fromMode(0o700));
     try root.dir.createDir(io, "LOGBIND-2", std.Io.File.Permissions.fromMode(0o700));
+    try prompt_root.dir.createDir(io, "LOGBIND-1", std.Io.File.Permissions.fromMode(0o700));
+    try prompt_root.dir.createDir(io, "LOGBIND-2", std.Io.File.Permissions.fromMode(0o700));
     var old_directory = try root.dir.openDir(io, "LOGBIND-1", .{ .iterate = true });
     defer old_directory.close(io);
     var next_directory = try root.dir.openDir(io, "LOGBIND-2", .{ .iterate = true });
     defer next_directory.close(io);
+    var old_prompt_directory = try prompt_root.dir.openDir(io, "LOGBIND-1", .{ .iterate = true });
+    defer old_prompt_directory.close(io);
+    var next_prompt_directory = try prompt_root.dir.openDir(io, "LOGBIND-2", .{ .iterate = true });
+    defer next_prompt_directory.close(io);
     const old_candidate = bindingCandidate();
     const next_candidate: log_binding.BindingCandidate = .{
         .log_policy_id = telemetry.Identifier.validate("LOGPOL-2").?,
@@ -386,19 +473,24 @@ test "same-run policy transition closes the old binding and continues sequence a
     defer log_binding.deinitOwner(old_owner);
     const next_owner = try log_binding.createValidated(std.testing.allocator, next_candidate);
     defer log_binding.deinitOwner(next_owner);
-    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false, .prompt_capture = &.{} };
+    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
     var old_sink = filesystem_sink.Adapter.initForTestLayout(io, root.dir, old_directory, old_candidate);
+    old_sink.prompt_run_directory = prompt_root.dir;
+    old_sink.prompt_directory = old_prompt_directory;
     defer old_sink.deinit();
     var old_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(old_owner), .actions = childrenFor(&old_sink, clock.port(), outputs.console(), outputs.emergency()) };
     var next_sink = filesystem_sink.Adapter.initForTestLayout(io, root.dir, next_directory, next_candidate);
+    next_sink.prompt_run_directory = prompt_root.dir;
+    next_sink.prompt_directory = next_prompt_directory;
     defer next_sink.deinit();
     var next_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(next_owner), .actions = childrenFor(&next_sink, clock.port(), outputs.console(), outputs.emergency()) };
     const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .event_type = .run_started } };
     var lifecycle: runtime_lifecycle.Lifecycle = .{};
     try std.testing.expect(lifecycle.barrier().process(fact) == .blocked);
     try std.testing.expect(lifecycle.activate(old_runner.childBindings(), fact.workflow_shortcode) == .ok);
+    try std.testing.expect(old_runner.prompt_state != null);
     try std.testing.expect(lifecycle.activate(next_runner.childBindings(), fact.workflow_shortcode) == .invalid);
     try std.testing.expect(lifecycle.barrier().process(fact) == .persisted);
     try std.testing.expectEqual(@as(u64, 2), old_runner.event_state.?.next_sequence);
@@ -408,6 +500,7 @@ test "same-run policy transition closes the old binding and continues sequence a
         .shortcode = fact.workflow_shortcode,
     };
     try std.testing.expect(lifecycle.transition(transition_execution.childBindings()) == .ok);
+    try std.testing.expect(next_runner.prompt_state != null);
     const outcome = lifecycle.barrier().process(fact);
     try std.testing.expect(outcome == .persisted);
     try std.testing.expectEqual(@as(u64, 3), next_runner.event_state.?.next_sequence);
@@ -467,7 +560,6 @@ test "retention authorization derives its single-use cutoff from trusted policy 
     const policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .debug, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &.{},
     };
     var clock: FakeClock = .{};
     const authorization = try (build_retention.Action{ .clock = clock.port() }).execute(
@@ -509,17 +601,20 @@ test "historical finalization recovers and durably closes one active tail" {
     const io = std.testing.io;
     var directory = std.testing.tmpDir(.{ .iterate = true });
     defer directory.cleanup();
+    var prompt_directory = std.testing.tmpDir(.{ .iterate = true });
+    defer prompt_directory.cleanup();
     const candidate = bindingCandidate();
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
     defer log_binding.deinitOwner(owner);
     const policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .debug, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &.{},
     };
     var clock: FakeClock = .{};
     var outputs: FakeOutputs = .{};
     var first_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
+    first_sink.prompt_run_directory = prompt_directory.dir;
+    first_sink.prompt_directory = prompt_directory.dir;
     var first_runner: runner_module.Runner = .{
         .allocator = std.testing.allocator,
         .policy = &policy,
@@ -533,6 +628,8 @@ test "historical finalization recovers and durably closes one active tail" {
     }) == .persisted);
 
     var recovered_sink = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
+    recovered_sink.prompt_run_directory = prompt_directory.dir;
+    recovered_sink.prompt_directory = prompt_directory.dir;
     var recovered_runner: runner_module.Runner = .{
         .allocator = std.testing.allocator,
         .policy = &policy,
@@ -572,7 +669,6 @@ test "failed successor preparation removes the active observer" {
     const policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .debug, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &.{},
     };
     var old_sink: FaultSink = .{ .fault = .none };
     var next_sink: FaultSink = .{ .fault = .recovery };
@@ -616,7 +712,6 @@ test "failed active finalization releases the lock and removes the observer" {
     const policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .debug, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &.{},
     };
     var sink: FaultSink = .{ .fault = .flush };
     var clock: FakeClock = .{};
@@ -653,7 +748,6 @@ test "sink acquisition failure reports once and blocks" {
     const policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .debug, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &.{},
     };
     var rejecting_sink: RejectingSink = .{};
     var clock: FakeClock = .{};
@@ -681,7 +775,6 @@ test "emergency failure preserves the original logging failure without retry" {
     const policy: log_policy.CompiledLoggingPolicy = .{
         .level = .{ .threshold = .debug, .alias_evidence = .none },
         .console = false,
-        .prompt_capture = &.{},
     };
     var rejecting_sink: RejectingSink = .{};
     var clock: FakeClock = .{};

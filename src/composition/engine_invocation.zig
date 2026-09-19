@@ -10,6 +10,8 @@ const compilation = @import("../domain/workflow_compilation.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const workflow = @import("../domain/workflow.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
+const run_outcome = @import("../domain/run_outcome.zig");
+const feature_log_activation = @import("../ports/feature_log_activation.zig");
 
 pub const Assembly = struct {
     allocator: std.mem.Allocator,
@@ -21,6 +23,7 @@ pub const Assembly = struct {
     pipeline_runner: ?workflow_pipeline_runner.Runner = null,
     provider_clock: ?@import("../ports/provider_authorization_lease.zig").Clock = null,
     provider_runtime: ?*@import("model_provider_runtime.zig").Assembly = null,
+    finalizer: ?feature_log_activation.Finalizer = null,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -84,6 +87,7 @@ pub const Assembly = struct {
                     self.preparedProviderServices(),
                 );
                 self.pipeline_runner.?.provider_clock = self.provider_clock;
+                self.pipeline_runner.?.publication_finalizer = self.finalizer;
                 if (self.provider_outcome.? == .ready) {
                     if (self.provider_runtime) |providers| providers.bind(&self.pipeline_runner.?) catch return .{ .failed = .LLM_PROVIDER_MODEL_BINDING_INVALID };
                 }
@@ -110,6 +114,9 @@ pub const Assembly = struct {
     fn invokeStep(context: *anyopaque, id: workflow.WorkflowStepId) execution.Applied {
         return cast(context).pipeline_runner.?.bindings().invokeStep(id);
     }
+    fn finalize(context: *anyopaque, outcome: run_outcome.Outcome) run_outcome.Outcome {
+        return if (cast(context).finalizer) |finalizer| finalizer.finish(outcome) else outcome;
+    }
     fn cast(context: *anyopaque) *Assembly {
         return @ptrCast(@alignCast(context));
     }
@@ -123,4 +130,5 @@ const vtable: workflow_bindings.ChildBindings.VTable = .{
     .selected_graph = Assembly.selectedGraph,
     .invoke_invocation = Assembly.invokeInvocation,
     .invoke_step = Assembly.invokeStep,
+    .finalize = Assembly.finalize,
 };

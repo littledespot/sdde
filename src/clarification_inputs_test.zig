@@ -104,6 +104,36 @@ fn load(allocator: std.mem.Allocator, captures: c.Captures) !c.Inputs {
     return (action.Action{ .parser = parser.formParser() }).execute(allocator, state, captures);
 }
 
+test "clarification publication selects its terminal outcome before any write" {
+    const refresh = @import("domain/clarification_refresh.zig");
+    const views = @import("domain/clarification_views.zig");
+    const output = @import("domain/clarification_output.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const roots: artifacts.FeatureRoots = .{ .specs = "requirements", .archive = "archive", .workflows = "engine" };
+    const selector = try feature.validate(a, .{ .bytes = selected.bytes }, .{ .specs = roots.specs, .archive = roots.archive });
+    const directory: feature.Directory = .{ .selector = selector, .root_observation = .absent, .observation = .absent };
+    const paths = try artifacts.resolveFeaturePaths(a, roots, selector);
+    const empty: c.Captures = .{ .state = null, .forms = &.{} };
+    const empty_inputs = try load(a, empty);
+    for ([_][]const u8{ "S01", "P01", "T01" }) |id| {
+        const record = fixture.record(id);
+        const state = try refresh.refresh(a, empty_inputs, .{ .feature = selected, .entries = &.{.{ .stage = c.Id.parse(id).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema }} });
+        const prepared = try output.prepare(a, directory, paths, empty, empty_inputs, .{ .ready = state }, try views.render(a, state, &.{}));
+        try std.testing.expectEqual(.needs_user, prepared.terminal_outcome);
+        const closed_capture = try fixture.closed(a, id, true);
+        const closed_inputs = try load(a, closed_capture);
+        const resolved = try refresh.refresh(a, closed_inputs, .{ .feature = selected, .entries = &.{} });
+        const completed = try output.prepare(a, directory, paths, closed_capture, closed_inputs, .{ .ready = resolved }, try views.render(a, resolved, closed_inputs.protected_forms));
+        try std.testing.expectEqual(.ok, completed.terminal_outcome);
+    }
+    inline for (.{ .authentication_required, .protected_clarification, .limit_exceeded }) |reason| {
+        try std.testing.expectError(error.InvalidWorkflowOutput, output.prepare(a, directory, paths, empty, empty_inputs, .{ .blocked = reason }, &.{}));
+    }
+    try std.testing.expectError(error.InvalidWorkflowOutput, output.prepare(a, directory, paths, empty, empty_inputs, .{ .ready = .{ .value = null } }, &.{}));
+}
+
 test "fixed paths use configured roots and preserve the selected feature key" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, checkPaths, .{});
 }

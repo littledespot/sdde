@@ -231,7 +231,7 @@ fn explanation(report: c.Report) []const u8 {
         .input_invalid => "Input setup failed before workflow execution. Check the diagnostic and captured inputs. Use scripts/e2e-spec.sh to load the checkout's .env.e2e; direct Zig invocations require the TEST_EVALUATION_* settings and test credential in their environment.",
         .harness_error => "The harness encountered an operational error. Any retained candidate or score does not make this a completed E2E run.",
         .bootstrap_failed => "The engine rejected project/workflow configuration before generation. Inspect the bootstrap diagnostic and captured project resources.",
-        .awaiting_clarification => "Awaiting clarification. Answer the registered forms, then run the workflow again. Specification publication and grading have not run.",
+        .awaiting_clarification => "Awaiting clarification. The incomplete specification and registered forms are published. Answer the forms, then run the workflow again. Specification completion and grading have not run.",
         .workflow_invalid => "The workflow rejected candidate data. Inspect its validation findings; no completed specification is available for grading.",
         .workflow_blocked => "The workflow is blocked. Inspect its native outcome and diagnostics before another invocation.",
         .workflow_cancelled => "The workflow was cancelled. No completed specification is available for grading.",

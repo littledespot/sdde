@@ -59,6 +59,7 @@ fn Call(comptime kind: provider.ProviderOperationKind) type {
                 const observed = action.execute(request.binding(), prepared, reference, invoked) catch |err| break :call switch (err) {
                     error.Cancelled => .cancelled,
                     error.OutOfMemory => .allocation_failed,
+                    error.ModelLoggingBlocked => .logging_blocked_before_send,
                 };
                 break :call .{ .observation = observed };
             } else .{ .observation = .{ .failed = .{ .operation_id = invoked.id, .cause = .authorization_denied, .retry_class = .never, .delivery = .not_sent } } };
@@ -102,6 +103,6 @@ fn statusFor(comptime kind: provider.ProviderOperationKind, outcome: results.For
             .failed => .failed,
         },
         .cancelled => .cancelled,
-        .allocation_failed => .failed,
+        .allocation_failed, .logging_blocked_before_send => .failed,
     };
 }

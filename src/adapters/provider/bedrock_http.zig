@@ -21,6 +21,30 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
 
         fn exchange(context: *transport.Context, allocator: std.mem.Allocator, request: transport.Request) transport.Error!transport.Response {
             const self: *Self = @ptrCast(@alignCast(context));
+            if (request.response_body_on_error) |slot| slot.* = null;
+            var state: Exchange = .{ .body = .init(allocator) };
+            defer state.body.deinit();
+            // perform joins both tasks on every exit. Only then can the caller
+            // observe or take ownership of bytes written by the network task.
+            const result = self.perform(allocator, request, &state);
+            const retained: ?transport.ResponseBody = if (state.body_started) .{
+                // Transfer the arena allocation without copying or allocating,
+                // including when the read itself failed for lack of memory.
+                .bytes = state.body.toArrayList().items,
+                .complete = state.body_complete,
+            } else null;
+            var response = result catch |err| {
+                if (request.response_body_on_error) |slot| slot.* = retained;
+                return err;
+            };
+            switch (response) {
+                .received => |*received| received.body = retained.?.bytes,
+                .failed => |*failure| failure.body = retained,
+            }
+            return response;
+        }
+
+        fn perform(self: *Self, allocator: std.mem.Allocator, request: transport.Request, state: *Exchange) transport.Error!transport.Response {
             switch (self.runtime.status()) {
                 .cancelled => return error.Cancelled,
                 .deadline_exhausted => return failed(.timeout, false, .preparing, .timeout),
@@ -28,12 +52,11 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
             }
             const now = self.clock.now() catch return failed(.transport_failed, false, .preparing, .unknown);
             if (now >= request.deadline_monotonic_ms) return failed(.timeout, false, .preparing, .timeout);
-            var state: Exchange = .{};
             const Event = union(enum) { network: transport.Error!void, timer: std.Io.Cancelable!void };
             var buffer: [2]Event = undefined;
             var tasks: std.Io.Select(Event) = .init(self.io, &buffer);
             defer tasks.cancelDiscard();
-            tasks.concurrent(.network, fetch, .{ self, allocator, request, &state }) catch return failed(.transport_failed, false, .preparing, .unknown);
+            tasks.concurrent(.network, fetch, .{ self, allocator, request, state }) catch return failed(.transport_failed, false, .preparing, .unknown);
             tasks.concurrent(.timer, sleep, .{ self.io, request.deadline_monotonic_ms - now }) catch {
                 tasks.cancelDiscard();
                 return failed(.transport_failed, state.sent, state.phase, .unknown);
@@ -44,7 +67,7 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
                 .timer => |finished| {
                     finished catch return error.Cancelled;
                     tasks.cancelDiscard();
-                    return failed(.timeout, state.sent, state.phase, .timeout);
+                    return if (state.header_failure) |failure| .{ .failed = failure } else failed(.timeout, state.sent, state.phase, .timeout);
                 },
             }
             return state.response;
@@ -58,7 +81,7 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
             self.send(allocator, request, state) catch |err| {
                 if (err == error.OutOfMemory) return error.OutOfMemory;
                 if (err == error.Canceled) return error.Cancelled;
-                state.response = failed(if (err == error.InvalidResponse) .response_invalid else .transport_failed, state.sent, state.phase, safeCause(err));
+                state.response = if (state.header_failure) |failure| .{ .failed = failure } else failed(if (err == error.InvalidResponse) .response_invalid else .transport_failed, state.sent, state.phase, safeCause(err));
             };
         }
 
@@ -100,29 +123,27 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
                 break .{ .request = &request, .head = head };
             };
             if (response.head.status.class() == .redirect) {
-                state.response = .{ .failed = .{ .cause = .response_invalid, .retry_class = .never, .delivery = .response_received, .diagnostic = .{ .phase = .response_headers, .cause = .malformed_response } } };
-                return;
+                state.header_failure = .{ .cause = .response_invalid, .retry_class = .never, .delivery = .response_received, .diagnostic = .{ .phase = .response_headers, .cause = .malformed_response } };
             }
-            if (response.head.content_encoding != .identity) return error.InvalidResponse;
+            if (response.head.content_encoding != .identity) state.rejectHead();
             var exception: ?[]const u8 = null;
             var request_id: ?[]const u8 = null;
             var headers = response.head.iterateHeaders();
             while (headers.next()) |header| {
                 if (std.ascii.eqlIgnoreCase(header.name, "x-amzn-errortype")) {
-                    if (exception != null) return error.InvalidResponse;
-                    exception = try allocator.dupe(u8, header.value);
+                    if (exception != null) state.rejectHead() else exception = try allocator.dupe(u8, header.value);
                 }
                 if (std.ascii.eqlIgnoreCase(header.name, "x-amzn-requestid")) {
-                    if (request_id != null) return error.InvalidResponse;
-                    request_id = try allocator.dupe(u8, header.value);
+                    if (request_id != null) state.rejectHead() else request_id = try allocator.dupe(u8, header.value);
                 }
             }
             state.phase = .response_body;
-            var bytes: std.Io.Writer.Allocating = .init(allocator);
-            defer bytes.deinit();
+            state.body_started = true;
             var buffer: [4096]u8 = undefined;
+            // reader removes HTTP transfer framing only. A rejected content
+            // encoding is retained exactly as sent, never decompressed.
             const reader = response.reader(&buffer);
-            _ = reader.streamRemaining(&bytes.writer) catch |err| switch (err) {
+            _ = reader.streamRemaining(&state.body.writer) catch |err| switch (err) {
                 error.ReadFailed => {
                     if (response.bodyErr()) |framing_error| return framing_error;
                     return request.connection.?.getReadError().?;
@@ -135,7 +156,8 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
                 .ready, .body_none => {},
                 else => return error.EndOfStream,
             }
-            state.response = .{ .received = .{ .status = @intFromEnum(response.head.status), .exception = exception, .request_id = request_id, .body = try bytes.toOwnedSlice() } };
+            state.body_complete = true;
+            state.response = if (state.header_failure) |failure| .{ .failed = failure } else .{ .received = .{ .status = @intFromEnum(response.head.status), .exception = exception, .request_id = request_id, .body = "" } };
         }
     };
 }
@@ -151,7 +173,15 @@ const Diagnostic = @import("../../domain/llm_provider_operation.zig").TransportD
 const Exchange = struct {
     phase: @FieldType(Diagnostic, "phase") = .preparing,
     sent: bool = false,
+    body: std.Io.Writer.Allocating,
+    body_started: bool = false,
+    body_complete: bool = false,
+    header_failure: ?transport.Failure = null,
     response: transport.Response = .{ .failed = .{ .cause = .transport_failed, .retry_class = .policy_eligible, .delivery = .not_sent } },
+
+    fn rejectHead(self: *Exchange) void {
+        if (self.header_failure == null) self.header_failure = failed(.response_invalid, self.sent, .response_headers, .malformed_response).failed;
+    }
 };
 
 fn failed(cause: @import("../../domain/llm_provider_operation.zig").ProviderFailureCause, sent: bool, phase: @FieldType(Diagnostic, "phase"), cause_detail: @FieldType(Diagnostic, "cause")) transport.Response {
