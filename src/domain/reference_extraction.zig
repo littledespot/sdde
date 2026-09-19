@@ -5,6 +5,11 @@ pub const identity = @import("reference_identity.zig");
 pub const text = @import("typed_text.zig");
 pub const tokens = @import("structured_tokens.zig");
 pub const Error = text.Error || tokens.Error || error{InvalidReferenceExtraction};
+const Origin = @import("model_candidate_origin.zig").Origin;
+
+/// Native decoding projects the assembled fields' actual producers once. The
+/// entry's origin remains the original candidate association for retry identity.
+pub const ProducerOrigins = struct { content: ?Origin, classifications: ?Origin };
 
 /// Syntax-validated interpretation is still not reconciled business authority.
 pub const ProposalContent = ContentOf(text.BusinessText, text.ReferenceSemanticText);
@@ -18,11 +23,12 @@ pub const TextValidatedProposal = struct {
     content: Content,
     citations: []const @import("source_selections.zig").Selection,
     origin: ?@import("model_candidate_origin.zig").Origin = null,
+    citations_origin: ?Origin = null,
     citation_origins: []const ?@import("model_candidate_origin.zig").Origin,
 
     pub fn rejectionOrigin(self: TextValidatedProposal, issue: @import("source_selections.zig").Issue) Error!?@import("model_candidate_origin.zig").Origin {
         if (self.citations.len != self.citation_origins.len) return error.InvalidReferenceExtraction;
-        return if (issue.rejected == null) self.origin else if (issue.index < self.citation_origins.len) self.citation_origins[issue.index] else error.InvalidReferenceExtraction;
+        return if (issue.rejected == null) self.citations_origin else if (issue.index < self.citation_origins.len) self.citation_origins[issue.index] else error.InvalidReferenceExtraction;
     }
 };
 pub const PreparedContent = union(enum) { model: Content, preserved_token: tokens.Value };
@@ -31,7 +37,9 @@ pub const ValidatedClaim = struct { content: PreparedContent, citations: []const
 pub const BlockReason = enum { extraction_failed };
 pub const RawResult = struct {
     scope: evidence.Scope,
+    /// Frozen association for this native candidate, independent of producers.
     origin: ?@import("model_candidate_origin.zig").Origin = null,
+    producers: ?ProducerOrigins = null,
     /// Only the engine supplies scope and failure; neither is in model JSON.
     result: union(enum) { response: []const u8, blocked: BlockReason },
 };
@@ -39,6 +47,7 @@ pub const Raw = struct { entries: []const RawResult };
 pub const ParsedResult = struct {
     scope: evidence.Scope,
     origin: ?@import("model_candidate_origin.zig").Origin = null,
+    producers: ?ProducerOrigins = null,
     text_origins: []const TextOrigin = &.{},
     token_classifications: []const tokens.Classification,
     outcome: union(enum) { claims: []const Proposal, no_feature_claim: text.ReferenceSemanticText, blocked: BlockReason },
@@ -47,7 +56,7 @@ pub const TextTarget = union(enum) { claim: usize, reason };
 pub const TextOrigin = struct { target: TextTarget, origin: ?@import("model_candidate_origin.zig").Origin };
 pub fn textOrigin(entry: ParsedResult, target: TextTarget) ?@import("model_candidate_origin.zig").Origin {
     for (entry.text_origins) |value| if (std.meta.eql(value.target, target)) return value.origin;
-    return entry.origin;
+    return if (entry.producers) |producers| producers.content else entry.origin;
 }
 pub const Parsed = struct {
     revision: u64 = 1,
@@ -68,7 +77,8 @@ pub const TextResult = union(enum) { valid: TextValidated, invalid: TextRejectio
 pub const TextValidatedResult = struct {
     scope: evidence.Scope,
     origin: ?@import("model_candidate_origin.zig").Origin = null,
-    classification_origin: ?@import("model_candidate_origin.zig").Origin = null,
+    /// Immutable, index-aligned provenance owned together with the current values.
+    classification_origins: []const ?Origin = &.{},
     token_classifications: []const tokens.Classification,
     outcome: union(enum) { claims: []const TextValidatedProposal, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };

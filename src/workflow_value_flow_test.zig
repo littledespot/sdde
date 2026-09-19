@@ -59,13 +59,14 @@ test "runtime rejects schema drift and releases candidates on cancellation inval
         var runner = fixture.runner(&control);
         defer runner.deinit();
         var children: EngineBindings = .{ .runner = &runner, .graph = fixture.graph };
-        const expected: workflow.OutcomeTag = switch (@as(Fault, fault)) {
-            .schema_version => .invalid,
+        const expected: execution.Rejection = switch (@as(Fault, fault)) {
+            .schema_version, .undeclared_outcome => .authority,
             .cancel_after_allocation => .cancelled,
-            .throw_after_allocation, .deadline_after_allocation, .undeclared_outcome => .failed,
+            .throw_after_allocation => .operation_failed,
+            .deadline_after_allocation => .deadline_exhausted,
             .none => unreachable,
         };
-        try std.testing.expectEqual(expected, engine.run(children.bind()).executionStatus().?);
+        try std.testing.expectEqual(expected, engine.run(children.bind()).execution_rejected);
         try std.testing.expectEqual(@as(usize, 0), control.observations);
         const missing: pipeline.NodeContract = .{ .id = "test.missing", .kind = .action, .requires = &.{.canonical_log_level}, .produces = &.{}, .side_effect = .none };
         try std.testing.expectError(error.MissingRequiredData, runner.envelope.view(missing));
@@ -114,7 +115,7 @@ test "runner checks required inputs before invoking an operation" {
     defer fixture.deinit();
     var runner = fixture.runner(&control);
     defer runner.deinit();
-    try std.testing.expectEqual(workflow.OutcomeTag.invalid, runner.bindings().invokeStep(.{ .bytes = "observe" }).outcome);
+    try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "observe" }).rejected);
     try std.testing.expectEqual(@as(usize, 0), control.observations);
 }
 

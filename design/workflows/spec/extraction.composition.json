@@ -1,0 +1,11 @@
+{
+  "schema": "json-composition/v1",
+  "result": "extraction-schema",
+  "parts": {
+    "content": {"paths": ["/kind", "/claims", "/reason"]},
+    "classifications": {
+      "paths": ["/token_classifications"],
+      "requires": ["content"]
+    }
+  }
+}

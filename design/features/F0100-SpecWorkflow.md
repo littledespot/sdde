@@ -12,11 +12,11 @@ consistency review and shared actionable-question preparation to this design.
 Those additions are **not implemented** by the supplied workflow.
 
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the
-pending generic response-composition integration: extraction content/citations,
+implemented generic response-composition integration: extraction content/citations,
 dependent token classifications, then native assembly and complete validation.
-The supplied workflow still uses the combined response. Configuration/compilation,
-per-part provenance and rebuilding must change together; the user permits increasing
-the finite graph limit. [Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition)
+The supplied workflow uses separate content and classification requests with one
+shared request body. Native repairs retain per-value provenance and their existing
+rebuilding path. The finite graph limit is 1,024. [Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition)
 owns implementation and verification, including unrelated JSON shapes.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
@@ -475,7 +475,7 @@ The closed model classifications are:
   candidates.
 - `no_feature_claim` may classify candidates irrelevant, but cannot preserve any.
 
-Compiled graphs retain a fixed 512-step capacity, including expanded subgraph
+Compiled graphs retain a fixed 1,024-step capacity, including expanded subgraph
 instances. Specify reuses model-request/release subgraphs and compact outcome
 maps for its repair routes. This capacity is independent of operation retry limits and the workflow token budget.
 The request subgraph uses ADR 0012's pure `prepare-model-request` operation;
@@ -484,8 +484,10 @@ Both paths use the same native owners and produce identical model-visible conten
 The request body also uses pure `admit-model-response`, retaining detailed decoder
 and schema-validator operations. Pre-generation source, post-generation source and
 principle review each have distinct request/repair call sites; shared bodies do not
-share their retry counters. This composition expands to 498 operations. Prompts,
-schemas and per-operation retry limits are unchanged.
+share their retry counters. The integrated graph has 519 operations. The split adds
+an independently retried extraction request and pure composition steps. Both part schemas derive from the same complete extraction schema; the
+combined prompt is replaced by concise part-specific guidance. Retry allowances
+and the workflow token budget are unchanged.
 
 - The reference-ingestion policy permits a distinct `invalid` terminal outcome.
 - The validator publishes `invalid` with the chunk scope, candidate revision,
@@ -796,8 +798,9 @@ validators:
   provider binding.
 - It uses the originating assignment's optional `protocol-prompt` and decoder/schema
   diagnostic.
-- Schema corrections include the exact expected schema node, JSON Pointer and
-  parent/value scope; syntax corrections retain the original complete schema.
+- Schema corrections include the candidate JSON Pointer, parent/value scope,
+  exact locator in the complete selected schema and concise derived field/tag
+  guidance. Expected subtrees are not repeated; syntax uses the same schema.
 - No candidate example is generated.
 - It rebuilds from the retained original inputs and latest rejection, without
   accumulating correction history.

@@ -1,5 +1,6 @@
 const std = @import("std");
 pub const max_local_id_bytes = 64;
+pub const max_step_id_bytes = 128;
 
 pub const WorkflowId = struct {
     bytes: []const u8,
@@ -13,6 +14,11 @@ pub const WorkflowStepId = struct {
     bytes: []const u8,
 
     pub fn parse(bytes: []const u8) ?WorkflowStepId {
+        return if (validLocalIdWithin(bytes, max_step_id_bytes)) .{ .bytes = bytes } else null;
+    }
+
+    // Authored IDs remain local; only compilation introduces qualified names.
+    pub fn parseLocal(bytes: []const u8) ?WorkflowStepId {
         return if (validLocalId(bytes)) .{ .bytes = bytes } else null;
     }
 };
@@ -67,7 +73,11 @@ fn validRegisteredName(bytes: []const u8) bool {
 }
 
 fn validLocalId(bytes: []const u8) bool {
-    if (bytes.len == 0 or bytes.len > max_local_id_bytes or bytes[0] < 'a' or bytes[0] > 'z') return false;
+    return validLocalIdWithin(bytes, max_local_id_bytes);
+}
+
+fn validLocalIdWithin(bytes: []const u8, maximum: usize) bool {
+    if (bytes.len == 0 or bytes.len > maximum or bytes[0] < 'a' or bytes[0] > 'z') return false;
     var hyphen = false;
     for (bytes, 0..) |byte, index| {
         if (!(std.ascii.isLower(byte) or std.ascii.isDigit(byte) or byte == '-') or
@@ -133,4 +143,16 @@ test "workflow identifiers operation IDs and policy references are distinct and 
     }
     try std.testing.expect(RegisteredRef.parse("core.safe@1") != null);
     try std.testing.expect(RegisteredRef.parse("core.safe@01") == null);
+}
+
+test "compiled step identifiers have finite qualification space while authored names remain local" {
+    const local = "a" ** max_local_id_bytes;
+    const longer = "a" ** (max_local_id_bytes + 1);
+    const compiled = "a" ** max_step_id_bytes;
+    try std.testing.expect(WorkflowStepId.parseLocal(local) != null);
+    try std.testing.expect(WorkflowStepId.parseLocal(longer) == null);
+    try std.testing.expect(WorkflowId.parse(longer) == null);
+    try std.testing.expect(WorkflowResourceId.parse(longer) == null);
+    try std.testing.expect(WorkflowStepId.parse(compiled) != null);
+    try std.testing.expect(WorkflowStepId.parse("a" ** (max_step_id_bytes + 1)) == null);
 }

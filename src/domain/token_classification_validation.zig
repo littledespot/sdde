@@ -30,6 +30,19 @@ pub const Rejection = struct {
 };
 pub const Result = union(enum) { valid: extraction.Classified, invalid: Rejection };
 
+/// A missing value has no producer. Otherwise use the first defective current
+/// item, not the last collection repair's origin or the candidate retry anchor.
+pub fn rejectionOrigin(entry: extraction.TextValidatedResult, issues: Issues) extraction.Error!?@import("model_candidate_origin.zig").Origin {
+    if (entry.token_classifications.len != entry.classification_origins.len) return error.InvalidReferenceExtraction;
+    for (entry.token_classifications, entry.classification_origins) |classification, origin| {
+        inline for (.{ issues.duplicate, issues.unknown, issues.forbidden }) |ids| {
+            for (ids) |id| if (std.meta.eql(classification.id(), id)) return origin;
+        }
+    }
+    if (issues.missing.len != 0) return null;
+    return error.InvalidReferenceExtraction;
+}
+
 pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tokens.Candidates, parsed: extraction.TextValidated) extraction.Error!Result {
     return check(a, inputs, candidates, parsed, null);
 }
@@ -66,6 +79,7 @@ fn check(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tokens.Candi
     var index: usize = 0;
     for (ordered) |entry| {
         if (selected_scope) |scope| if (!entry.scope.chunk_id.eql(scope.chunk_id)) continue;
+        if (entry.token_classifications.len != entry.classification_origins.len) return error.InvalidReferenceExtraction;
         var missing: std.ArrayList(tokens.CandidateId) = .empty;
         var duplicate: std.ArrayList(tokens.CandidateId) = .empty;
         var unknown: std.ArrayList(tokens.CandidateId) = .empty;
@@ -98,12 +112,13 @@ fn check(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tokens.Candi
             // A blocked entry is engine-owned, so contradictory data is an
             // authority failure, not an invitation to have the model repair it.
             if (entry.outcome == .blocked) return error.InvalidReferenceExtraction;
-            return .{ .invalid = .{ .dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = parsed }), .scope = entry.scope, .revision = parsed.revision, .origin = entry.classification_origin, .observed = entry.token_classifications, .choices = choices(entry.outcome), .issues = .{
+            const issues: Issues = .{
                 .missing = try missing.toOwnedSlice(a),
                 .duplicate = try duplicate.toOwnedSlice(a),
                 .unknown = try unknown.toOwnedSlice(a),
                 .forbidden = try forbidden.toOwnedSlice(a),
-            } } };
+            };
+            return .{ .invalid = .{ .dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = parsed }), .scope = entry.scope, .revision = parsed.revision, .origin = try rejectionOrigin(entry, issues), .observed = entry.token_classifications, .choices = choices(entry.outcome), .issues = issues } };
         }
     }
     if (index != selections.len) return error.InvalidStructuredTokens;

@@ -60,13 +60,17 @@ pub const CollectExtraction = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, progress_schema, .extraction_progress);
-        const packet = try readPacket(&input.step.data);
-        const candidate = try handoff.read(&input.step.data);
+        const candidate = try @import("json_composition_workflow.zig").readValidated(&input.step.data);
         const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .extraction_progress = self.action.execute(owner.arena.allocator(), prior.payload().extraction_progress, packet, candidate.body, candidate.origin) catch return error.OperationExecutionFailed };
+        const producers: @import("../domain/reference_extraction.zig").ProducerOrigins = .{
+            .content = candidate.producer(&.{"claims"}) orelse candidate.producer(&.{"reason"}) orelse return error.OperationExecutionFailed,
+            .classifications = candidate.producer(&.{"token_classifications"}) orelse return error.OperationExecutionFailed,
+        };
+        owner.payload = .{ .extraction_progress = self.action.execute(owner.arena.allocator(), prior.payload().extraction_progress, candidate.base, candidate.body, candidate.origin, producers) catch return error.OperationExecutionFailed };
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(progress_schema.key)] = values.adopt(self.allocator, progress_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
+        for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
         return .{ .outcome = .ok, .delta = delta };
     }
 };

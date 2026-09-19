@@ -124,12 +124,15 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     const resource_bytes = try scratch.allocator().dupe(u8, "immutable prompt");
     const resource_id = workflow.WorkflowResourceId.parse("prompt").?;
     const schema_id = workflow.WorkflowResourceId.parse("result").?;
-    const schema_bytes = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":64}},\"required\":[\"answer\"],\"additionalProperties\":false}";
+    const schema_bytes = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":64},\"detail\":{\"type\":\"boolean\"}},\"required\":[\"answer\",\"detail\"],\"additionalProperties\":false}";
+    const composition_id = workflow.WorkflowResourceId.parse("split").?;
+    const composition_bytes = "{\"schema\":\"json-composition/v1\",\"result\":\"result\",\"parts\":{\"content\":{\"paths\":[\"/answer\"]},\"metadata\":{\"paths\":[\"/detail\"],\"requires\":[\"content\"]}}}";
     var schema_adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const compiled_schema = try schema_adapter.compiler().compile(scratch.allocator(), schema_bytes);
     const declared_resources = [_]workflow.ResourceDeclaration{
         .{ .id = resource_id, .name = resource_name },
         .{ .id = schema_id, .name = "result.json" },
+        .{ .id = composition_id, .name = "split.json" },
     };
     const retry_parameters = [_]workflow.ParameterBinding{.{
         .id = workflow.WorkflowParameterId.parse("retry-limit").?,
@@ -148,6 +151,7 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     const compiled_resources = [_]compilation.CompiledResource{
         .{ .id = resource_id, .content = .{ .prompt = resource_bytes } },
         .{ .id = schema_id, .content = .{ .result_schema = compiled_schema } },
+        .{ .id = composition_id, .content = .{ .json_composition = try schema_adapter.compiler().compileComposition(scratch.allocator(), composition_bytes, compiled_schema) } },
     };
     const compiled_parameters = [_]compilation.CompiledParameter{.{
         .id = retry_parameters[0].id,
@@ -186,37 +190,50 @@ test "validated workflow registry accepts zero definitions and owns its graph re
         descriptor("arbitrary.workflow.yaml", .file, 1, 3),
         descriptor(resource_name, .file, 2, resource_bytes.len),
         descriptor("result.json", .file, 3, schema_bytes.len),
+        descriptor("split.json", .file, 4, composition_bytes.len),
     };
     const accounts = [_]inventory.InventoryAccount{
         .{ .ordinal = 1, .path = descriptors[0].path, .disposition = .definition },
         .{ .ordinal = 2, .path = descriptors[1].path, .disposition = .resource },
         .{ .ordinal = 3, .path = descriptors[2].path, .disposition = .resource },
+        .{ .ordinal = 4, .path = descriptors[3].path, .disposition = .resource },
     };
     const captures = [_]inventory.Capture{.{ .ordinal = 1, .bytes = "abc" }};
     const resource_captures = [_]inventory.Capture{
         .{ .ordinal = 2, .bytes = resource_bytes },
         .{ .ordinal = 3, .bytes = schema_bytes },
+        .{ .ordinal = 4, .bytes = composition_bytes },
     };
-    const owner = try registry.createValidated(std.testing.allocator, .{
+    const candidate: registry.RegistryCandidate = .{
         .inventory = .{
             .capability = capability,
             .descriptors = &descriptors,
             .accounts = &accounts,
             .definition_ordinals = &.{1},
-            .resource_ordinals = &.{ 2, 3 },
+            .resource_ordinals = &.{ 2, 3, 4 },
         },
         .definition_captures = &captures,
         .resource_manifest = .{
             .bindings = &.{
                 .{ .definition_ordinal = 1, .resource_id = resource_id, .resource_ordinal = 2 },
                 .{ .definition_ordinal = 1, .resource_id = schema_id, .resource_ordinal = 3 },
+                .{ .definition_ordinal = 1, .resource_id = composition_id, .resource_ordinal = 4 },
             },
-            .resource_ordinals = &.{ 2, 3 },
+            .resource_ordinals = &.{ 2, 3, 4 },
         },
         .resource_captures = &resource_captures,
         .definitions = &.{declared},
         .graphs = &.{graph},
-    });
+    };
+    var foreign_resources = compiled_resources;
+    const foreign_schema = try schema_adapter.compiler().compile(scratch.allocator(), schema_bytes);
+    foreign_resources[2].content = .{ .json_composition = try schema_adapter.compiler().compileComposition(scratch.allocator(), composition_bytes, foreign_schema) };
+    var foreign_graph = graph;
+    foreign_graph.authority.resources = &foreign_resources;
+    var foreign_candidate = candidate;
+    foreign_candidate.graphs = &.{foreign_graph};
+    try std.testing.expectError(error.InvalidWorkflowRegistry, registry.createValidated(std.testing.allocator, foreign_candidate));
+    const owner = try registry.createValidated(std.testing.allocator, candidate);
     scratch.deinit();
     bootstrap_registry.deinitOwner(root_owner);
     root_live = false;
@@ -229,6 +246,14 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     try std.testing.expectEqualStrings(schema_bytes, retained_schema.bytes());
     try std.testing.expectEqualStrings("answer", retained_schema.root().object[0].name);
     try std.testing.expectEqual(@as(u32, 64), retained_schema.root().object[0].schema.string.maximum);
+    const retained_composition = resolved.authority.resources[2].content.json_composition;
+    try std.testing.expectEqualStrings(composition_bytes, retained_composition.bytes());
+    try std.testing.expect(retained_composition.resultSchema() == retained_schema);
+    const content = retained_composition.part(.{ .bytes = "content" }).?;
+    const content_schema = try retained_composition.selectSchema(content, &.{});
+    try std.testing.expectEqual(@as(usize, 1), content_schema.root().object.len);
+    try std.testing.expectEqualStrings("answer", content_schema.root().object[0].name);
+    try std.testing.expectEqual(@as(u32, 64), content_schema.root().object[0].schema.string.maximum);
     try std.testing.expectEqual(@as(u64, 1000), resolved.authority.total_model_token_budget.value);
     const retry_authority = resolved.authority.steps[0].retry_authority.?;
     try std.testing.expectEqualStrings("hello", retry_authority.workflow_id.bytes);

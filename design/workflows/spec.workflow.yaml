@@ -7,8 +7,10 @@ policy: core.specification-output@1
 start: toolchain
 resources:
   protocol-prompt: spec/protocol.prompt.md
-  extraction-prompt: spec/extraction.prompt.md
+  extraction-content-prompt: spec/extraction-content.prompt.md
+  extraction-classifications-prompt: spec/extraction-classifications.prompt.md
   extraction-schema: spec/extraction.schema.json
+  extraction-composition: spec/extraction.composition.json
   reconciliation-prompt: spec/reconciliation.prompt.md
   reconciliation-schema: spec/reconciliation.schema.json
   generation-prompt: spec/generation.prompt.md
@@ -284,15 +286,40 @@ subgraphs:
         on: {ok: finish-extraction, more: extraction-packet, failed: end.failed}
       extraction-packet:
         use: build-reference-extraction-model-input
-        on: {ok: ex, failed: end.failed}
-      ex:
-        call: model-request
+        on: {ok: initialize-composition, failed: end.failed}
+      initialize-composition:
+        use: initialize-json-composition
+        with: {composition: extraction-composition}
+        on: {ok: content, failed: end.failed}
+      content:
+        call: composition-request
         with:
-          prompt: extraction-prompt
-          schema: extraction-schema
-          selection: resource
+          prompt: extraction-content-prompt
+          composition-part: content
           retry-limit: 2
-        on: {ok: collect-extraction, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: retain-content, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      retain-content:
+        use: retain-json-part
+        on: {ok: release-content, failed: end.failed}
+      release-content:
+        use: retire-model-request
+        on: {ok: classifications, failed: end.failed}
+      classifications:
+        call: composition-request
+        with:
+          prompt: extraction-classifications-prompt
+          composition-part: classifications
+          retry-limit: 2
+        on: {ok: retain-classifications, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      retain-classifications:
+        use: retain-json-part
+        on: {ok: assemble, failed: end.failed}
+      assemble:
+        use: assemble-json
+        on: {ok: validate-assembly, failed: end.failed}
+      validate-assembly:
+        use: validate-assembled-json
+        on: {ok: collect-extraction, failed: end.failed}
       collect-extraction:
         use: collect-reference-extraction-result
         on: {ok: ex-release, failed: end.failed}
@@ -783,7 +810,30 @@ subgraphs:
           prompt: {param: prompt}
           result-schema: {param: schema}
           result-selection: {param: selection}
-        on: {ok: account, failed: end.failed}
+        on: {ok: request, failed: end.failed}
+      request:
+        call: model-request-body
+        with: {retry-limit: {param: retry-limit}}
+        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+  composition-request:
+    start: prepare
+    steps:
+      prepare:
+        use: prepare-model-request
+        with:
+          slot: spec_generation
+          response-mode: prompt-only
+          protocol-prompt: protocol-prompt
+          prompt: {param: prompt}
+          composition-part: {param: composition-part}
+        on: {ok: request, failed: end.failed}
+      request:
+        call: model-request-body
+        with: {retry-limit: {param: retry-limit}}
+        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+  model-request-body:
+    start: account
+    steps:
       account:
         use: advance-model-attempt-accounting
         with:

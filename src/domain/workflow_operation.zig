@@ -5,7 +5,7 @@ const workflow_token_budget = @import("workflow_token_budget.zig");
 
 pub const Kind = enum { invocation, step };
 pub const ParameterKind = enum { boolean, integer, string, enumeration, registered_ref, resource, model_slot };
-pub const ResourceKind = enum { prompt, result_schema, example, data };
+pub const ResourceKind = enum { prompt, result_schema, json_composition, example, data };
 
 pub const ParameterDescriptor = struct {
     id: []const u8,

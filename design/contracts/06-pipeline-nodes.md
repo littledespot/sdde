@@ -108,9 +108,10 @@ The pipeline runner validates node contracts before execution, applies immutable
   hidden domain validation, authority refresh, or alternative evidence store.
 
 An unexpected binding error terminates execution without applying a delta or
-following a YAML outcome edge. Expected failures return their declared typed
-data and follow the ordinary validated YAML outcome; no successor may run on
-an error that failed to produce its promised inputs.
+following a YAML outcome edge. Rejected input, delta, accounting or dependency-renewal
+contracts likewise return a terminal typed runner rejection, never an `invalid` or
+`failed` operation outcome. Only a declared operation outcome whose delta and runner
+transitions have been accepted and applied may select a YAML successor.
 
 #### Execution-local information stack
 
@@ -142,11 +143,11 @@ starts empty, including after `needs_user` (ADR 0009).
 ### 6.1 Action rules
 
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) adds the
-design for generic JSON composition within this same envelope. Configured JSON
+implementation of generic JSON composition within this same envelope. Configured JSON
 schemas do not define native pipeline keys: sealed registered values retain the
 compiled parts, current dependencies and real producer origins. Assembly proposes
-one candidate delta; the runner alone applies it. Consumed staging becomes history,
-so it cannot overwrite a later native repair. Implementation remains pending.
+one candidate delta; the runner alone applies it. Staging is retired in the candidate-installation delta; its immutable owners
+remain retained only as candidate evidence and cannot overwrite later native repairs.
 
 Every action must:
 

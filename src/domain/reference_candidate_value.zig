@@ -88,6 +88,7 @@ pub fn capture(allocator: std.mem.Allocator, raw: extraction.Raw) std.mem.Alloca
     for (raw.entries, entries) |input, *entry| {
         entry.* = .{
             .origin = input.origin,
+            .producers = input.producers,
             .scope = .{ .state_id = .{ .bytes = try arena.dupe(u8, input.scope.state_id.bytes) }, .chunk_id = .{ .bytes = try arena.dupe(u8, input.scope.chunk_id.bytes) } },
             .result = switch (input.result) {
                 .response => |bytes| .{ .response = try arena.dupe(u8, bytes) },

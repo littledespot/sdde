@@ -27,8 +27,16 @@
       "destination": ".sddtoolkit/workflows/spec/protocol.prompt.md"
     },
     {
-      "source": "design/workflows/spec/extraction.prompt.md",
-      "destination": ".sddtoolkit/workflows/spec/extraction.prompt.md"
+      "source": "design/workflows/spec/extraction-content.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/extraction-content.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/extraction-classifications.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/extraction-classifications.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/extraction.composition.json",
+      "destination": ".sddtoolkit/workflows/spec/extraction.composition.json"
     },
     {
       "source": "design/workflows/spec/extraction.schema.json",

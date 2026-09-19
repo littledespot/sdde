@@ -156,22 +156,49 @@ fn compileResources(
     captures: []const inventory.Capture,
 ) Error![]const compilation.CompiledResource {
     const resources = allocator.alloc(compilation.CompiledResource, item.resources.len) catch return invalid();
-    for (item.resources, resources) |declared, *compiled| {
-        const kind = deriveResourceKind(registry, item, declared.id) orelse return invalid();
+    const kinds = allocator.alloc(?operation.ResourceKind, item.resources.len) catch return invalid();
+    const bytes = allocator.alloc([]const u8, item.resources.len) catch return invalid();
+    const canonical_aliases = allocator.alloc(?workflow.WorkflowResourceId, item.resources.len) catch return invalid();
+    @memset(canonical_aliases, null);
+    for (item.resources, 0..) |declared, index| {
+        kinds[index] = try deriveResourceKind(registry, item, declared.id);
         const binding = findResourceBinding(manifest.bindings, item.source_ordinal, declared.id) orelse return invalid();
         if (binding.resource_ordinal == 0 or binding.resource_ordinal > inventory_value.descriptors.len) return invalid();
         const descriptor = inventory_value.descriptors[binding.resource_ordinal - 1];
         const capture = findCapture(captures, binding.resource_ordinal) orelse return invalid();
         if (!std.mem.eql(u8, descriptor.path, declared.name) or descriptor.size == null or
             descriptor.size.? != capture.bytes.len) return invalid();
-        compiled.* = .{ .id = declared.id, .content = switch (kind) {
-            .result_schema => .{ .result_schema = result_schema_compiler.compile(allocator, capture.bytes) catch return invalid() },
-            .prompt => .{ .prompt = capture.bytes },
-            .example => .{ .example = capture.bytes },
-            .data => .{ .data = capture.bytes },
-        } };
-        if (!std.mem.eql(u8, compiled.bytes(), capture.bytes)) return invalid();
+        bytes[index] = capture.bytes;
     }
+    // A composition's result alias is a reference to the same workflow-owned
+    // schema resource; it need not also be passed directly to an operation.
+    for (kinds, 0..) |kind, index| if (kind == .json_composition) {
+        const canonical_alias = result_schema_compiler.compositionResultAlias(allocator, bytes[index]) catch return invalid();
+        const canonical_index = for (item.resources, 0..) |resource, at| {
+            if (std.mem.eql(u8, resource.id.bytes, canonical_alias.bytes)) break at;
+        } else return invalid();
+        if (kinds[canonical_index] != null and kinds[canonical_index] != .result_schema) return invalid();
+        kinds[canonical_index] = .result_schema;
+        canonical_aliases[index] = canonical_alias;
+    };
+    for (item.resources, resources, kinds, bytes) |declared, *compiled, kind, captured| {
+        if (kind == .json_composition) continue;
+        compiled.* = .{ .id = declared.id, .content = switch (kind orelse return invalid()) {
+            .result_schema => .{ .result_schema = result_schema_compiler.compile(allocator, captured) catch return invalid() },
+            .prompt => .{ .prompt = captured },
+            .example => .{ .example = captured },
+            .data => .{ .data = captured },
+            .json_composition => unreachable,
+        } };
+    }
+    for (item.resources, resources, kinds, bytes, canonical_aliases) |declared, *compiled, kind, captured, canonical_alias| if (kind == .json_composition) {
+        const canonical_index = for (item.resources, 0..) |resource, at| {
+            if (std.mem.eql(u8, resource.id.bytes, canonical_alias.?.bytes)) break at;
+        } else return invalid();
+        compiled.* = .{ .id = declared.id, .content = .{ .json_composition = result_schema_compiler.compileComposition(allocator, captured, resources[canonical_index].content.result_schema) catch return invalid() } };
+    };
+    for (resources, bytes) |compiled, captured| if (!std.mem.eql(u8, compiled.bytes(), captured)) return invalid();
+    if (!compilation.validResourceBindings(resources)) return invalid();
     return resources;
 }
 
@@ -179,16 +206,16 @@ fn deriveResourceKind(
     registry: *const operation_registry.Registry,
     item: definition.Definition,
     id: workflow.WorkflowResourceId,
-) ?operation.ResourceKind {
+) Error!?operation.ResourceKind {
     var found: ?operation.ResourceKind = null;
     for (item.steps) |step| {
-        const entry = registry.resolveOperation(step.operation_id) orelse return null;
+        const entry = registry.resolveOperation(step.operation_id) orelse return invalid();
         for (step.parameters) |parameter| {
             const descriptor = findDescriptor(entry.contract.parameters, parameter.id.bytes) orelse continue;
             if (descriptor.kind != .resource or parameter.value != .string or
                 !std.mem.eql(u8, parameter.value.string, id.bytes)) continue;
-            const kind = descriptor.resource_kind orelse return null;
-            if (found != null and found.? != kind) return null;
+            const kind = descriptor.resource_kind orelse return invalid();
+            if (found != null and found.? != kind) return invalid();
             found = kind;
         }
     }

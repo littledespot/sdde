@@ -121,6 +121,45 @@ test "protocol retry retains exact request schema and identity and releases ever
     defer other.deinit();
     source.result_resource = &other.resource;
     try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, source, fixture.prepared.request.content, rejected, .{ .decoder = .{ .reason = .ExpectedObject } }, "Correct syntax only."));
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, rejected, .{ .schema = .{ .reason = .type_mismatch, .expected = other.prepared.request.response_schema.root() } }, "Correct syntax only."));
+    const child = @import("domain/model_result_schema.zig").findProperty(fixture.prepared.request.response_schema.root().one_of[0].object, "value").?.schema;
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, retryAllocation, .{ &fixture, rejected, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .{ .schema = .{ .reason = .string_length, .expected = child } }), "Correct syntax only." });
+}
+
+test "correction locators resolve escaped names root alternatives and selected definitions" {
+    try checkDocument(variants, .{ .bytes = "{\"kind\":\"content\"}", .rejection = .missing_required_property, .path = "/value" });
+    try checkDocument(variants, .{ .bytes = "{\"kind\":\"unknown\"}", .rejection = .unknown_variant, .path = "/kind" });
+    try checkDocument(variants, .{ .bytes = "{\"kind\":\"question\",\"subject\":\"foreign\"}", .rejection = .enum_mismatch, .path = "/subject" });
+    const escaped =
+        \\{"type":"object","properties":{"a~/b":{"type":"object","properties":{"count":{"type":"integer","minimum":1,"maximum":9}},"required":["count"],"additionalProperties":false}},"required":["a~/b"],"additionalProperties":false}
+    ;
+    try checkDocument(escaped, .{ .bytes = "{\"a~/b\":{\"count\":10}}", .rejection = .integer_range, .path = "/a~0~1b/count" });
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited);
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const compiled = try parser.compiler().compile(a, bytes);
+    const selected = compiled.select(.{ .bytes = "summary" }).?;
+    const cases = [_]Case{
+        .{ .bytes = "{\"statements\":[{\"local_key\":1,\"claim_ids\":[{\"ordinal\":1}],\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .missing_required_property, .path = "/statements/0/content/kind" },
+        .{ .bytes = "{\"statements\":[{\"local_key\":1,\"claim_ids\":[{\"ordinal\":1}],\"kind\":\"model\",\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .unknown_property, .path = "/statements/0/kind" },
+    };
+    for (cases) |case| try checkDocument(selected.modelBytes(), case);
+    const projection = @import("domain/model_schema_projection.zig");
+    const schema = @import("domain/model_result_schema.zig");
+    const statement = schema.findProperty(selected.root().object, "statements").?.schema.array.items;
+    const content = schema.findProperty(statement.object, "content").?.schema;
+    try std.testing.expectEqualStrings("/properties/statements/items/properties/content", (try projection.locate(a, selected, content)).?);
+    const shape = (try projection.outline(a, statement)).object;
+    try std.testing.expectEqual(@as(usize, 3), shape.get("fields").?.object.count());
+    try std.testing.expectEqual(@as(usize, 3), shape.get("required").?.array.items.len);
+    const tags = shape.get("fields").?.object.get("content").?.object.get("kind").?.array.items;
+    try std.testing.expectEqual(@as(usize, 2), tags.len);
+    try std.testing.expectEqualStrings("model", tags[0].string);
+    try std.testing.expectEqualStrings("preserved_token", tags[1].string);
+    try std.testing.expect(!shape.get("fields").?.object.get("claim_ids").?.object.contains("items"));
+    try std.testing.expect(try projection.locate(a, selected, compiled.root()) == null);
 }
 
 fn retryAllocation(allocator: std.mem.Allocator, fixture: *Fixture, rejected: *const @import("domain/provider_invocation_validation.zig").CompleteCandidate, diagnostic: @import("domain/model_protocol_retry.zig").Diagnostic, prompt: []const u8) !void {
@@ -486,19 +525,21 @@ pub fn checkDocument(contract: []const u8, case: Case) !void {
             var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
             defer arena.deinit();
             const a = arena.allocator();
-            if (result.invalid.expected == retried.request.response_schema.root()) {
-                try std.testing.expect(!expected.contains("schema"));
-                try std.testing.expect(retried.request.response_schema == fixture.prepared.request.response_schema);
-                const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference);
-                const request = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
-                var occurrences: usize = 0;
-                for (request.value.object.get("system").?.array.items) |part|
-                    occurrences += std.mem.count(u8, part.object.get("text").?.string, retried.request.response_schema.modelBytes());
-                try std.testing.expectEqual(@as(usize, 1), occurrences);
-            } else {
-                const projected = try @import("domain/model_schema_projection.zig").value(a, result.invalid.expected, .complete);
-                try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, projected, .{}), try std.json.Stringify.valueAlloc(a, expected.get("schema").?, .{}));
-            }
+            try std.testing.expect(!expected.contains("schema"));
+            try std.testing.expect(retried.request.response_schema == fixture.prepared.request.response_schema);
+            const projection = @import("domain/model_schema_projection.zig");
+            const pointer = @import("domain/json_pointer.zig");
+            const complete = try std.json.parseFromSlice(std.json.Value, a, retried.request.response_schema.modelBytes(), .{});
+            const located = pointer.lookup(complete.value, try pointer.parse(a, expected.get("schema_pointer").?.string)).?;
+            const projected = try projection.value(a, result.invalid.expected, .complete);
+            try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, projected, .{}), try std.json.Stringify.valueAlloc(a, located, .{}));
+            try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, try projection.outline(a, result.invalid.expected), .{}), try std.json.Stringify.valueAlloc(a, expected.get("shape").?, .{}));
+            const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference);
+            const request = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
+            var occurrences: usize = 0;
+            for (request.value.object.get("system").?.array.items) |part|
+                occurrences += std.mem.count(u8, part.object.get("text").?.string, retried.request.response_schema.modelBytes());
+            try std.testing.expectEqual(@as(usize, 1), occurrences);
             try std.testing.expectEqual(@as(usize, 2), guidance.value.object.count());
             var retained = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, parts[parts.len - 1].evidence, .{});
             defer retained.deinit();

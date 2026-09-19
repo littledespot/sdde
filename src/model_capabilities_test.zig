@@ -38,6 +38,20 @@ test "missing malformed and duplicate model controls cannot create requirements"
     try std.testing.expect(model.resolve(&duplicate_control) == null);
 }
 
+test "request result selection keeps exactly one canonical schema or configured part" {
+    const parameter = @import("domain/workflow_compilation.zig").CompiledParameter;
+    const resource: parameter = .{ .id = .{ .bytes = "result-schema" }, .value = .{ .resource = .{ .bytes = "canonical" } } };
+    const part: parameter = .{ .id = .{ .bytes = "composition-part" }, .value = .{ .string = "content" } };
+    try std.testing.expect(model.validResultSelection(&.{resource}));
+    try std.testing.expect(model.validResultSelection(&.{part}));
+    try std.testing.expect(!model.validResultSelection(&.{}));
+    try std.testing.expect(!model.validResultSelection(&.{ resource, part }));
+    try std.testing.expect(!model.validResultSelection(&.{ part, .{ .id = .{ .bytes = "input" }, .value = .{ .resource = .{ .bytes = "other" } } } }));
+    try std.testing.expect(!model.validResultSelection(&.{ part, .{ .id = .{ .bytes = "result-selection" }, .value = .{ .enumeration = "input" } } }));
+    try std.testing.expect(!model.validResultSelection(&.{.{ .id = part.id, .value = .{ .string = "unknown/part" } }}));
+    try std.testing.expect(!model.validResultSelection(&.{.{ .id = resource.id, .value = .{ .string = "canonical" } }}));
+}
+
 test "model contracts validate capabilities without granting unsupported operations" {
     var contract = provider_contract;
     try (contracts.Registry{ .entries = &.{contract} }).validate();

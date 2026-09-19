@@ -5,6 +5,7 @@ const compilation = @import("workflow_compilation.zig");
 const preparation = @import("model_request_preparation.zig");
 const provider = @import("llm_provider_operation.zig");
 const packets = @import("model_input_packet.zig");
+const composition = @import("json_composition_runtime.zig");
 pub const Input = union(enum) { resource: compilation.CompiledResource, packet: *const packets.Packet };
 pub const ResultSelection = enum { resource, input };
 
@@ -55,6 +56,10 @@ pub const Request = opaque {
         };
     }
 
+    pub fn part(self: *const Request) ?composition.Binding {
+        return storage(self).composition;
+    }
+
     pub fn source(self: *const Request, input_id: provider.ModelVisibleInputId) preparation.ValidationError!preparation.Source {
         const value = storage(self);
         const evidence = switch (value.phase) {
@@ -67,6 +72,7 @@ pub const Request = opaque {
             .request_schema_id = .{ .bytes = "model-request/v1" },
             .model_visible_input_id = input_id,
             .result_resource = &value.result,
+            .composition = value.composition,
         };
     }
 
@@ -92,6 +98,7 @@ const Storage = struct {
     protocol_prompt: ?compilation.CompiledResource,
     result: compilation.CompiledResource,
     input: ?Input,
+    composition: ?composition.Binding = null,
     phase: union(enum) {
         assigned,
         validated: *const identity.ModelRequestBindingEvidence,
@@ -109,6 +116,7 @@ pub const Selection = struct {
     input: ?Input,
     protocol_prompt: ?compilation.CompiledResource,
     result_selection: ResultSelection,
+    composition: ?composition.Binding = null,
 
     pub fn unit(self: Selection) identity.ImmutableUnitOwnerId {
         return if (self.input != null and self.input.? == .packet) self.input.?.packet.unit() else .workflow_step;
@@ -119,7 +127,7 @@ pub const Selection = struct {
     }
 
     pub fn bind(self: Selection, allocator: std.mem.Allocator, assignment: identity.Assignment) Error!*Request {
-        return assign(allocator, assignment.owner, assignment.model_request_id, self.binding, self.prompt, self.result, self.input, self.protocol_prompt, self.result_selection);
+        return assign(allocator, assignment.owner, assignment.model_request_id, self.binding, self.prompt, self.result, self.input, self.protocol_prompt, self.result_selection, self.composition);
     }
 };
 
@@ -154,7 +162,7 @@ pub fn prepare(allocator: std.mem.Allocator, current: *const identity.ModelReque
     return .{ .owner = assignment.owner, .assigned = assigned, .validated = checked, .request = built };
 }
 
-pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *const identity.ModelRequestId, selected: binding_module.ValidatedProviderModelBinding, prompt: compilation.CompiledResource, result: compilation.CompiledResource, input: ?Input, protocol_prompt: ?compilation.CompiledResource, selection: ResultSelection) Error!*Request {
+pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *const identity.ModelRequestId, selected: binding_module.ValidatedProviderModelBinding, prompt: compilation.CompiledResource, result: compilation.CompiledResource, input: ?Input, protocol_prompt: ?compilation.CompiledResource, selection: ResultSelection, part_binding: ?composition.Binding) Error!*Request {
     if (protocol_prompt) |resource| if (resource.content != .prompt) return error.ModelRequestAssociationInvalid;
     if (prompt.content != .prompt or result.content != .result_schema or
         (input != null and input.? == .resource and input.?.resource.content != .data) or
@@ -165,6 +173,13 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         _ = identity.validateBinding(current, current.revision(), id, value.packet.unit(), selected.operation_id, value.packet.purpose()) catch return error.ModelRequestAssociationInvalid;
     };
     var bound_result = result;
+    if (part_binding) |part| {
+        if (selection != .resource or !part.valid() or result.content.result_schema != part.plan.resultSchema() or
+            !std.mem.eql(u8, result.id.bytes, part.plan.resultAlias().bytes) or
+            !part.epoch.eql(identity.ledger(ledger_owner).stageRunEpochId())) return error.ModelRequestAssociationInvalid;
+        const current = identity.ledger(ledger_owner);
+        _ = identity.validateBinding(current, current.revision(), id, part.base.unit(), selected.operation_id, part.base.purpose()) catch return error.ModelRequestAssociationInvalid;
+    }
     if (selection == .input) {
         const packet = input orelse return error.ModelRequestAssociationInvalid;
         if (packet != .packet or result.content != .result_schema) return error.ModelRequestAssociationInvalid;
@@ -180,6 +195,7 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         .protocol_prompt = protocol_prompt,
         .result = bound_result,
         .input = input,
+        .composition = part_binding,
         .phase = .assigned,
     });
 }
@@ -204,6 +220,10 @@ pub fn destroy(request: *Request) void {
     const value: *Storage = @ptrCast(@alignCast(request));
     if (value.phase == .prepared) value.phase.prepared.deinit();
     if (value.input) |input| if (input == .packet) packets.release(input.packet);
+    if (value.composition) |part| {
+        packets.release(part.base);
+        value.allocator.free(part.prerequisites);
+    }
     identity.deinitOwner(value.ledger_owner);
     value.allocator.destroy(value);
 }
@@ -220,7 +240,13 @@ fn create(value: Storage) Error!*Request {
     if (value.input) |input| if (input == .packet) {
         _ = try packets.retain(input.packet);
     };
+    errdefer if (value.input) |input| if (input == .packet) packets.release(input.packet);
     result.* = value;
+    if (value.composition) |part| {
+        result.composition.?.prerequisites = try value.allocator.dupe(composition.Prerequisite, part.prerequisites);
+        errdefer value.allocator.free(result.composition.?.prerequisites);
+        _ = try packets.retain(part.base);
+    }
     return @ptrCast(result);
 }
 

@@ -14,7 +14,7 @@ pub const Limit = struct {
 
 /// Terminal evidence owns its operation name and survives graph/runner teardown.
 pub const Exhaustion = struct {
-    operation_name: [workflow.max_local_id_bytes]u8,
+    operation_name: [workflow.max_step_id_bytes]u8,
     operation_name_len: u8,
     limit: Limit,
     completed_executions: u64,

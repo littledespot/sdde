@@ -3,6 +3,11 @@ const schema = @import("domain/model_result_schema.zig");
 const parser = @import("adapters/parsers/model_result_schemas.zig");
 const compilation = @import("domain/workflow_compilation.zig");
 
+test {
+    _ = @import("json_composition_test.zig");
+    _ = @import("json_composition_runtime_test.zig");
+}
+
 const replacement =
     \\{"type":"object","properties":{"replacement":{"type":"string","maxLength":256}},"required":["replacement"],"additionalProperties":false}
 ;
@@ -183,7 +188,7 @@ test "schema resource cloning owns source properties literals and nested nodes" 
     };
     @memset(bytes, 'x');
     try std.testing.expectEqualStrings(variants, source.bytes());
-    const cloned = try source.clone(copy.allocator());
+    const cloned = try source.clone(copy.allocator(), null);
     original.deinit();
     try std.testing.expectEqualStrings(variants, cloned.bytes());
     try std.testing.expectEqual(.result_schema, cloned.kind());

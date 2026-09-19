@@ -838,7 +838,7 @@ fn modelRequestIdEql(left: *const ModelRequestId, right: *const ModelRequestId, 
         purposeEqlBounded(left.purpose, right.purpose, remaining_depth - 1);
 }
 
-fn purposeEqlBounded(left: RequestPurposeBinding, right: RequestPurposeBinding, remaining_depth: usize) bool {
+pub fn purposeEqlBounded(left: RequestPurposeBinding, right: RequestPurposeBinding, remaining_depth: usize) bool {
     if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
     return switch (left) {
         .initial_generation => true,

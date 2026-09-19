@@ -44,7 +44,7 @@ pub fn authorize(a: std.mem.Allocator, facts: Facts, rejection: Rejection) Error
     switch (rejection) {
         .token_classifications => |diagnostic| {
             const entry = try entryAt(current, diagnostic.scope);
-            if (current.revision != diagnostic.revision or !std.meta.eql(entry.classification_origin, diagnostic.origin) or !try atomic.equal(a, .{ .classifications = .{ .token_classifications = entry.token_classifications } }, .{ .classifications = .{ .token_classifications = diagnostic.observed } })) return error.InvalidAtomicRepair;
+            if (current.revision != diagnostic.revision or !std.meta.eql(try validation.rejectionOrigin(entry, diagnostic.issues), diagnostic.origin) or !try atomic.equal(a, .{ .classifications = .{ .token_classifications = entry.token_classifications } }, .{ .classifications = .{ .token_classifications = diagnostic.observed } })) return error.InvalidAtomicRepair;
             var result = try atomic.authorize(a, unit(diagnostic.scope), current.revision, .token_classifications, try select(current, diagnostic.scope, .token_classifications), facts, .{ .token_classifications = .{ .issues = diagnostic.issues, .choices = diagnostic.choices } });
             result.retry = try retryPermit(a, result);
             return result;
@@ -91,7 +91,9 @@ pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, p
         switch (authorization.target) {
             .token_classifications => {
                 entry.token_classifications = try a.dupe(extraction.tokens.Classification, replacement.classifications.token_classifications);
-                entry.classification_origin = origin;
+                const origins = try a.alloc(?@import("model_candidate_origin.zig").Origin, entry.token_classifications.len);
+                @memset(origins, origin);
+                entry.classification_origins = origins;
             },
             .citation, .missing_citations => {
                 const index = claimIndex(authorization.target);
@@ -109,7 +111,7 @@ pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, p
                         const origins = try a.alloc(?@import("model_candidate_origin.zig").Origin, replacement.citations.citations.len);
                         @memset(origins, origin);
                         claims[index].citation_origins = origins;
-                        claims[index].origin = origin;
+                        claims[index].citations_origin = origin;
                         break :citations try a.dupe(selections.Selection, replacement.citations.citations);
                     },
                     .token_classifications => unreachable,
@@ -262,7 +264,10 @@ pub const Omission = struct {
                 const classifications = try a.dupe(extraction.tokens.Classification, entry.token_classifications);
                 classifications[index] = replacement.classification;
                 changed.token_classifications = classifications;
-                changed.classification_origin = origin;
+                if (entry.classification_origins.len != classifications.len) return error.InvalidAtomicRepair;
+                const origins = try a.dupe(?@import("model_candidate_origin.zig").Origin, entry.classification_origins);
+                origins[index] = origin;
+                changed.classification_origins = origins;
             } else {
                 const claim = if (replacement == .claim) replacement.claim else if (replacement.outcome == .claim) replacement.outcome.claim else return error.InvalidAtomicRepair;
                 const checked = try @import("reference_extraction_text.zig").validate(validator, a, literals, current, facts.extraction.inputs, .{ .entries = &.{.{ .scope = scope, .origin = origin, .token_classifications = &.{}, .outcome = .{ .claims = &.{claim} } }} });

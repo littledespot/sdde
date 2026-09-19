@@ -132,7 +132,8 @@ fn graphProjectsDefinition(
         !std.mem.eql(u8, graph.authority.start_step_id.bytes, declared.start_step_id.bytes) or
         !graph.authority.total_model_token_budget.isValid() or
         graph.authority.resources.len != declared.resources.len or
-        graph.authority.steps.len != declared.steps.len) return false;
+        graph.authority.steps.len != declared.steps.len or
+        !compilation.validResourceBindings(graph.authority.resources)) return false;
 
     for (graph.authority.resources, declared.resources) |compiled, resource| {
         const binding = findBinding(candidate.resource_manifest.bindings, declared.source_ordinal, resource.id) orelse return false;
@@ -207,8 +208,16 @@ fn sameTarget(left: workflow.TransitionTarget, right: workflow.TransitionTarget)
 fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow) !compilation.CompiledWorkflow {
     const resources = try allocator.alloc(compilation.CompiledResource, source.authority.resources.len);
     for (resources, source.authority.resources) |*destination, item| {
-        destination.* = try item.clone(allocator);
+        if (item.content == .json_composition) continue;
+        destination.* = try item.clone(allocator, null);
     }
+    for (resources, source.authority.resources) |*destination, item| if (item.content == .json_composition) {
+        const canonical_alias = item.content.json_composition.resultAlias();
+        const canonical_index = for (source.authority.resources, 0..) |resource, index| {
+            if (std.mem.eql(u8, resource.id.bytes, canonical_alias.bytes)) break index;
+        } else return error.InvalidJsonComposition;
+        destination.* = try item.clone(allocator, resources[canonical_index].content.result_schema);
+    };
     const steps = try allocator.alloc(compilation.CompiledStep, source.authority.steps.len);
     for (steps, source.authority.steps) |*destination, step| {
         destination.* = step;

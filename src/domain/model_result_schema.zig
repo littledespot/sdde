@@ -143,13 +143,20 @@ fn isResult(root: *const Node) bool {
     };
 }
 
-fn createSchema(allocator: std.mem.Allocator, root: *const Node, bytes: []const u8, definitions: []const Definition) Error!*const Schema {
+fn createSchema(allocator: std.mem.Allocator, root: *const Node, bytes: []const u8, definitions: []const Definition) std.mem.Allocator.Error!*const Schema {
     const result = try allocator.create(Storage);
     var scratch: std.heap.ArenaAllocator = .init(allocator);
     defer scratch.deinit();
     const model_bytes = try std.json.Stringify.valueAlloc(allocator, try @import("model_schema_projection.zig").value(scratch.allocator(), root, .complete), .{});
     result.* = .{ .bytes = bytes, .model_bytes = model_bytes, .root = root.*, .definitions = definitions };
     return @ptrCast(result);
+}
+
+/// The composition compiler derives these nodes from an already compiled schema.
+/// It preserves closed objects and variant tags, including a selected constant
+/// tag that is intentionally not accepted as an independent external result.
+pub fn project(allocator: std.mem.Allocator, canonical: *const Schema, root: *const Node) std.mem.Allocator.Error!*const Schema {
+    return createSchema(allocator, root, canonical.bytes(), &.{});
 }
 
 const Compiler = struct {

@@ -5,15 +5,27 @@ const packets = @import("../domain/model_input_packet.zig");
 const requests = @import("model_request_workflow.zig");
 pub const requires = [_]@import("../domain/pipeline.zig").DataKey{ .model_request_identity_ledger, .prepared_model_request, .model_input_packet, .model_payload_schema_result };
 pub const Candidate = struct { body: []const u8, origin: @import("../domain/model_candidate_origin.zig").Origin };
+pub const Accepted = struct { candidate: Candidate, evidence: *const @import("../domain/model_payload_schema.zig").Evidence };
 pub fn read(view: *const data.View) @import("../ports/workflow_operation_registry.zig").Error!Candidate {
     const request = try requests.readCurrent(view, requests.prepared_schema);
     const packet = @import("pipeline_values.zig").read(view, requests.packet_schema, packets.Packet) catch return error.OperationExecutionFailed;
     if (request.packet() != packet) return error.OperationExecutionFailed;
+    return (try readAdmitted(view)).candidate;
+}
+
+/// Part retention additionally requires terminal acceptance of the logical request.
+pub fn readAccepted(view: *const data.View) @import("../ports/workflow_operation_registry.zig").Error!Accepted {
+    const admitted = try readAdmitted(view);
+    const ledger = @import("pipeline_values.zig").read(view, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+    _ = @import("../domain/model_candidate_origin.zig").Origin.fromAccepted(ledger, admitted.evidence) orelse return error.OperationExecutionFailed;
+    return admitted;
+}
+fn readAdmitted(view: *const data.View) @import("../ports/workflow_operation_registry.zig").Error!Accepted {
     const result = try @import("model_payload_schema_workflow.zig").readCurrent(view);
     const ledger = @import("pipeline_values.zig").read(view, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
     return switch (result.outcome()) {
         .valid => |proof| switch (proof.candidate().association().result()) {
-            .complete => |complete| .{ .body = complete.content(), .origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, complete.association().operationId()) orelse return error.OperationExecutionFailed },
+            .complete => |complete| .{ .evidence = proof, .candidate = .{ .body = complete.content(), .origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, complete.association().operationId()) orelse return error.OperationExecutionFailed } },
             .stopped, .failed => error.OperationExecutionFailed,
         },
         .schema_rejected, .not_validated => error.OperationExecutionFailed,

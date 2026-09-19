@@ -16,6 +16,7 @@ pub fn parse(allocator: std.mem.Allocator, raw: extraction.Raw) extraction.Error
         };
         result.token_classifications = &.{};
         result.origin = entry.origin;
+        result.producers = entry.producers;
         result.text_origins = &.{};
         result.outcome = switch (entry.result) {
             .blocked => |reason| .{ .blocked = reason },

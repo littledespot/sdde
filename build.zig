@@ -461,6 +461,17 @@ pub fn build(b: *std.Build) void {
     const clarification_step = b.step("test-clarification-inputs", "Test fixed artifact paths and read-only clarification inputs");
     clarification_step.dependOn(&b.addRunArtifact(clarification_tests).step);
 
+    const graph_step = b.step("test-workflow-graph", "Test workflow compilation, graph bounds and runner execution");
+    for ([_][]const u8{ "src/workflow_definition_test.zig", "src/workflow_registry_test.zig", "src/workflow_json_composition_test.zig" }) |source| {
+        const graph_tests = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path(source),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module }},
+        }) });
+        graph_step.dependOn(&b.addRunArtifact(graph_tests).step);
+    }
+
     const atomic_execution_step = b.step("test-atomic-execution", "Test execution isolation, provider lifecycle, authorization and logging cleanup");
     for ([_][]const u8{
         "src/provider_operation_lifecycle_test.zig",
@@ -474,7 +485,9 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         }) });
-        atomic_execution_step.dependOn(&b.addRunArtifact(tests).step);
+        const run_tests = b.addRunArtifact(tests);
+        atomic_execution_step.dependOn(&run_tests.step);
+        if (std.mem.eql(u8, source, "src/workflow_execution_test.zig")) graph_step.dependOn(&run_tests.step);
     }
 
     const smoke_command = packaging_smoke.add(b, executable);

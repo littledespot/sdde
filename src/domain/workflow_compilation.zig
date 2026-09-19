@@ -27,6 +27,7 @@ pub const CompiledResource = struct {
     content: union(operation.ResourceKind) {
         prompt: []const u8,
         result_schema: *const @import("model_result_schema.zig").Schema,
+        json_composition: *const @import("json_composition.zig").Plan,
         example: []const u8,
         data: []const u8,
     },
@@ -38,20 +39,38 @@ pub const CompiledResource = struct {
     pub fn bytes(self: CompiledResource) []const u8 {
         return switch (self.content) {
             .result_schema => |schema| schema.bytes(),
+            .json_composition => |plan| plan.bytes(),
             inline else => |value| value,
         };
     }
 
-    pub fn clone(self: CompiledResource, allocator: std.mem.Allocator) std.mem.Allocator.Error!CompiledResource {
+    pub fn clone(self: CompiledResource, allocator: std.mem.Allocator, canonical: ?*const @import("model_result_schema.zig").Schema) @import("json_composition.zig").Error!CompiledResource {
         return .{
             .id = .{ .bytes = try allocator.dupe(u8, self.id.bytes) },
             .content = switch (self.content) {
                 .result_schema => |schema| .{ .result_schema = try schema.clone(allocator) },
+                .json_composition => |plan| .{ .json_composition = try plan.clone(allocator, canonical orelse return error.InvalidJsonComposition) },
                 inline else => |value, tag| @unionInit(@FieldType(CompiledResource, "content"), @tagName(tag), try allocator.dupe(u8, value)),
             },
         };
     }
 };
+
+pub fn validResourceBindings(resources: []const CompiledResource) bool {
+    for (resources) |resource| if (resource.content == .json_composition) {
+        const plan = resource.content.json_composition;
+        const canonical = findResultSchema(resources, plan.resultAlias()) orelse return false;
+        if (canonical != plan.resultSchema()) return false;
+    };
+    return true;
+}
+
+pub fn findResultSchema(resources: []const CompiledResource, id: workflow.WorkflowResourceId) ?*const @import("model_result_schema.zig").Schema {
+    for (resources) |resource| if (std.mem.eql(u8, resource.id.bytes, id.bytes)) {
+        return if (resource.content == .result_schema) resource.content.result_schema else null;
+    };
+    return null;
+}
 
 pub const CompiledStep = struct {
     id: workflow.WorkflowStepId,

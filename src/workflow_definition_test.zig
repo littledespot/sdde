@@ -225,11 +225,19 @@ test "non-schema resources are not parsed and a compiler cannot substitute a for
             else
                 bytes);
         }
+
+        fn compositionAlias(_: *anyopaque, _: std.mem.Allocator, _: []const u8) @import("domain/json_composition.zig").Error!workflow.WorkflowResourceId {
+            return error.InvalidJsonComposition;
+        }
+
+        fn compileComposition(_: *anyopaque, _: std.mem.Allocator, _: []const u8, _: *const @import("domain/model_result_schema.zig").Schema) @import("domain/json_composition.zig").Error!*const @import("domain/json_composition.zig").Plan {
+            return error.InvalidJsonComposition;
+        }
     };
     var spy: Spy = .{};
     const action: compile.Action = .{
         .registry = &operations,
-        .result_schema_compiler = .{ .context = &spy, .compile_fn = Spy.compileSchema },
+        .result_schema_compiler = .{ .context = &spy, .compile_fn = Spy.compileSchema, .composition_result_alias_fn = Spy.compositionAlias, .compile_composition_fn = Spy.compileComposition },
     };
     const captures = [_]inventory.Capture{
         .{ .ordinal = 3, .bytes = "Generate one result." },
@@ -240,6 +248,58 @@ test "non-schema resources are not parsed and a compiler cannot substitute a for
     spy.foreign = true;
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, action.execute(arena.allocator(), definitions, testInventory(), manifest, &captures));
     try std.testing.expectEqual(@as(usize, 2), spy.calls);
+}
+
+test "composition resources infer one canonical schema and reject missing or conflicting bindings" {
+    const canonical_bytes = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":64},\"flag\":{\"type\":\"boolean\"}},\"required\":[\"answer\",\"flag\"],\"additionalProperties\":false}";
+    const composition_bytes = "{\"schema\":\"json-composition/v1\",\"result\":\"result-schema\",\"parts\":{\"content\":{\"paths\":[\"/answer\"]},\"details\":{\"paths\":[\"/flag\"],\"requires\":[\"content\"]}}}";
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const resource_yaml = try std.mem.replaceOwned(u8, a, resource_workflow, "resources:\n", "resources:\n  composition: split.json\n");
+    const yaml = try std.mem.replaceOwned(u8, a, resource_yaml, "result-schema: result-schema", "result-schema: composition");
+    const definitions = try reusableDefinitions(a, yaml);
+    const resource_descriptors = try a.alloc(inventory.InventoryDescriptor, descriptors.len + 1);
+    @memcpy(resource_descriptors[0..descriptors.len], &descriptors);
+    resource_descriptors[4].size = canonical_bytes.len;
+    resource_descriptors[5] = .{ .path = "split.json", .kind = .file, .identity = .{ .filesystem_id = 1, .file_id = 6 }, .size = composition_bytes.len };
+    var source_inventory = testInventory();
+    source_inventory.descriptors = resource_descriptors;
+    source_inventory.resource_ordinals = &.{ 3, 5, 6 };
+    const resource_manifest: inventory.ResourceManifest = .{
+        .bindings = &.{
+            .{ .definition_ordinal = 1, .resource_id = .{ .bytes = "prompt" }, .resource_ordinal = 3 },
+            .{ .definition_ordinal = 1, .resource_id = .{ .bytes = "result-schema" }, .resource_ordinal = 5 },
+            .{ .definition_ordinal = 1, .resource_id = .{ .bytes = "composition" }, .resource_ordinal = 6 },
+        },
+        .resource_ordinals = &.{ 3, 5, 6 },
+    };
+    var entries = operation_entries;
+    const parameters = try a.dupe(@import("domain/workflow_operation.zig").ParameterDescriptor, entries[1].contract.parameters);
+    parameters[2].resource_kind = .json_composition;
+    entries[1].contract.parameters = parameters;
+    var operations_value = operations;
+    operations_value.operations = &entries;
+    var schemas: result_schema_parser.Adapter = .{};
+    const action: compile.Action = .{ .registry = &operations_value, .result_schema_compiler = schemas.compiler() };
+    var captures = [_]inventory.Capture{
+        .{ .ordinal = 3, .bytes = "Generate one result." },
+        .{ .ordinal = 5, .bytes = canonical_bytes },
+        .{ .ordinal = 6, .bytes = composition_bytes },
+    };
+    const graphs = try action.execute(a, definitions, source_inventory, resource_manifest, &captures);
+    const resources = graphs[0].authority.resources;
+    const canonical = @import("domain/workflow_compilation.zig").findResultSchema(resources, .{ .bytes = "result-schema" }).?;
+    try std.testing.expectEqual(.json_composition, resources[0].kind());
+    try std.testing.expect(resources[0].content.json_composition.resultSchema() == canonical);
+    try std.testing.expectEqualStrings(composition_bytes, resources[0].bytes());
+
+    for ([_][]const u8{ "missing", "prompt", "composition" }) |wrong_alias| {
+        const invalid_bytes = try std.mem.replaceOwned(u8, a, composition_bytes, "\"result-schema\"", try std.fmt.allocPrint(a, "\"{s}\"", .{wrong_alias}));
+        captures[2].bytes = invalid_bytes;
+        resource_descriptors[5].size = invalid_bytes.len;
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, action.execute(a, definitions, source_inventory, resource_manifest, &captures));
+    }
 }
 
 test "unknown operations and unguarded cycles reject the complete graph" {
@@ -762,6 +822,13 @@ test "reuse expansion enforces total step bounds unused definitions and collisio
     source_definition.start_step_id = calls[0].id;
     source_definition.calls = calls;
     try std.testing.expectEqual(maximum, (try expand(a, source_definition)).steps.len);
+    const over_limit = try a.alloc(@import("domain/workflow_definition.zig").SubgraphCall, maximum + 1);
+    @memcpy(over_limit[0..maximum], calls);
+    over_limit[maximum] = calls[0];
+    over_limit[maximum].id.bytes = "extra-call";
+    source_definition.calls = over_limit;
+    try std.testing.expectError(error.InvalidWorkflowSubgraph, expand(a, source_definition));
+    source_definition.calls = calls;
     var doubled = source_definition.subgraphs[0];
     const local_steps = try a.alloc(@import("domain/workflow_definition.zig").SubgraphStep, 2);
     local_steps[0] = doubled.steps[0];
@@ -778,6 +845,75 @@ test "reuse expansion enforces total step bounds unused definitions and collisio
     collision.id.bytes = "g5-first-generate";
     source_definition.steps = &.{collision};
     try std.testing.expectError(error.InvalidWorkflowSubgraph, expand(a, source_definition));
+}
+
+test "definition schema and compiler share the finite expanded graph bound" {
+    const maximum = @import("domain/workflow_definition.zig").max_steps;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var yaml: std.Io.Writer.Allocating = .init(a);
+    try yaml.writer.print(
+        "schema: workflow/v1\nid: bounded-graph\nversion: 1\nshortcode: BOND\ninvoke: test.empty\npolicy: test.safe@1\nstart: s{d:0>4}\nsteps:\n",
+        .{maximum - 1},
+    );
+    for (0..maximum) |index| {
+        try yaml.writer.print("  s{d:0>4}: {{use: test.retry, on: {{ok: ", .{index});
+        if (index == 0) try yaml.writer.writeAll("end.ok") else try yaml.writer.print("s{d:0>4}", .{index - 1});
+        try yaml.writer.writeAll("}}\n");
+    }
+    const definitions = try reusableDefinitions(a, yaml.written());
+    try std.testing.expectEqual(maximum, definitions[0].steps.len);
+    var entries = operation_entries;
+    entries[2].contract.outcomes = &.{.ok};
+    var registry = operations;
+    registry.operations = &entries;
+    var schemas: result_schema_parser.Adapter = .{};
+    const graphs = try (compile.Action{ .registry = &registry, .result_schema_compiler = schemas.compiler() }).execute(a, definitions, emptyInventory(), .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
+    _ = try (validate_graphs.Action{}).execute(a, graphs);
+    try std.testing.expectEqual(maximum, graphs[0].authority.steps.len);
+    try std.testing.expectEqual(maximum, graphs[0].authority.maximum_step_executions);
+    try yaml.writer.print("  s{d:0>4}: {{use: test.retry, on: {{ok: end.ok}}}}\n", .{maximum});
+    try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, reusableDefinitions(a, yaml.written()));
+}
+
+test "qualified subgraph identities accept the compiled bound and reject excess without widening authored names" {
+    const d = @import("domain/workflow_definition.zig");
+    const expand = @import("domain/workflow_subgraphs.zig").expand;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const defs = try reusableDefinitions(a, reusable_workflow);
+    var source = defs[0];
+    var call = source.calls[0];
+    call.id = workflow.WorkflowStepId.parseLocal("c" ** workflow.max_local_id_bytes).?;
+    call.outcomes = source.calls[1].outcomes;
+    source.steps = &.{};
+    source.calls = &.{call};
+    source.start_step_id = call.id;
+    var subgraph = source.subgraphs[0];
+    var child = subgraph.steps[0];
+    const local_bytes = workflow.max_step_id_bytes - workflow.max_local_id_bytes - "g64-".len - 1;
+    child.id = workflow.WorkflowStepId.parseLocal("s" ** local_bytes).?;
+    child.outcomes = &.{
+        .{ .outcome = .ok, .target = .{ .terminal = .ok } },
+        .{ .outcome = .invalid, .target = .{ .step = child.id } },
+        .{ .outcome = .failed, .target = .{ .terminal = .failed } },
+        .{ .outcome = .cancelled, .target = .{ .terminal = .cancelled } },
+    };
+    subgraph.start = child.id;
+    subgraph.steps = &.{child};
+    source.subgraphs = &.{subgraph};
+    const expanded = try expand(a, source);
+    try std.testing.expectEqual(@as(usize, workflow.max_step_id_bytes), expanded.steps[0].id.bytes.len);
+    child.id = workflow.WorkflowStepId.parseLocal("s" ** (local_bytes + 1)).?;
+    subgraph.start = child.id;
+    subgraph.steps = &.{child};
+    source.subgraphs = &.{subgraph};
+    try std.testing.expectError(error.InvalidWorkflowSubgraph, expand(a, source));
+    const authored = try std.mem.replaceOwned(u8, a, reusable_workflow, "start: validate", "start: " ++ "a" ** (workflow.max_local_id_bytes + 1));
+    try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, reusableDefinitions(a, authored));
+    try std.testing.expect(d.SubgraphId.parse("a" ** (workflow.max_local_id_bytes + 1)) == null);
 }
 
 const nested_workflow =

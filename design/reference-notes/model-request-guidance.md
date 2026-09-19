@@ -39,8 +39,9 @@ for every workflow and both response modes:
 - Original task content, selected protocol prompt and complete original schema.
 - Exact rejected response as untrusted evidence.
 - Decoder position and object/key context, or the schema JSON Pointer.
-- For schema rejection: the exact expected schema node, its JSON Pointer and
-  parent/value scope, preserving alternatives and bounds.
+- For schema rejection: the candidate JSON Pointer and parent/value scope, an
+  exact locator in the single complete schema, and derived immediate fields and
+  discriminator values. Alternatives and bounds remain in that schema.
 
 The protocol prompt requires the complete corrected response, preserving unaffected
 entries and business meaning. The diagnostic locates the defect; it does not narrow

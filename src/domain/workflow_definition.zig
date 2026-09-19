@@ -7,8 +7,8 @@ pub const max_definition_bytes: usize = 1_048_576;
 pub const max_resource_bytes: usize = 1_048_576;
 pub const max_total_resource_bytes: usize = 16_777_216;
 // Includes expanded subgraph instances, not only handwritten YAML steps.
-// Fixed graph storage supports complete validation/repair paths at this bound.
-pub const max_steps: usize = 512;
+// One compiler-owned bound also sizes the runner's per-operation retry storage.
+pub const max_steps: usize = 1024;
 pub const max_parameters: usize = 32;
 pub const max_resources: usize = 64;
 pub const max_subgraphs: usize = 32;
@@ -34,7 +34,7 @@ pub const Definition = struct {
 pub const SubgraphId = struct {
     bytes: []const u8,
     pub fn parse(bytes: []const u8) ?SubgraphId {
-        _ = workflow.WorkflowStepId.parse(bytes) orelse return null;
+        _ = workflow.WorkflowStepId.parseLocal(bytes) orelse return null;
         return .{ .bytes = bytes };
     }
 };

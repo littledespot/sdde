@@ -32,6 +32,66 @@ test "generic engine preserves every YAML-compiled terminal outcome" {
     }
 }
 
+test "maximum graph validates executes every operation and rejects cycles and overflow" {
+    const definition = @import("domain/workflow_definition.zig");
+    const validate = @import("actions/workflow/validate_compiled_workflow_graphs.zig");
+    const maximum = definition.max_steps;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const steps = try a.alloc(compilation.CompiledStep, maximum + 1);
+    const transitions = try a.alloc(workflow.Transition, maximum * 2);
+    for (steps, 0..) |*step, index| {
+        step.* = test_steps[0];
+        step.id = workflow.WorkflowStepId.parse(try std.fmt.allocPrint(a, "operation-{d}", .{index})).?;
+    }
+    for (steps[0..maximum], 0..) |step, index| {
+        transitions[index * 2] = .{
+            .from = step.id,
+            .outcome = .ok,
+            .target = if (index + 1 == maximum) .{ .terminal = .ok } else .{ .step = steps[index + 1].id },
+        };
+        // Each node has a terminal edge, while the success chain exercises the
+        // complete bound and the cycle validator's maximum recursion depth.
+        transitions[index * 2 + 1] = .{ .from = step.id, .outcome = .failed, .target = .{ .terminal = .failed } };
+    }
+    var graph = try testGraph();
+    graph.authority.start_step_id = steps[0].id;
+    graph.authority.steps = steps[0..maximum];
+    graph.authority.transitions = transitions;
+    graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(graph.authority.steps).?;
+    _ = try (validate.Action{}).execute(a, &.{graph});
+    var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+    var barrier: FakeBarrier = .{};
+    var registry = testRegistry(&control);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
+    var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).executionStatus().?);
+    try std.testing.expectEqual(maximum, control.state.calls);
+    try std.testing.expectEqual(maximum, barrier.calls);
+    try std.testing.expectEqual(maximum, runner.retry_execution_counts.len);
+    try std.testing.expectEqual(@as(u128, 0), runner.token_accounting.current().committed());
+
+    transitions[(maximum - 1) * 2].target = .{ .step = steps[0].id };
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (validate.Action{}).execute(a, &.{graph}));
+    transitions[(maximum - 1) * 2].target = .{ .terminal = .ok };
+    graph.authority.steps = steps;
+    graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(steps).?;
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (validate.Action{}).execute(a, &.{graph}));
+
+    var bounded = test_steps[0];
+    bounded.retry_authority = .{
+        .workflow_id = graph.authority.workflow_id,
+        .workflow_version = graph.authority.workflow_version,
+        .operation_instance_id = bounded.id,
+        .limit = .{ .value = std.math.maxInt(u32) },
+        .scope = .model_request,
+    };
+    @memset(steps[0..maximum], bounded);
+    try std.testing.expect(compilation.calculateExecutionLimit(steps[0..maximum]) == null);
+}
+
 test "rerunning an abandoned workflow executes every step again from compiled start" {
     inline for (.{ .failed, .blocked, .cancelled, .needs_user }) |terminal| {
         var steps = [_]compilation.CompiledStep{test_steps[0]} ** 3;
@@ -247,6 +307,123 @@ test "unexpected binding failure never follows a declared failed transition" {
     try std.testing.expectEqual(@as(usize, 0), barrier.calls);
 }
 
+test "runner contract rejections cannot enter invalid or failed workflow recovery" {
+    inline for (std.meta.tags(DeltaFault)) |fault| {
+        var steps = [_]compilation.CompiledStep{test_steps[0]} ** 2;
+        steps[0].id = .{ .bytes = "first" };
+        steps[1].id = .{ .bytes = "recovery" };
+        for (&steps) |*step| step.produces = &.{test_value_schema.key};
+        const transitions = [_]workflow.Transition{
+            .{ .from = steps[0].id, .outcome = .invalid, .target = .{ .step = steps[1].id } },
+            .{ .from = steps[0].id, .outcome = .failed, .target = .{ .step = steps[1].id } },
+            .{ .from = steps[1].id, .outcome = .ok, .target = .{ .terminal = .ok } },
+        };
+        var graph = try testGraph();
+        graph.authority.steps = &steps;
+        graph.authority.start_step_id = steps[0].id;
+        graph.authority.transitions = &transitions;
+        graph.authority.maximum_step_executions = 2;
+        graph.authority.data_schemas = &.{test_value_schema};
+        var control: OperationControl = .{ .state = .{ .outcome = .ok, .delta_fault = fault } };
+        var registry = testRegistry(&control);
+        registry.data_schemas = graph.authority.data_schemas;
+        control.entries[1].contract.produces = steps[0].produces;
+        var barrier: FakeBarrier = .{};
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+        const result = engine.run(children.bindings());
+        try std.testing.expect(result == .execution_rejected);
+        try std.testing.expectEqual(.authority, result.execution_rejected);
+        try std.testing.expectEqual(@as(usize, 1), control.state.calls);
+        try std.testing.expectEqual(@as(usize, 0), barrier.calls);
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(test_value_schema.key)] == null);
+        try std.testing.expect(!runner.envelope.latestInformation(test_value_schema.key).contains(test_value_schema.key));
+        try std.testing.expectEqual(@as(u128, 0), runner.token_accounting.current().committed());
+    }
+}
+
+test "runner rejects incomplete dependency renewal without committing repair progress or following recovery" {
+    const values = @import("application/pipeline_values.zig");
+    const retry = @import("domain/workflow_retry.zig");
+    const candidate = comptime values.schema(.model_input_packet, u32, 1, 32).captured().recorded();
+    const review = values.schema(.model_payload_schema_result, u32, 1, 32).captured().recorded();
+    const permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 1 };
+    const Merge = struct {
+        calls: usize = 0,
+        fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+            context.?.calls += 1;
+            var delta: pipeline.NodeDelta = .{};
+            delta.data_replacements[@intFromEnum(candidate.key)] = values.create(std.testing.allocator, candidate, u32, 2) catch return error.OperationExecutionFailed;
+            delta.data_invalidations = .initMany(input.step.step.invalidates);
+            delta.repair_transition = .{ .merged = .{ .permit = permit, .revision_after = 2, .validation = .dependent_review } };
+            return .{ .outcome = .ok, .delta = delta };
+        }
+    };
+    for ([_]bool{ false, true }) |complete| {
+        var steps = [_]compilation.CompiledStep{test_steps[0]} ** 2;
+        steps[1].id = .{ .bytes = "recovery" };
+        for (&steps) |*step| {
+            step.requires = &.{ candidate.key, review.key, test_value_schema.key };
+            step.replaces = &.{candidate.key};
+            step.invalidates = if (complete) &.{ review.key, test_value_schema.key } else &.{review.key};
+            step.repair_role = .merge;
+        }
+        const transitions = [_]workflow.Transition{
+            .{ .from = steps[0].id, .outcome = .ok, .target = .{ .terminal = .ok } },
+            .{ .from = steps[0].id, .outcome = .invalid, .target = .{ .step = steps[1].id } },
+            .{ .from = steps[0].id, .outcome = .failed, .target = .{ .step = steps[1].id } },
+        };
+        var graph = try testGraph();
+        graph.authority.steps = &steps;
+        graph.authority.transitions = &transitions;
+        graph.authority.data_schemas = &.{ candidate, review, test_value_schema };
+        var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+        var registry = testRegistry(&control);
+        registry.data_schemas = graph.authority.data_schemas;
+        var merge: Merge = .{};
+        control.entries[1].binding = operation_bindings.bind(Merge, &merge, Merge.invoke);
+        control.entries[1].contract.requires = steps[0].requires;
+        control.entries[1].contract.replaces = steps[0].replaces;
+        control.entries[1].contract.invalidates = steps[0].invalidates;
+        control.entries[1].contract.repair_role = .merge;
+        var barrier: FakeBarrier = .{};
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        var delta: pipeline.NodeDelta = .{};
+        defer runner.envelope.discard(&delta);
+        delta.data_writes[@intFromEnum(candidate.key)] = try values.create(std.testing.allocator, candidate, u32, 1);
+        try runner.envelope.apply(.{ .id = "test.candidate", .kind = .action, .requires = &.{}, .produces = &.{candidate.key}, .side_effect = .none }, &delta, .ok);
+        delta.data_writes[@intFromEnum(review.key)] = try values.create(std.testing.allocator, review, u32, 1);
+        delta.data_writes[@intFromEnum(test_value_schema.key)] = try values.create(std.testing.allocator, test_value_schema, u32, 1);
+        try runner.envelope.apply(.{ .id = "test.review", .kind = .action, .requires = &.{candidate.key}, .produces = &.{ review.key, test_value_schema.key }, .side_effect = .none }, &delta, .ok);
+        try runner.repair_retry.commit(try runner.repair_retry.prepare(.{ .authorized = permit }));
+        const generation = runner.envelope.generation;
+        const revision = runner.repair_retry.revision;
+        const original = runner.envelope.slots[@intFromEnum(candidate.key)];
+        const history_count = runner.envelope.records.items.len;
+        var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+        const result = engine.run(children.bindings());
+        try std.testing.expectEqual(@as(usize, 1), merge.calls);
+        try std.testing.expectEqual(@as(usize, 0), barrier.calls);
+        try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+        if (complete) {
+            try std.testing.expectEqual(.ok, result.executionStatus().?);
+            try std.testing.expectEqual(revision + 1, runner.repair_retry.revision);
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(test_value_schema.key)] == null);
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(candidate.key)] != original);
+        } else {
+            try std.testing.expectEqual(.authority, result.execution_rejected);
+            try std.testing.expectEqual(revision, runner.repair_retry.revision);
+            // The engine applied only its empty invocation delta before merge.
+            try std.testing.expectEqual(generation + 1, runner.envelope.generation);
+            try std.testing.expectEqual(history_count, runner.envelope.records.items.len);
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(test_value_schema.key)] != null);
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(candidate.key)] == original);
+        }
+    }
+}
+
 const TestEngineBindings = struct {
     graph: *const compilation.CompiledWorkflow,
     runner: *runner_module.Runner,
@@ -304,6 +481,11 @@ test "retry exhaustion owns the operation name after source teardown" {
     try std.testing.expectEqualStrings("request-account", rejection.retry_limit.operation().bytes);
     try std.testing.expect(Exhaustion.init(.{ .bytes = "account" }, .{ .value = 4 }, 4) == null);
     try std.testing.expect(Exhaustion.init(.{ .bytes = "invalid/name" }, .{ .value = 4 }, 5) == null);
+    var maximum: [workflow.max_step_id_bytes]u8 = @splat('s');
+    const longest = Exhaustion.init(.{ .bytes = &maximum }, .{ .value = 4 }, 5).?;
+    @memset(&maximum, 'x');
+    try std.testing.expectEqualStrings("s" ** workflow.max_step_id_bytes, longest.operation().bytes);
+    try std.testing.expect(Exhaustion.init(.{ .bytes = "s" ** (workflow.max_step_id_bytes + 1) }, .{ .value = 4 }, 5) == null);
 }
 
 fn selected(graph: *const compilation.CompiledWorkflow) execution.SelectedWorkflow {
@@ -343,7 +525,10 @@ const OperationState = struct {
     expected_resource_id: ?[]const u8 = null,
     calls: usize = 0,
     fail_call: ?usize = null,
+    delta_fault: ?DeltaFault = null,
 };
+const DeltaFault = enum { missing_write, wrong_schema, undeclared_invalidation, undeclared_outcome };
+const test_value_schema = @import("application/pipeline_values.zig").schema(.canonical_log_level, u32, 1, 32).recorded();
 const FakeBarrier = struct {
     calls: usize = 0,
     block: bool = false,
@@ -412,6 +597,16 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
             control.calls += 1;
             if (control.fail_call == control.calls) return error.OperationExecutionFailed;
             var delta: pipeline.NodeDelta = .{};
+            if (control.delta_fault) |fault| {
+                const values = @import("application/pipeline_values.zig");
+                if (fault != .missing_write or control.calls > 1) {
+                    var schema = test_value_schema;
+                    if (fault == .wrong_schema and control.calls == 1) schema.version += 1;
+                    delta.data_writes[@intFromEnum(test_value_schema.key)] = values.create(std.testing.allocator, schema, u32, 1) catch return error.OperationExecutionFailed;
+                }
+                if (fault == .undeclared_invalidation and control.calls == 1) delta.data_invalidations.insert(.workflow_invocation);
+                if (fault == .undeclared_outcome and control.calls == 1) break :step .{ .outcome = .more, .delta = delta };
+            }
             step_input.log.log(&delta, .{ .event_type = .action_completed }) catch return error.OperationExecutionFailed;
             break :step .{ .outcome = outcome, .delta = delta };
         },

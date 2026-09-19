@@ -28,6 +28,7 @@ test {
     _ = @import("specification_generation_test.zig");
     _ = @import("principle_registry_test.zig");
     _ = @import("model_result_schema_test.zig");
+    _ = @import("workflow_json_composition_test.zig");
     _ = @import("model_candidate_json_test.zig");
     _ = @import("model_capabilities_test.zig");
     refAllDeclsRecursive(@This());

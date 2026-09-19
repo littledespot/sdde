@@ -201,7 +201,7 @@ test "runner rejects altered or missing compiled model controls before operation
             .graph = &graph,
         }, &registry, barrier.port(), .{}, &fixture.services);
         defer runner.deinit();
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, runner.bindings().invokeStep(step.id).outcome);
+        try std.testing.expectEqual(.authority, runner.bindings().invokeStep(step.id).rejected);
         try std.testing.expectEqual(@as(usize, 0), control.state.calls);
     }
 }
@@ -241,8 +241,8 @@ test "generic runner supplies immutable binding to a pure operation without a pr
     );
     defer runner_without_authority.deinit();
     try std.testing.expectEqual(
-        workflow.OutcomeTag.failed,
-        runner_without_authority.bindings().invokeStep(model_step.id).outcome,
+        .authority,
+        runner_without_authority.bindings().invokeStep(model_step.id).rejected,
     );
     try std.testing.expectEqual(@as(usize, 1), control.state.calls);
 }

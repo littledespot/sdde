@@ -21,12 +21,21 @@ pub const Fixture = struct {
     }
 
     pub fn initWithSchema(self: *Fixture, schema_bytes: ?[]const u8) !void {
+        return self.initialize(schema_bytes, null);
+    }
+
+    pub fn initWithCompiledSchema(self: *Fixture, selected: *const @import("domain/model_result_schema.zig").Schema) !void {
+        return self.initialize(null, selected);
+    }
+
+    fn initialize(self: *Fixture, schema_bytes: ?[]const u8, selected: ?*const @import("domain/model_result_schema.zig").Schema) !void {
         try self.base.init(std.testing.allocator);
         errdefer self.base.deinit();
         if (schema_bytes) |bytes| {
             var adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
             self.base.request.response_schema = try adapter.compiler().compile(self.base.schema_arena.allocator(), bytes);
         }
+        if (selected) |compiled| self.base.request.response_schema = compiled;
         self.resource = .{ .id = .{ .bytes = "result" }, .content = .{ .result_schema = self.base.request.response_schema } };
         const source = try self.requestSource();
         self.prepared = try (build_request.Action{}).execute(std.testing.allocator, source, self.base.request.content);

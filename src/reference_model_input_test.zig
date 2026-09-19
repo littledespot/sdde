@@ -23,6 +23,10 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
     const passive = try text.prepare(a, inputs);
     defer passive.deinit();
     const candidates = try tokens.candidates(a, inputs);
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const content: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const classified: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    const producers: @import("domain/reference_extraction.zig").ProducerOrigins = .{ .content = content, .classifications = classified };
     var progress = try iteration.initialize(a, inputs);
     for (inputs.chunks.entries) |chunk| {
         const scope = iteration.current(progress).?;
@@ -41,10 +45,12 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
         try std.testing.expectEqualStrings(inputs.corpus.sources[0].bytes[chunk.span.start.byte..chunk.span.end.byte], reconstructed.items);
         try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Hello, World!") != null);
         const response = try tokens.wire(a, try extraction.reply(a, chunk, "The application displays a greeting."), try tokens.classifications(a, candidates, chunk));
-        progress = try iteration.append(a, progress, scope, response, null);
+        progress = try iteration.append(a, progress, scope, response, content, producers);
     }
     try std.testing.expect(iteration.current(progress) == null);
     const raw = try iteration.finish(a, progress);
+    try std.testing.expectEqualDeep(content, raw.entries[0].origin.?);
+    try std.testing.expectEqualDeep(producers, raw.entries[0].producers.?);
     const extracted = try extraction.finish(a, inputs, raw.entries);
     const context: reconciliation.Context = .{ .inputs = inputs, .registry = passive.registry, .current = text.safety.value(passive.owner) };
     const initial = try reconciliation.initialize(a, inputs, extracted, 2);
@@ -157,14 +163,14 @@ test "extraction collection rejects missing duplicate foreign and out of order s
     const inputs = try source.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "renewals.md", "A librarian renews loans.\n" ** 70));
     const initial = try iteration.initialize(a, inputs);
     try std.testing.expectError(error.InvalidReferenceExtraction, iteration.finish(a, initial));
-    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, initial, initial.scopes[1], extraction.no_claim, null));
+    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, initial, initial.scopes[1], extraction.no_claim, null, null));
     var foreign = initial.scopes[0];
     foreign.state_id.bytes = "foreign";
-    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, initial, foreign, extraction.no_claim, null));
-    const once = try iteration.append(a, initial, initial.scopes[0], extraction.no_claim, null);
-    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, once, initial.scopes[0], extraction.no_claim, null));
-    const complete = try iteration.append(a, once, initial.scopes[1], extraction.no_claim, null);
-    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, complete, initial.scopes[1], extraction.no_claim, null));
+    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, initial, foreign, extraction.no_claim, null, null));
+    const once = try iteration.append(a, initial, initial.scopes[0], extraction.no_claim, null, null);
+    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, once, initial.scopes[0], extraction.no_claim, null, null));
+    const complete = try iteration.append(a, once, initial.scopes[1], extraction.no_claim, null, null);
+    try std.testing.expectError(error.InvalidReferenceExtraction, iteration.append(a, complete, initial.scopes[1], extraction.no_claim, null, null));
     try std.testing.expectEqual(@as(usize, 2), (try iteration.finish(a, complete)).entries.len);
 }
 test "packet body and domain identity are owned independently of caller allocations" {
@@ -181,4 +187,42 @@ test "packet body and domain identity are owned independently of caller allocati
     try std.testing.expectEqualStrings("answer", retained.resultDefinition().?.bytes);
     try std.testing.expectError(error.InvalidModelInputPacket, packets.create(std.testing.allocator, "", .workflow_step, .initial_generation, null));
     try std.testing.expectError(error.InvalidModelInputPacket, packets.create(std.testing.allocator, "{}", .workflow_step, .initial_generation, .{ .bytes = "../answer" }));
+}
+
+test "typed and admitted packet context preserve exact numbers and assignment ownership" {
+    try packetContextPrecision(std.testing.allocator);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, packetContextPrecision, .{});
+    const base = try packets.create(std.testing.allocator, "{\"candidate\":{}}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withContext(struct {}, std.testing.allocator, base, "candidate", .{}));
+}
+
+fn packetContextPrecision(allocator: std.mem.Allocator) !void {
+    const body = "{\"amount\":9007199254740993.0,\"rate\":0.10000000000000000000000000001,\"items\":[1e0,-0.0]}";
+    const unit: @import("domain/model_request_identity.zig").ImmutableUnitOwnerId = .{ .plan_unit = .{
+        .plan_input_authority_state_id = .{ .bytes = "plan-current" },
+        .unit_slot_id = .{ .bytes = "limits" },
+    } };
+    const base = try packets.create(allocator, body, unit, .{ .semantic_review = .{ .bytes = "precision" } }, .{ .bytes = "limits" });
+    defer packets.release(base);
+    const Context = struct { offset: f64, note: []const u8 };
+    const context: Context = .{ .offset = -0.0, .note = "keep exact" };
+    const encoded = try @import("domain/model_candidate_json.zig").encode(Context, allocator, context);
+    defer allocator.free(encoded);
+    var parsed = try @import("domain/strict_json.zig").parse(allocator, encoded, .{ .maximum_depth = 8 }, false, null);
+    defer parsed.deinit();
+    const expected = try std.fmt.allocPrint(allocator, "{s},\"prerequisites\":{s}}}", .{ body[0 .. body.len - 1], encoded });
+    defer allocator.free(expected);
+    for ([_]bool{ false, true }) |typed| {
+        const derived = if (typed)
+            try packets.withContext(Context, allocator, base, "prerequisites", context)
+        else
+            try packets.withJsonContext(allocator, base, "prerequisites", parsed.value);
+        defer packets.release(derived);
+        try std.testing.expectEqualStrings(expected, derived.body());
+        try std.testing.expectEqualStrings(body, base.body());
+        try std.testing.expectEqualDeep(base.unit(), derived.unit());
+        try std.testing.expectEqualDeep(base.purpose(), derived.purpose());
+        try std.testing.expectEqualStrings(base.resultDefinition().?.bytes, derived.resultDefinition().?.bytes);
+    }
 }

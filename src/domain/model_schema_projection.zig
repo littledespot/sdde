@@ -11,6 +11,79 @@ pub fn render(allocator: std.mem.Allocator, selected: *const schema.Schema, prof
     return std.json.Stringify.valueAlloc(allocator, try value(arena.allocator(), selected.root(), profile), .{});
 }
 
+/// Locate a bound node in the complete selected projection, not in candidate
+/// data or the resource's unselected definitions. Foreign nodes have no locator.
+pub fn locate(allocator: std.mem.Allocator, selected: *const schema.Schema, target: *const schema.Node) std.mem.Allocator.Error!?[]const u8 {
+    const pointer = @import("json_pointer.zig");
+    var path: [schema.max_depth * 2 + 2]pointer.Segment = undefined;
+    const length = locateNode(selected.root(), target, &path, 0) orelse return null;
+    return try pointer.render(allocator, path[0..length]);
+}
+
+fn locateNode(node: *const schema.Node, target: *const schema.Node, path: []@import("json_pointer.zig").Segment, depth: usize) ?usize {
+    if (node == target) return depth;
+    switch (node.*) {
+        .object => |properties| for (properties) |property| {
+            path[depth] = .{ .property = "properties" };
+            path[depth + 1] = .{ .property = property.name };
+            if (locateNode(property.schema, target, path, depth + 2)) |length| return length;
+        },
+        .array => |items| {
+            path[depth] = .{ .property = "items" };
+            return locateNode(items.items, target, path, depth + 1);
+        },
+        .one_of => |choices| for (choices, 0..) |choice, index| {
+            path[depth] = .{ .property = "oneOf" };
+            path[depth + 1] = .{ .index = index };
+            if (locateNode(choice, target, path, depth + 2)) |length| return length;
+        },
+        else => {},
+    }
+    return null;
+}
+
+/// Immediate fields and tags aid correction without repeating child schemas.
+/// This is guidance only; the complete selected schema retains every constraint.
+pub fn outline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.Allocator.Error!std.json.Value {
+    switch (node.*) {
+        .object => |properties| {
+            var object: std.json.ObjectMap = .{};
+            var fields: std.json.ObjectMap = .{};
+            var required: std.array_list.Managed(std.json.Value) = .init(allocator);
+            for (properties) |property| {
+                try fields.put(allocator, property.name, try fieldOutline(allocator, property.schema));
+                if (property.required) try required.append(.{ .string = property.name });
+            }
+            try object.put(allocator, "fields", .{ .object = fields });
+            try object.put(allocator, "required", .{ .array = required });
+            return .{ .object = object };
+        },
+        .one_of => |choices| {
+            var alternatives: std.array_list.Managed(std.json.Value) = .init(allocator);
+            for (choices) |choice| try alternatives.append(try outline(allocator, choice));
+            var object: std.json.ObjectMap = .{};
+            try object.put(allocator, "alternatives", .{ .array = alternatives });
+            return .{ .object = object };
+        },
+        .array => return fieldOutline(allocator, node),
+        else => return value(allocator, node, .complete),
+    }
+}
+
+fn fieldOutline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.Allocator.Error!std.json.Value {
+    var object: std.json.ObjectMap = .{};
+    switch (node.*) {
+        .object, .array => try object.put(allocator, "type", .{ .string = if (node.* == .object) "object" else "array" }),
+        .one_of => |choices| {
+            var tags: std.array_list.Managed(std.json.Value) = .init(allocator);
+            for (choices) |choice| try tags.append(.{ .string = schema.findProperty(choice.object, "kind").?.schema.constant.string });
+            try object.put(allocator, "kind", .{ .array = tags });
+        },
+        else => return value(allocator, node, .complete),
+    }
+    return .{ .object = object };
+}
+
 pub fn value(allocator: std.mem.Allocator, node: *const schema.Node, profile: Profile) std.mem.Allocator.Error!std.json.Value {
     var object: std.json.ObjectMap = .{};
     switch (node.*) {

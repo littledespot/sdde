@@ -20,8 +20,9 @@ const count_observation = @import("../application/model_token_count_observation_
 
 const transport = @import("../application/model_transport_workflow.zig");
 const protocol = @import("../application/model_protocol_retry_workflow.zig");
-pub const count = 28;
-pub const schemas = requests.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema, invocation.count_schema, count_observation.schema };
+const composition = @import("../application/json_composition_workflow.zig");
+pub const count = 32;
+pub const schemas = requests.schemas ++ composition.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema, invocation.count_schema, count_observation.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
 pub const Assembly = struct {
@@ -53,6 +54,10 @@ pub const Assembly = struct {
     check_phase: protocol.Check,
     retire_input: transport.Retire(.input),
     retire_transport: transport.Retire(.request_and_input),
+    initialize_composition: composition.Initialize,
+    retain_part: composition.Retain,
+    assemble_json: composition.Assemble,
+    validate_assembled_json: composition.Validate,
     entries: [count]operations.Entry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator) void {
@@ -85,6 +90,10 @@ pub const Assembly = struct {
             .check_phase = .{},
             .retire_input = .{},
             .retire_transport = .{},
+            .initialize_composition = .{ .allocator = allocator },
+            .retain_part = .{ .allocator = allocator },
+            .assemble_json = .{ .allocator = allocator },
+            .validate_assembled_json = .{ .allocator = allocator },
             .entries = undefined,
         };
         self.entries = .{
@@ -116,6 +125,10 @@ pub const Assembly = struct {
             entry(protocol.Check, &self.check_phase),
             entry(transport.Retire(.input), &self.retire_input),
             entry(transport.Retire(.request_and_input), &self.retire_transport),
+            entry(composition.Initialize, &self.initialize_composition),
+            entry(composition.Retain, &self.retain_part),
+            entry(composition.Assemble, &self.assemble_json),
+            entry(composition.Validate, &self.validate_assembled_json),
         };
     }
 };

@@ -4,6 +4,7 @@ const workflow = @import("../../domain/workflow.zig");
 const definition = @import("../../domain/workflow_definition.zig");
 const compilation = @import("../../domain/workflow_compilation.zig");
 const workflow_retry = @import("../../domain/workflow_retry.zig");
+const composition_flow = @import("../../domain/workflow_json_composition.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
@@ -35,12 +36,13 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
     if (workflow.OperationId.parse(graph.authority.invocation_operation_id.bytes) == null) return invalid();
     try validateDataSchemas(graph.authority);
     if (steps.len == 0 or steps.len > definition.max_steps or
+        !compilation.validResourceBindings(graph.authority.resources) or
         !graph.authority.total_model_token_budget.isValid() or
         graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return invalid())) return invalid();
     for (steps) |step| {
         if (!@import("../../domain/workflow_operation.zig").validRepair(step.repair_role, if (step.retry_authority) |value| value.scope else null, step.runner_accounting, step.side_effect)) return invalid();
         if (step.repair_role != .none and step.capabilities.len != 0) return invalid();
-        if (workflow.OperationId.parse(step.operation_id.bytes) == null) return invalid();
+        if (workflow.WorkflowStepId.parse(step.id.bytes) == null or workflow.OperationId.parse(step.operation_id.bytes) == null) return invalid();
         if (!@import("../../domain/workflow_operation.zig").validAccounting(step.runner_accounting, step.requires, step.produces, step.side_effect, step.retry_authority != null)) return invalid();
         if (!@import("../../domain/workflow_capability.zig").permits(graph.authority.allowed_capabilities, step.capabilities)) return invalid();
         if (!@import("../../domain/workflow_model.zig").validProjection(step)) return invalid();
@@ -186,27 +188,37 @@ fn visitUnguarded(
 
 fn validateDataFlow(allocator: std.mem.Allocator, graph: compilation.CompiledWorkflow, start: usize) Error!void {
     const steps = graph.authority.steps;
-    const inputs = allocator.alloc(?KeyState, steps.len) catch return invalid();
+    const State = struct {
+        keys: KeyState,
+        composition: composition_flow.State = .{},
+    };
+    const inputs = allocator.alloc(?State, steps.len) catch return invalid();
     @memset(inputs, null);
     var initial = [_]bool{false} ** key_count;
     for (graph.authority.invocation_outputs) |key| {
         if (initial[@intFromEnum(key)]) return invalid();
         initial[@intFromEnum(key)] = true;
     }
-    inputs[start] = initial;
+    inputs[start] = .{ .keys = initial };
     var queue: std.ArrayList(usize) = .empty;
     queue.append(allocator, start) catch return invalid();
     var cursor: usize = 0;
     while (cursor < queue.items.len) : (cursor += 1) {
         const index = queue.items[cursor];
-        const output = try applyDataContract(inputs[index].?, steps[index]);
+        const input = inputs[index].?;
+        const output = try applyDataContract(input.keys, steps[index]);
         for (graph.authority.transitions) |transition| {
-            if (!std.mem.eql(u8, transition.from.bytes, steps[index].id.bytes) or transition.target != .step) continue;
+            if (!std.mem.eql(u8, transition.from.bytes, steps[index].id.bytes)) continue;
+            const composed = composition_flow.apply(input.composition, steps[index], graph.authority.resources, transition.outcome) catch return invalid();
+            if (transition.target == .terminal) {
+                if (transition.target.terminal == .ok and composed.plan != null) return invalid();
+                continue;
+            }
             const target = stepIndex(steps, transition.target.step.bytes) orelse return invalid();
             if (inputs[target]) |existing| {
-                if (!std.mem.eql(bool, &existing, &output)) return invalid();
+                if (!std.mem.eql(bool, &existing.keys, &output) or !existing.composition.eql(composed)) return invalid();
             } else {
-                inputs[target] = output;
+                inputs[target] = .{ .keys = output, .composition = composed };
                 queue.append(allocator, target) catch return invalid();
             }
         }

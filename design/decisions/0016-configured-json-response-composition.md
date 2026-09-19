@@ -1,8 +1,8 @@
 # ADR 0016: Configure smaller JSON responses and assemble them deterministically
 
-- **Status:** Accepted design direction; configuration encoding proposed; not implemented
+- **Status:** Accepted; configured object-part composition implemented
 - **Date:** 2026-09-19
-- **Decision authority:** User instruction to document generic, configured response
+- **Decision authority:** User instructions to design and implement generic, configured response
   decomposition and prompt-free reconstitution across JSON shapes. Higher input
   token counts are acceptable; existing execution-budget enforcement remains.
 - **Amends:** §§6, 12, 14, 16.4, 22 and 28 for configured response composition;
@@ -48,14 +48,14 @@ Independently copied part schemas are prohibited. Local `$defs` remain ordinary
 schema reuse under ADR 0013.
 
 This extends ADR 0013's selection of whole named result definitions with compiler-
-derived property projections; those projections are not an existing capability.
+derived property projections implemented by the shared schema owner.
 Keep each projected schema bound to its complete schema and part identity throughout
 preparation, provider serialization, correction and admission.
 Registry ownership transfer must bind the composition to the destination graph's
 canonical schema owner. Do not retain compiler-arena pointers or clone a private
 second copy of the referenced result schema inside the composition.
 
-**Proposed authoring shape, not current executable configuration:**
+**Executable composition resource:**
 
 ```json
 {
@@ -79,10 +79,23 @@ active composition handoffs satisfy them. It cannot remove a registered input
 requirement or become a post-assembly semantic repair policy. No resource supplies executable expressions,
 callbacks, model dispatch, defaults, conditional business policy or capabilities.
 
-The new resource kind/encoding needs a closed parser/compiler contract and
-conformance fixtures before runtime use. Do not treat today's unvalidated `data`
-resource bytes as a trusted plan. Exact operation parameter names and the formal
-schema are delivered with implementation; this sketch is not a fallback format.
+The existing resource compiler admits only the closed `json-composition/v1`
+object above: `schema`, `result` and `parts` are required; each part has nonempty
+`paths` and optional `requires`; unknown fields reject. Part IDs and the result
+alias use the existing resource-ID contract. The existing schema-profile bound
+limits parts/selectors; dependencies and paths validate before inference.
+
+| Registered operation | Configuration / handoff |
+| --- | --- |
+| `initialize-json-composition` | `composition` resource; binds the current packet and execution epoch. |
+| `prepare-model-request` / `assign-model-request-id` | Select `composition-part`, or the existing `result-schema` path, exclusively. A part cannot override schema, result selection or input. |
+| `retain-json-part` | Retains the exact schema-admitted, terminal-accepted request result and prerequisite placements. |
+| `assemble-json` | Retires staging and installs the complete, unvalidated JSON candidate in one runner delta. |
+| `validate-assembled-json` | Reuses complete schema validation; native consumers require its associated evidence. |
+
+Dependent requests add only configured prerequisite values to the original packet's
+`prerequisites` object. The ordinary request body and protocol correction remain
+shared; each explicit call site keeps its own assignment identity.
 
 Request preparation selects either its existing schema/definition binding or one
 sealed composition-part binding. The latter resolves the complete schema through
@@ -118,7 +131,7 @@ All provider, admission and correction consumers retain this same binding.
   Ambiguous variant selection or an unrepresentable partial schema rejects at
   compilation; keep the affected group together instead of weakening `oneOf`.
 - Keep optional containers as whole subtrees in the first implementation. The
-  proposed encoding has no separate presence owner or absent-part transition;
+  encoding has no separate presence owner or absent-part transition;
   splitting `/details/summary` from `/details/rationale` when `details` is optional
   therefore rejects. Required object containers remain recursively decomposable.
   Missing and `null` stay distinct; assembly never invents presence or defaults.
@@ -148,8 +161,7 @@ All provider, admission and correction consumers retain this same binding.
 | Existing schema and domain validators | Validate the assembled shape, then cross-part/domain obligations, citations, coverage and semantic findings. |
 | Existing runner and capability-free orchestration | Execute declared child bindings, apply deltas, branch on typed results and enforce limits. Orchestrators perform no assembly or validation work. |
 
-These are responsibility boundaries, not claims that all named operations already
-exist. Keep detailed operations available; any consolidated pure entrypoint reuses
+The registered operations implement these responsibility boundaries. Keep detailed operations available; any consolidated pure entrypoint reuses
 their domain functions, never invokes another action. Reuse definition-local
 subgraphs for coordination. The composition resource does not hide a model-call
 loop or an executable child graph.
@@ -171,23 +183,28 @@ required. New part revisions or schema selections cannot replenish retry attempt
 
 ### Graph capacity
 
-The delivered Spec graph has **498/512** expanded operations. Its existing request
-body has 15 operations, plus a retirement operation. Simply appending a second
-request therefore projects **at least 514**, before additional composition steps.
-This is a lower-bound calculation, not compilation of a new graph.
+The integrated Spec graph compiles to **519 operations**, compared with 498 before
+response decomposition. The added request uses the same 14-operation lifecycle body
+and separate preparation; part retention, assembly and validation are explicit.
 
-The user explicitly permits raising this arbitrary implementation limit. Retain
-a finite compiler-owned bound and select the higher value from the compiled graph
-and measured storage/runtime behavior during implementation. Synchronize the one
-constant, derived capacities, schema projection and boundary tests; verify overflow,
-cycle checks, identity widths, allocation/stack behavior and clean packaging.
-No further approval to increase the finite bound is required by this record.
+The user explicitly permits raising this arbitrary implementation limit. The bound
+is now **1,024**, defined once by `workflow_definition.max_steps`; schema validation,
+expansion, compiled validation and runner storage use that same constant. The runner's
+fixed `u64` retry array increases from 4,096 to 8,192 bytes. Graph tables and validation
+working sets remain allocator-backed. Boundary coverage compiles and executes a full
+1,024-operation graph, rejects one extra operation, detects an unguarded cycle of that
+length and checks execution-limit arithmetic overflow. Qualified step identities
+retain their existing validated string representation with a 128-byte compiler-owned
+bound; authored local IDs remain 64 bytes. Retry-exhaustion evidence derives its
+owned name storage from the same compiled bound. The measured Spec graph fits this
+bound; no additional capacity configuration is introduced. Verification and measured
+resource/request costs are recorded in [Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition).
 
 Do not introduce request orchestration machinery solely to preserve 512. Detailed
 operations and distinct request identities remain visible. Consolidate only where
 there is a separate cohesive responsibility; neither a larger ceiling nor call
 frames reduce the number of operations or model calls. Token and retry budgets
-remain unchanged. The current executable still enforces 512 until implemented.
+remain unchanged.
 
 ## 4. Candidate lifecycle, provenance and repair
 
@@ -288,11 +305,11 @@ native checks for exactly one classification per supplied candidate. Omission
 review still compares against source meaning; JSON completeness is not semantic
 completeness.
 
-Current parsing assumes one response origin. Implementation must preserve distinct
-content/classification origins through initial decoding, text validation, selected
-repair, native defect identity, evidence assembly and reporting. Apply composition
-to initial extraction and its protocol corrections; remove the superseded
-combined generation path. Atomic/additive repair keeps its existing selected-unit
+Parsing retains distinct content/classification producers through initial decoding,
+text validation, selected repair, evidence assembly and reporting. The first
+admitted producer anchors native recurrence identity and remains unchanged by
+repairs. Initial extraction and its protocol corrections use composition; the
+combined generation prompt and call path have been removed. Atomic/additive repair keeps its existing selected-unit
 response and merge authority. It neither invokes full composition nor replaces
 unrelated classifications. These are distinct generation and repair responsibilities,
 not compatibility formats. The canonical assembled domain payload remains unchanged.
@@ -302,10 +319,8 @@ tokens, claims, the ledger and downstream evidence; it does not repeat extractio
 generation. Retain that path. Typed-text normalization and deterministic token-claim
 construction remain there, never in generic JSON assembly.
 
-Extend the native provenance representation at the same boundary: current state
-has one classification-collection origin, and missing-citation repair can overwrite
-the claim origin. Preserve each classification item's producer and distinguish
-claim-content attribution from collection/diagnostic association. Updating one
+Native provenance retains each classification item's producer and distinguishes
+claim-content attribution from citation-collection diagnostic association. Updating one
 classification or a claim's citations cannot relabel unaffected values. Collection
 diagnostics derive attribution from current values; no parallel mutable origin map
 or invented producer for an absent entry is introduced.
@@ -383,6 +398,6 @@ safe boundaries require their own dependency/coverage analysis using this contra
 - Report persisted-contract/feedback readiness separately. A scored output cannot
   stand in for the still-missing exact-contract readback evidence described above.
 
-The overall design remains **Proposed design**. Runtime schemas, workflow YAML,
-prompts and code are unchanged by this documentation. Delivery and verification of
-the approved graph-capacity increase belong to [Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition).
+The overall design remains **Proposed design**. Implementation, measurements and
+verification of this accepted amendment are recorded in
+[Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition).

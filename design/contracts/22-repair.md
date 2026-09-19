@@ -158,7 +158,7 @@ apply to active staging. Current native repair rebuilds derived data without
 converting it back into response parts or adding automatic part-generation calls.
 Existing selected-unit model repairs remain available. Historical parts cannot
 overwrite an already repaired candidate. Keep stable native candidate/defect identity
-separate from changing per-field producer origins. This pending integration changes
+separate from changing per-field producer origins. This integration changes
 no retry counter or global token rule.
 
 When a model response fails JSON decoding or its bound result schema, no valid
@@ -172,11 +172,13 @@ defined response-level correction containing:
   reason and JSON Pointer; duplicate-field diagnostics identify the first and
   repeated key locations without inferring a repair or accepting changed data;
 - no request to reconsider semantics;
-- for schema rejection, the exact expected compiled schema node, its JSON Pointer
-  and value/parent scope, including all applicable alternatives and constraints.
-  Syntax correction uses the original complete schema already supplied. Guidance
-  does not synthesize candidate values or duplicate the complete schema in a
-  separate example.
+- for schema rejection, the expected candidate JSON Pointer and value/parent scope,
+  a distinct JSON Pointer locating the exact expected node in the complete selected
+  schema, and concise schema-derived immediate fields, required fields and allowed
+  discriminator values. The single complete schema retains every alternative and
+  constraint; correction does not repeat its subtrees. This focused amendment was
+  explicitly approved on 19 September 2026. Syntax correction uses that same complete
+  schema. Guidance never selects a semantic branch, moves fields or synthesizes values.
 
 - The builder owns no retry counter or limit.
 - Each correction returns through the existing `advance-model-attempt-accounting` step, whose
@@ -236,8 +238,8 @@ of another target's retry allowance:
   execution's distinct keys. Assignment counters have the same finite u32 population
   bound. Both use the existing runner-owned retry state and report projections,
   never a builder/provider counter. The compiler uses these bounds and declared per-operation
-  allowances to retain a finite execution guard, including pure loops. The 512-step
-  expansion ceiling is unchanged.
+  allowances to retain a finite execution guard, including pure loops. The compiler's
+  1,024-step expansion ceiling does not change per-operation retry or token budgets.
 - Protocol corrections retain the same logical request and selected defect allowance.
   A new authorization cannot erase earlier failures. Actual input/output token usage
   remains cumulative across every target, correction and successful fix; no further

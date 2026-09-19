@@ -81,8 +81,8 @@ model-request subgraphs with explicit part call sites and ordinary typed transit
 The compiler proves declared part dependencies; the composition resource schedules
 nothing. Generic assembly is a pure child action with no model port or prompt.
 The approved finite graph-capacity increase preserves visible detailed operations
-and independent retry identities; it introduces no hidden dispatcher. This design
-is not yet implemented.
+and independent retry identities; it introduces no hidden dispatcher. The initial
+extraction workflow uses this shared implementation.
 
 ### 14.2 `StageGateOrchestrator`
 

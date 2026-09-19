@@ -27,7 +27,7 @@ pub fn validate(candidate: *const envelope.Candidate) Result {
 
 // Traversal is bounded by the already compiled schema and captured response.
 // Only the schema compiler owns shape, variant uniqueness and structural limits.
-fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnostic {
+pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnostic {
     switch (node.*) {
         .object => |properties| {
             if (value != .object) return reject(.type_mismatch, node);

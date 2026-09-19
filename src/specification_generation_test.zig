@@ -1664,29 +1664,56 @@ test "semantic disposition repair reuses fixed-sibling choices and full validati
 
 test "source omission repairs target the false empty outcome and individual irrelevant classification" {
     const repair = @import("domain/reference_extraction_repair.zig").Omission;
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const original: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    const corrected: Origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 2 } };
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     inline for (.{ false, true }) |has_claims| {
-        var fixture = try Fixture.initExtraction(a, "Display `Loan renewed!` and the new deadline.", null, has_claims);
+        var fixture = try Fixture.initExtraction(a, "Display `Loan renewed!` and `Due today` with the new deadline.", null, has_claims);
         defer fixture.deinit();
         const inputs = fixture.context.inputs;
         const candidates = try tokens.candidates(a, inputs);
+        try std.testing.expectEqual(@as(usize, 2), candidates.entries.len);
+        const entries = try a.dupe(@import("domain/reference_extraction.zig").TextValidatedResult, fixture.extracted_text.entries);
+        const origins = try a.alloc(?Origin, entries[0].token_classifications.len);
+        @memset(origins, original);
+        entries[0].classification_origins = origins;
+        entries[0].origin = original;
+        fixture.extracted_text.entries = entries;
         const chunk = inputs.chunks.entries[0];
         const facts: repair.Facts = .{ .extraction = .{ .inputs = inputs, .candidates = candidates, .candidate = fixture.extracted_text }, .support = try omissionSupport(&fixture, if (has_claims) .{ .token_classification = candidates.entries[0].id } else .{ .extraction_claim = chunk.id }) };
         const auth = try repair.authorize(a, facts);
         try std.testing.expect(auth.operation == .replace);
         const replacement: repair.Replacement = if (has_claims) .{ .classification = .{ .preserve = .{ .token_candidate_id = candidates.entries[0].id, .kind = .business_exact_string } } } else .{ .outcome = .{ .claim = .{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display the new deadline." } }} } }, .citations = &.{extraction.wholeChunk(chunk)} } } };
-        const merged = try repair.merge(a, text.validator, fixture.context.registry, fixture.context.current, facts, auth, replacement, null);
+        const merged = try repair.merge(a, text.validator, fixture.context.registry, fixture.context.current, facts, auth, replacement, corrected);
+        try std.testing.expectEqualDeep(original, merged.entries[0].origin.?);
         const rebuilt = try extraction.finishText(a, inputs, merged);
         try std.testing.expectEqual(.complete, rebuilt.outcome);
         if (has_claims) {
             try std.testing.expectEqualDeep(fixture.extracted_text.entries[0].outcome, merged.entries[0].outcome);
+            try std.testing.expectEqualDeep(corrected, merged.entries[0].classification_origins[0].?);
+            try std.testing.expectEqualDeep(fixture.extracted_text.entries[0].classification_origins[1..], merged.entries[0].classification_origins[1..]);
+            try std.testing.expectEqualDeep(fixture.extracted_text.entries[0].token_classifications[1..], merged.entries[0].token_classifications[1..]);
+            const damaged_entries = try a.dupe(@import("domain/reference_extraction.zig").TextValidatedResult, merged.entries);
+            const damaged_values = try a.dupe(@import("domain/structured_tokens.zig").Classification, damaged_entries[0].token_classifications);
+            damaged_values[1].irrelevant.ordinal = 999;
+            damaged_entries[0].token_classifications = damaged_values;
+            var damaged = merged;
+            damaged.entries = damaged_entries;
+            const diagnostic = (try @import("domain/token_classification_validation.zig").validate(a, inputs, candidates, damaged)).invalid;
+            try std.testing.expectEqualDeep(original, diagnostic.origin.?);
             try std.testing.expectEqual(@as(usize, 2), rebuilt.ledger.claims.len);
             var foreign = replacement;
             foreign.classification.preserve.token_candidate_id.ordinal += 1;
             try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, text.validator, fixture.context.registry, fixture.context.current, facts, auth, foreign, null));
-        } else try std.testing.expectEqualDeep(fixture.extracted_text.entries[0].token_classifications, merged.entries[0].token_classifications);
+        } else {
+            try std.testing.expectEqualDeep(fixture.extracted_text.entries[0].token_classifications, merged.entries[0].token_classifications);
+            try std.testing.expectEqualDeep(fixture.extracted_text.entries[0].classification_origins, merged.entries[0].classification_origins);
+            try std.testing.expectEqualDeep(corrected, merged.entries[0].outcome.claims[0].origin.?);
+            try std.testing.expectEqualDeep(corrected, merged.entries[0].outcome.claims[0].citations_origin.?);
+        }
     }
 }
 fn completedFixture(fixture: *const Fixture, omit_requirements: bool) !@import("domain/specification_session.zig").Session {

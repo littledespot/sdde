@@ -56,10 +56,22 @@ pub const Source = struct {
     request_schema_id: provider.RequestSchemaId,
     model_visible_input_id: provider.ModelVisibleInputId,
     result_resource: *const compilation.CompiledResource,
+    composition: ?@import("json_composition_runtime.zig").Binding = null,
 
     pub fn resultSchema(self: Source) ValidationError!*const @import("model_result_schema.zig").Schema {
         if (workflow.WorkflowResourceId.parse(self.result_resource.id.bytes) == null or
             self.result_resource.content != .result_schema) return error.InvalidModelRequestSource;
+        if (self.composition) |part| {
+            const request = self.request_binding.modelRequestId();
+            if (self.result_resource.content.result_schema != part.plan.resultSchema() or
+                !std.mem.eql(u8, self.result_resource.id.bytes, part.plan.resultAlias().bytes) or
+                !part.epoch.eql(request.stage_run_epoch_id) or
+                !identity.unitOwnerEql(part.base.unit(), request.immutable_unit_owner_id) or
+                // Native packets cannot contain context-followup parent chains.
+                !identity.purposeEqlBounded(part.base.purpose(), request.purpose, 1)) return error.InvalidModelRequestSource;
+            if (!part.valid()) return error.InvalidModelRequestSource;
+            return part.schema;
+        }
         return self.result_resource.content.result_schema;
     }
 };

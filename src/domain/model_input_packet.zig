@@ -92,13 +92,26 @@ pub fn withContext(comptime T: type, allocator: std.mem.Allocator, base: *const 
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const scratch = arena.allocator();
+    const bytes = try @import("model_candidate_json.zig").encode(T, scratch, context);
+    var parsed = try @import("strict_json.zig").parse(scratch, bytes, .{ .maximum_depth = schema.max_json_depth }, false, null);
+    defer parsed.deinit();
+    return withJsonContext(allocator, base, field, parsed.value);
+}
+
+/// Already admitted JSON uses the same packet projection as typed context.
+pub fn withJsonContext(allocator: std.mem.Allocator, base: *const Packet, comptime field: []const u8, context: std.json.Value) (Error || @import("strict_json.zig").Error)!*Packet {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const scratch = arena.allocator();
     const strict = @import("strict_json.zig");
     const limits: strict.Limits = .{ .maximum_depth = schema.max_json_depth };
-    var input = try strict.decode(std.json.Value, scratch, base.body(), limits);
-    if (input != .object or input.object.contains(field)) return error.InvalidModelInputPacket;
-    const bytes = try @import("model_candidate_json.zig").encode(T, scratch, context);
-    try input.object.put(scratch, field, try strict.decode(std.json.Value, scratch, bytes, limits));
-    const body = try std.json.Stringify.valueAlloc(scratch, input, .{});
+    // Context placement is structural: retain number lexemes instead of
+    // converting evidence to machine floats or integers and back.
+    var input = try strict.parse(scratch, base.body(), limits, false, null);
+    defer input.deinit();
+    if (input.value != .object or input.value.object.contains(field)) return error.InvalidModelInputPacket;
+    try input.value.object.put(input.arena.allocator(), field, context);
+    const body = try std.json.Stringify.valueAlloc(scratch, input.value, .{});
     return if (base.repairPermit()) |permit| createRepair(allocator, body, base.unit(), base.purpose(), base.resultDefinition(), permit) else create(allocator, body, base.unit(), base.purpose(), base.resultDefinition());
 }
 fn storage(packet: *const Packet) *Storage {

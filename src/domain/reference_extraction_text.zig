@@ -12,7 +12,9 @@ pub fn validate(validator: text.Validator, allocator: std.mem.Allocator, registr
         _ = try evidence.resolve(inputs, candidate.scope);
         entry.scope = candidate.scope;
         entry.origin = candidate.origin;
-        entry.classification_origin = candidate.origin;
+        const classification_origins = try allocator.alloc(?@import("model_candidate_origin.zig").Origin, candidate.token_classifications.len);
+        @memset(classification_origins, if (candidate.producers) |producers| producers.classifications else candidate.origin);
+        entry.classification_origins = classification_origins;
         entry.token_classifications = candidate.token_classifications;
         entry.outcome = switch (candidate.outcome) {
             .blocked => |reason| .{ .blocked = reason },
@@ -25,8 +27,9 @@ pub fn validate(validator: text.Validator, allocator: std.mem.Allocator, registr
                 for (proposals, checked, 0..) |proposal, *value, index| {
                     value.citations = proposal.citations;
                     value.origin = extraction.textOrigin(candidate, .{ .claim = index });
+                    value.citations_origin = if (candidate.producers) |producers| producers.content else candidate.origin;
                     const origins = try allocator.alloc(?@import("model_candidate_origin.zig").Origin, proposal.citations.len);
-                    @memset(origins, candidate.origin);
+                    @memset(origins, value.citations_origin);
                     value.citation_origins = origins;
                     value.content = switch (try checkContent(validator, allocator, context, proposal.content)) {
                         .valid => |accepted| accepted,

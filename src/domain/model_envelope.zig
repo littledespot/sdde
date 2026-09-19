@@ -60,6 +60,11 @@ pub const Candidate = opaque {
     pub fn root(self: *const Candidate) *const Object {
         return @ptrCast(&storage(self).parsed.value.object);
     }
+
+    /// Borrow the decoder-owned tree for deterministic structural composition.
+    pub fn json(self: *const Candidate) *const std.json.Value {
+        return &storage(self).parsed.value;
+    }
 };
 
 /// Owns the parsed tree, not the invocation evidence/request/graph. Those
@@ -111,7 +116,7 @@ fn array(view: *const Array) *const std.json.Array {
     return @ptrCast(@alignCast(view));
 }
 
-fn value(raw: *const std.json.Value) Value {
+pub fn value(raw: *const std.json.Value) Value {
     return switch (raw.*) {
         .null => .null_value,
         .bool => |boolean| .{ .boolean = boolean },

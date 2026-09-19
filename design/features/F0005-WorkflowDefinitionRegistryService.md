@@ -179,12 +179,13 @@ V1 acceptance is the conjunction of three non-overlapping contracts:
 
 ### 3.2 Root shape
 
-[ADR 0016](../decisions/0016-configured-json-response-composition.md) proposes one
+[ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the implemented
 typed JSON-composition resource through the existing `resources` and operation
 parameter boundary. It references one complete result schema and owns only the
 part partition/dependencies. YAML continues to own calls, resources and transitions;
-no new repository configuration owner or executable resource is added. The closed
-encoding/resource compiler and formal schema changes remain implementation work.
+no new repository configuration owner or executable resource is added. The existing schema compiler port parses its closed encoding, resolves the canonical
+schema alias and derives the part schemas; compiled dataflow proves explicit calls
+satisfy prerequisites before inference.
 
 Every definition contains these exact concise fields:
 
@@ -213,7 +214,7 @@ Every definition contains these exact concise fields:
 The identifier contracts are:
 
 ```text
-WorkflowId | WorkflowStepId | WorkflowParameterId | WorkflowResourceId
+WorkflowId | authored WorkflowStepId | WorkflowParameterId | WorkflowResourceId
   = [a-z][a-z0-9]*(?:-[a-z0-9]+)*
   = 1..64 ASCII bytes
 
@@ -225,6 +226,9 @@ RegisteredRef
   = [a-z][a-z0-9]*(?:[.-][a-z0-9]+)*@[1-9][0-9]*
   = 3..128 ASCII bytes
 ```
+
+Compiler-qualified step IDs retain the same syntax with a 128-byte bound.
+Authored step IDs, starts and transition targets remain bounded to 64 bytes.
 
 - `OperationId` is used by `invoke` and `steps.*.use` and resolves to exactly one
   current contract.
@@ -323,7 +327,8 @@ typed content cannot change the compiled semantic graph.
 - Unused definitions and extra bindings reject.
 
 - The shared expander creates `g<call-ID-length>-<call-ID>-<local-step-ID>` identities,
-  subject to the existing 64-byte step-ID bound.
+  subject to one finite 128-byte compiled step-ID bound. Authored local IDs remain
+  limited to 64 bytes; the compiler never shortens or hashes a qualified identity.
 - Collisions and expansion beyond the compiler-owned step bound reject.
 - The compiler and registry use this same projection; existing gates, dependencies,
   retry/cycle checks, capability policy and runner semantics apply to the complete
@@ -359,9 +364,9 @@ For a complete current example, see
 These are the current compiler-owned, non-configurable implementation limits,
 enforced before allocation or continued traversal can exceed them. The user-approved
 [ADR 0016 graph-capacity amendment](../decisions/0016-configured-json-response-composition.md#graph-capacity)
-permits increasing the finite step ceiling. The table records the executable today;
-the new value, derived capacities and boundary evidence must change together during
-implementation. No workflow may bypass the currently compiled bound.
+raises the finite step ceiling to 1,024. The schema validator, subgraph expander,
+compiled-graph validator and runner derive their capacities from the same native
+constant; no workflow configuration can override it.
 
 | Constant | Value |
 | --- | ---: |
@@ -373,7 +378,7 @@ implementation. No workflow may bypass the currently compiled bound.
 | `maxWorkflowDefinitionTotalBytes` | 16,777,216 bytes per inventory |
 | `maxWorkflowResourceBytes` | 1,048,576 bytes per resource |
 | `maxWorkflowResourceTotalBytes` | 16,777,216 bytes per inventory |
-| `maxWorkflowStepsPerDefinition` | 512 steps, including expanded subgraph instances |
+| `maxWorkflowStepsPerDefinition` | 1,024 steps, including expanded subgraph instances |
 | `maxWorkflowParametersPerStep` | 32 values |
 | `maxWorkflowResourcesPerDefinition` | 64 declared aliases |
 | `maxWorkflowYamlEvents` | 262,144 events per definition |
@@ -390,7 +395,7 @@ implementation. No workflow may bypass the currently compiled bound.
 
 - Transitions have no independent policy knob.
 - The seven closed outcome tags and unique `(workflowStepId, outcomeTag)` mapping key
-  bound a 512-step graph to 3,584 transitions. Six outcomes permit matching terminals;
+  bound a 1,024-step graph to 7,168 transitions. Six outcomes permit matching terminals;
   `more` must target another step.
 - Zero definitions is a valid variable-size registry; a later selection against it
   returns the ordinary typed unknown-workflow diagnostic.

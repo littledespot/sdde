@@ -11,6 +11,7 @@ pub const ReconciliationFault = enum { summary_membership, duplicate_disposition
 pub const SupportFault = enum { missing_detail, foreign_provenance, missing_finding, duplicate_finding, partial_findings, two_missing_findings, foreign_sources };
 pub const SourceLoss = enum { empty, partial, classification, signal, post_generation, unchanged };
 pub const Options = struct {
+    summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
     disposition_sequence: ?enum { recover, exhaust } = null,
     attempt: u32 = 1,
     source_loss: ?SourceLoss = null,
@@ -79,7 +80,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 for (choices, discarded) |choice, *decision| decision.* = .{ .irrelevant = choice.id() };
                 // R21: a protocol-valid correction abandons the source task.
                 const reply = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .no_feature_claim = .{ .reason = .{ .nodes = &.{.{ .literal = .{ .value = "The rejected response JSON has a syntax error in its claims array." } }} }, .token_classifications = &.{} } });
-                return @import("reference_tokens.zig").wire(allocator, reply, discarded);
+                return extractionResponse(allocator, request, try @import("reference_tokens.zig").wire(allocator, reply, discarded));
             }
             const claim = if (options.script) |script| (try @import("specification_script.zig").extraction(script, selected_chunk.bytes)).claim else try extractedClaim(allocator, chunk.id);
             const citation: @import("../domain/source_selections.zig").Selection = if (options.citation_fault == .unknown) .{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } else @import("../reference_extraction_test.zig").wholeChunk(chunk);
@@ -88,7 +89,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
             if (options.source_loss == .classification) for (choices) |*choice| {
                 choice.* = .{ .irrelevant = choice.id() };
             };
-            return @import("reference_tokens.zig").wire(allocator, body, if (options.missing_classifications) &.{} else choices);
+            return extractionResponse(allocator, request, try @import("reference_tokens.zig").wire(allocator, body, if (options.missing_classifications) &.{} else choices));
         },
         .reference_global => {
             const input = (try native.read(&view, @import("../application/reference_reconciliation_workflow.zig").input_schema, .reconciliation_input)).payload().reconciliation_input;
@@ -138,6 +139,7 @@ pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![
                 return @import("reference_reconciliation.zig").repairResponse(allocator, replacement);
             }
             if (input.purpose == .summary) {
+                if (options.summary_sequence) |mode| return @import("summary_protocol_sequence.zig").response(allocator, input, options.attempt, mode);
                 var proposal = try @import("reference_reconciliation.zig").summary(allocator, input);
                 if (options.reconciliation_fault == .occupied_summary) {
                     const statements = try allocator.alloc(r.StatementProposal, proposal.statements.len + 1);
@@ -522,6 +524,26 @@ fn selection(value: g.spec.Provenance) g.spec.Selection {
 
 fn extractedClaim(allocator: std.mem.Allocator, chunk: r.evidence.identity.ChunkId) ![]const u8 {
     return std.fmt.allocPrint(allocator, "The outcome from reference unit {s} is observable.", .{chunk.bytes});
+}
+
+/// The scripted extraction source remains one fixture; each provider call gets
+/// only its configured fields. Protocol faults are injected afterward
+/// by Driver, so this projection cannot repair or conceal a malformed response.
+fn extractionResponse(allocator: std.mem.Allocator, request: *const @import("../domain/model_request_handoff.zig").Request, body: []const u8) ![]const u8 {
+    const part = request.part() orelse return body;
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, body, .{});
+    defer parsed.deinit();
+    var result: std.json.ObjectMap = .{};
+    for (part.plan.parts()[part.part].paths) |path| {
+        const value = @import("../domain/json_pointer.zig").lookup(parsed.value, path) orelse continue;
+        var parent = &result;
+        for (path.segments[0 .. path.segments.len - 1]) |name| {
+            const child = try parent.getOrPutValue(allocator, name, .{ .object = .{} });
+            parent = &child.value_ptr.object;
+        }
+        try parent.put(allocator, path.segments[path.segments.len - 1], value);
+    }
+    return std.json.Stringify.valueAlloc(allocator, std.json.Value{ .object = result }, .{});
 }
 
 fn omittedKind(options: Options, kind: g.spec.Kind) bool {

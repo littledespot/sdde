@@ -157,6 +157,67 @@ test "request validation rejects foreign request input and schema associations" 
     try std.testing.expectError(error.InvalidProviderNeutralModelRequest, (build.Action{}).execute(std.testing.allocator, invalid, fixture.request.content));
 }
 
+test "composition source preserves exact part schema execution unit and purpose association" {
+    const packets = @import("domain/model_input_packet.zig");
+    const runtime = @import("domain/json_composition_runtime.zig");
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const canonical = try parser.compiler().compile(a,
+        \\{"type":"object","properties":{"left":{"type":"string","maxLength":10},"right":{"type":"string","maxLength":10}},"required":["left","right"],"additionalProperties":false}
+    );
+    const plan = try parser.compiler().compileComposition(a,
+        \\{"schema":"json-composition/v1","result":"result","parts":{"left":{"paths":["/left"]},"right":{"paths":["/right"]}}}
+    , canonical);
+    const id = fixture.model_request_id;
+    const packet = try packets.create(std.testing.allocator, "{}", id.immutable_unit_owner_id, id.purpose, null);
+    defer packets.release(packet);
+    const state = try runtime.State.init(a, plan, packet, id.stage_run_epoch_id);
+    const part = try state.select(a, 0);
+    const resource: compilation.CompiledResource = .{ .id = plan.resultAlias(), .content = .{ .result_schema = canonical } };
+    var selected = try source(&fixture, &resource);
+    selected.composition = part;
+    var prepared = try preparation.build(std.testing.allocator, selected, fixture.request.content);
+    defer prepared.deinit();
+    try std.testing.expect(prepared.request.response_schema == part.schema);
+    var native_entry = fixture.registry_entry;
+    native_entry.capabilities.structured_response = .bedrock_json_schema;
+    var native_binding = fixture.provider_binding;
+    native_binding.registry_entry = &native_entry;
+    native_binding.response_mode = .native_schema;
+    var native_source = selected;
+    native_source.provider_binding = &native_binding;
+    var native_request = try preparation.build(std.testing.allocator, native_source, fixture.request.content);
+    defer native_request.deinit();
+    try std.testing.expect(native_request.request.response_schema == part.schema);
+    const native_projection = try @import("domain/model_schema_projection.zig").render(a, native_request.request.response_schema, .bedrock);
+    try std.testing.expect(std.mem.indexOf(u8, native_projection, "\"left\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, native_projection, "\"right\"") == null);
+    try std.testing.expect(std.mem.indexOf(u8, part.schema.modelBytes(), "\"maxLength\":10") != null);
+    const other_epoch = try @import("domain/execution_reference.zig").create(std.testing.allocator);
+    defer other_epoch.release();
+    const other_unit = try packets.create(std.testing.allocator, "{}", .{ .plan_unit = .{ .plan_input_authority_state_id = .{ .bytes = "other" }, .unit_slot_id = .{ .bytes = "other" } } }, .initial_generation, null);
+    defer packets.release(other_unit);
+    const other_purpose = try packets.create(std.testing.allocator, "{}", id.immutable_unit_owner_id, .{ .atomic_repair = .{ .bytes = "foreign-repair" } }, null);
+    defer packets.release(other_purpose);
+    for (0..4) |index| {
+        var wrong = selected;
+        switch (index) {
+            0 => wrong.composition.?.epoch = .{ .reference = other_epoch },
+            1 => wrong.composition.?.base = other_unit,
+            2 => wrong.composition.?.base = other_purpose,
+            3 => wrong.composition.?.part = 1,
+            else => unreachable,
+        }
+        try std.testing.expectError(error.InvalidModelRequestSource, preparation.build(std.testing.allocator, wrong, fixture.request.content));
+        try std.testing.expectError(error.InvalidModelRequestSource, preparation.validateRequest(wrong, prepared.request));
+    }
+}
+
 test "request validation rejects divergent binding controls and modes" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);

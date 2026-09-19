@@ -48,7 +48,7 @@ fn convert(
     const shortcode = telemetry.WorkflowShortcode.parse(string(field(map, "shortcode")) orelse return invalid()) catch return invalid();
     const invocation = workflow.OperationId.parse(string(field(map, "invoke")) orelse return invalid()) orelse return invalid();
     const policy = workflow.RegisteredRef.parse(string(field(map, "policy")) orelse return invalid()) orelse return invalid();
-    const start = workflow.WorkflowStepId.parse(string(field(map, "start")) orelse return invalid()) orelse return invalid();
+    const start = workflow.WorkflowStepId.parseLocal(string(field(map, "start")) orelse return invalid()) orelse return invalid();
     const resources = try convertResources(allocator, field(map, "resources"));
     const steps = try convertSteps(allocator, field(map, "steps") orelse return invalid());
 
@@ -94,7 +94,7 @@ fn convertSteps(
     var steps: std.ArrayList(workflow.DeclarativeStep) = .empty;
     var calls: std.ArrayList(definition.SubgraphCall) = .empty;
     for (map) |pair| {
-        const id = workflow.WorkflowStepId.parse(string(pair.key) orelse return invalid()) orelse return invalid();
+        const id = workflow.WorkflowStepId.parseLocal(string(pair.key) orelse return invalid()) orelse return invalid();
         if (closedMapping(pair.value, &.{ "call", "with", "on" }, &.{ "call", "on" })) |call| {
             calls.append(allocator, .{
                 .id = id,
@@ -145,7 +145,7 @@ fn convertSubgraphs(allocator: std.mem.Allocator, raw: ?*definition.RawNode) Err
                 }
             }
             step.* = .{
-                .id = workflow.WorkflowStepId.parse(string(entry.key) orelse return invalid()) orelse return invalid(),
+                .id = workflow.WorkflowStepId.parseLocal(string(entry.key) orelse return invalid()) orelse return invalid(),
                 .target = if (call_map != null)
                     .{ .subgraph = definition.SubgraphId.parse(string(field(step_map, "call")) orelse return invalid()) orelse return invalid() }
                 else
@@ -156,7 +156,7 @@ fn convertSubgraphs(allocator: std.mem.Allocator, raw: ?*definition.RawNode) Err
         }
         subgraph.* = .{
             .id = definition.SubgraphId.parse(string(pair.key) orelse return invalid()) orelse return invalid(),
-            .start = workflow.WorkflowStepId.parse(string(field(value, "start")) orelse return invalid()) orelse return invalid(),
+            .start = workflow.WorkflowStepId.parseLocal(string(field(value, "start")) orelse return invalid()) orelse return invalid(),
             .steps = steps,
         };
     }
@@ -221,7 +221,7 @@ fn parseTarget(value: []const u8) ?workflow.TransitionTarget {
         const outcome = parseOutcome(value[4..]) orelse return null;
         return .{ .terminal = outcome };
     }
-    return .{ .step = workflow.WorkflowStepId.parse(value) orelse return null };
+    return .{ .step = workflow.WorkflowStepId.parseLocal(value) orelse return null };
 }
 
 fn closedMapping(

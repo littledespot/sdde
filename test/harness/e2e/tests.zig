@@ -102,6 +102,8 @@ test "shipped workflow conforms to native registrations and rejects contract dri
         .{ "use: collect-specification-support", "use: apply-specification-support" },
         .{ "retry-limit: 1", "retry-limit: -1" },
         .{ "selection: input", "selection: missing-definition" },
+        .{ "composition-part: content", "composition-part: classifications" },
+        .{ "use: retain-json-part", "use: check-model-request-phase" },
     };
     for (0..mutations.len + 1) |index| {
         var project = std.testing.tmpDir(.{});
@@ -122,6 +124,33 @@ test "shipped workflow conforms to native registrations and rejects contract dri
             // provider or workflow invocation. No parallel contract is constructed.
             try std.testing.expect(runtime.native.registry.validate());
             const graph = runtime.boot.ready.workflows.registry().resolve(.{ .bytes = choice.workflow_id }).?;
+            // A registered native request remains forbidden inside active
+            // composition, even when its ordinary data contract still matches.
+            const InvalidSelection = enum { unknown_part, ordinary_request, missing_schema };
+            for ([_]InvalidSelection{ .unknown_part, .ordinary_request, .missing_schema }) |fault| {
+                var invalid_graph = graph.*;
+                const steps = try a.dupe(@import("../../../src/domain/workflow_compilation.zig").CompiledStep, graph.authority.steps);
+                invalid_graph.authority.steps = steps;
+                var changed_part = false;
+                for (steps) |*step| {
+                    const parameters = try a.dupe(@import("../../../src/domain/workflow_compilation.zig").CompiledParameter, step.parameters);
+                    for (parameters, 0..) |*parameter, parameter_index| {
+                        if (!std.mem.eql(u8, parameter.id.bytes, if (fault == .missing_schema) "result-schema" else "composition-part")) continue;
+                        if (fault == .ordinary_request) {
+                            parameter.id.bytes = "result-schema";
+                            parameter.value = .{ .resource = .{ .bytes = "extraction-schema" } };
+                        } else if (fault == .missing_schema) {
+                            std.mem.copyForwards(@import("../../../src/domain/workflow_compilation.zig").CompiledParameter, parameters[parameter_index .. parameters.len - 1], parameters[parameter_index + 1 ..]);
+                        } else parameter.value = .{ .string = "unknown-part" };
+                        step.parameters = if (fault == .missing_schema) parameters[0 .. parameters.len - 1] else parameters;
+                        changed_part = true;
+                        break;
+                    }
+                    if (changed_part) break;
+                }
+                try std.testing.expect(changed_part);
+                try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("../../../src/actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(a, &.{invalid_graph}));
+            }
             const protocol = for (captured.files) |file| {
                 if (std.mem.eql(u8, file.mapping.source, "design/workflows/spec/protocol.prompt.md")) break file.bytes;
             } else return error.MissingProtocolPrompt;

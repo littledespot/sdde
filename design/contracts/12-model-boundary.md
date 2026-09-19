@@ -379,9 +379,9 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   outcome.
 - [ADR 0016](../decisions/0016-configured-json-response-composition.md) permits this
   complete candidate to be assembled from separately admitted configured responses;
-  it is no longer required to originate in one model call. Until that implementation
-  lands, the executable still uses the combined response. Assembly retains every
-  contributing origin and does not invent provider evidence.
+  it is no longer required to originate in one model call. Initial extraction uses
+  that path. Assembly retains every contributing origin and does not invent provider
+  evidence.
 - A preserve classification deterministically creates a canonical token and preserved-token
   claim, so `no_feature_claim` is valid only when no model or preserved-token claim remains.
 - Each model claim contains typed content plus one or more `SourceCitationProposal` values;
@@ -579,10 +579,14 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
 user-directed decomposition contract: configured shapes and partitions, derived
 part schemas, explicit independent request bindings, deterministic prompt-free
 assembly and complete validation. It also records the approved finite graph-limit
-increase. This is a pending implementation, not a new runtime configuration already
-accepted by the parser.
+increase. The closed `json-composition/v1` resource is compiled through the existing
+resource boundary and selects parts through ordinary request preparation.
 
 The mechanism is shared across supported JSON shapes. Domain owners contribute
 facts and semantic validators; they do not gain separate assembly, retry, storage
 or continuation policies. An assembled candidate retains every real producer
 association and never becomes a fabricated provider response.
+A parent subtree has one producer only when all present selected descendants share
+that exact origin. Absent fields contribute none; an empty structural container or
+subtree with mixed origins has no single producer. Finer required-object selectors
+therefore preserve native consumer provenance without assigning a synthetic origin.

@@ -36,6 +36,7 @@ pub fn validProjection(step: compilation.CompiledStep) bool {
         }
     }
     const model = step.model orelse return true;
+    if (assignsRequest(step.produces, step.replaces) and !validResultSelection(step.parameters)) return false;
     const expected = resolve(step.parameters) orelse return false;
     return std.meta.eql(model, expected);
 }
@@ -56,7 +57,30 @@ pub fn validDescriptors(descriptors: []const operation.ParameterDescriptor) bool
         }
         if (!found) return false;
     }
+    for (descriptors) |descriptor| if (std.mem.eql(u8, descriptor.id, "composition-part")) {
+        if (descriptor.kind != .string or descriptor.required or !descriptor.workflow_definition_safe) return false;
+        const result = for (descriptors) |candidate| {
+            if (std.mem.eql(u8, candidate.id, "result-schema")) break candidate;
+        } else return false;
+        if (result.kind != .resource or result.resource_kind != .result_schema or result.required or !result.workflow_definition_safe) return false;
+    };
     return true;
+}
+
+pub fn assignsRequest(produces: []const @import("pipeline.zig").DataKey, replaces: []const @import("pipeline.zig").DataKey) bool {
+    return std.mem.indexOfScalar(@import("pipeline.zig").DataKey, produces, .assigned_model_request) != null and
+        std.mem.indexOfScalar(@import("pipeline.zig").DataKey, replaces, .model_request_identity_ledger) != null;
+}
+
+/// A request has one result authority: a complete schema resource or a part of
+/// the active compiled composition. Part bindings cannot override their inputs.
+pub fn validResultSelection(values: []const compilation.CompiledParameter) bool {
+    const result = find(values, "result-schema");
+    const part = find(values, "composition-part");
+    if ((result == null) == (part == null)) return false;
+    if (result) |resource| return resource == .resource and @import("workflow.zig").WorkflowResourceId.parse(resource.resource.bytes) != null;
+    return part.? == .string and @import("workflow.zig").WorkflowResourceId.parse(part.?.string) != null and
+        find(values, "result-selection") == null and find(values, "input") == null;
 }
 
 pub fn resolve(

@@ -1393,9 +1393,11 @@ test "configured specification generation YAML executes native references models
     const evidence_start = source_gap_start + 2;
     const disposition_start = evidence_start + 3;
     const source_repair_start = disposition_start + 4;
-    const source_repairs = std.meta.tags(@import("../test_fixtures/spec_generation_responses.zig").SourceLoss);
-    for (0..source_repair_start + source_repairs.len) |scenario| {
-        const source_repair_scenario = scenario >= source_repair_start;
+    const source_repairs = std.meta.tags(@import("../test_fixtures/spec_generation_responses.zig").SourceLoss).* ++ .{.empty};
+    const summary_start = source_repair_start + source_repairs.len;
+    for (0..summary_start + 4) |scenario| {
+        const summary_scenario = scenario >= summary_start;
+        const source_repair_scenario = scenario >= source_repair_start and scenario < summary_start;
         const disposition_scenario = scenario >= disposition_start and scenario < source_repair_start;
         const evidence_scenario = scenario >= evidence_start and scenario < disposition_start;
         const source_gaps = scenario >= source_gap_start and scenario < evidence_start;
@@ -1424,6 +1426,7 @@ test "configured specification generation YAML executes native references models
         if (source_gaps) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == source_gap_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
         if (support_scenario and (support_faults[(scenario - support_start) % support_faults.len] == .partial_findings or support_faults[(scenario - support_start) % support_faults.len] == .foreign_sources)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario - support_start < support_faults.len) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and label the deadline `Return by`.\n" });
         if (evidence_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == evidence_start + 1) "After renewal display `Loan renewed!` and the new return deadline.\n" else "On startup display `Hello, World!` and the current UTC date and time.\n" });
+        if (summary_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - summary_start) % 2 == 0) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and label the deadline `Return by`.\n" });
         if (disposition_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - disposition_start) % 2 == 0) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
         // Keep the omitted claim and its exact token in the selected producer's
         // chunk so the empty -> claim -> classification recovery is exercised.
@@ -1444,14 +1447,16 @@ test "configured specification generation YAML executes native references models
         const definition = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", allocator, .limited(1_048_576));
         defer allocator.free(definition);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = definition });
-        const protocol_prompt = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/protocol.prompt.md", allocator, .limited(1_048_576));
-        defer allocator.free(protocol_prompt);
-        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/spec/protocol.prompt.md", .data = protocol_prompt });
-        inline for (.{ "extraction", "reconciliation", "generation", "support", "repair" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
-            const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name ++ "." ++ extension, allocator, .limited(1_048_576));
+        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "generation.prompt.md", "generation.schema.json", "support.prompt.md", "support.schema.json", "repair.prompt.md", "repair.schema.json" }) |name| {
+            const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name, allocator, .limited(1_048_576));
             defer allocator.free(bytes);
-            try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/spec/" ++ name ++ "." ++ extension, .data = bytes });
-        };
+            // A finer required-object selector must survive the native extraction
+            // handoff and subsequent source repair, not merely JSON assembly.
+            const finer = scenario == summary_start - 1 and std.mem.eql(u8, name, "extraction.composition.json");
+            const configured = if (finer) try std.mem.replaceOwned(u8, allocator, bytes, "\"/reason\"", "\"/reason/nodes\"") else bytes;
+            defer if (finer) allocator.free(configured);
+            try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/spec/" ++ name, .data = configured });
+        }
         var project_source = toolchain_authority_source.Adapter.init(io, project.dir);
         var document_parser: toolchain_documents.Adapter = .{};
         var reference_source: @import("../adapters/filesystem/reference_directory_inspector.zig").Adapter = .{ .io = io, .project_root = project.dir };
@@ -1533,8 +1538,14 @@ test "configured specification generation YAML executes native references models
         }
         if (disposition_scenario) driver.disposition_sequence = if (scenario - disposition_start < 2) .exhaust else .recover;
         if (source_repair_scenario) driver.source_loss = source_repairs[scenario - source_repair_start];
+        if (summary_scenario) {
+            driver.summary_sequence = if (scenario - summary_start < 2) .exhaust else .recover;
+            if (scenario == summary_start) driver.measurement_prefix = ".zig-cache/r35-request";
+            driver.malformed_once = true;
+        }
         const result = driver.run();
-        const expected: workflow.OutcomeTag = if (source_repair_scenario) (if (driver.source_loss == .unchanged) .failed else .ok) else if (extraction_omission) .invalid else if (driver.disposition_sequence == .exhaust or driver.support_fault == .partial_findings or driver.evidence_fault == .unchanged or driver.reconciliation_protocol_fault == .token_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
+        if (summary_scenario) try @import("../test_fixtures/summary_protocol_sequence.zig").verify(&driver, result);
+        const expected: workflow.OutcomeTag = if (source_repair_scenario) (if (driver.source_loss == .unchanged) .failed else .ok) else if (extraction_omission) .invalid else if (driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .partial_findings or driver.evidence_fault == .unchanged or driver.reconciliation_protocol_fault == .token_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; candidate: {any}\n", .{ scenario, result, try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (scenario <= 1) {
@@ -1575,7 +1586,7 @@ test "configured specification generation YAML executes native references models
             defer readback.deinit();
             const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
             _ = try @import("../domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" });
-            try std.testing.expectEqual(@as(usize, 498), graph.authority.steps.len);
+            try std.testing.expectEqual(@as(usize, 519), graph.authority.steps.len);
         }
         if (scenario == 3) try std.testing.expectEqual(@as(usize, 0), driver.principle_calls);
         if (disposition_scenario) {
@@ -1605,8 +1616,8 @@ test "configured specification generation YAML executes native references models
             const decision = try owned.read(&view, authority.result_schema, .result);
             try std.testing.expectEqual(.invalid, decision.continuation);
             for (decision.entries) |entry| try std.testing.expect(entry.candidate_defect != null);
-            try std.testing.expectEqual(@as(usize, 4), driver.calls);
-            try std.testing.expectEqual(@as(usize, 4), runner.tokenLedger().accounted_operations.items.len);
+            try std.testing.expectEqual(@as(usize, 5), driver.calls);
+            try std.testing.expectEqual(@as(usize, 5), runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.omission_repair_calls);
             try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
             try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
@@ -1792,8 +1803,10 @@ test "configured specification generation YAML executes native references models
             try std.testing.expect(driver.text_repair_calls > 0);
             if (scenario == text_start + 1) {
                 try std.testing.expect(driver.classification_repair_calls > 0);
-                try std.testing.expectEqualDeep(driver.classification_original_origin.?, driver.classification_failure_origin.?);
-                try std.testing.expect(!std.meta.eql(driver.classification_text_origin.?, driver.classification_failure_origin.?));
+                // Missing entries have no producer; the retained classification
+                // call and repaired text still keep their distinct real origins.
+                try std.testing.expect(driver.classification_failure_origin == null);
+                try std.testing.expect(!std.meta.eql(driver.classification_text_origin.?, driver.classification_original_origin.?));
             }
         }
         if (driver.failed_text_repair or repeated_scenario) {

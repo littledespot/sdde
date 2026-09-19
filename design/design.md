@@ -35,8 +35,9 @@ Implementation remains pending; it preserves business and policy ownership.
 [ADR 0016](decisions/0016-configured-json-response-composition.md) records the
 user-directed generic JSON response decomposition and deterministic assembly design.
 Shapes and partitions are workflow configuration; assembly needs no LLM prompt.
-The user also permits increasing the finite compiler graph ceiling. Implementation
-and measured live improvement remain pending; the configuration encoding is proposed.
+The configured compiler, runner integration and initial extraction split are
+implemented. The finite graph ceiling is 1,024. Measured live improvement and the
+separate persisted extraction-contract binding remain outstanding.
 
 **Scope:** Engine development in this repository. `init`, `drift`, `audit`,
 version-control integration and artifact fingerprinting remain outside the
@@ -1032,7 +1033,7 @@ decision history:
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
 | [0015](decisions/0015-specification-principle-review.md) | Early Spec principle assessment and shared actionable questions; configuration/capture/review implemented, full readiness and question preparation pending. |
-| [0016](decisions/0016-configured-json-response-composition.md) | User-directed configured JSON decomposition and prompt-free assembly; finite graph-limit increase approved. Encoding proposed; implementation pending. |
+| [0016](decisions/0016-configured-json-response-composition.md) | User-directed configured JSON decomposition and prompt-free assembly; finite graph-limit increase approved. Configured object-part compiler and extraction integration implemented; live improvement pending. |
 
 Additional accepted feature boundaries:
 

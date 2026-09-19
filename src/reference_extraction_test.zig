@@ -69,9 +69,9 @@ test "Hello World and unrelated source claims receive only engine assigned IDs" 
 
 test "closed result parser rejects unknown fields forged IDs malformed variants and classifications" {
     for ([_][]const u8{
-        "{}",                                                                                                                                             "[]",                                                                                              "null",                                                                                                           "```json\n{}\n```",                                                                   no_claim ++ "{}",
-        "{\"kind\":\"blocked\"}",                                                                                                                         "{\"kind\":\"no_feature_claim\",\"reason\":\"none\",\"token_classifications\":[],\"claim_id\":1}", "{\"kind\":\"no_feature_claim\",\"kind\":\"no_feature_claim\",\"reason\":\"none\",\"token_classifications\":[]}", "{\"kind\":\"no_feature_claim\",\"reason\":\"none\",\"token_classifications\":[{}]}", "{\"kind\":\"no_feature_claim\",\"reason\":\"none\"}",
-        "{\"kind\":\"claims\",\"claims\":[{\"content\":{\"kind\":\"business\",\"text\":\"x\"},\"citations\":[],\"id\":1}],\"token_classifications\":[]}", "{\"kind\":\"claims\",\"claims\":[],\"reason\":\"none\",\"token_classifications\":[]}",
+        "{}",                                                                                                                                             "[]",                                                                                              "null",                                                                                                                       "```json\n{}\n```",                                                                   no_claim ++ "{}",
+        "{\"kind\":\"blocked\"}",                                                                                                                         "{\"kind\":\"no_feature_claim\",\"reason\":\"none\",\"token_classifications\":[],\"claim_id\":1}", "{\"kind\":\"no_feature_claim\",\"kind\":\"no_feature_claim\",\"reason\":\"none\",\"token_classifications\":[]}",             "{\"kind\":\"no_feature_claim\",\"reason\":\"none\",\"token_classifications\":[{}]}", "{\"kind\":\"no_feature_claim\",\"reason\":\"none\"}",
+        "{\"kind\":\"claims\",\"claims\":[{\"content\":{\"kind\":\"business\",\"text\":\"x\"},\"citations\":[],\"id\":1}],\"token_classifications\":[]}", "{\"kind\":\"claims\",\"claims\":[],\"reason\":\"none\",\"token_classifications\":[]}",            "{\"kind\":\"claims\",\"claims\":[],\"token_classifications\":[],\"producers\":{\"content\":null,\"classifications\":null}}",
     }) |bytes| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
@@ -191,7 +191,13 @@ fn ownershipCase(allocator: std.mem.Allocator) !void {
     const inputs = try fixture.prepare(source_allocator, &ids, try ingest(source_allocator, "owned.md", "A `quoted` requirement.\r\n"));
     const quoted = try reply(source_allocator, inputs.chunks.entries[0], "Retained claim");
     const bytes = try token_fixture.wire(source_allocator, quoted, try token_fixture.classifications(source_allocator, try token_fixture.candidates(source_allocator, inputs), inputs.chunks.entries[0]));
-    const captured = try owned.capture(allocator, .{ .entries = &.{raw(inputs, 0, bytes)} });
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const content: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    const classifications: Origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 1 } };
+    var observed = raw(inputs, 0, bytes);
+    observed.origin = content;
+    observed.producers = .{ .content = content, .classifications = classifications };
+    const captured = try owned.capture(allocator, .{ .entries = &.{observed} });
     defer owned.destroy(captured);
     var current = try owned.create(allocator, null);
     defer owned.destroy(current);
@@ -200,6 +206,8 @@ fn ownershipCase(allocator: std.mem.Allocator) !void {
         const next = try owned.create(allocator, owned.view(current));
         errdefer owned.destroy(next);
         next.payload = .{ .text_validated = try text_fixture.check(next.arena.allocator(), inputs, current.payload.parsed) };
+        try std.testing.expectEqualDeep(content, next.payload.text_validated.entries[0].outcome.claims[0].origin.?);
+        try std.testing.expectEqualDeep(classifications, next.payload.text_validated.entries[0].classification_origins[0].?);
         owned.destroy(current);
         current = next;
     }
@@ -364,13 +372,20 @@ test "citation repair changes only the selected reference and retains exact diag
 
 test "missing citation repair is restricted to the empty collection and materializes captured bytes" {
     const repair = @import("domain/reference_extraction_repair.zig");
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const anchor: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const content_origin: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    const repair_origin: Origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 1 } };
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var ids: fixture.IdSource = .{};
     const bytes = "Hello, World!\n";
     const inputs = try fixture.prepare(a, &ids, try ingest(a, "source.md", bytes));
-    const parsed = try parse.execute(a, .{ .entries = &.{raw(inputs, 0, try reply(a, inputs.chunks.entries[0], "Display the greeting."))} });
+    var response = raw(inputs, 0, try reply(a, inputs.chunks.entries[0], "Display the greeting."));
+    response.origin = anchor;
+    response.producers = .{ .content = content_origin, .classifications = null };
+    const parsed = try parse.execute(a, .{ .entries = &.{response} });
     var entry = parsed.entries[0];
     var claim = entry.outcome.claims[0];
     claim.citations = &.{};
@@ -380,10 +395,20 @@ test "missing citation repair is restricted to the empty collection and material
     const rejection = (try @import("domain/reference_selection_validation.zig").validate(a, inputs, available, candidate)).source_selections;
     const authorization = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, .{ .source_selections = rejection });
     try std.testing.expect(authorization.target == .missing_citations);
-    const updated = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .citations = .{ .citations = &.{wholeChunk(inputs.chunks.entries[0])} } }, null);
+    try std.testing.expectEqualDeep(content_origin, rejection.origin.?);
+    const unchanged = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .citations = .{ .citations = &.{} } }, repair_origin);
+    const repeated = (try @import("domain/reference_selection_validation.zig").validate(a, inputs, available, unchanged)).source_selections;
+    try std.testing.expectEqualDeep(repair_origin, repeated.origin.?);
+    try std.testing.expectEqualDeep(content_origin, unchanged.entries[0].outcome.claims[0].origin.?);
+    try std.testing.expectEqualDeep(anchor, unchanged.entries[0].origin.?);
+    const again = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = unchanged }, .{ .source_selections = repeated });
+    try std.testing.expectEqualDeep(authorization.retry.?.key, again.retry.?.key);
+    const updated = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = unchanged }, again, .{ .citations = .{ .citations = &.{wholeChunk(inputs.chunks.entries[0])} } }, repair_origin);
     const accepted = (try validate.execute(a, inputs, try token_fixture.prepare(a, inputs, updated))).valid;
     try std.testing.expectEqualStrings(bytes, accepted.entries[0].outcome.claims[0].citations[0].verbatim.?);
     try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[0].content, updated.entries[0].outcome.claims[0].content);
+    try std.testing.expectEqualDeep(content_origin, updated.entries[0].outcome.claims[0].origin.?);
+    try std.testing.expectEqualDeep(repair_origin, updated.entries[0].outcome.claims[0].citation_origins[0].?);
     try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, null));
 }
 
@@ -571,5 +596,107 @@ test "classification repair requests retain the frozen outcome and permitted dec
             const invalid = try repair.merge(a, facts, auth, .{ .classifications = .{ .token_classifications = forbidden } }, null);
             try std.testing.expect((try classifications.validate(a, inputs, available, invalid)).invalid.issues.forbidden.len > 0);
         }
+    }
+}
+
+test "composed extraction preserves producer attribution and stable native repair identity" {
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const text_repair = @import("domain/reference_extraction_text_repair.zig");
+    const repair = @import("domain/reference_extraction_repair.zig");
+    const classifications = @import("domain/token_classification_validation.zig");
+    const contexts = @import("domain/reference_extraction_context.zig");
+    const anchor: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const content: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 2 } };
+    const classified: Origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 1 } };
+    const corrected: Origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 1 } };
+    for ([_][]const u8{ "Show `Hello, World!`.\n", "Display `Renewed!` and `Due today`.\n" }) |source| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var ids: fixture.IdSource = .{};
+        const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", source));
+        const available = try token_fixture.candidates(a, inputs);
+        var unknown = available.entries[0].id;
+        unknown.ordinal = 999;
+        var response = raw(inputs, 0, try token_fixture.wire(a, try reply(a, inputs.chunks.entries[0], "requirements.md"), &.{.{ .irrelevant = unknown }}));
+        response.origin = anchor;
+        response.producers = .{ .content = content, .classifications = classified };
+        const parsed = try parse.execute(a, .{ .entries = &.{response} });
+        const context = try text_fixture.prepare(a, inputs);
+        defer context.deinit();
+        const current = text_fixture.safety.value(context.owner);
+        const rejected = (try text_fixture.validate_text.execute(a, context.registry, current, inputs, parsed)).invalid;
+        try std.testing.expectEqualDeep(content, rejected.origin.?);
+        const facts = try contexts.textFacts(inputs, context.registry, current, parsed);
+        const auth = try text_repair.authorize(a, facts, rejected);
+        const recurring = try text_repair.merge(a, facts, auth, auth.operation.replace, corrected);
+        const still_rejected = (try text_fixture.validate_text.execute(a, context.registry, current, inputs, recurring)).invalid;
+        const retry = try text_repair.authorize(a, try contexts.textFacts(inputs, context.registry, current, recurring), still_rejected);
+        try std.testing.expectEqualDeep(auth.retry.?.key, retry.retry.?.key);
+        try std.testing.expectEqualDeep(corrected, still_rejected.origin.?);
+        const fixed = try text_repair.merge(a, facts, auth, .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display the required message." } }} } }, corrected);
+        const checked = (try text_fixture.validate_text.execute(a, context.registry, current, inputs, fixed)).valid;
+        try std.testing.expectEqualDeep(anchor, checked.entries[0].origin.?);
+        try std.testing.expectEqualDeep(corrected, checked.entries[0].outcome.claims[0].origin.?);
+        try std.testing.expectEqualDeep(content, checked.entries[0].outcome.claims[0].citation_origins[0].?);
+        try std.testing.expectEqualDeep(classified, checked.entries[0].classification_origins[0].?);
+        const invalid = (try classifications.validate(a, inputs, available, checked)).invalid;
+        try std.testing.expectEqualDeep(classified, invalid.origin.?);
+        const repair_facts: repair.Facts = .{ .inputs = inputs, .candidates = available, .candidate = checked };
+        const authorization = try repair.authorize(a, repair_facts, .{ .token_classifications = invalid });
+        const unchanged = try repair.merge(a, repair_facts, authorization, authorization.operation.replace, corrected);
+        const repeated = (try classifications.validate(a, inputs, available, unchanged)).invalid;
+        try std.testing.expectEqualDeep(corrected, repeated.origin.?);
+        const again = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = unchanged }, .{ .token_classifications = repeated });
+        try std.testing.expectEqualDeep(authorization.retry.?.key, again.retry.?.key);
+        const complete = try repair.merge(a, repair_facts, authorization, .{ .classifications = .{ .token_classifications = try token_fixture.classifications(a, available, inputs.chunks.entries[0]) } }, corrected);
+        try std.testing.expectEqualDeep(checked.entries[0].outcome, complete.entries[0].outcome);
+        try std.testing.expectEqualDeep(anchor, complete.entries[0].origin.?);
+        for (complete.entries[0].classification_origins) |origin| try std.testing.expectEqualDeep(corrected, origin.?);
+        try std.testing.expectEqual(.complete, (try finishText(a, inputs, complete)).outcome);
+        const absent = try repair.merge(a, repair_facts, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, corrected);
+        const missing = (try classifications.validate(a, inputs, available, absent)).invalid;
+        try std.testing.expect(missing.origin == null and missing.issues.missing.len == available.entries.len);
+        const entries = try a.dupe(extraction.TextValidatedResult, complete.entries);
+        entries[0].classification_origins = &.{};
+        var malformed = complete;
+        malformed.entries = entries;
+        try std.testing.expectError(error.InvalidReferenceExtraction, classifications.validate(a, inputs, available, malformed));
+    }
+}
+
+test "token-only extraction preserves exact claims without weakening no-feature classification policy" {
+    const classifications = @import("domain/token_classification_validation.zig");
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const content: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const classified: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    for ([_][]const u8{ "Show `Hello, World!`.\n", "Display `Renewed!` and `Due today`.\n" }) |source| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var ids: fixture.IdSource = .{};
+        const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", source));
+        const available = try token_fixture.candidates(a, inputs);
+        const preserved = try token_fixture.classifications(a, available, inputs.chunks.entries[0]);
+        try std.testing.expect(available.entries.len > 0);
+        var response = raw(inputs, 0, try token_fixture.wire(a, "{\"kind\":\"claims\",\"claims\":[],\"token_classifications\":[]}", preserved));
+        response.origin = content;
+        response.producers = .{ .content = content, .classifications = classified };
+        const candidate = try text_fixture.check(a, inputs, try parse.execute(a, .{ .entries = &.{response} }));
+        try std.testing.expectEqual(@as(usize, 0), candidate.entries[0].outcome.claims.len);
+        const completed = try finishText(a, inputs, candidate);
+        try std.testing.expectEqual(.complete, completed.outcome);
+        try std.testing.expectEqual(available.entries.len, completed.ledger.claims.len);
+        try std.testing.expectEqual(available.entries.len, completed.ledger.chunks[0].outcome.claims.len);
+        for (available.entries, completed.ledger.claims) |token, claim| {
+            try std.testing.expectEqualDeep(token.id, claim.content.preserved_token.value.candidate_id);
+            try std.testing.expectEqualStrings(token.fact.citation.verbatim.?, claim.content.preserved_token.value.raw_value.bytes);
+        }
+        response.result = .{ .response = try token_fixture.wire(a, no_claim, preserved) };
+        const rejected_candidate = try text_fixture.check(a, inputs, try parse.execute(a, .{ .entries = &.{response} }));
+        const rejected = (try classifications.validate(a, inputs, available, rejected_candidate)).invalid;
+        try std.testing.expectEqual(available.entries.len, rejected.issues.forbidden.len);
+        try std.testing.expectEqualDeep(classified, rejected.origin.?);
+        try std.testing.expectEqualSlices(std.meta.Tag(extraction.tokens.Classification), &.{.irrelevant}, rejected.choices.decisions);
     }
 }
