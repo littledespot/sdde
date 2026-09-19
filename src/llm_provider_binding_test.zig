@@ -47,6 +47,7 @@ test "YAML-declared model slot resolves to one immutable provider binding" {
         fixture.services.allowlist().resolveSlot(resolved.slot_id).?.registry_entry_id,
     ));
     try std.testing.expectEqualStrings("low", resolved.reasoning_effort.?);
+    try std.testing.expectEqual(.zero, resolved.controls.temperature.?);
 }
 
 test "binding rejects absent slot authority and non-model steps" {
@@ -155,21 +156,18 @@ test "binding retains the exact catalogue authority without capacity configurati
     const result = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
     try std.testing.expect(result.registry_entry == fixture.services.registry().resolveId(result.registry_entry.id).?);
     try std.testing.expectEqualDeep(contract.capabilities, result.registry_entry.capabilities);
-    try std.testing.expectEqualDeep(model_step.model.?.controls, result.controls);
+    try std.testing.expectEqualDeep(contract.capabilities.inferenceControls(), result.controls);
 }
 
-test "unsupported controls and native schema cannot silently fall back" {
+test "binding omits unsupported temperature and rejects unsupported native schema" {
     var contract = provider_contracts.entries[0];
     contract.capabilities.temperature = false;
     var fixture = try Fixture.initWith(.{ .entries = &.{contract} });
     defer fixture.deinit();
-    const parameters = model_parameters ++ [_]compilation.CompiledParameter{.{ .id = .{ .bytes = "temperature" }, .value = .{ .integer = 0 } }};
+    const resolved = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
+    try std.testing.expect(resolved.controls.temperature == null);
     var step = model_step;
-    step.parameters = &parameters;
-    step.model = @import("domain/workflow_model.zig").resolve(&parameters).?;
     var graph = model_graph;
-    graph.authority.steps = &.{step};
-    try std.testing.expectError(error.ProviderModelBindingInvalid, (resolve_binding.Action{}).execute(&graph, step.id, fixture.services.registry(), fixture.services.allowlist()));
     var native_parameters = model_parameters;
     for (&native_parameters) |*parameter| {
         if (std.mem.eql(u8, parameter.id.bytes, "response-mode")) parameter.value = .{ .enumeration = "native-schema" };
@@ -188,9 +186,12 @@ test "runner rejects altered or missing compiled model controls before operation
     var barrier: FakeBarrier = .{};
     for (0..3) |variant| {
         var step = model_step;
+        const forbidden = model_parameters ++ [_]compilation.CompiledParameter{
+            .{ .id = .{ .bytes = "temperature" }, .value = .{ .integer = 0 } },
+        };
         switch (variant) {
             0 => step.model = null,
-            1 => step.model.?.controls.temperature = .{ .value = 100 },
+            1 => step.parameters = &forbidden,
             2 => step.model.?.response_mode = .native_schema,
             else => unreachable,
         }

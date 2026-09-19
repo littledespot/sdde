@@ -537,6 +537,12 @@ pub const Assembly = struct {
         self.capture_principle_registry.action.config = if (config.principles) |value| @import("../domain/principle_policy.zig").Input.fromConfig(value) else null;
         self.build_principles.action.config = if (config.principles) |value| @import("../domain/principle_policy.zig").Input.fromConfig(value) else null;
     }
+    pub fn bindWorkflows(self: *Assembly, registry: *const @import("../domain/workflow_registry.zig").ValidatedWorkflowDefinitionRegistry) void {
+        const contracts = registry.contractSource();
+        self.parse_specification_state.action.contracts = contracts;
+        self.build_specification_state.action.contracts = contracts;
+        self.prepare_specification_output.action.contracts = contracts;
+    }
     pub fn bindRoots(self: *Assembly, registry: *const roots.BootstrapRootRegistry) void {
         self.capture_project.action.source.capability = registry.projectPrinciples();
         self.inventory_presets.action.source.capability = registry.toolchainPresetRegistry();

@@ -6,7 +6,7 @@ const build_request = @import("actions/model/build_model_request.zig");
 
 const Fixture = @import("provider_invocation_test_fixture.zig").Fixture;
 
-test "rejected content retains validated usage and latency without candidate or retry authority" {
+test "only associated missing final content with valid usage qualifies for protocol correction" {
     var fixture: Fixture = undefined;
     try fixture.init();
     defer fixture.deinit();
@@ -30,6 +30,17 @@ test "rejected content retains validated usage and latency without candidate or 
     try std.testing.expectEqual(.response_invalid, owned.evidence.result().failed.cause);
     try std.testing.expectEqual(.never, owned.evidence.result().failed.retry_class);
     try std.testing.expectEqual(provider.ProviderContentDiagnostic.missing_final_text, owned.evidence.result().failed.content.?);
+    try std.testing.expect(owned.evidence.missingFinalText());
+    var invalid_content = response;
+    invalid_content.completed.raw_result.rejected.reason = .invalid_content;
+    var invalid = try validation.validate(std.testing.allocator, fixture.call, &invalid_content);
+    defer invalid.deinit();
+    try std.testing.expect(!invalid.evidence.missingFinalText());
+    // An untrusted failure label cannot substitute for admitted wire/usage facts.
+    const unobserved: provider.ProviderInvocationObservation = .{ .failed = owned.evidence.result().failed };
+    var unavailable = try validation.validate(std.testing.allocator, fixture.call, &unobserved);
+    defer unavailable.deinit();
+    try std.testing.expect(!unavailable.evidence.missingFinalText());
     for (0..3) |variant| {
         var wrong = response;
         switch (variant) {

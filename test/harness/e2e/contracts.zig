@@ -82,7 +82,8 @@ pub const TerminalRejection = struct {
             .gate => |reason| @tagName(reason),
             .logging => |reason| @tagName(reason),
             .token_budget => |reason| @errorName(reason),
-            .authority, .operation_failed, .cancelled, .deadline_exhausted, .retry_limit => null,
+            .operation_failed => value.diagnostic(),
+            .authority, .cancelled, .deadline_exhausted, .retry_limit => null,
         } };
     }
 };

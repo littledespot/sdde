@@ -16,6 +16,16 @@ pub const RegistryCandidate = struct {
 };
 
 pub const ValidatedWorkflowDefinitionRegistry = opaque {
+    pub fn contractSource(self: *const ValidatedWorkflowDefinitionRegistry) @import("../ports/workflow_contract_source.zig").Source {
+        return .{ .context = @ptrCast(self), .resolve_fn = resolveContract };
+    }
+
+    fn resolveContract(context: *const @import("../ports/workflow_contract_source.zig").Context, id: workflow.WorkflowId) ?*const compilation.SemanticAuthority {
+        const self: *const ValidatedWorkflowDefinitionRegistry = @ptrCast(context);
+        const graph = self.resolve(id) orelse return null;
+        return &graph.authority;
+    }
+
     pub fn count(self: *const ValidatedWorkflowDefinitionRegistry) usize {
         return registryStorage(self).entries.len;
     }

@@ -162,7 +162,11 @@ separate from changing per-field producer origins. This integration changes
 no retry counter or global token rule.
 
 When a model response fails JSON decoding or its bound result schema, no valid
-IR is available. The YAML-declared protocol-retry builder prepares a narrowly
+IR is available. The user-approved missing-answer amendment also permits the
+same continuation when sealed provider evidence establishes `missing_final_text`
+after wire, association and usage validation. Reasoning is never answer text;
+no empty candidate, adapter retry or blanket provider-failure retry is introduced.
+The YAML-declared protocol-retry builder prepares a narrowly
 defined response-level correction containing:
 
 - the original schema;
@@ -188,6 +192,16 @@ defined response-level correction containing:
 - Every correction starts with the original retained task/schema/evidence inputs and the latest
   rejected response and diagnostic; previous correction prompts are not accumulated.
 - All attempts remain available as execution evidence.
+
+For missing final text, retain the original task/input/schema and supply the precise
+missing-answer diagnostic with a concise request for the complete assigned response.
+There is no rejected body to attach: do not substitute reasoning, an empty string or
+an older response. The existing admission and retirement owners consume this sealed
+evidence without decoding a nonexistent candidate. Provider-operation failure remains
+recorded; explicit request closure remains failed/invalid unless a later response
+passes ordinary admission. Missing answers, JSON and schema failures share one
+assignment allowance, including selected native-repair parents. Charge every exchange
+before continuation; unknown usage or an exhausted global budget prohibits a new call.
 
 Runner retry exhaustion retains the owning compiled operation, declared limit
 and completed execution count alongside the last response diagnostic. It is a

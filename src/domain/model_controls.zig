@@ -4,14 +4,21 @@ pub const ResponseGuidanceMode = enum { prompt_only, native_schema };
 /// Serialize once per request; keep it out of workflow content retained by retries.
 pub const response_format_guidance = "Return exactly one JSON object matching the supplied schema. No Markdown fences or surrounding text.";
 
-pub const TemperaturePermille = struct {
-    value: u16,
+/// Engine policy: supported temperature controls have exactly one value.
+pub const Temperature = enum {
+    zero,
 
-    pub fn init(value: u16) ?TemperaturePermille {
-        return if (value <= 1000) .{ .value = value } else null;
+    pub fn wireValue(self: Temperature) f64 {
+        return switch (self) {
+            .zero => 0,
+        };
     }
 };
 
 pub const InferenceControls = struct {
-    temperature: ?TemperaturePermille = null,
+    temperature: ?Temperature = null,
+
+    pub fn forTemperatureSupport(supported: bool) InferenceControls {
+        return .{ .temperature = if (supported) .zero else null };
+    }
 };

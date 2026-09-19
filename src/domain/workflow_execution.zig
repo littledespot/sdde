@@ -31,10 +31,12 @@ pub const Applied = union(enum) {
     }
 };
 
+pub const OperationError = error{ OperationExecutionFailed, REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE };
+
 pub const Rejection = union(enum) {
     gate: @import("workflow_gate.zig").Rejection,
     authority,
-    operation_failed,
+    operation_failed: OperationError,
     logging: @import("feature_log_stream.zig").FailureCode,
     cancelled,
     deadline_exhausted,
@@ -44,8 +46,12 @@ pub const Rejection = union(enum) {
     pub fn diagnostic(self: Rejection) []const u8 {
         return switch (self) {
             .token_budget => |failure| @errorName(failure),
+            .operation_failed => |failure| switch (failure) {
+                error.OperationExecutionFailed => "failed",
+                error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE => @errorName(failure),
+            },
             .retry_limit => "RetryLimitExhausted",
-            .gate, .authority, .operation_failed, .logging, .cancelled, .deadline_exhausted => @tagName(self.status()),
+            .gate, .authority, .logging, .cancelled, .deadline_exhausted => @tagName(self.status()),
         };
     }
 

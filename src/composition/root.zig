@@ -138,6 +138,7 @@ pub const Runtime = struct {
         self.boot = runInProjectWithRegistry(io, allocator, project, control, &self.native.registry);
         if (self.boot == .ready) {
             self.native.bindRoots(self.boot.ready.roots.registry());
+            self.native.bindWorkflows(self.boot.ready.workflows.registry());
             self.native.bindPrinciples(self.boot.ready.roots.registry().projectPrinciples(), self.boot.ready.config.config(), self.principle_source.reader(), self.principle_source.enumerator(), self.principle_source.capturer());
         }
         self.provider_runtime = .{
@@ -714,6 +715,7 @@ fn inspectToolchainRun(io: std.Io, project_root: std.Io.Dir, runtime: pipeline.N
     defer boot.deinit();
     try std.testing.expect(boot == .ready);
     operations.bindRoots(boot.ready.roots.registry());
+    operations.bindWorkflows(boot.ready.workflows.registry());
     var provider = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project_root, .{}, &llm_provider_contracts.Registry.empty);
     var invocation = engine_invocation.Assembly.init(std.testing.allocator, &boot.ready, &.{"toolchain-check"}, &operations.registry, provider.bind(), runtime);
     defer invocation.deinit();
@@ -1323,6 +1325,7 @@ test "native YAML validates citations extraction and reconciliation before conti
         defer boot.deinit();
         try std.testing.expect(boot == .ready);
         native.bindRoots(boot.ready.roots.registry());
+        native.bindWorkflows(boot.ready.workflows.registry());
         var principle_source: @import("../adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
         native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), boot.ready.config.config(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
         var providers = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project.dir, .{}, &llm_provider_contracts.Registry.empty);
@@ -1360,6 +1363,11 @@ test "configured specification generation YAML executes native references models
     const io = std.testing.io;
     const allocator = std.testing.allocator;
     const faults = [_]@import("../test_fixtures/spec_generation_driver.zig").Fault{
+        .{ .stage = .extraction, .shape = .alternating_missing, .repetition = .{ .every_request = 2 } },
+        .{ .stage = .reconciliation, .shape = .missing_answer },
+        .{ .stage = .generation, .shape = .missing_answer },
+        .{ .stage = .repair, .shape = .missing_answer },
+        .{ .stage = .support, .shape = .missing_answer },
         .{ .stage = .extraction, .shape = .empty },
         .{ .stage = .reconciliation, .shape = .empty },
         .{ .stage = .generation, .shape = .empty },
@@ -1477,6 +1485,7 @@ test "configured specification generation YAML executes native references models
         if (boot != .ready) std.debug.print("generation bootstrap: {any}\n", .{boot});
         try std.testing.expect(boot == .ready);
         native.bindRoots(boot.ready.roots.registry());
+        native.bindWorkflows(boot.ready.workflows.registry());
         var principle_source: @import("../adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
         native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), boot.ready.config.config(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
         var services = try @import("../model_request_workflow_test.zig").providerServices(allocator, null, "spec_generation");
@@ -1494,6 +1503,7 @@ test "configured specification generation YAML executes native references models
         if (fault) |selected_fault| {
             driver.fault = selected_fault;
             driver.repair = selected_fault.stage == .repair;
+            if (selected_fault.shape == .alternating_missing) driver.measurement_prefix = ".zig-cache/r37-recovery";
         }
         driver.principle_conflict = scenario == 1;
         if (scenario <= 1) driver.fault = .{ .stage = .support, .shape = .empty, .repetition = .{ .every_request = 1 } };
@@ -1593,7 +1603,7 @@ test "configured specification generation YAML executes native references models
             var readback: std.heap.ArenaAllocator = .init(allocator);
             defer readback.deinit();
             const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-            _ = try @import("../domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" });
+            _ = try @import("../domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
             try std.testing.expectEqual(@as(usize, 577), graph.authority.steps.len);
         }
         if (scenario == 3) try std.testing.expectEqual(@as(usize, 0), driver.principle_calls);
@@ -1603,7 +1613,7 @@ test "configured specification generation YAML executes native references models
                 var readback: std.heap.ArenaAllocator = .init(allocator);
                 defer readback.deinit();
                 const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-                const state = (try @import("../domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" })).state.?;
+                const state = (try @import("../domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).state.?;
                 try std.testing.expectEqual(@as(usize, 2), state.reference.dispositions.len);
                 try std.testing.expectEqual(@as(usize, 2), state.reference.signals.len);
                 try std.testing.expectEqual(.all_resolved, state.review.result.continuation);
@@ -2043,6 +2053,33 @@ test "configured specification generation YAML executes native references models
             defer allocator.free(bytes);
             const rendered = try @import("../application/specification_values.zig").storage.read(&.{ .slots = runner.envelope.slots }, @import("../application/specification_rendering_workflow.zig").rendered_schema, .rendered);
             try std.testing.expectEqualStrings(rendered, bytes);
+            if (fault != null and fault.?.shape == .alternating_missing) {
+                var readback: std.heap.ArenaAllocator = .init(allocator);
+                defer readback.deinit();
+                const a = readback.allocator();
+                const state_path = "engine/workflows/features/chosen/state/workflow.json";
+                const saved = try project.dir.readFileAlloc(io, state_path, a, .limited(64 * 1024 * 1024));
+                var restored = (try @import("../domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).state.?;
+                try std.testing.expectEqualStrings("spec-generation", restored.reference.extraction_contract.?.workflow_id.bytes);
+                restored.reference.extraction_contract.?.workflow_version += 1;
+                try project.dir.writeFile(io, .{ .sub_path = state_path, .data = try std.json.Stringify.valueAlloc(a, restored, .{}) });
+                // Publication changes previously absent filesystem roots. A new
+                // invocation must bootstrap their current physical authority.
+                var next_boot = runInProjectWithRegistry(io, allocator, project.dir, .{}, &native.registry);
+                defer next_boot.deinit();
+                try std.testing.expect(next_boot == .ready);
+                native.bindRoots(next_boot.ready.roots.registry());
+                native.bindWorkflows(next_boot.ready.workflows.registry());
+                const next_graph = next_boot.ready.workflows.registry().resolve(graph.authority.workflow_id).?;
+                var next_runner = @import("../application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = runner.selected.invocation, .graph = next_graph }, &native.registry, next_boot.ready.logs.barrier(), .{}, &services);
+                defer next_runner.deinit();
+                var next_driver: @import("../test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &next_runner, .fake = &fake };
+                const rejected = next_driver.run();
+                try std.testing.expectEqual(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, rejected.execution_rejected.operation_failed);
+                try std.testing.expectEqualStrings("REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE", rejected.execution_rejected.diagnostic());
+                try std.testing.expectEqual(@as(usize, 0), next_driver.calls);
+                try std.testing.expectEqual(@as(u128, 0), next_runner.tokenLedger().committed());
+            }
             if (classification_scenario or citation_scenario) {
                 // Capturing repaired candidates must not exempt their source
                 // authority from the ordinary stale-generation gate.

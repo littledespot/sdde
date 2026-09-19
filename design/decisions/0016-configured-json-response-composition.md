@@ -344,17 +344,17 @@ implementing that entire API or a second extraction path in this change.
 
 ### Persisted contract readiness
 
-The design-level extraction-contract reference in §12.7 must bind the complete
-compiled composition, not one contributing call. That named metadata field is
-absent from today's native `reference_snapshot.Snapshot`. In-memory composition
-can be implemented independently, but unchanged snapshot readback cannot establish
-that missing contract binding. Full conformance to §12.7 remains open until its
-existing metadata requirement is implemented through the canonical snapshot
-writer/reader, or explicitly amended. No such waiver is granted here. Persisted
-re-extraction cannot proceed when the exact required composition authority is
-unavailable; no latest-schema fallback, fragment/provider checkpoint or new store
-can substitute for it. This boundary remains an explicit readiness item, not an
-implicit expansion of the initial composition implementation.
+The approved §12.7 amendment derives extraction-contract metadata from the existing
+compiled graph/schema/composition and native partition identity. The canonical
+snapshot writer records this comparison evidence; state readback and publication
+resolve it against the current validated registry. Exact content and identities must
+match, including part-operation parameters and composition dependencies. Missing or
+changed authority rejects with `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE`.
+
+No separate partition configuration, schema copy used as authority, provider
+checkpoint or recovery store is introduced. Readback retains full native validation;
+a fresh invocation starts at `start`. This closes the metadata binding requirement,
+not the separately deferred native-to-part feedback API.
 
 This example does not limit the mechanism. Conformance must also demonstrate
 unrelated configured nested objects, tagged variants and whole-array properties.

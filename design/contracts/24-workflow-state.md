@@ -21,6 +21,11 @@ baseline's authority and is subject to the accepted amendments in [§32](../desi
 
 [View the Workflow state sample](../code.md#workflow-state).
 
+Published reference snapshots retain the exact extraction-contract comparison
+evidence defined by [§12.7](12-model-boundary.md#127-workflow-defined-model-operations).
+Readback resolves current compiled authority and rejects missing or changed bindings
+before model calls; it never executes persisted contract bytes.
+
 It contains no content hashes or fingerprints. Preset IDs/versions and artifact paths are metadata, not freshness proofs.
 
 ### 24.2 Stage transition state machine

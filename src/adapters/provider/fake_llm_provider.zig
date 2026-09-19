@@ -17,6 +17,7 @@ pub const CountPlan = union(enum) {
 };
 
 pub const CompletePlan = struct {
+    content_diagnostic: ?operation.ProviderContentDiagnostic = null,
     content: []const u8,
     input_tokens: u64,
     output_tokens: u64,
@@ -140,6 +141,13 @@ pub const FakeLLMProvider = struct {
             plan.output_tokens,
             total_tokens,
         ) orelse return responseFailure(operation_id, .response_invalid);
+        if (plan.content_diagnostic) |reason| return .{ .completed = .{ .operation_id = operation_id, .raw_result = .{ .rejected = .{
+            .request_id = request.model_request_id,
+            .binding_id = provider_binding.bindingId(),
+            .reason = reason,
+            .usage = usage,
+            .provider_latency_ms = plan.provider_latency_ms,
+        } } } };
         var content = operation.CompleteOwnedUtf8.init(
             self.allocator,
             plan.content,

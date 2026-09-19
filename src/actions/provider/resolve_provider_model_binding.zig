@@ -40,7 +40,8 @@ pub const Action = struct {
         const entry = registry.resolveId(allowed.registry_entry_id) orelse return invalid();
         const required = step.model orelse return invalid();
         const supported = entry.capabilities;
-        if (!supported.supports(required.response_mode, required.controls)) return invalid();
+        const controls = supported.inferenceControls();
+        if (!supported.supports(required.response_mode, controls)) return invalid();
         if (!contracts.supportsReasoningEffort(
             entry.supported_reasoning_efforts,
             allowed.reasoning_effort,
@@ -56,7 +57,7 @@ pub const Action = struct {
             .registry_entry = entry,
             .reasoning_effort = allowed.reasoning_effort,
             .response_mode = required.response_mode,
-            .controls = required.controls,
+            .controls = controls,
         };
     }
 };

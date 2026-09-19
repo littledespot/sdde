@@ -17,19 +17,23 @@ pub const Build = struct {
         const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
         const payload = try @import("model_payload_schema_workflow.zig").readCurrent(&input.step.data);
         var delta = @import("../domain/model_transport.zig").retire(.rejected_attempt, ledger, current.id(), @import("model_payload_schema_workflow.zig").status(payload)) catch return error.OperationExecutionFailed;
+        const observation = payload.source().source().outcome();
+        if (observation != .validated) return error.OperationExecutionFailed;
+        const rejected = observation.validated;
+        if (rejected.request() != current.prepared()) return error.OperationExecutionFailed;
         const diagnostic: @import("../domain/model_protocol_retry.zig").Diagnostic = switch (payload.outcome()) {
             .schema_rejected => |reason| .{ .schema = reason },
-            .not_validated => |source| if (source.outcome() == .protocol_rejected) .{ .decoder = source.outcome().protocol_rejected.diagnostic } else return error.OperationExecutionFailed,
+            .not_validated => |source| switch (source.outcome()) {
+                .protocol_rejected => |reason| .{ .decoder = reason.diagnostic },
+                .not_decoded => if (rejected.missingFinalText()) .missing_final_text else return error.OperationExecutionFailed,
+                .decoded => return error.OperationExecutionFailed,
+            },
             .valid => return error.OperationExecutionFailed,
         };
         var input_id: [64]u8 = undefined;
         const input_bytes = std.fmt.bufPrint(&input_id, "protocol-{d}", .{ledger.revision().value}) catch return error.OperationExecutionFailed;
         const source = validated.source(.{ .bytes = input_bytes }) catch return error.OperationExecutionFailed;
         const prompt = current.protocolPrompt() orelse return error.OperationExecutionFailed;
-        const observation = payload.source().source().outcome();
-        if (observation != .validated or observation.validated.result() != .complete) return error.OperationExecutionFailed;
-        const rejected = observation.validated.result().complete;
-        if (rejected.association().request() != current.prepared()) return error.OperationExecutionFailed;
         var parts: [2]@import("../domain/llm_provider_operation.zig").ModelVisibleContent = undefined;
         var prepared = self.action.execute(self.allocator, source, validated.content(&parts), rejected, diagnostic, prompt) catch return error.OperationExecutionFailed;
         const next = @import("../domain/model_request_handoff.zig").prepared(validated, prepared) catch {

@@ -106,9 +106,9 @@ pub const Runner = struct {
         {
             return .{ .rejected = .authority };
         }
-        const occurrence = self.envelope.beginOccurrence(authority.invocation_operation_id.bytes) catch return .{ .rejected = .operation_failed };
-        var candidate = entry.invoke(.{ .invocation = .{ .arguments = self.selected.invocation.arguments } }) catch {
-            return .{ .rejected = .operation_failed };
+        const occurrence = self.envelope.beginOccurrence(authority.invocation_operation_id.bytes) catch return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
+        var candidate = entry.invoke(.{ .invocation = .{ .arguments = self.selected.invocation.arguments } }) catch |err| {
+            return .{ .rejected = .{ .operation_failed = err } };
         };
         defer self.envelope.discard(&candidate.delta);
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
@@ -234,7 +234,7 @@ pub const Runner = struct {
             const invoked = state.current_operations.requireInvoked(id_value) catch return .{ .rejected = .authority };
             const valid = if (calls_count or validates_count) provider.validateCountInvocation(request.binding(), request.prepared().?, invoked) else provider.validateInferenceInvocation(request.binding(), request.prepared().?, invoked);
             if (!valid) return .{ .rejected = .authority };
-            if (calls_model and !calls_count) self.token_accounting.prepare(id_value) catch return .{ .rejected = .operation_failed };
+            if (calls_model and !calls_count) self.token_accounting.prepare(id_value) catch return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
             break :call .{ .request = request.prepared().?, .provider_binding = request.binding(), .operations = state.current_operations, .operation_id = id_value };
         } else null;
         const token_revision = self.token_accounting.current().revision();
@@ -265,7 +265,7 @@ pub const Runner = struct {
         var expected: ExpectedAccounting = .none;
         if (step.runner_accounting == .increment_model_attempt) {
             const current_requests = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
-            if (self.model_accounting == null) self.model_accounting = model_accounting.State.init(self.allocator, current_requests) catch return .{ .rejected = .operation_failed };
+            if (self.model_accounting == null) self.model_accounting = model_accounting.State.init(self.allocator, current_requests) catch return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
             const state = &self.model_accounting.?;
             const current = attempt.accounting(state.attempts);
             if (!current.stageRunEpochId().eql(current_requests.stageRunEpochId())) return .{ .rejected = .authority };
@@ -295,10 +295,10 @@ pub const Runner = struct {
         }
         if (step.retry_authority) |authority| {
             if (request_assignment) |assignment| {
-                const admitted = self.repair_retry.beginAssignmentAttempt(step.id, authority.limit, assignment) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .operation_failed else .authority };
+                const admitted = self.repair_retry.beginAssignmentAttempt(step.id, authority.limit, assignment) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OperationExecutionFailed } else .authority };
                 if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, admitted.exhausted) orelse return .{ .rejected = .authority } } };
             } else if (repair_permit) |permit| {
-                const admitted = self.repair_retry.beginAttempt(step.id, authority.limit, permit) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .operation_failed else .authority };
+                const admitted = self.repair_retry.beginAttempt(step.id, authority.limit, permit) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OperationExecutionFailed } else .authority };
                 if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, admitted.exhausted) orelse return .{ .rejected = .authority } } };
             } else {
                 if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, self.retry_execution_counts[index]) orelse return .{ .rejected = .authority } } };
@@ -315,15 +315,16 @@ pub const Runner = struct {
             const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
             const evidence = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
             authorization = authorization_binding.Binding.allocate(&state.authorization_leases, retained_request orelse return .{ .rejected = .authority }, evidence.record().id, authorization_selection.timeout(step.parameters) orelse return .{ .rejected = .authority }, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return switch (err) {
-                error.OutOfMemory => .{ .rejected = .operation_failed },
+                error.OutOfMemory => .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } },
                 else => |failure| authorizationRejected(failure),
             };
         }
-        const occurrence = self.envelope.beginOccurrence(step.operation_id.bytes) catch return .{ .rejected = .operation_failed };
+        const occurrence = self.envelope.beginOccurrence(step.operation_id.bytes) catch return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
         var candidate = entry.invoke(.{ .step = .{
             .data = input_data,
             .step = step,
             .resources = resources,
+            .authority = &self.selected.graph.authority,
             .model_binding = if (retained_request) |request| request.binding() else if (resolved_binding) |*value| value else null,
             .repair_permit = self.repair_retry.currentPermit(),
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
@@ -333,12 +334,12 @@ pub const Runner = struct {
             .provider_token_count = if (validates_count) .{ .request = call.?.request, .provider_binding = call.?.provider_binding, .operations = call.?.operations, .operation_id = call.?.operation_id } else null,
             .provider_operation = provider_input,
             .provider_authorization = if (authorization) |bound| .{ .facts = bound.facts, .slot = bound.slot, .runtime = bound.runtime } else null,
-        } }) catch {
+        } }) catch |err| {
             if (calls_model and !calls_count) {
                 const invoked = call.?;
                 if (model_invocation.reconcile(&self.token_accounting, token_revision, invoked, null)) |reason| return .{ .rejected = reason };
             }
-            return .{ .rejected = .operation_failed };
+            return .{ .rejected = .{ .operation_failed = err } };
         };
         defer self.envelope.discard(&candidate.delta);
         if (calls_model) {
@@ -445,7 +446,7 @@ pub const Runner = struct {
         if (candidate.delta.data_replacements[@intFromEnum(pipeline.DataKey.model_request_identity_ledger)] != null) {
             const input = self.envelope.view(contract) catch return .{ .rejected = .authority };
             const successor = request_lifecycle_binding.validateReplacement(&input, contract, &candidate.delta, candidate.outcome, if (self.model_accounting) |state| state.current_operations else null) catch return .{ .rejected = .authority };
-            if (self.model_accounting != null) request_owner = identity.retainLedger(successor) catch return .{ .rejected = .operation_failed };
+            if (self.model_accounting != null) request_owner = identity.retainLedger(successor) catch return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
         }
         var pending: ?model_accounting.Pending = null;
         defer if (pending) |unapplied| unapplied.discard();
@@ -469,20 +470,20 @@ pub const Runner = struct {
             switch (expected) {
                 .attempt => |classification| {
                     if (transition != .increment_model_attempt) return .{ .rejected = .authority };
-                    pending = state.prepare(current, request.id(), classification, transition.increment_model_attempt) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .rejected = .authority };
+                    pending = state.prepare(current, request.id(), classification, transition.increment_model_attempt) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } } else .{ .rejected = .authority };
                 },
                 .assignment => |kind| {
                     if (transition != .advance_provider_operation) return .{ .rejected = .authority };
-                    pending = state.prepareAssignment(current, request.prepared().?, kind, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .rejected = .authority };
+                    pending = state.prepareAssignment(current, request.prepared().?, kind, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } } else .{ .rejected = .authority };
                 },
                 .invocation => |invocation| {
                     if (transition != .advance_provider_operation or !candidate.delta.data_invalidations.contains(.assigned_provider_operation)) return .{ .rejected = .authority };
                     const assigned = values.read(&view, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
-                    pending = state.prepareInvocation(current, request.prepared().?, assigned, invocation, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .rejected = .authority };
+                    pending = state.prepareInvocation(current, request.prepared().?, assigned, invocation, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } } else .{ .rejected = .authority };
                 },
                 .completion => |facts| {
                     if (transition != .advance_provider_operation or !candidate.delta.data_invalidations.contains(facts.source.key())) return .{ .rejected = .authority };
-                    pending = state.prepareCompletion(current, request.prepared().?, facts, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .rejected = .authority };
+                    pending = state.prepareCompletion(current, request.prepared().?, facts, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } } else .{ .rejected = .authority };
                 },
                 .none => unreachable,
             }
@@ -504,10 +505,10 @@ pub const Runner = struct {
         };
         if (repair_required and candidate.delta.repair_transition == null) return .{ .rejected = .authority };
         const repair_pending = if (candidate.delta.repair_transition) |transition|
-            self.repair_retry.prepare(transition) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .operation_failed else .authority }
+            self.repair_retry.prepare(transition) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OperationExecutionFailed } else .authority }
         else
             null;
-        self.envelope.applyOccurrence(occurrence, contract, &candidate.delta, candidate.outcome) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .operation_failed } else .{ .rejected = .authority };
+        self.envelope.applyOccurrence(occurrence, contract, &candidate.delta, candidate.outcome) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } } else .{ .rejected = .authority };
         // No repair-state mutation occurs between preparation and this allocation-
         // free commit; the envelope and accepted native progress advance together.
         if (repair_pending) |prepared| self.repair_retry.commit(prepared) catch unreachable;

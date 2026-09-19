@@ -127,8 +127,8 @@ test "provider request rejects malformed identity content and controls" {
     invalid.content = &invalid_content;
     try std.testing.expectError(error.InvalidProviderNeutralModelRequest, operation.IdentifiedProviderNeutralModelRequest.init(invalid));
     invalid = fixture.request;
-    invalid.controls.temperature = .{ .value = 1001 };
-    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, operation.IdentifiedProviderNeutralModelRequest.init(invalid));
+    invalid.controls.temperature = null;
+    try std.testing.expect(!invalid.matchesBinding(fixture.provider_binding));
 }
 
 test "optional count evidence validates association without imposing token capacity" {

@@ -12,7 +12,7 @@ pub fn validateCount(call: validation.Call, candidate: *const execution.Candidat
     const observed = values.read(&.{ .slots = candidate.delta.data_writes }, invocation.count_schema, counted.Result) catch return .authority;
     if (!observed.operationId().eql(call.operation_id)) return .authority;
     const outcome = observed.outcome() orelse return .authority;
-    if (outcome.* == .allocation_failed) return .operation_failed;
+    if (outcome.* == .allocation_failed) return .{ .operation_failed = error.OperationExecutionFailed };
     return if (candidate.outcome == invocation.countStatus(outcome.*)) null else .authority;
 }
 
@@ -26,13 +26,13 @@ pub fn reconcile(accounting: *token_runner.Runner, revision: tokens.Revision, ca
         // the next call without fabricating zero usage for an unknown delivery.
         error.ProviderTokenUsageUnavailable => {},
         error.WorkflowTokenBudgetExceeded => return .{ .token_budget = error.WorkflowTokenBudgetExceeded },
-        else => return .operation_failed,
+        else => return .{ .operation_failed = error.OperationExecutionFailed },
     };
     return rejection;
 }
 
 fn classify(call: validation.Call, candidate: ?*const execution.Candidate, resolution: *tokens.Reconciliation) ?execution.Rejection {
-    const value = candidate orelse return .operation_failed;
+    const value = candidate orelse return .{ .operation_failed = error.OperationExecutionFailed };
     const observed = values.read(&.{ .slots = value.delta.data_writes }, invocation.schema, result.Result) catch return .authority;
     if (!observed.operationId().eql(call.operation_id)) return .authority;
     const outcome = observed.outcome() orelse return .authority;
@@ -46,7 +46,7 @@ fn classify(call: validation.Call, candidate: ?*const execution.Candidate, resol
             }
         },
         .cancelled => {},
-        .allocation_failed => return .operation_failed,
+        .allocation_failed => return .{ .operation_failed = error.OperationExecutionFailed },
     }
     if (value.outcome != invocation.status(outcome.*)) return .authority;
     return null;

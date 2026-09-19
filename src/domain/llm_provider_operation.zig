@@ -117,9 +117,7 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
             RequestSchemaId.parse(self.request_schema_id.bytes) == null or
             ResultSchemaId.parse(self.result_schema_id.bytes) == null or
             ModelVisibleInputId.parse(self.model_visible_input_id.bytes) == null or
-            self.content.len == 0 or
-            (self.controls.temperature != null and
-                model_controls.TemperaturePermille.init(self.controls.temperature.?.value) == null))
+            self.content.len == 0)
         {
             return error.InvalidProviderNeutralModelRequest;
         }

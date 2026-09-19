@@ -348,6 +348,8 @@ test "YAML rejects retired model size parameters missing modes and invalid contr
         .{ "response-mode: prompt-only", "response-mode: prompt-only, output-bytes: 4294967296" },
         .{ "response-mode: prompt-only", "response-mode: prompt-only, input-tokens: 1000" },
         .{ "response-mode: prompt-only", "response-mode: automatic" },
+        .{ "response-mode: prompt-only", "response-mode: prompt-only, temperature: 0" },
+        .{ "response-mode: prompt-only", "response-mode: prompt-only, temperature: 100" },
         .{ "response-mode: prompt-only", "response-mode: prompt-only, temperature: 1001" },
     };
     for (substitutions) |replacement| {

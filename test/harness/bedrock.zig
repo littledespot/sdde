@@ -24,7 +24,7 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
         .content = &content,
         .schema = .{ .prompt_only = try packet.resultSchema(a) },
         .schema_name = "rubric_judgment",
-        .temperature = config.temperature,
+        .temperature = if (config.temperature != null) .zero else null,
         .reasoning_effort = encoding.reasoningEffort(if (config.reasoning_effort) |effort| @tagName(effort) else null) catch return error.InvalidEvaluationContract,
     }, .inference) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,

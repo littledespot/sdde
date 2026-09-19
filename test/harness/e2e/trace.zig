@@ -92,7 +92,7 @@ pub const Trace = struct {
     fn step(context: *anyopaque, id: workflow.WorkflowStepId) execution.Applied {
         const self = cast(context);
         // A failed evidence sink aborts the test; it cannot create a passing run.
-        if (self.failure != null) return .{ .rejected = .operation_failed };
+        if (self.failure != null) return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
         const result = self.invocation.bindings().invokeStep(id);
         self.last_step = id;
         self.recordStep(id, result) catch |err| {

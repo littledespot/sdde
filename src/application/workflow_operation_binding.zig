@@ -56,6 +56,7 @@ pub fn inspect(comptime T: type, comptime ancestors: []const type) Inspection {
     const toolchain_source = @import("../ports/toolchain_authority_source.zig");
     if (T == toolchain_source.ProjectCapturer or T == toolchain_source.PresetEnumerator or T == toolchain_source.PresetCapturer) return .{ .toolchain_read = true };
     if (T == @import("../ports/toolchain_document_parser.zig").Parser) return .{ .toolchain_parser = true };
+    if (T == @import("../ports/workflow_contract_source.zig").Source) return .{}; // Immutable compiled metadata only.
     if (T == std.mem.Allocator) return .{}; // Allocation is runner-local, not an operational port.
     inline for (ancestors) |ancestor| if (T == ancestor) return .{};
     const next = ancestors ++ &[_]type{T};

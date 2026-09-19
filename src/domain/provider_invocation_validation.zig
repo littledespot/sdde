@@ -43,6 +43,19 @@ pub const Evidence = opaque {
         return storage(self).provider_latency_ms;
     }
 
+    /// Missing final content after association and usage validation may enter
+    /// explicit protocol correction. This is not a candidate or call permission.
+    pub fn missingFinalText(self: *const Evidence) bool {
+        const failure = switch (storage(self).result) {
+            .failed => |value| value,
+            .complete, .stopped => return false,
+        };
+        // Transport failures cannot carry admitted usage. Only a validated raw
+        // content rejection can establish this narrowly recoverable condition.
+        return self.usage() != null and failure.cause == .response_invalid and
+            failure.delivery == .response_received and failure.content == .missing_final_text;
+    }
+
     pub fn delivery(self: *const Evidence) provider.ProviderDeliveryDisposition {
         return switch (storage(self).result) {
             .complete, .stopped => .response_received,

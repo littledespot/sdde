@@ -23,7 +23,7 @@ pub fn encode(allocator: std.mem.Allocator, request: *const operation.Identified
         .content = request.content,
         .schema = schema,
         .schema_name = "sdde_model_envelope_v1",
-        .temperature = if (request.controls.temperature) |temperature| @as(f64, @floatFromInt(temperature.value)) / 1000.0 else null,
+        .temperature = request.controls.temperature,
         .reasoning_effort = try reasoningEffort(request.binding_id.reasoning_effort),
     }, kind);
 }
@@ -44,7 +44,7 @@ pub const TextRequest = struct {
     content: []const operation.ModelVisibleContent,
     schema: TextSchema,
     schema_name: []const u8,
-    temperature: ?f64,
+    temperature: ?@import("../../domain/model_controls.zig").Temperature,
     reasoning_effort: ?ReasoningEffort,
 };
 
@@ -78,7 +78,7 @@ fn write(writer: *std.Io.Writer, request: TextRequest, kind: operation.ProviderO
             try json.objectField("inferenceConfig");
             try json.beginObject();
             try json.objectField("temperature");
-            try json.write(temperature);
+            try json.write(temperature.wireValue());
             try json.endObject();
         }
         if (request.schema == .native) {

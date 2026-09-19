@@ -456,7 +456,7 @@ const TestEngineBindings = struct {
 };
 
 test "workflow outcomes preserve exact runner rejections at invocation and step boundaries" {
-    for ([_]execution.Rejection{ .authority, .operation_failed, .cancelled, .deadline_exhausted, .{ .gate = .missing_evidence }, .{ .logging = .LOG_SINK_FAILURE }, .{ .token_budget = error.WorkflowTokenBudgetExceeded }, .{ .token_budget = error.ProviderTokenUsageUnavailable }, .{ .retry_limit = @import("domain/workflow_retry.zig").Exhaustion.init(.{ .bytes = "account" }, .{ .value = 1 }, 2).? } }) |reason| {
+    for ([_]execution.Rejection{ .authority, .{ .operation_failed = error.OperationExecutionFailed }, .{ .operation_failed = error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE }, .cancelled, .deadline_exhausted, .{ .gate = .missing_evidence }, .{ .logging = .LOG_SINK_FAILURE }, .{ .token_budget = error.WorkflowTokenBudgetExceeded }, .{ .token_budget = error.ProviderTokenUsageUnavailable }, .{ .retry_limit = @import("domain/workflow_retry.zig").Exhaustion.init(.{ .bytes = "account" }, .{ .value = 1 }, 2).? } }) |reason| {
         for ([_]bool{ false, true }) |invocation| {
             var graph = try testGraph();
             var control: OperationControl = .{ .state = .{ .outcome = .ok } };

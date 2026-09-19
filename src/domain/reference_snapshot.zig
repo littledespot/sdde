@@ -6,6 +6,7 @@ const x = @import("reference_extraction.zig");
 const r = @import("reference_reconciliation.zig");
 const passive = @import("passive_literals.zig");
 pub const Snapshot = struct {
+    extraction_contract: ?@import("reference_extraction_contract.zig").Binding = null,
     directory: @import("reference_ingestion.zig").RelativePath,
     inputs: e.Inputs,
     extraction: x.Ledger,
@@ -19,13 +20,14 @@ pub const Error = e.Error || error{InvalidReferenceSnapshot};
 
 /// The source gates own extraction/reconciliation validation. Publication
 /// projects only their accepted canonical records, retaining every source.
-pub fn build(directory: @import("reference_ingestion.zig").RelativePath, inputs: e.Inputs, extracted: x.Accounted, reconciled: r.Accounted, registry: passive.Registry) Error!Snapshot {
+pub fn build(directory: @import("reference_ingestion.zig").RelativePath, inputs: e.Inputs, extracted: x.Accounted, reconciled: r.Accounted, registry: passive.Registry, contract: @import("reference_extraction_contract.zig").Binding) Error!Snapshot {
     const global = reconciled.records.assignments.checked.prior.prior;
     if (extracted.outcome != .complete or reconciled.outcome != .complete or
         !inputs.corpus.state_id.eql(extracted.ledger.state_id) or
         !inputs.corpus.state_id.eql(global.input.progress.plan.layout.items.state_id) or
         !inputs.corpus.state_id.eql(registry.grammar.reference_state_id)) return error.InvalidReferenceSnapshot;
     return .{
+        .extraction_contract = contract,
         .directory = directory,
         .inputs = inputs,
         .extraction = extracted.ledger,

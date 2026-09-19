@@ -6,14 +6,27 @@ const operation = @import("domain/workflow_operation.zig");
 const operations = @import("ports/workflow_operation_registry.zig");
 const provider_registry = @import("domain/llm_provider_registry.zig");
 
-test "compiled model requirements need only explicit response mode and supported controls" {
+test "temperature policy requires zero exactly when the registered model supports it" {
+    for ([_]bool{ false, true }) |supported| {
+        var capabilities = fixture.capabilities;
+        capabilities.temperature = supported;
+        const selected = capabilities.inferenceControls();
+        try std.testing.expectEqual(supported, selected.temperature != null);
+        if (selected.temperature) |temperature| try std.testing.expectEqual(@as(f64, 0), temperature.wireValue());
+        try std.testing.expect(capabilities.supports(.prompt_only, selected));
+        try std.testing.expect(!capabilities.supports(.prompt_only, .forTemperatureSupport(!supported)));
+    }
+}
+
+test "compiled model requirements select response mode without temperature authority" {
     const resolved = model.resolve(&fixture.compiled_parameters).?;
     try std.testing.expectEqual(.prompt_only, resolved.response_mode);
-    try std.testing.expect(resolved.controls.temperature == null);
-    const controlled = fixture.compiled_parameters ++ [_]@import("domain/workflow_compilation.zig").CompiledParameter{
-        .{ .id = .{ .bytes = "temperature" }, .value = .{ .integer = 1000 } },
-    };
-    try std.testing.expectEqual(@as(u16, 1000), model.resolve(&controlled).?.controls.temperature.?.value);
+    inline for (.{ @as(i64, 0), 1, 100, 1000 }) |temperature| {
+        const controlled = fixture.compiled_parameters ++ [_]@import("domain/workflow_compilation.zig").CompiledParameter{
+            .{ .id = .{ .bytes = "temperature" }, .value = .{ .integer = temperature } },
+        };
+        try std.testing.expect(model.resolve(&controlled) == null);
+    }
 }
 
 test "missing malformed and duplicate model controls cannot create requirements" {
@@ -59,15 +72,15 @@ test "model contracts validate capabilities without granting unsupported operati
     try std.testing.expectError(error.InvalidProviderModelContracts, (contracts.Registry{ .entries = &.{contract} }).validate());
     contract.capabilities.exact_token_counter = .unavailable;
     try (contracts.Registry{ .entries = &.{contract} }).validate();
-    try std.testing.expect(contract.capabilities.supports(.prompt_only, .{}));
+    try std.testing.expect(contract.capabilities.supports(.prompt_only, contract.capabilities.inferenceControls()));
     contract = provider_contract;
     contract.capabilities.inference = false;
     try std.testing.expectError(error.InvalidProviderModelContracts, (contracts.Registry{ .entries = &.{contract} }).validate());
     contract = provider_contract;
     contract.capabilities.temperature = false;
-    try std.testing.expect(contract.capabilities.supports(.prompt_only, .{}));
-    try std.testing.expect(!contract.capabilities.supports(.prompt_only, .{ .temperature = .{ .value = 0 } }));
-    try std.testing.expect(!fixture.capabilities.supports(.native_schema, .{}));
+    try std.testing.expect(contract.capabilities.supports(.prompt_only, contract.capabilities.inferenceControls()));
+    try std.testing.expect(!contract.capabilities.supports(.prompt_only, .{ .temperature = .zero }));
+    try std.testing.expect(!fixture.capabilities.supports(.native_schema, fixture.capabilities.inferenceControls()));
 }
 
 test "catalogue candidate cannot substitute compiled capability facts" {
@@ -103,8 +116,8 @@ test "model registration requires a typed slot but no capacity configuration" {
     try std.testing.expect(!registry.validate());
 }
 
-test "registered model contracts cannot restore retired size parameters" {
-    inline for (.{ "input-bytes", "output-bytes", "input-tokens", "output-tokens" }) |retired| {
+test "registered model contracts cannot restore temperature or retired size parameters" {
+    inline for (.{ "temperature", "input-bytes", "output-bytes", "input-tokens", "output-tokens" }) |retired| {
         var entry = model_operation;
         const parameters = [_]operation.ParameterDescriptor{
             .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },

@@ -127,7 +127,8 @@ The initial registered contracts are:
 - A Bedrock request needs explicit user/evidence input; the adapter invents no input
   text.
 - CountTokens wraps this projection in `input.converse` and sends no inference controls.
-- Converse sends supported temperature and reasoning effort only when selected.
+- Converse always sends temperature `0` when supported by the bound model and
+  omits it only when unsupported (§12.5). Reasoning effort is sent only when selected.
 - Reasoning effort uses the closed `additionalModelRequestFields.reasoning_effort`
   projection described by the [AWS OpenAI model
   parameters](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-openai.html);
@@ -169,8 +170,10 @@ The initial registered contracts are:
 - When the closed wire/usage portion is valid, content rejection retains actual
   usage and latency in F0006's `.rejected` observation. Reasoning-only `end_turn`
   identifies `missing_final_text`; other invalid content identifies `invalid_content`.
-  Both remain `response_invalid` with no retry permission. Invalid wire/usage cannot
-  supply trusted usage, and reasoning never becomes candidate text.
+  Both remain `response_invalid`, with no adapter retry. After shared association
+  and usage validation, only `missing_final_text` is eligible for explicit bounded
+  protocol correction under §22.6. `invalid_content` remains terminal. Invalid
+  wire/usage cannot supply trusted usage, and reasoning never becomes candidate text.
 
 Recognized non-candidate stops discard content and retain usage:
 

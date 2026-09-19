@@ -5,6 +5,7 @@ const authority = @import("../../domain/required_authority.zig");
 const snapshot = @import("../../domain/reference_snapshot.zig");
 const coverage = @import("../../domain/specification_coverage.zig");
 pub const Action = struct {
+    contracts: ?state.ContractSource = null,
     pub const contract: pipeline.NodeContract = .{
         .id = "build-specification-state",
         .kind = .action,
@@ -12,7 +13,7 @@ pub const Action = struct {
         .produces = &.{.specification_publication_state},
         .side_effect = .none,
     };
-    pub fn execute(_: Action, allocator: std.mem.Allocator, prior: state.Prior, reference: snapshot.Snapshot, context: @import("../../domain/specification_provenance.zig").Context, content: @import("../../domain/specification.zig").IdentifiedContent, ledger: @import("../../domain/specification_identity.zig").Ledger, accounted: coverage.Coverage, inputs: authority.Inputs, observations: authority.Observations, result: authority.Result, clarifications: @import("../../domain/clarification_refresh.zig").Result, rendering_valid: bool) !state.State {
+    pub fn execute(self: Action, allocator: std.mem.Allocator, prior: state.Prior, reference: snapshot.Snapshot, context: @import("../../domain/specification_provenance.zig").Context, content: @import("../../domain/specification.zig").IdentifiedContent, ledger: @import("../../domain/specification_identity.zig").Ledger, accounted: coverage.Coverage, inputs: authority.Inputs, observations: authority.Observations, result: authority.Result, clarifications: @import("../../domain/clarification_refresh.zig").Result, rendering_valid: bool) !state.State {
         if (!rendering_valid or clarifications != .ready or inputs.brief == null or inputs.specification == null or
             !reference.inputs.corpus.state_id.eql(context.inputs.corpus.state_id) or
             !try @import("../../domain/specification.zig").sameContent(allocator, content, inputs.specification.?) or
@@ -35,7 +36,7 @@ pub const Action = struct {
             .principle_assessment = inputs.principle_assessment orelse return error.InvalidSpecificationState,
             .review = .{ .candidate_revision = inputs.revision, .seeds = inputs.seeds, .evidence = inputs.evidence, .candidates = inputs.candidates, .observations = observations, .result = result },
         };
-        try state.validate(allocator, value, inputs.feature);
+        try state.validate(allocator, value, inputs.feature, self.contracts);
         return value;
     }
 };

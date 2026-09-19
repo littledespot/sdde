@@ -483,9 +483,11 @@ outcome through runner-owned child bindings:
    native generation constraints derive from it through the registered profile.
 
 Request-origin contracts declare one repository slot and explicit `response-mode`
-(`prompt-only | native-schema`). Optional `temperature` is an integer in
-thousandths (`0..1000`); omission sends no temperature control. Resources and
-outcomes remain in the existing concise workflow structure.
+(`prompt-only | native-schema`). Under the user-approved 2026-09-19 amendment
+to §12.5, temperature is engine-owned: binding selects `0` when the registered
+model supports it, otherwise omission. Workflow `temperature` parameters reject,
+including zero; neither request consumers nor retries can override the binding.
+Resources and outcomes remain in the existing concise workflow structure.
 
 - The originating step's typed slot and response-control requirements compile into the
   existing model-binding projection.
@@ -976,7 +978,11 @@ undone; it does not make any candidate workflow output successful.
   delivery and no candidate.
   Raw `.rejected` preserves independently decoded usage until the shared association
   and usage validator admits it. The resulting failure retains the content diagnostic
-  and retry class `never`; this does not authorize JSON correction or another call.
+  and transport retry class `never`. The user-approved missing-answer amendment
+  permits only validated `missing_final_text` with known usage to enter explicit
+  workflow protocol correction (§22.6); it creates no candidate or call permission.
+  All other rejected content remains terminal. The existing runner allowance,
+  authorization lifecycle and total-token budget govern any further call.
   Its declared envelope history retains the same immutable evidence owner through
   transport/current-slot retirement for reports, without another accounting ledger.
 - Provider-reported size rejection uses the existing API-failure mapping; a provider

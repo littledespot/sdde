@@ -5,14 +5,12 @@ const operation = @import("workflow_operation.zig");
 
 pub const Requirements = struct {
     response_mode: controls.ResponseGuidanceMode,
-    controls: controls.InferenceControls,
 };
 
 // Shared generic model parameters. No workflow name, route, or model identity
-// participates in this contract. Omitted controls mean no control is sent.
+// participates in this contract. Temperature is owned by provider capabilities.
 pub const parameters = [_]operation.ParameterDescriptor{
     .{ .id = "response-mode", .kind = .enumeration, .required = true, .workflow_definition_safe = true, .allowed_values = &.{ "prompt-only", "native-schema" } },
-    .{ .id = "temperature", .kind = .integer, .required = false, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 1000 },
 };
 
 pub fn validProjection(step: compilation.CompiledStep) bool {
@@ -43,7 +41,7 @@ pub fn validProjection(step: compilation.CompiledStep) bool {
 
 pub fn validDescriptors(descriptors: []const operation.ParameterDescriptor) bool {
     for (descriptors) |descriptor| {
-        if (retiredSizeParameter(descriptor.id)) return false;
+        if (retiredParameter(descriptor.id)) return false;
     }
     for (parameters) |required| {
         var found = false;
@@ -87,7 +85,7 @@ pub fn resolve(
     values: []const compilation.CompiledParameter,
 ) ?Requirements {
     for (values, 0..) |value, index| {
-        if (retiredSizeParameter(value.id.bytes)) return null;
+        if (retiredParameter(value.id.bytes)) return null;
         for (values[0..index]) |prior| if (std.mem.eql(u8, prior.id.bytes, value.id.bytes)) return null;
     }
     const mode = find(values, "response-mode") orelse return null;
@@ -98,12 +96,7 @@ pub fn resolve(
         .native_schema
     else
         return null;
-    var selected: controls.InferenceControls = .{};
-    if (find(values, "temperature")) |temperature| {
-        if (temperature != .integer or temperature.integer < 0 or temperature.integer > 1000) return null;
-        selected.temperature = controls.TemperaturePermille.init(@intCast(temperature.integer)) orelse return null;
-    }
-    return .{ .response_mode = response_mode, .controls = selected };
+    return .{ .response_mode = response_mode };
 }
 
 pub fn consumesPreparedRequest(keys: []const @import("pipeline.zig").DataKey) bool {
@@ -124,13 +117,13 @@ pub fn validConsumerDescriptors(descriptors: []const operation.ParameterDescript
 }
 
 fn requestOverride(id: []const u8) bool {
-    if (retiredSizeParameter(id)) return true;
+    if (retiredParameter(id)) return true;
     for (parameters) |parameter| if (std.mem.eql(u8, parameter.id, id)) return true;
     return false;
 }
 
-fn retiredSizeParameter(id: []const u8) bool {
-    inline for (.{ "input-bytes", "output-bytes", "input-tokens", "output-tokens" }) |retired| {
+fn retiredParameter(id: []const u8) bool {
+    inline for (.{ "temperature", "input-bytes", "output-bytes", "input-tokens", "output-tokens" }) |retired| {
         if (std.mem.eql(u8, id, retired)) return true;
     }
     return false;

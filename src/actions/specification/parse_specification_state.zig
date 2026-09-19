@@ -2,8 +2,9 @@ const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
 const state = @import("../../domain/specification_state.zig");
 pub const Action = struct {
+    contracts: ?state.ContractSource = null,
     pub const contract: pipeline.NodeContract = .{ .id = "parse-specification-state", .kind = .action, .requires = &.{ .feature_directory, .raw_workflow_state }, .produces = &.{ .prior_specification_state, .prior_principle_registry }, .side_effect = .none };
-    pub fn execute(_: Action, allocator: std.mem.Allocator, feature: @import("../../domain/feature_identity.zig").FeatureId, bytes: ?[]const u8) state.Error!state.Prior {
-        return state.parse(allocator, bytes, feature);
+    pub fn execute(self: Action, allocator: std.mem.Allocator, feature: @import("../../domain/feature_identity.zig").FeatureId, bytes: ?[]const u8) state.Error!state.Prior {
+        return state.parse(allocator, bytes, feature, self.contracts);
     }
 };

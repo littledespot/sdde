@@ -38,12 +38,12 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
   no reuse, total tombstone accounting, and that the final ledger resolves every persisted
   reference identity.
 
-## `ResolveReferenceExtractionContractAction`
+## Extraction-contract readback
 
-- **Input:** exact extraction-contract binding and historical compiled workflow authority
-- **Output:** immutable extraction descriptor
-- **Responsibility:** Resolve the recorded workflow operation, resources, schemas, and chunker
-  or emit the unavailable-contract diagnostic.
+The existing snapshot writer and canonical-state validation actions use the shared
+[§12.7 extraction binding](../12-model-boundary.md#127-workflow-defined-model-operations).
+They derive comparison evidence from compiled metadata and resolve it against the
+current registry. No separate resolver action or historical-schema registry is needed.
 
 ## `ResolveReferenceRootAction`
 

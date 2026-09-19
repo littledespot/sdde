@@ -894,7 +894,8 @@ validators:
   reassess current principles and resolve those obligations under its own input authority.
 - The native closed `specification-state/v2` singleton contains the feature key,
   revision, `specified` stage, captured reference sources/chunks/claims/citations,
-  reconciliation and passive-literal records, accepted brief/content/provenance,
+  exact compiled extraction-contract comparison evidence, reconciliation and
+  passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and required-authority
   review evidence.
 - Model-assisted support retains that label.
@@ -903,7 +904,9 @@ validators:
 - `capture-workflow-state` and `parse-specification-state` validate this singleton
   before generation; reruns reuse only the canonical record-ID counters, increment the
   publication revision and regenerate the candidate from current inputs.
-- Malformed or foreign state blocks before model calls.
+- Malformed or foreign state blocks before model calls. Missing, changed or unavailable
+  extraction authority rejects with `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE`; the
+  current validated workflow registry is the only contract resolver.
 - Generated Markdown is not imported as authority.
 - Specification request owners use the same lossless `FeatureId` directory contract for
   generation, review and repair.

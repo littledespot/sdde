@@ -40,7 +40,7 @@ pub const Parse = struct {
         const bytes = values.read(&input.step.data, raw_schema, ?[]const u8) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .prior_state = self.action.execute(owner.arena.allocator(), (try readFeature(&input.step.data)).selector.feature_id, bytes.*) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .prior_state = self.action.execute(owner.arena.allocator(), (try readFeature(&input.step.data)).selector.feature_id, bytes.*) catch |err| return contractError(err) };
         const prior_principles = if (owner.payload.prior_state.state) |state_value| state_value.principle_assessment.registry else null;
         const principle_schema = @import("principle_workflow.zig").prior_schema;
         const projected = values.create(self.allocator, principle_schema, ?@import("../domain/principle_registry.zig").Registry, prior_principles) catch return error.OperationExecutionFailed;
@@ -82,7 +82,7 @@ pub const Build = struct {
         const valid = values.read(view, rendering.validated_schema, bool) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .publication_state = self.action.execute(owner.arena.allocator(), prior, snapshot, try @import("specification_workflow.zig").readContext(view), content, ledger.*, coverage, inputs, observations, result, clarifications.*, valid.*) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .publication_state = self.action.execute(owner.arena.allocator(), prior, snapshot, try @import("specification_workflow.zig").readContext(view), content, ledger.*, coverage, inputs, observations, result, clarifications.*, valid.*) catch |err| return contractError(err) };
         return owned.publish(self.allocator, state_schema, owner, .ok) catch error.OperationExecutionFailed;
     }
 };
@@ -100,7 +100,7 @@ pub const BuildSnapshot = struct {
         const registry = values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .reference_snapshot = self.action.execute(.{ .bytes = directory.project_relative_path }, inputs.*, extracted.payload().accounted, reconciled.payload().reconciliation_accounted, registry.*) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .reference_snapshot = self.action.execute(owner.arena.allocator(), (input.step.authority orelse return error.OperationExecutionFailed).*, .{ .bytes = directory.project_relative_path }, inputs.*, extracted.payload().accounted, reconciled.payload().reconciliation_accounted, registry.*) catch |err| return contractError(err) };
         return owned.publish(self.allocator, snapshot_schema, owner, .ok) catch error.OperationExecutionFailed;
     }
 };
@@ -136,10 +136,18 @@ pub const Prepare = struct {
         const reference = owned.read(view, reference_schema, .reference_context) catch return error.OperationExecutionFailed;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const prepared = self.action.execute(arena.allocator(), try readFeature(view), paths.*, captured.*, inputs.*, clarifications.*, forms.*, prior, current, try @import("specification_workflow.zig").readContext(view), spec, valid.*, reference) catch return error.OperationExecutionFailed;
+        const prepared = self.action.execute(arena.allocator(), try readFeature(view), paths.*, captured.*, inputs.*, clarifications.*, forms.*, prior, current, try @import("specification_workflow.zig").readContext(view), spec, valid.*, reference) catch |err| return contractError(err);
         return @import("workflow_candidate.zig").publish(self.allocator, @import("workflow_output_binding.zig").prepared_schema, @import("../domain/workflow_output.zig").Prepared, prepared);
     }
 };
 fn readFeature(view: *const @import("../domain/pipeline_data.zig").View) operations.Error!@import("../domain/feature_directory.zig").Directory {
     return (values.read(view, @import("feature_directory_workflow.zig").directory, @import("../domain/feature_directory.zig").Directory) catch return error.OperationExecutionFailed).*;
+}
+
+const DomainError = @typeInfo(@typeInfo(@TypeOf(Parse.Action.execute)).@"fn".return_type.?).error_union.error_set ||
+    @typeInfo(@typeInfo(@TypeOf(Build.Action.execute)).@"fn".return_type.?).error_union.error_set ||
+    @typeInfo(@typeInfo(@TypeOf(BuildSnapshot.Action.execute)).@"fn".return_type.?).error_union.error_set ||
+    @typeInfo(@typeInfo(@TypeOf(Prepare.Action.execute)).@"fn".return_type.?).error_union.error_set;
+fn contractError(err: DomainError) operations.Error {
+    return if (err == error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE) error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE else error.OperationExecutionFailed;
 }

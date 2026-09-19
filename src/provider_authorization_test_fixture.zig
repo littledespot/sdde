@@ -72,7 +72,7 @@ pub const Fixture = struct {
             .registry_entry = &self.registry_entry,
             .reasoning_effort = "low",
             .response_mode = .prompt_only,
-            .controls = .{ .temperature = @import("domain/model_controls.zig").TemperaturePermille.init(100) },
+            .controls = self.registry_entry.capabilities.inferenceControls(),
         };
         self.schema_arena = .init(allocator);
         errdefer self.schema_arena.deinit();

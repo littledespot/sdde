@@ -22,11 +22,13 @@ pub const Capabilities = struct {
             (!self.temperature or self.inference);
     }
 
+    pub fn inferenceControls(self: Capabilities) @import("model_controls.zig").InferenceControls {
+        return .forTemperatureSupport(self.temperature);
+    }
+
     pub fn supports(self: Capabilities, mode: @import("model_controls.zig").ResponseGuidanceMode, selected: @import("model_controls.zig").InferenceControls) bool {
         if (!self.isValid() or !self.inference) return false;
-        if (selected.temperature) |temperature| {
-            if (!self.temperature or temperature.value > 1000) return false;
-        }
+        if (!@import("std").meta.eql(selected, self.inferenceControls())) return false;
         return switch (mode) {
             .prompt_only => self.structured_response != .unavailable,
             .native_schema => self.structured_response == .bedrock_json_schema,

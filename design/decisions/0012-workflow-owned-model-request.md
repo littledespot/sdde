@@ -16,8 +16,10 @@
   use those domain authorities; generic ownership cannot stand in for semantic-review,
   repair or clarification authority.
 
-- The originating step declares the repository slot, response controls, prompt, result
-  schema and optional input resource once.
+- The originating step declares the repository slot, response mode, prompt, result
+  schema and optional input resource once. The user-approved 2026-09-19 amendment
+  in §12.5 makes temperature engine-owned: `0` when the registered model supports
+  it, omitted otherwise; workflow temperature parameters reject.
 - Registered identity, binding-validation and request-building operations exchange
   immutable typed pipeline values. The 2026-09-18 user-approved preparation amendment
   also permits `prepare-model-request` to reuse those domain owners and publish

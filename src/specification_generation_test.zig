@@ -2159,6 +2159,8 @@ test "published support validates without an execution ledger and rejects erased
     const a = arena.allocator();
     var fixture = try Fixture.init(a, "A borrower receives a renewal receipt.");
     defer fixture.deinit();
+    const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
+    const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
     const current = try completedFixture(&fixture, false);
     const assigned = try sessions.assemble(a, text.validator, fixture.context, current);
     var inputs = try @import("domain/specification_authority.zig").project(a, current.feature, fixture.context.references, assigned.content, current.units[0].?.response.content.brief);
@@ -2171,7 +2173,7 @@ test "published support validates without an execution ledger and rejects erased
         .feature = current.feature,
         .revision = 1,
         .stage = .specified,
-        .reference = try @import("domain/reference_snapshot.zig").build(.{ .bytes = "first" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry),
+        .reference = try @import("domain/reference_snapshot.zig").build(.{ .bytes = "first" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry, contract),
         .brief = inputs.brief.?,
         .content = assigned.content,
         .id_ledger = assigned.ledger,
@@ -2182,10 +2184,36 @@ test "published support validates without an execution ledger and rejects erased
     const bytes = try std.json.Stringify.valueAlloc(a, value, .{});
     var fresh = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer fresh.deinit();
-    const restored = (try state.parse(fresh.allocator(), bytes, current.feature)).state.?;
+    const restored = (try state.parse(fresh.allocator(), bytes, current.feature, contracts.port())).state.?;
     try std.testing.expectEqualStrings(bytes, try std.json.Stringify.valueAlloc(a, restored, .{}));
     const document = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
     try std.testing.expect(document.value.object.get("review").?.object.get("origin") == null);
+    try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, state.parse(a, bytes, current.feature, null));
+    for (0..10) |mode| {
+        var broken = value;
+        var binding = contract;
+        const entries = try a.dupe(@import("domain/reference_extraction_contract.zig").Extraction, binding.extractions);
+        binding.extractions = entries;
+        switch (mode) {
+            0 => broken.reference.extraction_contract = null,
+            1 => binding.workflow_id = .{ .bytes = "foreign-workflow" },
+            2 => binding.workflow_version += 1,
+            3 => entries[0].node = .{ .bytes = "foreign-node" },
+            4 => entries[0].assembly_node = .{ .bytes = "foreign-assembly" },
+            5 => entries[0].result_schema.bytes = "{}",
+            6 => entries[0].composition.bytes = "{}",
+            7 => entries[0].parts = &.{},
+            8 => {
+                const parts = try a.dupe(@import("domain/reference_extraction_contract.zig").Part, entries[0].parts);
+                parts[0].parameters = &.{};
+                entries[0].parts = parts;
+            },
+            9 => binding.extractions = &.{},
+            else => unreachable,
+        }
+        if (mode != 0) broken.reference.extraction_contract = binding;
+        try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, state.parse(a, try std.json.Stringify.valueAlloc(a, broken, .{}), current.feature, contracts.port()));
+    }
     for (0..14) |mode| {
         var broken = value;
         if (mode == 0) {
@@ -2231,7 +2259,7 @@ test "published support validates without an execution ledger and rejects erased
             proofs[0].review.?.detail = "\x00";
             broken.review.evidence = proofs;
         }
-        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, broken, .{}), current.feature));
+        try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, broken, .{}), current.feature, contracts.port()));
     }
 }
 
@@ -2497,4 +2525,39 @@ fn checkDetailRepair(comptime purpose: @import("domain/specification_support.zig
     try std.testing.expect(!detail_owner.detailRule(.supported).accepts("\xc0"));
     try std.testing.expect(detail_owner.detailRule(.supported).accepts(""));
     try std.testing.expect(!detail_owner.detailRule(.unsupported).accepts(""));
+}
+
+// Metadata outlives neither its original graph nor execution arena. Only the
+// serialized comparison evidence crosses to the new invocation.
+test "persisted extraction binding resolves fresh compiled authority after original owners are released" {
+    const contract = @import("domain/reference_extraction_contract.zig");
+    const fixture_type = @import("test_fixtures/extraction_contract.zig").Fixture;
+    const bytes = capture: {
+        var execution_arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer execution_arena.deinit();
+        const a = execution_arena.allocator();
+        const original = try fixture_type.init(a);
+        const binding = try contract.capture(a, original.authority, .source_blocks_v1);
+        break :capture try std.json.Stringify.valueAlloc(std.testing.allocator, binding, .{});
+    };
+    defer std.testing.allocator.free(bytes);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const stored = try @import("domain/strict_json.zig").decode(contract.Binding, a, bytes, .{ .maximum_bytes = 10000, .maximum_depth = 32 });
+    var current = try fixture_type.init(a);
+    try contract.validate(std.testing.allocator, stored, &current.authority, .source_blocks_v1);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, contract.validate, .{ stored, &current.authority, .source_blocks_v1 });
+    current.authority.workflow_version += 1;
+    try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, contract.validate(a, stored, &current.authority, .source_blocks_v1));
+    current.authority.workflow_version -= 1;
+    // Same resource IDs and workflow version, changed schema bytes.
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const changed_schema = try parser.compiler().compile(a, try std.mem.replaceOwned(u8, a, stored.extractions[0].result_schema.bytes, "100", "99"));
+    const changed_plan = try parser.compiler().compileComposition(a, stored.extractions[0].composition.bytes, changed_schema);
+    const resources = try a.dupe(@import("domain/workflow_compilation.zig").CompiledResource, current.authority.resources);
+    resources[0].content = .{ .result_schema = changed_schema };
+    resources[1].content = .{ .json_composition = changed_plan };
+    current.authority.resources = resources;
+    try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, contract.validate(a, stored, &current.authority, .source_blocks_v1));
 }

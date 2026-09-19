@@ -6,7 +6,7 @@ const workflow = @import("../domain/workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 pub const Fault = struct {
     stage: enum { extraction, reconciliation, generation, repair, support, candidate_review },
-    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol },
+    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing },
     repetition: union(enum) { once, every_request: u32, persistent } = .once,
 };
 pub const Driver = struct {
@@ -152,9 +152,10 @@ pub const Driver = struct {
             var base_buffer: [2]@import("../domain/llm_provider_operation.zig").ModelVisibleContent = undefined;
             const base = validated.content(&base_buffer);
             const content = current_request.prepared().?.content;
-            std.testing.expectEqual(base.len + @as(usize, if (attempt > 1) 3 else 0), content.len) catch unreachable;
+            std.testing.expectEqual(base.len + @as(usize, if (attempt > 1) (if (self.fake.invocation_plan.complete.content_diagnostic == .missing_final_text) 2 else 3) else 0), content.len) catch unreachable;
             std.testing.expectEqualDeep(base, content[0..base.len]) catch unreachable;
             if (attempt > 1) std.testing.expectEqualStrings(current_request.protocolPrompt().?, content[base.len].guidance) catch unreachable;
+            self.fake.invocation_plan.complete.content_diagnostic = null;
             if (current_request.id().purpose == .semantic_review) {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
                 const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
@@ -234,7 +235,9 @@ pub const Driver = struct {
                         self.fault_request = request.id();
                         self.fault_requests += 1;
                     }
-                    self.fake.invocation_plan.complete.content = if (fault.shape == .alternating_protocol) (if (attempt % 2 == 1) "{" else "{}") else corrupt(arena.allocator(), body, fault.shape) catch unreachable;
+                    if (fault.shape == .missing_answer or (fault.shape == .alternating_missing and attempt % 2 == 0)) {
+                        self.fake.invocation_plan.complete.content_diagnostic = .missing_final_text;
+                    } else self.fake.invocation_plan.complete.content = if (fault.shape == .alternating_protocol or fault.shape == .alternating_missing) (if (attempt % 2 == 1) "{" else "{}") else corrupt(arena.allocator(), body, fault.shape) catch unreachable;
                     self.fault_calls += 1;
                 }
             }

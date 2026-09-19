@@ -607,3 +607,40 @@ test "Bedrock capitalized messages preserve closed error classification for infe
         try std.testing.expectEqual(.response_invalid, counted.failed.cause);
     }
 }
+
+test "Bedrock inference serializes zero for every registered model and omits unsupported temperature" {
+    const encoding = @import("adapters/provider/bedrock_request.zig");
+    for (contracts.registry.entries) |contract| {
+        for ([_]bool{ true, false }) |temperature_supported| {
+            var fixture: Fixture = undefined;
+            try fixture.init(std.testing.allocator, .bedrock);
+            defer fixture.deinit();
+            fixture.base.registry_entry.provider = contract.provider;
+            fixture.base.registry_entry.model = contract.model;
+            fixture.base.registry_entry.capabilities = contract.capabilities;
+            // The unsupported variant is a synthetic registered capability contract.
+            fixture.base.registry_entry.capabilities.temperature = temperature_supported;
+            fixture.base.provider_binding.controls = fixture.base.registry_entry.capabilities.inferenceControls();
+            fixture.base.request.controls = fixture.base.provider_binding.controls;
+            try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
+            const bytes = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference);
+            defer std.testing.allocator.free(bytes);
+            var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 32 }, false, null);
+            defer parsed.deinit();
+            if (temperature_supported) {
+                const inference = parsed.value.object.get("inferenceConfig").?;
+                try std.testing.expectEqual(@as(usize, 1), inference.object.count());
+                try std.testing.expectEqualStrings("0", inference.object.get("temperature").?.number_string);
+            } else try std.testing.expect(parsed.value.object.get("inferenceConfig") == null);
+            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count);
+            defer std.testing.allocator.free(counted);
+            try std.testing.expect(std.mem.indexOf(u8, counted, "\"temperature\"") == null);
+            var altered = fixture.base.request;
+            altered.controls = .forTemperatureSupport(!temperature_supported);
+            var altered_binding = fixture.base.provider_binding;
+            altered_binding.controls = altered.controls;
+            try std.testing.expect(!altered.matchesBinding(fixture.base.provider_binding));
+            try std.testing.expect(!altered.matchesBinding(altered_binding));
+        }
+    }
+}

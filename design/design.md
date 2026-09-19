@@ -36,8 +36,11 @@ Implementation remains pending; it preserves business and policy ownership.
 user-directed generic JSON response decomposition and deterministic assembly design.
 Shapes and partitions are workflow configuration; assembly needs no LLM prompt.
 The configured compiler, runner integration and initial extraction split are
-implemented. The finite graph ceiling is 1,024. Measured live improvement and the
-separate persisted extraction-contract binding remain outstanding.
+implemented. The finite graph ceiling is 1,024. The separately approved §12.7
+amendment derives persisted comparison evidence from existing compiled bindings;
+current registry authority governs readback. The approved §§12.7/22.6 amendment
+permits bounded missing-final-answer correction through existing retry owners.
+Measured live improvement remains outstanding.
 
 **Scope:** Engine development in this repository. `init`, `drift`, `audit`,
 version-control integration and artifact fingerprinting remain outside the
@@ -834,6 +837,11 @@ The new engine is ready for production evaluation when all of the following are 
     be used to obtain a broader capability.
 
 12. **Model results, limits, and retries.**
+    - Under the user-approved 2026-09-19 amendment to §12.5, every engine inference
+      request uses temperature `0` when supported by its registered model and
+      omits it otherwise. Workflow overrides reject; preparation, authorization
+      and retries preserve this policy. Bedrock evaluation uses the same policy;
+      OpenAI evaluation remains unchanged.
     - Every YAML-declared model operation—including implementation and repair—conforms with a
       nano-class model and has an ADR 0006 compact closed response schema, complete
       evidence/guidance packet, and deterministic runner-owned request identity/accounting

@@ -114,7 +114,10 @@ pub fn status(result: *const Result) @import("../domain/workflow.zig").OutcomeTa
     return switch (result.outcome()) {
         .decoded => .ok,
         .protocol_rejected => .invalid,
-        .not_decoded => |source| observation.status(source),
+        .not_decoded => |source| switch (source.outcome()) {
+            .validated => |evidence| if (evidence.missingFinalText()) .invalid else observation.status(source),
+            .rejected, .cancelled => observation.status(source),
+        },
     };
 }
 

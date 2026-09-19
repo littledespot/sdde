@@ -700,7 +700,7 @@ test "provider cause survives request release without inventing a candidate reje
     }
 }
 
-test "production rejected-content observation reaches reports after request and runner release" {
+test "missing-answer exhaustion retains usage and diagnostics after request and runner release" {
     const io = std.testing.io;
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -743,13 +743,15 @@ test "production rejected-content observation reaches reports after request and 
         prepared.prepare_workflow = Prepared.ready;
         const outcome = @import("../../../src/application/workflow_engine_orchestrator.zig").run(.{ .context = bindings.context, .vtable = &prepared });
         try std.testing.expectEqual(.failed, outcome.executionStatus().?);
-        try std.testing.expectEqual(@as(usize, 1), wire.calls);
+        try std.testing.expectEqual(@as(usize, 3), wire.calls);
+        try std.testing.expectEqual(@as(u64, 3), outcome.execution_rejected.retry_limit.completed_executions);
+        try std.testing.expectEqual(@as(u32, 2), outcome.execution_rejected.retry_limit.limit.value);
+        report.terminal_rejection = c.TerminalRejection.fromNative(outcome.execution_rejected);
         const runner = &invocation.pipeline_runner.?;
         // Retire current transport views through the common delta boundary before reporting.
         const pipeline = @import("../../../src/domain/pipeline.zig");
         const retired = [_]pipeline.DataKey{
             @import("../../../src/application/model_request_workflow.zig").prepared_schema.key,
-            @import("../../../src/application/provider_observation_workflow.zig").schema.key,
         };
         var retirement: pipeline.NodeDelta = .{};
         for (retired) |key| retirement.data_invalidations.insert(key);
@@ -758,7 +760,7 @@ test "production rejected-content observation reaches reports after request and 
         report.workflow_outcome = outcome.executionStatus();
         try @import("observation.zig").capture(a, runner, &report);
     }
-    try std.testing.expectEqual(@as(u128, 932), report.total_tokens);
+    try std.testing.expectEqual(@as(u128, 2796), report.total_tokens);
     try std.testing.expectEqual(@as(u64, 932), report.last_model_usage.?.total_tokens);
     try std.testing.expectEqualStrings("response_invalid", report.provider_diagnostic.?);
     try std.testing.expectEqual(.missing_final_text, report.provider_content_diagnostic.?);
@@ -1035,4 +1037,15 @@ test "events and reports preserve native repair changes and text spans after rel
         const tree = try std.json.parseFromSlice(std.json.Value, a, event, .{});
         try std.testing.expectEqual(index == 1, tree.value.object.get("repairs").?.array.items[0].object.get("changed").?.bool);
     }
+}
+
+test "persisted extraction rejection retains its terminal diagnostic in report readback" {
+    const native: @import("../../../src/domain/workflow_execution.zig").Rejection = .{ .operation_failed = error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE };
+    const value = c.TerminalRejection.fromNative(native);
+    const bytes = try std.json.Stringify.valueAlloc(std.testing.allocator, value, .{});
+    defer std.testing.allocator.free(bytes);
+    var decoded = try std.json.parseFromSlice(c.TerminalRejection, std.testing.allocator, bytes, .{});
+    defer decoded.deinit();
+    try std.testing.expectEqual(.operation_failed, decoded.value.kind);
+    try std.testing.expectEqualStrings("REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE", decoded.value.detail.?);
 }

@@ -62,7 +62,7 @@ test "runtime rejects schema drift and releases candidates on cancellation inval
         const expected: execution.Rejection = switch (@as(Fault, fault)) {
             .schema_version, .undeclared_outcome => .authority,
             .cancel_after_allocation => .cancelled,
-            .throw_after_allocation => .operation_failed,
+            .throw_after_allocation => .{ .operation_failed = error.OperationExecutionFailed },
             .deadline_after_allocation => .deadline_exhausted,
             .none => unreachable,
         };

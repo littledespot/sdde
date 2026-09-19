@@ -4,7 +4,6 @@ const workflow = @import("../../domain/workflow.zig");
 const definition = @import("../../domain/workflow_definition.zig");
 const compilation = @import("../../domain/workflow_compilation.zig");
 const workflow_retry = @import("../../domain/workflow_retry.zig");
-const composition_flow = @import("../../domain/workflow_json_composition.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
@@ -70,7 +69,8 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
     try validateReachability(allocator, steps, graph.authority.transitions, start);
     try validateTerminalReachability(allocator, steps, graph.authority.transitions);
     try validateBoundedCycles(allocator, steps, graph.authority.transitions);
-    try validateDataFlow(allocator, graph, start);
+    const flow = @import("../../domain/workflow_data_flow.zig").analyze(allocator, graph.authority) catch return invalid();
+    allocator.free(flow);
 }
 
 fn validateDataSchemas(authority: compilation.SemanticAuthority) Error!void {
@@ -184,64 +184,6 @@ fn visitUnguarded(
         if (steps[target].retry_authority == null) try visitUnguarded(steps, transitions, target, colors);
     }
     colors[index] = 2;
-}
-
-fn validateDataFlow(allocator: std.mem.Allocator, graph: compilation.CompiledWorkflow, start: usize) Error!void {
-    const steps = graph.authority.steps;
-    const State = struct {
-        keys: KeyState,
-        composition: composition_flow.State = .{},
-    };
-    const inputs = allocator.alloc(?State, steps.len) catch return invalid();
-    @memset(inputs, null);
-    var initial = [_]bool{false} ** key_count;
-    for (graph.authority.invocation_outputs) |key| {
-        if (initial[@intFromEnum(key)]) return invalid();
-        initial[@intFromEnum(key)] = true;
-    }
-    inputs[start] = .{ .keys = initial };
-    var queue: std.ArrayList(usize) = .empty;
-    queue.append(allocator, start) catch return invalid();
-    var cursor: usize = 0;
-    while (cursor < queue.items.len) : (cursor += 1) {
-        const index = queue.items[cursor];
-        const input = inputs[index].?;
-        const output = try applyDataContract(input.keys, steps[index]);
-        for (graph.authority.transitions) |transition| {
-            if (!std.mem.eql(u8, transition.from.bytes, steps[index].id.bytes)) continue;
-            const composed = composition_flow.apply(input.composition, steps[index], graph.authority.resources, transition.outcome) catch return invalid();
-            if (transition.target == .terminal) {
-                if (transition.target.terminal == .ok and composed.plan != null) return invalid();
-                continue;
-            }
-            const target = stepIndex(steps, transition.target.step.bytes) orelse return invalid();
-            if (inputs[target]) |existing| {
-                if (!std.mem.eql(bool, &existing.keys, &output) or !existing.composition.eql(composed)) return invalid();
-            } else {
-                inputs[target] = .{ .keys = output, .composition = composed };
-                queue.append(allocator, target) catch return invalid();
-            }
-        }
-    }
-}
-
-fn applyDataContract(input: KeyState, step: compilation.CompiledStep) Error!KeyState {
-    var result = input;
-    for (step.gates) |gate| {
-        if (!input[@intFromEnum(gate.evidence)]) return invalid();
-        for (gate.authority) |key| if (!input[@intFromEnum(key)]) return invalid();
-    }
-    for (step.requires) |key| if (!input[@intFromEnum(key)]) return invalid();
-    for (step.produces) |key| {
-        if (result[@intFromEnum(key)]) return invalid();
-        result[@intFromEnum(key)] = true;
-    }
-    for (step.replaces) |key| if (!result[@intFromEnum(key)]) return invalid();
-    for (step.invalidates) |key| {
-        if (!result[@intFromEnum(key)]) return invalid();
-        result[@intFromEnum(key)] = false;
-    }
-    return result;
 }
 
 fn stepIndex(steps: []const compilation.CompiledStep, expected: []const u8) ?usize {

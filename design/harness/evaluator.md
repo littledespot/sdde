@@ -74,13 +74,17 @@ The internal test environment supplies the evaluation selection:
 | --- | --- |
 | `schema` | `"evaluation-config/v1"` |
 | `reasoning_effort` | Explicit `null`, or `none`, `minimal`, `low`, `medium`, `high`, `xhigh`; must be supported by the selected model. |
-| `temperature` | Explicit `null`, or a number from 0 through 2 supported by the selected model. |
+| `temperature` | Bedrock: `null` derives the required control from registered capabilities; explicit `0` is accepted only when supported, and nonzero values reject. OpenAI: explicit `null`, or a supported number from 0 through 2. |
 | `timeout_ms` | Positive integer deadline for each network attempt. |
 | `retry_limit` | Integer 0–65535; additional attempts, not total attempts. Zero disables retries. |
 | `retry_delay_ms` | Nonnegative integer; must be positive when retries are enabled. |
 | `total_token_budget` | Positive integer allowance for reported input + output tokens across this evaluation. |
 
-- `null` omits the corresponding API control; it does not select a hidden local value.
+- For reasoning effort and OpenAI temperature, `null` omits the API control.
+- Under the user-approved 2026-09-19 §12.5 amendment, Bedrock temperature always
+  resolves to `0` when supported, otherwise omission. The resolved value is retained
+  in reports and validated before request encoding; callers cannot clear or alter it.
+  OpenAI evaluation remains unchanged.
 - Unsupported model/settings combinations are configuration errors, not permission to
   choose another model.
 - Judge settings/accounting are independent of generation.
@@ -120,7 +124,8 @@ The internal test environment supplies the evaluation selection:
   is inferred.
 - Both accept `reasoning_effort: null`; GPT-OSS also supports `low`, `medium` and
   `high`.
-- Temperature is null or 0–1.
+- Both registered Bedrock models require temperature `0`. Unsupported models omit
+  the control according to their registered capability, not an operator override.
 - These are the repository's registered contracts, not a catalogue of all models
   available from the provider.
 

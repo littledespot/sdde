@@ -35,7 +35,7 @@ const Settings = struct {
 /// Values borrow from the caller-owned selection and JSON decoding arena.
 pub fn parse(a: std.mem.Allocator, bytes: []const u8, selection: Selection) c.Error!Config {
     const settings = try c.decode(Settings, a, bytes);
-    const value: Config = .{
+    var value: Config = .{
         .schema = settings.schema,
         .api = selection.api,
         .model = selection.model.bytes,
@@ -47,6 +47,11 @@ pub fn parse(a: std.mem.Allocator, bytes: []const u8, selection: Selection) c.Er
         .retry_delay_ms = settings.retry_delay_ms,
         .total_token_budget = settings.total_token_budget,
     };
+    if (selection.api == .bedrock_converse) {
+        const required = try bedrockTemperature(selection.model);
+        if (settings.temperature != null and !std.meta.eql(settings.temperature, required)) return error.InvalidEvaluationContract;
+        value.temperature = required;
+    }
     try validate(value);
     return value;
 }
@@ -62,7 +67,13 @@ pub fn validate(value: Config) c.Error!void {
             const model = registry.resolve(.{ .bytes = "aws-bedrock" }, c.ModelId.parse(value.model).?) orelse return error.InvalidEvaluationContract;
             if (!model.acceptsConfig(.{ .aws_bedrock = .{ .region = region } }) or !model.capabilities.inference or
                 !contracts.supportsReasoningEffort(model.supported_reasoning_efforts, if (value.reasoning_effort) |effort| @tagName(effort) else null)) return error.InvalidEvaluationContract;
-            if (value.temperature) |temperature| if (!model.capabilities.temperature or temperature > 1) return error.InvalidEvaluationContract;
+            if (!std.meta.eql(value.temperature, try bedrockTemperature(c.ModelId.parse(value.model).?))) return error.InvalidEvaluationContract;
         },
     }
+}
+
+fn bedrockTemperature(model: c.ModelId) c.Error!?f64 {
+    const entry = registry.resolve(.{ .bytes = "aws-bedrock" }, model) orelse return error.InvalidEvaluationContract;
+    const controls = entry.capabilities.inferenceControls();
+    return if (controls.temperature) |temperature| temperature.wireValue() else null;
 }

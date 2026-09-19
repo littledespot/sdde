@@ -10,13 +10,15 @@ const data = @import("../domain/pipeline_data.zig");
 const gate = @import("../domain/workflow_gate.zig");
 const capability_contract = @import("../domain/workflow_capability.zig");
 
-pub const Error = error{OperationExecutionFailed};
+pub const Error = execution.OperationError;
 
 pub const InvocationInput = struct {
     arguments: []const []const u8,
 };
 
 pub const StepInput = struct {
+    /// The runner's current immutable compiled metadata, never execution capability.
+    authority: ?*const compilation.SemanticAuthority = null,
     data: data.View,
     step: *const compilation.CompiledStep,
     resources: []const compilation.CompiledResource,

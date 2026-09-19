@@ -183,7 +183,8 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 
 - one reference chunk, artifact section, requirement cluster, task cluster, or file operation per call;
 - strict JSON schema with enums and `additionalProperties: false`;
-- low temperature or provider equivalent, without relying on it for correctness;
+- temperature `0` whenever the selected registered model supports temperature; omit
+  the control only when unsupported, without relying on it for correctness;
 - stable IDs for sources, requirements, tokens, projects, files, tasks, commands, and diagnostics;
 - complete response-shape guidance from the bound compiled schema, including
   nested alternatives and constraints, without synthetic candidate examples;
@@ -194,6 +195,12 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - no full-document retry for a local validation failure;
 - one complete schema-valid result and explicit operation-local retry limits;
 - an optional YAML-declared fallback operation only after deterministic retry exhaustion, never as hidden behavior.
+
+The user-approved 2026-09-19 temperature policy applies to every engine model
+request and Bedrock rubric evaluation. Provider binding derives the control from
+registered capabilities; workflow definitions cannot select or override it.
+Prepared requests, retries and provider authorization retain and validate that
+control. OpenAI rubric evaluation remains outside this amendment.
 
 ### 12.6 Semantic review
 
@@ -208,7 +215,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 
 - The engine ships no model-route registry.
 - The originating model-request step calls a registered generic operation and declares its model
-  slot, prompt/guidance resources, result schema, supported controls, allowed context behavior,
+  slot, prompt/guidance resources, result schema, response mode, allowed context behavior,
   and outcome transitions in the workflow definition.
 - Large resources are declared once and referenced by concise local IDs.
 - The compiler captures and validates every declared resource before execution; there is no
@@ -358,8 +365,12 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   provider-operation evidence; every operation associated with the request must be terminal.
 - Schema-valid candidate evidence permits request `accepted`/`ok` only, granting no semantic,
   approval, commit or workflow-success authority.
-- Protocol/schema rejection closes as request `failed` while retaining the `invalid` outcome;
-  provider stops/failures remain `failed` and cancellation remains `cancelled`.
+- Protocol/schema rejection closes as request `failed` while retaining the `invalid` outcome.
+  The approved missing-final-answer case also admits as `invalid`, with no candidate:
+  sealed observation evidence must establish `missing_final_text`, valid association
+  and known usage. It may enter the same explicit protocol correction and attempt
+  retirement path, or close as failed. Other provider stops/failures remain `failed`
+  and cancellation remains `cancelled`.
 - No retry exhaustion or user approval is inferred.
 - The runner validates the evidence-derived reason/outcome and one direct ledger successor
   before publication; missing, foreign, stale, duplicate or unfinished operation evidence
@@ -452,23 +463,23 @@ authenticated answer acceptance and protected history (§23.2).
   revisions, and required-field coverage before closing the record.
 - Failure to establish support leaves the same record open; it never creates an answer.
 
-- A reference-extraction workflow step additionally declares its partition-contract resource.
-- `ReferenceSnapshot.extractionContract` stores the exact compiled workflow ID/version/node
-  identity, internal request-contract identity, selected result-schema resource identity, and
-  partition contract.
-- With ADR 0016 composition, this design-level binding covers the complete compiled
-  composition and its part operations/schema projections, not one chosen contributing
-  call. It supplies no persisted request/part checkpoint. The current native snapshot
-  stores canonical source/claim/token data without this named extraction-contract
-  field; that existing design requirement must not be described as implemented.
-  [ADR 0016's readiness boundary](../decisions/0016-configured-json-response-composition.md#persisted-contract-readiness)
-  requires its canonical writer/readback implementation or an explicit amendment
-  before full §12.7 conformance; in-memory composition does not close that gap.
-- Revalidation of a persisted snapshot must resolve that closed compiled authority and blocks with
-  `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE` rather than silently using a newer schema,
-  resource, or chunk boundary contract.
-- A fresh extraction starts at the selected workflow's `start`; it never resumes a saved request
-  or candidate from that snapshot.
+- Persisted extraction-contract metadata is derived from the current compiled workflow,
+  complete result schema, composition and part-operation bindings, plus the native
+  `source_blocks_v1` partition identity. No separate partition resource is configured.
+- `ReferenceSnapshot.extraction_contract` records the workflow ID/version, extraction
+  and assembly nodes, `model-request/v1`, exact schema/composition resource IDs and
+  bytes, and part-operation IDs/parameters. Derived part schemas remain owned by the
+  canonical schema and composition; they are not copied into a second authority.
+- The runner supplies immutable selected-graph metadata to the snapshot writer. The
+  existing graph data-flow owner resolves the applicable extraction bindings. The
+  state reader and publication validator resolve them through the current validated
+  workflow registry and compare exact content as well as identity.
+- Missing, unavailable or changed bindings reject with the terminal typed
+  `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE` diagnostic. The snapshot supplies
+  comparison evidence, never a schema fallback, executable graph or saved request.
+  Existing source, claim, token, relationship and review validation still applies.
+- Fresh invocations start at the selected workflow's `start`; snapshots do not resume
+  requests or parts. Readback must work after the original execution has been released.
 
 ### 12.8 Closed authority-reconciliation boundary
 
