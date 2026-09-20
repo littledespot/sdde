@@ -454,7 +454,7 @@
       "minLength": 1,
       "maxLength": 2000
     },
-    "source_detail": {
+    "gap_detail": {
       "type": "object",
       "properties": {
         "detail": {
@@ -465,7 +465,8 @@
         }
       },
       "required": [
-        "detail"
+        "detail",
+        "question"
       ],
       "additionalProperties": false
     }

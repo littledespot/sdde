@@ -27,7 +27,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             rejection: review.Diagnostic,
             finding: ?review.Value,
             pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, detail_rule: ?@import("specification_support_evidence.zig").DetailRule.Guidance, finding: ?review.Value = null, decision: ?review.Decision = null, question_rule: ?[]const u8 } {
-                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .detail_rule = if (self.rejection.issue == .invalid_detail and self.finding != null) @import("specification_support_evidence.zig").detailRule(self.finding.?.decision.finding()).guidance() else null, .finding = if (self.rejection.issue == .invalid_detail) null else self.finding, .decision = if (self.rejection.issue == .invalid_detail and self.finding != null) self.finding.?.decision else null, .question_rule = if (purpose == .source and self.rejection.issue == .invalid_detail and self.finding != null) admission.questionGuidance(self.finding.?.decision.finding()) else null };
+                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .detail_rule = if (self.rejection.issue.isText() and self.finding != null) @import("specification_support_evidence.zig").detailRule(self.finding.?.decision.finding()).guidance() else null, .finding = if (self.rejection.issue.isText()) null else self.finding, .decision = if (self.rejection.issue.isText() and self.finding != null) self.finding.?.decision else null, .question_rule = if (purpose == .source and self.rejection.issue.isText() and self.finding != null) admission.questionGuidance(self.finding.?.decision.finding()) else null };
             }
         };
         const atomic = shared.Contract(Target, Replacement, Facts, Rule);
@@ -74,7 +74,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                     .replace => |value| switch (value) {
                         .finding => true,
                         .selection => issue.issue == .invalid_evidence,
-                        .detail => issue.issue == .invalid_detail,
+                        .detail => issue.issue.isText(),
                     },
                     .delete => unreachable,
                 };
@@ -111,7 +111,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 return error.InvalidAtomicRepair;
             }
             const expected: Replacement = switch (rejection.issue) {
-                .invalid_detail => .{ .detail = detail(value) },
+                .invalid_detail, .missing_question, .invalid_question, .forbidden_question => .{ .detail = detail(value) },
                 .invalid_evidence => .{ .selection = selection(value) },
                 .invalid_json, .unknown_requirement, .duplicate_requirement, .missing_requirement, .invalid_decision => return error.UnsafeSupportRepair,
             };
@@ -130,7 +130,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 .finding => "principle_finding",
                 .selection => "principle_selection",
                 .detail => "detail",
-            } else if (kind == .finding and try review.applicability(inputs, authorization.target.requirement) == .review) "applicability_finding" else if (kind == .detail) "source_detail" else @tagName(kind);
+            } else if (kind == .finding and try review.applicability(inputs, authorization.target.requirement) == .review) "applicability_finding" else if (kind == .detail) (if (admission.questionRequired(authorization.rule.finding.?.decision.finding())) "gap_detail" else "detail") else @tagName(kind);
             return atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index]);
         }
         pub const parse = atomic.parse;

@@ -2550,6 +2550,15 @@ fn checkDetailRepair(comptime purpose: @import("domain/specification_support.zig
         const authorization = try repair.authorize(a, inputs, context, rejected);
         const packet = try repair.packet(a, inputs, context, candidate, authorization);
         defer @import("domain/model_input_packet.zig").release(packet);
+        var schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+        const schemas = try schema_parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
+        const selected = schemas.select(packet.resultDefinition().?).?;
+        const codec = @import("domain/model_candidate_json.zig");
+        var expected = authorization.operation.replace;
+        expected.detail.detail = good.entries[0].value.detail;
+        if (purpose == .source) expected.detail.question = good.entries[0].value.question;
+        try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = try codec.encodeSelected(repair.Replacement, a, expected) });
+        if (purpose == .principles) try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = "{\"detail\":\"Known facts.\",\"question\":\"Which rule applies?\"}", .rejection = .unknown_property, .path = "/question" });
         const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
         const repair_rule = body.value.object.get("repair").?.object.get("rule").?.object;
         try std.testing.expect(!repair_rule.contains("finding"));
@@ -2817,11 +2826,11 @@ test "source gap questions survive detail repair insertion and persisted validat
     for ([_]?[]const u8{ null, "", " \n", "\x00" }) |bad| {
         entries[0].value.question = bad;
         const rejected = (try review.collect(a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), null)).rejected;
-        try std.testing.expectEqual(.invalid_detail, rejected.rejection.selected().?.issue);
+        try std.testing.expectEqual(@as(review.Issue, if (bad == null) .missing_question else .invalid_question), rejected.rejection.selected().?.issue);
         const auth = try repair.authorize(a, inputs, fixture.context, rejected);
         const packet = try repair.packet(a, inputs, fixture.context, rejected.candidate.?, auth);
         defer @import("domain/model_input_packet.zig").release(packet);
-        try std.testing.expectEqualStrings("source_detail", packet.resultDefinition().?.bytes);
+        try std.testing.expectEqualStrings("gap_detail", packet.resultDefinition().?.bytes);
         const unchanged = try repair.merge(a, inputs, fixture.context, rejected.candidate.?, auth, auth.operation.replace, null);
         try std.testing.expectEqual(.recurring, repair.progress(auth, unchanged));
         const fixed = try repair.merge(a, inputs, fixture.context, rejected.candidate.?, auth, .{ .detail = .{ .detail = entries[0].value.detail, .question = question } }, null);
@@ -2944,5 +2953,77 @@ test "false conflicts repair a closed relation group with exact preconditions an
         const gap = try supportDecision(a, negative.inputs);
         try std.testing.expectEqual(.needs_user, gap.result.continuation);
         try std.testing.expectError(error.InvalidRequiredAuthority, repair.authorize(a, parsed, ctx, .{ .review = negative.candidate, .inputs = gap.inputs, .observations = gap.observations, .result = gap.result }));
+    }
+}
+
+test "R42 selected question schemas match retained decisions and text defects share one retry identity" {
+    const review = @import("domain/specification_support.zig").Source;
+    const repair = @import("domain/specification_support_repair.zig").Source;
+    const json = @import("domain/model_candidate_json.zig");
+    const check = @import("model_payload_schema_test.zig").checkDocument;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
+    for ([_][]const u8{ "Display a greeting and the UTC time on startup.", "A borrower renews a loan." }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, null, null);
+        const good = try reviewFor(a, inputs);
+        for (std.meta.tags(review.Decision)) |decision| {
+            const entries = try a.dupe(review.Finding, good.entries);
+            const index = if (decision == .not_applicable) blk: {
+                const ledger = try @import("domain/required_authority.zig").build(a, inputs);
+                for (ledger.requirements, 0..) |req, i| if (req.seed.id.kind == .entity_applicability) break :blk i;
+                return error.MissingEntityRequirement;
+            } else 0;
+            const negative = @import("domain/specification_support_evidence.zig").questionRequired(decision.finding());
+            entries[index].value.decision = decision;
+            entries[index].value.detail = "The source establishes the action; its duration is unspecified.";
+            entries[index].value.question = if (negative) null else "Unexpected question.";
+            const rejected = (try review.collect(a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), null)).rejected;
+            try std.testing.expectEqual(@as(review.Issue, if (negative) .missing_question else .forbidden_question), rejected.rejection.selected().?.issue);
+            const auth = try repair.authorize(a, inputs, fixture.context, rejected);
+            const packet = try repair.packet(a, inputs, fixture.context, rejected.candidate.?, auth);
+            defer @import("domain/model_input_packet.zig").release(packet);
+            const selected = schemas.select(packet.resultDefinition().?).?;
+            const only_detail = "{\"detail\":\"The source establishes the action; its duration is unspecified.\"}";
+            const pair = "{\"detail\":\"The source establishes the action; its duration is unspecified.\",\"question\":\"What duration applies? State the duration and starting event.\"}";
+            try check(selected.modelBytes(), .{ .bytes = if (negative) pair else only_detail });
+            try check(selected.modelBytes(), .{ .bytes = if (negative) only_detail else pair, .rejection = if (negative) .missing_required_property else .unknown_property, .path = "/question" });
+            const fixed = try repair.merge(a, inputs, fixture.context, rejected.candidate.?, auth, try repair.parse(a, auth, packet, if (negative) pair else only_detail), null);
+            try std.testing.expectEqual(.resolved, repair.progress(auth, fixed));
+            try std.testing.expectEqual(decision, fixed.accepted.candidate.review.entries[index].value.decision);
+            try std.testing.expectEqualDeep(entries[index].value.provenance, fixed.accepted.candidate.review.entries[index].value.provenance);
+            for (entries, fixed.accepted.candidate.review.entries, 0..) |before, after, i| if (i != index) try std.testing.expectEqualDeep(before, after);
+            try review.validateStored(a, fixed.accepted.inputs, fixture.context.inputs);
+            if (!negative) continue;
+            // A schema-valid repair may introduce a native text defect. It must
+            // retain the original pair's key, even when the failing field changes.
+            const blank_detail = "{\"detail\":\"\",\"question\":\"What duration applies? State its starting event.\"}";
+            try check(selected.modelBytes(), .{ .bytes = blank_detail });
+            const recurring = try repair.merge(a, inputs, fixture.context, rejected.candidate.?, auth, try repair.parse(a, auth, packet, blank_detail), null);
+            try std.testing.expectEqual(.invalid_detail, recurring.rejected.rejection.selected().?.issue);
+            try std.testing.expectEqual(.recurring, repair.progress(auth, recurring));
+            const again = try repair.authorize(a, inputs, fixture.context, recurring.rejected);
+            try std.testing.expectEqualDeep(auth.retry.?.key, again.retry.?.key);
+            const blank_question = "{\"detail\":\"Known facts and missing duration.\",\"question\":\" \"}";
+            try check(selected.modelBytes(), .{ .bytes = blank_question });
+            const next_packet = try repair.packet(a, inputs, fixture.context, recurring.rejected.candidate.?, again);
+            defer @import("domain/model_input_packet.zig").release(next_packet);
+            const still_bad = try repair.merge(a, inputs, fixture.context, recurring.rejected.candidate.?, again, try repair.parse(a, again, next_packet, blank_question), null);
+            try std.testing.expectEqual(.invalid_question, still_bad.rejected.rejection.selected().?.issue);
+            try std.testing.expectEqual(.recurring, repair.progress(again, still_bad));
+            try std.testing.expectEqualDeep(auth.retry.?.key, (try repair.authorize(a, inputs, fixture.context, still_bad.rejected)).retry.?.key);
+            var both = rejected.candidate.?;
+            const malformed = try a.dupe(review.Finding, both.review.entries);
+            malformed[index].value.detail = "";
+            both.review.entries = malformed;
+            const all = (try review.validate(a, inputs, fixture.context.inputs, both)).rejected.rejection.diagnostics;
+            try std.testing.expectEqual(@as(usize, 2), all.len);
+            try std.testing.expectEqual(.invalid_detail, all[0].issue);
+            try std.testing.expectEqual(.missing_question, all[1].issue);
+        }
     }
 }

@@ -137,7 +137,7 @@ pub const DetailRule = struct {
     pub const Guidance = struct { instruction: []const u8, allow_empty: bool, maximum_utf8_bytes: usize };
     pub fn guidance(self: DetailRule) Guidance {
         return .{
-            .instruction = "Explain the retained finding, not the specification field. Nonempty detail must be nonblank UTF-8; only tab/newline control characters are allowed.",
+            .instruction = "Preserve the retained finding. Put known facts/preconditions and the reason in detail. Nonempty text must be nonblank UTF-8; only tab/newline controls are allowed.",
             .allow_empty = self.allow_empty,
             .maximum_utf8_bytes = @import("clarification_inputs.zig").max_text_bytes,
         };
@@ -159,18 +159,20 @@ pub fn questionRequired(finding: a.Finding) bool {
     };
 }
 pub fn questionGuidance(finding: a.Finding) []const u8 {
-    return if (questionRequired(finding)) "Ask for the missing decision and expected answer; keep known facts in detail." else "Omit question; preserve the finding and meaning.";
+    return if (questionRequired(finding)) "Return question asking the user for the missing business/source decision and expected answer format. Do not answer it or ask for a review verdict." else "Omit question; preserve the finding and meaning.";
 }
-pub fn validQuestion(finding: a.Finding, question: ?[]const u8) bool {
-    if (!questionRequired(finding)) return question == null;
-    return if (question) |value| @import("clarification_inputs.zig").validText(value, @import("clarification_inputs.zig").max_text_bytes) else false;
+pub const QuestionIssue = enum { missing_question, invalid_question, forbidden_question };
+pub fn questionIssue(finding: a.Finding, question: ?[]const u8) ?QuestionIssue {
+    if (!questionRequired(finding)) return if (question == null) null else .forbidden_question;
+    const value = question orelse return .missing_question;
+    return if (@import("clarification_inputs.zig").validText(value, @import("clarification_inputs.zig").max_text_bytes)) null else .invalid_question;
 }
 
 pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, evidence: a.Evidence) Error!void {
     const review = evidence.review orelse return error.InvalidRequiredAuthority;
     if (review.principle_citations.len != 0 or review.principle_registry != null) return error.InvalidRequiredAuthority;
     if (!validDetail(evidence.finding, review.detail)) return error.InvalidRequiredAuthority;
-    if (!validQuestion(evidence.finding, review.question)) return error.InvalidRequiredAuthority;
+    if (questionIssue(evidence.finding, review.question) != null) return error.InvalidRequiredAuthority;
     const result = try admit(allocator, inputs, sources, evidence.requirement, evidence.finding, .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, review.source_ids, review.detail);
     if (result != .accepted) return error.InvalidRequiredAuthority;
     try sameProvenance(result.accepted.provenance, review.provenance);

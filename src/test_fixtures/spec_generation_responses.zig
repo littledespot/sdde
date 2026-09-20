@@ -8,7 +8,7 @@ const native = @import("../application/reference_extraction_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
 pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text, occupied_summary, occupied_signals, occupied_conflict, permuted_disposition, permuted_conflict_disposition };
-pub const SupportFault = enum { missing_detail, foreign_provenance, missing_finding, duplicate_finding, partial_findings, two_missing_findings, foreign_sources };
+pub const SupportFault = enum { missing_detail, foreign_provenance, missing_finding, duplicate_finding, partial_findings, two_missing_findings, foreign_sources, question_recover, question_exhaust, question_native_exhaust, question_mixed_exhaust };
 pub const SourceLoss = enum { empty, partial, classification, signal, post_generation, unchanged, false_conflict, unchanged_conflict };
 pub const Options = struct {
     global_sequence: ?@import("global_protocol_sequence.zig").Mode = null,
@@ -460,6 +460,29 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const repair = @import("../domain/specification_support_repair.zig").Source;
                 const state = try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_repair_workflow.zig").schema, .support_repair);
                 const authorized = state.authorization;
+                if (options.support_fault) |fault| switch (fault) {
+                    .question_recover, .question_exhaust, .question_native_exhaust, .question_mixed_exhaust => {
+                        var replacement: repair.Replacement = .{ .detail = .{
+                            .detail = "The source establishes the action; its duration is unspecified.",
+                            .question = "What duration applies? State the duration and starting event.",
+                        } };
+                        switch (fault) {
+                            .question_recover => if (options.attempt == 1) {
+                                replacement.detail.question = null;
+                            },
+                            .question_exhaust => replacement.detail.question = null,
+                            .question_native_exhaust => if (options.support_merges == 0) {
+                                replacement.detail.detail = "";
+                            } else {
+                                replacement.detail.question = " ";
+                            },
+                            .question_mixed_exhaust => replacement.detail.question = if (options.attempt == 1) null else " ",
+                            else => unreachable,
+                        }
+                        return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, replacement);
+                    },
+                    else => {},
+                };
                 if (options.evidence_fault == .unchanged) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, authorized.operation.replace);
                 if (options.support_fault == .foreign_sources and options.support_merges == 0) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, authorized.operation.replace);
                 var value = findings[authorized.target.ordinal - 1].value;
@@ -497,6 +520,13 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             };
             if (options.support_fault) |fault| if ((inputs.specification != null) == options.support_post) {
                 switch (fault) {
+                    .question_recover, .question_exhaust, .question_native_exhaust, .question_mixed_exhaust => {
+                        for (findings[0..2]) |*finding| {
+                            finding.value.decision = .unsupported;
+                            finding.value.detail = "The source establishes the action; its duration is unspecified.";
+                            finding.value.question = null;
+                        }
+                    },
                     .missing_detail => {
                         findings[0].value.decision = .ambiguous;
                         findings[0].value.question = "Which renewal deadline applies? Supply a duration and starting event.";

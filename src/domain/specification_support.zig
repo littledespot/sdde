@@ -55,7 +55,25 @@ pub fn Contract(comptime purpose: Purpose) type {
             last_repair: ?@import("atomic_repair.zig").Merge = null,
             occurrences: @import("repair_occurrences.zig").Set = .{},
         };
-        pub const Issue = enum { invalid_json, unknown_requirement, duplicate_requirement, missing_requirement, invalid_detail, invalid_evidence, invalid_decision };
+        pub const Issue = enum {
+            invalid_json,
+            unknown_requirement,
+            duplicate_requirement,
+            missing_requirement,
+            invalid_detail,
+            missing_question,
+            invalid_question,
+            forbidden_question,
+            invalid_evidence,
+            invalid_decision,
+
+            pub fn isText(self: Issue) bool {
+                return switch (self) {
+                    .invalid_detail, .missing_question, .invalid_question, .forbidden_question => true,
+                    else => false,
+                };
+            }
+        };
         pub const Diagnostic = struct { issue: Issue, requirement: ?a.Id, ordinal: ?u32, revision: u64, origin: ?Origin, entry_index: ?usize = null, evidence: ?evidence_admission.Rejection = null };
         pub const Rejection = struct {
             diagnostics: []const Diagnostic,
@@ -185,7 +203,13 @@ pub fn Contract(comptime purpose: Purpose) type {
                     const before = diagnostics.items.len;
                     if (purpose == .source) if (finding.value.decision == .not_applicable and required != .review) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
                     const semantic = finding.value.decision.finding();
-                    if (!admission.validDetail(semantic, finding.value.detail) or (purpose == .source and !admission.validQuestion(semantic, finding.value.question))) try diagnostics.append(allocator, diagnostic(proposed, .invalid_detail, requirement.seed.id, ordinal, position));
+                    if (!admission.validDetail(semantic, finding.value.detail)) try diagnostics.append(allocator, diagnostic(proposed, .invalid_detail, requirement.seed.id, ordinal, position));
+                    if (purpose == .source) if (admission.questionIssue(semantic, finding.value.question)) |issue| {
+                        const text_issue: Issue = switch (issue) {
+                            inline else => |value| @field(Issue, @tagName(value)),
+                        };
+                        try diagnostics.append(allocator, diagnostic(proposed, text_issue, requirement.seed.id, ordinal, position));
+                    };
                     var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail);
                     if (purpose == .source and reviewed == .accepted) {
                         reviewed.accepted.question = finding.value.question;

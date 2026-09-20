@@ -477,8 +477,13 @@ source-review findings and canonical review evidence. It is required for genuine
 findings and absent for supported/applicability/candidate-defect findings. Existing
 `detail` carries the facts/reason. Initial admission, insertion, selected detail
 correction and persisted validation share this contract; detail correction retains
-the verdict/provenance. Generation uses its existing question shape. Presence and
-association checks are structural, not deterministic proof of actionability.
+the verdict/provenance. Its selected schema requires both `detail` and `question`
+for a retained negative finding, and permits only `detail` otherwise. Diagnostics
+identify missing, invalid or forbidden questions separately from invalid detail;
+they retain one repair unit and retry family. Initial/insertion findings still use
+native decision-dependent validation within their existing wire shape. Generation
+uses its existing question shape. Presence and association checks are structural,
+not deterministic proof of actionability.
 
 Consolidate only the same engine-built subject under existing identity rules.
 Equal wording or shared citations across subjects do not establish equivalent

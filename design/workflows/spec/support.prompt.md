@@ -16,9 +16,10 @@ Use supported for preserved meaning; candidate_omission for meaning lost downstr
 including compatible requirements misclassified as conflicting. Check conflict
 labels against source meaning; unresolved status is not proof of contradiction.
 Use unsupported, ambiguous or conflicting for genuine source gaps: explain the
-known facts in detail; supply question with the exact missing choice and expected
-answer. Omit question for supported, not_applicable and candidate_omission. Do not ask to restate supported behavior or
-change a verdict to pass.
+known facts/preconditions in detail; supply question asking the user for the missing
+choice and specifying the answer format. The user supplies the answer. Omit question
+for supported, not_applicable and candidate_omission. Do not ask to restate supported
+behavior or change a verdict to pass.
 
 Follow evidence_rules and each task's evidence. Positive claim rules apply to
 supported, not_applicable and candidate_omission; non-null supported_provenance
