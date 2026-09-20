@@ -1605,7 +1605,7 @@ test "source omission repair preserves raw siblings and rebuilds canonical ident
         try std.testing.expectError(error.InvalidSourceCitation, extraction.finishText(a, inputs, invalid));
         var unlocalized = facts;
         unlocalized.support = try omissionSupport(&fixture, .{ .unlocalized = .{} });
-        try std.testing.expectError(error.InvalidRequiredAuthority, repair.authorize(a, unlocalized));
+        try std.testing.expectError(error.UnlocalizedSourceOmission, repair.authorize(a, unlocalized));
     }
 }
 

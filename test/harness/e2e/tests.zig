@@ -1016,7 +1016,7 @@ test "reports preserve native extraction reconciliation specification and comple
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var retained: [4]Diagnostic = undefined;
+    var retained: [5]Diagnostic = undefined;
     {
         var source: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer source.deinit();
@@ -1032,6 +1032,9 @@ test "reports preserve native extraction reconciliation specification and comple
         const accounted = (try references.finish(scratch, global, proposal, input.context())).valid;
         const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = input.inputs, .references = accounted, .registry = input.context().registry, .current = input.context().current };
         const review_inputs = try @import("../../../src/domain/specification_authority.zig").project(scratch, input.inputs.corpus.feature_id, accounted, null, null);
+        var omission_inputs = review_inputs;
+        omission_inputs.review_origin = origin;
+        retained[4] = try (Diagnostic{ .support_findings = .from(.source, omission_inputs, .unlocalized_omission) }).copy(a);
         const missing = (try @import("../../../src/domain/specification_support.zig").Source.collect(scratch, review_inputs, context, "{\"entries\":[]}", origin)).rejected;
         try std.testing.expect(missing.rejection.diagnostics.len > 1);
         retained[3] = try (Diagnostic{ .support = missing.rejection }).copy(a);
@@ -1053,6 +1056,7 @@ test "reports preserve native extraction reconciliation specification and comple
         for ([_][]const u8{ try @import("report.zig").renderMarkdown(a, decoded), try @import("report.zig").terminal(a, decoded, "runs", "case") }) |output| {
             try std.testing.expect(std.mem.indexOf(u8, output, bytes) != null);
             try std.testing.expect(std.mem.indexOf(u8, output, "native-validation") != null);
+            if (diagnostic == .support_findings) try std.testing.expect(std.mem.indexOf(u8, output, "No safe repair target can be authorized") != null);
         }
     }
 }

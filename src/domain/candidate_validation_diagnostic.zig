@@ -7,7 +7,7 @@ pub const Diagnostic = union(enum) {
     token_classifications: @import("token_classification_validation.zig").Rejection,
     source_selections: @import("reference_selection_validation.zig").Rejection,
     coverage: @import("specification_coverage.zig").Rejection,
-    support_findings: struct { purpose: @import("specification_support.zig").Purpose = .source, revision: u64, evidence: []const @import("required_authority.zig").Evidence, origins: []const ?@import("model_candidate_origin.zig").Origin, origin: ?@import("model_candidate_origin.zig").Origin },
+    support_findings: SupportFindings,
     support: @import("specification_support.zig").Source.Rejection,
     principle_review: @import("specification_support.zig").Contract(.principles).Rejection,
     specification: @import("specification_candidate.zig").Rejection,
@@ -30,5 +30,19 @@ pub const Diagnostic = union(enum) {
         const bytes = try std.json.Stringify.valueAlloc(allocator, self, .{});
         defer allocator.free(bytes);
         return @import("strict_json.zig").decode(Diagnostic, allocator, bytes, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
+    }
+};
+
+const authority = @import("required_authority.zig");
+pub const SupportFindings = struct {
+    purpose: @import("specification_support.zig").Purpose,
+    revision: u64,
+    evidence: []const authority.Evidence,
+    origins: []const ?@import("model_candidate_origin.zig").Origin,
+    origin: ?@import("model_candidate_origin.zig").Origin,
+    repair_rejection: ?@import("source_omission.zig").Rejection,
+
+    pub fn from(purpose: @import("specification_support.zig").Purpose, inputs: authority.Inputs, rejection: ?@import("source_omission.zig").Rejection) SupportFindings {
+        return .{ .purpose = purpose, .revision = inputs.revision, .evidence = inputs.evidence, .origins = inputs.review_origins, .origin = inputs.review_origin, .repair_rejection = rejection };
     }
 };

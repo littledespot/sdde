@@ -3,7 +3,7 @@ const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
 pub const Description = struct {
-    version: enum { @"model-request-debug/v1" } = .@"model-request-debug/v1",
+    version: enum { @"model-request-debug/v2" } = .@"model-request-debug/v2",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,
@@ -30,7 +30,7 @@ pub const Description = struct {
             .request_step = selected.operation_id.workflow_step_id.bytes,
             .content = request.content,
             .protocol_prompt = @import("model_controls.zig").response_format_guidance,
-            .schema = request.response_schema.bytes(),
+            .schema = request.response_schema.modelBytes(),
             .response_mode = request.response_guidance_mode,
             .controls = request.controls,
             .reasoning_effort = selected.reasoning_effort,

@@ -13,7 +13,18 @@ pub const Location = union(enum) {
 };
 pub const Support = struct { review: @import("specification_support.zig").Source.Candidate, inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
 pub const Evidence = struct { finding: authority.Evidence, location: Location };
-pub const Error = authority.Error || r.Error || @import("specification_support.zig").Source.Error;
+pub const Rejection = enum {
+    unlocalized_omission,
+    invalid_repair_authority,
+
+    pub fn explanation(self: Rejection) []const u8 {
+        return switch (self) {
+            .unlocalized_omission => "The source review reports an omission without identifying a defective producer. No safe repair target can be authorized; the workflow stops without a repair call or publication.",
+            .invalid_repair_authority => "The source omission cannot establish current repair authority. The workflow stops without a repair call or publication.",
+        };
+    }
+};
+pub const Error = authority.Error || r.Error || @import("specification_support.zig").Source.Error || error{UnlocalizedSourceOmission};
 const retry = @import("workflow_retry.zig");
 const atomic = @import("atomic_repair.zig");
 pub const Producer = enum { extraction, reconciliation };
@@ -120,7 +131,7 @@ pub fn select(a: std.mem.Allocator, sources: r.evidence.Inputs, support: Support
         const finding = (try authority.supportedOmission(a, support.inputs, support.observations, support.result, entry.requirement)) orelse continue;
         try @import("specification_support_evidence.zig").validate(a, support.inputs, sources, finding);
         for (support.review.review.entries) |review| if (review.requirement_ordinal == finding.id.ordinal) {
-            if (review.value.loss == .unlocalized) return error.InvalidRequiredAuthority;
+            if (review.value.loss == .unlocalized) return error.UnlocalizedSourceOmission;
             return .{ .finding = finding, .location = review.value.loss };
         };
         return error.InvalidRequiredAuthority;

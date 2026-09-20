@@ -131,7 +131,9 @@ and credentials are required. Replay does not run workflow nodes or semantic
 validators, publish artifacts, or change workflow state.
 
 The UI is embedded in the executable. Captures use `prompt-columns/v3`; older
-prompt formats are rejected. Replays use `request-replay/v3` records with a saved
+prompt formats are rejected. Request descriptions use `model-request-debug/v2`
+and retain the exact selected response schema; older descriptions are rejected.
+Replays use `request-replay/v4` records with a saved
 session and dispatch sequence; older replay records are rejected. Replay sessions
 are separate from workflow runs, each with its own execution order. Rejected replay
 requests can leave gaps in session numbering. Stop the server with Ctrl-C. See

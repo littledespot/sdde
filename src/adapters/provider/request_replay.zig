@@ -23,7 +23,7 @@ pub const Adapter = struct {
         const self: *Adapter = @ptrCast(@alignCast(context));
         try self.authorization.authorize_fn(self.authorization.context, description);
         if (description.provider_config != .aws_bedrock or description.operation_kind != .inference or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
-        const schema = self.compiler.compile(a, description.schema) catch return error.InvalidReplay;
+        const schema = self.compiler.compileSelected(a, description.schema) catch return error.InvalidReplay;
         const body = request.encodeText(a, .{
             .content = description.content,
             .schema = switch (description.response_mode) {
@@ -123,7 +123,7 @@ pub const Adapter = struct {
         defer parsed.deinit();
         result.parsed = strict.decode(std.json.Value, a, decoded.output.text, .{ .maximum_depth = @import("../../domain/model_result_schema.zig").max_json_depth }) catch return error.InvalidReplay;
         result.json = .valid;
-        const schema = self.compiler.compile(a, description.schema) catch {
+        const schema = self.compiler.compileSelected(a, description.schema) catch {
             result.reason = "Captured schema is invalid";
             return result;
         };

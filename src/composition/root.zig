@@ -1702,6 +1702,13 @@ test "configured specification generation YAML executes native references models
             const decision = try owned.read(&view, authority.result_schema, .result);
             try std.testing.expectEqual(.invalid, decision.continuation);
             for (decision.entries) |entry| try std.testing.expect(entry.candidate_defect != null);
+            const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?;
+            try std.testing.expectEqual(.unlocalized_omission, diagnostic.support_findings.repair_rejection.?);
+            try std.testing.expectEqualDeep((try owned.read(&view, authority.inputs_schema, .inputs)).evidence, diagnostic.support_findings.evidence);
+            var diagnostic_arena: std.heap.ArenaAllocator = .init(allocator);
+            defer diagnostic_arena.deinit();
+            const copied = try diagnostic.copy(diagnostic_arena.allocator());
+            try std.testing.expectEqualDeep(diagnostic, copied);
             try std.testing.expectEqual(@as(usize, 7), driver.calls);
             try std.testing.expectEqual(@as(usize, 7), runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.omission_repair_calls);

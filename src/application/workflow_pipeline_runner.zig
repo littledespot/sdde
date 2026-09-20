@@ -492,10 +492,11 @@ pub const Runner = struct {
         };
         const diagnostic = @import("candidate_validation_diagnostics.zig").read(&produced) catch return .LOG_SERIALIZATION_FAILURE;
         if (diagnostic) |value| {
-            if (value == .support_findings) {
+            if (value == .support_findings and value.support_findings.repair_rejection == null) {
                 if (self.events().emit(.{ .event_type = .review_rejected, .node_id = .{ .bytes = step.id.bytes }, .fields = .{ .outcome = event_capture.outcome(candidate.outcome) } })) |failure| return failure;
             }
-            if (self.events().validation(step.id, candidate.outcome, @tagName(value), value.origin())) |failure| return failure;
+            const reason = if (value == .support_findings and value.support_findings.repair_rejection != null) @tagName(value.support_findings.repair_rejection.?) else @tagName(value);
+            if (self.events().validation(step.id, candidate.outcome, reason, value.origin())) |failure| return failure;
         }
         if (candidate.delta.repair_transition) |transition| {
             if (transition == .validated) return self.events().validation(step.id, candidate.outcome, if (transition.validated.result == .recurring) "REPAIR_RECURRING" else null, null);

@@ -237,7 +237,7 @@ test "non-schema resources are not parsed and a compiler cannot substitute a for
     var spy: Spy = .{};
     const action: compile.Action = .{
         .registry = &operations,
-        .result_schema_compiler = .{ .context = &spy, .compile_fn = Spy.compileSchema, .composition_result_alias_fn = Spy.compositionAlias, .compile_composition_fn = Spy.compileComposition },
+        .result_schema_compiler = .{ .context = &spy, .compile_fn = Spy.compileSchema, .compile_selected_fn = Spy.compileSchema, .composition_result_alias_fn = Spy.compositionAlias, .compile_composition_fn = Spy.compileComposition },
     };
     const captures = [_]inventory.Capture{
         .{ .ordinal = 3, .bytes = "Generate one result." },

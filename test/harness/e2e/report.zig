@@ -93,6 +93,8 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
 }
 
 fn writeCandidateError(writer: *std.Io.Writer, diagnostic: @import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic) !void {
+    if (diagnostic == .support_findings) if (diagnostic.support_findings.repair_rejection) |rejection|
+        try writer.print("Repair authorization: {s}\n\n", .{rejection.explanation()});
     try writer.writeAll("Candidate validation: ");
     try std.json.Stringify.value(diagnostic, .{}, writer);
 }

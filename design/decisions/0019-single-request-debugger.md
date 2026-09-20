@@ -40,8 +40,17 @@ unattributed evidence remains explicitly uncorrelated.
 The prompt column schema becomes `prompt-columns/v3`, with 37 columns; no legacy
 reader is added. A separate `request_description` body records the provider/model,
 region/config, selected slot, workflow/request entry, typed content, fixed protocol
-prompt, exact validation schema and inference settings. This description is
-credential-redacted, chunked and persisted through the same mandatory logging
+prompt, exact validation schema and inference settings. `model-request-debug/v2`
+captures the selected schema's complete expanded projection, including named
+selections, composition parts and narrowed repair shapes. The shared schema
+compiler reconstructs selected object/tagged-union roots for diagnostic use;
+constant-tagged selected roots are permitted without relaxing the external
+workflow-resource profile. Shared node/depth bounds apply; the source-file byte
+limit is not reapplied to expanded projections. Inspection and replay use this
+same reconstruction.
+Complete authored resources remain separate source evidence. Older descriptions
+are rejected; current files never supply missing historical schema authority.
+This description is credential-redacted, chunked and persisted through the same mandatory logging
 pipeline. It is a diagnostic projection, never request or workflow authority.
 Per-body byte lengths and contiguous chunk offsets prove complete reconstruction.
 
@@ -69,7 +78,7 @@ requires no browser-supplied filesystem path. Missing snapshots are explicitly
 unavailable; current source files cannot substitute for historical evidence.
 Replay retains the original source snapshot. Modified input is marked as an
 override, including an exact replay of an already modified request. Immutable
-`request-replay/v3` records persist both fields; no older replay reader is added.
+`request-replay/v4` records persist both fields; no older replay reader is added.
 
 ## Replay
 

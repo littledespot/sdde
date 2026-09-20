@@ -492,7 +492,7 @@ test "replay dispatch order survives shuffled filenames reopening and separate s
     const duplicate_bytes = try std.json.Stringify.valueAlloc(a, record, .{});
     try directory.dir.writeFile(io, .{ .sub_path = "logs/debugger/" ++ "d" ** 32 ++ ".request.json", .data = duplicate_bytes });
     try std.testing.expectError(error.InvalidDebugArchive, store.load(a));
-    const legacy_bytes = try std.mem.replaceOwned(u8, a, duplicate_bytes, "request-replay/v3", "request-replay/v2");
+    const legacy_bytes = try std.mem.replaceOwned(u8, a, duplicate_bytes, "request-replay/v4", "request-replay/v3");
     try std.testing.expectError(error.InvalidJsonDocument, @import("domain/strict_json.zig").decode(debug.RequestRecord, a, legacy_bytes, .{ .maximum_depth = 64 }));
 }
 
@@ -541,4 +541,153 @@ test "source snapshots reject unknown fields invalid paths broken chains and for
     try std.testing.expect(!base.matches("other", "generation-invoke", "generation-prepare"));
     try std.testing.expect(!base.matches("spec", "foreign", "generation-prepare"));
     try std.testing.expect(!base.matches("spec", "generation-invoke", "foreign"));
+}
+
+// Exercise capture, fragmentation, graph release, inspection and replay through
+// the same shared owners for whole, named, composed and narrowed request shapes.
+test "selected request schemas survive capture and graph release without whole-schema fallback" {
+    for (0..7) |shape| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture: Fixture = undefined;
+        try fixture.init(a);
+        defer fixture.environment.deinit();
+        var sink: LogSink = .{ .a = a };
+        try sink.rows.appendSlice(a, format.prompt_heading);
+        var logger: capture.Capture = .{ .allocator = a, .logs = sink.barrier() };
+        defer logger.deinit();
+        var response_text: []const u8 = undefined;
+        {
+            var production: @import("provider_authorization_test_fixture.zig").Fixture = undefined;
+            try production.init(std.testing.allocator);
+            defer production.deinit();
+            const source = production.schema_arena.allocator();
+            production.registry_entry.provider.bytes = description.provider;
+            production.registry_entry.model.bytes = description.model;
+            production.registry_entry.config = description.provider_config;
+            const selected = try debuggerSelectedShape(source, fixture.compiler.compiler(), shape);
+            production.request.response_schema = selected.schema;
+            response_text = try a.dupe(u8, selected.response);
+            production.request.response_guidance_mode = mode;
+            production.provider_binding.response_mode = mode;
+            // Force request-description fragmentation, including its schema.
+            production.request.content = &.{ .{ .guidance = try source.dupe(u8, "bounded captured context " ** 500) }, .{ .user = "Generate the selected data." } };
+            const projection = debug.Description.from(&production.request, &production.provider_binding, .inference);
+            try std.testing.expectEqualStrings(selected.schema.modelBytes(), projection.schema);
+            logger.begin(.{ .workflow = try @import("domain/telemetry.zig").WorkflowShortcode.parse("SPEC"), .workflow_id = .{ .bytes = projection.workflow_id }, .node = .{ .bytes = "generation-invoke" }, .action = .{ .bytes = "invoke-model" }, .operation = .{ .bytes = projection.request_step }, .model_slot = .{ .bytes = projection.model_slot }, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .description = projection });
+            defer logger.end();
+            const body = try @import("adapters/provider/bedrock_request.zig").encode(source, &production.request, .inference);
+            try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = body }, &.{}));
+            const response = try debugResponse(source, selected.response);
+            try std.testing.expectEqual(.recorded, logger.port().capture(.response, .{ .provider_body = response }, &.{}));
+        }
+        var restored: archive.Archive = .{ .allocator = a };
+        try restored.ingest(sink.rows.items);
+        const calls = try restored.calls();
+        try std.testing.expectEqual(@as(usize, 1), calls.len);
+        const parent = calls[0];
+        try std.testing.expect(parent.parent == null);
+        const selected = parent.description.?;
+        const inspected = try fixture.provider.provider().inspect(a, selected, parent.response.?);
+        if (inspected.schema != .valid) std.debug.print("selected shape {d}: {s}\n", .{ shape, try std.json.Stringify.valueAlloc(a, inspected, .{}) });
+        try std.testing.expectEqual(.valid, inspected.schema);
+        try std.testing.expectEqualStrings(parent.request.?, try fixture.provider.provider().prepare(a, selected));
+        const invalid = try fixture.provider.provider().inspect(a, selected, try debugResponse(a, "{\"foreign\":true}"));
+        try std.testing.expectEqual(.invalid, invalid.schema);
+        const missing = try fixture.provider.provider().inspect(a, selected, try debugResponse(a, "{}"));
+        try std.testing.expectEqual(.invalid, missing.schema);
+        fixture.wire.inference_body = try debugResponse(a, response_text);
+        const replayed = try fixture.replay().replay(a, replayIdentity("a" ** 32, 1), parent, .{ .call = 0, .mode = .exact });
+        try std.testing.expectEqualStrings(parent.request.?, replayed.request.body);
+        try std.testing.expectEqualStrings(parent.id, replayed.request.parent_call);
+        _ = try fixture.replay().replay(a, replayIdentity("b" ** 32, 2), parent, .{ .call = 0, .mode = .modified, .edit = .{ .content = &.{ .{ .guidance = "Recheck the selected response." }, .{ .user = "Generate the selected data." } }, .schema = selected.schema } });
+        try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
+        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v2", "model-request-debug/v1");
+        try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, obsolete));
+    };
+}
+
+fn debugResponse(a: std.mem.Allocator, content: []const u8) ![]const u8 {
+    return std.json.Stringify.valueAlloc(a, .{ .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = content }} } }, .stopReason = "end_turn", .usage = .{ .inputTokens = 10, .outputTokens = 2, .totalTokens = 12 } }, .{});
+}
+
+fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_result_schema_compiler.zig").Compiler, shape: usize) !struct { schema: *const @import("domain/model_result_schema.zig").Schema, response: []const u8 } {
+    if (shape == 0) return .{ .schema = try compiler.compile(a, schema), .response = "{\"answer\":\"kept\"}" };
+    if (shape == 1) {
+        const canonical = try compiler.compile(a,
+            \\{"$defs":{"repair":{"type":"object","properties":{"enabled":{"type":"boolean"}},"required":["enabled"],"additionalProperties":false}},"type":"object","properties":{"whole":{"$ref":"#/$defs/repair"}},"required":["whole"],"additionalProperties":false}
+        );
+        return .{ .schema = canonical.select(.{ .bytes = "repair" }).?, .response = "{\"enabled\":true}" };
+    }
+    if (shape == 5) {
+        const canonical = try compiler.compile(a,
+            \\{"oneOf":[{"type":"object","properties":{"kind":{"const":"keep"},"value":{"type":"string","maxLength":16}},"required":["kind","value"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"drop"}},"required":["kind"],"additionalProperties":false}]}
+        );
+        const narrowed = try @import("domain/model_result_schema.zig").project(a, canonical, canonical.root().one_of[0]);
+        // Compiled selected shapes may have a constant root discriminator; the
+        // external complete-schema profile must still reject that root.
+        try std.testing.expectError(error.InvalidModelResultSchema, compiler.compile(a, narrowed.modelBytes()));
+        return .{ .schema = narrowed, .response = "{\"kind\":\"keep\",\"value\":\"original\"}" };
+    }
+    const raw = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/extraction.schema.json", a, .limited(1_048_576));
+    const config = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/extraction.composition.json", a, .limited(1_048_576));
+    const canonical = try compiler.compile(a, raw);
+    const plan = try compiler.compileComposition(a, config, canonical);
+    if (shape == 6) return .{ .schema = try plan.selectSchema(0, &.{}), .response =
+    \\{"kind":"claims","claims":[{"content":{"kind":"business","segments":[{"kind":"literal","value":"The application must start successfully."},{"kind":"literal","value":"When started, the application must display `Hello, World!`."},{"kind":"literal","value":"Should also output date and time in UTC."}]},"citations":[{"first":{"ordinal":5},"last":{"ordinal":7}}]},{"content":{"kind":"technical","nodes":[{"kind":"literal","value":"The application displays the string `Hello, World!`."},{"kind":"literal","value":"The application outputs the current date and time in UTC."}]},"citations":[{"first":{"ordinal":6},"last":{"ordinal":7}}]}]}
+    };
+    const content = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"kind\":\"literal\",\"value\":\"No feature behavior.\"}]}}";
+    const prior = try std.json.parseFromSlice(std.json.Value, a, content, .{});
+    if (shape == 2) return .{ .schema = try plan.selectSchema(0, &.{}), .response = content };
+    if (shape == 3) return .{ .schema = try plan.selectSchema(1, &.{.{ .part = 0, .value = prior.value }}), .response = "{\"token_classifications\":[]}" };
+    const claim_prior = try std.json.parseFromSlice(std.json.Value, a, "{\"kind\":\"claims\",\"claims\":[]}", .{});
+    return .{ .schema = try plan.selectSchema(1, &.{.{ .part = 0, .value = claim_prior.value }}), .response = "{\"token_classifications\":[]}" };
+}
+
+test "selected diagnostic schema parsing retains closed syntax and bounded root rules" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture: Fixture = undefined;
+    try fixture.init(a);
+    defer fixture.environment.deinit();
+    for ([_][]const u8{
+        "{",
+        "{\"type\":\"string\",\"maxLength\":16}",
+        "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":true}",
+        "{\"type\":\"object\",\"properties\":{},\"required\":[\"missing\"],\"additionalProperties\":false}",
+        "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false,\"unknown\":true}",
+        "{\"$ref\":\"https://example.invalid/schema\"}",
+    }) |invalid| {
+        var selected = description;
+        selected.schema = invalid;
+        try std.testing.expectError(error.InvalidModelResultSchema, fixture.compiler.compiler().compileSelected(a, invalid));
+        try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, selected));
+        const inspected = try fixture.provider.provider().inspect(a, selected, try debugResponse(a, "{}"));
+        try std.testing.expectEqual(.unavailable, inspected.schema);
+    }
+    try std.testing.expectEqual(@as(usize, 0), fixture.wire.calls);
+}
+
+test "selected schema reconstruction does not reapply the source file size limit to expansion" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var adapter_instance: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const compiler = adapter_instance.compiler();
+    var bytes: std.Io.Writer.Allocating = .init(a);
+    try bytes.writer.writeAll("{\"$defs\":{\"label\":{\"enum\":[\"");
+    try bytes.writer.writeAll("x" ** 40000);
+    try bytes.writer.writeAll("\"]}},\"type\":\"object\",\"properties\":{");
+    for (0..32) |i| {
+        if (i != 0) try bytes.writer.writeByte(',');
+        try bytes.writer.print("\"field{d}\":{{\"$ref\":\"#/$defs/label\"}}", .{i});
+    }
+    try bytes.writer.writeAll("},\"required\":[],\"additionalProperties\":false}");
+    const canonical = try compiler.compile(a, bytes.written());
+    try std.testing.expect(canonical.modelBytes().len > @import("domain/model_result_schema.zig").max_bytes);
+    const rebuilt = try compiler.compileSelected(a, canonical.modelBytes());
+    try std.testing.expectEqualStrings(canonical.modelBytes(), rebuilt.modelBytes());
+    try std.testing.expectError(error.InvalidModelResultSchema, compiler.compile(a, canonical.modelBytes()));
 }

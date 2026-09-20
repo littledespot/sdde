@@ -12,9 +12,15 @@ const rec = @import("reference_reconciliation_workflow.zig");
 const reference = @import("../domain/reference_candidate_value.zig");
 const authority = @import("required_authority_workflow.zig");
 const authority_values = @import("required_authority_values.zig");
-const owned = @import("retained_candidate.zig").Storage(union(enum) { repair: loss.Repair, rejected }, .rejected);
+const Rejection = struct { reason: loss.Rejection, support: loss.Support };
+const owned = @import("retained_candidate.zig").Storage(union(enum) { repair: loss.Repair, rejected: ?Rejection }, .{ .rejected = null });
 pub const schema = values.schema(.source_omission_repair, owned.Value, 1, null).captured();
 pub const schemas = [_]data.Schema{schema};
+pub fn rejection(view: *const data.View) values.Error!?Rejection {
+    if (!view.contains(schema.key)) return null;
+    const value = owned.payload(try values.read(view, schema, owned.Value));
+    return if (value.* == .rejected) value.rejected else null;
+}
 pub fn read(view: *const data.View) operations.Error!loss.Repair {
     return owned.read(view, schema, .repair) catch error.OperationExecutionFailed;
 }
@@ -43,8 +49,10 @@ pub const Authorize = struct {
         const self = context.?;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        const state = self.action.execute(owner.arena.allocator(), try facts(&input.step.data), try parsed(&input.step.data), try rec.textContext(&input.step.data)) catch |err| {
+        const current = try facts(&input.step.data);
+        const state = self.action.execute(owner.arena.allocator(), current, try parsed(&input.step.data), try rec.textContext(&input.step.data)) catch |err| {
             if (err == error.OutOfMemory) return error.OperationExecutionFailed;
+            owner.payload = .{ .rejected = .{ .reason = if (err == error.UnlocalizedSourceOmission) .unlocalized_omission else .invalid_repair_authority, .support = current.support } };
             return owned.publish(self.allocator, schema, owner, .invalid) catch error.OperationExecutionFailed;
         };
         owner.payload = .{ .repair = state };

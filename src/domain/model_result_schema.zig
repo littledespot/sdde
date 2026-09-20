@@ -99,6 +99,17 @@ fn storage(value: *const Schema) *const Storage {
 // exact source bytes. All output allocations belong to the caller's arena;
 // that arena must be discarded on rejection/allocation failure.
 pub fn compile(allocator: std.mem.Allocator, raw: std.json.Value, bytes: []const u8) Error!*const Schema {
+    return compileResult(allocator, raw, bytes, .complete);
+}
+
+/// Reconstruct a captured selected response shape for diagnostic inspection/replay.
+/// Composition may select a single constant-tagged object. This does not relax
+/// the external workflow-resource profile or admit scalar response roots.
+pub fn compileSelected(allocator: std.mem.Allocator, raw: std.json.Value, bytes: []const u8) Error!*const Schema {
+    return compileResult(allocator, raw, bytes, .selected);
+}
+
+fn compileResult(allocator: std.mem.Allocator, raw: std.json.Value, bytes: []const u8, kind: enum { complete, selected }) Error!*const Schema {
     if (raw != .object) return invalid();
     var compiler: Compiler = .{ .allocator = allocator };
     var root_value = raw;
@@ -124,7 +135,10 @@ pub fn compile(allocator: std.mem.Allocator, raw: std.json.Value, bytes: []const
     // The existing expansion bound applies independently to the selected root.
     compiler.node_count = 0;
     const root = try compiler.node(root_value, 1);
-    if (!isResult(root)) return invalid();
+    switch (kind) {
+        .complete => if (!isResult(root)) return invalid(),
+        .selected => if (root.* != .object and root.* != .one_of) return invalid(),
+    }
     return createSchema(allocator, root, captured, definitions);
 }
 
