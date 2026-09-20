@@ -21,10 +21,9 @@ choice and specifying the answer format. The user supplies the answer. Omit ques
 for supported, not_applicable and candidate_omission. Do not ask to restate supported
 behavior or change a verdict to pass.
 
-Follow evidence_rules and each task's evidence. Positive claim rules apply to
-supported, not_applicable and candidate_omission; non-null supported_provenance
-must match for supported or not_applicable. Select only supplied IDs. Choose
-not_applicable only when its non-null permitted rule holds. Never invent authority.
+Follow evidence_rules and each task's evidence. Non-null supported_provenance
+must match for supported or not_applicable. Choose not_applicable only when its
+permitted rule holds. Never invent authority.
 
 Use unlocalized unless candidate_omission has a clear producer: a missing claim's
 extraction chunk, an irrelevant token classification, or a defective reconciliation

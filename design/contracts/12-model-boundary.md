@@ -485,6 +485,14 @@ native decision-dependent validation within their existing wire shape. Generatio
 uses its existing question shape. Presence and association checks are structural,
 not deterministic proof of actionability.
 
+Evidence-selection repair selects its response shape from the retained native
+evidence minimum. A `claim_required` rule selects the canonical named shape with
+nonempty `claim_ids`; optional and claim-or-source rules retain the generic shape.
+The same evidence owner supplies concise guidance to initial review, insertion
+and repair: `not_applicable` still needs supporting claims. Native validation and
+persisted readback retain eligibility, exact-set and current-provenance checks;
+schema cardinality never establishes semantic support or selects citations.
+
 Consolidate only the same engine-built subject under existing identity rules.
 Equal wording or shared citations across subjects do not establish equivalent
 decisions or let one answer resolve multiple requirements. A related-needs display

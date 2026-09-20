@@ -130,7 +130,11 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 .finding => "principle_finding",
                 .selection => "principle_selection",
                 .detail => "detail",
-            } else if (kind == .finding and try review.applicability(inputs, authorization.target.requirement) == .review) "applicability_finding" else if (kind == .detail) (if (admission.questionRequired(authorization.rule.finding.?.decision.finding())) "gap_detail" else "detail") else @tagName(kind);
+            } else switch (kind) {
+                .finding => if (try review.applicability(inputs, authorization.target.requirement) == .review) "applicability_finding" else "finding",
+                .detail => if (admission.questionRequired(authorization.rule.finding.?.decision.finding())) "gap_detail" else "detail",
+                .selection => if (authorization.rule.rejection.evidence.?.rule.minimum == .claim_required) "claim_selection" else "selection",
+            };
             return atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index]);
         }
         pub const parse = atomic.parse;

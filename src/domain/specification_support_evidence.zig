@@ -41,6 +41,7 @@ pub fn sourceChoices(allocator: std.mem.Allocator, sources: r.evidence.Inputs) s
 }
 
 /// The same facts constrain admission and describe evidence selection to a model.
+pub const selection_instruction: []const u8 = "Select supplied evidence supporting the finding; not_applicable still needs claims. Eligibility alone is not support.";
 pub const Minimum = enum { optional, claim_required, claim_or_source_required };
 pub fn minimum(finding: a.Finding) Minimum {
     return switch (finding) {
@@ -56,7 +57,7 @@ pub const Rule = struct {
     eligible_source_ids: []const SourceId,
     provenance: ?spec.Provenance,
 
-    pub const Guidance = struct { minimum: Minimum, claims: ClaimSet, eligible_source_ids: []const SourceId, provenance: ?spec.Selection };
+    pub const Guidance = struct { instruction: []const u8 = selection_instruction, minimum: Minimum, claims: ClaimSet, eligible_source_ids: []const SourceId, provenance: ?spec.Selection };
     pub fn guidance(self: Rule) Guidance {
         return .{ .minimum = self.minimum, .claims = self.claims, .eligible_source_ids = self.eligible_source_ids, .provenance = if (self.provenance) |value| selection(value) else null };
     }
