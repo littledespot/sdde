@@ -9,7 +9,9 @@ const prompt_log = @import("sanitized_prompt_log.zig");
 pub const event_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count\n";
 pub const event_column_count = std.mem.countScalar(u8, event_heading, '|') + 1;
 
-pub const prompt_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted\n";
+pub const prompt_heading = "record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted|workflow_id|action_id|call_id|call_kind|original_call_id|parent_call_id|body_bytes\n";
+
+pub const prompt_column_count = std.mem.countScalar(u8, prompt_heading, '|') + 1;
 
 pub const Error = error{ InvalidFeatureLogRecord, OutOfMemory };
 
@@ -112,9 +114,9 @@ pub fn serializePromptControl(allocator: std.mem.Allocator, record: EventControl
     try appendOptional(allocator, &row, &first, null);
     try appendCell(allocator, &row, &first, record.run_id.bytes);
     try appendCell(allocator, &row, &first, record.feature_id.bytes);
-    for (0..13) |_| try appendOptional(allocator, &row, &first, null);
+    for (0..prompt_column_count - 17) |_| try appendOptional(allocator, &row, &first, null);
     row.append(allocator, '\n') catch return error.OutOfMemory;
-    try validateEncodedRow(allocator, row.items, 30);
+    try validateEncodedRow(allocator, row.items, prompt_column_count);
     return row.toOwnedSlice(allocator) catch return error.OutOfMemory;
 }
 
@@ -157,8 +159,19 @@ pub fn serializePrompt(allocator: std.mem.Allocator, record: PromptRecord) Error
     try appendUnsigned(allocator, &row, &first, fragment.retained_bytes, &number_buffer);
     try appendCell(allocator, &row, &first, if (fragment.truncated) "true" else "false");
     try appendCell(allocator, &row, &first, if (fragment.redacted) "true" else "false");
+    if (fragment.attribution) |attribution| {
+        var call_buffer: [96]u8 = undefined;
+        const lineage = @import("model_call_lineage.zig");
+        try appendCell(allocator, &row, &first, attribution.workflow_id.bytes);
+        try appendCell(allocator, &row, &first, attribution.action_id.bytes);
+        try appendCell(allocator, &row, &first, lineage.callId(&call_buffer, attribution.call) catch return error.InvalidFeatureLogRecord);
+        try appendCell(allocator, &row, &first, @tagName(attribution.links.kind));
+        try appendCell(allocator, &row, &first, lineage.callId(&call_buffer, attribution.links.original) catch return error.InvalidFeatureLogRecord);
+        try appendOptional(allocator, &row, &first, if (attribution.links.parent) |parent| lineage.callId(&call_buffer, parent) catch return error.InvalidFeatureLogRecord else null);
+    } else for (0..6) |_| try appendOptional(allocator, &row, &first, null);
+    try appendOptionalUnsigned(allocator, &row, &first, fragment.body_bytes, &number_buffer);
     row.append(allocator, '\n') catch return error.OutOfMemory;
-    try validateEncodedRow(allocator, row.items, 30);
+    try validateEncodedRow(allocator, row.items, prompt_column_count);
     return row.toOwnedSlice(allocator) catch return error.OutOfMemory;
 }
 
@@ -280,7 +293,7 @@ pub fn validatePersistedControlRow(
     if (!std.mem.eql(u8, cellAt(line, 0) orelse return error.InvalidFeatureLogRecord, @tagName(kind)) or
         parseUtcMs(cellAt(line, 10) orelse return error.InvalidFeatureLogRecord) == null) return error.InvalidFeatureLogRecord;
     const event_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36 };
-    const prompt_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29 };
+    const prompt_nulls = [_]usize{ 7, 8, 11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36 };
     const null_columns: []const usize = if (stream == .event) &event_nulls else &prompt_nulls;
     for (null_columns) |column| {
         if (!std.mem.eql(u8, cellAt(line, column) orelse return error.InvalidFeatureLogRecord, "\\N")) {
@@ -444,9 +457,9 @@ fn stageText(value: telemetry.Stage) []const u8 {
 
 test "built-in headings are byte stable and have exact widths" {
     try std.testing.expectEqual(@as(usize, 37), std.mem.countScalar(u8, event_heading, '|') + 1);
-    try std.testing.expectEqual(@as(usize, 30), std.mem.countScalar(u8, prompt_heading, '|') + 1);
+    try std.testing.expectEqual(@as(usize, 37), std.mem.countScalar(u8, prompt_heading, '|') + 1);
     try std.testing.expect(std.mem.endsWith(u8, event_heading, "|count\n"));
-    try std.testing.expect(std.mem.endsWith(u8, prompt_heading, "|redacted\n"));
+    try std.testing.expect(std.mem.endsWith(u8, prompt_heading, "|body_bytes\n"));
 }
 
 test "UTC timestamps reject impossible calendar dates" {
@@ -544,7 +557,7 @@ test "prompt rows are scalar bounded and use the exact prompt schema" {
         },
     });
     defer allocator.free(row);
-    try validateEncodedRow(allocator, row, 30);
+    try validateEncodedRow(allocator, row, prompt_column_count);
     try std.testing.expect(std.mem.indexOf(u8, row, "|debug|model.prompt_fragment|") != null);
-    try std.testing.expect(std.mem.indexOf(u8, row, "|safe\\|body|9|false|true\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, row, "|safe\\|body|9|false|true|") != null);
 }

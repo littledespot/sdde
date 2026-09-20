@@ -55,7 +55,9 @@ pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_id
     for (references.conflicts) |conflict| {
         const id: authority.Id = .{ .kind = .reference_meaning, .unit = .{ .conflict = conflict.id }, .slot = .disposition };
         try seeds.append(allocator, .{ .id = id, .requiredness = .{ .obligation = .reference_accounting }, .input_authorities = sources });
-        try gaps.append(allocator, .{ .requirement = id, .reason = .conflicting });
+        // A reconciliation label is a candidate assertion. Source review
+        // establishes whether the gap needs user authority or candidate repair.
+        try gaps.append(allocator, .{ .requirement = id, .reason = .conflicting, .subject = .candidate });
     }
     for (items.entries) |item| {
         if (item.claim.content != .preserved_token) continue;

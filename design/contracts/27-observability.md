@@ -47,6 +47,40 @@ keep their registered `debug` severity and the configured event threshold.
 - Console, event and report projections consume this evidence without parsing model text again
   or creating repair authority.
 
+### Complete execution evidence
+
+The user-directed completeness requirement applies to successful and failed work:
+retain every executed operation's outcome, JSON/schema rejection, correction attempt,
+native repair, retry exhaustion, token-accounting result and terminal disposition.
+An earlier error remains inspectable after recovery. Capture every available model
+body under ADR 0018; retain partial/no-response provenance and credential redaction.
+Diagnostic runs must enable full capture. Console output is a mirror, not a substitute
+for persisted records. A harness-only trace does not satisfy production logging.
+
+Reuse the closed event registry and shared logging lifecycle. The runner owns
+execution/transition facts, validators supply typed diagnostics, and the existing
+provider observation boundary owns exchange bytes. Emit each fact once with its
+run/node/request/attempt association; do not introduce a second logger or re-parse
+response bodies to reconstruct facts. Capture/serialization/append/flush failure must
+remain an explicit terminal failure, with the existing emergency diagnostic when the
+file sink is unusable. Never claim a complete record after a logging failure.
+
+**Publication finalization (user-approved R39 contract):** retain ADR 0018 and
+§25.1's close-before-write barrier. `publication.prepared` records the validated
+intended `ok`/`needs_user` outcome; it is not a successful write. Actual publication
+results remain in the terminal result and harness report. Non-publication terminal
+outcomes are recorded before close. Close failure prevents publication, repeated
+finalization preserves failure, and no event is appended after close. The feature
+stream starts at activation after preflight; pre-activation errors use the existing
+terminal/emergency path. No second sink or completion authority is introduced.
+See the [approval record](../../fixes/IMP_001.md#r39-logging-finalization-decision).
+
+The runner projects action starts/outcomes, model attempts and reconciled usage,
+protocol/schema admission and current native rejection evidence. `retry.admitted`
+and `retry.exhausted` use existing runner counts; `repair.*` observes accepted
+native repair transitions and does not count or authorize them. Project only each
+operation's newly produced diagnostic evidence, avoiding stale-failure attribution.
+
 Useful metrics:
 
 - model calls and tokens by stage/unit;
@@ -62,3 +96,9 @@ Useful metrics:
 - authority-reconciliation outcomes and gap reasons by earliest owner and requirement kind, including upstream-rework and administrative-block counts.
 
 The metrics distinguish deterministic rejection from semantic-review rejection. This is necessary to see whether failures come from model capability, poor initial guidance, preset errors, or repository problems.
+
+[ADR 0019](../decisions/0019-single-request-debugger.md) adds the native browser
+request debugger and single-request replay. `prompt-columns/v3` retains caller
+and YAML-entry attribution, exact request descriptions, body lengths and explicit
+retry/repair lineage. Debugger records remain diagnostic and never grant workflow
+authority; replay requires an explicit user-triggered request for one call.

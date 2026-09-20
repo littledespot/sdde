@@ -16,6 +16,7 @@ pub const Source = struct {
     conflicts: @import("repair_occurrences.zig").Set = .{},
     pending_repair: ?@import("atomic_repair.zig").Pending(@import("reference_reconciliation_repair.zig").ObservationTarget) = null,
     omission_retry: ?@import("workflow_retry.zig").Permit = null,
+    omission_conflict_claims: []const r.ClaimId = &.{},
     pub fn at(self: Source, unit: Unit, field: Field) ?Origin {
         for (self.fields) |value| if (std.meta.eql(value.unit, unit) and value.field == field) return value.origin;
         for (self.fields) |value| if (std.meta.eql(value.unit, unit) and value.field == .record) return value.origin;

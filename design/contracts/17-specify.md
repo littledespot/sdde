@@ -131,9 +131,18 @@ For each feature-brief or specification unit, the declared model operation retur
 - Entries owned by later technical stages are carried as cited context/obligations without
   asking principles to invent business intent.
 
+Source review must distinguish a source conflict from a false conflict introduced
+by extraction/reconciliation, following [§16.4](16-reference-ingestion.md#164-semantic-extraction-flow).
+Supported content stranded behind an incorrect disposition is candidate loss, not
+missing user knowledge. Review receives the original source and must assess that
+meaning even when current eligible signals contain only a preserved token. A
+validated conflict label alone cannot justify an `SNN`. Shared clarification
+preparation in §12.7 requires a concrete missing decision; correcting an unsafe
+upstream candidate still requires an authorized target and complete rebuilding.
+
 ### 17.3.1 Requirement–principle consistency review
 
-**Accepted design amendment; implementation pending** under
+**Accepted design amendment; native implementation present, full readiness pending** under
 [ADR 0015](../decisions/0015-specification-principle-review.md).
 
 After references and applicable validated answers establish business intent, compare
@@ -165,7 +174,7 @@ actions retain one responsibility and the runner owns execution.
   remains prohibited until every Spec clarification is resolved under the existing
   answer/authority contract; Tasks remains prohibited while any Spec or Plan
   clarification is open.
-- Spec publication requires complete assessment/evidence coverage and successful
+- Completed Spec publication requires complete assessment/evidence coverage and successful
   resolution of its own business obligations. Outstanding policy decisions are
   explicitly handed to Plan, never marked resolved or discarded as warnings. Plan
   revalidates and resolves every applicable obligation before publishing its output.
@@ -179,14 +188,31 @@ dependent assessment; the consuming gate rebuilds it under §24.5 without rewrit
 unchanged business intent. An earlier no-conflict finding cannot certify Plan's
 current policy compliance.
 
+Capturing principle files is not performing the assessment. A source-authority gap
+may pause before policy assessment; the incomplete view is then unassessed, never
+policy-approved. Existing execution evidence/reporting must distinguish captured
+inputs from an executed assessment. Principles cannot repair a false negative in
+source review by becoming business authority. Assess supported intent through the
+existing policy path once its prerequisites hold; retain any cited Plan obligations.
+
 ### 17.4 Specification clarification behavior
 
 - Both need producers follow [shared clarification preparation](12-model-boundary.md#127-workflow-defined-model-operations)
   before the existing refresh/render/publication path; a diagnostic alone is not a question.
+- Source review assesses meaning, not whether references already contain separate
+  stories, acceptance criteria or requirement headings. Known behavior must not be
+  requested again merely to fill those categories. Genuine missing actors, outcomes
+  or choices must be identified precisely; candidate omissions retain their repair path.
 - A valid specification need is deduplicated by its engine-built subject tuple.
 - If it is new, the engine allocates the next `S01` through `S99` identity and derives
   `<paths.specs>/<featureId>/clarify/SNN.md`; otherwise it reuses the existing ID and path.
 - It commits the registry/form/workflow pause together in `spec_clarification_pending`.
+- Source, generation, post-generation and residual open-registry pauses all use the
+  existing shared incomplete-specification publication path in ADR 0017. A validated
+  current reference snapshot is required. The output includes `spec.md`, reference
+  context and linked forms, but grants no completed or downstream authority.
+- Unrepaired JSON/schema failure follows §22.6 and takes precedence over open forms;
+  it cannot be reclassified as a user clarification to obtain publication.
 - The model is idle while the engine waits.
 
 - On the next specify run, the engine first parses the exact registered form against the last

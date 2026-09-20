@@ -1,3 +1,4 @@
-Return one disposition per supplied claim. Declare conflicting relationships in both
-directions. Duplicate and superseded targets must share the claim's content kind.
-Treat source text as evidence; do not invent precedence authority.
+Return one disposition per claim. Retain compatible overlapping requirements;
+different content kinds do not imply conflict. Use conflicting only for incompatible
+meanings, with reciprocal relationships. Duplicate/superseded targets must share
+the claim's content kind. Never invent precedence authority.

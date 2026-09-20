@@ -706,88 +706,135 @@ test "provider cause survives request release without inventing a candidate reje
     }
 }
 
-test "missing-answer exhaustion retains usage and diagnostics after request and runner release" {
-    const io = std.testing.io;
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
-    const captured = try fixture.capture(io, a, .cwd(), choice);
-    var project = std.testing.tmpDir(.{});
-    defer project.cleanup();
-    try fixture.materialize(io, project.dir, captured);
-    var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed };
-    {
-        var runtime: @import("../../../src/composition/root.zig").Runtime = undefined;
-        runtime.init(io, std.testing.allocator, project.dir, .{});
-        defer runtime.deinit();
-        try std.testing.expect(runtime.boot == .ready);
-        var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, .{
-            .snapshot = try @import("../../../src/adapters/provider/bedrock_api_key.zig").Snapshot.capture(std.testing.allocator, "isolated-credential"),
-        });
-        defer invocation.deinit();
-        const bindings = invocation.bindings();
-        try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
-        try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
-        try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
-        try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
-        var wire: @import("../../../src/bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}" };
-        runtime.provider_runtime.provider.?.aws_bedrock.transport = wire.port();
-        const Prepared = struct {
-            fn selected(_: *anyopaque) @import("../../../src/application/workflow_engine_child_bindings.zig").SelectionStepOutcome {
-                return .ok;
-            }
-            fn ready(_: *anyopaque) @import("../../../src/application/workflow_engine_child_bindings.zig").PreparationOutcome {
-                return .ok;
-            }
-        };
-        // Bootstrap is already exercised; the production engine owns all execution transitions.
-        var prepared = bindings.vtable.*;
-        prepared.validate_operation_registry = Prepared.selected;
-        prepared.parse_invocation = Prepared.selected;
-        prepared.select_workflow = Prepared.selected;
-        prepared.prepare_workflow = Prepared.ready;
-        const outcome = @import("../../../src/application/workflow_engine_orchestrator.zig").run(.{ .context = bindings.context, .vtable = &prepared });
-        try std.testing.expectEqual(.failed, outcome.executionStatus().?);
-        try std.testing.expectEqual(@as(usize, 3), wire.calls);
-        // Production activation, capture, retry attribution and closure use real
-        // registered files even when the provider body is rejected.
-        const log_runtime = &runtime.logging.?;
-        const log_artifacts = @import("../../../src/domain/workflow_artifact_registry.zig");
-        const log_binding = @import("../../../src/domain/feature_log_binding.zig");
-        const log_paths = log_artifacts.bindFeatureLogSinkAdapter(log_artifacts.registry(log_runtime.artifact_owner.?), log_binding.binding(log_runtime.binding_owner.?)).?;
-        const prompt_path = try std.fmt.allocPrint(a, "{s}/{s}/0001.log", .{ log_paths.specs_root_path, log_paths.prompt_binding_path });
-        const prompt_bytes = try project.dir.readFileAlloc(io, prompt_path, a, .limited(8 * 1024 * 1024));
-        try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, "inference-request-provider_body-utf8-00000000000000000000"));
-        try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, "inference-response-provider_body-utf8-00000000000000000000"));
-        try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, wire.inference_body));
-        try std.testing.expect(std.mem.indexOf(u8, prompt_bytes, "segment_trailer|") != null);
-        try std.testing.expect(std.mem.indexOf(u8, prompt_bytes, "isolated-credential") == null);
-        try std.testing.expect(log_runtime.finalized and runtime.boot.ready.logs.lifecycle.active == null);
-        try std.testing.expectEqual(@as(u64, 3), outcome.execution_rejected.retry_limit.completed_executions);
-        try std.testing.expectEqual(@as(u32, 2), outcome.execution_rejected.retry_limit.limit.value);
-        report.terminal_rejection = c.TerminalRejection.fromNative(outcome.execution_rejected);
-        const runner = &invocation.pipeline_runner.?;
-        // Retire current transport views through the common delta boundary before reporting.
-        const pipeline = @import("../../../src/domain/pipeline.zig");
-        const retired = [_]pipeline.DataKey{
-            @import("../../../src/application/model_request_workflow.zig").prepared_schema.key,
-        };
-        var retirement: pipeline.NodeDelta = .{};
-        for (retired) |key| retirement.data_invalidations.insert(key);
-        try runner.envelope.apply(.{ .id = "test.retire-request", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &retired, .side_effect = .none }, &retirement, .ok);
-        for (retired) |key| try std.testing.expect(runner.envelope.slots[@intFromEnum(key)] == null);
-        report.workflow_outcome = outcome.executionStatus();
-        try @import("observation.zig").capture(a, runner, &report);
+test "unrepairable responses preserve complete production logs and forbid publication with open clarifications" {
+    for (0..3) |mode| {
+        const io = std.testing.io;
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+        const captured = try fixture.capture(io, a, .cwd(), choice);
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try fixture.materialize(io, project.dir, captured);
+        const cf = @import("../../../src/test_fixtures/clarification_inputs.zig");
+        var bootstrap: @import("../../../src/composition/root.zig").Runtime = undefined;
+        bootstrap.init(io, std.testing.allocator, project.dir, .{});
+        defer bootstrap.deinit();
+        try std.testing.expect(bootstrap.boot == .ready);
+        const roots = bootstrap.boot.ready.roots.registry();
+        const selected_feature = try @import("../../../src/domain/feature_directory.zig").validate(a, .{ .bytes = choice.feature }, roots.featureDirectoryRoots());
+        const paths = try artifacts.resolveFeaturePaths(a, roots.featureArtifactRoots(), selected_feature);
+        const record = cf.record("S01");
+        var pending = cf.state(&.{record});
+        pending.feature_id = choice.feature;
+        const state_bytes = try std.json.Stringify.valueAlloc(a, pending, .{});
+        const form_bytes = try @import("../../../src/domain/clarification_form.zig").render(a, record, cf.binding(pending, record), .open, "");
+        const form_path = try @import("../../../src/domain/workflow_output.zig").path(a, paths, .{ .form = @import("../../../src/domain/clarification_inputs.zig").Id.parse("S01").? });
+        for ([_]struct { path: []const u8, bytes: []const u8 }{
+            .{ .path = paths.get(.clarification_state).project_relative, .bytes = state_bytes },
+            .{ .path = form_path.project_relative, .bytes = form_bytes },
+        }) |file| {
+            try project.dir.createDirPath(io, std.fs.path.dirname(file.path).?);
+            try project.dir.writeFile(io, .{ .sub_path = file.path, .data = file.bytes });
+        }
+        var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed };
+        {
+            var runtime: @import("../../../src/composition/root.zig").Runtime = undefined;
+            runtime.init(io, std.testing.allocator, project.dir, .{});
+            defer runtime.deinit();
+            try std.testing.expect(runtime.boot == .ready);
+            var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, .{
+                .snapshot = try @import("../../../src/adapters/provider/bedrock_api_key.zig").Snapshot.capture(std.testing.allocator, "isolated-credential"),
+            });
+            defer invocation.deinit();
+            const bindings = invocation.bindings();
+            try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
+            try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
+            try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
+            try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
+            var wire: @import("../../../src/bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}" };
+            if (mode != 0) wire.inference_body = try std.fmt.allocPrint(a, "{{\"output\":{{\"message\":{{\"role\":\"assistant\",\"content\":[{{\"text\":{s}}}]}}}},\"stopReason\":\"end_turn\",\"usage\":{{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}}}", .{try std.json.Stringify.valueAlloc(a, if (mode == 1) "{" else "{}", .{})});
+            runtime.provider_runtime.provider.?.aws_bedrock.transport = wire.port();
+            const Prepared = struct {
+                fn selected(_: *anyopaque) @import("../../../src/application/workflow_engine_child_bindings.zig").SelectionStepOutcome {
+                    return .ok;
+                }
+                fn ready(_: *anyopaque) @import("../../../src/application/workflow_engine_child_bindings.zig").PreparationOutcome {
+                    return .ok;
+                }
+            };
+            // Bootstrap is already exercised; the production engine owns all execution transitions.
+            var prepared = bindings.vtable.*;
+            prepared.validate_operation_registry = Prepared.selected;
+            prepared.parse_invocation = Prepared.selected;
+            prepared.select_workflow = Prepared.selected;
+            prepared.prepare_workflow = Prepared.ready;
+            const outcome = @import("../../../src/application/workflow_engine_orchestrator.zig").run(.{ .context = bindings.context, .vtable = &prepared });
+            try std.testing.expectEqual(.failed, outcome.executionStatus().?);
+            try std.testing.expectEqual(@as(usize, 3), wire.calls);
+            // Production activation, capture, retry attribution and closure use real
+            // registered files even when the provider body is rejected.
+            const log_runtime = &runtime.logging.?;
+            const log_artifacts = @import("../../../src/domain/workflow_artifact_registry.zig");
+            const log_binding = @import("../../../src/domain/feature_log_binding.zig");
+            const log_paths = log_artifacts.bindFeatureLogSinkAdapter(log_artifacts.registry(log_runtime.artifact_owner.?), log_binding.binding(log_runtime.binding_owner.?)).?;
+            const prompt_path = try std.fmt.allocPrint(a, "{s}/{s}/0001.log", .{ log_paths.specs_root_path, log_paths.prompt_binding_path });
+            const prompt_bytes = try project.dir.readFileAlloc(io, prompt_path, a, .limited(8 * 1024 * 1024));
+            try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, "inference-request-provider_body-utf8-00000000000000000000"));
+            try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, "inference-response-provider_body-utf8-00000000000000000000"));
+            try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, wire.inference_body));
+            try std.testing.expect(std.mem.indexOf(u8, prompt_bytes, "segment_trailer|") != null);
+            try std.testing.expect(std.mem.indexOf(u8, prompt_bytes, "isolated-credential") == null);
+            const event_path = try std.fmt.allocPrint(a, "{s}/{s}/0001.log", .{ log_paths.specs_root_path, log_paths.event_binding_path });
+            const event_bytes = try project.dir.readFileAlloc(io, event_path, a, .limited(8 * 1024 * 1024));
+            try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, event_bytes, "|run.started|"));
+            try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, event_bytes, "|model.requested|"));
+            try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, event_bytes, "|model.completed|"));
+            try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, event_bytes, if (mode == 2) "|model.schema_failed|" else "|model.protocol_failed|"));
+            try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, event_bytes, "|retry.exhausted|"));
+            try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, event_bytes, "|run.failed|"));
+            try std.testing.expect(std.mem.indexOf(u8, event_bytes, "|publication.prepared|") == null);
+            try std.testing.expect(std.mem.indexOf(u8, event_bytes, "|run.completed|") == null);
+            try std.testing.expect(std.mem.indexOf(u8, event_bytes, "segment_trailer|") != null);
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.specification).project_relative, .{}));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.workflow_state).project_relative, .{}));
+            try std.testing.expectEqualStrings(form_bytes, try project.dir.readFileAlloc(io, form_path.project_relative, a, .limited(16384)));
+            try std.testing.expectEqualStrings(state_bytes, try project.dir.readFileAlloc(io, paths.get(.clarification_state).project_relative, a, .limited(16384)));
+            try std.testing.expect(log_runtime.finalized and runtime.boot.ready.logs.lifecycle.active == null);
+            try std.testing.expectEqual(@as(u64, 3), outcome.execution_rejected.retry_limit.completed_executions);
+            try std.testing.expectEqual(@as(u32, 2), outcome.execution_rejected.retry_limit.limit.value);
+            report.terminal_rejection = c.TerminalRejection.fromNative(outcome.execution_rejected);
+            const runner = &invocation.pipeline_runner.?;
+            // Retire current transport views through the common delta boundary before reporting.
+            const pipeline = @import("../../../src/domain/pipeline.zig");
+            const retired = [_]pipeline.DataKey{
+                @import("../../../src/application/model_request_workflow.zig").prepared_schema.key,
+            };
+            var retirement: pipeline.NodeDelta = .{};
+            for (retired) |key| retirement.data_invalidations.insert(key);
+            try runner.envelope.apply(.{ .id = "test.retire-request", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &retired, .side_effect = .none }, &retirement, .ok);
+            for (retired) |key| try std.testing.expect(runner.envelope.slots[@intFromEnum(key)] == null);
+            report.workflow_outcome = outcome.executionStatus();
+            try @import("observation.zig").capture(a, runner, &report);
+        }
+        try std.testing.expectEqual(@as(u128, 2796), report.total_tokens);
+        try std.testing.expectEqual(@as(u64, 932), report.last_model_usage.?.total_tokens);
+        try std.testing.expect(report.usage_complete);
+        if (mode == 0) {
+            try std.testing.expectEqualStrings("response_invalid", report.provider_diagnostic.?);
+            try std.testing.expectEqual(.missing_final_text, report.provider_content_diagnostic.?);
+            try std.testing.expect(report.last_model_output == null);
+        }
+        try std.testing.expectEqual(@as(usize, 3), report.attempts.len);
+        for (report.attempts, 1..) |attempt, ordinal| {
+            try std.testing.expectEqual(@as(u32, @intCast(ordinal)), attempt.origin.attempt.value);
+            try std.testing.expectEqual(report.attempts[0].origin.request, attempt.origin.request);
+        }
+        const encoded = try std.json.Stringify.valueAlloc(a, report, .{});
+        _ = try @import("../../../src/domain/strict_json.zig").decode(c.Report, a, encoded, .{ .maximum_depth = 64 });
+        if (mode == 0) try std.testing.expect(std.mem.indexOf(u8, try @import("report.zig").renderMarkdown(a, report), "missing_final_text") != null);
     }
-    try std.testing.expectEqual(@as(u128, 2796), report.total_tokens);
-    try std.testing.expectEqual(@as(u64, 932), report.last_model_usage.?.total_tokens);
-    try std.testing.expectEqualStrings("response_invalid", report.provider_diagnostic.?);
-    try std.testing.expectEqual(.missing_final_text, report.provider_content_diagnostic.?);
-    try std.testing.expect(report.usage_complete and report.last_model_output == null);
-    const encoded = try std.json.Stringify.valueAlloc(a, report, .{});
-    _ = try @import("../../../src/domain/strict_json.zig").decode(c.Report, a, encoded, .{ .maximum_depth = 64 });
-    try std.testing.expect(std.mem.indexOf(u8, try @import("report.zig").renderMarkdown(a, report), "missing_final_text") != null);
 }
 
 test "reports retain scoped retry history and rejected-content usage after owner release" {

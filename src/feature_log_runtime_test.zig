@@ -260,7 +260,7 @@ test "debug captures response code content without explicit prompt selectors" {
     try std.testing.expect(std.mem.startsWith(u8, bytes, @import("domain/feature_log_format.zig").prompt_heading));
     try std.testing.expect(std.mem.indexOf(u8, bytes, "|PLAN|") != null);
     try std.testing.expect(std.mem.indexOf(u8, bytes, "|70000|") != null);
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "|sanitized|9|false|true\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "|sanitized|9|false|true|") != null);
 }
 
 test "production capture resolves the active lifecycle and persists complete debug exchanges" {
@@ -284,9 +284,10 @@ test "production capture resolves the active lifecycle and persists complete deb
     const exchange = @import("application/model_exchange_capture.zig");
     // Production constructs the barrier before workflow feature activation.
     var capture: exchange.Capture = .{ .allocator = a, .logs = lifecycle.barrier() };
+    defer capture.deinit();
     const shortcode = try telemetry.WorkflowShortcode.parse("SPEC");
     try std.testing.expectEqual(.ok, lifecycle.activate(runner.childBindings(), shortcode));
-    capture.begin(.{ .workflow = shortcode, .node = .{ .bytes = "invoke" }, .operation = .{ .bytes = "generate" }, .model_slot = .{ .bytes = "generation" }, .origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 2 } } });
+    capture.begin(.{ .workflow = shortcode, .workflow_id = .{ .bytes = "example" }, .action = .{ .bytes = "invoke-model" }, .node = .{ .bytes = "invoke" }, .operation = .{ .bytes = "generate" }, .model_slot = .{ .bytes = "generation" }, .origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 2 } } });
     defer capture.end();
     const padding = try a.alloc(u8, 11000);
     defer a.free(padding);
@@ -965,4 +966,42 @@ fn rejectPrune(_: *anyopaque, _: *const log_binding.ValidatedFeatureLogBinding, 
 }
 fn rejectRelease(_: *anyopaque) @import("ports/feature_log_sink.zig").Error!void {
     return error.ReleaseFailure;
+}
+
+test "production event projection uses closed facts and propagates every barrier failure" {
+    const capture = @import("application/workflow_event_capture.zig");
+    const Spy = struct {
+        count: usize = 0,
+        blocked: bool = false,
+        fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) log_stream.Outcome {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            _ = log_event_registry.validateFact(fact.fact) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+            self.count += 1;
+            return if (self.blocked) .{ .blocked = .LOG_FLUSH_FAILURE } else .dropped;
+        }
+    };
+    var spy: Spy = .{};
+    const events: capture.Capture = .{ .barrier = .{ .context = &spy, .process_fn = Spy.process }, .shortcode = try telemetry.WorkflowShortcode.parse("OTHR") };
+    const node: @import("domain/workflow.zig").WorkflowStepId = .{ .bytes = "check" };
+    for ([_]bool{ false, true }) |blocked| {
+        spy.blocked = blocked;
+        const expected: ?log_stream.FailureCode = if (blocked) .LOG_FLUSH_FAILURE else null;
+        try std.testing.expectEqual(expected, events.emit(.{ .event_type = .run_started }));
+        try std.testing.expectEqual(expected, events.action(node, null));
+        for (std.enums.values(@import("domain/workflow.zig").OutcomeTag)) |status| {
+            try std.testing.expectEqual(expected, events.action(node, .{ .outcome = status }));
+            if (status != .more) try std.testing.expectEqual(expected, events.terminal(.{ .execution = status }));
+        }
+        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = .authority }));
+        try std.testing.expectEqual(log_stream.FailureCode.LOG_SERIALIZATION_FAILURE, events.terminal(.{ .execution = .more }).?);
+        try std.testing.expectEqual(expected, events.validation(node, .ok, null, null));
+        try std.testing.expectEqual(expected, events.validation(node, .invalid, "WRONG_SHAPE", null));
+        try std.testing.expectEqual(expected, events.repair(node, .repair_requested, .ok, null));
+        try std.testing.expectEqual(expected, events.repair(node, .repair_applied, .ok, null));
+        try std.testing.expectEqual(expected, events.repair(node, .repair_rejected, .invalid, "REPAIR_RECURRING"));
+        try std.testing.expectEqual(expected, events.retryAttempt(node, 2, false));
+        try std.testing.expectEqual(expected, events.retryAttempt(node, 3, true));
+        try std.testing.expectEqual(expected, events.emit(.{ .event_type = .publication_prepared, .fields = .{ .outcome = .needs_user } }));
+    }
+    try std.testing.expect(spy.count > 0);
 }

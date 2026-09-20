@@ -398,7 +398,7 @@ Logging-internal nodes are not recursively observed.
 - `feature-log/v2` uses a deterministic fixed-header pipe-delimited format to avoid
   repeating field names in every record.
 - The initial F0002 implementation embeds exactly two schemas as compiler constants:
-  `event-columns/v2` and `prompt-columns/v2`.
+  `event-columns/v2` and `prompt-columns/v3`.
 - It does not generate columns from the event registry or read headings/schema IDs from
   configuration, workflow files, persisted data, or plugins.
 - The first row of each segment is exactly one matching stream-specific column heading.
@@ -413,13 +413,16 @@ The hard-coded headings are:
 
 ```text
 record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted|workflow_id|action_id|call_id|call_kind|original_call_id|parent_call_id|body_bytes
 ```
 
-- The first is the event heading; the second is the 30-column prompt heading.
+- The first is the event heading; the second is the 37-column prompt heading.
 - Existing wire columns `model_route_id` (events) and `route_id` (prompts) carry
   the workflow model-operation identity; `model_profile_id` carries the repository
   model-slot identity. ADR 0018 does not rename columns or introduce a route registry.
+- [ADR 0019](../decisions/0019-single-request-debugger.md) adds workflow/action
+  attribution, call/parent/original links and the complete sanitized body length.
+  These fields are null for ordinary fragments without call attribution.
 - Every prompt data row represents exactly one sanitized fragment.
 - The prompt pipeline sorts selected fragments by canonical `promptBodyFragmentId` and
   emits one row per fragment in that order.
@@ -484,9 +487,9 @@ supplies the actual shortcode through the runner-created `WorkflowLog` binding.
 When prompt capture is enabled, one sanitized fragment is one row:
 
 ```text
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted
-segment_header|feature-log/v2|prompt|prompt-columns/v2|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
-prompt|feature-log/v2|prompt|prompt-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0043|43|2026-08-28T10:15:31Z|1206|debug|model.prompt_fragment|model.prompt_fragment/v1|RUN-001|F0002|implement|\N|1|REQ-001|ROUTE-001|PROFILE-001|FRAG-001|request|ordinary|Create plan with [REDACTED_SECRET]|34|false|true
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted|workflow_id|action_id|call_id|call_kind|original_call_id|parent_call_id|body_bytes
+segment_header|feature-log/v2|prompt|prompt-columns/v3|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
+prompt|feature-log/v2|prompt|prompt-columns/v3|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0043|43|2026-08-28T10:15:31Z|1206|debug|model.prompt_fragment|model.prompt_fragment/v1|RUN-001|F0002|implement|\N|1|REQ-001|ROUTE-001|PROFILE-001|FRAG-001|request|ordinary|Create plan with [REDACTED_SECRET]|34|false|true|\N|\N|\N|\N|\N|\N|\N
 ```
 
 The console mirror, when enabled, displays only the applicable `event|...` or

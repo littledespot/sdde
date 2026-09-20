@@ -447,6 +447,38 @@ Admitted model explanations remain attributed evidence; diagnostic prose is not
 automatically a question. Both generation needs and authority-gap needs follow this
 contract. Preparation performs no semantic reassessment, model call, publication or
 state transition; rendering formats its result through the existing controlled form.
+Preparation uses precise claim/citation bindings when supplied; source-only gaps
+and generation needs retain their producer's validated captured-source/subject
+evidence. It does not include every citation merely because its source matches. It quotes
+captured text with source/line attribution and avoids repeating contained excerpts
+when the full relevant text and every binding remain represented; citation IDs and
+source records remain unchanged. Distinct evidence must not be merged by similar
+wording. This is presentation deduplication, not multi-subject answer consolidation.
+When full excerpts exceed the existing form fields, preparation references the complete
+`reference-context.md` view instead of clipping or inventing a summary. Keep the
+review concern in `why_required` and the subject-specific requested answer in
+`question`. Evidence presentation does not certify a semantic finding.
+
+Ask for the missing decision in ordinary user terms, not a restatement of the
+reviewer's rejection. Identify what is already known and its source, then exactly
+what the answer must add or choose. Explain why that decision is needed for this
+subject; a generic absence message and a byte limit are insufficient. Do not ask
+the user to reproduce known requirements in internal specification categories.
+If admitted evidence does not identify the semantic gap, return to the existing
+review/validation boundary; formatting must not invent a question or change a finding.
+For a claimed conflict, the evidence must identify the incompatible meanings, why
+they cannot both hold and the precise choice the answer must resolve. A conflict ID,
+an unresolved status, copied rejection prose or an answer byte limit does not supply
+that decision. Correct malformed/incomplete review data through existing bounded
+review handling; substantive uncertainty remains a clarification only when an
+actual user decision is identified. Formatting must not perform a second semantic
+review. The user-approved 20 September amendment adds optional `question` to
+source-review findings and canonical review evidence. It is required for genuine negative source
+findings and absent for supported/applicability/candidate-defect findings. Existing
+`detail` carries the facts/reason. Initial admission, insertion, selected detail
+correction and persisted validation share this contract; detail correction retains
+the verdict/provenance. Generation uses its existing question shape. Presence and
+association checks are structural, not deterministic proof of actionability.
 
 Consolidate only the same engine-built subject under existing identity rules.
 Equal wording or shared citations across subjects do not establish equivalent

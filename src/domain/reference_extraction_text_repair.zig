@@ -70,7 +70,7 @@ pub fn packet(a: std.mem.Allocator, facts: Facts, registry: @import("passive_lit
     return atomic.packet(a, authorization, base, .{ .bytes = switch (authorization.operation.replace) {
         .business => "business_text_replacement",
         .reference => "reference_text_replacement",
-    } });
+    } }, e.textOrigin(try entryAt(facts.candidate, authorization.target), authorization.target.field));
 }
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     return atomic.parse(a, authorization, input, bytes);

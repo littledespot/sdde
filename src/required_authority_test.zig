@@ -283,11 +283,12 @@ test "reference conflicts cannot be dropped or resolved by supplied evidence" {
     for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };
     inputs.evidence = evidence;
     const result = try run(allocator, inputs);
-    try std.testing.expectEqual(.needs_user, result.continuation);
+    try std.testing.expectEqual(.invalid, result.continuation);
     const conflict = for (result.entries) |entry| {
         if (entry.requirement.unit == .conflict) break entry;
     } else return error.ExpectedConflict;
-    try std.testing.expectEqual(.conflicting, conflict.outcome.clarification_required.reason);
+    try std.testing.expect(conflict.candidate_defect != null);
+    try std.testing.expectEqual(.resolved_exactly_one, std.meta.activeTag(conflict.outcome));
     try std.testing.expectEqualDeep(accounted.records.conflicts[0].value.citation_ids, inputs.references.?.conflicts[0].value.citation_ids);
     evidence[0].reference_support = &.{.{ .conflict = accounted.records.conflicts[0].id }};
     const with_conflicting_support = try run(allocator, inputs);
@@ -390,14 +391,20 @@ test "authority clarification subjects preserve earliest owner and remain stable
     for (proofs) |*proof| {
         proof.finding = .ambiguous;
         proof.resolution = .{ .existing_authority = source };
-        proof.review = .{ .detail = "Which delivery deadline applies?", .provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{} };
+        proof.review = .{ .question = "Which delivery deadline applies? Supply the date and timezone.", .detail = "The source provides no delivery deadline.", .provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{} };
     }
+    proofs[1].review.?.question = "Which delivery mechanism should implement the deadline? Name the mechanism.";
     inputs.evidence = proofs;
     inputs.candidates = &.{};
     const needs = try conversion.build(allocator, inputs, try observe(allocator, inputs), try run(allocator, inputs));
     try std.testing.expectEqual(@as(usize, 2), needs.entries.len);
     try std.testing.expectEqual(.spec, needs.entries[0].stage);
     try std.testing.expectEqual(.plan, needs.entries[1].stage);
+    try std.testing.expect(!std.mem.eql(u8, needs.entries[0].question, needs.entries[1].question));
+    for (needs.entries) |need| {
+        try std.testing.expectEqualStrings("The source provides no delivery deadline.", need.why_required);
+        try std.testing.expect(!std.mem.eql(u8, need.question, need.why_required));
+    }
     const c = @import("domain/clarification_inputs.zig");
     const first = try refresh.refresh(allocator, .{ .state = .{ .value = null }, .submissions = &.{}, .protected_forms = &.{} }, needs);
     const changed = try allocator.dupe(a.Evidence, &.{ proofs[1], proofs[0] });

@@ -3540,7 +3540,7 @@ const RepairSequence = struct {
         std.crypto.hash.sha2.Sha256.hash(&authorization, &digest, .{});
         const permit: @import("domain/workflow_retry.zig").Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(self.selected), .family = @splat(2) }, .authorization = digest, .revision = self.selected, .maximum_targets = 4 };
         const unit: identity.ImmutableUnitOwnerId = .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = "repair-state" }, .chunk_id = .{ .bytes = "repair-chunk" } } };
-        const packet = @import("domain/model_input_packet.zig").createRepair(std.testing.allocator, "{}", unit, .{ .atomic_repair = .{ .bytes = &authorization } }, null, permit) catch return error.OperationExecutionFailed;
+        const packet = @import("domain/model_input_packet.zig").createRepair(std.testing.allocator, "{}", unit, .{ .atomic_repair = .{ .bytes = &authorization } }, null, permit, null) catch return error.OperationExecutionFailed;
         var result = try requests.publishPacket(std.testing.allocator, packet);
         result.delta.repair_transition = .{ .authorized = permit };
         return result;
@@ -6288,15 +6288,43 @@ test "configured parts keep admitted siblings through protocol recovery and exha
                 .binding = bindings.bind(ProtocolUnits, &input, ProtocolUnits.select),
             }};
             fixture.registry.operations = &entries;
-            const graph = try fixture.compileResources(composition_yaml, address_schema, false, address_composition);
+            const source_yaml = composition_yaml ++ "\n# source-secret\n";
+            var source_graph = (try fixture.compileResources(source_yaml, address_schema, false, address_composition)).*;
+            source_graph.source = .{ .path = "request.workflow.yaml", .content = source_yaml };
+            const graph = &source_graph;
             var runner = fixture.runner(graph, std.testing.allocator);
             defer runner.deinit();
-            var calls: CompositionCalls = .{ .fake = invocationProvider(&runner, std.testing.allocator), .recover = recover, .missing_answer = missing_answer };
+            var snapshots: std.ArrayList(@import("domain/request_source_snapshot.zig").Snapshot) = .empty;
+            var calls: CompositionCalls = .{
+                .fake = invocationProvider(&runner, std.testing.allocator),
+                .recover = recover,
+                .missing_answer = missing_answer,
+                .source_observer = .{ .runner = &runner, .allocator = fixture.arena.allocator(), .snapshots = &snapshots },
+            };
             fixture.native.invoke_model.action = .{ .provider = calls.interface() };
             var harness: Harness = .{ .runner = &runner };
             try std.testing.expectEqual(@as(workflow.OutcomeTag, if (recover) .ok else .failed), harness.run());
             try std.testing.expectEqual(@as(usize, 5), calls.fake.effect_count);
             try std.testing.expect(calls.consistent);
+            try std.testing.expectEqual(calls.fake.effect_count, snapshots.items.len);
+            for (snapshots.items) |snapshot| {
+                try snapshot.validate();
+                try std.testing.expect(snapshot.document.redacted);
+                try std.testing.expect(std.mem.indexOf(u8, snapshot.document.content, "source-secret") == null);
+                try std.testing.expectEqualStrings(snapshot.selection.part.?, snapshot.caller.chain[0].id);
+                try std.testing.expectEqualStrings("part", snapshot.caller.chain[1].subgraph.?);
+                try std.testing.expectEqualStrings("call", snapshot.caller.chain[1].id);
+                try std.testing.expectEqualStrings("prepare", snapshot.preparation.chain[1].id);
+                try std.testing.expectEqual(@as(usize, 4), snapshot.resources.len);
+                try std.testing.expectEqualStrings("prompt", snapshot.resources[0].alias);
+                try std.testing.expectEqualStrings("prompt", snapshot.resources[1].alias);
+                try std.testing.expectEqualStrings("result.json", snapshot.resources[2].document.path);
+                try std.testing.expectEqualStrings(address_schema, snapshot.resources[2].document.content);
+                try std.testing.expectEqualStrings("composition.json", snapshot.resources[3].document.path);
+                try std.testing.expectEqualStrings(address_composition, snapshot.resources[3].document.content);
+                try std.testing.expectEqual(@as(usize, 1), snapshot.selection.paths.len);
+                try std.testing.expectEqualStrings(snapshot.selection.part.?, snapshot.selection.paths[0][snapshot.selection.paths[0].len - 1]);
+            }
             try std.testing.expectEqual(@as(u128, 35), runner.tokenLedger().committed());
             try std.testing.expectEqual(@as(usize, 5), runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(usize, 3), (try requestLedger(&runner)).recordCount());
@@ -6332,11 +6360,21 @@ const CompositionCalls = struct {
     missing_answer: bool = false,
     zip_request: ?*const identity.ModelRequestId = null,
     consistent: bool = true,
+    source_observer: ?struct {
+        runner: *runner_module.Runner,
+        allocator: std.mem.Allocator,
+        snapshots: *std.ArrayList(@import("domain/request_source_snapshot.zig").Snapshot),
+    } = null,
     fn interface(self: *@This()) @import("ports/llm_provider_interface.zig").LLMProviderInterface {
         return .{ .context = @ptrCast(self), .vtable = &.{ .invoke = invoke, .count_input_tokens = count } };
     }
     fn invoke(context: *@import("ports/llm_provider_interface.zig").Context, selected: *const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding, request: *const provider.IdentifiedProviderNeutralModelRequest, reference: *const provider.ValidatedProviderAuthorizationLeaseRef, invoked: *const provider.InvokedProviderOperation) @import("ports/llm_provider_interface.zig").Error!provider.ProviderInvocationObservation {
         const self: *@This() = @ptrCast(@alignCast(context));
+        if (self.source_observer) |observer| {
+            const metadata = observer.runner.model_capture.current orelse return error.ModelLoggingBlocked;
+            const snapshot = @import("application/request_source_capture.zig").snapshot(observer.allocator, metadata.source_context.?, metadata.node.bytes, &.{"source-secret"}) catch return error.ModelLoggingBlocked;
+            observer.snapshots.append(observer.allocator, snapshot.?) catch return error.OutOfMemory;
+        }
         const shape = request.response_schema.modelBytes();
         if (std.mem.indexOf(u8, shape, "\"street\"") != null) {
             self.fake.invocation_plan.complete.content = "{\"address\":{\"street\":\"Main St\"}}";
@@ -6690,7 +6728,10 @@ test "production capture attributes count and inference bodies to the existing r
     try fixture.initWithProvider(std.testing.allocator, 1);
     defer fixture.deinit();
     const a = fixture.arena.allocator();
-    const graph = try fixture.compile(try countInferenceYaml(&fixture));
+    const yaml_source = try std.mem.concat(a, u8, &.{ try countInferenceYaml(&fixture), "\n# " ++ "source snapshot " ** 1000 });
+    var graph_value = (try fixture.compile(yaml_source)).*;
+    graph_value.source = .{ .path = "request.workflow.yaml", .content = yaml_source };
+    const graph = &graph_value;
     var environment = try bedrockEnvironment(std.testing.allocator);
     defer environment.deinit();
     var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
@@ -6737,6 +6778,38 @@ test "production capture attributes count and inference bodies to the existing r
             try std.testing.expectEqualStrings(expected, body.items);
         }
     }
+    const captured = try restoreCapturedSources(a, sink.fragments.items);
+    try std.testing.expectEqual(@as(usize, 2), captured.len);
+    for (captured) |call| {
+        const snapshot = call.source_snapshot.?;
+        try std.testing.expectEqualStrings(yaml_source, snapshot.document.content);
+        try std.testing.expectEqualStrings("request.workflow.yaml", snapshot.document.path);
+        try std.testing.expectEqualStrings(call.node, snapshot.caller.chain[0].id);
+        try std.testing.expectEqualStrings(call.action, snapshot.caller.chain[0].target);
+        try std.testing.expectEqualStrings(call.request_step, snapshot.preparation.chain[0].id);
+        try std.testing.expectEqual(@as(usize, 3), snapshot.resources.len);
+        try std.testing.expectEqualStrings("prompt.md", snapshot.resources[0].document.path);
+        try std.testing.expectEqualStrings(prompt_bytes, snapshot.resources[0].document.content);
+        try std.testing.expectEqualStrings(schema_bytes, snapshot.resources[1].document.content);
+        try std.testing.expectEqualStrings(input_bytes, snapshot.resources[2].document.content);
+    }
+    var first_source: ?usize = null;
+    var last_source: ?usize = null;
+    for (sink.fragments.items, 0..) |fragment, index| {
+        if (std.mem.startsWith(u8, fragment.fragment_id.bytes, "inference-request-source_snapshot-")) {
+            if (first_source == null) first_source = index;
+            last_source = index;
+        }
+    }
+    try std.testing.expect(first_source.? < last_source.?);
+    var partial: std.ArrayList(ModelCaptureSink.prompt.SanitizedPromptFragment) = .empty;
+    for (sink.fragments.items, 0..) |fragment, index| if (index != last_source.?) try partial.append(a, fragment);
+    const partial_calls = try restoreCapturedSources(a, partial.items);
+    try std.testing.expect(partial_calls[0].source_snapshot != null);
+    try std.testing.expect(partial_calls[1].source_snapshot == null);
+    partial.clearRetainingCapacity();
+    for (sink.fragments.items, 0..) |fragment, index| if (index != first_source.?) try partial.append(a, fragment);
+    try std.testing.expectError(error.InvalidDebugArchive, restoreCapturedSources(a, partial.items));
     try std.testing.expectEqual(@as(u128, 12), runner.tokenLedger().committed());
     try std.testing.expect(runner.model_capture.current == null);
 }
@@ -7029,4 +7102,27 @@ test "packet result selection binds one immutable named schema and fails before 
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.failed, harness.run());
     try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+}
+
+fn restoreCapturedSources(a: std.mem.Allocator, fragments: []const ModelCaptureSink.prompt.SanitizedPromptFragment) ![]@import("domain/request_debugger.zig").Call {
+    const format = @import("domain/feature_log_format.zig");
+    var rows: std.ArrayList(u8) = .empty;
+    try rows.appendSlice(a, format.prompt_heading);
+    for (fragments, 1..) |fragment, sequence| {
+        try rows.appendSlice(a, try format.serializePrompt(a, .{
+            .log_policy_id = .{ .bytes = "policy-1" },
+            .binding_id = .{ .bytes = "binding-1" },
+            .segment_ordinal = 1,
+            .event_id = .{ .bytes = "event-1" },
+            .sequence = sequence,
+            .occurred_at_utc = "2026-09-20T00:00:00Z",
+            .monotonic_offset = 1,
+            .run_id = .{ .bytes = "run-one" },
+            .feature_id = .{ .bytes = "feature" },
+            .fragment = fragment,
+        }));
+    }
+    var archive: @import("domain/request_debugger_archive.zig").Archive = .{ .allocator = a };
+    try archive.ingest(rows.items);
+    return archive.calls();
 }

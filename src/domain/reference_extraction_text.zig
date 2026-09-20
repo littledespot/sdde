@@ -15,6 +15,7 @@ pub fn validate(validator: text.Validator, allocator: std.mem.Allocator, registr
         const classification_origins = try allocator.alloc(?@import("model_candidate_origin.zig").Origin, candidate.token_classifications.len);
         @memset(classification_origins, if (candidate.producers) |producers| producers.classifications else candidate.origin);
         entry.classification_origins = classification_origins;
+        entry.producers = candidate.producers;
         entry.token_classifications = candidate.token_classifications;
         entry.outcome = switch (candidate.outcome) {
             .blocked => |reason| .{ .blocked = reason },

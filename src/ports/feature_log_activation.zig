@@ -20,10 +20,26 @@ pub const Activator = struct {
 };
 
 pub const Finalizer = struct {
+    pub const Reason = union(enum) {
+        terminal: run.Outcome,
+        publication: @import("../domain/workflow_output.zig").TerminalOutcome,
+        pub fn outcome(self: Reason) run.Outcome {
+            return switch (self) {
+                .terminal => |value| value,
+                .publication => |value| .{ .execution = switch (value) {
+                    .ok => .ok,
+                    .needs_user => .needs_user,
+                } },
+            };
+        }
+    };
     context: *Context,
-    finish_fn: *const fn (*Context, run.Outcome) run.Outcome,
+    finish_fn: *const fn (*Context, Reason) run.Outcome,
 
     pub fn finish(self: Finalizer, outcome: run.Outcome) run.Outcome {
-        return self.finish_fn(self.context, outcome);
+        return self.finish_fn(self.context, .{ .terminal = outcome });
+    }
+    pub fn beforePublication(self: Finalizer, outcome: @import("../domain/workflow_output.zig").TerminalOutcome) run.Outcome {
+        return self.finish_fn(self.context, .{ .publication = outcome });
     }
 };

@@ -76,6 +76,7 @@ pub const TextRejection = struct {
 pub const TextResult = union(enum) { valid: TextValidated, invalid: TextRejection };
 pub const TextValidatedResult = struct {
     scope: evidence.Scope,
+    producers: ?ProducerOrigins = null,
     origin: ?@import("model_candidate_origin.zig").Origin = null,
     /// Immutable, index-aligned provenance owned together with the current values.
     classification_origins: []const ?Origin = &.{},

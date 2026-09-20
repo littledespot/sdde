@@ -91,7 +91,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             if (!try eql(Dependencies, a, authorization.dependencies, current)) return error.InvalidAtomicRepair;
         }
 
-        pub fn packet(a: std.mem.Allocator, authorization: Authorization, base: *const packets.Packet, definition: @import("model_result_schema.zig").DefinitionId) Error!*packets.Packet {
+        pub fn packet(a: std.mem.Allocator, authorization: Authorization, base: *const packets.Packet, definition: @import("model_result_schema.zig").DefinitionId, origin: ?Origin) Error!*packets.Packet {
             if (!identity.unitOwnerEql(authorization.owner, base.unit())) return error.InvalidAtomicRepair;
             var arena: std.heap.ArenaAllocator = .init(a);
             defer arena.deinit();
@@ -110,7 +110,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
                 try repair.object.put(scratch, "current_value", current_value);
             }
             const body = try std.json.Stringify.valueAlloc(scratch, .{ .input = input, .repair = repair }, .{});
-            return packets.createRepair(a, body, base.unit(), .{ .atomic_repair = authorization.id }, definition, authorization.retry orelse return error.InvalidAtomicRepair);
+            return packets.createRepair(a, body, base.unit(), .{ .atomic_repair = authorization.id }, definition, authorization.retry orelse return error.InvalidAtomicRepair, origin);
         }
 
         pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {

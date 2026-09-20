@@ -42,20 +42,18 @@ fn locateNode(node: *const schema.Node, target: *const schema.Node, path: []@imp
     return null;
 }
 
-/// Immediate fields and tags aid correction without repeating child schemas.
+/// Immediate fields, child-object requirements and tags, without child schemas.
 /// This is guidance only; the complete selected schema retains every constraint.
 pub fn outline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.Allocator.Error!std.json.Value {
     switch (node.*) {
         .object => |properties| {
             var object: std.json.ObjectMap = .{};
             var fields: std.json.ObjectMap = .{};
-            var required: std.array_list.Managed(std.json.Value) = .init(allocator);
             for (properties) |property| {
                 try fields.put(allocator, property.name, try fieldOutline(allocator, property.schema));
-                if (property.required) try required.append(.{ .string = property.name });
             }
             try object.put(allocator, "fields", .{ .object = fields });
-            try object.put(allocator, "required", .{ .array = required });
+            try object.put(allocator, "required", try requiredFields(allocator, properties));
             return .{ .object = object };
         },
         .one_of => |choices| {
@@ -73,7 +71,11 @@ pub fn outline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.A
 fn fieldOutline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.Allocator.Error!std.json.Value {
     var object: std.json.ObjectMap = .{};
     switch (node.*) {
-        .object, .array => try object.put(allocator, "type", .{ .string = if (node.* == .object) "object" else "array" }),
+        .object => |properties| {
+            try object.put(allocator, "type", .{ .string = "object" });
+            try object.put(allocator, "required", try requiredFields(allocator, properties));
+        },
+        .array => try object.put(allocator, "type", .{ .string = "array" }),
         .one_of => |choices| {
             var tags: std.array_list.Managed(std.json.Value) = .init(allocator);
             for (choices) |choice| try tags.append(.{ .string = schema.findProperty(choice.object, "kind").?.schema.constant.string });
@@ -84,19 +86,25 @@ fn fieldOutline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.
     return .{ .object = object };
 }
 
+fn requiredFields(allocator: std.mem.Allocator, properties: []const schema.Property) std.mem.Allocator.Error!std.json.Value {
+    var required: std.array_list.Managed(std.json.Value) = .init(allocator);
+    for (properties) |property| {
+        if (property.required) try required.append(.{ .string = property.name });
+    }
+    return .{ .array = required };
+}
+
 pub fn value(allocator: std.mem.Allocator, node: *const schema.Node, profile: Profile) std.mem.Allocator.Error!std.json.Value {
     var object: std.json.ObjectMap = .{};
     switch (node.*) {
         .object => |properties| {
             try object.put(allocator, "type", .{ .string = "object" });
             var fields_value: std.json.ObjectMap = .{};
-            var required: std.array_list.Managed(std.json.Value) = .init(allocator);
             for (properties) |property| {
                 try fields_value.put(allocator, property.name, try value(allocator, property.schema, profile));
-                if (property.required) try required.append(.{ .string = property.name });
             }
             try object.put(allocator, "properties", .{ .object = fields_value });
-            try object.put(allocator, "required", .{ .array = required });
+            try object.put(allocator, "required", try requiredFields(allocator, properties));
             try object.put(allocator, "additionalProperties", .{ .bool = false });
         },
         .string => |bounds| {

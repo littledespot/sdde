@@ -47,7 +47,9 @@ pub const Replacement = union(enum) {
     conflict: r.ConflictProposal,
     summary: r.text.ReferenceSemanticText,
     conflict_detail: struct { kind: r.ConflictKind, summary: r.text.ReferenceSemanticText },
+    conflict_group: ConflictGroup,
 };
+pub const ConflictGroup = struct { claim_dispositions: []const r.ClaimDispositionProposal, conflicts: []const r.ConflictProposal };
 pub const Rule = struct {
     rejection: d.Rejection,
     requirement: []const u8,
@@ -319,7 +321,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .disposition => .{ .disposition = if (authorization.rule.disposition_choices == null) .rules else .choices },
         .summary => .summary,
         .conflict_detail => .conflict_detail,
-        .statement, .disposition_record, .signal, .conflict => return error.InvalidAtomicRepair,
+        .statement, .disposition_record, .signal, .conflict, .conflict_group => return error.InvalidAtomicRepair,
     };
     const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, scope);
     defer packets.release(base);
@@ -332,7 +334,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         },
         .preserved_token => "token_reference",
     } else try std.fmt.allocPrint(scratch, "repair_{s}", .{@tagName(kind)});
-    return atomic.packet(a, authorization, contextual, .{ .bytes = definition });
+    return atomic.packet(a, authorization, contextual, .{ .bytes = definition }, parsed.source.at(targetOrigin(authorization.target).unit, targetOrigin(authorization.target).field));
 }
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     if (try atomic.checkRequest(authorization, input) == .content) {
@@ -633,7 +635,8 @@ pub const Omission = struct {
     const loss = @import("source_omission.zig");
     pub const Facts = struct { reconciliation: context.Facts, support: loss.Support };
     const OmissionRule = struct { finding: @import("required_authority.zig").ReviewEvidence, disposition_choices: ?dispositions.RepairChoices };
-    const Atomic = shared.Contract(Target, Replacement, Facts, OmissionRule);
+    pub const OmissionTarget = union(enum) { unit: Target, conflict_group: []const r.ClaimId };
+    const Atomic = shared.Contract(OmissionTarget, Replacement, Facts, OmissionRule);
     pub const OmissionAuthorization = Atomic.Authorization;
     pub const OmissionError = Atomic.Error || loss.Error;
     pub fn facts(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support) OmissionError!Facts {
@@ -644,22 +647,28 @@ pub const Omission = struct {
         try v.input(a, parsed.input);
         const selected = try loss.select(a, ctx.inputs, support);
         const finding = selected.finding.review.?;
-        const target: Target = switch (selected.location) {
+        const target: OmissionTarget = switch (selected.location) {
             .reconciliation_signal => |id| blk: {
                 if (id.ordinal == 0 or id.ordinal > parsed.proposal.global.signals.len) return error.InvalidAtomicRepair;
                 const index = id.ordinal - 1;
                 try r.sameSet(r.ClaimId, parsed.proposal.global.signals[index].claim_ids, finding.provenance.claim_ids);
-                break :blk .{ .signal_content = index };
+                break :blk .{ .unit = .{ .signal_content = index } };
             },
             .reconciliation_disposition => |id| blk: {
-                for (parsed.proposal.global.claim_dispositions, 0..) |value, index| if (std.meta.eql(value.claim_id, id)) break :blk .{ .disposition = .{ .index = index, .claim = id } };
+                for (parsed.proposal.global.claim_dispositions, 0..) |value, index| if (std.meta.eql(value.claim_id, id)) break :blk .{ .unit = .{ .disposition = .{ .index = index, .claim = id } } };
                 return error.InvalidAtomicRepair;
+            },
+            .reconciliation_conflict => |id| blk: {
+                if (id.ordinal == 0 or id.ordinal > parsed.proposal.global.conflicts.len) return error.InvalidAtomicRepair;
+                const claims = parsed.proposal.global.conflicts[id.ordinal - 1].claim_ids;
+                try r.sameSet(r.ClaimId, claims, finding.provenance.claim_ids);
+                break :blk .{ .conflict_group = try a.dupe(r.ClaimId, claims) };
             },
             else => return error.InvalidAtomicRepair,
         };
         const current = try facts(a, parsed, ctx, support);
         defer a.free(current.reconciliation.lineage.history);
-        var result = try Atomic.authorize(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)).?, current, .{ .finding = finding, .disposition_choices = try dispositionChoices(a, parsed, target) });
+        var result = try Atomic.authorize(a, try owner(a, parsed), parsed.source.revision, target, (try selectedValue(a, parsed, target)).?, current, .{ .finding = finding, .disposition_choices = if (target == .unit) try dispositionChoices(a, parsed, target.unit) else null });
         result.retry = try Omission.retryPermit(a, result);
         return result;
     }
@@ -672,8 +681,8 @@ pub const Omission = struct {
         const current = try facts(a, parsed, ctx, support);
         defer a.free(current.reconciliation.lineage.history);
         try Atomic.checkDependencies(a, auth, current);
-        const kind = if (auth.target == .signal_content) (try v.selectedKind(parsed.input.progress.plan.layout.items, parsed.proposal.global.signals[auth.target.signal_content].claim_ids)) orelse return error.InvalidAtomicRepair else null;
-        const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, if (kind) |value| .{ .content = value } else .{ .disposition = if (auth.rule.disposition_choices == null) .rules else .choices });
+        const kind = if (auth.target == .unit and auth.target.unit == .signal_content) (try v.selectedKind(parsed.input.progress.plan.layout.items, parsed.proposal.global.signals[auth.target.unit.signal_content].claim_ids)) orelse return error.InvalidAtomicRepair else null;
+        const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, if (kind) |value| .{ .content = value } else if (auth.target == .conflict_group) .all else .{ .disposition = if (auth.rule.disposition_choices == null) .rules else .choices });
         defer packets.release(base);
         return Atomic.packet(a, auth, base, .{ .bytes = if (kind) |value| switch (value) {
             .preserved_token => "token_reference",
@@ -681,7 +690,7 @@ pub const Omission = struct {
                 .business, .scope_guard => "business_text",
                 else => "reference_text",
             },
-        } else "repair_disposition" });
+        } else if (auth.target == .conflict_group) "repair_conflict_group" else "repair_disposition" }, if (auth.target == .unit) parsed.source.at(targetOrigin(auth.target.unit).unit, targetOrigin(auth.target.unit).field) else parsed.source.at(.conflicts, .record));
     }
     pub fn parse(a: std.mem.Allocator, auth: OmissionAuthorization, input: *const packets.Packet, bytes: []const u8) OmissionError!Replacement {
         const json = @import("model_candidate_json.zig");
@@ -696,9 +705,71 @@ pub const Omission = struct {
         const replacement = try Atomic.copyReplacement(a, proposed);
         const current = try facts(a, parsed, ctx, support);
         defer a.free(current.reconciliation.lineage.history);
-        const merged = try Atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try select(parsed, auth.target), current, auth, replacement, origin);
-        var result = try apply(a, parsed, auth.target, replacement, merged, origin);
+        const merged = try Atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try selectedValue(a, parsed, auth.target), current, auth, replacement, origin);
+        var result = if (auth.target == .unit) try apply(a, parsed, auth.target.unit, replacement, merged, origin) else try applyGroup(a, parsed, auth.target.conflict_group, replacement.conflict_group, merged, origin);
+        result.source.omission_conflict_claims = if (auth.target == .conflict_group) try a.dupe(r.ClaimId, auth.target.conflict_group) else &.{};
         result.source.omission_retry = auth.retry orelse return error.InvalidAtomicRepair;
+        return result;
+    }
+    fn selectedValue(a: std.mem.Allocator, parsed: r.Parsed, target: OmissionTarget) OmissionError!?Replacement {
+        if (target == .unit) return select(parsed, target.unit);
+        if (parsed.proposal != .global or target.conflict_group.len < 2) return error.InvalidAtomicRepair;
+        const claims = target.conflict_group;
+        var selected_dispositions: std.ArrayList(r.ClaimDispositionProposal) = .empty;
+        var selected_conflicts: std.ArrayList(r.ConflictProposal) = .empty;
+        for (parsed.proposal.global.claim_dispositions) |value| {
+            if (!r.contains(r.ClaimId, claims, value.claim_id)) continue;
+            if (value.disposition != .conflicting) return error.InvalidAtomicRepair;
+            for (value.disposition.conflicting.related_claim_ids) |id| if (!r.contains(r.ClaimId, claims, id)) return error.InvalidAtomicRepair;
+            try selected_dispositions.append(a, value);
+        }
+        if (selected_dispositions.items.len != claims.len) return error.InvalidAtomicRepair;
+        for (parsed.proposal.global.conflicts) |value| {
+            var touches = false;
+            for (value.claim_ids) |id| if (r.contains(r.ClaimId, claims, id)) {
+                touches = true;
+            };
+            if (!touches) continue;
+            for (value.claim_ids) |id| if (!r.contains(r.ClaimId, claims, id)) return error.InvalidAtomicRepair;
+            try selected_conflicts.append(a, value);
+        }
+        if (selected_conflicts.items.len == 0) return error.InvalidAtomicRepair;
+        return .{ .conflict_group = .{ .claim_dispositions = try selected_dispositions.toOwnedSlice(a), .conflicts = try selected_conflicts.toOwnedSlice(a) } };
+    }
+    fn applyGroup(a: std.mem.Allocator, parsed: r.Parsed, claims: []const r.ClaimId, replacement: ConflictGroup, merged: shared.Merge, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!r.Parsed {
+        // No external links, missing members, duplicates or foreign records can
+        // widen this native-bound unit. Ordinary validators judge its meaning.
+        if (replacement.claim_dispositions.len != claims.len) return error.InvalidAtomicRepair;
+        for (replacement.claim_dispositions, 0..) |value, index| {
+            if (!r.contains(r.ClaimId, claims, value.claim_id)) return error.InvalidAtomicRepair;
+            for (replacement.claim_dispositions[0..index]) |prior| if (std.meta.eql(prior.claim_id, value.claim_id)) return error.InvalidAtomicRepair;
+            const canonical = try value.canonical(a);
+            for (canonical.related_claim_ids) |id| if (!r.contains(r.ClaimId, claims, id)) return error.InvalidAtomicRepair;
+        }
+        for (replacement.conflicts) |value| {
+            if (value.claim_ids.len < 2) return error.InvalidAtomicRepair;
+            for (value.claim_ids) |id| if (!r.contains(r.ClaimId, claims, id)) return error.InvalidAtomicRepair;
+        }
+        var result = parsed;
+        for (replacement.claim_dispositions) |value| {
+            for (result.proposal.global.claim_dispositions, 0..) |prior, index| if (std.meta.eql(prior.claim_id, value.claim_id)) {
+                result = try apply(a, result, .{ .disposition = .{ .index = index, .claim = value.claim_id } }, .{ .disposition = value.disposition }, merged, origin);
+                break;
+            };
+        }
+        // Remove only associated conflicts, from the end to keep deletion indices valid.
+        var index = result.proposal.global.conflicts.len;
+        while (index > 0) {
+            index -= 1;
+            const value = result.proposal.global.conflicts[index];
+            if (r.contains(r.ClaimId, claims, value.claim_ids[0])) {
+                var deletion_merge = merged;
+                deletion_merge.operation = .delete;
+                result = try apply(a, result, .{ .conflict = index }, null, deletion_merge, origin);
+            }
+        }
+        for (replacement.conflicts) |value| result = try apply(a, result, .{ .insert_conflict = .{ .index = result.proposal.global.conflicts.len, .claims = value.claim_ids } }, .{ .conflict_detail = .{ .kind = value.kind, .summary = value.summary } }, merged, origin);
+        result.source.last_repair = merged;
         return result;
     }
     pub const Authorization = OmissionAuthorization;

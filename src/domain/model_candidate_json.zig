@@ -47,11 +47,18 @@ fn transform(comptime T: type, a: std.mem.Allocator, value: std.json.Value, comp
     var result = value;
     switch (@typeInfo(T)) {
         .@"struct" => |s| {
-            if (value != .object or value.object.count() != s.fields.len) return error.InvalidJsonDocument;
+            if (value != .object or value.object.count() > s.fields.len) return error.InvalidJsonDocument;
+            for (value.object.keys()) |key| {
+                var known = false;
+                inline for (s.fields) |field| if (std.mem.eql(u8, key, field.name)) {
+                    known = true;
+                };
+                if (!known) return error.InvalidJsonDocument;
+            }
             result = .{ .object = .{} };
             inline for (s.fields) |field| {
-                const child = value.object.get(field.name) orelse return error.InvalidJsonDocument;
-                try result.object.put(a, field.name, try transform(field.type, a, child, direction));
+                const child = value.object.get(field.name) orelse if (@typeInfo(field.type) == .optional and field.default_value_ptr != null) .null else return error.InvalidJsonDocument;
+                if (!(direction == .wire and @typeInfo(field.type) == .optional and field.default_value_ptr != null and child == .null)) try result.object.put(a, field.name, try transform(field.type, a, child, direction));
             }
         },
         .@"union" => |u| {

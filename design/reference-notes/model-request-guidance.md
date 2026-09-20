@@ -40,7 +40,7 @@ for every workflow and both response modes:
 - Exact rejected response as untrusted evidence.
 - Decoder position and object/key context, or the schema JSON Pointer.
 - For schema rejection: the candidate JSON Pointer and parent/value scope, an
-  exact locator in the single complete schema, and derived immediate fields and
+  exact locator in the single complete schema, and derived immediate fields, child-object required names and
   discriminator values. Alternatives and bounds remain in that schema.
 
 The protocol prompt requires the complete corrected response, preserving unaffected
@@ -77,7 +77,7 @@ It rejects fences, duplicate keys, trailing text and schema violations. Rejected
 bytes remain evidence. Valid shape yields candidate data, not business-quality
 proof or publication authority.
 
-## Configured smaller outputs — design pending implementation
+## Configured smaller outputs — implemented boundary
 
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) separates
 cohesive response parts while retaining relevant input evidence. Each call receives
@@ -86,8 +86,70 @@ part. Replace combined-output instructions at each part's initial/correction cal
 site; a narrowed schema must not accompany a prompt requesting sibling fields.
 Native assembly receives admitted values and a compiled structural mapping,
 with **no LLM prompt or call**. Existing full validation, native repair and total-token
-accounting remain. The configured first use separates extraction content from
-dependent token classifications; no model-quality improvement is yet measured.
+accounting remain. Extraction separates content from dependent token classifications;
+global reconciliation separates dispositions, signals and conflicts. Arrays and
+optional containers remain whole. These paths are implemented; the retained runs
+do not establish a measured reliability improvement or a completed, scored baseline.
+
+## Proposed conformance improvements — 20 September 2026
+
+This is an assessment direction, not an extension of accepted contracts or a
+claim of delivery. [Chunk 18's R38 follow-up](../../fixes/IMP_001.md#r38-follow-up--generation-conformance)
+owns sequencing and approval decisions. R38 repeated incorrect nested wrappers
+despite the correct schema; R39 corrected its JSON and then reached a separate
+semantic-review problem. Measure structural compliance and semantic quality separately.
+
+| Improvement to assess | Existing owner and boundary |
+| --- | --- |
+| Assignment-specific instructions | Request/assignment guidance supplies only relevant generation rules, shared JSON framing and necessary evidence. Remove sibling-unit instructions consistently from initial and correction inputs; do not create parallel prompts for every failure. |
+| Precise nested correction guidance | The feasibility review selects [one nonrecursive child-object required-field annotation](../contracts/22-repair.md#2261-child-object-requirements), approved on 20 September 2026. Reuse the shared projection and protocol builder with the same selected schema; no branch selection, evidence relocation or candidate synthesis. |
+| Model and response-mode comparison | Reuse existing provider binding, schema projection and request capture. Explicitly compare the configured baseline with native mode or another registered, authorized model; change one factor at a time. No automatic fallback, hidden model escalation or new retry owner. |
+| Further response decomposition | Reuse ADR 0016 for measured object-shape difficulties. Array-item decomposition remains deferred until finite assignments, stable identities, unique ownership, coverage/order and dependency renewal have accepted authority. Do not add arbitrary splitting, flattening or another assembler. |
+| Native derivation of mechanical fields | Reuse existing native construction where accepted inputs determine the value uniquely. Required evidence selections, relationships and business meaning remain explicit candidate data. Changing a wire shape requires consistent schema, decoding, repair, provenance and persisted-validation changes; a formatter cannot infer missing support. |
+| Measured model reliability | Reuse the existing harness and captured requests under [§28.8](../contracts/28-testing.md#288-model-conformance-comparisons). Scripted acceptance/rejection tests establish engine enforcement; controlled live comparisons establish model behavior. |
+
+Start with assignment guidance and the focused nested-shape assessment, then compare
+model/mode choices. Further decomposition or native derivation needs evidence of a
+remaining problem. Successful parts retain their dependencies and provenance;
+shared retries, full validation and global token accounting remain unchanged.
+Unresolved JSON/schema rejection ends in error without specification publication,
+including when clarification forms are open.
+
+## Nested-correction feasibility
+
+**Feasible within existing owners; model benefit remains unproven.** The latest
+[R40 evidence](../../fixes/FIX_001.md#42-brief-wrapper-recurrence-and-correction-feasibility)
+repeats R38's misplaced root provenance. The validator reports that first unknown
+property before visiting children. Its expected node already identifies the brief
+branch; the outline reduces each child object to its type. The complete schema is
+present, so the opportunity is visibility of the required nesting, not recovery of
+lost schema information or proof that the prompt caused the model failure.
+
+| Boundary | Existing responsibility and proposed effect |
+| --- | --- |
+| Schema compilation/selection | The canonical compiled schema owns fields and requiredness. Named results, configured parts and narrowed native repairs keep their exact binding. No schema or composition format changes. |
+| Schema validation | `model_payload_schema` retains its first diagnostic and selected expected node. No extra candidate traversal, defect collection or inferred union selection is needed. |
+| Shape projection | `model_schema_projection` adds required names to immediate object-valued field descriptors under the approved §22.6.1 rule. It reads schema data only. |
+| Correction/preparation | `model_protocol_retry` uses the projection; `model_request_preparation` copies rendered guidance from scratch into request-owned memory. Original assignment/input/schema and latest rejected response remain associated. |
+| Provider/logging | Existing serialization sends the guidance and single complete acceptance schema; native mode retains its existing derived grammar. Existing request capture records the changed bytes without a new log or debugger contract. |
+| Admission/continuation | The existing runner accounts each call, applies the same assignment allowance and revalidates the full response. Native merge/full validation and deterministic composition preserve authorized scope, sibling data, dependencies and provenance. |
+
+For example, the derived descriptor for `title` is now:
+
+```json
+{"type":"object","required":["value","provenance"]}
+```
+
+This is explanatory output derived from the configured schema, not a hard-coded
+brief rule or a candidate template. It does not say which claims support a field
+or authorize copying the rejected root provenance into every child. Deeper defects
+remain governed by the full schema and subsequent diagnostics; this amendment does
+not recursively expand objects or array items. Repeated failure still exhausts.
+
+The [implementation and offline verification record](../../fixes/IMP_001.md#focused-226-decision--child-object-requirements)
+cover unrelated shapes, optional fields, exact selected-schema ownership, cleanup,
+recovery and exhaustion. Request-size evidence measures overhead, not reliability;
+approved controlled calls are still needed to measure model outcomes under §28.8.
 
 ## Provider mode and implementation evidence
 
@@ -99,6 +161,13 @@ dependent token classifications; no model-quality improvement is yet measured.
 - The Specify E2E case uses `prompt-only`: its configured model failed native
   tagged-schema live checks. This records the existing case selection, not a
   waiver of validation or new E2E evidence.
+
+AWS documents [structured-output support for gpt-oss-20b](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-20b.html)
+and [schema-constrained Converse output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
+(checked 20 September 2026). Availability does not overturn the
+[retained native-mode failures](../../fixes/FIX_001.md#47-native-mode-and-retry-counts-are-not-demonstrated-solutions)
+or prove improvement for the configured provider/model/schema combination. A
+comparison must record the actual mode and full engine-validation results.
 
 | Responsibility | Source |
 | --- | --- |

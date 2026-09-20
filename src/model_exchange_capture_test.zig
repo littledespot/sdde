@@ -36,6 +36,8 @@ const Sink = struct {
 };
 const metadata: capture.Metadata = .{
     .workflow = telemetry.WorkflowShortcode.parse("SPEC") catch unreachable,
+    .workflow_id = .{ .bytes = "spec" },
+    .action = .{ .bytes = "invoke-model" },
     .node = .{ .bytes = "invoke-part" },
     .operation = .{ .bytes = "generate-part" },
     .model_slot = .{ .bytes = "generation" },
@@ -136,4 +138,30 @@ test "capture honors disabled selection and makes persistence failures sticky" {
     defer drop_logger.end();
     try std.testing.expectEqual(.blocked, drop_logger.port().capture(.response, .{ .provider_body = "unexpectedly dropped" }, &.{}));
     try std.testing.expectEqual(.LOG_SERIALIZATION_FAILURE, drop_logger.failure.?);
+}
+
+test "request lineage distinguishes count retry repair and unrelated requests" {
+    const lineage = @import("domain/model_call_lineage.zig");
+    var history: lineage.History = .{};
+    defer history.deinit(std.testing.allocator);
+    const first: lineage.Origin = .{ .request = .{ .value = 0 }, .attempt = .{ .value = 1 } };
+    const retried: lineage.Origin = .{ .request = first.request, .attempt = .{ .value = 3 } };
+    const repair: lineage.Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    const repaired_again: lineage.Origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 1 } };
+    const unrelated: lineage.Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    try std.testing.expectEqual(.initial, (try history.observe(std.testing.allocator, first, .initial, null)).kind);
+    _ = try history.observe(std.testing.allocator, .{ .request = first.request, .attempt = .{ .value = 2 }, .kind = .input_token_count }, .initial, null);
+    _ = try history.observe(std.testing.allocator, unrelated, .initial, null);
+    const retry = try history.observe(std.testing.allocator, retried, .initial, null);
+    try std.testing.expectEqual(.retry, retry.kind);
+    try std.testing.expectEqualDeep(first, retry.original);
+    try std.testing.expectEqualDeep(first, retry.parent.?);
+    const linked = try history.observe(std.testing.allocator, repair, .repair, retried);
+    try std.testing.expectEqual(.repair, linked.kind);
+    try std.testing.expectEqualDeep(first, linked.original);
+    try std.testing.expectEqualDeep(retried, linked.parent.?);
+    try std.testing.expectEqualDeep(first, (try history.observe(std.testing.allocator, repaired_again, .repair, repair)).original);
+    try std.testing.expectError(error.InvalidModelCallLineage, history.observe(std.testing.allocator, repaired_again, .repair, repair));
+    try std.testing.expectError(error.InvalidModelCallLineage, history.observe(std.testing.allocator, .{ .request = .{ .value = 9 }, .attempt = .{ .value = 1 } }, .repair, null));
+    try std.testing.expectError(error.InvalidModelCallLineage, history.observe(std.testing.allocator, .{ .request = .{ .value = 9 }, .attempt = .{ .value = 1 } }, .repair, .{ .request = .{ .value = 8 }, .attempt = .{ .value = 1 } }));
 }

@@ -14,18 +14,20 @@ pub fn expand(allocator: std.mem.Allocator, source: d.Definition) Error!Expansio
     const root = try allocator.alloc(d.SubgraphStep, source.steps.len + source.calls.len);
     for (source.steps, root[0..source.steps.len]) |step, *copy| copy.* = .{
         .id = step.id,
+        .source = step.source,
         .target = .{ .operation = step.operation_id },
         .parameters = try literals(allocator, step.parameters),
         .outcomes = step.outcomes,
     };
     for (source.calls, root[source.steps.len..]) |call, *copy| copy.* = .{
         .id = call.id,
+        .source = call.source,
         .target = .{ .subgraph = call.subgraph },
         .parameters = try literals(allocator, call.parameters),
         .outcomes = call.outcomes,
     };
     var compiler: Compiler = .{ .allocator = allocator, .subgraphs = source.subgraphs };
-    const result = try compiler.scope(root, source.start_step_id, &.{}, null);
+    const result = try compiler.scope(root, source.start_step_id, &.{}, null, &.{});
     for (compiler.used[0..source.subgraphs.len]) |used| if (!used) return invalid();
     const sorted = try allocator.dupe(w.DeclarativeStep, result.steps);
     std.mem.sort(w.DeclarativeStep, sorted, {}, stepLessThan);
@@ -39,7 +41,7 @@ const Compiler = struct {
     active: [d.max_subgraphs]bool = @splat(false),
     used: [d.max_subgraphs]bool = @splat(false),
 
-    fn scope(self: *Compiler, local: []const d.SubgraphStep, start: w.WorkflowStepId, bindings: []const w.ParameterBinding, prefix: ?w.WorkflowStepId) Error!Expansion {
+    fn scope(self: *Compiler, local: []const d.SubgraphStep, start: w.WorkflowStepId, bindings: []const w.ParameterBinding, prefix: ?w.WorkflowStepId, parents: []const @import("workflow_source.zig").Entry) Error!Expansion {
         if (local.len == 0 or local.len > d.max_steps) return invalid();
         try validateParameters(local, bindings);
         const parts = try self.allocator.alloc(Expansion, local.len);
@@ -47,6 +49,7 @@ const Compiler = struct {
         for (local, parts, 0..) |step, *part, index| {
             for (local[0..index]) |prior| if (same(prior.id.bytes, step.id.bytes)) return invalid();
             const id = try qualified(self.allocator, prefix, step.id);
+            const chain = if (step.source) |entry| try std.mem.concat(self.allocator, @import("workflow_source.zig").Entry, &.{ parents, &.{entry} }) else parents;
             const parameters = try self.allocator.alloc(w.ParameterBinding, step.parameters.len);
             for (step.parameters, parameters) |parameter, *bound| bound.* = .{
                 .id = parameter.id,
@@ -59,7 +62,7 @@ const Compiler = struct {
             part.* = switch (step.target) {
                 .operation => |operation| value: {
                     const operations = try self.allocator.alloc(w.DeclarativeStep, 1);
-                    operations[0] = .{ .id = id, .operation_id = operation, .parameters = parameters, .outcomes = step.outcomes };
+                    operations[0] = .{ .source_chain = chain, .id = id, .operation_id = operation, .parameters = parameters, .outcomes = step.outcomes };
                     break :value .{ .start = id, .steps = operations };
                 },
                 .subgraph => |called| value: {
@@ -72,7 +75,7 @@ const Compiler = struct {
                     self.used[selected] = true;
                     const subgraph = self.subgraphs[selected];
                     try validateExits(subgraph.steps, step.outcomes);
-                    break :value try self.scope(subgraph.steps, subgraph.start, parameters, id);
+                    break :value try self.scope(subgraph.steps, subgraph.start, parameters, id, chain);
                 },
             };
             if (part.steps.len > d.max_steps - count) return invalid();

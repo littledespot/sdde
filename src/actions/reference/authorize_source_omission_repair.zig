@@ -12,7 +12,7 @@ pub const Action = struct {
         return .{ .authorization = switch (selected.location) {
             .unlocalized => return error.InvalidAtomicRepair,
             .extraction_claim, .token_classification => .{ .extraction = try ex.authorize(a, extraction) },
-            .reconciliation_signal, .reconciliation_disposition => .{ .reconciliation = try rec.authorize(a, parsed, ctx, extraction.support) },
+            .reconciliation_signal, .reconciliation_disposition, .reconciliation_conflict => .{ .reconciliation = try rec.authorize(a, parsed, ctx, extraction.support) },
         } };
     }
 };

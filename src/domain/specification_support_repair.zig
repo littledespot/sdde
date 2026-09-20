@@ -20,13 +20,14 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             }
         };
         const Selection = if (purpose == .principles) struct { citations: []const @import("principle_registry.zig").Citation } else struct { provenance: @import("specification.zig").Selection, source_ids: []const @import("reference_identity.zig").SourceId };
-        pub const Replacement = union(enum) { finding: review.Value, selection: Selection, detail: struct { detail: []const u8 } };
+        const Detail = if (purpose == .source) struct { detail: []const u8, question: ?[]const u8 = null } else struct { detail: []const u8 };
+        pub const Replacement = union(enum) { finding: review.Value, selection: Selection, detail: Detail };
         const Facts = struct { inputs: authority.Inputs, sources: evidence.Inputs, candidate: review.Candidate };
         const Rule = struct {
             rejection: review.Diagnostic,
             finding: ?review.Value,
-            pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, detail_rule: ?@import("specification_support_evidence.zig").DetailRule.Guidance, finding: ?review.Value } {
-                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .detail_rule = if (self.rejection.issue == .invalid_detail and self.finding != null) @import("specification_support_evidence.zig").detailRule(self.finding.?.decision.finding()).guidance() else null, .finding = self.finding };
+            pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, detail_rule: ?@import("specification_support_evidence.zig").DetailRule.Guidance, finding: ?review.Value = null, decision: ?review.Decision = null, question_rule: ?[]const u8 } {
+                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .detail_rule = if (self.rejection.issue == .invalid_detail and self.finding != null) @import("specification_support_evidence.zig").detailRule(self.finding.?.decision.finding()).guidance() else null, .finding = if (self.rejection.issue == .invalid_detail) null else self.finding, .decision = if (self.rejection.issue == .invalid_detail and self.finding != null) self.finding.?.decision else null, .question_rule = if (purpose == .source and self.rejection.issue == .invalid_detail and self.finding != null) admission.questionGuidance(self.finding.?.decision.finding()) else null };
             }
         };
         const atomic = shared.Contract(Target, Replacement, Facts, Rule);
@@ -110,7 +111,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 return error.InvalidAtomicRepair;
             }
             const expected: Replacement = switch (rejection.issue) {
-                .invalid_detail => .{ .detail = .{ .detail = value.detail } },
+                .invalid_detail => .{ .detail = detail(value) },
                 .invalid_evidence => .{ .selection = selection(value) },
                 .invalid_json, .unknown_requirement, .duplicate_requirement, .missing_requirement, .invalid_decision => return error.UnsafeSupportRepair,
             };
@@ -129,8 +130,8 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 .finding => "principle_finding",
                 .selection => "principle_selection",
                 .detail => "detail",
-            } else if (kind == .finding and try review.applicability(inputs, authorization.target.requirement) == .review) "applicability_finding" else @tagName(kind);
-            return atomic.packet(a, authorization, base, .{ .bytes = definition });
+            } else if (kind == .finding and try review.applicability(inputs, authorization.target.requirement) == .review) "applicability_finding" else if (kind == .detail) "source_detail" else @tagName(kind);
+            return atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index]);
         }
         pub const parse = atomic.parse;
         pub fn merge(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, candidate: review.Candidate, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!review.Collection {
@@ -146,7 +147,10 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 if (authorization.operation == .delete and index == target.index) continue;
                 var next = finding;
                 if (authorization.operation == .replace and index == target.index) switch (try atomic.copyReplacement(a, replacement.?)) {
-                    .detail => |value| next.value.detail = value.detail,
+                    .detail => |value| {
+                        next.value.detail = value.detail;
+                        if (purpose == .source) next.value.question = value.question;
+                    },
                     .selection => |value| {
                         if (purpose == .principles) next.value.citations = value.citations else {
                             next.value.provenance = value.provenance;
@@ -168,16 +172,20 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 .insert => try candidate.occurrences.inserting(a, target.index, candidate.review.entries.len),
                 .delete => try candidate.occurrences.deleting(a, target.index, candidate.review.entries.len),
             };
-            return review.validate(a, inputs, context.inputs, .{ .review = .{ .entries = try entries.toOwnedSlice(a) }, .revision = merged.revision_after, .origin = candidate.origin, .origins = try origins.toOwnedSlice(a), .last_repair = merged, .occurrences = occurrences });
+            return review.validate(a, inputs, context.inputs, .{ .omission_conflict_claims = candidate.omission_conflict_claims, .review = .{ .entries = try entries.toOwnedSlice(a) }, .revision = merged.revision_after, .origin = candidate.origin, .origins = try origins.toOwnedSlice(a), .last_repair = merged, .occurrences = occurrences });
         }
         fn valueAt(candidate: review.Candidate, index: usize, kind: std.meta.Tag(Replacement)) ?Replacement {
             if (index >= candidate.review.entries.len) return null;
             const value = candidate.review.entries[index].value;
             return switch (kind) {
                 .finding => .{ .finding = value },
-                .detail => .{ .detail = .{ .detail = value.detail } },
+                .detail => .{ .detail = detail(value) },
                 .selection => .{ .selection = selection(value) },
             };
+        }
+
+        fn detail(value: review.Value) Detail {
+            return if (purpose == .source) .{ .detail = value.detail, .question = value.question } else .{ .detail = value.detail };
         }
 
         fn selection(value: review.Value) Selection {

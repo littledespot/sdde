@@ -23,6 +23,7 @@ pub const CompiledParameter = struct {
 };
 
 pub const CompiledResource = struct {
+    source_path: ?[]const u8 = null,
     id: workflow.WorkflowResourceId,
     content: union(operation.ResourceKind) {
         prompt: []const u8,
@@ -47,6 +48,7 @@ pub const CompiledResource = struct {
     pub fn clone(self: CompiledResource, allocator: std.mem.Allocator, canonical: ?*const @import("model_result_schema.zig").Schema) @import("json_composition.zig").Error!CompiledResource {
         return .{
             .id = .{ .bytes = try allocator.dupe(u8, self.id.bytes) },
+            .source_path = if (self.source_path) |path| try allocator.dupe(u8, path) else null,
             .content = switch (self.content) {
                 .result_schema => |schema| .{ .result_schema = try schema.clone(allocator) },
                 .json_composition => |plan| .{ .json_composition = try plan.clone(allocator, canonical orelse return error.InvalidJsonComposition) },
@@ -73,6 +75,7 @@ pub fn findResultSchema(resources: []const CompiledResource, id: workflow.Workfl
 }
 
 pub const CompiledStep = struct {
+    source_chain: []const @import("workflow_source.zig").Entry = &.{},
     id: workflow.WorkflowStepId,
     operation_id: workflow.OperationId,
     parameters: []const CompiledParameter,
@@ -110,6 +113,7 @@ pub const SemanticAuthority = struct {
 };
 
 pub const CompiledWorkflow = struct {
+    source: ?@import("workflow_source.zig").Document = null,
     source_ordinal: u16,
     shortcode: telemetry.WorkflowShortcode,
     authority: SemanticAuthority,

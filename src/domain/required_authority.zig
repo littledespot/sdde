@@ -71,6 +71,7 @@ pub const Resolution = union(enum) { existing_authority: Authority, supported_ca
 pub const Finding = enum { supported, ambiguous, conflicting, unsupported, candidate_omission };
 pub const ReviewEvidence = struct {
     detail: []const u8,
+    question: ?[]const u8 = null,
     provenance: @import("specification.zig").Provenance,
     source_ids: []const @import("reference_identity.zig").SourceId,
     principle_citations: []const @import("principle_registry.zig").Citation = &.{},

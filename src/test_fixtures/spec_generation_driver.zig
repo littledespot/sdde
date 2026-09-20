@@ -6,8 +6,8 @@ const workflow = @import("../domain/workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 pub const Fault = struct {
     stage: enum { extraction, reconciliation, generation, repair, support, candidate_review },
-    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing },
-    repetition: union(enum) { once, every_request: u32, persistent } = .once,
+    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, misplaced_provenance },
+    repetition: union(enum) { once, first_request: u32, every_request: u32, persistent } = .once,
 };
 pub const Driver = struct {
     runner: *@import("../application/workflow_pipeline_runner.zig").Runner,
@@ -60,6 +60,8 @@ pub const Driver = struct {
     malformed_classification_repair_once: bool = false,
     classification_repair_calls: usize = 0,
     brief_uncertain: bool = false,
+    brief_text: ?[3][]const u8 = null,
+    brief_references: ?*const data.Value = null,
     entities_required: bool = false,
     generation_gap: bool = false,
     calls: usize = 0,
@@ -130,10 +132,10 @@ pub const Driver = struct {
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .support_post = self.support_post, .principle_conflict = self.principle_conflict, .candidate_omissions = self.candidate_omissions, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .support_post = self.support_post, .principle_conflict = self.principle_conflict, .candidate_omissions = self.candidate_omissions, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             self.fake.invocation_plan.complete.content = if (self.malformed or (self.malformed_once and self.calls == 0)) "{" else body;
             const current_request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
-            if (self.measurement_prefix) |prefix| if (self.global_sequence != null or self.summary_sequence != null or current_request.part() != null or current_request.id().immutable_unit_owner_id == .semantic_review) {
+            if (self.measurement_prefix) |prefix| if (self.source_loss != null or self.brief_text != null or self.global_sequence != null or self.summary_sequence != null or current_request.part() != null or current_request.id().immutable_unit_owner_id == .semantic_review) {
                 const Part = struct { kind: []const u8, text: []const u8 };
                 const parts = arena.allocator().alloc(Part, current_request.prepared().?.content.len) catch unreachable;
                 for (parts, current_request.prepared().?.content) |*part, content_part| part.* = .{ .kind = @tagName(content_part), .text = content_part.bytes() };
@@ -141,6 +143,7 @@ pub const Driver = struct {
                     .purpose = @tagName(current_request.id().purpose),
                     .content = parts,
                     .schema = current_request.prepared().?.response_schema.modelBytes(),
+                    .wire = @import("../adapters/provider/bedrock_request.zig").encode(arena.allocator(), current_request.prepared().?, .inference) catch unreachable,
                     .composition = if (current_request.part()) |part| .{
                         .part = part.plan.parts()[part.part].id.bytes,
                         .canonical_schema = part.plan.completeSchema().modelBytes(),
@@ -220,12 +223,28 @@ pub const Driver = struct {
                     else => unreachable,
                 };
                 const matches_stage = stage == fault.stage or (stage == .support and fault.stage == .candidate_review and (authorityInputs(&view)).specification != null);
+                if (matches_stage and fault.shape == .misplaced_provenance) {
+                    const references = view.slots[@intFromEnum(@import("../application/reference_reconciliation_workflow.zig").accounted_schema.key)].?;
+                    if (self.brief_references) |retained| std.testing.expect(retained == references) catch unreachable else self.brief_references = references;
+                    if (attempt > 1) {
+                        const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
+                        const expected = correction.value.object.get("expected").?.object;
+                        std.testing.expectEqualStrings("/provenance", correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("path").?.string) catch unreachable;
+                        const fields = expected.get("shape").?.object.get("fields").?.object;
+                        for ([_][]const u8{ "title", "description", "primary_goal" }) |field| {
+                            std.testing.expectEqualStrings("{\"type\":\"object\",\"required\":[\"value\",\"provenance\"]}", std.json.Stringify.valueAlloc(arena.allocator(), fields.get(field).?, .{}) catch unreachable) catch unreachable;
+                        }
+                        const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
+                        std.testing.expectEqualStrings(corrupt(arena.allocator(), body, fault.shape) catch unreachable, prior.value.rejected_response) catch unreachable;
+                    }
+                }
                 if (matches_stage and fault.shape == .alternating_protocol and attempt > 1) {
                     const evidence = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
                     std.testing.expectEqualStrings(if (attempt % 2 == 0) "{" else "{}", evidence.value.rejected_response) catch unreachable;
                 }
                 const reject = switch (fault.repetition) {
                     .once => self.fault_calls == 0,
+                    .first_request => |count| (self.fault_request == null or self.fault_request == request.id()) and attempt <= count,
                     .every_request => |count| attempt <= count,
                     .persistent => true,
                 };
@@ -441,7 +460,15 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
     if (shape == .empty) return "{}";
     var parsed = try std.json.parseFromSlice(std.json.Value, allocator, body, .{});
     defer parsed.deinit();
-    if (shape == .mixed_variant) {
+    if (shape == .misplaced_provenance) {
+        var provenance: ?std.json.Value = null;
+        for (parsed.value.object.values()) |*child| {
+            if (child.* != .object or !child.object.contains("value") or !child.object.contains("provenance")) continue;
+            provenance = child.object.get("provenance").?;
+            child.* = child.object.get("value").?;
+        }
+        try parsed.value.object.put(allocator, "provenance", provenance orelse return error.InvalidFixture);
+    } else if (shape == .mixed_variant) {
         try parsed.value.object.put(allocator, "foreign_variant", .{ .object = .{} });
     } else {
         std.debug.assert(emptyNested(&parsed.value, true));

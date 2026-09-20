@@ -4,6 +4,7 @@ const std = @import("std");
 const identity = @import("model_request_identity.zig");
 const schema = @import("model_result_schema.zig");
 const retry = @import("workflow_retry.zig");
+const Origin = @import("model_candidate_origin.zig").Origin;
 pub const Error = identity.Error || error{InvalidModelInputPacket};
 pub const Packet = opaque {
     pub fn body(self: *const Packet) []const u8 {
@@ -21,6 +22,9 @@ pub const Packet = opaque {
     pub fn repairPermit(self: *const Packet) ?retry.Permit {
         return storage(self).repair;
     }
+    pub fn repairOrigin(self: *const Packet) ?Origin {
+        return storage(self).repair_origin;
+    }
 };
 const Storage = struct {
     allocator: std.mem.Allocator,
@@ -31,21 +35,22 @@ const Storage = struct {
     purpose: identity.RequestPurposeBinding,
     result_definition: ?schema.DefinitionId = null,
     repair: ?retry.Permit = null,
+    repair_origin: ?Origin = null,
     handle: Handle,
 };
 const Handle = struct { owner: *Storage };
 pub fn create(allocator: std.mem.Allocator, body: []const u8, unit: identity.ImmutableUnitOwnerId, purpose: identity.RequestPurposeBinding, result_definition: ?schema.DefinitionId) Error!*Packet {
-    return createBound(allocator, body, unit, purpose, result_definition, null);
+    return createBound(allocator, body, unit, purpose, result_definition, null, null);
 }
 /// Native repair authority is retained out of band; it is never model input.
-pub fn createRepair(allocator: std.mem.Allocator, body: []const u8, unit: identity.ImmutableUnitOwnerId, purpose: identity.RequestPurposeBinding, result_definition: ?schema.DefinitionId, permit: retry.Permit) Error!*Packet {
+pub fn createRepair(allocator: std.mem.Allocator, body: []const u8, unit: identity.ImmutableUnitOwnerId, purpose: identity.RequestPurposeBinding, result_definition: ?schema.DefinitionId, permit: retry.Permit, origin: ?Origin) Error!*Packet {
     if (purpose != .atomic_repair or permit.revision == 0 or permit.maximum_targets == 0) return error.InvalidModelInputPacket;
     var digest: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(purpose.atomic_repair.bytes, &digest, .{});
     if (!std.mem.eql(u8, &digest, &permit.authorization)) return error.InvalidModelInputPacket;
-    return createBound(allocator, body, unit, purpose, result_definition, permit);
+    return createBound(allocator, body, unit, purpose, result_definition, permit, origin);
 }
-fn createBound(allocator: std.mem.Allocator, body: []const u8, unit: identity.ImmutableUnitOwnerId, purpose: identity.RequestPurposeBinding, result_definition: ?schema.DefinitionId, permit: ?retry.Permit) Error!*Packet {
+fn createBound(allocator: std.mem.Allocator, body: []const u8, unit: identity.ImmutableUnitOwnerId, purpose: identity.RequestPurposeBinding, result_definition: ?schema.DefinitionId, permit: ?retry.Permit, origin: ?Origin) Error!*Packet {
     try identity.validateUnitOwner(unit);
     if (body.len == 0 or !std.unicode.utf8ValidateSlice(body)) return error.InvalidModelInputPacket;
     // Follow-up requests retain their parent through the request ledger, not a
@@ -62,6 +67,7 @@ fn createBound(allocator: std.mem.Allocator, body: []const u8, unit: identity.Im
     }
     owner.unit = try identity.cloneUnitOwner(arena, unit);
     owner.repair = permit;
+    owner.repair_origin = origin;
     owner.purpose = switch (purpose) {
         .initial_generation => .initial_generation,
         .atomic_repair => |id| .{ .atomic_repair = .{ .bytes = try arena.dupe(u8, id.bytes) } },
@@ -112,7 +118,7 @@ pub fn withJsonContext(allocator: std.mem.Allocator, base: *const Packet, compti
     if (input.value != .object or input.value.object.contains(field)) return error.InvalidModelInputPacket;
     try input.value.object.put(input.arena.allocator(), field, context);
     const body = try std.json.Stringify.valueAlloc(scratch, input.value, .{});
-    return if (base.repairPermit()) |permit| createRepair(allocator, body, base.unit(), base.purpose(), base.resultDefinition(), permit) else create(allocator, body, base.unit(), base.purpose(), base.resultDefinition());
+    return if (base.repairPermit()) |permit| createRepair(allocator, body, base.unit(), base.purpose(), base.resultDefinition(), permit, base.repairOrigin()) else create(allocator, body, base.unit(), base.purpose(), base.resultDefinition());
 }
 fn storage(packet: *const Packet) *Storage {
     const handle: *const Handle = @ptrCast(@alignCast(packet));

@@ -59,6 +59,8 @@ pub const Assembly = struct {
         }
         self.inputs.active_feature = directory;
         self.outputs.active_feature = directory;
+        const events: @import("../application/workflow_event_capture.zig").Capture = .{ .barrier = self.logs.barrier(), .shortcode = shortcode };
+        if (events.emit(.{ .event_type = .run_started })) |failure| return self.fail(failure);
         return .{ .ready = active.directory(directory) };
     }
 
@@ -74,11 +76,18 @@ pub const Assembly = struct {
         return .{ .blocked = failure };
     }
 
-    fn finish(context: *port.Context, outcome: run.Outcome) run.Outcome {
+    fn finish(context: *port.Context, reason: port.Finalizer.Reason) run.Outcome {
         const self: *Assembly = @ptrCast(@alignCast(context));
+        const outcome = reason.outcome();
         if (!self.finalized) {
             self.finalized = true;
             if (self.logs.lifecycle.active != null) {
+                const events: @import("../application/workflow_event_capture.zig").Capture = .{ .barrier = self.logs.barrier(), .shortcode = self.shortcode.? };
+                const event_failure = switch (reason) {
+                    .terminal => events.terminal(outcome),
+                    .publication => |prepared| events.emit(.{ .event_type = .publication_prepared, .fields = .{ .outcome = if (prepared == .needs_user) .needs_user else .completed } }),
+                };
+                if (event_failure) |failure| self.failure = failure;
                 var finalization: @import("../application/feature_log_finalization_runner.zig").Runner = .{
                     .target = runtime.runner(self.runtime_owner.?),
                     .mode = .active,

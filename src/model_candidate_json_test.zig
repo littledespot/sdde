@@ -177,6 +177,7 @@ test "loss attribution wire variants stay closed across initial review insertion
         "{\"kind\":\"token_classification\",\"source_id\":{\"ordinal\":7},\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}",
         "{\"kind\":\"reconciliation_signal\",\"ordinal\":7}",
         "{\"kind\":\"reconciliation_disposition\",\"ordinal\":9}",
+        "{\"kind\":\"reconciliation_conflict\",\"ordinal\":9}",
     };
     try std.testing.expectEqual(@typeInfo(@import("domain/source_omission.zig").Location).@"union".fields.len, locations.len);
     inline for (locations) |location| {
@@ -343,4 +344,17 @@ test "retained variant decoding omits only the root discriminator and rejects le
     const Nested = union(enum) { document: Document, empty: struct {} };
     const nested: Nested = .{ .document = sample };
     try std.testing.expectEqualDeep(nested, try codec.decodeSelected(Nested, a, .document, try codec.encodeSelected(Nested, a, nested)));
+}
+
+test "model JSON optional fields round trip without relaxing required nullable fields" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const Value = struct { name: []const u8, answer: ?[]const u8 = null, status: ?u32 };
+    const absent: Value = .{ .name = "delivery", .status = null };
+    try std.testing.expectEqualStrings("{\"name\":\"delivery\",\"status\":null}", try codec.encode(Value, a, absent));
+    try std.testing.expectEqualDeep(absent, try codec.decode(Value, a, try codec.encode(Value, a, absent)));
+    const present: Value = .{ .name = "delivery", .answer = "next day", .status = 3 };
+    try std.testing.expectEqualDeep(present, try codec.decode(Value, a, try codec.encode(Value, a, present)));
+    for ([_][]const u8{ "{\"name\":\"delivery\"}", "{\"status\":null}", "{\"name\":\"delivery\",\"status\":null,\"foreign\":0}" }) |bad| try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Value, a, bad));
 }

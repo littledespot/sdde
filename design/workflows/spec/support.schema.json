@@ -89,6 +89,9 @@
         },
         "loss": {
           "$ref": "#/$defs/loss"
+        },
+        "question": {
+          "$ref": "#/$defs/question_value"
         }
       },
       "required": [
@@ -128,6 +131,9 @@
         },
         "loss": {
           "$ref": "#/$defs/loss"
+        },
+        "question": {
+          "$ref": "#/$defs/question_value"
         }
       },
       "required": [
@@ -305,6 +311,24 @@
             "ordinal"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "reconciliation_conflict"
+            },
+            "ordinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            }
+          },
+          "required": [
+            "kind",
+            "ordinal"
+          ],
+          "additionalProperties": false
         }
       ]
     },
@@ -422,6 +446,26 @@
       },
       "required": [
         "entries"
+      ],
+      "additionalProperties": false
+    },
+    "question_value": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "source_detail": {
+      "type": "object",
+      "properties": {
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        },
+        "question": {
+          "$ref": "#/$defs/question_value"
+        }
+      },
+      "required": [
+        "detail"
       ],
       "additionalProperties": false
     }

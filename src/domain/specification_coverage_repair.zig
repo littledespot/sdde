@@ -187,7 +187,10 @@ pub fn omissionPacket(a: std.mem.Allocator, current: sessions.Session, context: 
     defer packets.release(contextual);
     const definition = if (authorization.target.part == .record) try std.fmt.allocPrint(a, "record_{s}", .{@tagName((try sessions.unit(authorization.target.unit)).records)}) else "value";
     defer if (authorization.target.part == .record) a.free(definition);
-    return atomic.packet(a, authorization, contextual, .{ .bytes = definition });
+    return atomic.packet(a, authorization, contextual, .{ .bytes = definition }, current.units[authorization.target.unit].?.origins.at(switch (authorization.target.part) {
+        .record => .unit,
+        .value => |field| .{ .target = .{ .value = .{ .subject = field.subject, .field = field.field } } },
+    }));
 }
 pub const parseOmission = atomic.parse;
 pub fn mergeOmission(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, support: Support, authorization: Authorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!sessions.Session {

@@ -145,7 +145,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     defer if (authorization.operation.replace == .record) allocator.free(definition);
     const contextual = try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try candidates.readContext(authorization.dependencies.candidate.response, authorization.target));
     defer packets.release(contextual);
-    return atomic.packet(allocator, authorization, contextual, .{ .bytes = definition });
+    return atomic.packet(allocator, authorization, contextual, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }));
 }
 
 pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_value: *const packets.Packet, bytes: []const u8) Error!Replacement {

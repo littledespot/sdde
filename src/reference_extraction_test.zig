@@ -629,6 +629,9 @@ test "composed extraction preserves producer attribution and stable native repai
         try std.testing.expectEqualDeep(content, rejected.origin.?);
         const facts = try contexts.textFacts(inputs, context.registry, current, parsed);
         const auth = try text_repair.authorize(a, facts, rejected);
+        const text_packet = try text_repair.packet(a, facts, context.registry, current, available, auth);
+        defer @import("domain/model_input_packet.zig").release(text_packet);
+        try std.testing.expectEqualDeep(content, text_packet.repairOrigin().?);
         const recurring = try text_repair.merge(a, facts, auth, auth.operation.replace, corrected);
         const still_rejected = (try text_fixture.validate_text.execute(a, context.registry, current, inputs, recurring)).invalid;
         const retry = try text_repair.authorize(a, try contexts.textFacts(inputs, context.registry, current, recurring), still_rejected);
@@ -644,6 +647,9 @@ test "composed extraction preserves producer attribution and stable native repai
         try std.testing.expectEqualDeep(classified, invalid.origin.?);
         const repair_facts: repair.Facts = .{ .inputs = inputs, .candidates = available, .candidate = checked };
         const authorization = try repair.authorize(a, repair_facts, .{ .token_classifications = invalid });
+        const classification_packet = try repair.packet(a, inputs, context.registry, available, checked, authorization);
+        defer @import("domain/model_input_packet.zig").release(classification_packet);
+        try std.testing.expectEqualDeep(classified, classification_packet.repairOrigin().?);
         const unchanged = try repair.merge(a, repair_facts, authorization, authorization.operation.replace, corrected);
         const repeated = (try classifications.validate(a, inputs, available, unchanged)).invalid;
         try std.testing.expectEqualDeep(corrected, repeated.origin.?);
@@ -657,6 +663,10 @@ test "composed extraction preserves producer attribution and stable native repai
         const absent = try repair.merge(a, repair_facts, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, corrected);
         const missing = (try classifications.validate(a, inputs, available, absent)).invalid;
         try std.testing.expect(missing.origin == null and missing.issues.missing.len == available.entries.len);
+        const missing_auth = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = absent }, .{ .token_classifications = missing });
+        const missing_packet = try repair.packet(a, inputs, context.registry, available, absent, missing_auth);
+        defer @import("domain/model_input_packet.zig").release(missing_packet);
+        try std.testing.expectEqualDeep(corrected, missing_packet.repairOrigin().?);
         const entries = try a.dupe(extraction.TextValidatedResult, complete.entries);
         entries[0].classification_origins = &.{};
         var malformed = complete;

@@ -43,6 +43,7 @@ pub const SubgraphParameter = struct {
     value: union(enum) { literal: workflow.ParameterValue, parameter: workflow.WorkflowParameterId },
 };
 pub const SubgraphStep = struct {
+    source: ?@import("workflow_source.zig").Entry = null,
     id: workflow.WorkflowStepId,
     target: union(enum) { operation: workflow.OperationId, subgraph: SubgraphId },
     parameters: []const SubgraphParameter,
@@ -50,6 +51,7 @@ pub const SubgraphStep = struct {
 };
 pub const Subgraph = struct { id: SubgraphId, start: workflow.WorkflowStepId, steps: []const SubgraphStep };
 pub const SubgraphCall = struct {
+    source: ?@import("workflow_source.zig").Entry = null,
     id: workflow.WorkflowStepId,
     subgraph: SubgraphId,
     parameters: []const workflow.ParameterBinding,

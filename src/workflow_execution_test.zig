@@ -105,6 +105,20 @@ test "generic engine finalizes selection and preparation failures before any ope
 }
 
 test "publication effects finalize logging before the shared runner invokes any writer" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const output = @import("domain/workflow_output.zig");
+    const values = @import("application/pipeline_values.zig");
+    const prepared_schema = @import("application/workflow_output_binding.zig").prepared_schema;
+    const feature = try @import("domain/feature_directory.zig").validate(a, .{ .bytes = "example" }, .{ .specs = "specs", .archive = "archive" });
+    const prepared: output.Prepared = .{
+        .terminal_outcome = .needs_user,
+        .feature = .{ .selector = feature, .root_observation = .absent, .observation = .absent },
+        .paths = try @import("domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, .{ .specs = "specs", .archive = "archive", .workflows = "workflows" }, feature),
+        .prior = .{ .state = null, .forms = &.{} },
+        .files = &.{.{ .target = .{ .artifact = .specification }, .bytes = "incomplete" }},
+    };
     for ([_]pipeline.SideEffect{ .workflow_publication, .filesystem_write, .none }) |effect| {
         for ([_]bool{ false, true }) |fail| {
             var control: OperationControl = .{ .state = .{ .outcome = .ok } };
@@ -112,14 +126,22 @@ test "publication effects finalize logging before the shared runner invokes any 
             var graph = try testGraph();
             var steps = test_steps;
             steps[0].side_effect = effect;
+            steps[0].requires = &.{prepared_schema.key};
             graph.authority.steps = &steps;
+            graph.authority.data_schemas = &.{prepared_schema};
             var registry = testRegistry(&control);
+            registry.data_schemas = graph.authority.data_schemas;
             control.entries[1].contract.side_effect = effect;
+            control.entries[1].contract.requires = steps[0].requires;
             var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
             defer runner.deinit();
             var finalizer: FakeFinalizer = .{ .fail = fail, .operations = &control.state };
             runner.publication_finalizer = finalizer.port();
             try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
+            var delta: pipeline.NodeDelta = .{};
+            delta.data_writes[@intFromEnum(prepared_schema.key)] = try values.create(std.testing.allocator, prepared_schema, output.Prepared, prepared);
+            defer runner.envelope.discard(&delta);
+            try runner.envelope.apply(.{ .id = "test.prepare", .kind = .action, .requires = &.{}, .produces = &.{prepared_schema.key}, .side_effect = .none }, &delta, .ok);
             const result = runner.bindings().invokeStep(steps[0].id);
             const publication = effect == .workflow_publication;
             try std.testing.expectEqual(@as(usize, if (publication) 1 else 0), finalizer.calls);
@@ -635,8 +657,9 @@ const FakeFinalizer = struct {
     fn port(self: *FakeFinalizer) finalization.Finalizer {
         return .{ .context = @ptrCast(self), .finish_fn = finish };
     }
-    fn finish(context: *finalization.Context, outcome: run_outcome.Outcome) run_outcome.Outcome {
+    fn finish(context: *finalization.Context, reason: finalization.Finalizer.Reason) run_outcome.Outcome {
         const self: *FakeFinalizer = @ptrCast(@alignCast(context));
+        const outcome = reason.outcome();
         self.calls += 1;
         self.last = outcome;
         if (self.operations) |operations_state| self.operations_at_finish = operations_state.calls;

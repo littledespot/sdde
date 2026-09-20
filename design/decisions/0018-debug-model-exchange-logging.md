@@ -76,6 +76,15 @@ Publication is terminal in the compiled graph: prepared output carries the valid
 This also excludes pure post-publication steps that could emit telemetry or fail
 after the required log stream has closed.
 
+The user-approved R39 clarification (20 September 2026) retains this ordering.
+Before close, persist `publication.prepared` with the validated intended outcome.
+Actual write success/failure is reported by the existing terminal result and harness
+report, not the closed feature log. Execution, admission, repair and retry events
+use the existing registry and barrier; retry counts are projections of runner state.
+For paths without publication, persist the terminal event before close. No logged
+intent grants completion and no post-write logging failure can rewrite completion
+history. Pre-activation failures retain the terminal/emergency path.
+
 This run-local lifecycle does not restore the persisted bootstrap-policy lineage,
 WAL or historical execution recovery withdrawn by ADR 0009. Earlier historical
 maintenance catalogue entries are not current-run activation prerequisites. Old

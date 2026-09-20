@@ -67,14 +67,19 @@ pub fn packet(a: std.mem.Allocator, inputs: evidence.Inputs, literals: @import("
     _ = try select(current, scope, authorization.target);
     const base = try @import("reference_model_input.zig").extractionPacket(a, inputs, literals, candidates, scope);
     defer packets.release(base);
-    if (authorization.target == .token_classifications) return atomic.packet(a, authorization, base, .{ .bytes = "classification_replacement" });
+    if (authorization.target == .token_classifications) {
+        const entry = try entryAt(current, scope);
+        const rejected_origin = try validation.rejectionOrigin(entry, authorization.rule.token_classifications.issues);
+        const producing_origin = if (entry.producers) |producers| producers.classifications else entry.origin;
+        return atomic.packet(a, authorization, base, .{ .bytes = "classification_replacement" }, rejected_origin orelse producing_origin);
+    }
     // Citation repair needs the unchanged claim's meaning as well as source
     // choices. This is a projection of the retained candidate, not new authority.
     const claim = try claimAt(current, scope, claimIndex(authorization.target));
     const content = @import("model_evidence.zig").modelContent(claim.content);
     const contextual = try packets.withContext(@TypeOf(content), a, base, "claim", content);
     defer packets.release(contextual);
-    return atomic.packet(a, authorization, contextual, .{ .bytes = if (authorization.target == .citation) "source_selection_replacement" else "citation_replacement" });
+    return atomic.packet(a, authorization, contextual, .{ .bytes = if (authorization.target == .citation) "source_selection_replacement" else "citation_replacement" }, try claim.rejectionOrigin(authorization.rule.source_selection));
 }
 
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
@@ -94,6 +99,7 @@ pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, p
                 const origins = try a.alloc(?@import("model_candidate_origin.zig").Origin, entry.token_classifications.len);
                 @memset(origins, origin);
                 entry.classification_origins = origins;
+                if (entry.producers) |*producers| producers.classifications = origin;
             },
             .citation, .missing_citations => {
                 const index = claimIndex(authorization.target);
@@ -240,7 +246,14 @@ pub const Omission = struct {
         try Atomic.checkDependencies(a, auth, facts);
         const base = try @import("reference_model_input.zig").extractionPacket(a, facts.extraction.inputs, literals, facts.extraction.candidates, try Omission.scopeOf(auth));
         defer packets.release(base);
-        return Atomic.packet(a, auth, base, .{ .bytes = if (auth.target == .classification) "classification" else "claim" });
+        return Atomic.packet(a, auth, base, .{ .bytes = if (auth.target == .classification) "classification" else "claim" }, try Omission.sourceOrigin(facts, auth));
+    }
+    fn sourceOrigin(facts: OmissionFacts, auth: OmissionAuthorization) OmissionError!?@import("model_candidate_origin.zig").Origin {
+        const entry = try entryAt(facts.extraction.candidate, try Omission.scopeOf(auth));
+        return switch (auth.target) {
+            .classification => |index| entry.classification_origins[index],
+            .claim, .outcome => if (entry.producers) |producers| producers.content else entry.origin,
+        };
     }
     pub fn parse(a: std.mem.Allocator, auth: OmissionAuthorization, input: *const packets.Packet, bytes: []const u8) OmissionError!OmissionReplacement {
         _ = try Atomic.checkRequest(auth, input);

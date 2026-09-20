@@ -12,6 +12,11 @@ This is a validated incomplete projection, never a completed `SpecificationIR` o
 `specified` authority. The workflow ends `needs_user`; Plan and all later stages
 remain blocked. The governing design retains its Proposed status.
 
+This applies to a valid `needs_user` outcome, not an execution that fails while
+open forms exist. Unrepaired JSON/schema rejection remains a terminal error under
+[§22.6](../contracts/22-repair.md#226-unparseable-output), with no new specification
+publication. Successful correction may continue to a validated clarification pause.
+
 A clarification pause publishes the complete registered set: incomplete `spec.md`,
 current `reference-context.md`, clarification registry/forms, and a canonical
 `spec_clarification_pending` workflow-state variant. The pending state replaces
@@ -49,5 +54,7 @@ not an alternative input authority; reruns regenerate it and preserve user-close
 - Reruns replace all views, retain monotonic specification IDs and protected closed forms,
   and can converge from pending to specified without resuming a checkpoint.
 - Validate the entire pending output before writes; every write failure remains failure.
+- Existing open forms cannot turn protocol exhaustion or another terminal failure
+  into pending publication; rejected model data never supplies the incomplete view.
 - E2E reports distinguish publication of an incomplete document from completion and
   grading. `needs_user` remains ungraded and reports the published specification path.

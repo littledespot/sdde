@@ -12,6 +12,23 @@ pub const ResultSelection = enum { resource, input };
 /// One immutable association, carried by typed pipeline keys. Canonical IDs are
 /// retained through their ledger owner, never cloned into a second authority.
 pub const Request = opaque {
+    /// Authored resource aliases retained by this exact request selection.
+    pub fn sourceResources(self: *const Request) SourceResources {
+        const value = storage(self);
+        return .{
+            .prompt = value.prompt.id,
+            .protocol_prompt = if (value.protocol_prompt) |resource| resource.id else null,
+            .result = value.result.id,
+            .input = if (value.input) |input_value| switch (input_value) {
+                .resource => |resource| resource.id,
+                .packet => null,
+            } else null,
+        };
+    }
+
+    pub fn selectedResultDefinition(self: *const Request) ?@import("model_result_schema.zig").DefinitionId {
+        return storage(self).result_definition;
+    }
     pub fn id(self: *const Request) *const identity.ModelRequestId {
         return storage(self).id;
     }
@@ -89,6 +106,13 @@ pub const Request = opaque {
     }
 };
 
+pub const SourceResources = struct {
+    prompt: @import("workflow.zig").WorkflowResourceId,
+    protocol_prompt: ?@import("workflow.zig").WorkflowResourceId,
+    result: @import("workflow.zig").WorkflowResourceId,
+    input: ?@import("workflow.zig").WorkflowResourceId,
+};
+
 const Storage = struct {
     allocator: std.mem.Allocator,
     ledger_owner: *identity.Owner,
@@ -97,6 +121,7 @@ const Storage = struct {
     prompt: compilation.CompiledResource,
     protocol_prompt: ?compilation.CompiledResource,
     result: compilation.CompiledResource,
+    result_definition: ?@import("model_result_schema.zig").DefinitionId = null,
     input: ?Input,
     composition: ?composition.Binding = null,
     phase: union(enum) {
@@ -194,6 +219,7 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         .prompt = prompt,
         .protocol_prompt = protocol_prompt,
         .result = bound_result,
+        .result_definition = if (selection == .input) input.?.packet.resultDefinition() else null,
         .input = input,
         .composition = part_binding,
         .phase = .assigned,

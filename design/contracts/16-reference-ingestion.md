@@ -218,9 +218,17 @@ The linked diagram and this sequence are normative; an orchestrator must require
 10. Validate the closed `ReferenceReconciliationProposal`: every returned ID is supplied/authorized, each input claim has exactly one retained/superseded/duplicate/conflicting disposition, signal variants match their content, and conflict/precedence joins resolve.
 11. Build/validate the canonical claim ledger; assign engine conflict/signal IDs; and build canonical `SourceConflict`/`ReferenceSignal` records. Current-spec claim dispositions refer to open-question signals by `signalId`.
 12. Build the manifest from the ordered inventory and exactly one final entry variant per source; validate that every inventory entry and decoded block has a final accounting state, both budget ledgers are closed, every source map is complete, and every passive/claim/context join resolves. Assemble and fully validate the immutable `ReferenceSnapshot` candidate before deciding its next branch.
-13. If behavior-changing conflicts remain unresolved, deterministically create or reuse exactly one conflict-bound `SNN` for every unique structural subject coordinate, render their engine-owned current claim-ID choices, and use one `SpecificationClarificationPauseEntries` variant to validate and publish under §§23.2 and 25 the conflict-bearing snapshot, current authorities, complete clarification-set transition, complete controlled-form set, reference view, and `spec_clarification_pending` state. Snapshot-local conflict/claim/citation IDs are binding data, not clarification subject identity. No completed feature brief or specification authority is persisted; ADR 0017 additionally publishes the validated incomplete `spec.md` projection alongside the pending state. A closed authenticated response is first committed through the complete clarification-response publication, then checked against a fully and independently recaptured successor snapshot. Only a validated total old-option-to-current-claim correspondence for the exact same structural subject may feed the decision-ID allocator and decision builder; full accounting, set reconciliation, and snapshot validation run again. Otherwise generate/validate the specification, rebuild the current `SpecificationProvenanceState.claimDispositions`, and persist bootstrap-authority/request/passive-literal-registry/acknowledgement/reference/provenance/spec/views/workflow state with the complete successful Specify output.
+13. If source review establishes genuine behavior-changing source conflicts that remain unresolved, deterministically create or reuse exactly one conflict-bound `SNN` for every unique structural subject coordinate, render their engine-owned current claim-ID choices, and use one `SpecificationClarificationPauseEntries` variant to validate and publish under §§23.2 and 25 the conflict-bearing snapshot, current authorities, complete clarification-set transition, complete controlled-form set, reference view, and `spec_clarification_pending` state. Snapshot-local conflict/claim/citation IDs are binding data, not clarification subject identity. No completed feature brief or specification authority is persisted; ADR 0017 additionally publishes the validated incomplete `spec.md` projection alongside the pending state. A closed authenticated response is first committed through the complete clarification-response publication, then checked against a fully and independently recaptured successor snapshot. Only a validated total old-option-to-current-claim correspondence for the exact same structural subject may feed the decision-ID allocator and decision builder; full accounting, set reconciliation, and snapshot validation run again. Otherwise generate/validate the specification, rebuild the current `SpecificationProvenanceState.claimDispositions`, and persist bootstrap-authority/request/passive-literal-registry/acknowledgement/reference/provenance/spec/views/workflow state with the complete successful Specify output.
 
 `README.md` is flagged as an organizer for presentation, but its claims remain peer authoritative. A conflict with a sibling is treated like any other authoritative conflict.
+
+Conflict classification must distinguish incompatible source requirements from
+compatible overlap, repetition, or different business/technical classifications.
+Its existing summary must explain the incompatible meanings and cite their claims;
+concatenating the claims is not an explanation. Reciprocal IDs, coverage and valid
+JSON prove structural consistency, not semantic incompatibility. Source review must
+check the classification against captured evidence before treating it as a missing
+user decision; it must not assume the earlier model's conflict label is correct.
 
 Source-preservation review may identify an established-source candidate omission.
 Under the user-approved chunk 14 amendment (18 September 2026), §22 permits repair
@@ -229,6 +237,32 @@ target. Repair extraction loss in extraction; repair reconciliation loss in
 reconciliation. Preserve unrelated raw units, rebuild all dependent identities and
 projections, and repeat full validation and support review. Unlocalized omissions
 remain candidate defects; genuinely missing source decisions remain clarifications.
+
+#### False-conflict repair boundary — approved extension
+
+**Approved by the user on 20 September 2026:** the existing omission-repair owner
+may replace one native-bound conflict group: the selected conflict's claims,
+their disposition entries and associated conflict records. This amends §22.1/§22.3's
+single-record boundary. Reconciliation labels are candidate assertions, so authority
+projection records them as candidate defects. Source review establishes a genuine
+gap or attributes lost meaning with `reconciliation_conflict`; a positive finding
+alone cannot clear an unresolved conflict record.
+
+Authorization requires exact claim/citation/source joins, current old values,
+producing origins, candidate revision and source/policy dependencies. Reject a group
+whose relationships cross the selected membership; never widen it to the whole
+result. Replacement retains that membership and cannot introduce external links.
+Reusing existing mutation owners preserves unrelated records and their provenance.
+The existing runner invalidates and rebuilds dependent signals, conflicts,
+identities, coverage and support before publication; missing signals use ordinary
+coverage repair. No new model call type, continuation policy or retry budget applies.
+
+The original claim set supplies a stable retry identity across conflict-ID renewal.
+Retain that native witness with the candidate and review, not as persisted authority.
+Only complete rebuilt validation and current positive evidence for those claims can
+establish progress; unchanged false conflicts remain recurring failures. Genuine
+source conflicts remain actionable clarifications. Unsafe attribution fails as a
+candidate defect; repair cannot invent source precedence or force a positive verdict.
 
 ### 16.5 Human correction without editing generated views
 

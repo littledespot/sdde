@@ -73,6 +73,22 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     valid_command.expectStdOutEqual("");
     valid_command.expectStdErrEqual("");
 
+    _ = package_directory.add("requirements/current/debugger-fixture/.keep", "");
+    const debugger_probe = b.addExecutable(.{ .name = "debugger-smoke", .root_module = b.createModule(.{
+        .root_source_file = b.path("test/packaging/debugger_smoke.zig"),
+        .target = b.graph.host,
+        .optimize = .Debug,
+    }) });
+    const debugger_command = b.addRunArtifact(debugger_probe);
+    debugger_command.setName("serve embedded request debugger from packaged executable");
+    debugger_command.addFileArg(packaged_executable);
+    debugger_command.setCwd(package_directory.getDirectory());
+    debugger_command.clearEnvironment();
+    debugger_command.expectExitCode(0);
+    debugger_command.expectStdOutEqual("");
+    debugger_command.expectStdErrEqual("");
+    valid_command.step.dependOn(&debugger_command.step);
+
     _ = package_directory.add(".sddtoolkit/workflows/reused.workflow.yaml",
         \\schema: workflow/v1
         \\id: reused

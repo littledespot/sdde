@@ -17,7 +17,10 @@ An atomic repair changes the smallest independently valid IR unit associated wit
 - one complete file only when a parser/tool cannot localize the failure;
 - one explicitly declared coupled group of pointers within one authorized IR record or one authorized file when those pointers cannot be valid separately.
 
-Atomicity means unrelated valid units cannot change.
+Atomicity means unrelated valid units cannot change. The explicitly approved
+20 September amendment in [§16.4](16-reference-ingestion.md#false-conflict-repair-boundary--approved-extension)
+permits one native-bound inseparable conflict-relation group across its affected
+dispositions/conflict records. No other cross-record repair is authorized.
 
 The user-approved chunk 14 amendment (18 September 2026) permits execution-private
 repair of source-backed candidate omissions. The owning contract must establish a
@@ -184,6 +187,9 @@ defined response-level correction containing:
   explicitly approved on 19 September 2026. Syntax correction uses that same complete
   schema. Guidance never selects a semantic branch, moves fields or synthesizes values.
 
+The [approved child-object amendment](#2261-child-object-requirements)
+below adds required names to immediate child-object descriptors only.
+
 - The builder owns no retry counter or limit.
 - Each correction returns through the existing `advance-model-attempt-accounting` step, whose
   compiler-validated local limit owns further attempts of that assignment (§22.7).
@@ -206,7 +212,43 @@ before continuation; unknown usage or an exhausted global budget prohibits a new
 Runner retry exhaustion retains the owning compiled operation, declared limit
 and completed execution count alongside the last response diagnostic. It is a
 typed terminal rejection, never an ordinary YAML outcome that could continue
-to success. Whole-stage regeneration is not used.
+to success or `needs_user`. If JSON decoding or schema validation still fails when
+correction is unavailable or exhausted, the workflow reports an error and exits
+nonzero; it cannot publish either a completed or incomplete specification. Existing
+open clarifications do not override that failure. A correction that passes admission
+may continue through the remaining domain validators; a recovered earlier rejection
+is not itself a publication veto. Whole-stage regeneration is not used.
+
+#### 22.6.1 Child-object requirements
+
+**Explicitly approved by the user on 20 September 2026.** Extend the
+existing schema-derived correction outline at one boundary: every immediate field
+descriptor whose compiled type is `object` also lists that object's required
+property names, in compiled order. Derive these names in the shared schema
+projection; the protocol builder consumes the result without inspecting candidates
+or selecting additional diagnostics. Reuse the existing required-field projection.
+
+- This annotation is nonrecursive. It contains names, not child schema subtrees,
+  synthesized examples or a second complete schema. No new configurable depth,
+  token ceiling or truncation rule is introduced.
+- Required names apply when that object is present; they do not make an optional
+  parent field required. Emit an empty list for an object with no required children.
+- Array descriptors remain type-only. Child tagged unions retain the existing
+  allowed-tag summary; no branch is inferred. At an expected union node, retain
+  the existing alternatives and apply the same object-field rule within each.
+- Keep the canonical validator's first rejection and both candidate/schema
+  pointers unchanged. Additional required names describe expected structure,
+  not additional established defects or instructions to move evidence.
+- Resolve only the original selected schema: complete/named result, configured
+  part or narrowed repair response. Never widen a replacement into its parent
+  candidate or import sibling schemas, fields, data or authority.
+
+All other §22.6 behavior remains unchanged, including complete-response correction,
+schema/native validation, request ownership, accounting and terminal rejection.
+The [feasibility trace](../reference-notes/model-request-guidance.md#nested-correction-feasibility)
+and [Chunk 18 plan](../../fixes/IMP_001.md#focused-226-decision--child-object-requirements)
+record evidence, limits and required verification. This amendment grants no new
+repair capability and does not claim improved model compliance.
 
 ### 22.7 Repair retry limit and escalation
 

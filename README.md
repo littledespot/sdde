@@ -99,6 +99,57 @@ credentials come from `AWS_BEARER_TOKEN_BEDROCK`. Models, regions and supported
 controls are described in [F0007](design/features/F0007-AWSBedrockProvider.md).
 The engine does not load `.env.e2e` or use internal `TEST_` credentials.
 
+## Debug one LLM request
+
+Set `logs.level` to `debug` or `trace` to retain complete credential-redacted
+requests, responses, prompt/context/schema and caller attribution. From the same
+project root, open a captured feature with:
+
+```sh
+sdde --debugger <feature-directory>
+```
+
+Open the local session URL printed by the executable. Select a call to inspect
+Prompt, Context (structured or exact raw content), Schema, Request and Response.
+Calls are grouped by run and numbered in execution order using the captured log
+sequence. Prominent call-type badges distinguish Initial, Repair, Retry, Context
+follow-up and Replay. The call-type filter narrows the list; filtering preserves
+call numbers. Source links name the related call, such as “Repair of Call 8”.
+Retries and repairs remain in their execution positions and link to their original
+and preceding calls. The always-visible Workflow origin panel identifies the
+workflow, expanded calling YAML entry, registered action, request-preparation entry
+and model slot. Sidebar entries label the workflow and YAML caller, and search
+includes both call and preparation entries. Replays explicitly identify the user
+Replay command as their initiator and retain the captured workflow origin. Response
+inspection separates provider bytes, extracted text, parsed JSON and schema diagnostics.
+
+The Replay tab sends **one selected prompt once**. Exact replay preserves request
+bytes; modified replay lets you edit its prompt, context or schema. Each click may
+incur provider charges and saves a new linked record under the feature's
+`logs/debugger`; original captures remain unchanged. Current provider authorization
+and credentials are required. Replay does not run workflow nodes or semantic
+validators, publish artifacts, or change workflow state.
+
+The UI is embedded in the executable. Captures use `prompt-columns/v3`; older
+prompt formats are rejected. Replays use `request-replay/v3` records with a saved
+session and dispatch sequence; older replay records are rejected. Replay sessions
+are separate from workflow runs, each with its own execution order. Rejected replay
+requests can leave gaps in session numbering. Stop the server with Ctrl-C. See
+[ADR 0019](design/decisions/0019-single-request-debugger.md).
+
+Workflow origin links open captured sources in the **Sources** tab. Follow the
+call chain from the top-level YAML entry through nested subgraphs to the model
+invocation, or follow request assembly to its bound prompt, schema, input and
+composition resources. YAML entries have structural selectors (for example
+`/subgraphs/request/steps/prepare`), a structured declaration view, and the exact
+captured YAML file. JSON resources show selected schema definitions and composition
+parts/paths when applicable. **Request** remains the exact assembled provider body.
+
+Snapshots come from the execution's loaded files; editing or deleting current
+workflow files does not change them. Credential redaction is marked. Replays retain
+the original snapshots and identify modified input as overrides. Calls without a
+source snapshot explicitly show that source navigation is unavailable.
+
 ## Development evaluation
 
 [Live E2E instructions](design/harness/e2e.md) cover credential setup, case

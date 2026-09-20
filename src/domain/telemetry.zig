@@ -54,6 +54,7 @@ pub const CanonicalLogLevel = enum {
 };
 
 pub const EventType = enum {
+    publication_prepared,
     run_started,
     run_completed,
     run_blocked,
@@ -78,6 +79,8 @@ pub const EventType = enum {
     repair_applied,
     repair_rejected,
     repair_exhausted,
+    retry_admitted,
+    retry_exhausted,
     review_requested,
     review_approved,
     review_rejected,
@@ -93,6 +96,7 @@ pub const EventType = enum {
 
     pub fn text(self: EventType) []const u8 {
         return switch (self) {
+            .publication_prepared => "publication.prepared",
             .run_started => "run.started",
             .run_completed => "run.completed",
             .run_blocked => "run.blocked",
@@ -117,6 +121,8 @@ pub const EventType = enum {
             .repair_applied => "repair.applied",
             .repair_rejected => "repair.rejected",
             .repair_exhausted => "repair.exhausted",
+            .retry_admitted => "retry.admitted",
+            .retry_exhausted => "retry.exhausted",
             .review_requested => "review.requested",
             .review_approved => "review.approved",
             .review_rejected => "review.rejected",
@@ -145,7 +151,7 @@ pub const EventOutcome = enum {
 
 pub const Stage = enum { specify, plan, tasks, implement, other };
 pub const EvidenceStatus = enum { present, missing, passed, failed };
-pub const RepairUnitKind = enum { field, record, section, task, file_operation };
+pub const RepairUnitKind = enum { field, record, section, task, file_operation, authorized_unit };
 
 pub const Identifier = struct {
     bytes: []const u8,

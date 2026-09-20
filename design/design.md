@@ -30,7 +30,8 @@ preserves the decision scope; subsequent defect reviews do not grant new authori
 
 [ADR 0015](decisions/0015-specification-principle-review.md) adds early Spec
 requirement–principle assessment and shared actionable-question preparation.
-Implementation remains pending; it preserves business and policy ownership.
+Native capture/assessment is implemented; actionable-question preparation and full
+readiness remain tracked in FIX_001. Business and policy ownership stay separate.
 
 [ADR 0016](decisions/0016-configured-json-response-composition.md) records the
 user-directed generic JSON response decomposition and deterministic assembly design.
@@ -622,6 +623,9 @@ into safe records without making logs workflow authority.
 At `debug` and `trace`, [ADR 0018](decisions/0018-debug-model-exchange-logging.md)
 requires complete credential-redacted production model requests and available raw
 responses, including failed attempts, in the registered prompt stream.
+[ADR 0019](decisions/0019-single-request-debugger.md) adds the embedded browser
+debugger, explicit retry/repair lineage, and exact or modified replay of one selected
+request without workflow execution.
 
 [Complete §27 contract](contracts/27-observability.md).
 
@@ -812,7 +816,7 @@ The new engine is ready for production evaluation when all of the following are 
 8. **Mandatory feature logging.**
     - Mandatory metadata event logs use fixed-header pipe-delimited `feature-log/v2` beneath
       `<paths.specs>/<featureId>/logs/`.
-    - Logs use only the compiler-locked `event-columns/v2` and `prompt-columns/v2` headings.
+    - Logs use only the compiler-locked `event-columns/v2` and `prompt-columns/v3` headings.
       Each segment has one exact heading and validated segment control rows.
     - Every event/prompt row carries the selected compiled workflow's registry-validated
       `workflow_shortcode` and the registry-owned `level`.
@@ -822,6 +826,10 @@ The new engine is ready for production evaluation when all of the following are 
       authority.
     - Debug/trace captures complete credential-redacted model exchanges in bounded chunks;
       higher thresholds emit metadata only. `logs.level` is the sole capture control.
+    - The native debugger exposes prompt, structured/raw context, schema, exact request,
+      response stages and caller/YAML-entry attribution. Retries and repairs link to
+      their producing calls. Explicit exact/modified replay sends one selected request
+      at most once, retains an immutable linked result and grants no workflow authority.
 
 9. Fixed workflow artifact paths are engine-assigned, and every path-like model field is
     structured, normalized, contained, classified, preset-validated, and authorized before it
@@ -878,6 +886,8 @@ The new engine is ready for production evaluation when all of the following are 
     validation before persistence. Validated resolution permits repair of another target;
     recurrence retains its own history under §22.7. Exhaustion of the selected defect's
     explicit operation retry allowance blocks/fails and never weakens policy.
+    JSON/schema rejection that cannot be corrected is a terminal error under §22.6,
+    even with open clarifications; it cannot publish an incomplete specification.
 
 16. Unsupported references are reported and cannot be silently omitted; every selected source,
     decoded block, and bounded chunk has an exact disposition and accounting record.
@@ -895,6 +905,8 @@ The new engine is ready for production evaluation when all of the following are 
     - Exact subject keys prevent duplicates.
     - Questions identify the requirement, current evidence and exact unresolved decision
       under §12.7; equal wording across subjects does not authorize answer sharing.
+    - Review diagnostics alone are not actionable questions. Do not ask users to
+      restate supported behavior in the engine's internal specification categories.
     - Open forms expose only controlled fields; closed historical views are read-only.
     - Reruns reconsider current reference/principle/answer authorities and regenerate the
       complete owning stage.
@@ -950,6 +962,8 @@ The new engine is ready for production evaluation when all of the following are 
     permitted.
 
 30. Failed and blocked executions cannot be reported as completed.
+    Complete diagnostic capture under §27 includes failures and every correction
+    attempt; full model bodies without production event records are insufficient.
 
 31. **Publication and fresh execution.**
     - The selected workflow validates its complete output before publication.
@@ -960,6 +974,8 @@ The new engine is ready for production evaluation when all of the following are 
       provider-effect recovery is permitted.
     - Clarifications retain their explicit persistence exception, including ADR 0017
       incomplete specification/reference views and pending state; these never authorize Plan.
+      A valid clarification pause publishes `spec.md`; terminal validation failure
+      remains failure even when clarification records already exist.
 
 32. Stage state, fresh-invocation validation, comparisons and invalidation work without
     storing/comparing artifact fingerprints and without depending on Git flow.
@@ -1047,10 +1063,11 @@ decision history:
 | [0012](decisions/0012-workflow-owned-model-request.md) | Retain one execution-owned request/binding/resource identity across explicit YAML operations. |
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
-| [0015](decisions/0015-specification-principle-review.md) | Early Spec principle assessment and shared actionable questions; configuration/capture/review implemented, full readiness and question preparation pending. |
+| [0015](decisions/0015-specification-principle-review.md) | Early Spec principle assessment and shared actionable questions; configuration/capture/review and shared question preparation implemented; final readiness pending. |
 | [0016](decisions/0016-configured-json-response-composition.md) | User-directed configured JSON decomposition and prompt-free assembly; finite graph-limit increase approved. Configured object-part compiler and extraction integration implemented; live improvement pending. |
 | [0017](decisions/0017-incomplete-specification-publication.md) | Clarification pauses publish a validated incomplete specification and pending state without completion authority. |
 | [0018](decisions/0018-debug-model-exchange-logging.md) | Debug/trace capture complete credential-redacted production model exchanges, including failed attempts, without silent truncation. |
+| [0019](decisions/0019-single-request-debugger.md) | The native browser debugger inspects captured calls and explicitly replays one selected prompt with immutable parent links and no workflow execution. |
 
 Additional accepted feature boundaries:
 

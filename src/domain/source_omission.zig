@@ -9,6 +9,7 @@ pub const Location = union(enum) {
     token_classification: r.extraction.tokens.CandidateId,
     reconciliation_signal: r.SignalId,
     reconciliation_disposition: r.ClaimId,
+    reconciliation_conflict: r.ConflictId,
 };
 pub const Support = struct { review: @import("specification_support.zig").Source.Candidate, inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
 pub const Evidence = struct { finding: authority.Evidence, location: Location };
@@ -17,9 +18,9 @@ const retry = @import("workflow_retry.zig");
 const atomic = @import("atomic_repair.zig");
 pub const Producer = enum { extraction, reconciliation };
 const Family = enum { source_omission };
-const Subject = union(enum) { feature: authority.Id, token: r.extraction.tokens.CandidateId, regenerated: authority.Id };
+const Subject = union(enum) { feature: authority.Id, token: r.extraction.tokens.CandidateId, regenerated: authority.Id, conflict_claims: []const r.ClaimId };
 
-fn subject(inputs: authority.Inputs, requirement: authority.Id) Error!Subject {
+fn subject(a: std.mem.Allocator, inputs: authority.Inputs, requirement: authority.Id) Error!Subject {
     return switch (requirement.unit) {
         .feature => .{ .feature = requirement },
         .token => |id| token: {
@@ -30,8 +31,23 @@ fn subject(inputs: authority.Inputs, requirement: authority.Id) Error!Subject {
             }
             return error.InvalidRequiredAuthority;
         },
-        .record, .signal, .conflict, .decision => .{ .regenerated = requirement },
+        .conflict => |id| blk: {
+            const records = inputs.references orelse return error.InvalidRequiredAuthority;
+            for (records.conflicts) |conflict| if (std.meta.eql(conflict.id, id)) break :blk .{ .conflict_claims = try orderedClaims(a, conflict.value.claim_ids) };
+            return error.InvalidRequiredAuthority;
+        },
+        .record, .signal, .decision => .{ .regenerated = requirement },
     };
+}
+
+fn orderedClaims(a: std.mem.Allocator, claims: []const r.ClaimId) Error![]const r.ClaimId {
+    const result = try a.dupe(r.ClaimId, claims);
+    std.mem.sort(r.ClaimId, result, {}, struct {
+        fn less(_: void, lhs: r.ClaimId, rhs: r.ClaimId) bool {
+            return lhs.ordinal < rhs.ordinal;
+        }
+    }.less);
+    return result;
 }
 
 fn retryScope(a: std.mem.Allocator, producer: Producer, feature: @import("feature_identity.zig").FeatureId, state: r.extraction.identity.StateId) Error![32]u8 {
@@ -41,7 +57,7 @@ fn retryScope(a: std.mem.Allocator, producer: Producer, feature: @import("featur
 
 pub fn retryPermit(a: std.mem.Allocator, producer: Producer, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, authorization: @import("model_request_identity.zig").RepairAuthorizationId, revision: u64, support: Support, selected: authority.Id, previous: ?retry.Permit) Error!retry.Permit {
     const records = support.inputs.references orelse return error.InvalidRequiredAuthority;
-    var result = try atomic.permit(Subject, Family, a, owner, try subject(support.inputs, selected), .source_omission, authorization, revision, std.math.cast(u32, support.inputs.seeds.len) orelse return error.InvalidRequiredAuthority);
+    var result = try atomic.permit(Subject, Family, a, owner, try subject(a, support.inputs, selected), .source_omission, authorization, revision, std.math.cast(u32, support.inputs.seeds.len) orelse return error.InvalidRequiredAuthority);
     result.key.scope = try retryScope(a, producer, support.inputs.feature, records.items.state_id);
     if (previous) |prior| if (std.mem.eql(u8, &prior.key.scope, &result.key.scope)) {
         result.maximum_targets = prior.maximum_targets;
@@ -59,11 +75,28 @@ pub fn admittedValidation(a: std.mem.Allocator, permit: retry.Permit, admitted: 
         if (std.mem.eql(u8, &permit.key.scope, &try retryScope(a, producer, inputs.feature, records.items.state_id))) break true;
     } else false;
     if (!matched_scope) return error.InvalidRequiredAuthority;
+    const repaired_claims = admitted.candidate.omission_conflict_claims;
+    if (repaired_claims.len != 0 and std.mem.eql(u8, &permit.key.target, &(try atomic.snapshot(Subject, a, .{ .conflict_claims = try orderedClaims(a, repaired_claims) })).bytes)) {
+        var resolved = true;
+        for (repaired_claims) |claim| {
+            _ = try r.item(records.items, claim);
+            var supported = false;
+            for (inputs.evidence) |finding| if (finding.review) |review| {
+                if (!r.contains(r.ClaimId, review.provenance.claim_ids, claim)) continue;
+                if (finding.finding == .supported) supported = true else resolved = false;
+            };
+            if (!supported) resolved = false;
+            for (records.conflicts) |conflict| if (r.contains(r.ClaimId, conflict.value.claim_ids, claim)) {
+                resolved = false;
+            };
+        }
+        return .{ .validated = .{ .permit = permit, .revision = std.math.add(u64, permit.revision, 1) catch return error.InvalidRequiredAuthority, .result = if (resolved) .resolved else .recurring } };
+    }
     const ledger = try authority.build(a, inputs);
     const result = try authority.reconcile(a, ledger, try authority.buildObservations(a, ledger));
     const revision = std.math.add(u64, permit.revision, 1) catch return error.InvalidRequiredAuthority;
     for (result.entries) |entry| {
-        const selected = try subject(inputs, entry.requirement);
+        const selected = try subject(a, inputs, entry.requirement);
         if (!std.mem.eql(u8, &permit.key.target, &(try atomic.snapshot(Subject, a, selected)).bytes)) continue;
         if (selected == .regenerated) break;
         const resolved = entry.candidate_defect == null and switch (entry.outcome) {
@@ -127,6 +160,14 @@ pub fn validate(inputs: authority.Inputs, sources: r.evidence.Inputs, finding: a
             for (records.signals) |signal| if (std.meta.eql(signal.id, id)) {
                 try r.sameSet(r.ClaimId, signal.value.claim_ids, review.provenance.claim_ids);
                 for (signal.value.claim_ids) |claim| try sourceForClaim(records.items, claim, review.source_ids);
+                return;
+            };
+            return error.InvalidRequiredAuthority;
+        },
+        .reconciliation_conflict => |id| {
+            for (records.conflicts) |conflict| if (std.meta.eql(conflict.id, id)) {
+                try r.sameSet(r.ClaimId, conflict.value.claim_ids, review.provenance.claim_ids);
+                for (conflict.value.claim_ids) |claim| try sourceForClaim(records.items, claim, review.source_ids);
                 return;
             };
             return error.InvalidRequiredAuthority;

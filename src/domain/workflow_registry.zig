@@ -61,6 +61,11 @@ pub fn createValidated(allocator: std.mem.Allocator, candidate: RegistryCandidat
     };
     for (entries, candidate.graphs) |*destination, source| {
         destination.* = cloneGraph(owner.arena.allocator(), source) catch return error.InvalidWorkflowRegistry;
+        const captured = findCapture(candidate.definition_captures, source.source_ordinal) orelse return invalid();
+        destination.source = .{
+            .path = owner.arena.allocator().dupe(u8, candidate.inventory.descriptors[source.source_ordinal - 1].path) catch return invalid(),
+            .content = owner.arena.allocator().dupe(u8, captured.bytes) catch return invalid(),
+        };
     }
     owner.registry = .{ .entries = entries };
     return @ptrCast(owner);
@@ -150,7 +155,7 @@ fn graphProjectsDefinition(
         const binding = findBinding(candidate.resource_manifest.bindings, declared.source_ordinal, resource.id) orelse return false;
         const capture = findCapture(candidate.resource_captures, binding.resource_ordinal) orelse return false;
         if (!std.mem.eql(u8, compiled.id.bytes, resource.id.bytes) or
-            !std.mem.eql(u8, compiled.bytes(), capture.bytes)) return false;
+            !std.mem.eql(u8, compiled.bytes(), capture.bytes) or compiled.source_path == null or !std.mem.eql(u8, compiled.source_path.?, resource.name)) return false;
     }
     var transition_count: usize = 0;
     for (graph.authority.steps, declared.steps) |compiled, step| {
@@ -159,7 +164,7 @@ fn graphProjectsDefinition(
         if (!@import("workflow_model_request_lifecycle.zig").validProjection(compiled)) return false;
         if (!@import("workflow_provider_operation.zig").validProjection(compiled)) return false;
         if (!@import("workflow_provider_authorization.zig").validProjection(compiled)) return false;
-        if (!std.mem.eql(u8, compiled.id.bytes, step.id.bytes) or
+        if (!@import("workflow_source.zig").sameChain(compiled.source_chain, step.source_chain) or !std.mem.eql(u8, compiled.id.bytes, step.id.bytes) or
             !std.mem.eql(u8, compiled.operation_id.bytes, step.operation_id.bytes) or
             compiled.parameters.len != step.parameters.len or compiled.outcomes.len != step.outcomes.len) return false;
         const retry_parameter = findCompiledParameter(compiled.parameters, workflow_retry.parameter_id);
@@ -235,6 +240,7 @@ fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow
         destination.id.bytes = try allocator.dupe(u8, step.id.bytes);
         destination.operation_id.bytes = try allocator.dupe(u8, step.operation_id.bytes);
         destination.parameters = try cloneParameters(allocator, step.parameters);
+        destination.source_chain = try @import("workflow_source.zig").cloneChain(allocator, step.source_chain);
         destination.requires = try allocator.dupe(pipeline.DataKey, step.requires);
         destination.optional = try allocator.dupe(pipeline.DataKey, step.optional);
         destination.produces = try allocator.dupe(pipeline.DataKey, step.produces);

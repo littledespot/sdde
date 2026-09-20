@@ -4,6 +4,12 @@ const telemetry = @import("telemetry.zig");
 
 pub const PromptDirection = enum { request, response };
 pub const PromptBodyClass = enum { ordinary, reference_body, code_body, complete_body };
+pub const CallAttribution = struct {
+    workflow_id: telemetry.Identifier,
+    action_id: telemetry.Identifier,
+    call: @import("model_candidate_origin.zig").Origin,
+    links: @import("model_call_lineage.zig").Links,
+};
 
 pub const SanitizedPromptFragment = struct {
     workflow_shortcode: telemetry.WorkflowShortcode,
@@ -20,6 +26,8 @@ pub const SanitizedPromptFragment = struct {
     retained_bytes: u16,
     truncated: bool,
     redacted: bool,
+    attribution: ?CallAttribution = null,
+    body_bytes: ?u64 = null,
 };
 
 pub const Error = error{InvalidSanitizedPromptFragment};
@@ -28,6 +36,15 @@ pub fn validate(fragment: SanitizedPromptFragment) Error!void {
     if (fragment.attempt == 0 or fragment.content.len != fragment.retained_bytes or
         fragment.content.len > limits.max_prompt_content_bytes or
         !std.unicode.utf8ValidateSlice(fragment.content)) return error.InvalidSanitizedPromptFragment;
+    if (fragment.attribution) |attribution| {
+        if (telemetry.Identifier.validate(attribution.workflow_id.bytes) == null or
+            telemetry.Identifier.validate(attribution.action_id.bytes) == null or
+            fragment.node_id == null or attribution.call.attempt.value != fragment.attempt or
+            attribution.links.original.attempt.value == 0 or
+            (attribution.links.kind == .initial) != (attribution.links.parent == null)) return error.InvalidSanitizedPromptFragment;
+        if (attribution.links.kind == .initial and !std.meta.eql(attribution.call, attribution.links.original)) return error.InvalidSanitizedPromptFragment;
+        if (attribution.links.parent) |parent| if (parent.attempt.value == 0 or std.meta.eql(attribution.call, parent)) return error.InvalidSanitizedPromptFragment;
+    }
 }
 
 pub const ContentChunk = struct {
@@ -94,6 +111,10 @@ pub fn createBatch(
         destination.fragment_id.bytes = allocator.dupe(u8, source.fragment_id.bytes) catch return error.InvalidSanitizedPromptFragment;
         destination.content = allocator.dupe(u8, source.content) catch return error.InvalidSanitizedPromptFragment;
         if (source.node_id) |node_id| destination.node_id = .{ .bytes = allocator.dupe(u8, node_id.bytes) catch return error.InvalidSanitizedPromptFragment };
+        if (source.attribution) |attribution| {
+            destination.attribution.?.workflow_id.bytes = allocator.dupe(u8, attribution.workflow_id.bytes) catch return error.InvalidSanitizedPromptFragment;
+            destination.attribution.?.action_id.bytes = allocator.dupe(u8, attribution.action_id.bytes) catch return error.InvalidSanitizedPromptFragment;
+        }
     }
     std.mem.sort(SanitizedPromptFragment, owned_fragments, {}, lessThan);
     for (owned_fragments[1..], owned_fragments[0 .. owned_fragments.len - 1]) |current, prior| {

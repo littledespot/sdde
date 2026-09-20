@@ -107,6 +107,9 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
     business intent. Empty/unrelated principles invent neither requirements nor questions.
   - Prove no Spec-to-PNN predecessor cycle, no policy approval inferred from review,
     and no old no-conflict result certifying Plan's current policy compliance.
+  - Distinguish principle capture from assessment execution on a source-gap pause;
+    do not report an unexecuted assessment as passed. Preserve supported business
+    intent where selected principles conflict; route policy obligations to their owner.
   - Include requirements supported only by validated answers and authenticated Spec
     edits; their current bindings and policy assessment cannot be skipped on rerun.
 - **Clarifications:**
@@ -122,7 +125,20 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
     decisions through §12.7. Identical review text for different S/P/T subjects must
     not produce indistinguishable questions or shared answer authority. Preserve IDs,
     controlled-region readback and closed/concurrently closed bytes; add no summary call.
+  - Cover source text that supports several specification categories without separate
+    headings, and genuinely missing actors/decisions in unrelated domains. Questions
+    identify known facts and the specific missing answer; diagnostic copying and
+    asking for already-supported behavior fail the actionability assessment.
 - **Logging:**
+  - Production execution must emit registered lifecycle/validation/retry events;
+    an empty event stream with complete prompt bodies is not complete logging.
+    Compare executed operations and exchanges with attributed records across
+    recovery, exhaustion, needs-user, failed publication and cancellation.
+  - Reconstruct every debug/trace request and available response from fragments,
+    including rejected JSON and partial transport. Prove capture/append/flush
+    failures cannot become success or silently lose diagnostics.
+  - Cover the §27 publication/finalization ordering decision: pre-write intent is
+    never reported as successful publication and no record is appended after close.
   - Normalize log-level case and `CRITICAL`/`WARN` aliases.
   - Use fixed `.log` feature event/prompt paths.
   - Write `feature-log/v2` column headings and control rows exactly once.
@@ -150,6 +166,11 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
 - transient unauthorized command writes that are restored before exit, which must still terminate the command and invalidate its evidence;
 - **Publication:**
   - Validate output before publication.
+  - Unrepaired JSON/schema rejection with existing open forms ends in error with no
+    publication calls. A successful correction may reach a valid clarification pause.
+  - Source, generation, candidate-review and residual open-registry pauses all publish
+    the validated incomplete specification through the same path, remain ungraded,
+    and keep Plan/Tasks gates closed. Rejected response bytes never enter that view.
   - Inject failure/interruption at every write; record no new successful completion afterward.
   - Exercise fresh reruns without rollback.
 
@@ -412,3 +433,32 @@ for integration/fault-injection evidence. They are not E2E results:
     - Reject duplicate IDs/shortcodes, unknown operations, illegal transitions,
       unbounded cycles and capability escalation.
     - Prove that adding the workflow changes no initial SDD graph.
+
+### 28.8 Model-conformance comparisons
+
+Assess the [request-guidance proposals](../reference-notes/model-request-guidance.md#proposed-conformance-improvements--20-september-2026)
+through existing request capture, provider binding, validators and the harness.
+Scripted fault/recovery tests establish enforcement, sibling/provenance preservation,
+dependency freshness and exact accounting; they do not establish live reliability.
+
+- Declare retained failure cases, unrelated shapes, sufficient/insufficient source
+  cases, settings and repetition counts before comparing. Include unchanged invalid
+  corrections, structural recovery that drops content, and fully supported recovery.
+- Change one factor at a time: hold model/settings fixed for guidance or composition
+  comparisons, and hold schema/evidence/guidance fixed for model or response-mode
+  comparisons. Retain actual serialized requests, responses and validation results.
+- Report initial JSON/schema admission, correction recovery/exhaustion, unchanged
+  responses, omitted requirements, unsupported evidence and false clarification gaps
+  separately. A parseable response or a genuine clarification is not scored completion.
+- Measure complete request bytes and prompt/schema/evidence contributions; label
+  estimated tokens separately from actual provider usage. Record calls, total tokens,
+  latency and final outcome. Larger inputs are acceptable when measured correctness
+  improves; no local token ceiling or budget exemption is introduced.
+- Live diagnostic comparisons require an explicit bounded approval and are not E2E
+  evidence. They use existing request/replay owners, never import a replayed result as
+  workflow authority and never change model/mode silently. Each whole-workflow E2E
+  run retains §28.7's separate approval and actual-output grading requirements.
+
+Use measured improvements to select a change; keep unrepaired JSON/schema rejection
+terminal with no publication. A completed, published and scored run remains distinct from a
+successful isolated request, valid incomplete specification or passing fake-provider suite.

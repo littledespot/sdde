@@ -44,8 +44,10 @@ pub fn Contract(comptime purpose: Purpose) type {
             provenance: spec.Selection,
             source_ids: []const @import("reference_identity.zig").SourceId,
             detail: []const u8,
+            question: ?[]const u8 = null,
         };
         pub const Candidate = struct {
+            omission_conflict_claims: []const r.ClaimId = &.{},
             review: Review,
             revision: u64 = 1,
             origin: ?Origin,
@@ -118,7 +120,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 const id = requirement.seed.id;
                 const required = try applicability(inputs, id);
                 review_applicability = review_applicability or required == .review;
-                try slots.append(scratch, .{ .ordinal = try r.ordinal(index), .task = try task(scratch, id), .permitted_not_applicable = if (required == .review) required.review else null, .evidence = (try admission.requirements(scratch, inputs, context.inputs, id)).guidance() });
+                try slots.append(scratch, .{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, id), .permitted_not_applicable = if (required == .review) required.review else null, .evidence = (try admission.requirements(scratch, inputs, context.inputs, id)).guidance() });
             }
             if (target != null and slots.items.len != 1) return error.InvalidRequiredAuthority;
             const projected = try @import("model_evidence.zig").project(scratch, all.entries);
@@ -143,28 +145,6 @@ pub fn Contract(comptime purpose: Purpose) type {
             return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = "source-support" } } }, .{ .semantic_review = .{ .bytes = "source-support" } }, .{ .bytes = if (review_applicability) "review_applicability" else "review" });
         }
 
-        /// Presentation of the native subject, not another requirement or routing policy.
-        fn task(allocator: std.mem.Allocator, id: a.Id) Error![]const u8 {
-            return switch (id.unit) {
-                .feature => switch (id.slot) {
-                    .display_name => "A name identifying the feature's purpose.",
-                    .description => "A description of intended user-visible behavior.",
-                    .primary_goal => "The intended user benefit.",
-                    .primary_user_story => "The actor, action and intended result.",
-                    .acceptance_criteria => "Observable pass/fail outcomes.",
-                    .functional_requirements => "Required application behavior.",
-                    .scenario_coverage => "Source-required triggers, outcomes and exact copy.",
-                    .entities => "Whether business entities/data are involved.",
-                    else => error.InvalidRequiredAuthority,
-                },
-                .record => |id_record| std.fmt.allocPrint(allocator, "Source support for {s} {d}, field {s}, member {d}.", .{ @tagName(id_record.kind), id_record.ordinal, @tagName(id.slot), id.member }),
-                .signal => |signal| std.fmt.allocPrint(allocator, "Source meaning preserved by signal {d}.", .{signal.ordinal}),
-                .conflict => |conflict| std.fmt.allocPrint(allocator, "Source evidence and unresolved meaning of conflict {d}.", .{conflict.ordinal}),
-                .token => |token| std.fmt.allocPrint(allocator, "Exact token {d} and its source-required use.", .{token.ordinal}),
-                .decision => error.InvalidRequiredAuthority,
-            };
-        }
-
         pub fn collect(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, bytes: []const u8, origin: ?Origin) Error!Collection {
             const proposed = @import("model_candidate_json.zig").decode(Review, allocator, bytes) catch |err| return switch (err) {
                 error.OutOfMemory => error.OutOfMemory,
@@ -172,7 +152,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             };
             const origins = try allocator.alloc(?Origin, proposed.entries.len);
             @memset(origins, origin);
-            return validate(allocator, inputs, context.inputs, .{ .review = proposed, .origin = origin, .origins = origins });
+            return validate(allocator, inputs, context.inputs, .{ .review = proposed, .origin = origin, .origins = origins, .omission_conflict_claims = if (purpose == .source) context.references.records.assignments.checked.prior.prior.source.omission_conflict_claims else &.{} });
         }
 
         pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, proposed: Candidate) Error!Collection {
@@ -205,9 +185,10 @@ pub fn Contract(comptime purpose: Purpose) type {
                     const before = diagnostics.items.len;
                     if (purpose == .source) if (finding.value.decision == .not_applicable and required != .review) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
                     const semantic = finding.value.decision.finding();
-                    if (!admission.validDetail(semantic, finding.value.detail)) try diagnostics.append(allocator, diagnostic(proposed, .invalid_detail, requirement.seed.id, ordinal, position));
+                    if (!admission.validDetail(semantic, finding.value.detail) or (purpose == .source and !admission.validQuestion(semantic, finding.value.question))) try diagnostics.append(allocator, diagnostic(proposed, .invalid_detail, requirement.seed.id, ordinal, position));
                     var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail);
                     if (purpose == .source and reviewed == .accepted) {
+                        reviewed.accepted.question = finding.value.question;
                         @import("source_omission.zig").validate(inputs, sources, semantic, reviewed.accepted, finding.value.loss) catch |err| {
                             if (err == error.OutOfMemory) return error.OutOfMemory;
                             reviewed = .{ .rejected = .{ .issue = .invalid_loss, .rule = (try admission.requirements(allocator, inputs, sources, requirement.seed.id)).rule(semantic) } };
@@ -264,7 +245,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (evidence.finding != .supported) return error.InvalidRequiredAuthority;
                     break :blk Decision.not_applicable;
                 } else try Decision.fromFinding(evidence.finding);
-                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .decision = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail } };
+                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .decision = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .question = review.question } };
             }
             var empty = inputs;
             empty.evidence = &.{};

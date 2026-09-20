@@ -14,6 +14,11 @@ pub const Action = struct {
     pub fn execute(_: Action, allocator: std.mem.Allocator, feature: @import("../../domain/feature_identity.zig").FeatureId, context: @import("../../domain/specification_provenance.zig").Context, checked: g.Checked) projection.Error!refresh.Needs {
         if (checked.response != .clarification or !std.mem.eql(u8, feature.bytes, context.inputs.corpus.feature_id.bytes)) return error.InvalidSpecification;
         const question = try projection.scalar(allocator, context, checked.response.clarification.question);
+        const prepared = @import("../../domain/clarification_preparation.zig").prepare(allocator, question.bytes, switch (checked.response.clarification.reason) {
+            .missing => "Required business information is missing; answer only the decision in the question.",
+            .ambiguous => "More than one business interpretation remains; identify the intended choice.",
+            .conflicting => "Business sources conflict; identify which requirement governs and why.",
+        }, (try @import("../../domain/specification_provenance.zig").items(context)).entries, .{ .citation_ids = checked.response.clarification.question.provenance.citation_ids }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecification;
         const needs = try allocator.alloc(refresh.Need, 1);
         const authority = try allocator.dupe(@import("../../domain/clarification_inputs.zig").Authority, &.{.{ .reference = context.inputs.corpus.state_id }});
         needs[0] = .{
@@ -23,12 +28,8 @@ pub const Action = struct {
                 else => @tagName(checked.unit),
             }, .slot = "content" },
             .authority = authority,
-            .question = question.bytes,
-            .why_required = switch (checked.response.clarification.reason) {
-                .missing => "Required business information is missing.",
-                .ambiguous => "Required business information is ambiguous.",
-                .conflicting => "Required business information conflicts.",
-            },
+            .question = prepared.question,
+            .why_required = prepared.why_required,
             .answer_schema = .{ .bounded_business_text = @import("../../domain/clarification_inputs.zig").max_text_bytes },
         };
         return .{ .feature = feature, .entries = needs };

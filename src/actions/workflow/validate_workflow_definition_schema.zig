@@ -98,6 +98,7 @@ fn convertSteps(
         if (closedMapping(pair.value, &.{ "call", "with", "on" }, &.{ "call", "on" })) |call| {
             calls.append(allocator, .{
                 .id = id,
+                .source = try sourceEntry(allocator, null, id.bytes, .subgraph, string(field(call, "call")) orelse return invalid(), pair.value),
                 .subgraph = definition.SubgraphId.parse(string(field(call, "call")) orelse return invalid()) orelse return invalid(),
                 .parameters = try convertParameters(allocator, field(call, "with")),
                 .outcomes = try convertOutcomes(allocator, field(call, "on") orelse return invalid()),
@@ -107,6 +108,7 @@ fn convertSteps(
         const step_map = closedMapping(pair.value, &step_fields, &step_required) orelse return invalid();
         steps.append(allocator, .{
             .id = id,
+            .source = try sourceEntry(allocator, null, id.bytes, .operation, string(field(step_map, "use")) orelse return invalid(), pair.value),
             .operation_id = workflow.OperationId.parse(string(field(step_map, "use")) orelse return invalid()) orelse return invalid(),
             .parameters = try convertParameters(allocator, field(step_map, "with")),
             .outcomes = try convertOutcomes(allocator, field(step_map, "on") orelse return invalid()),
@@ -145,6 +147,7 @@ fn convertSubgraphs(allocator: std.mem.Allocator, raw: ?*definition.RawNode) Err
                 }
             }
             step.* = .{
+                .source = try sourceEntry(allocator, string(pair.key) orelse return invalid(), string(entry.key) orelse return invalid(), if (call_map != null) .subgraph else .operation, string(field(step_map, if (call_map != null) "call" else "use")) orelse return invalid(), entry.value),
                 .id = workflow.WorkflowStepId.parseLocal(string(entry.key) orelse return invalid()) orelse return invalid(),
                 .target = if (call_map != null)
                     .{ .subgraph = definition.SubgraphId.parse(string(field(step_map, "call")) orelse return invalid()) orelse return invalid() }
@@ -379,4 +382,29 @@ test "rejects unknown outcome and unsafe resource name" {
         error.WorkflowDefinitionSchemaInvalid,
         (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = root }}),
     );
+}
+
+fn sourceEntry(a: std.mem.Allocator, subgraph: ?[]const u8, id: []const u8, kind: @FieldType(@import("../../domain/workflow_source.zig").Entry, "kind"), target: []const u8, node: *definition.RawNode) Error!@import("../../domain/workflow_source.zig").Entry {
+    return .{ .subgraph = subgraph, .id = id, .kind = kind, .target = target, .declaration = std.json.Stringify.valueAlloc(a, try sourceJson(a, node), .{ .whitespace = .indent_2 }) catch return invalid() };
+}
+// Structural view of the accepted authored entry; exact YAML bytes are retained
+// separately by the registry. This projection is not imported as authority.
+fn sourceJson(a: std.mem.Allocator, node: *definition.RawNode) Error!std.json.Value {
+    return switch (node.*) {
+        .null_value => .null,
+        .boolean => |v| .{ .bool = v },
+        .integer => |v| .{ .number_string = std.fmt.allocPrint(a, "{d}", .{v}) catch return invalid() },
+        .float => |v| .{ .float = v },
+        .scalar => |v| .{ .string = v },
+        .sequence => |items| block: {
+            var result: std.array_list.Managed(std.json.Value) = .init(a);
+            for (items) |item| result.append(try sourceJson(a, item)) catch return invalid();
+            break :block .{ .array = result };
+        },
+        .mapping => |items| block: {
+            var result: std.json.ObjectMap = .{};
+            for (items) |pair| result.put(a, string(pair.key) orelse return invalid(), try sourceJson(a, pair.value)) catch return invalid();
+            break :block .{ .object = result };
+        },
+    };
 }

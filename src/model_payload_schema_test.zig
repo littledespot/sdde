@@ -13,6 +13,40 @@ const variants =
 ;
 const Case = struct { bytes: []const u8, rejection: ?validation.Rejection = null, path: ?[]const u8 = null };
 
+const child_objects =
+    \\{"type":"object","properties":{"optional":{"type":"object","properties":{"a~/b":{"type":"boolean"},"deep":{"type":"object","properties":{"id":{"type":"boolean"}},"required":["id"],"additionalProperties":false}},"required":["a~/b","deep"],"additionalProperties":false},"empty":{"type":"object","properties":{},"required":[],"additionalProperties":false},"loose":{"type":"object","properties":{"flag":{"type":"boolean"}},"required":[],"additionalProperties":false},"items":{"type":"array","maxItems":2,"items":{"type":"boolean"}},"choice":
+++ variants ++
+    \\},"required":[],"additionalProperties":false}
+;
+
+test "correction outlines expose conditional child requirements without recursive schemas" {
+    var fixture: Fixture = undefined;
+    try fixture.initWithSchema(child_objects);
+    defer fixture.deinit();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const outline = try @import("domain/model_schema_projection.zig").outline(a, fixture.prepared.request.response_schema.root());
+    try std.testing.expectEqualStrings(
+        \\{"fields":{"optional":{"type":"object","required":["a~/b","deep"]},"empty":{"type":"object","required":[]},"loose":{"type":"object","required":[]},"items":{"type":"array"},"choice":{"kind":["content","question"]}},"required":[]}
+    , try std.json.Stringify.valueAlloc(a, outline, .{}));
+    for ([_]Case{
+        .{ .bytes = "{}" },
+        .{ .bytes = "{\"empty\":{},\"loose\":{}}" },
+        .{ .bytes = "{\"optional\":{}}", .rejection = .missing_required_property, .path = "/optional/a~0~1b" },
+        .{ .bytes = "{\"optional\":{\"a~/b\":true,\"deep\":{}}}", .rejection = .missing_required_property, .path = "/optional/deep/id" },
+        .{ .bytes = "{\"optional\":{\"a~/b\":true,\"deep\":{\"id\":true}}}" },
+        .{ .bytes = "{\"choice\":{}}", .rejection = .missing_required_property, .path = "/choice/kind" },
+        .{ .bytes = "{\"choice\":{\"kind\":\"foreign\"}}", .rejection = .unknown_variant, .path = "/choice/kind" },
+        .{ .bytes = "{\"choice\":{\"kind\":\"question\",\"subject\":\"alpha\"}}" },
+    }) |case| try checkDocument(child_objects, case);
+    var response = try fixture.response();
+    defer response.deinit();
+    var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
+    defer captured.deinit();
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, retryAllocation, .{ &fixture, captured.evidence, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .{ .schema = .{ .reason = .type_mismatch, .expected = fixture.prepared.request.response_schema.root() } }), "Correct syntax only." });
+}
+
 test "reconciliation repair definitions admit only the natively selected payload" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -33,6 +67,53 @@ test "reconciliation repair definitions admit only the natively selected payload
             "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[]}}",
             "{\"current_value\":{}}",
         }) |invalid| try checkDocument(selected.modelBytes(), .{ .bytes = invalid, .rejection = .unknown_property, .path = if (std.mem.startsWith(u8, invalid, "{\"kind\"")) "/kind" else "/current_value" });
+    }
+}
+
+test "child requirements stay inside selected definitions parts and repair schemas in both modes" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const canonical = try parser.compiler().compile(a, try std.fmt.allocPrint(a, "{{\"$defs\":{{\"record\":{s}}},\"type\":\"object\",\"properties\":{{}},\"required\":[],\"additionalProperties\":false}}", .{child_objects}));
+    const selected = canonical.select(.{ .bytes = "record" }).?;
+    const plan = try parser.compiler().compileComposition(a,
+        \\{"schema":"json-composition/v1","result":"result","definition":"record","parts":{"selected":{"paths":["/optional"]},"siblings":{"paths":["/empty","/loose","/items","/choice"]}}}
+    , canonical);
+    const generation = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .limited(1_048_576)));
+    const repair_schema = generation.select(.{ .bytes = "attributed_value" }).?;
+    for ([_]*const @import("domain/model_result_schema.zig").Schema{ selected, try plan.selectSchema(0, &.{}), repair_schema }) |schema| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithCompiledSchema(schema);
+        defer fixture.deinit();
+        fixture.fake.invocation_plan.complete.content = "{\"foreign\":true}";
+        var response = try fixture.response();
+        defer response.deinit();
+        var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
+        defer captured.deinit();
+        var decoded = try (decoder.Action{}).execute(std.testing.allocator, captured.evidence.result().complete, null);
+        defer decoded.deinit();
+        const diagnostic = validation.validate(decoded.candidate).invalid;
+        var retry = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .schema = diagnostic }, "Correct syntax only.");
+        defer retry.deinit();
+        const guidance = try std.json.parseFromSlice(std.json.Value, a, retry.request.content[retry.request.content.len - 2].guidance, .{});
+        const expected = guidance.value.object.get("expected").?.object;
+        try std.testing.expectEqualStrings("", expected.get("schema_pointer").?.string);
+        const fields = expected.get("shape").?.object.get("fields").?.object;
+        const child = fields.get(if (schema == repair_schema) "provenance" else "optional").?.object;
+        try std.testing.expectEqual(@as(usize, 2), child.count());
+        try std.testing.expectEqualStrings(if (schema == repair_schema) "[\"claim_ids\",\"clarification_response_ids\"]" else "[\"a~/b\",\"deep\"]", try std.json.Stringify.valueAlloc(a, child.get("required").?, .{}));
+        if (schema != selected) try std.testing.expect(!fields.contains("items") and !fields.contains("loose"));
+        for (std.enums.values(@import("domain/model_controls.zig").ResponseGuidanceMode)) |mode| {
+            var request = retry.request.*;
+            request.response_guidance_mode = mode;
+            const bytes = try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference);
+            const wire = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
+            var count: usize = 0;
+            for (wire.value.object.get("system").?.array.items) |part| count += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, schema.modelBytes()));
+            try std.testing.expectEqual(@as(usize, 1), count);
+            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("outputConfig"));
+        }
     }
 }
 

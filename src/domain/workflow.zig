@@ -117,6 +117,8 @@ pub const OutcomeTransition = struct {
 };
 
 pub const DeclarativeStep = struct {
+    source: ?@import("workflow_source.zig").Entry = null,
+    source_chain: []const @import("workflow_source.zig").Entry = &.{},
     id: WorkflowStepId,
     operation_id: OperationId,
     parameters: []const ParameterBinding,

@@ -419,6 +419,7 @@ pub fn build(b: *std.Build) void {
     for ([_][]const u8{
         "src/model_log_redaction_test.zig",
         "src/model_exchange_capture_test.zig",
+        "src/request_debugger_test.zig",
         "src/feature_log_layout_test.zig",
     }) |source| {
         const tests = b.addTest(.{ .root_module = b.createModule(.{

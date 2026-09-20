@@ -147,24 +147,7 @@
       "type": "object",
       "properties": {
         "claim_dispositions": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "claim_id": {
-                "$ref": "#/$defs/ordinal"
-              },
-              "disposition": {
-                "$ref": "#/$defs/disposition"
-              }
-            },
-            "required": [
-              "claim_id",
-              "disposition"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
+          "$ref": "#/$defs/claim_dispositions"
         },
         "signals": {
           "type": "array",
@@ -191,43 +174,7 @@
           "maxItems": 4294967295
         },
         "conflicts": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "claim_ids": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/ordinal"
-                },
-                "maxItems": 4294967295
-              },
-              "kind": {
-                "enum": [
-                  "mutually_exclusive",
-                  "precedence_missing",
-                  "value_mismatch",
-                  "scope_mismatch"
-                ]
-              },
-              "summary": {
-                "$ref": "#/$defs/reference_text"
-              },
-              "resolution": {
-                "enum": [
-                  "unresolved"
-                ]
-              }
-            },
-            "required": [
-              "claim_ids",
-              "kind",
-              "summary",
-              "resolution"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
+          "$ref": "#/$defs/conflicts"
         }
       },
       "required": [
@@ -564,6 +511,81 @@
       },
       "required": [
         "token_id"
+      ],
+      "additionalProperties": false
+    },
+    "claim_dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claim_id": {
+            "$ref": "#/$defs/ordinal"
+          },
+          "disposition": {
+            "$ref": "#/$defs/disposition"
+          }
+        },
+        "required": [
+          "claim_id",
+          "disposition"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 4294967295
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ordinal"
+            },
+            "maxItems": 4294967295
+          },
+          "kind": {
+            "enum": [
+              "mutually_exclusive",
+              "precedence_missing",
+              "value_mismatch",
+              "scope_mismatch"
+            ]
+          },
+          "summary": {
+            "$ref": "#/$defs/reference_text"
+          },
+          "resolution": {
+            "enum": [
+              "unresolved"
+            ]
+          }
+        },
+        "required": [
+          "claim_ids",
+          "kind",
+          "summary",
+          "resolution"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 4294967295
+    },
+    "repair_conflict_group": {
+      "type": "object",
+      "properties": {
+        "claim_dispositions": {
+          "$ref": "#/$defs/claim_dispositions"
+        },
+        "conflicts": {
+          "$ref": "#/$defs/conflicts"
+        }
+      },
+      "required": [
+        "claim_dispositions",
+        "conflicts"
       ],
       "additionalProperties": false
     }

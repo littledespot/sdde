@@ -138,8 +138,16 @@ test "validated workflow registry accepts zero definitions and owns its graph re
         .id = workflow.WorkflowParameterId.parse("retry-limit").?,
         .value = .{ .integer = 2 },
     }};
+    const source_entry: @import("domain/workflow_source.zig").Entry = .{
+        .subgraph = null,
+        .id = step_id_bytes,
+        .kind = .operation,
+        .target = try scratch.allocator().dupe(u8, "core.noop"),
+        .declaration = try scratch.allocator().dupe(u8, "{\"use\":\"core.noop\"}"),
+    };
     const local_declared_steps = [_]workflow.DeclarativeStep{.{
         .id = workflow.WorkflowStepId.parse(step_id_bytes).?,
+        .source = source_entry,
         .operation_id = workflow.OperationId.parse("core.noop").?,
         .parameters = &retry_parameters,
         .outcomes = &.{.{ .outcome = .ok, .target = .{ .terminal = .ok } }},
@@ -149,9 +157,9 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     declared.start_step_id = local_declared_steps[0].id;
     declared.steps = &local_declared_steps;
     const compiled_resources = [_]compilation.CompiledResource{
-        .{ .id = resource_id, .content = .{ .prompt = resource_bytes } },
-        .{ .id = schema_id, .content = .{ .result_schema = compiled_schema } },
-        .{ .id = composition_id, .content = .{ .json_composition = try schema_adapter.compiler().compileComposition(scratch.allocator(), composition_bytes, compiled_schema) } },
+        .{ .id = resource_id, .source_path = resource_name, .content = .{ .prompt = resource_bytes } },
+        .{ .id = schema_id, .source_path = "result.json", .content = .{ .result_schema = compiled_schema } },
+        .{ .id = composition_id, .source_path = "split.json", .content = .{ .json_composition = try schema_adapter.compiler().compileComposition(scratch.allocator(), composition_bytes, compiled_schema) } },
     };
     const compiled_parameters = [_]compilation.CompiledParameter{.{
         .id = retry_parameters[0].id,
@@ -159,6 +167,7 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     }};
     const local_compiled_steps = [_]compilation.CompiledStep{.{
         .id = local_declared_steps[0].id,
+        .source_chain = &.{source_entry},
         .operation_id = local_declared_steps[0].operation_id,
         .parameters = &compiled_parameters,
         .requires = &.{},
@@ -198,7 +207,7 @@ test "validated workflow registry accepts zero definitions and owns its graph re
         .{ .ordinal = 3, .path = descriptors[2].path, .disposition = .resource },
         .{ .ordinal = 4, .path = descriptors[3].path, .disposition = .resource },
     };
-    const captures = [_]inventory.Capture{.{ .ordinal = 1, .bytes = "abc" }};
+    const captures = [_]inventory.Capture{.{ .ordinal = 1, .bytes = try scratch.allocator().dupe(u8, "abc") }};
     const resource_captures = [_]inventory.Capture{
         .{ .ordinal = 2, .bytes = resource_bytes },
         .{ .ordinal = 3, .bytes = schema_bytes },
@@ -233,6 +242,19 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     var foreign_candidate = candidate;
     foreign_candidate.graphs = &.{foreign_graph};
     try std.testing.expectError(error.InvalidWorkflowRegistry, registry.createValidated(std.testing.allocator, foreign_candidate));
+    var missing_source = local_compiled_steps;
+    missing_source[0].source_chain = &.{};
+    var source_graph = graph;
+    source_graph.authority.steps = &missing_source;
+    var source_candidate = candidate;
+    source_candidate.graphs = &.{source_graph};
+    try std.testing.expectError(error.InvalidWorkflowRegistry, registry.createValidated(std.testing.allocator, source_candidate));
+    var wrong_path = compiled_resources;
+    wrong_path[0].source_path = "other.md";
+    source_graph = graph;
+    source_graph.authority.resources = &wrong_path;
+    source_candidate.graphs = &.{source_graph};
+    try std.testing.expectError(error.InvalidWorkflowRegistry, registry.createValidated(std.testing.allocator, source_candidate));
     const owner = try registry.createValidated(std.testing.allocator, candidate);
     scratch.deinit();
     bootstrap_registry.deinitOwner(root_owner);
@@ -242,6 +264,11 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     const resolved = service.registry().resolve(workflow.WorkflowId.parse("hello").?).?;
     try std.testing.expectEqualStrings("core.noop", resolved.authority.steps[0].operation_id.bytes);
     try std.testing.expectEqualStrings("immutable prompt", resolved.authority.resources[0].bytes());
+    try std.testing.expectEqualStrings("prompt.md", resolved.authority.resources[0].source_path.?);
+    try std.testing.expectEqualStrings("arbitrary.workflow.yaml", resolved.source.?.path);
+    try std.testing.expectEqualStrings("abc", resolved.source.?.content);
+    try std.testing.expectEqualStrings("run", resolved.authority.steps[0].source_chain[0].id);
+    try std.testing.expectEqualStrings("{\"use\":\"core.noop\"}", resolved.authority.steps[0].source_chain[0].declaration);
     const retained_schema = resolved.authority.resources[1].content.result_schema;
     try std.testing.expectEqualStrings(schema_bytes, retained_schema.bytes());
     try std.testing.expectEqualStrings("answer", retained_schema.root().object[0].name);

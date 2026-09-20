@@ -757,7 +757,9 @@ test "local reuse compiles to the identical explicit graph with separate retries
         \\    on: {ok: end.ok, invalid: g6-second-generate, failed: end.failed, cancelled: end.cancelled}
     });
     const plain = try reusableCompile(a, explicit);
-    try std.testing.expectEqualDeep(plain.authority.steps, reused.authority.steps);
+    try expectSameExecutableSteps(plain.authority.steps, reused.authority.steps);
+    try expectSourceChain(reused.authority.steps, "g5-first-generate", &.{ "first", "generate" });
+    try expectSourceChain(reused.authority.steps, "g6-second-generate", &.{ "second", "generate" });
     try std.testing.expectEqualDeep(plain.authority.transitions, reused.authority.transitions);
     try std.testing.expectEqual(plain.authority.maximum_step_executions, reused.authority.maximum_step_executions);
     try std.testing.expectEqual(@as(u32, 1), reused.authority.steps[0].retry_authority.?.limit.value);
@@ -964,7 +966,9 @@ test "nested composition forwards parameters and compiles to the same explicit o
         \\    on: {ok: end.ok, invalid: g15-g6-second-inner-generate, failed: end.failed, cancelled: end.cancelled}
     });
     const plain = try reusableCompile(a, explicit);
-    try std.testing.expectEqualDeep(plain.authority.steps, nested.authority.steps);
+    try expectSameExecutableSteps(plain.authority.steps, nested.authority.steps);
+    try expectSourceChain(nested.authority.steps, "g14-g5-first-inner-generate", &.{ "first", "inner", "generate" });
+    try expectSourceChain(nested.authority.steps, "g15-g6-second-inner-generate", &.{ "second", "inner", "generate" });
     try std.testing.expectEqualDeep(plain.authority.transitions, nested.authority.transitions);
     try std.testing.expectEqual(plain.authority.maximum_step_executions, nested.authority.maximum_step_executions);
     var reordered = (try reusableDefinitions(a, nested_workflow))[0];
@@ -991,5 +995,31 @@ test "nested composition rejects recursion scope escape missing bindings and out
         const bytes = try std.mem.replaceOwned(u8, arena.allocator(), nested_workflow, change[0], change[1]);
         try std.testing.expect(!std.mem.eql(u8, bytes, nested_workflow));
         try std.testing.expectError(error.WorkflowGraphCompileInvalid, reusableCompile(arena.allocator(), bytes));
+    }
+}
+
+// Source ancestry differs deliberately between authored inline and reused YAML;
+// every executable field must still agree.
+fn expectSameExecutableSteps(expected: []const @import("domain/workflow_compilation.zig").CompiledStep, actual: []const @import("domain/workflow_compilation.zig").CompiledStep) !void {
+    try std.testing.expectEqual(expected.len, actual.len);
+    for (expected, actual) |left, right| {
+        inline for (@typeInfo(@TypeOf(left)).@"struct".fields) |field| {
+            if (comptime !std.mem.eql(u8, field.name, "source_chain")) try std.testing.expectEqualDeep(@field(left, field.name), @field(right, field.name));
+        }
+    }
+}
+fn expectSourceChain(steps: []const @import("domain/workflow_compilation.zig").CompiledStep, id: []const u8, expected: []const []const u8) !void {
+    const step = for (steps) |step| {
+        if (std.mem.eql(u8, id, step.id.bytes)) break step;
+    } else return error.TestExpectedEqual;
+    try std.testing.expectEqual(expected.len, step.source_chain.len);
+    for (expected, step.source_chain, 0..) |entry_id, entry, index| {
+        try std.testing.expectEqualStrings(entry_id, entry.id);
+        try std.testing.expectEqual(index == 0, entry.subgraph == null);
+        if (index > 0) try std.testing.expectEqualStrings(step.source_chain[index - 1].target, entry.subgraph.?);
+        try std.testing.expectEqual(index + 1 == expected.len, entry.kind == .operation);
+        var declaration = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, entry.declaration, .{});
+        defer declaration.deinit();
+        try std.testing.expectEqualStrings(entry.target, declaration.value.object.get(if (entry.kind == .operation) "use" else "call").?.string);
     }
 }

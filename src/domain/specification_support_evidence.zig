@@ -152,11 +152,25 @@ pub fn detailRule(finding: a.Finding) DetailRule {
 pub fn validDetail(finding: a.Finding, detail: []const u8) bool {
     return detailRule(finding).accepts(detail);
 }
+pub fn questionRequired(finding: a.Finding) bool {
+    return switch (finding) {
+        .supported, .candidate_omission => false,
+        .ambiguous, .conflicting, .unsupported => true,
+    };
+}
+pub fn questionGuidance(finding: a.Finding) []const u8 {
+    return if (questionRequired(finding)) "Ask for the missing decision and expected answer; keep known facts in detail." else "Omit question; preserve the finding and meaning.";
+}
+pub fn validQuestion(finding: a.Finding, question: ?[]const u8) bool {
+    if (!questionRequired(finding)) return question == null;
+    return if (question) |value| @import("clarification_inputs.zig").validText(value, @import("clarification_inputs.zig").max_text_bytes) else false;
+}
 
 pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, evidence: a.Evidence) Error!void {
     const review = evidence.review orelse return error.InvalidRequiredAuthority;
     if (review.principle_citations.len != 0 or review.principle_registry != null) return error.InvalidRequiredAuthority;
     if (!validDetail(evidence.finding, review.detail)) return error.InvalidRequiredAuthority;
+    if (!validQuestion(evidence.finding, review.question)) return error.InvalidRequiredAuthority;
     const result = try admit(allocator, inputs, sources, evidence.requirement, evidence.finding, .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, review.source_ids, review.detail);
     if (result != .accepted) return error.InvalidRequiredAuthority;
     try sameProvenance(result.accepted.provenance, review.provenance);

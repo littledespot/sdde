@@ -57,6 +57,7 @@ pub const Action = struct {
                 try validateDeclaredOutcomes(entry.contract.outcomes, declared.outcomes, item.steps, policy.*);
                 compiled.* = .{
                     .id = declared.id,
+                    .source_chain = declared.source_chain,
                     .operation_id = declared.operation_id,
                     .parameters = parameters,
                     .requires = entry.contract.requires,
@@ -183,7 +184,7 @@ fn compileResources(
     };
     for (item.resources, resources, kinds, bytes) |declared, *compiled, kind, captured| {
         if (kind == .json_composition) continue;
-        compiled.* = .{ .id = declared.id, .content = switch (kind orelse return invalid()) {
+        compiled.* = .{ .id = declared.id, .source_path = declared.name, .content = switch (kind orelse return invalid()) {
             .result_schema => .{ .result_schema = result_schema_compiler.compile(allocator, captured) catch return invalid() },
             .prompt => .{ .prompt = captured },
             .example => .{ .example = captured },
@@ -195,7 +196,7 @@ fn compileResources(
         const canonical_index = for (item.resources, 0..) |resource, at| {
             if (std.mem.eql(u8, resource.id.bytes, canonical_alias.?.bytes)) break at;
         } else return invalid();
-        compiled.* = .{ .id = declared.id, .content = .{ .json_composition = result_schema_compiler.compileComposition(allocator, captured, resources[canonical_index].content.result_schema) catch return invalid() } };
+        compiled.* = .{ .id = declared.id, .source_path = declared.name, .content = .{ .json_composition = result_schema_compiler.compileComposition(allocator, captured, resources[canonical_index].content.result_schema) catch return invalid() } };
     };
     for (resources, bytes) |compiled, captured| if (!std.mem.eql(u8, compiled.bytes(), captured)) return invalid();
     if (!compilation.validResourceBindings(resources)) return invalid();

@@ -11,6 +11,16 @@ pub fn main(init: std.process.Init) !void {
         try arguments.append(init.gpa, try init.arena.allocator().dupe(u8, argument));
     }
 
+    if (arguments.items.len > 0 and std.mem.eql(u8, arguments.items[0], "--debugger")) {
+        if (arguments.items.len != 2) {
+            try writeFailure(init.io, "Usage: sdde --debugger <feature-directory>");
+            std.process.exit(1);
+        }
+        return sdde.debugRequests(init.io, init.gpa, arguments.items[1], init.environ_map) catch |err| {
+            try writeFailure(init.io, @errorName(err));
+            std.process.exit(1);
+        };
+    }
     var report = try sdde.run(init.io, init.gpa, arguments.items, init.environ_map);
     defer report.deinit();
     const outcome = report.outcome;

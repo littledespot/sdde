@@ -9,7 +9,7 @@ const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
 pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text, occupied_summary, occupied_signals, occupied_conflict, permuted_disposition, permuted_conflict_disposition };
 pub const SupportFault = enum { missing_detail, foreign_provenance, missing_finding, duplicate_finding, partial_findings, two_missing_findings, foreign_sources };
-pub const SourceLoss = enum { empty, partial, classification, signal, post_generation, unchanged };
+pub const SourceLoss = enum { empty, partial, classification, signal, post_generation, unchanged, false_conflict, unchanged_conflict };
 pub const Options = struct {
     global_sequence: ?@import("global_protocol_sequence.zig").Mode = null,
     summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
@@ -31,6 +31,7 @@ pub const Options = struct {
     script: ?@import("specification_script.zig").Script = null,
     uncertain: bool = false,
     brief_uncertain: bool = false,
+    brief_text: ?[3][]const u8 = null,
     repair: bool = false,
     failed_repair: bool = false,
     omit_exact: bool = false,
@@ -87,9 +88,19 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const reply = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .no_feature_claim = .{ .reason = .{ .nodes = &.{.{ .literal = .{ .value = "The rejected response JSON has a syntax error in its claims array." } }} }, .token_classifications = &.{} } });
                 return @import("reference_tokens.zig").wire(allocator, reply, discarded);
             }
-            const claim = if (options.script) |script| (try @import("specification_script.zig").extraction(script, selected_chunk.bytes)).claim else try extractedClaim(allocator, chunk.id);
+            const claim = if (options.script) |script| (try @import("specification_script.zig").extraction(script, selected_chunk.bytes)).claim else if (options.brief_text) |texts| texts[1] else try extractedClaim(allocator, chunk.id);
             const citation: @import("../domain/source_selections.zig").Selection = if (options.citation_fault == .unknown) .{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } else @import("../reference_extraction_test.zig").wholeChunk(chunk);
             const body = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = if (options.text_fault) "unbound/reference.md" else claim } }} } }, .citations = if (options.citation_fault == .missing) &.{} else &.{citation} }}, .token_classifications = &.{} } });
+            if (options.source_loss == .false_conflict or options.source_loss == .unchanged_conflict) {
+                const response_type = @import("../domain/reference_extraction_parser.zig").Response;
+                var response = try @import("../domain/model_candidate_json.zig").decode(response_type, allocator, body);
+                const claims = try allocator.alloc(r.extraction.Proposal, 2);
+                claims[0] = response.claims.claims[0];
+                claims[1] = .{ .content = .{ .technical = .{ .nodes = &.{.{ .literal = .{ .value = "Present the source-required confirmation at startup." } }} } }, .citations = claims[0].citations };
+                response.claims.claims = claims;
+                response.claims.token_classifications = try @import("reference_tokens.zig").classifications(allocator, candidates, chunk);
+                return @import("../domain/model_candidate_json.zig").encode(response_type, allocator, response);
+            }
             const choices = try allocator.dupe(r.extraction.tokens.Classification, try @import("reference_tokens.zig").classifications(allocator, candidates, chunk));
             if (options.source_loss == .classification) for (choices) |*choice| {
                 choice.* = .{ .irrelevant = choice.id() };
@@ -102,8 +113,13 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const repair = @import("../domain/reference_reconciliation_repair.zig");
                 if (view.contains(.source_omission_repair)) {
                     const auth = (try @import("../application/source_omission_repair_workflow.zig").read(&view)).authorization.reconciliation;
-                    if (options.source_loss == .unchanged) return @import("reference_reconciliation.zig").repairResponse(allocator, auth.operation.replace);
-                    const claim = (try r.item(input.progress.plan.layout.items, auth.dependencies.reconciliation.proposal.global.signals[auth.target.signal_content].claim_ids[0])).claim;
+                    if (options.source_loss == .unchanged or options.source_loss == .unchanged_conflict) return @import("reference_reconciliation.zig").repairResponse(allocator, auth.operation.replace);
+                    if (auth.target == .conflict_group) {
+                        const dispositions = try allocator.dupe(r.ClaimDispositionProposal, auth.operation.replace.conflict_group.claim_dispositions);
+                        for (dispositions) |*value| value.disposition = .{ .retained = .{} };
+                        return @import("reference_reconciliation.zig").repairResponse(allocator, .{ .conflict_group = .{ .claim_dispositions = dispositions, .conflicts = &.{} } });
+                    }
+                    const claim = (try r.item(input.progress.plan.layout.items, auth.dependencies.reconciliation.proposal.global.signals[auth.target.unit.signal_content].claim_ids[0])).claim;
                     return @import("reference_reconciliation.zig").repairResponse(allocator, .{ .content = @import("reference_reconciliation.zig").content(claim) });
                 }
                 const authorization = try @import("../application/reference_reconciliation_repair_workflow.zig").readAuthorization(&view);
@@ -162,6 +178,27 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 return @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), allocator, .{ .summary = proposal });
             }
             var proposal = try @import("reference_reconciliation.zig").global(allocator, input);
+            if (options.source_loss == .false_conflict or options.source_loss == .unchanged_conflict) {
+                const claims = try allocator.alloc(r.ClaimId, 2);
+                var count: usize = 0;
+                for (input.progress.plan.layout.items.entries) |item| if (item.claim.content == .model and count < 2) {
+                    claims[count] = item.claim.id;
+                    count += 1;
+                };
+                if (count != 2) return error.InvalidConflictFixture;
+                const dispositions = try allocator.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
+                for (dispositions) |*value| {
+                    if (std.meta.eql(value.claim_id, claims[0])) value.disposition = .{ .conflicting = .{ .related_claim_ids = claims[1..2] } };
+                    if (std.meta.eql(value.claim_id, claims[1])) value.disposition = .{ .conflicting = .{ .related_claim_ids = claims[0..1] } };
+                }
+                proposal.claim_dispositions = dispositions;
+                var signals: std.ArrayList(r.SignalProposal) = .empty;
+                for (proposal.signals) |signal| if (!r.contains(r.ClaimId, claims, signal.claim_ids[0])) {
+                    try signals.append(allocator, signal);
+                };
+                proposal.signals = try signals.toOwnedSlice(allocator);
+                proposal.conflicts = &.{.{ .claim_ids = claims, .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The source behavior and its presentation." } }} }, .resolution = .unresolved }};
+            }
             if (options.global_sequence != null) proposal = try @import("global_protocol_sequence.zig").mixed(allocator, input, proposal);
             if (options.disposition_sequence != null) {
                 const signals = try allocator.dupe(r.SignalProposal, proposal.signals[0..1]);
@@ -255,7 +292,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const all = try @import("../domain/specification_provenance.zig").items(context);
             const dispositions = context.references.records.assignments.checked.prior.prior.dispositions;
             const first = for (dispositions) |disposition| {
-                if (@import("../domain/specification_provenance.zig").eligibleClaim(disposition.disposition)) break disposition.claim_id;
+                if (@import("../domain/specification_provenance.zig").eligibleClaim(disposition.disposition) and businessValue((try r.item(all, disposition.claim_id)).claim) != null) break disposition.claim_id;
             } else return error.InvalidFixture;
             const value = try attributed(allocator, all, &.{first});
             if (request.id().purpose == .atomic_repair) {
@@ -293,7 +330,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         const retained = for (dispositions) |disposition| {
                             if (std.meta.eql(disposition.claim_id, item.claim.id)) break @import("../domain/specification_provenance.zig").eligibleClaim(disposition.disposition);
                         } else false;
-                        if (!retained) continue;
+                        if (!retained or businessValue(item.claim) == null) continue;
                         const selected = try attributed(allocator, all, &.{item.claim.id});
                         if (kind == .acceptance_criterion and item.claim.content == .model) try records.append(allocator, .{ .content = .{ .acceptance_criterion = .{ .given = selected.value, .when = selected.value, .then = selected.value } }, .provenance = selected.provenance });
                         if (kind == .functional_requirement and item.claim.content == .model) try records.append(allocator, .{ .content = .{ .functional_requirement = .{ .text = selected.value } }, .provenance = selected.provenance });
@@ -302,6 +339,11 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     break :result .{ .records = records.items };
                 },
             } };
+            if (unit == .brief) if (options.brief_text) |texts| {
+                inline for (.{ "title", "description", "primary_goal" }, 0..) |field, index| {
+                    @field(proposed.content.brief, field).value = try scriptedValue(allocator, all, .{ .bytes = texts[index] });
+                }
+            };
             if (options.repair and unit == .brief) proposed.content.brief.description.provenance.claim_ids = &.{.{ .ordinal = 999999 }};
             return @import("../domain/model_candidate_json.zig").encode(g.ModelResponse, allocator, g.ModelResponse.from(proposed));
         },
@@ -340,7 +382,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         if (item.claim.content == .preserved_token and item.claim.content.preserved_token.value.id.ordinal == token.ordinal) selected = (try attributed(allocator, all, &.{item.claim.id})).provenance;
                     },
                     .signal => |id| for (context.references.records.signals) |signal| {
-                        if (signal.id.ordinal == id.ordinal) selected = (try attributed(allocator, all, signal.value.claim_ids)).provenance;
+                        if (signal.id.ordinal == id.ordinal) selected = selection(.{ .claim_ids = signal.value.claim_ids, .citation_ids = signal.value.citation_ids, .clarification_response_ids = &.{} });
                     },
                     .conflict => |id| for (context.references.records.conflicts) |conflict| {
                         if (conflict.id.ordinal == id.ordinal) selected = selection(.{ .claim_ids = conflict.value.claim_ids, .citation_ids = conflict.value.citation_ids, .clarification_response_ids = &.{} });
@@ -368,8 +410,24 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     else => null,
                 };
                 const omission = if (omission_kind) |kind| omittedKind(options, kind) and inputs.specification != null and !g.spec.hasRecords(inputs.specification.?, kind) else false;
-                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .decision = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The specification omits the source-supported requirement." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else "" } };
-                if (options.source_gaps and requirement.seed.id.kind == .feature_intent and requirement.seed.id.unit == .feature) finding.value = .{ .decision = .unsupported, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{}, .detail = "The source leaves this decision unspecified." };
+                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .question = if (conflict) "Should the loan be renewed or rejected? Choose the required outcome." else if (uncertain and !omission) "Which renewal deadline applies? Supply the duration and starting event." else null, .decision = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The specification omits the source-supported requirement." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else "" } };
+                if ((options.source_loss == .false_conflict or options.source_loss == .unchanged_conflict) and requirement.seed.id.unit == .conflict) {
+                    finding.value.decision = .candidate_omission;
+                    finding.value.question = null;
+                    finding.value.detail = "The source meanings are compatible; the false conflict discarded their supported behavior.";
+                    finding.value.loss = .{ .reconciliation_conflict = requirement.seed.id.unit.conflict };
+                    finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
+                }
+                if (options.source_gaps and requirement.seed.id.kind == .feature_intent and requirement.seed.id.unit == .feature) finding.value = .{ .decision = .unsupported, .question = switch (requirement.seed.id.slot) {
+                    .display_name => "What should users call this feature? Supply its display name.",
+                    .description => "What behavior should this feature provide? Describe the expected result.",
+                    .primary_goal => "Which user outcome takes priority? Name the primary goal.",
+                    .primary_user_story => "Who uses this feature and why? Name the user and intended benefit.",
+                    .acceptance_criteria => "Which observable outcome counts as success? State the pass/fail condition.",
+                    .functional_requirements => "What should happen when renewal is requested? State the required behavior.",
+                    .scenario_coverage => "What should happen when renewal is refused? Describe that scenario outcome.",
+                    else => return error.UnexpectedSourceGap,
+                }, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{}, .detail = "The source leaves this decision unspecified." };
                 if (options.extraction_omission) finding.value = .{ .decision = .candidate_omission, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{context.inputs.corpus.sources[0].id}, .detail = "Extraction discarded the source-required behavior and exact message." };
             }
             if (options.source_loss) |mode| {
@@ -416,7 +474,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .delete => return error.InvalidFixture,
                 };
                 const replacement: repair.Replacement = switch (kind) {
-                    .detail => .{ .detail = .{ .detail = "Which renewal deadline applies? The sources do not settle it." } },
+                    .detail => .{ .detail = .{ .detail = "The sources do not settle the renewal deadline.", .question = "Which renewal deadline applies? Supply the duration and starting event." } },
                     .selection => .{ .selection = .{ .provenance = value.provenance, .source_ids = value.source_ids } },
                     .finding => .{ .finding = value },
                 };
@@ -431,6 +489,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     finding.value.provenance.claim_ids = &.{all.entries[0].claim.id};
                 } else {
                     finding.value.decision = .unsupported;
+                    finding.value.question = "Which renewal rule should apply? Specify the duration and starting event.";
                     finding.value.provenance.claim_ids = &.{};
                     finding.value.detail = "The source does not settle this requirement.";
                 }
@@ -440,6 +499,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 switch (fault) {
                     .missing_detail => {
                         findings[0].value.decision = .ambiguous;
+                        findings[0].value.question = "Which renewal deadline applies? Supply a duration and starting event.";
                         findings[0].value.detail = "";
                     },
                     .foreign_provenance => findings[0].value.provenance.claim_ids = &.{.{ .ordinal = 999999 }},
@@ -459,15 +519,17 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
         else => return error.InvalidFixture,
     }
 }
-fn attributed(allocator: std.mem.Allocator, all: r.Items, ids: []const r.ClaimId) !g.spec.Model.AttributedValue {
-    const claim = (try r.item(all, ids[0])).claim;
-    const value: g.spec.BusinessValue = switch (claim.content) {
+fn businessValue(claim: r.extraction.Claim) ?g.spec.BusinessValue {
+    return switch (claim.content) {
         .model => |model| switch (model) {
-            .business => |business| .{ .normalized = business.value },
-            else => return error.InvalidFixture,
+            .business, .scope_guard => |value| .{ .normalized = value.value },
+            else => null,
         },
         .preserved_token => |token| .{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } },
     };
+}
+fn attributed(allocator: std.mem.Allocator, all: r.Items, ids: []const r.ClaimId) !g.spec.Model.AttributedValue {
+    const value = businessValue((try r.item(all, ids[0])).claim) orelse return error.InvalidFixture;
     return .{ .value = value, .provenance = .{ .claim_ids = try allocator.dupe(r.ClaimId, ids), .clarification_response_ids = &.{} } };
 }
 
