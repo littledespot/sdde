@@ -35,8 +35,9 @@ pub const Build = struct {
         const source = validated.source(.{ .bytes = input_bytes }) catch return error.OperationExecutionFailed;
         const prompt = current.protocolPrompt() orelse return error.OperationExecutionFailed;
         var parts: [2]@import("../domain/llm_provider_operation.zig").ModelVisibleContent = undefined;
-        var prepared = self.action.execute(self.allocator, source, validated.content(&parts), rejected, diagnostic, prompt) catch return error.OperationExecutionFailed;
-        const next = @import("../domain/model_request_handoff.zig").prepared(validated, prepared) catch {
+        const repetition = current.protocolRepetition(rejected, diagnostic) catch return error.OperationExecutionFailed;
+        var prepared = self.action.execute(self.allocator, source, validated.content(&parts), rejected, diagnostic, repetition, prompt) catch return error.OperationExecutionFailed;
+        const next = @import("../domain/model_request_handoff.zig").prepared(validated, prepared, .{ .previous = current, .rejected = rejected, .diagnostic = diagnostic }) catch {
             prepared.deinit();
             return error.OperationExecutionFailed;
         };

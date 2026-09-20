@@ -63,7 +63,12 @@ pub fn outline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.A
             try object.put(allocator, "alternatives", .{ .array = alternatives });
             return .{ .object = object };
         },
-        .array => return fieldOutline(allocator, node),
+        .array => |items| {
+            var object = (try fieldOutline(allocator, node)).object;
+            try object.put(allocator, "minItems", .{ .integer = items.minimum });
+            try object.put(allocator, "maxItems", .{ .integer = items.maximum });
+            return .{ .object = object };
+        },
         else => return value(allocator, node, .complete),
     }
 }

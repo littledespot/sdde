@@ -169,11 +169,18 @@ bounded fragment; no tail truncation is permitted.
 - **Output:** parsed compact result or protocol diagnostic
 - **Responsibility:** Parse the complete JSON object only, preserving its trusted association.
 
-## `BuildProtocolRetryGuidanceAction`
+## `BuildModelProtocolRetryAction` (`build-model-protocol-retry`)
 
-- **Input:** decoder/schema diagnostic and original workflow-declared result schema
-- **Output:** protocol-retry guidance
-- **Responsibility:** Build decoder-only retry guidance without semantic instructions.
+- **Input:** current typed decoder/schema/missing-answer rejection, associated
+  provider evidence and retained original assignment/input/selected schema.
+- **Output:** prepared correction request under the same logical request identity.
+- **Responsibility:** Build model-visible correction content through the existing
+  diagnostic, schema-projection and request-preparation owners, following
+  [§22.6](../22-repair.md#226-unparseable-output).
+- The [explicit-error guidance](../22-repair.md#2262-explicit-error-guidance)
+  adds concise explanations and a confirmed repetition fact from existing evidence
+  ownership. It adds no history, retry accounting, model invocation, validation or
+  successor selection to this action.
 
 ## `AdvanceModelAttemptAccountingAction`
 

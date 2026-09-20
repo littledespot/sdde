@@ -162,7 +162,13 @@ pub const Driver = struct {
             const content = current_request.prepared().?.content;
             std.testing.expectEqual(base.len + @as(usize, if (attempt > 1) (if (self.fake.invocation_plan.complete.content_diagnostic == .missing_final_text) 2 else 3) else 0), content.len) catch unreachable;
             std.testing.expectEqualDeep(base, content[0..base.len]) catch unreachable;
-            if (attempt > 1) std.testing.expectEqualStrings(current_request.protocolPrompt().?, content[base.len].guidance) catch unreachable;
+            if (attempt > 1) {
+                const prompt = current_request.protocolPrompt().?;
+                if (!std.mem.eql(u8, prompt, content[base.len].guidance)) {
+                    const repeated = std.fmt.allocPrint(arena.allocator(), "{s}\nThe previous correction still failed this validation.", .{prompt}) catch unreachable;
+                    std.testing.expectEqualStrings(repeated, content[base.len].guidance) catch unreachable;
+                }
+            }
             self.fake.invocation_plan.complete.content_diagnostic = null;
             if (current_request.id().purpose == .semantic_review) {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
@@ -228,6 +234,8 @@ pub const Driver = struct {
                     if (self.brief_references) |retained| std.testing.expect(retained == references) catch unreachable else self.brief_references = references;
                     if (attempt > 1) {
                         const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
+                        std.testing.expectEqualStrings("Schema validation failed: this property is not allowed at this location.", correction.value.object.get("explanation").?.string) catch unreachable;
+                        std.testing.expectEqual(@as(usize, if (attempt > 2) 1 else 0), std.mem.count(u8, content[base.len].guidance, "The previous correction still failed this validation.")) catch unreachable;
                         const expected = correction.value.object.get("expected").?.object;
                         std.testing.expectEqualStrings("/provenance", correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("path").?.string) catch unreachable;
                         const fields = expected.get("shape").?.object.get("fields").?.object;

@@ -175,9 +175,11 @@ defined response-level correction containing:
 - the original schema;
 - the exact rejected response, retained through its original invocation
   association and supplied as untrusted evidence;
-- decoder position and available object/key context, or schema rejection
-  reason and JSON Pointer; duplicate-field diagnostics identify the first and
-  repeated key locations without inferring a repair or accepting changed data;
+- the latest native validation error in the **model-visible correction guidance**:
+  decoder reason, position and available object/key context, or schema rejection
+  reason and JSON Pointer. Recording the error only in logs is insufficient.
+  Duplicate-field diagnostics identify the first and repeated key locations
+  without inferring a repair or accepting changed data;
 - no request to reconsider semantics;
 - for schema rejection, the expected candidate JSON Pointer and value/parent scope,
   a distinct JSON Pointer locating the exact expected node in the complete selected
@@ -249,6 +251,54 @@ The [feasibility trace](../reference-notes/model-request-guidance.md#nested-corr
 and [Chunk 18 plan](../../fixes/IMP_001.md#focused-226-decision--child-object-requirements)
 record evidence, limits and required verification. This amendment grants no new
 repair capability and does not claim improved model compliance.
+
+#### 22.6.2 Explicit error guidance
+
+**User-requested amendment, implemented 20 September 2026.**
+Extend the existing `build-model-protocol-retry` action, not the set of repair
+actions. Its single responsibility remains preparing the corrected request.
+
+- State explicitly that the previous response failed JSON decoding, schema
+  validation or final-answer admission. Preserve the typed diagnostic and its
+  available location; add a concise explanation through the existing diagnostic
+  owner. For example, `unknown_property` means the property is not allowed at that
+  location; `missing_required_property` means a required property is missing.
+- Derive expected fields, types, discriminator values and relevant bounds only
+  from the selected compiled schema through the shared schema projection. Keep
+  the candidate path, parent/value scope and schema locator distinct. A
+  parent-scoped discriminator error must not describe the parent's type as the
+  discriminator's type. Do not invent actual values, additional defects or fixes.
+  For length/range errors, project the relevant scalar bounds without duplicating
+  item/child schemas; immediate child arrays otherwise remain type-only.
+- Use one complete-response instruction: correct the reported errors, preserve
+  unaffected entries and meaning, and return the complete assigned response
+  matching the supplied schema. Replace redundant wording instead of appending
+  another prompt, schema copy or example. Required child fields remain conditional
+  on the parent being present; guidance never moves or selects evidence.
+- A single notice such as “The previous correction still failed this validation”
+  is permitted only when retained typed evidence proves a correction of the
+  immediately preceding rejection failed with the same diagnostic identity.
+  Confirm the same execution, immutable assignment and selected schema; compare
+  diagnostic kind/reason and location/context, including schema scope/locator
+  where applicable. An attempt ordinal alone proves no recurrence. Same diagnostic
+  does not prove identical response bytes, and different errors receive only the
+  current error guidance.
+- The request handoff owns a copy of the rejection addressed by each prepared
+  correction. It compares the next native rejection only after matching provider
+  evidence to that exact prepared request, and passes the confirmed fact to the
+  builder. No prompt parsing, semantic similarity classifier, second
+  history store, unrestricted stack read or new counter is permitted. Keep only
+  the latest rejected body in model context; missing answers retain the no-body
+  rule. Without sufficient evidence, omit the repetition claim.
+
+These rules apply to every admitted response shape, including configured parts
+and selected native-repair responses. They do not make native semantic defects,
+user clarifications, transport failures, invalid associations or runner failures
+eligible for protocol correction. Existing authorization, full validation, retry
+identities/limits, token accounting and terminal no-publication rules remain in
+force. See [request-level tests](28-testing.md#284-model-fault-injection-tests) and
+the [R45 implementation plan](../../fixes/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance).
+Improved model compliance still requires separately approved live measurement.
 
 ### 22.7 Repair retry limit and escalation
 

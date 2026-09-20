@@ -94,7 +94,7 @@ test "child requirements stay inside selected definitions parts and repair schem
         var decoded = try (decoder.Action{}).execute(std.testing.allocator, captured.evidence.result().complete, null);
         defer decoded.deinit();
         const diagnostic = validation.validate(decoded.candidate).invalid;
-        var retry = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .schema = diagnostic }, "Correct syntax only.");
+        var retry = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .schema = diagnostic }, .unconfirmed, "Correct syntax only.");
         defer retry.deinit();
         const guidance = try std.json.parseFromSlice(std.json.Value, a, retry.request.content[retry.request.content.len - 2].guidance, .{});
         const expected = guidance.value.object.get("expected").?.object;
@@ -201,8 +201,8 @@ test "protocol retry retains exact request schema and identity and releases ever
     try other.initWithSchema(empty);
     defer other.deinit();
     source.result_resource = &other.resource;
-    try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, source, fixture.prepared.request.content, rejected, .{ .decoder = .{ .reason = .ExpectedObject } }, "Correct syntax only."));
-    try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, rejected, .{ .schema = .{ .reason = .type_mismatch, .expected = other.prepared.request.response_schema.root() } }, "Correct syntax only."));
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, source, fixture.prepared.request.content, rejected, .{ .decoder = .{ .reason = .ExpectedObject } }, .unconfirmed, "Correct syntax only."));
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, rejected, .{ .schema = .{ .reason = .type_mismatch, .expected = other.prepared.request.response_schema.root() } }, .unconfirmed, "Correct syntax only."));
     const child = @import("domain/model_result_schema.zig").findProperty(fixture.prepared.request.response_schema.root().one_of[0].object, "value").?.schema;
     try std.testing.checkAllAllocationFailures(std.testing.allocator, retryAllocation, .{ &fixture, rejected, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .{ .schema = .{ .reason = .string_length, .expected = child } }), "Correct syntax only." });
 }
@@ -227,7 +227,7 @@ test "missing-answer correction admits only validated missing content and cleans
     try std.testing.expect(captured.evidence.missingFinalText());
     try std.testing.checkAllAllocationFailures(std.testing.allocator, retryAllocation, .{ &fixture, captured.evidence, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .missing_final_text), "Return the complete assigned response." });
     const retry_action: @import("actions/model/build_model_protocol_retry.zig").Action = .{};
-    try std.testing.expectError(error.ModelRequestAssociationInvalid, retry_action.execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .decoder = .{ .reason = .ExpectedObject } }, "Correct syntax only."));
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, retry_action.execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .decoder = .{ .reason = .ExpectedObject } }, .unconfirmed, "Correct syntax only."));
 }
 
 test "correction locators resolve escaped names root alternatives and selected definitions" {
@@ -268,7 +268,7 @@ test "correction locators resolve escaped names root alternatives and selected d
 
 fn retryAllocation(allocator: std.mem.Allocator, fixture: *Fixture, rejected: *const @import("domain/provider_invocation_validation.zig").Evidence, diagnostic: @import("domain/model_protocol_retry.zig").Diagnostic, prompt: []const u8) !void {
     const source = try fixture.requestSource();
-    var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(allocator, source, fixture.prepared.request.content, rejected, diagnostic, prompt);
+    var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(allocator, source, fixture.prepared.request.content, rejected, diagnostic, .unconfirmed, prompt);
     defer retried.deinit();
     try std.testing.expect(retried.request.model_request_id == fixture.prepared.request.model_request_id);
     try std.testing.expect(retried.request.response_schema == fixture.prepared.request.response_schema);
@@ -302,7 +302,7 @@ test "selected protocol guidance explains duplicate property names and preserves
         var diagnostic: ?strict.Diagnostic = null;
         defer if (diagnostic) |value| value.deinit(std.testing.allocator);
         try std.testing.expectError(error.InvalidJsonDocument, strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 64 }, false, &diagnostic));
-        var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .decoder = diagnostic.? }, prompt);
+        var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .decoder = diagnostic.? }, .unconfirmed, prompt);
         defer retried.deinit();
         const content = retried.request.content;
         var guidance = try strict.parse(std.testing.allocator, content[content.len - 2].guidance, .{ .maximum_depth = 64 }, true, null);
@@ -312,11 +312,12 @@ test "selected protocol guidance explains duplicate property names and preserves
         try std.testing.expectEqualStrings(bytes, evidence.value.object.get("rejected_response").?.string);
         try std.testing.expectEqualStrings(prompt, content[content.len - 3].guidance);
         const duplicate = diagnostic.?.reason == .DuplicateField;
-        try std.testing.expectEqual(@as(usize, if (duplicate) 2 else 1), guidance.value.object.count());
+        try std.testing.expectEqual(@as(usize, 2), guidance.value.object.count());
+        try std.testing.expect(std.mem.startsWith(u8, guidance.value.object.get("explanation").?.string, "JSON decoding failed:"));
         if (duplicate) {
-            try std.testing.expectEqualStrings("Property names must be unique within each JSON object. This diagnostic concerns repeated names, not repeated identifier values.", guidance.value.object.get("explanation").?.string);
+            try std.testing.expectEqualStrings("JSON decoding failed: property names must be unique within each object. This diagnostic concerns repeated names, not repeated identifier values.", guidance.value.object.get("explanation").?.string);
             try std.testing.checkAllAllocationFailures(std.testing.allocator, retryAllocation, .{ &fixture, captured.evidence, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .{ .decoder = diagnostic.? }), prompt });
-        } else try std.testing.expect(guidance.value.object.get("explanation") == null);
+        }
         const supplied = guidance.value.object.get("diagnostic").?.object.get("decoder").?.object;
         try std.testing.expectEqual(@as(usize, 3), supplied.count());
         try std.testing.expectEqualStrings(@tagName(diagnostic.?.reason), supplied.get("reason").?.string);
@@ -347,7 +348,7 @@ test "unrelated schemas retain one universal framing instruction across initial 
         defer response.deinit();
         var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
         defer captured.deinit();
-        var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .schema = .{ .reason = .missing_required_property, .expected = fixture.prepared.request.response_schema.root() } }, "Correct syntax only.");
+        var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .schema = .{ .reason = .missing_required_property, .expected = fixture.prepared.request.response_schema.root() } }, .unconfirmed, "Correct syntax only.");
         defer retried.deinit();
         for ([_]*const provider.IdentifiedProviderNeutralModelRequest{ fixture.prepared.request, retried.request }) |request| {
             // Retry-owned content retains task guidance only; serialization adds framing.
@@ -614,7 +615,7 @@ pub fn checkDocument(contract: []const u8, case: Case) !void {
             const description = try result.invalid.describe(std.testing.allocator);
             defer std.testing.allocator.free(description.path);
             try std.testing.expectEqualStrings(path, description.path);
-            var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence, .{ .schema = result.invalid }, "Correct syntax only.");
+            var retried = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence, .{ .schema = result.invalid }, .unconfirmed, "Correct syntax only.");
             defer retried.deinit();
             const parts = retried.request.content;
             var guidance = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, parts[parts.len - 2].guidance, .{});
@@ -644,7 +645,28 @@ pub fn checkDocument(contract: []const u8, case: Case) !void {
             for (request.value.object.get("system").?.array.items) |part|
                 occurrences += std.mem.count(u8, part.object.get("text").?.string, retried.request.response_schema.modelBytes());
             try std.testing.expectEqual(@as(usize, 1), occurrences);
-            try std.testing.expectEqual(@as(usize, 2), guidance.value.object.count());
+            try std.testing.expectEqual(@as(usize, 3), guidance.value.object.count());
+            const explanation = guidance.value.object.get("explanation").?.string;
+            try std.testing.expect(std.mem.startsWith(u8, explanation, "Schema validation failed:"));
+            const expected_words = switch (reason) {
+                .unknown_property => "not allowed",
+                .missing_required_property => "required property is missing",
+                .type_mismatch => if (result.invalid.expected_location == .parent) "discriminator must be a string" else "wrong type",
+                .string_length => "string length",
+                .integer_range => "integer is outside",
+                .array_length => "number of array items",
+                .constant_mismatch => "expected constant",
+                .enum_mismatch => "allowed values",
+                .unknown_variant => "allowed kind",
+            };
+            try std.testing.expect(std.mem.indexOf(u8, explanation, expected_words) != null);
+            try std.testing.expect(std.mem.indexOf(u8, wire, explanation) != null);
+            if (reason == .array_length) {
+                const shape = expected.get("shape").?.object;
+                try std.testing.expectEqual(result.invalid.expected.array.minimum, shape.get("minItems").?.integer);
+                try std.testing.expectEqual(result.invalid.expected.array.maximum, shape.get("maxItems").?.integer);
+                try std.testing.expect(!shape.contains("items"));
+            }
             var retained = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, parts[parts.len - 1].evidence, .{});
             defer retained.deinit();
             try std.testing.expectEqualStrings(case.bytes, retained.value.object.get("rejected_response").?.string);

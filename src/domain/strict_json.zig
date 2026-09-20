@@ -19,32 +19,39 @@ pub const Diagnostic = struct {
         return result;
     }
 
-    /// Explain an ambiguous parser term without inferring a correction or
-    /// changing the stored diagnostic and its context.
-    pub fn explanation(self: Diagnostic) ?[]const u8 {
+    /// Explain the parser rejection without inferring a correction.
+    pub fn explanation(self: Diagnostic) []const u8 {
         return switch (self.reason) {
-            .DuplicateField => "Property names must be unique within each JSON object. " ++
+            .DuplicateField => "JSON decoding failed: property names must be unique within each object. " ++
                 "This diagnostic concerns repeated names, not repeated identifier values.",
-            .EmptyDocument,
-            .ByteLimitExceeded,
-            .InvalidUtf8,
-            .ByteOrderMark,
-            .NestingLimitExceeded,
-            .ExpectedObject,
-            .SyntaxError,
-            .UnexpectedEndOfInput,
-            .UnexpectedToken,
-            .InvalidNumber,
-            .Overflow,
-            .InvalidCharacter,
-            .InvalidEnumTag,
-            .UnknownField,
-            .MissingField,
-            .LengthMismatch,
-            .BufferUnderrun,
-            .ValueTooLong,
-            => null,
+            .EmptyDocument => "JSON decoding failed: the response is empty.",
+            .ByteLimitExceeded => "JSON decoding failed: the document exceeds the decoder's declared byte limit.",
+            .InvalidUtf8 => "JSON decoding failed: the document contains invalid UTF-8.",
+            .ByteOrderMark => "JSON decoding failed: a byte-order mark is not allowed.",
+            .NestingLimitExceeded => "JSON decoding failed: nesting exceeds the decoder's declared depth limit.",
+            .ExpectedObject => "JSON decoding failed: the complete response must be one JSON object.",
+            .SyntaxError => "JSON decoding failed: invalid JSON syntax at the reported location.",
+            .UnexpectedEndOfInput, .BufferUnderrun => "JSON decoding failed: the document ends before the value is complete.",
+            .UnexpectedToken => "JSON decoding failed: this token is not allowed at the reported location.",
+            .InvalidNumber => "JSON decoding failed: invalid JSON number.",
+            .Overflow => "JSON decoding failed: the number cannot be represented by the decoder.",
+            .InvalidCharacter => "JSON decoding failed: invalid character or escape sequence.",
+            .InvalidEnumTag => "JSON decoding failed: the value is not an allowed enum tag.",
+            .UnknownField => "JSON decoding failed: this field is not allowed.",
+            .MissingField => "JSON decoding failed: a required field is missing.",
+            .LengthMismatch => "JSON decoding failed: the value has an invalid length.",
+            .ValueTooLong => "JSON decoding failed: the value exceeds the decoder's declared limit.",
         };
+    }
+
+    pub fn eql(self: Diagnostic, other: Diagnostic) bool {
+        if (self.reason != other.reason or !std.meta.eql(self.location, other.location)) return false;
+        const left = self.context orelse return other.context == null;
+        const right = other.context orelse return false;
+        return std.mem.eql(u8, left.path, right.path) and
+            std.meta.eql(left.first_occurrence, right.first_occurrence) and
+            std.meta.eql(left.repeated_occurrence, right.repeated_occurrence) and
+            (if (left.key) |key| if (right.key) |other_key| std.mem.eql(u8, key, other_key) else false else right.key == null);
     }
 
     pub const Location = @import("json_context.zig").Location;

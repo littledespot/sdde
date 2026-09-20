@@ -3720,7 +3720,9 @@ test "protocol retries retain only latest repeated or alternating decoder reject
                 try std.testing.expectEqual(@as(usize, 5), correction.content.len);
                 try std.testing.expectEqualStrings(prompt_bytes, correction.content[0].guidance);
                 try std.testing.expectEqualStrings(input_bytes, correction.content[1].user);
-                try std.testing.expectEqualStrings(prompt_bytes, correction.content[2].guidance);
+                const repeated = index > 0 and std.mem.eql(u8, responses[index - 1], body);
+                const expected_prompt = if (repeated) prompt_bytes ++ "\nThe previous correction still failed this validation." else prompt_bytes;
+                try std.testing.expectEqualStrings(expected_prompt, correction.content[2].guidance);
                 var guidance = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, correction.content[3].guidance, .{});
                 defer guidance.deinit();
                 const decoder = guidance.value.object.get("diagnostic").?.object.get("decoder").?;
@@ -3805,6 +3807,7 @@ test "R31 syntax nesting and sibling loss retain correction scope through recove
                         try std.testing.expectEqual(@as(usize, 5), correction.content.len);
                         try std.testing.expectEqualStrings(prompt_bytes, correction.content[0].guidance);
                         try std.testing.expectEqualStrings(input_bytes, correction.content[1].user);
+                        try std.testing.expectEqual(@as(usize, if (index == 2) 1 else 0), std.mem.count(u8, correction.content[2].guidance, "The previous correction still failed this validation."));
                         const latest = try std.json.parseFromSlice(std.json.Value, a, correction.content[4].evidence, .{});
                         try std.testing.expectEqualStrings(body, latest.value.object.get("rejected_response").?.string);
                     }
@@ -3825,6 +3828,91 @@ test "R31 syntax nesting and sibling loss retain correction scope through recove
             }
         }
     }
+}
+
+test "protocol repetition requires the current correction association and same typed rejection" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try protocolRetryYaml(&fixture));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    var original: ?*const handoff.Request = null;
+    var prior: ?*const @import("domain/provider_invocation_validation.zig").Evidence = null;
+    // Changed bytes can retain the same defect; moving that defect changes its identity.
+    for ([_][]const u8{ "{\"foreign\":true}", "{\"foreign\":false}", "{\"another\":false}" }, 0..) |body, index| {
+        fake.invocation_plan.complete.content = body;
+        try prepareProtocolAttempt(&runner, index != 0);
+        const request = try currentRequest(&runner);
+        if (index == 0) original = request;
+        for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode" }) |step|
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        try std.testing.expectEqual(.invalid, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
+        const evidence = (try observationResult(&runner)).outcome().validated;
+        const diagnostic: @import("domain/model_protocol_retry.zig").Diagnostic = .{ .schema = (try payloadResult(&runner)).outcome().schema_rejected };
+        try std.testing.expectEqual(@as(@import("domain/model_protocol_retry.zig").Repetition, if (index == 1) .confirmed else .unconfirmed), try request.protocolRepetition(evidence, diagnostic));
+        if (prior) |previous| {
+            try std.testing.expectError(error.ModelRequestAssociationInvalid, request.protocolRepetition(previous, diagnostic));
+            try std.testing.expectError(error.ModelRequestAssociationInvalid, original.?.protocolRepetition(evidence, diagnostic));
+        }
+        prior = evidence;
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+        const correction = try currentRequest(&runner);
+        const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .inference);
+        defer std.testing.allocator.free(wire);
+        try std.testing.expectEqual(@as(usize, if (index == 1) 1 else 0), std.mem.count(u8, wire, "The previous correction still failed this validation."));
+        try std.testing.expect(std.mem.indexOf(u8, wire, "identical response") == null);
+        try std.testing.expect(std.mem.indexOf(u8, wire, "Schema validation failed: this property is not allowed") != null);
+        try std.testing.expectEqual(@as(u128, (index + 1) * 7), runner.tokenLedger().committed());
+    }
+    try std.testing.expectEqual(@as(u64, 3), runner.bindings().invokeStep(.{ .bytes = "account" }).rejected.retry_limit.completed_executions);
+    // A new execution with the same compiled schema cannot inherit the old fact.
+    var fresh = fixture.runner(graph, std.testing.allocator);
+    defer fresh.deinit();
+    try prepareProtocolAttempt(&fresh, false);
+    const current = try currentRequest(&fresh);
+    try std.testing.expect(current.id() != original.?.id());
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, current.protocolRepetition(prior.?, .missing_final_text));
+    try std.testing.expectEqual(@as(u128, 0), fresh.tokenLedger().committed());
+    try std.testing.expectEqual(@as(usize, 3), fake.effect_count);
+}
+
+test "correction handoff releases copied rejection context at every allocation failure" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const nested = "{\"type\":\"object\",\"properties\":{\"result\":" ++ schema_bytes ++ "},\"required\":[\"result\"],\"additionalProperties\":false}";
+    const graph = try fixture.compileWithSchema(try protocolRetryYaml(&fixture), nested);
+    for ([_][]const u8{ "{\"result\":{\"foreign\":true}}", malformed_protocol_record }) |body|
+        try std.testing.checkAllAllocationFailures(std.testing.allocator, correctionAllocation, .{ &fixture, graph, body });
+}
+
+fn correctionAllocation(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow, body: []const u8) !void {
+    fixture.native.init(allocator);
+    fixture.authorization.allocator = allocator;
+    fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
+    @memcpy(fixture.entries[core.entries.len .. core.entries.len + native.count], &fixture.native.entries);
+    var runner = fixture.runner(graph, allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, allocator);
+    fake.invocation_plan.complete.content = body;
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    const invocation = runner.bindings().invokeInvocation();
+    if (invocation != .outcome or invocation.outcome != .ok) return error.OutOfMemory;
+    for ([_][]const u8{
+        "initialize", "origin",           "validate",  "build", "account",           "assign-operation", "authorize",         "phase",              "advance-request", "advance-operation", "call",  "validate-response", "complete-operation", "decode", "validate-payload", "retry",
+        "account",    "assign-operation", "authorize", "phase", "advance-operation", "call",             "validate-response", "complete-operation", "decode",          "validate-payload",  "retry",
+    }, 0..) |step, index| {
+        const result = runner.bindings().invokeStep(.{ .bytes = step });
+        if (result != .outcome or result.outcome == .failed) return error.OutOfMemory;
+        const expected: workflow.OutcomeTag = if (std.mem.eql(u8, step, "validate-payload") or (std.mem.eql(u8, step, "decode") and std.mem.eql(u8, body, malformed_protocol_record))) .invalid else if (index == 19) .more else .ok;
+        try std.testing.expectEqual(expected, result.outcome);
+    }
+    const request = (try currentRequest(&runner)).prepared().?;
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, request.content[2].guidance, "The previous correction still failed this validation."));
+    try std.testing.expectEqual(@as(u128, 14), runner.tokenLedger().committed());
 }
 
 // Independently authored wire data: preserve all eleven distinct findings while
@@ -7037,9 +7125,11 @@ test "missing answers share protocol allowance through mixed failure and success
                 try std.testing.expectEqual(@as(usize, if (absent) 4 else 5), correction.content.len);
                 if (absent) {
                     try std.testing.expect(std.mem.indexOf(u8, correction.content[3].guidance, "missing_final_text") != null);
+                    try std.testing.expect(std.mem.indexOf(u8, correction.content[3].guidance, "Final-answer admission failed: no final answer was received.") != null);
                     for (correction.content) |part| try std.testing.expect(part != .evidence);
                     try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.model_payload_schema_result)] == null);
                 }
+                try std.testing.expectEqual(@as(usize, if (sequence == 1 and attempt > 0) 1 else 0), std.mem.count(u8, correction.content[2].guidance, "The previous correction still failed this validation."));
             }
         }
         if (sequence != 0) {

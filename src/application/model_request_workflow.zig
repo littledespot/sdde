@@ -129,7 +129,7 @@ pub const Build = struct {
         var input_id: [32]u8 = undefined;
         const source = request.buildSource(&input_id) catch return error.OperationExecutionFailed;
         var owned = self.action.execute(self.allocator, source, request.content(&parts)) catch return error.OperationExecutionFailed;
-        const next = handoff.prepared(request, owned) catch {
+        const next = handoff.prepared(request, owned, null) catch {
             owned.deinit();
             return error.OperationExecutionFailed;
         };

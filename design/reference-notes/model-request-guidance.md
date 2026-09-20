@@ -38,7 +38,9 @@ for every workflow and both response modes:
 
 - Original task content, selected protocol prompt and complete original schema.
 - Exact rejected response as untrusted evidence.
-- Decoder position and object/key context, or the schema JSON Pointer.
+- Latest native validation error in model-visible guidance: decoder reason/position
+  and object/key context, or schema reason and JSON Pointer. A terminal/log-only
+  diagnostic does not meet this requirement.
 - For schema rejection: the candidate JSON Pointer and parent/value scope, an
   exact locator in the single complete schema, and derived immediate fields, child-object required names and
   discriminator values. Alternatives and bounds remain in that schema.
@@ -49,6 +51,39 @@ the response schema. For an atomic repair, that schema is already the selected
 replacement, not the whole candidate. Schema and domain validation still apply;
 syntax correction cannot recover omitted requirements. No candidate examples or
 accumulated correction prompts are added.
+
+In [R45](../../fixes/FIX_001.md#47-brief-schema-exhaustion-despite-child-object-guidance),
+both corrections already included `unknown_property` at `/provenance`, required
+child `value`/`provenance` fields and the rejected response. The first correction
+therefore differed from initial generation; the second correction repeated the
+first because the latest error and rejected response were unchanged. Use captured
+request/response bytes to establish repetition, rather than temperature alone.
+
+The user-requested [explicit-error guidance](../contracts/22-repair.md#2262-explicit-error-guidance)
+is implemented through the same `build-model-protocol-retry` action. The error has
+a plain-language explanation; the existing structured outline supplies allowed
+fields and child requirements. Together they convey the following for R45
+(illustrative wording, not an additional prompt):
+
+```text
+The previous response failed schema validation.
+Error at /provenance: this property is not allowed on the root object.
+Allowed root fields: kind, title, description, primary_goal.
+Each title, description and primary_goal object requires value and provenance.
+Return the complete corrected response matching the supplied schema.
+Correct the reported errors; preserve unaffected entries and meaning.
+```
+
+The field names above come from R45's selected schema, not hardcoded prompt rules.
+Keep the typed error and schema locator alongside the explanation. Decoder errors
+instead explain their parser reason/location; missing answers explicitly request
+the absent final response without attaching a body or reasoning.
+
+Confirmed recurrence adds one sentence: “The previous correction still failed this
+validation.” The handoff retains the preceding typed rejection with its prepared
+correction, verifies the next response's exact association and compares diagnostic
+identity before passing the fact to the builder. This adds no allowance, temperature change or
+semantic reassessment. Native defects and operational failures retain their owners.
 
 **Atomic repair** receives:
 
@@ -93,8 +128,8 @@ do not establish a measured reliability improvement or a completed, scored basel
 
 ## Proposed conformance improvements — 20 September 2026
 
-This is an assessment direction, not an extension of accepted contracts or a
-claim of delivery. [Chunk 18's R38 follow-up](../../fixes/IMP_001.md#r38-follow-up--generation-conformance)
+The table distinguishes implemented guidance from remaining assessments; linked
+contracts own each boundary. [Chunk 18's current follow-up](../../fixes/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance)
 owns sequencing and approval decisions. R38 repeated incorrect nested wrappers
 despite the correct schema; R39 corrected its JSON and then reached a separate
 semantic-review problem. Measure structural compliance and semantic quality separately.
@@ -103,6 +138,7 @@ semantic-review problem. Measure structural compliance and semantic quality sepa
 | --- | --- |
 | Assignment-specific instructions | Request/assignment guidance supplies only relevant generation rules, shared JSON framing and necessary evidence. Remove sibling-unit instructions consistently from initial and correction inputs; do not create parallel prompts for every failure. |
 | Precise nested correction guidance | The feasibility review selects [one nonrecursive child-object required-field annotation](../contracts/22-repair.md#2261-child-object-requirements), approved on 20 September 2026. Reuse the shared projection and protocol builder with the same selected schema; no branch selection, evidence relocation or candidate synthesis. |
+| Explicit error explanations | [§22.6.2](../contracts/22-repair.md#2262-explicit-error-guidance) is implemented through typed diagnostics and schema projection, with repetition wording only from confirmed prior-correction evidence. [R45 delivery](../../fixes/IMP_001.md#r45-delivery--explicit-correction-errors) records offline verification; live effectiveness remains unproven. |
 | Model and response-mode comparison | Reuse existing provider binding, schema projection and request capture. Explicitly compare the configured baseline with native mode or another registered, authorized model; change one factor at a time. No automatic fallback, hidden model escalation or new retry owner. |
 | Further response decomposition | Reuse ADR 0016 for measured object-shape difficulties. Array-item decomposition remains deferred until finite assignments, stable identities, unique ownership, coverage/order and dependency renewal have accepted authority. Do not add arbitrary splitting, flattening or another assembler. |
 | Native derivation of mechanical fields | Reuse existing native construction where accepted inputs determine the value uniquely. Required evidence selections, relationships and business meaning remain explicit candidate data. Changing a wire shape requires consistent schema, decoding, repair, provenance and persisted-validation changes; a formatter cannot infer missing support. |

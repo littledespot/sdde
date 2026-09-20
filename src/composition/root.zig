@@ -1588,6 +1588,9 @@ test "configured specification generation YAML executes native references models
         }
         if (brief_scenario) {
             if (scenario == brief_start) driver.measurement_prefix = ".zig-cache/r40-request";
+            // Shape recovery is not evidence recovery: the corrected response
+            // still needs native provenance repair before publication.
+            driver.repair = scenario - brief_start >= 2;
             const summary_first = (scenario - brief_start) % 2 == 0;
             if (summary_first) driver.summary_sequence = .recover else driver.support_fault = .foreign_provenance;
             driver.brief_text = if (summary_first) .{ "Startup greeting", "Display the greeting and current UTC date and time on startup.", "Show the current UTC date and time." } else .{ "Loan renewal", "Confirm loan renewal and display the return deadline.", "Show the new return deadline." };
@@ -2002,6 +2005,11 @@ test "configured specification generation YAML executes native references models
             } else {
                 const session = try @import("../application/specification_workflow.zig").readSession(&view);
                 try std.testing.expectEqual(@as(u32, 3), session.units[0].?.origins.initial.?.attempt.value);
+                const repaired = session.units[0].?;
+                try std.testing.expectEqual(@as(usize, 1), repaired.origins.fields.len);
+                try std.testing.expectEqualDeep(@as(@import("../domain/specification_candidate.zig").Target, .{ .provenance = .description }), repaired.origins.fields[0].target);
+                try std.testing.expectEqual(@as(u32, 1), repaired.origins.fields[0].origin.?.attempt.value);
+                try std.testing.expect(repaired.last_repair.?.changed);
                 const context = try @import("../application/specification_workflow.zig").readContext(&view);
                 var projection_arena: std.heap.ArenaAllocator = .init(allocator);
                 defer projection_arena.deinit();

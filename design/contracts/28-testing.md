@@ -308,6 +308,23 @@ Stub model operations deliberately return:
 
 Each test asserts that only a genuinely malformed authorized candidate reaches atomic repair; missing/unreconciled authority reaches clarification/rework/block instead, and invalid output never reaches a write/command action.
 
+For protocol correction, inspect the serialized provider request, not only retained
+logs or diagnostics. Under [§22.6.2](22-repair.md#2262-explicit-error-guidance), cover:
+
+- Explicit failure wording and accurate explanations for every schema reason,
+  decoder failures and missing final answers. Preserve the latest typed diagnostic,
+  original assignment, selected schema, applicable outline and latest rejected body.
+  Include root/escaped pointers, parent-scoped union errors, optional objects,
+  bounds, named schemas, configured parts and narrowed repair responses.
+- First correction, confirmed repeated rejection, alternating errors and successful
+  recovery. A changed payload with the same diagnostic must not be called identical.
+  Attempt count, an unrelated assignment, stale/foreign evidence or another execution
+  must not establish recurrence. The optional notice remains one sentence; previous
+  bodies/prompts are not accumulated, and missing answers have no rejected body.
+- Full schema/native validation, unaffected siblings and provenance, exact retry/token
+  accounting and terminal no-publication behavior. Reuse existing conformance cases,
+  including unrelated shapes; wording alone is not evidence of live effectiveness.
+
 ### 28.5 Preset conformance fixtures
 
 Ship golden valid/invalid repositories for:

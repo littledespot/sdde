@@ -159,12 +159,15 @@ In non-interactive use, approval must arrive through an explicit API/CLI approva
 
 ### 14.6 Protocol-retry operation
 
-- This YAML-selected operation is used only when decoding or workflow-declared result-schema
-  validation produced no candidate IR.
-- Its compiled subgraph declares `BuildProtocolRetryGuidanceAction`,
-  `ValidateModelRequestBindingAction`, `BuildModelRequestAction`, and one accounted provider
-  attempt, followed by `ValidateProviderInvocationObservationAction`,
-  `DecodeModelEnvelopeAction` and `ValidateModelPayloadSchemaAction`.
+- This YAML-selected operation handles decoding/schema rejection and the approved
+  missing-final-answer case under [§22.6](22-repair.md#226-unparseable-output).
+- Its compiled subgraph uses the existing `build-model-protocol-retry` action to
+  prepare correction content. Runner-owned bindings then reuse ordinary attempt
+  and token accounting, provider invocation, observation validation and response
+  admission; detailed decoding and schema-validation operations remain available.
+- [Explicit error guidance](22-repair.md#2262-explicit-error-guidance) changes
+  request preparation, not orchestration authority. The orchestrator follows typed
+  outcomes; it neither derives explanations nor compares rejection evidence.
 - A missing or invalid trusted call association fails closed; it is not malformed model content
   eligible for protocol repair.
 - The operation returns a typed result and cannot invoke candidate/semantic validators, choose

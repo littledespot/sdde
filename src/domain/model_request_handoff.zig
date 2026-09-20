@@ -6,6 +6,7 @@ const preparation = @import("model_request_preparation.zig");
 const provider = @import("llm_provider_operation.zig");
 const packets = @import("model_input_packet.zig");
 const composition = @import("json_composition_runtime.zig");
+const retry = @import("model_protocol_retry.zig");
 pub const Input = union(enum) { resource: compilation.CompiledResource, packet: *const packets.Packet };
 pub const ResultSelection = enum { resource, input };
 
@@ -100,6 +101,14 @@ pub const Request = opaque {
         };
     }
 
+    /// Only a response to this exact prepared correction can confirm recurrence.
+    pub fn protocolRepetition(self: *const Request, rejected: *const @import("provider_invocation_validation.zig").Evidence, diagnostic: retry.Diagnostic) Error!retry.Repetition {
+        const request = self.prepared() orelse return error.ModelRequestAssociationInvalid;
+        if (rejected.request() != request) return error.ModelRequestAssociationInvalid;
+        const previous = storage(self).protocol_rejection orelse return .unconfirmed;
+        return if (previous.eql(diagnostic)) .confirmed else .unconfirmed;
+    }
+
     pub fn buildSource(self: *const Request, input_id: *[32]u8) preparation.ValidationError!preparation.Source {
         const bytes = std.fmt.bufPrint(input_id, "input-{d}", .{self.ledger().revision().value}) catch return error.ModelRequestAssociationInvalid;
         return self.source(.{ .bytes = bytes });
@@ -124,6 +133,7 @@ const Storage = struct {
     result_definition: ?@import("model_result_schema.zig").DefinitionId = null,
     input: ?Input,
     composition: ?composition.Binding = null,
+    protocol_rejection: ?retry.Diagnostic = null,
     phase: union(enum) {
         assigned,
         validated: *const identity.ModelRequestBindingEvidence,
@@ -183,7 +193,7 @@ pub fn prepare(allocator: std.mem.Allocator, current: *const identity.ModelReque
     var parts: [2]provider.ModelVisibleContent = undefined;
     var owned = try preparation.build(allocator, try checked.buildSource(&input_id), checked.content(&parts));
     errdefer owned.deinit();
-    const built = try prepared(checked, owned);
+    const built = try prepared(checked, owned, null);
     return .{ .owner = assignment.owner, .assigned = assigned, .validated = checked, .request = built };
 }
 
@@ -233,11 +243,23 @@ pub fn validated(current: *const Request, evidence: *const identity.ModelRequest
     return create(next);
 }
 
+pub const Correction = struct {
+    previous: *const Request,
+    rejected: *const @import("provider_invocation_validation.zig").Evidence,
+    diagnostic: retry.Diagnostic,
+};
+
 /// Transfers the prepared allocation only on success. Registry and resource
 /// references borrow the immutable selected execution, which outlives its data.
-pub fn prepared(current: *const Request, owned: preparation.Owned) Error!*Request {
+pub fn prepared(current: *const Request, owned: preparation.Owned, correction: ?Correction) Error!*Request {
     var next = storage(current).*;
     try preparation.validateRequest(try current.source(owned.request.model_visible_input_id), owned.request);
+    if (correction) |value| {
+        if (current.id() != value.previous.id() or value.rejected.request().response_schema != owned.request.response_schema) return error.ModelRequestAssociationInvalid;
+        _ = try value.previous.protocolRepetition(value.rejected, value.diagnostic);
+        // Retain only this rejection, not the previous request/body chain.
+        next.protocol_rejection = value.diagnostic;
+    }
     next.phase = .{ .prepared = owned };
     return create(next);
 }
@@ -245,6 +267,7 @@ pub fn prepared(current: *const Request, owned: preparation.Owned) Error!*Reques
 pub fn destroy(request: *Request) void {
     const value: *Storage = @ptrCast(@alignCast(request));
     if (value.phase == .prepared) value.phase.prepared.deinit();
+    if (value.protocol_rejection) |diagnostic| diagnostic.deinit(value.allocator);
     if (value.input) |input| if (input == .packet) packets.release(input.packet);
     if (value.composition) |part| {
         packets.release(part.base);
@@ -273,6 +296,11 @@ fn create(value: Storage) Error!*Request {
         errdefer value.allocator.free(result.composition.?.prerequisites);
         _ = try packets.retain(part.base);
     }
+    errdefer if (value.composition) |part| {
+        packets.release(part.base);
+        value.allocator.free(result.composition.?.prerequisites);
+    };
+    if (value.protocol_rejection) |diagnostic| result.protocol_rejection = try diagnostic.copy(value.allocator);
     return @ptrCast(result);
 }
 
